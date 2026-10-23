@@ -119,7 +119,12 @@ import {
   type PlacedChart,
   type PlacedChartCopy,
 } from "./lower-chart";
-import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
+import {
+  readFilterViewsPart,
+  readWorkbookPart,
+  writeFilterViewsPart,
+  writeWorkbookPart,
+} from "./workbook-part";
 import {
   availableStyleIds,
   createDocStylesPlan,
@@ -561,6 +566,13 @@ export interface WorkbookSession extends DataToolsApi {
    *  colour model and the sRGB the document shows it as, the fallback an
    *  xlsx reader sees. Null when the document has no such swatch. */
   documentSwatchRef(id: string): Promise<DocSwatch | null>;
+  /** Sheet ADR 517 — named filter views on the active sheet: save the
+   *  current filter under `name`, apply one, delete one, list them. Saved
+   *  beside the workbook with the next save. */
+  saveFilterView(name: string): SessionResult;
+  applyFilterView(name: string): SessionResult;
+  deleteFilterView(name: string): SessionResult;
+  filterViewNames(): string[];
   /** How document swatches `ids` show on screen now (`#rrggbb`, colour
    *  managed), for the grid to draw referenced colours as the canvas does.
    *  Unknown ids are left out. */
@@ -3069,6 +3081,11 @@ export function createWorkbookSession(
     return persistChain;
   }
 
+  /** The workbook had named filter views when last saved or restored. */
+  let hadFilterViews = false;
+  /** A named filter view was saved, applied or deleted since the last save. */
+  let filterViewsTouched = false;
+
   function cancelPendingPersist(): void {
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = null;
@@ -3123,7 +3140,39 @@ export function createWorkbookSession(
         // An engine without the door keeps no slots.
       }
     }
-    return enqueueWrite(bytes, state.fileName ?? "workbook.xlsx", chartSlots);
+    // Sheet ADR 517 — the named filter views live beside the workbook (the
+    // xlsx has no place for them); written with it, and once more after
+    // the last one is deleted.
+    // Asked only of a workbook that has (or just changed) views, so a
+    // plain edit's save costs no extra engine call.
+    let views: readonly unknown[] | null = null;
+    if (hadFilterViews || filterViewsTouched) {
+      filterViewsTouched = false;
+      try {
+        views = state.engine.listFilterViews?.() ?? null;
+      } catch {
+        views = null;
+      }
+    }
+    const written = enqueueWrite(
+      bytes,
+      state.fileName ?? "workbook.xlsx",
+      chartSlots,
+    );
+    if (views && (views.length > 0 || hadFilterViews)) {
+      const epoch = docEpoch;
+      const toWrite = views;
+      hadFilterViews = toWrite.length > 0;
+      persistChain = persistChain.then(() =>
+        epoch === docEpoch
+          ? writeFilterViewsPart(host, toWrite).catch((err) =>
+              host.log.warn("filter views persist failed", err),
+            )
+          : undefined,
+      );
+      return persistChain;
+    }
+    return written;
   }
 
   // A .paged save takes the workbook part as it stands; an edit still in the
@@ -4294,10 +4343,21 @@ export function createWorkbookSession(
         epoch,
         fromPart.chartSlots,
       );
-      if (ok)
+      if (ok) {
+        // The named filter views saved beside the workbook (ADR 517).
+        const views = await readFilterViewsPart(host);
+        if (views.length > 0 && state.engine?.setFilterViews) {
+          try {
+            state.engine.setFilterViews(views as never);
+            hadFilterViews = true;
+          } catch (err) {
+            host.log.warn("filter views restore failed", err);
+          }
+        }
         await rediscoverPlacements().catch((err) =>
           host.log.warn("rediscover failed", err),
         );
+      }
       return ok;
     }
 
@@ -4971,6 +5031,65 @@ export function createWorkbookSession(
 
     documentStyleRevision() {
       return docStyleRevision;
+    },
+
+    saveFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.saveFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.saveFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      return { ok: true as const };
+    },
+
+    applyFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.applyFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.applyFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      void submitInFrameGrid();
+      return { ok: true as const };
+    },
+
+    deleteFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.deleteFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.deleteFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      return { ok: true as const };
+    },
+
+    filterViewNames() {
+      try {
+        return (state.engine?.listFilterViews?.() ?? []).map(
+          (v) => (v as { name: string }).name,
+        );
+      } catch {
+        return [];
+      }
     },
 
     async documentSwatchRef(id) {

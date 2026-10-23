@@ -187,7 +187,7 @@ export function DocStylesSection(props: {
             void session.setDocStylesEnabled(e.target.checked).then(report)
           }
         />
-        {t(M.useDocumentStyles)}
+        {t(M.switchLabel)}
       </label>
       {!info.enabled && (
         <p data-sheet-docstyles-offer style={note}>
