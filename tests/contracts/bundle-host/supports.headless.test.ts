@@ -149,6 +149,8 @@ const HEADLESS = [
   "objects.shared@1",
   "storage.blob@1",
   "clipboard@1",
+  "document.readNative@1",
+  "document.openNative@1",
   "documents.exportPaged@1",
   "documents.open@1",
   "secrets@1",
@@ -158,7 +160,7 @@ const HEADLESS = [
  *  reason: no UI or browser headlessly (shell, widgets, the renderer,
  *  consent, workers, modules, the caret, page navigation), no engine
  *  channel the harness client carries (scene layers, image resources,
- *  the binary lanes, the native-document and asset backends), and the
+ *  the binary lanes, the asset backend), and the
  *  engine shaper, which the harness wires only with `engineShaper: true`
  *  (it measures with an estimate by default). A bundle tested headlessly
  *  probes these and takes their no-backend path. */

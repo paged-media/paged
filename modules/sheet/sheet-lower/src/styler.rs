@@ -33,7 +33,7 @@
 //! the grid's style keys equal the page lowering's for the same window.
 
 use crate::condfmt::{self, CfRange, SheetCondFmt};
-use crate::style::{VisualAttrs, VisualStyleSource};
+use crate::style::{StyleKeyless, VisualAttrs, VisualStyleSource};
 use crate::LoweredStyle;
 use sheet_core::{Cell, CellValue, StyleId, Worksheet};
 use sheet_format::FormatColor;
@@ -188,40 +188,4 @@ fn domain(
     let out = (lo.is_finite() && hi.is_finite()).then_some((lo, hi));
     cache.insert(rng, out);
     out
-}
-
-/// A [`LoweredStyle`] without its positional `key` (the dedup map key).
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct StyleKeyless {
-    bold: bool,
-    italic: bool,
-    font_size_bits: Option<u64>,
-    font_name: Option<String>,
-    fill_rgb: Option<String>,
-    text_rgb: Option<String>,
-    border_top: bool,
-    border_right: bool,
-    border_bottom: bool,
-    border_left: bool,
-    /// The Wave 6 facets (underline, vertical alignment, wrap, border
-    /// lines), keyed by their debug rendering (f64 weights have no `Hash`).
-    extra: String,
-}
-
-impl StyleKeyless {
-    fn of(s: &LoweredStyle) -> Self {
-        StyleKeyless {
-            bold: s.bold,
-            italic: s.italic,
-            font_size_bits: s.font_size_pt.map(f64::to_bits),
-            font_name: s.font_name.clone(),
-            fill_rgb: s.fill_rgb.clone(),
-            text_rgb: s.text_rgb.clone(),
-            border_top: s.border_top,
-            border_right: s.border_right,
-            border_bottom: s.border_bottom,
-            border_left: s.border_left,
-            extra: format!("{:?}", (s.underline, &s.v_align, s.wrap, &s.border_lines)),
-        }
-    }
 }
