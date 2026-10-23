@@ -197,7 +197,7 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   (`.github/actions/module-wasm`), and the engine's packages likewise
   (`.github/actions/engine-wasm`).
 - `scripts/wasm-budget.mjs` fails when the distinct `.wasm` files the application can
-  resolve sum to more than 100 MB
+  resolve sum to more than 120 MB
   ([plugin-sdk ADR 308](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/308-plugin-wasm.md)).
 
 An editor profile decides which bundles are activated, which host panels, tools, menus and
