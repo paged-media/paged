@@ -159,6 +159,19 @@ function fakeSession(shown: GridScene = scene) {
     documentSwatchColors: async (ids) =>
       new Map(ids.map((id) => [id, "#123456"] as [string, string])),
     documentStyleRevision: () => 0,
+    documentStyleChoices: async () => ({
+      paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
+      swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
+    }),
+    applyDocumentSwatch: async (target, id) => {
+      calls.push(["swatch", target, id]);
+      return { ok: true as const };
+    },
+    styleAtTarget: () => null,
+    setStyle: (patch) => {
+      calls.push(["style", patch]);
+      return { ok: true as const };
+    },
     documentTextDefault: async () => ({
       family: "Minion Pro",
       style: null,
@@ -436,6 +449,28 @@ describe("sheet frame surface", () => {
     // A plain colour (no reference) stays as the workbook has it.
     expect(shown.styles[0]?.textRgb).toBe("#000000");
     expect(shown.styles[0]?.borderLines?.bottom?.rgb).toBe("#222222");
+  });
+
+  it("the bar applies a document paragraph style and a document swatch", async () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.change(r.getByTestId("sheet-bar-style"), {
+      target: { value: "ParagraphStyle/Cells" },
+    });
+    expect(calls).toContainEqual([
+      "style",
+      { docParaStyle: "ParagraphStyle/Cells" },
+    ]);
+    fireEvent.click(r.getByTestId("sheet-bar-fill"));
+    const picker = r.getByTestId("sheet-swatch-picker");
+    fireEvent.click(picker.querySelector('[data-swatch="Color/Brand"]')!);
+    expect(calls).toContainEqual(["swatch", "fill", "Color/Brand"]);
+    expect(r.queryByTestId("sheet-swatch-picker")).toBeNull();
   });
 
   it("detaches on unmount", () => {
