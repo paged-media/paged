@@ -138,7 +138,7 @@ describe("paged.template.openAsTemplate", () => {
     await h.settle();
     expect(q(h, "[data-open-as-template-dialog]")).toBeNull();
 
-    const rows = (await h.client.templateFields()) as {
+    const rows = (await h.client.templateFields()) as readonly {
       field: { name: string; kind: string };
       value?: { text?: string } | null;
     }[];
