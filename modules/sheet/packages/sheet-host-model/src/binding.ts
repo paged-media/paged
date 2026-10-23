@@ -112,6 +112,10 @@ export interface BindingData {
   freeze?: { rows: number; cols: number };
   /** Column sizing (v2). */
   sizing: FrameSizing;
+  /** A placed chart's box on its page, `[top, left, bottom, right]` (pt):
+   *  where a later session redraws it and the size it is drawn at. Absent on
+   *  a table frame and on charts placed before it was recorded. */
+  box?: [number, number, number, number];
 }
 
 /** The full envelope as it sits on the page item: a versioned wrapper
@@ -129,6 +133,7 @@ export interface BindingViewOptions {
   print?: Partial<FramePrint>;
   freeze?: { rows: number; cols: number };
   sizing?: FrameSizing;
+  box?: [number, number, number, number];
 }
 
 /** The top-left cell of an A1 range (`"B2:D9"` -> `"B2"`, `"C3"` -> `"C3"`),
@@ -178,6 +183,7 @@ export function makeBinding(
     },
     ...(options.freeze ? { freeze: { ...options.freeze } } : {}),
     sizing: options.sizing ?? "fit",
+    ...(options.box ? { box: [...options.box] } : {}),
   };
   return { v: BINDING_VERSION, data };
 }
@@ -193,6 +199,7 @@ export function withView(
     print: { ...d.print, ...options.print },
     freeze: options.freeze ?? d.freeze,
     sizing: options.sizing ?? d.sizing,
+    box: options.box ?? d.box,
   });
 }
 
@@ -273,6 +280,7 @@ export function parseBinding(input: unknown): Binding | null {
     print: parsePrint(v2.print),
     freeze: parseFreeze(v2.freeze),
     sizing: v2.sizing === "window" ? "window" : "fit",
+    box: parseBox(v2.box),
   });
 }
 
@@ -295,6 +303,16 @@ function parsePrint(input: unknown): Partial<FramePrint> {
   if (typeof p.headings === "boolean") out.headings = p.headings;
   if (typeof p.gridlines === "boolean") out.gridlines = p.gridlines;
   return out;
+}
+
+function parseBox(
+  input: unknown,
+): [number, number, number, number] | undefined {
+  return Array.isArray(input) &&
+    input.length === 4 &&
+    input.every((n) => typeof n === "number" && Number.isFinite(n))
+    ? (input as [number, number, number, number])
+    : undefined;
 }
 
 function parseFreeze(

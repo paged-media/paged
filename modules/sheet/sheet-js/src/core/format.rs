@@ -742,6 +742,105 @@ impl SheetSession {
             right: r,
         })
     }
+
+    /// The print area of `sheet` (its `_xlnm.Print_Area` name), one range per
+    /// area in the order the definition lists them: a definition of several
+    /// areas is stored as a formula (`Sheet1!$A$1:$C$5,Sheet1!$E$1:$F$3`),
+    /// which is split at its top-level commas and each area resolved. A whole
+    /// column or row (`$A:$C`, `$1:$4`) is cut to the sheet's used cells, as
+    /// Excel prints it. An error when the sheet has no print area, an area is
+    /// not a reference, or an area lies on another sheet.
+    pub fn print_areas(&self, sheet: u16) -> Result<Vec<ResolvedRange>, SessionError> {
+        self.validate_sheet(sheet)?;
+        let model = self.engine().model();
+        let none = || SessionError(format!("sheet {sheet} has no print area"));
+        let id = model.names.resolve(PRINT_AREA, sheet).ok_or_else(none)?;
+        let def = model.names.get(id).ok_or_else(none)?;
+        let ranges: Vec<sheet_core::RangeRef> = match &def.target {
+            sheet_core::NameTarget::Range(r) => vec![*r],
+            sheet_core::NameTarget::Formula(text) => {
+                let ctx = super::ModelParseCtx {
+                    model,
+                    current: sheet,
+                };
+                let mut out = Vec::new();
+                for area in split_areas(text) {
+                    use sheet_core::ast::Expr;
+                    match sheet_parser::parse(area, &ctx).map(|f| f.root) {
+                        Ok(Expr::Range(r)) => out.push(r),
+                        Ok(Expr::Ref(c)) => out.push(sheet_core::RangeRef { start: c, end: c }),
+                        _ => {
+                            return Err(SessionError(format!(
+                                "print area {area:?} is not a reference"
+                            )))
+                        }
+                    }
+                }
+                out
+            }
+        };
+        if ranges.is_empty() {
+            return Err(none());
+        }
+        let used = model.sheet(sheet).and_then(|ws| ws.used_range());
+        let mut out = Vec::with_capacity(ranges.len());
+        for r in ranges {
+            let n = r.normalized();
+            if n.start.sheet != sheet || n.end.sheet != sheet {
+                return Err(SessionError(format!(
+                    "a print area of sheet {sheet} lies on another sheet"
+                )));
+            }
+            let (mut r0, mut c0, mut r1, mut c1) = (n.start.row, n.start.col, n.end.row, n.end.col);
+            // A whole band: cut to the used cells (an empty sheet keeps one).
+            if r0 == 0 && r1 == sheet_core::MAX_ROW {
+                r1 = used.as_ref().map_or(0, |u| u.row1);
+            }
+            if c0 == 0 && c1 == sheet_core::MAX_COL {
+                c1 = used.as_ref().map_or(0, |u| u.col1);
+            }
+            r0 = r0.min(r1);
+            c0 = c0.min(c1);
+            out.push(ResolvedRange {
+                sheet,
+                range: format!("{}:{}", a1(r0, c0), a1(r1, c1)),
+                top: r0,
+                left: c0,
+                bottom: r1,
+                right: c1,
+            });
+        }
+        Ok(out)
+    }
+}
+
+/// The built-in defined name a sheet's print area is stored under.
+pub(crate) const PRINT_AREA: &str = "_xlnm.Print_Area";
+
+/// The areas of a multi-area reference (`A!$A$1:$B$2,'B c'!$C$1`), split at
+/// the commas outside quoted sheet names; an outer pair of parentheses (the
+/// union as a formula writes it) is dropped. Empty pieces are skipped.
+pub(crate) fn split_areas(text: &str) -> Vec<&str> {
+    let mut t = text.trim().trim_start_matches('=').trim();
+    if t.starts_with('(') && t.ends_with(')') {
+        t = &t[1..t.len() - 1];
+    }
+    let mut out = Vec::new();
+    let mut quoted = false;
+    let mut start = 0;
+    for (i, ch) in t.char_indices() {
+        match ch {
+            '\'' => quoted = !quoted,
+            ',' if !quoted => {
+                out.push(t[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(t[start..].trim());
+    out.retain(|s| !s.is_empty());
+    out
 }
 
 /// The result of [`SheetSession::merge`]: recomputed displays + circular
@@ -1165,20 +1264,41 @@ impl SheetSession {
         if let Some(s) = scope {
             self.validate_sheet(s)?;
         }
-        let (target_sheet, cr) = self.resolve_range(sheet, refers_to)?;
-        let (top, left, bottom, right) = bounds(&cr);
-        let cell = |row, col| sheet_core::CellRef {
-            sheet: target_sheet,
-            row,
-            col,
-            row_abs: true,
-            col_abs: true,
-        };
-        let range = sheet_core::RangeRef {
-            start: cell(top, left),
-            end: cell(bottom, right),
-        };
-        let text = range_text(self.engine().model(), &range);
+        // A print area may list several ranges (`A!A1:C5,A!E1:F3`): stored as
+        // the formula Excel writes, each area resolved and absolute.
+        let areas = split_areas(refers_to);
+        let multi = name.eq_ignore_ascii_case(PRINT_AREA) && areas.len() > 1;
+        let mut ranges = Vec::with_capacity(areas.len());
+        for area in if multi { areas } else { vec![refers_to] } {
+            let (target_sheet, cr) = self.resolve_range(sheet, area)?;
+            let (top, left, bottom, right) = bounds(&cr);
+            let cell = |row, col| sheet_core::CellRef {
+                sheet: target_sheet,
+                row,
+                col,
+                row_abs: true,
+                col_abs: true,
+            };
+            ranges.push(sheet_core::RangeRef {
+                start: cell(top, left),
+                end: cell(bottom, right),
+            });
+        }
+        if multi
+            && ranges
+                .iter()
+                .any(|r| r.start.sheet != ranges[0].start.sheet)
+        {
+            return Err(SessionError(
+                "invalid range: every area of a print area is on one sheet".into(),
+            ));
+        }
+        let range = ranges[0];
+        let text = ranges
+            .iter()
+            .map(|r| range_text(self.engine().model(), r))
+            .collect::<Vec<_>>()
+            .join(",");
         let new_scope = match scope {
             Some(s) => sheet_core::NameScope::Sheet(s),
             None => sheet_core::NameScope::Workbook,
@@ -1203,7 +1323,11 @@ impl SheetSession {
         let def = sheet_core::NameDef {
             name: name.into(),
             scope: new_scope,
-            target: sheet_core::NameTarget::Range(range),
+            target: if multi {
+                sheet_core::NameTarget::Formula(text.as_str().into())
+            } else {
+                sheet_core::NameTarget::Range(range)
+            },
         };
         self.with_names(|old| {
             let mut out = sheet_core::NameTable::default();
