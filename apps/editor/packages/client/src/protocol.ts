@@ -103,6 +103,8 @@ export type {
   OverflowRule,
   TemplateFieldProblem,
   TemplateFieldSummary,
+  TemplateFinding,
+  FindingSeverity,
   TemplateFieldValue,
   DeriveOptions,
   Derivation,

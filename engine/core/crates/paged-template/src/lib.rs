@@ -33,6 +33,7 @@
 mod derive;
 mod permission;
 mod policy;
+mod preflight;
 mod resolve;
 
 pub use derive::{
@@ -44,4 +45,5 @@ pub use policy::{
     Constraints, DocumentPolicy, FieldDef, ItemPolicy, ModuleField, OverflowRule, PolicyProblem,
     TemplateFieldKind, TEMPLATE_KEY,
 };
+pub use preflight::{preflight, FindingSeverity, TemplateFinding};
 pub use resolve::{story_of_run, PolicyIndex};

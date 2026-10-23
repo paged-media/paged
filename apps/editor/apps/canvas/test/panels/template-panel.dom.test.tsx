@@ -159,4 +159,35 @@ describe("Template panel", () => {
     await h.settle();
     expect(await h.client.templateFields()).toEqual([]);
   });
+
+  test("the Problems section lists the template's findings for an author (plan F3)", async () => {
+    covers("panel:paged.template");
+    const h = await mount();
+    await h.click(q(h, '[data-template-role="author"]')!);
+    await h.settle();
+    expect((await until(h, "[data-template-problems]")).textContent).toContain(
+      "No problems",
+    );
+    const made = await h.mutate({
+      op: "insertTextFrame",
+      args: { pageId: h.handle!.pageIds[0], bounds: [100, 40, 160, 300] },
+    } as never);
+    await h.mutate({
+      op: "setPluginMetadata",
+      args: {
+        elementId: (made as unknown as { payload: { createdId: unknown } })
+          .payload.createdId,
+        key: "x-paged:template",
+        value: JSON.stringify({
+          v: 1,
+          data: { field: { name: "photo", kind: "image" } },
+        }),
+      },
+    } as never);
+    const problem = await until(
+      h,
+      '[data-template-problem-code="imageNotReplaceable"]',
+    );
+    expect(problem.textContent).toContain("“photo” is a picture field");
+  });
 });

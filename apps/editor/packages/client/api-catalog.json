@@ -3,7 +3,7 @@
   "package": "@paged-media/client",
   "protocol": 76,
   "counts": {
-    "clientMembers": 86,
+    "clientMembers": 87,
     "wireKinds": 56,
     "exports": 74
   },
@@ -143,6 +143,12 @@
           "kind": "method",
           "signature": "async templateFields(): Promise<readonly TemplateFieldSummary[]>",
           "summary": "v75 (engine ADR 1001) — the template's fields, in form order, with their definitions and current values: the `templateFields` collection."
+        },
+        {
+          "name": "CanvasClient.templateFindings",
+          "kind": "method",
+          "signature": "async templateFindings(): Promise<readonly TemplateFinding[]>",
+          "summary": "v76 (editor plan F3) — the template's preflight: what is wrong with its policy before anyone fills it, errors first."
         },
         {
           "name": "CanvasClient.setTemplateFields",
@@ -905,6 +911,18 @@
           "name": "TemplateFieldSummary",
           "kind": "type",
           "signature": "TemplateFieldSummary",
+          "summary": null
+        },
+        {
+          "name": "TemplateFinding",
+          "kind": "type",
+          "signature": "TemplateFinding",
+          "summary": null
+        },
+        {
+          "name": "FindingSeverity",
+          "kind": "type",
+          "signature": "FindingSeverity",
           "summary": null
         },
         {
