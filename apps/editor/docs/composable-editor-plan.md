@@ -1249,17 +1249,32 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   runs placement and chart delete through `paged-node invoke`. A frame's view and sizing
   (`sizing: "window"`, printed headings and gridlines) wait for the page side of the frame
   window (sheet ADR 510) to be wired to placement (`modules/sheet/docs/status.md`).
-- **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per
-  record or group; read-only inspection commands (preview, expression check, refresh diff).
+- **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
+  commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
+  `defineBinding` (the session binding kinds), `apply`, and `merge` (now with `imageBase`,
+  `imageFields` and the undo steps it took). `generate <template> --per record|group [--by …]`
+  is the batch verb: paged.data's `planBatch` splits the records, each unit is merged, written
+  and undone. Read-only inspection commands: `previewQuery`, `checkExpression`, `refreshDiff`,
+  `previewRecordFlow` (`modules/data/docs/status.md`, extensions ADR 324 amendment of
+  2026-10-23).
 - **doc:** done: the exporter works after reopening a saved document; `block.text` writable;
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
   heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
   headless host has no native-open door, so `paged-node` places it in a frame).
-- **slide:** the typed `newSlide` places the layout's placeholders like the panel does; reorder
-  and duplicate; a typed `exportPptx`; menus and commands.
+- **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
+  reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
+  commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
+  and New, Duplicate, Delete, Move up and Move down of the active slide under Plugins ▸ Slide,
+  each offered only where it applies (`modules/slide/docs/status.md`).
 - **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
-- **publish / pdf:** bookmarks and tagged PDF in the typed exporter; `template fill -o x.pdf` and
-  `merge` through the typed exporter; a `preflight` command and verb; `paged-node package`.
+- **publish / pdf:** done. Bookmarks and tagged PDF are options of the typed `exportPdf`; every
+  PDF `paged-node` writes (`template fill -o x.pdf`, `merge`, `generate`, `-o x.pdf`) goes
+  through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
+  (exit 1 on an error finding). `paged-node package <doc> -o <dir|x.zip>`, InDesign's
+  package as the Rust `paged package` lays it out: the IDML with its links rebased into
+  `Links/`, the linked files, the fonts, instructions and a report. Fonts are collected only
+  from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
+  whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
 
 ## 9b. Workstream H — Demos
 

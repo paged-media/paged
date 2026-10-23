@@ -33,6 +33,7 @@ import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -77,6 +78,12 @@ const BIN_SRC = join(CLI_ROOT, "src", "bin.ts");
 const NP = "--no-plugins";
 const NOTES = `--plugins=${join(FIXTURES, "notes-plugin.ts")}`;
 const DATA = "--plugins=@paged-media/data";
+const PUBLISH = `--plugins=${join(REPO_ROOT, "modules/publish/packages/publish-bundle/src/index.ts")}`;
+const SINGLE_RECORD = join(dirname(LONG_RECORD_SET.idml), "single-record.idml");
+const SINGLE_RECORD_CSV = join(
+  dirname(LONG_RECORD_SET.idml),
+  "../csv/single-record.csv",
+);
 
 /** Whether every wasm artifact the workspace's paged.data bundle declares is
  *  built: its own engine (modules/data/scripts/build-wasm.sh) and DuckDB
@@ -888,6 +895,95 @@ const CASES: Record<string, Case[]> = {
           .join("\n"),
     },
   ],
+  generate: [
+    { name: "help", argv: () => ["generate", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["generate"], exit: 2 },
+    {
+      name: "usage-per",
+      argv: () => [
+        "generate",
+        fx.paged,
+        "--data",
+        T("records.csv"),
+        "--out",
+        T("generated"),
+        "--per",
+        "page",
+        NP,
+      ],
+      exit: 2,
+    },
+    {
+      name: "input-missing-template",
+      argv: () => [
+        "generate",
+        T("missing.idml"),
+        "--data",
+        T("records.csv"),
+        "--out",
+        T("generated"),
+        NP,
+      ],
+      exit: 2,
+    },
+    {
+      name: "ok",
+      needs: "data-engine",
+      argv: () => [
+        "generate",
+        SINGLE_RECORD,
+        "--data",
+        SINGLE_RECORD_CSV,
+        "--out",
+        T("generated"),
+        DATA,
+      ],
+      exit: 0,
+      structure: () => readdirSync(T("generated")).sort().join("\n"),
+    },
+  ],
+  preflight: [
+    { name: "help", argv: () => ["preflight", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["preflight"], exit: 2 },
+    {
+      name: "usage-no-publish-bundle",
+      argv: () => ["preflight", fx.paged, NP],
+      exit: 2,
+    },
+    {
+      name: "input-missing-doc",
+      argv: () => ["preflight", T("missing.paged"), PUBLISH],
+      exit: 2,
+    },
+    { name: "ok", argv: () => ["preflight", fx.paged, PUBLISH], exit: 0 },
+    {
+      name: "refused-pdfx4-without-profile",
+      argv: () => ["preflight", fx.paged, "--pdf-standard", "pdfx4", PUBLISH],
+      exit: 1,
+    },
+  ],
+  package: [
+    { name: "help", argv: () => ["package", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["package"], exit: 2 },
+    { name: "usage-no-out", argv: () => ["package", fx.paged, NP], exit: 2 },
+    {
+      name: "input-missing-doc",
+      argv: () => ["package", T("missing.paged"), "-o", T("pkg-none"), NP],
+      exit: 2,
+    },
+    {
+      name: "ok",
+      argv: () => ["package", fx.paged, "-o", T("pkg"), NP],
+      exit: 0,
+      structure: () => readdirSync(T("pkg")).sort().join("\n"),
+    },
+    {
+      name: "ok-zip",
+      argv: () => ["package", fx.paged, "-o", T("pkg.zip"), NP],
+      exit: 0,
+      structure: () => zipEntries(readFileSync(T("pkg.zip"))).join("\n"),
+    },
+  ],
   plugins: [
     { name: "help", argv: () => ["plugins", "--help"], exit: 0 },
     { name: "usage", argv: () => ["plugins", "a.paged", "b.paged"], exit: 2 },
@@ -1164,6 +1260,22 @@ describe("paged-node golden transcripts", () => {
   withDataEngine("merge: 57 records into one document", async () => {
     covers("cli:paged-node merge");
     await runCase("merge", theCase("merge", "ok"));
+  });
+  it("generate: argument and input errors", async () => {
+    covers("cli:paged-node generate");
+    await runVerb("generate");
+  });
+  withDataEngine("generate: one document per record", async () => {
+    covers("cli:paged-node generate");
+    await runCase("generate", theCase("generate", "ok"));
+  });
+  it("preflight (through paged.publish's typed preflight)", async () => {
+    covers("cli:paged-node preflight");
+    await runVerb("preflight");
+  });
+  it("package (a folder and a .zip)", async () => {
+    covers("cli:paged-node package");
+    await runVerb("package");
   });
   it("plugins", async () => {
     covers("cli:paged-node plugins");

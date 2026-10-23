@@ -1,0 +1,11 @@
+$ paged-node preflight <TMP>/fixture.paged --pdf-standard pdfx4 --plugins=<REPO>/modules/publish/packages/publish-bundle/src/index.ts
+# exit 1
+# stdout
+{
+  "error": {
+    "message": "preflight failed: invalidValue: pdfx4 needs an outputIntentProfile (a registered profile name)",
+    "exit": 1
+  }
+}
+# stderr
+(empty)

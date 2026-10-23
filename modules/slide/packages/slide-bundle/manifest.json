@@ -26,6 +26,15 @@
     }
   },
   "contributes": {
+    "commands": [
+      "media.paged.slide.command.newSlide",
+      "media.paged.slide.command.duplicateSlide",
+      "media.paged.slide.command.deleteSlide",
+      "media.paged.slide.command.moveSlideUp",
+      "media.paged.slide.command.moveSlideDown",
+      "media.paged.slide.command.importPptx",
+      "media.paged.slide.command.exportPptx"
+    ],
     "importers": ["media.paged.slide.importer.pptx"],
     "exporters": ["media.paged.slide.exporter.pptx"],
     "panels": [
