@@ -30,7 +30,7 @@ use crate::visual::{ColorRef, DifferentialFormat};
 pub type CfRange = (u32, u32, u32, u32);
 
 /// The comparison of a `cellIs` rule.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CfOp {
     Equal,
@@ -78,7 +78,7 @@ impl CfOp {
 }
 
 /// The text test of a text rule.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CfTextOp {
     Contains,
@@ -110,7 +110,7 @@ impl CfTextOp {
 }
 
 /// A `timePeriod` rule's period (relative to today).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CfTimePeriod {
     Today,
@@ -154,7 +154,7 @@ impl CfTimePeriod {
 }
 
 /// How a colour-scale / data-bar / icon-set threshold is found (`cfvo`).
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CfvoKind {
     Min,
@@ -200,7 +200,7 @@ impl CfvoKind {
 
 /// One threshold (`cfvo`): its kind, its value (a number or a formula, as
 /// text) and whether the comparison is `>=` (`gte`, the default) or `>`.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Cfvo {
     pub kind: CfvoKind,
@@ -219,7 +219,7 @@ impl Cfvo {
 }
 
 /// Where a data bar's axis sits (x14).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AxisPosition {
     /// At the zero point of the bar's domain when it holds negatives.
@@ -232,7 +232,7 @@ pub enum AxisPosition {
 }
 
 /// A data bar's direction (x14).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum BarDirection {
     #[default]
@@ -242,7 +242,7 @@ pub enum BarDirection {
 }
 
 /// A data bar (the 2006 `<dataBar>` plus its `x14:dataBar` extension).
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DataBarRule {
     pub min: Cfvo,
@@ -289,7 +289,7 @@ impl DataBarRule {
 }
 
 /// An icon set (2006 `<iconSet>` or `x14:iconSet`, custom icons included).
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IconSetRule {
     /// The set name (`3TrafficLights1`, `5Arrows`, `3Stars`, `NoIcons`, …).
@@ -304,7 +304,7 @@ pub struct IconSetRule {
 }
 
 /// What a rule tests and paints.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 // A data bar is the large variant; rules are few per sheet and cloned
 // rarely, so it stays inline rather than boxed.
@@ -381,7 +381,7 @@ impl CfKind {
 }
 
 /// One rule.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CfRule {
     pub kind: CfKind,
@@ -412,7 +412,8 @@ impl CfRule {
 }
 
 /// One `<conditionalFormatting>` block: its ranges and rules.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct CfBlock {
     pub ranges: Vec<CfRange>,
@@ -436,7 +437,8 @@ impl CfBlock {
 }
 
 /// A sheet's conditional formats.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct SheetCf {
     pub blocks: Vec<CfBlock>,

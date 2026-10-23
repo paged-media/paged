@@ -1297,6 +1297,25 @@ impl XlsxDocument {
         Ok((map, table))
     }
 
+    /// Append one record to a `styles.xml` section (`dxfs`, …), dedup by
+    /// canonical form, and return its index. `render` gets the part's
+    /// element prefix. Every existing index keeps its meaning, so the
+    /// model's style table stays valid (the re-parse only refreshes the
+    /// visual tables and the differential formats).
+    pub(crate) fn append_style_record(
+        &mut self,
+        section_local: &str,
+        render: impl Fn(&str) -> String,
+    ) -> Result<u32, XlsxError> {
+        let xml = self.styles_bytes();
+        let prefix = root_prefix(&xml)?;
+        let el = parse_elem(render(&prefix).as_bytes())?;
+        let rec = el.local().to_string();
+        let (xml, idx) = find_or_append(xml, section_local, &rec, &el, &prefix)?;
+        self.store_styles(xml)?;
+        Ok(idx as u32)
+    }
+
     /// Store new `styles.xml` bytes (creating the part when the package has
     /// none) and re-parse them with the loader's own parser: ids are
     /// positional, the visual side table and the dxfs are the parser's

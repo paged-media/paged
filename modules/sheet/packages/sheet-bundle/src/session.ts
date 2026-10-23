@@ -60,6 +60,8 @@ import {
   type CalcSettingsInfo,
   type CellEditRecord,
   type CellStylePatch,
+  type CfRuleInfo,
+  type CfRuleSpec,
   type DocSwatch,
   type EdgeStyle,
   type NameInfo,
@@ -843,6 +845,17 @@ export interface WorkbookSession extends DataToolsApi {
   formatTarget(): FormatTarget | null;
   /** Apply a partial style to the format target. */
   setStyle(patch: CellStylePatch): SessionResult;
+  /** W2.5 — the active sheet's conditional-format rules (highest priority
+   *  first); empty without a workbook. */
+  cfRules(): CfRuleInfo[];
+  /** W2.5 — add / replace / delete / reorder conditional-format rules on
+   *  the active sheet; each is one undo step (the Conditional Formatting
+   *  dialog drives these). */
+  addCfRule(spec: CfRuleSpec): SessionResult;
+  updateCfRule(index: number, spec: CfRuleSpec): SessionResult;
+  deleteCfRule(index: number): SessionResult;
+  reorderCfRules(order: readonly number[]): SessionResult;
+  setCfStopIfTrue(index: number, stop: boolean): SessionResult;
   /** Borders on the format target: `all` edges of every cell, the
    *  `outline` of the block, one side of the block, or `none` (every edge
    *  of every cell cleared). */
@@ -1790,6 +1803,33 @@ export function createWorkbookSession(
     else markEdited();
     emitter.emit();
     return { ok: true };
+  }
+
+  /** One conditional-format authoring step on the active sheet: the
+   *  model's snapshot before and after is the undo / redo (W2.5). */
+  function cfStep(
+    apply: (engine: SheetEngine, sheet: number) => unknown,
+  ): SessionResult {
+    const sheet = state.activeSheet;
+    if (sheet === null) return { ok: false, message: "no sheet is active" };
+    return journalFormat(
+      (e) => {
+        if (!e.cfSnapshot || !e.cfRestore) return null;
+        const before = e.cfSnapshot(sheet);
+        return () => {
+          const after = e.cfSnapshot!(sheet);
+          return {
+            undo: (x) => x.cfRestore!(sheet, before),
+            redo: (x) => x.cfRestore!(sheet, after),
+          };
+        };
+      },
+      (e) => {
+        if (!e.addCfRule)
+          throw new Error("engine wasm predates the conditional-format doors");
+        apply(e, sheet);
+      },
+    );
   }
 
   /** The style-id snapshot step over `sheet`/`range` (null when the engine
@@ -5824,6 +5864,38 @@ export function createWorkbookSession(
           e.setStyle(t.sheet, t.range, patch);
         },
       );
+    },
+
+    cfRules() {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.cfRules || sheet === null) return [];
+      try {
+        return e.cfRules(sheet);
+      } catch (err) {
+        host.log.warn("conditional formats could not be listed", err);
+        return [];
+      }
+    },
+
+    addCfRule(spec) {
+      return cfStep((e, sheet) => e.addCfRule!(sheet, spec));
+    },
+
+    updateCfRule(index, spec) {
+      return cfStep((e, sheet) => e.updateCfRule!(sheet, index, spec));
+    },
+
+    deleteCfRule(index) {
+      return cfStep((e, sheet) => e.deleteCfRule!(sheet, index));
+    },
+
+    reorderCfRules(order) {
+      return cfStep((e, sheet) => e.reorderCfRules!(sheet, order));
+    },
+
+    setCfStopIfTrue(index, stop) {
+      return cfStep((e, sheet) => e.setCfStopIfTrue!(sheet, index, stop));
     },
 
     setBorders(kind, edge) {

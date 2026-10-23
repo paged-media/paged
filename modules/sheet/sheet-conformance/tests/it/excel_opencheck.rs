@@ -100,6 +100,11 @@ fn scenarios() -> Vec<(&'static str, &'static str, Step)> {
                 .unwrap();
         }),
     ];
+    // W2.2 / W2.5: authored cell styles (every visual facet, an Excel named
+    // style, document references in the record's extLst) and authored
+    // conditional formats of every kind (2006 blocks + the x14 extension).
+    v.push(("w2-styles", "03-styles.xlsx", w2_styles));
+    v.push(("w2-cf", "20-condfmt-all.xlsx", w2_cf));
     for f in [
         "01-minimal.xlsx",
         "02-formulas.xlsx",
@@ -227,6 +232,169 @@ fn chart_data(s: &mut SheetSession) {
     }
 }
 
+fn w2_styles(s: &mut SheetSession) {
+    use sheet_js::core::{DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, StylePatchArg};
+    let doc = DocSwatchArg {
+        id: "Color/Brand".into(),
+        model: "spot".into(),
+        fallback_rgb: "#E3000F".into(),
+    };
+    s.set_style(
+        0,
+        "A1",
+        StylePatchArg {
+            pattern: Some("darkTrellis".into()),
+            fill: Some("#FF0000".into()),
+            fill_bg: Some("#FFFF00".into()),
+            indent: Some(2),
+            rotation: Some(45),
+            strike: Some(true),
+            vert_align: Some("superscript".into()),
+            underline_style: Some("doubleAccounting".into()),
+            border_diagonal: Some(EdgeArg {
+                style: "dashDot".into(),
+                color: Some("#0000FF".into()),
+                swatch: None,
+            }),
+            diagonal_up: Some(true),
+            font_swatch: Some(doc),
+            doc_char_style: Some("CharacterStyle/Strong".into()),
+            ..StylePatchArg::default()
+        },
+    )
+    .unwrap();
+    s.set_style(
+        0,
+        "B1",
+        StylePatchArg {
+            gradient: Some(GradientArg {
+                kind: "linear".into(),
+                degree: 90.0,
+                stops: vec![
+                    GradientStopArg {
+                        position: 0.0,
+                        color: "#FFFFFF".into(),
+                    },
+                    GradientStopArg {
+                        position: 1.0,
+                        color: "#4472C4".into(),
+                    },
+                ],
+                ..GradientArg::default()
+            }),
+            rotation: Some(255),
+            shrink: Some(true),
+            ..StylePatchArg::default()
+        },
+    )
+    .unwrap();
+    s.set_style(
+        0,
+        "A2",
+        StylePatchArg {
+            named_style: Some("Heading 1".into()),
+            ..StylePatchArg::default()
+        },
+    )
+    .unwrap();
+}
+
+fn w2_cf(s: &mut SheetSession) {
+    use sheet_core::condfmt::*;
+    use sheet_core::visual::{CellFill, ColorRef, DifferentialFormat, PatternKind};
+    use sheet_js::core::cf::CfRuleSpec;
+    let dxf = || {
+        Some(DifferentialFormat {
+            fill: Some(CellFill::Pattern {
+                pattern: PatternKind::Solid,
+                fg: Some(ColorRef::rgb(0xC6, 0xEF, 0xCE)),
+                bg: None,
+            }),
+            num_fmt: Some("0.0".into()),
+            ..Default::default()
+        })
+    };
+    let pct = |v: &str| Cfvo::new(CfvoKind::Percent, Some(v));
+    let mut bar = DataBarRule::new(
+        Cfvo::new(CfvoKind::AutoMin, None),
+        Cfvo::new(CfvoKind::AutoMax, None),
+        ColorRef::rgb(0x63, 0x8E, 0xC6),
+    );
+    bar.gradient = false;
+    bar.border = true;
+    bar.border_color = Some(ColorRef::rgb(0x63, 0x8E, 0xC6));
+    bar.axis_position = AxisPosition::Middle;
+    let kinds = vec![
+        (
+            "U1:U10",
+            CfKind::Expression {
+                formula: "AND(U1>2,ISODD(ROW()))".into(),
+            },
+        ),
+        (
+            "U1:U10",
+            CfKind::CellIs {
+                op: CfOp::NotBetween,
+                formulas: vec!["3".into(), "$Z$1".into()],
+            },
+        ),
+        (
+            "V1:V10",
+            CfKind::TimePeriod {
+                period: CfTimePeriod::LastMonth,
+            },
+        ),
+        (
+            "V1:V10",
+            CfKind::Text {
+                op: CfTextOp::EndsWith,
+                text: "x".into(),
+            },
+        ),
+        ("V1:V10", CfKind::Blanks { blank: false }),
+        ("V1:V10", CfKind::Errors { error: false }),
+        ("W1:W10", CfKind::DataBar(bar)),
+        (
+            "X1:X10",
+            CfKind::IconSet(IconSetRule {
+                set: "3Triangles".into(),
+                cfvos: vec![pct("0"), pct("33"), pct("67")],
+                reverse: true,
+                show_value: false,
+                custom: vec![],
+            }),
+        ),
+        (
+            "Y1:Y10",
+            CfKind::IconSet(IconSetRule {
+                set: "3Arrows".into(),
+                cfvos: vec![pct("0"), Cfvo::new(CfvoKind::Num, Some("4")), pct("80")],
+                reverse: false,
+                show_value: true,
+                custom: vec![None, Some(("3Flags".into(), 1)), Some(("3Stars".into(), 2))],
+            }),
+        ),
+    ];
+    for (range, kind) in kinds {
+        let dxf = if kind.paints_dxf() { dxf() } else { None };
+        s.add_cf_rule(
+            0,
+            CfRuleSpec {
+                ranges: vec![range.into()],
+                kind,
+                stop_if_true: false,
+                dxf,
+            },
+        )
+        .unwrap();
+    }
+    for r in 0..10u32 {
+        s.set_cell(0, r, 22, &format!("{}", r as i32 - 4)).unwrap();
+        s.set_cell(0, r, 23, &format!("{}", r)).unwrap();
+        s.set_cell(0, r, 24, &format!("{}", r)).unwrap();
+    }
+}
+
 /// A package Excel must repair: rows out of order.
 fn broken_control() -> Vec<u8> {
     let mut s = SheetSession::load_xlsx(&corpus("01-minimal.xlsx")).unwrap();
@@ -276,11 +444,24 @@ fn inventory(bytes: &[u8]) -> String {
     let mut dv = 0;
     let mut notes = 0;
     let mut tables = 0;
+    // Every conditional-format rule of the full model (x14 included).
+    let cfr: usize = doc
+        .cf_models
+        .values()
+        .map(|c| c.blocks.iter().map(|b| b.rules.len()).sum::<usize>())
+        .sum();
     for i in 0..sheets.len() as u16 {
-        cf += doc
-            .conditional_formats
-            .get(&i)
-            .map_or(0, |c| c.blocks.len());
+        // Blocks by their ranges (Excel merges blocks over the same ranges
+        // into one on save).
+        cf += doc.conditional_formats.get(&i).map_or(0, |c| {
+            let mut seen: Vec<&Vec<(u32, u32, u32, u32)>> = Vec::new();
+            for b in &c.blocks {
+                if !seen.contains(&&b.ranges) {
+                    seen.push(&b.ranges);
+                }
+            }
+            seen.len()
+        });
         dv += doc.data_validations_of(i).map_or(0, |d| d.rules.len());
         notes += doc.comments_of(i).map_or(0, |c| c.comments.len());
         tables += s.model().sheets[i as usize].tables.len();
@@ -319,7 +500,7 @@ fn inventory(bytes: &[u8]) -> String {
         format!(" charts={}[{}]", charts.len(), charts.join("|"))
     };
     format!(
-        "cf={cf} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}{charts}"
+        "cf={cf} cfr={cfr} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}{charts}"
     )
 }
 
@@ -339,6 +520,10 @@ fn record_what_excel_made_of_them() {
             "01-minimal".to_string()
         } else if case.starts_with("chart-") {
             "16-structure".to_string()
+        } else if case == "w2-styles" {
+            "03-styles".to_string()
+        } else if case == "w2-cf" {
+            "20-condfmt-all".to_string()
         } else {
             case.to_string()
         };

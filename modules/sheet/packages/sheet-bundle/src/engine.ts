@@ -608,6 +608,20 @@ export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
   /** W2.2 — the workbook's Excel named cell styles and the built-ins it can
    *  add. */
   namedStyles?(): NamedStyleInfo[];
+  /** W2.5 — the conditional-format rules of a sheet, highest priority
+   *  first; `index` is the handle the other calls take until the next
+   *  change. */
+  cfRules?(sheet: number): CfRuleInfo[];
+  /** W2.5 — add a rule at the top of the priority order; returns 0. */
+  addCfRule?(sheet: number, spec: CfRuleSpec): number;
+  updateCfRule?(sheet: number, index: number, spec: CfRuleSpec): void;
+  deleteCfRule?(sheet: number, index: number): void;
+  /** `order`: the current indices, highest priority first. */
+  reorderCfRules?(sheet: number, order: readonly number[]): void;
+  setCfStopIfTrue?(sheet: number, index: number, stop: boolean): void;
+  /** The whole model (an undo snapshot) and its restore. */
+  cfSnapshot?(sheet: number): unknown;
+  cfRestore?(sheet: number, snapshot: unknown): void;
   /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
    *  snapshot for `setStyleIds` (the in-session undo of a format change). */
   getStyleIds?(sheet: number, range: string): number[];
@@ -871,6 +885,38 @@ export interface CellVisualInfo {
   };
   namedStyle?: string;
   docCellStyle?: string;
+}
+
+/** A conditional-format rule's kind (the engine's JSON shape, tagged by
+ *  `type`: `cellIs`, `expression`, `top10`, `aboveAverage`, `duplicates`,
+ *  `text`, `timePeriod`, `blanks`, `errors`, `colorScale`, `dataBar`,
+ *  `iconSet`, `unknown`). Every semantic is Rust's (sheet ADR 523). */
+export type CfKind = { type: string; [field: string]: unknown };
+
+/** A differential format a rule paints (the engine's JSON shape: optional
+ *  `font`, `fill`, `border`, `numFmt`). */
+export type CfFormat = Record<string, unknown>;
+
+/** A rule as the engine lists it. */
+export interface CfRuleInfo {
+  index: number;
+  ranges: string[];
+  rule: {
+    kind: CfKind;
+    priority: number;
+    stopIfTrue: boolean;
+    dxf?: CfFormat | null;
+    dxfId?: number | null;
+    extId?: string | null;
+  };
+}
+
+/** A rule to add or replace. */
+export interface CfRuleSpec {
+  ranges: string[];
+  kind: CfKind;
+  stopIfTrue?: boolean;
+  dxf?: CfFormat | null;
 }
 
 /** One Excel named cell style (`namedStyles`). */
@@ -1150,6 +1196,14 @@ export interface SheetWasmEngine
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
   get_cell_visual?(sheet: number, row: number, col: number): CellVisualInfo;
   named_styles?(): NamedStyleInfo[];
+  cf_rules?(sheet: number): CfRuleInfo[];
+  add_cf_rule?(sheet: number, spec: CfRuleSpec): number;
+  update_cf_rule?(sheet: number, index: number, spec: CfRuleSpec): void;
+  delete_cf_rule?(sheet: number, index: number): void;
+  reorder_cf_rules?(sheet: number, order: Uint32Array): void;
+  set_cf_stop_if_true?(sheet: number, index: number, stop: boolean): void;
+  cf_snapshot?(sheet: number): unknown;
+  cf_restore?(sheet: number, snapshot: unknown): void;
   get_style_ids?(sheet: number, range: string): Uint32Array;
   set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
   merge?(sheet: number, range: string): { changed: CellChange[] };
@@ -1369,6 +1423,24 @@ export function wrapEngine(
     getCellVisual: (sheet, row, col) =>
       need("get_cell_visual")(sheet, row, col) as CellVisualInfo,
     namedStyles: () => need("named_styles")() as NamedStyleInfo[],
+    cfRules: (sheet) => need("cf_rules")(sheet) as CfRuleInfo[],
+    addCfRule: (sheet, spec) => need("add_cf_rule")(sheet, spec) as number,
+    updateCfRule: (sheet, index, spec) => {
+      need("update_cf_rule")(sheet, index, spec);
+    },
+    deleteCfRule: (sheet, index) => {
+      need("delete_cf_rule")(sheet, index);
+    },
+    reorderCfRules: (sheet, order) => {
+      need("reorder_cf_rules")(sheet, Uint32Array.from(order));
+    },
+    setCfStopIfTrue: (sheet, index, stop) => {
+      need("set_cf_stop_if_true")(sheet, index, stop);
+    },
+    cfSnapshot: (sheet) => need("cf_snapshot")(sheet),
+    cfRestore: (sheet, snapshot) => {
+      need("cf_restore")(sheet, snapshot);
+    },
     getStyleIds: (sheet, range) =>
       Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
     setStyleIds: (sheet, range, ids) =>
