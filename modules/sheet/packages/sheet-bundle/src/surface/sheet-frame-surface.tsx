@@ -58,6 +58,7 @@ import {
 import type { WorkbookSession } from "../session";
 import type { DataToolsApi } from "../data-tools";
 import { DataCards } from "./data-cards";
+import { useDocStyleLooks, withDocumentStyles } from "./doc-style-looks";
 import {
   REF_COLORS,
   a1Of,
@@ -80,6 +81,7 @@ export type FrameSurfaceSession = Pick<
   | "documentTextDefault"
   | "documentSwatchColors"
   | "documentStyleRevision"
+  | "documentStyleLooks"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -411,8 +413,14 @@ function SheetFrameSurfaceView({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
-  const [scene, setScene] = useState<GridScene | null>(null);
+  const [rawScene, setScene] = useState<GridScene | null>(null);
   const textDefault = useDocumentTextDefault(session);
+  // ADR 524 — cells in document styles draw in those styles' looks.
+  const docLooks = useDocStyleLooks(session, rawScene);
+  const scene = useMemo(
+    () => (rawScene ? withDocumentStyles(rawScene, docLooks) : null),
+    [rawScene, docLooks],
+  );
   const swatchColors = useSwatchColors(session, scene);
   const facesLoaded = useDocumentFaces(
     session,

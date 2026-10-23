@@ -91,6 +91,7 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     documentFontFace: async () => null,
     documentSwatchColors: async () => new Map(),
     documentStyleRevision: () => 0,
+    documentStyleLooks: async () => new Map(),
   };
   return { session, calls, changed };
 }

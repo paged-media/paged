@@ -51,6 +51,7 @@ use sheet_xlsx::XlsxDocument;
 
 mod charts;
 pub mod csv;
+mod docstyles;
 mod fill;
 pub mod filter;
 mod format;
@@ -63,6 +64,7 @@ pub mod tables;
 pub mod validation;
 pub mod whatif;
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
+pub use docstyles::{DocReferences, NamedStyleUsage};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
     ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,

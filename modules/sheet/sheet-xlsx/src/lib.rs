@@ -46,6 +46,7 @@
 //! `FormulaId`s on load and writes printed text back before save.
 
 pub mod defined_names;
+pub mod doc_style_map;
 pub mod error;
 pub mod opc;
 pub mod parts;

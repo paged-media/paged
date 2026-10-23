@@ -399,5 +399,22 @@
   "sheet.workbook.validations": "{sheet}: {count, plural, one {# Datenüberprüfung} other {# Datenüberprüfungen}} ({kinds}; erhalten, aber nicht angewendet)",
   "sheet.workbook.valuesAria": "Wertebereich",
   "sheet.workbook.valuesFirst": "Geben Sie zuerst einen Wertebereich ein (zum Beispiel B2:C8).",
-  "sheet.workbook.valuesPlaceholder": "Werte, z. B. B2:C8"
+  "sheet.workbook.valuesPlaceholder": "Werte, z. B. B2:C8",
+  "sheet.docStyles.section": "Dokumentformate",
+  "sheet.docStyles.useDocumentStyles": "Dokumentformate verwenden",
+  "sheet.docStyles.note": "Excel-Zellenformatvorlagen übernehmen die Absatz-, Zeichen- und Zellenformate des Layoutdokuments; die Arbeitsmappe behält ihre eigenen Werte für Excel.",
+  "sheet.docStyles.offer": "Diese Arbeitsmappe nutzt ihr eigenes Excel-Aussehen. Stattdessen die Formate des Dokuments verwenden?",
+  "sheet.docStyles.excelStyle": "Excel-Format",
+  "sheet.docStyles.paragraphStyle": "Absatzformat",
+  "sheet.docStyles.characterStyle": "Zeichenformat",
+  "sheet.docStyles.cellStyle": "Zellenformat",
+  "sheet.docStyles.cells": "Zellen",
+  "sheet.docStyles.none": "(keines)",
+  "sheet.docStyles.create": "Dokumentformate aus Arbeitsmappe erstellen",
+  "sheet.docStyles.created": "{count} Dokumentformate erstellt und zugeordnet.",
+  "sheet.docStyles.missing": "{count} Verweise fehlen",
+  "sheet.docStyles.remap": "Neu zuordnen",
+  "sheet.docStyles.remapTo": "{id} ersetzen durch",
+  "sheet.docStyles.unread": "Die Formate des Dokuments konnten nicht gelesen werden.",
+  "sheet.docStyles.noWorkbook": "Zuerst eine Arbeitsmappe öffnen oder erstellen."
 }
