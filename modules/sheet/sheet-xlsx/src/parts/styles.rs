@@ -62,7 +62,9 @@ use crate::opc::attr;
 use crate::parts::style_model::StyleSheet;
 use crate::parts::theme::{apply_tint, ThemePalette};
 use sheet_core::style::{CellStyle, StyleTable};
-use sheet_core::visual::{CellVisual, DifferentialFormat, FontSpec, HAlign, NamedCellStyle};
+use sheet_core::visual::{
+    CellVisual, DifferentialFormat, FontSpec, HAlign, NamedCellStyle, RichRunVisual,
+};
 use sheet_core::StyleId;
 use sheet_format::ColorPalette;
 use std::collections::BTreeMap;
@@ -165,6 +167,8 @@ pub struct VisualStyles {
     named: Vec<NamedCellStyle>,
     palette: ColorPalette,
     default_font: FontSpec,
+    /// Rich-text cells: `(sheet, row, col)` → the runs of its shared string.
+    rich: BTreeMap<(sheet_core::SheetId, u32, u32), Vec<RichRunVisual>>,
 }
 
 impl VisualStyles {
@@ -194,6 +198,26 @@ impl VisualStyles {
         &self.default_font
     }
 
+    /// The table with the workbook's rich-text cells.
+    pub fn with_rich(
+        mut self,
+        rich: BTreeMap<(sheet_core::SheetId, u32, u32), Vec<RichRunVisual>>,
+    ) -> Self {
+        self.rich = rich;
+        self
+    }
+
+    /// Carry the rich-text cells over from an earlier table (a style edit
+    /// re-parses the styles part; the runs belong to the strings).
+    pub fn take_rich_from(&mut self, other: &mut VisualStyles) {
+        self.rich = std::mem::take(&mut other.rich);
+    }
+
+    /// Drop a cell's runs (its text was edited).
+    pub fn forget_rich(&mut self, sheet: sheet_core::SheetId, row: u32, col: u32) {
+        self.rich.remove(&(sheet, row, col));
+    }
+
     /// True if NO cell carries visual styling (e.g. an unstyled workbook).
     pub fn is_empty(&self) -> bool {
         self.by_style.values().all(VisualStyle::is_default)
@@ -206,6 +230,35 @@ impl VisualStyles {
 impl sheet_lower::VisualStyleSource for VisualStyles {
     fn visual(&self, id: StyleId) -> Option<sheet_lower::VisualAttrs> {
         self.get(id).cloned()
+    }
+
+    fn rich_runs(
+        &self,
+        sheet: sheet_core::SheetId,
+        row: u32,
+        col: u32,
+        text: &str,
+        base: &sheet_lower::VisualAttrs,
+    ) -> Option<Vec<(String, sheet_lower::VisualAttrs)>> {
+        let runs = self.rich.get(&(sheet, row, col))?;
+        // The runs belong to the text the cell was loaded with: an edited
+        // cell shows plain text.
+        if runs.iter().map(|r| r.text.as_str()).collect::<String>() != text {
+            return None;
+        }
+        Some(
+            runs.iter()
+                .map(|r| {
+                    let attrs = match &r.font {
+                        Some(f) => {
+                            sheet_lower::run_attrs(base, f, &self.palette, &self.default_font)
+                        }
+                        None => base.clone(),
+                    };
+                    (r.text.clone(), attrs)
+                })
+                .collect(),
+        )
     }
 
     fn format_color_rgb(&self, color: sheet_format::FormatColor) -> String {

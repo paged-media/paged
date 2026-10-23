@@ -209,3 +209,100 @@ describe("sheet_grid_paint: number-format fills [sheet.format.engine]", () => {
     ).toBe(false);
   });
 });
+
+describe("sheet_grid_paint: the cell visual model [sheet.format.cell-style]", () => {
+  const style = (over: Record<string, unknown>) => ({
+    key: 1,
+    bold: false,
+    italic: false,
+    borderTop: false,
+    borderRight: false,
+    borderBottom: false,
+    borderLeft: false,
+    ...over,
+  });
+  const one = (
+    st: Record<string, unknown>,
+    cell: Record<string, unknown> = {},
+  ): GridScene => ({
+    ...scene,
+    cells: [
+      { row: 9, col: 2, text: "Ab", align: "left", styleKey: 1, ...cell },
+    ],
+    styles: [style({ key: 0 }), style(st)] as GridScene["styles"],
+    selection: null,
+  });
+  const opts = {
+    headings: false,
+    rowHeadingWidthPt: 0,
+    widthPt: 200,
+    heightPt: 100,
+  };
+
+  it("paints a pattern's background then its marks, and draws diagonals", () => {
+    const { ctx, calls } = recorder();
+    (ctx as { setLineDash?: unknown }).setLineDash = () => {};
+    paintGridScene(
+      ctx,
+      one({
+        fillRgb: "#808080",
+        fillPattern: {
+          pattern: "darkHorizontal",
+          fgRgb: "#FF0000",
+          bgRgb: "#FFFF00",
+        },
+        borderLines: {
+          diagonalDown: { style: "thin", weightPt: 0.75, rgb: "#0000FF" },
+        },
+      }),
+      opts,
+    );
+    const bg = calls.find(
+      (c) => c.op === "fillRect" && c.fillStyle === "#FFFF00",
+    );
+    expect(bg?.args).toEqual([0, 0, 40, 15]);
+    // The blend is not painted where the pattern can be drawn.
+    expect(
+      calls.some((c) => c.op === "fillRect" && c.fillStyle === "#808080"),
+    ).toBe(false);
+    const moves = calls.filter((c) => c.op === "moveTo").map((c) => c.args);
+    expect(moves).toContainEqual([0, 0]); // the diagonal from the top-left
+  });
+
+  it("rotates text when the context can, and lays rich runs end to end", () => {
+    const { ctx } = recorder();
+    const angles: number[] = [];
+    Object.assign(ctx, {
+      rotate: (a: number) => angles.push(a),
+      measureText: (t: string) => ({ width: t.length * 5 }),
+    });
+    paintGridScene(ctx, one({ rotation: 90 }), opts);
+    expect(angles).toEqual([-Math.PI / 2]);
+
+    const r = recorder();
+    Object.assign(r.ctx, {
+      measureText: (t: string) => ({ width: t.length * 5 }),
+    });
+    const sc = one(
+      {},
+      {
+        runs: [
+          { text: "A", styleKey: 2 },
+          { text: "b", styleKey: 1 },
+        ],
+      },
+    );
+    sc.styles.push(
+      style({
+        key: 2,
+        bold: true,
+        textRgb: "#C00000",
+      }) as GridScene["styles"][0],
+    );
+    paintGridScene(r.ctx, sc, opts);
+    const texts = r.calls.filter((c) => c.op === "fillText");
+    expect(texts.map((c) => c.args[0])).toEqual(["A", "b"]);
+    expect(texts[0].fillStyle).toBe("#C00000");
+    expect(texts[1].args[1]).toBe((texts[0].args[1] as number) + 5);
+  });
+});

@@ -34,7 +34,14 @@ import {
   type GridScene,
   type GridSvgOptions,
 } from "./grid";
-import type { Align, BorderLine, LoweredStyle } from "./lowered";
+import type {
+  Align,
+  BorderLine,
+  FillGradient,
+  FillPattern,
+  LoweredRun,
+  LoweredStyle,
+} from "./lowered";
 
 /** The part of CanvasRenderingContext2D the painter uses (so a test can
  *  record the calls). */
@@ -62,6 +69,23 @@ export interface PaintContext {
   measureText?(text: string): { width: number };
   /** Dash pattern for dashed/dotted borders (a real canvas has it). */
   setLineDash?(segments: number[]): void;
+  /** Rotated text (W2.2; without it rotated text is drawn upright). */
+  rotate?(angle: number): void;
+  /** Gradient fills (W2.2; without them the mean colour is drawn). */
+  createLinearGradient?(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ): CanvasGradient;
+  createRadialGradient?(
+    x0: number,
+    y0: number,
+    r0: number,
+    x1: number,
+    y1: number,
+    r1: number,
+  ): CanvasGradient;
 }
 
 /** Heading strip sizes and colours. */
@@ -129,6 +153,8 @@ export interface PaintOptions {
 /** One text box to draw: a cell or a merged area. */
 interface TextBox {
   text: string;
+  /** Rich-text runs (W2.2). */
+  runs?: LoweredRun[];
   /** The repeat-fill character (`text` holds a TAB where it stands). */
   fill?: string;
   align: Align;
@@ -206,6 +232,260 @@ function paintFilled(
   ctx.fillText(fill.repeat(n), from, y);
 }
 
+/** A font shorthand for a style at `size`. */
+function fontOf(
+  st: LoweredStyle | undefined,
+  size: number,
+  g: GridSvgOptions,
+): string {
+  const family = st?.fontName
+    ? `"${st.fontName}", ${g.fontFamily}`
+    : g.fontFamily;
+  return `${st?.italic ? "italic " : ""}${st?.bold ? "bold " : ""}${size}px ${family}`;
+}
+
+/** The size a style draws at and its baseline shift (super/subscript draw
+ *  at 65 % of the size, raised by a third / lowered by a seventh). */
+function sizeOf(
+  st: LoweredStyle | undefined,
+  g: GridSvgOptions,
+): { size: number; shift: number } {
+  const base = st?.fontSizePt ?? g.fontSizePt;
+  if (st?.vertAlign === "superscript")
+    return { size: base * 0.65, shift: -base * 0.33 };
+  if (st?.vertAlign === "subscript")
+    return { size: base * 0.65, shift: base * 0.14 };
+  return { size: base, shift: 0 };
+}
+
+/** Underline and strike-through of a drawn line of text from `x` to
+ *  `x + w` at baseline `y`. */
+function decorate(
+  ctx: PaintContext,
+  st: LoweredStyle | undefined,
+  x: number,
+  y: number,
+  w: number,
+  size: number,
+  color: string,
+): void {
+  const lines: number[] = [];
+  if (st?.underline) {
+    lines.push(y + size * 0.12);
+    if (st.underlineStyle?.startsWith("double")) lines.push(y + size * 0.24);
+  }
+  if (st?.strike) lines.push(y - size * 0.3);
+  if (lines.length === 0) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(size / 16, 0.5);
+  ctx.beginPath();
+  for (const ly of lines) {
+    ctx.moveTo(x, ly);
+    ctx.lineTo(x + w, ly);
+  }
+  ctx.stroke();
+}
+
+/** Draw one box's text (see the text pass in `paintGridScene`). */
+function paintBoxText(
+  ctx: PaintContext,
+  b: TextBox,
+  st: LoweredStyle | undefined,
+  styleOf: (key: number) => LoweredStyle | undefined,
+  g: GridSvgOptions,
+): void {
+  let { size, shift } = sizeOf(st, g);
+  ctx.font = fontOf(st, size, g);
+  const color = st?.textRgb ?? g.textColor;
+  ctx.fillStyle = color;
+  const measure = ctx.measureText?.bind(ctx);
+  const indent = st?.indentPt ?? 0;
+  const align =
+    b.align === "right" ? "right" : b.align === "center" ? "center" : "left";
+  const innerW = Math.max(b.x1 - b.x0 - 2 * g.pad - indent, 1);
+  // Shrink to fit: the font scaled down until the text fits the width.
+  if (st?.shrink && measure && !b.wrap) {
+    const w = measure(b.text).width;
+    if (w > innerW) {
+      size = Math.max((size * innerW) / w, 1);
+      shift = (shift * innerW) / w;
+      ctx.font = fontOf(st, size, g);
+    }
+  }
+  const rot = st?.rotation ?? 0;
+  if (rot > 0 && rot <= 180 && ctx.rotate) {
+    // Counter-clockwise up to 90°, clockwise above (value − 90).
+    const angle = ((rot <= 90 ? -rot : rot - 90) * Math.PI) / 180;
+    ctx.translate((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    ctx.rotate(angle);
+    ctx.textAlign = "center";
+    ctx.fillText(b.text, 0, size * 0.35 + shift);
+    return;
+  }
+  if (b.fill !== undefined && b.text.includes("\t")) {
+    // A repeat fill (`*x`): the part before the fill at the left edge, the
+    // part after at the right edge, the character repeated between.
+    paintFilled(ctx, b, b.fill, b.y1 - 3.5 + shift, g.pad);
+    return;
+  }
+  const tx =
+    align === "right"
+      ? b.x1 - g.pad - indent
+      : align === "center"
+        ? (b.x0 + b.x1) / 2
+        : b.x0 + g.pad + indent;
+  const stacked = rot === 255;
+  const lines = stacked
+    ? b.text.split("\n")
+    : b.wrap
+      ? wrapLines(ctx, b.text, innerW)
+      : [b.text];
+  const lead = size * 1.2;
+  const block = lead * (lines.length - 1);
+  const vAlign = b.vAlign ?? st?.vAlign;
+  // Excel's default vertical alignment is bottom.
+  const firstY =
+    (vAlign === "top"
+      ? b.y0 + size + 1
+      : vAlign === "center"
+        ? (b.y0 + b.y1 + size * 0.7) / 2 - block / 2
+        : b.y1 - 3.5 - block) + shift;
+  // Rich-text runs on one line: each run in its own style, laid end to end.
+  if (b.runs && b.runs.length > 0 && lines.length === 1 && measure) {
+    const parts = b.runs.map((r) => {
+      const rs = styleOf(r.styleKey);
+      const z = sizeOf(rs, g);
+      const sz = (z.size * size) / sizeOf(st, g).size;
+      ctx.font = fontOf(rs, sz, g);
+      return { r, rs, sz, sh: z.shift, w: measure(r.text).width };
+    });
+    const total = parts.reduce((a, p) => a + p.w, 0);
+    let x =
+      align === "right" ? tx - total : align === "center" ? tx - total / 2 : tx;
+    ctx.textAlign = "left";
+    for (const p of parts) {
+      ctx.font = fontOf(p.rs, p.sz, g);
+      const c = p.rs?.textRgb ?? g.textColor;
+      ctx.fillStyle = c;
+      ctx.fillText(p.r.text, x, firstY - shift + p.sh);
+      decorate(ctx, p.rs, x, firstY - shift + p.sh, p.w, p.sz, c);
+      x += p.w;
+    }
+    return;
+  }
+  ctx.textAlign = align;
+  lines.forEach((line, i) => {
+    const ty = firstY + i * lead;
+    ctx.fillText(line, tx, ty);
+    if ((st?.underline || st?.strike) && measure) {
+      const w = measure(line).width;
+      const ux =
+        align === "right" ? tx - w : align === "center" ? tx - w / 2 : tx;
+      decorate(ctx, st, ux, ty, w, size, color);
+    }
+  });
+}
+
+/** Fill a box with a gradient; false when the context cannot. */
+function paintGradient(
+  ctx: PaintContext,
+  gr: FillGradient,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): boolean {
+  let grad: CanvasGradient | undefined;
+  if (gr.kind === "path" && ctx.createRadialGradient) {
+    const cx = x + w * ((gr.left + (1 - gr.right)) / 2 || 0.5);
+    const cy = y + h * ((gr.top + (1 - gr.bottom)) / 2 || 0.5);
+    grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(w, h) / 2);
+  } else if (ctx.createLinearGradient) {
+    // xlsx degrees run clockwise from "left to right".
+    const a = (gr.degree * Math.PI) / 180;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const dx = (Math.cos(a) * w) / 2;
+    const dy = (Math.sin(a) * h) / 2;
+    grad = ctx.createLinearGradient(cx - dx, cy - dy, cx + dx, cy + dy);
+  }
+  if (!grad) return false;
+  for (const s of gr.stops)
+    grad.addColorStop(Math.min(Math.max(s.position, 0), 1), s.rgb);
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, w, h);
+  return true;
+}
+
+/** Draw one of the 18 xlsx fill patterns: the background, then the
+ *  foreground marks on a 2 pt lattice (dots for the greys, lines for the
+ *  stripes, both for the grids and trellises). */
+function paintPattern(
+  ctx: PaintContext,
+  fp: FillPattern,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  const fg = fp.fgRgb ?? "#000000";
+  ctx.fillStyle = fp.bgRgb ?? "#ffffff";
+  ctx.fillRect(x, y, w, h);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = fg;
+  const p = fp.pattern;
+  const dots = (sx: number, sy: number, d: number, stagger: boolean) => {
+    for (let j = 0, yy = y; yy < y + h; j++, yy += sy) {
+      const off = stagger && j % 2 === 1 ? sx / 2 : 0;
+      for (let xx = x + off; xx < x + w; xx += sx) ctx.fillRect(xx, yy, d, d);
+    }
+  };
+  if (p === "darkGray") {
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = fp.bgRgb ?? "#ffffff";
+    dots(2, 2, 1, true);
+  } else if (p === "mediumGray") dots(2, 1, 1, true);
+  else if (p === "lightGray") dots(2, 2, 1, true);
+  else if (p === "gray125") dots(4, 2, 1, true);
+  else if (p === "gray0625") dots(4, 4, 1, true);
+  else {
+    const dark = p.startsWith("dark");
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = dark ? 1 : 0.5;
+    ctx.beginPath();
+    const step = 2;
+    const horiz = /Horizontal|Grid/.test(p);
+    const vert = /Vertical|Grid/.test(p);
+    const down = /Down|Trellis/.test(p);
+    const up = /Up|Trellis/.test(p);
+    if (horiz)
+      for (let yy = y + step / 2; yy < y + h; yy += step) {
+        ctx.moveTo(x, yy);
+        ctx.lineTo(x + w, yy);
+      }
+    if (vert)
+      for (let xx = x + step / 2; xx < x + w; xx += step) {
+        ctx.moveTo(xx, y);
+        ctx.lineTo(xx, y + h);
+      }
+    if (down)
+      for (let d = -h; d < w; d += step) {
+        ctx.moveTo(x + d, y);
+        ctx.lineTo(x + d + h, y + h);
+      }
+    if (up)
+      for (let d = 0; d < w + h; d += step) {
+        ctx.moveTo(x + d, y);
+        ctx.lineTo(x + d - h, y + h);
+      }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /** Draw `scene` onto `ctx` in frame-content points. */
 export function paintGridScene(
   ctx: PaintContext,
@@ -261,6 +541,7 @@ export function paintGridScene(
     }
     boxes.push({
       text: cell.text,
+      runs: cell.runs,
       fill: cell.fill,
       align: cell.align,
       styleKey: cell.styleKey ?? 0,
@@ -291,12 +572,20 @@ export function paintGridScene(
     });
   }
 
-  // Cell fills from the style table.
+  // Cell fills from the style table: solid, the 18 patterns, gradients.
   for (const b of boxes) {
-    const fill = styleOf(b.styleKey)?.fillRgb;
+    const st = styleOf(b.styleKey);
+    const fill = st?.fillRgb;
     if (!fill) continue;
+    const [x, y, w, hh] = [b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0];
+    if (st?.fillGradient && paintGradient(ctx, st.fillGradient, x, y, w, hh))
+      continue;
+    if (st?.fillPattern) {
+      paintPattern(ctx, st.fillPattern, x, y, w, hh);
+      continue;
+    }
     ctx.fillStyle = fill;
-    ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    ctx.fillRect(x, y, w, hh);
   }
 
   // Data bars under the text.
@@ -347,70 +636,25 @@ export function paintGridScene(
     edge(bl?.bottom, st.borderBottom, b.x0, b.y1, b.x1, b.y1);
     edge(bl?.left, st.borderLeft, b.x0, b.y0, b.x0, b.y1);
     edge(bl?.right, st.borderRight, b.x1, b.y0, b.x1, b.y1);
+    // The diagonals (W2.2).
+    edge(bl?.diagonalUp, false, b.x0, b.y1, b.x1, b.y0);
+    edge(bl?.diagonalDown, false, b.x0, b.y0, b.x1, b.y1);
   }
   ctx.setLineDash?.([]);
 
   // Cell text, aligned in its box, clipped to the box (or to the empty
-  // neighbours it overflows into), wrapped when the style says so.
+  // neighbours it overflows into), wrapped when the style says so; rotated,
+  // stacked, indented, shrunk, struck through, super/subscript and rich-text
+  // runs as the style and the runs say (W2.2).
   ctx.textBaseline = "alphabetic";
   for (const b of boxes) {
     if (!b.text) continue;
     const st = styleOf(b.styleKey);
-    const size = st?.fontSizePt ?? g.fontSizePt;
-    const family = st?.fontName
-      ? `"${st.fontName}", ${g.fontFamily}`
-      : g.fontFamily;
-    ctx.font = `${st?.italic ? "italic " : ""}${st?.bold ? "bold " : ""}${size}px ${family}`;
-    const color = st?.textRgb ?? g.textColor;
-    ctx.fillStyle = color;
-    const align =
-      b.align === "right" ? "right" : b.align === "center" ? "center" : "left";
-    ctx.textAlign = align;
-    const tx =
-      align === "right"
-        ? b.x1 - g.pad
-        : align === "center"
-          ? (b.x0 + b.x1) / 2
-          : b.x0 + g.pad;
-    const lines = b.wrap
-      ? wrapLines(ctx, b.text, Math.max(b.x1 - b.x0 - 2 * g.pad, 1))
-      : [b.text];
-    const lead = size * 1.2;
-    const block = lead * (lines.length - 1);
-    const vAlign = b.vAlign ?? st?.vAlign;
-    // Excel's default vertical alignment is bottom.
-    const firstY =
-      vAlign === "top"
-        ? b.y0 + size + 1
-        : vAlign === "center"
-          ? (b.y0 + b.y1 + size * 0.7) / 2 - block / 2
-          : b.y1 - 3.5 - block;
     ctx.save();
     ctx.beginPath();
     ctx.rect(b.clipX0, b.y0, b.clipX1 - b.clipX0, b.y1 - b.y0);
     ctx.clip();
-    if (b.fill !== undefined && b.text.includes("\t")) {
-      // A repeat fill (`*x`): the part before the fill at the left edge, the
-      // part after at the right edge, the character repeated between.
-      paintFilled(ctx, b, b.fill, firstY, g.pad);
-      ctx.restore();
-      continue;
-    }
-    lines.forEach((line, i) => {
-      const ty = firstY + i * lead;
-      ctx.fillText(line, tx, ty);
-      if (st?.underline && ctx.measureText) {
-        const w = ctx.measureText(line).width;
-        const ux =
-          align === "right" ? tx - w : align === "center" ? tx - w / 2 : tx;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(size / 16, 0.5);
-        ctx.beginPath();
-        ctx.moveTo(ux, ty + size * 0.12);
-        ctx.lineTo(ux + w, ty + size * 0.12);
-        ctx.stroke();
-      }
-    });
+    paintBoxText(ctx, b, st, styleOf, g);
     ctx.restore();
   }
 
