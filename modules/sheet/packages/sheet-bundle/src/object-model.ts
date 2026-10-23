@@ -1981,6 +1981,24 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 517 — data validation in the grid.
+      id: C("dataValidation"),
+      title: "Data validation",
+      args: struct({}),
+      async handler() {
+        session.openDataCard({ kind: "validation" });
+      },
+    },
+    {
+      // Sheet ADR 517 — circle invalid data in the grid.
+      id: C("circleInvalid"),
+      title: "Circle invalid data",
+      args: struct({}),
+      async handler() {
+        session.toggleInvalidCircles();
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),

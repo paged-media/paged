@@ -54,6 +54,8 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Clear contents", "clearCells", "clear"],
   ["Context/Sort…", "sortRange", "data"],
   ["Context/Format cells…", "formatCells", "format"],
+  ["Context/Data validation…", "dataValidation", "data"],
+  ["Context/Circle invalid data", "circleInvalid", "data"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

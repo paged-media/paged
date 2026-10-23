@@ -56,6 +56,8 @@ import {
   type GridScene,
 } from "../../../sheet-host-model/src";
 import type { WorkbookSession } from "../session";
+import type { DataToolsApi } from "../data-tools";
+import { DataCards } from "./data-cards";
 import {
   REF_COLORS,
   a1Of,
@@ -101,6 +103,8 @@ export type FrameSurfaceSession = Pick<
   | "functionList"
   | "sheets"
   | "state"
+  | "undoCellEdit"
+  | keyof DataToolsApi
 >;
 
 const MAX_ROW = 1_048_575;
@@ -416,6 +420,15 @@ function SheetFrameSurfaceView({
     textDefault?.family ?? null,
   );
   const edit = useSessionView(session, () => session.cellEditState());
+  // Sheet ADR 517 — what sits on the cells: the active cell's input
+  // message and list, the AutoFilter's buttons, the invalid-data circles.
+  const data = useSessionView(session, () => ({
+    prompt: session.cellPrompt(),
+    listOpen: session.validationListOpen(),
+    filter: session.filterButtons(),
+    circles: session.invalidCircles(),
+  }));
+  const [listIndex, setListIndex] = useState(0);
   const [completion, setCompletion] = useState<{
     items: FunctionEntry[];
     index: number;
@@ -529,6 +542,31 @@ function SheetFrameSurfaceView({
       }
       ctx.restore();
     }
+    // Circle invalid data: a red ellipse around each cell breaking its rule.
+    if (data.circles && data.circles.length > 0) {
+      ctx.save();
+      ctx.translate(headW, headH);
+      ctx.strokeStyle = "#d62020";
+      ctx.lineWidth = 1.25;
+      for (const c of data.circles) {
+        const box = cellRect(scene, c.row, c.col);
+        if (!box) continue;
+        const rx = (box[2] - box[0]) / 2 + 2;
+        const ry = (box[3] - box[1]) / 2 + 1.5;
+        ctx.beginPath();
+        ctx.ellipse(
+          box[0] + rx - 2,
+          box[1] + ry - 1.5,
+          rx,
+          ry,
+          0,
+          0,
+          2 * Math.PI,
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     // Full screen shows more than the frame: a dashed outline marks the
     // frame-sized window that lands on the page when the frame is left.
     if (props.presentation === "fullscreen") {
@@ -571,6 +609,7 @@ function SheetFrameSurfaceView({
     headW,
     edit?.text,
     resizeGhost,
+    data.circles,
     facesLoaded,
     textDefault,
     swatchColors,
@@ -850,6 +889,28 @@ function SheetFrameSurfaceView({
     if (composing.current || e.nativeEvent.isComposing) return;
     const el = e.currentTarget;
     const open = session.cellEditState();
+    // An open validation list owns the arrows, Enter and Esc.
+    const listItems = data.listOpen ? (data.prompt?.items ?? null) : null;
+    if (!open && listItems && listItems.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = listItems.length;
+        setListIndex((listIndex + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        session.chooseListItem(
+          listItems[Math.min(listIndex, listItems.length - 1)]!,
+        );
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        session.openCellDropdown(false);
+        return;
+      }
+    }
     // The suggestion list owns the arrows, Tab and Enter while it shows.
     if (open && completion) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -949,7 +1010,8 @@ function SheetFrameSurfaceView({
     if (composing.current) return;
     const el = e.currentTarget;
     if (session.cellEditState()) session.setCellEditText(el.value);
-    else session.beginCellEdit(el.value, "enter");
+    // A refused edit (a locked cell) leaves nothing typed behind.
+    else if (!session.beginCellEdit(el.value, "enter")) el.value = "";
     updateCompletion(el.value, el.selectionEnd ?? el.value.length);
   };
 
@@ -1113,7 +1175,187 @@ function SheetFrameSurfaceView({
           ))}
         </ul>
       ) : null}
+      <CellChrome
+        session={session}
+        scene={scene}
+        headW={headW}
+        headH={headH}
+        active={active}
+        editing={edit !== null}
+        prompt={data.prompt}
+        listOpen={data.listOpen}
+        listIndex={listIndex}
+        filter={data.filter}
+        onListOpen={() => setListIndex(0)}
+        focusEditor={() => editorRef.current?.focus({ preventScroll: true })}
+      />
     </div>
+  );
+}
+
+/** A small funnel / arrow, drawn in the button's own pt box. */
+function FilterGlyph({ filtered }: { filtered: boolean }) {
+  return (
+    <svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true">
+      {filtered ? (
+        <path d="M1 2h8L6 5.5V9L4 8V5.5z" fill="#2b6cb0" />
+      ) : (
+        <path d="M2 3.5h6L5 7z" fill="#3a3a38" />
+      )}
+    </svg>
+  );
+}
+
+/** What sits on cells, in frame points (sheet ADR 517): the AutoFilter's
+ *  header buttons, the active cell's list button and list, and its input
+ *  message. */
+function CellChrome({
+  session,
+  scene,
+  headW,
+  headH,
+  active,
+  editing,
+  prompt,
+  listOpen,
+  listIndex,
+  filter,
+  onListOpen,
+  focusEditor,
+}: {
+  session: FrameSurfaceSession;
+  scene: GridScene | null;
+  headW: number;
+  headH: number;
+  active: { row: number; col: number } | null;
+  editing: boolean;
+  prompt: ReturnType<FrameSurfaceSession["cellPrompt"]>;
+  listOpen: boolean;
+  listIndex: number;
+  filter: ReturnType<FrameSurfaceSession["filterButtons"]>;
+  onListOpen: () => void;
+  focusEditor: () => void;
+}) {
+  if (!scene) return null;
+  const stop = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const rect = active ? cellRect(scene, active.row, active.col) : null;
+  const items = prompt?.items ?? null;
+  const onHeader =
+    !!filter &&
+    !!active &&
+    active.row === filter.row &&
+    active.col >= filter.left &&
+    active.col <= filter.right;
+  const btn: CSSProperties = {
+    position: "absolute",
+    padding: 0,
+    margin: 0,
+    border: "1px solid #a8a8a4",
+    borderRadius: 1,
+    background: "#f3f3f1",
+    cursor: "pointer",
+    boxSizing: "border-box",
+    zIndex: 1,
+  };
+  return (
+    <>
+      {rect && items && !onHeader ? (
+        <button
+          type="button"
+          data-testid="sheet-list-button"
+          aria-label="Choose from list"
+          aria-expanded={listOpen}
+          tabIndex={-1}
+          style={{
+            ...btn,
+            left: headW + rect[2] + 1,
+            top: headH + rect[1],
+            width: Math.min(14, rect[3] - rect[1]),
+            height: rect[3] - rect[1],
+          }}
+          onPointerDown={stop}
+          onClick={() => {
+            if (editing) session.commitCellEdit();
+            if (!listOpen) onListOpen();
+            session.openCellDropdown(!listOpen);
+            focusEditor();
+          }}
+        >
+          <FilterGlyph filtered={false} />
+        </button>
+      ) : null}
+      {rect && items && listOpen ? (
+        <ul
+          data-testid="sheet-list"
+          role="listbox"
+          style={{
+            position: "absolute",
+            left: headW + rect[0],
+            top: headH + rect[3] + 1,
+            minWidth: rect[2] - rect[0] + 14,
+            maxHeight: 8 * 13,
+            overflowY: "auto",
+            margin: 0,
+            padding: 1,
+            listStyle: "none",
+            background: "#ffffff",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            zIndex: 2,
+          }}
+        >
+          {items.map((it, i) => (
+            <li
+              key={`${i}:${it}`}
+              role="option"
+              aria-selected={i === listIndex}
+              style={{
+                padding: "1px 4px",
+                whiteSpace: "nowrap",
+                background: i === listIndex ? "#dfe7f1" : "transparent",
+              }}
+              onPointerDown={(e) => {
+                stop(e);
+                session.chooseListItem(it);
+                focusEditor();
+              }}
+            >
+              {it === "" ? "\u00a0" : it}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {rect && prompt && (prompt.title || prompt.message) && !listOpen ? (
+        <div
+          data-testid="sheet-input-message"
+          role="note"
+          style={{
+            position: "absolute",
+            left: headW + rect[2] + (items ? 16 : 4),
+            top: headH + rect[3] + 2,
+            maxWidth: 160,
+            padding: "3px 5px",
+            background: "#ffffe1",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            whiteSpace: "pre-wrap",
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        >
+          {prompt.title ? <strong>{prompt.title}</strong> : null}
+          {prompt.title && prompt.message ? <br /> : null}
+          {prompt.message}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -1136,7 +1378,7 @@ function SheetBarView({
       input: edit
         ? edit.text
         : active
-          ? session.cellInputAt(active.row, active.col)
+          ? formulaShown(session, active.row, active.col)
           : "",
       name: sel
         ? a1Of(
@@ -1154,6 +1396,9 @@ function SheetBarView({
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
+      alert: session.entryAlert(),
+      card: session.dataCard(),
+      filterHeader: filterHeaderText(session),
       // ADR 510 — a window frame's lock (null: not a window frame).
       lock: session.frameView(props.elementId)?.lock ?? null,
     };
@@ -1327,6 +1572,17 @@ function SheetBarView({
           ⤢
         </button>
       </div>
+      <DataCards
+        session={session}
+        chrome={{
+          style: bar,
+          button,
+          done: () => requestAnimationFrame(focusGrid),
+        }}
+        card={view.card}
+        alert={view.alert}
+        filterHeader={view.filterHeader}
+      />
       {view.pasteSpecial ? (
         <PasteSpecialCard
           session={session}
@@ -1337,6 +1593,26 @@ function SheetBarView({
       ) : null}
     </div>
   );
+}
+
+/** The bar's formula: the cell's input, or nothing for a hidden formula on
+ *  a protected sheet (sheet ADR 517). */
+function formulaShown(
+  session: FrameSurfaceSession,
+  row: number,
+  col: number,
+): string {
+  const p = session.cellProtectionAt(row, col);
+  if (p?.sheetProtected && p.formulaHidden) return "";
+  return session.cellInputAt(row, col);
+}
+
+/** The header text of the column the filter menu is open on. */
+function filterHeaderText(session: FrameSurfaceSession): string {
+  const card = session.dataCard();
+  const fb = session.filterButtons();
+  if (card?.kind !== "filter" || !fb) return "";
+  return session.cellInputAt(fb.row, card.col);
 }
 
 // ── paste special: the options card under the bar ─────────────────────
