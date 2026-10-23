@@ -161,6 +161,27 @@ describe.skipIf(!built)(
       s2.dispose();
     });
 
+    it("named filter views are saved beside the workbook and restored with it", async () => {
+      const doc = fakeDocument();
+      const s1 = createWorkbookSession(doc.host);
+      await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
+      const e1 = s1.state().engine!;
+      if (!e1.saveFilterView || !e1.listFilterViews || !e1.setAutofilter)
+        return;
+      e1.setAutofilter(0, "A1:B3");
+      expect(s1.saveFilterView("Open items").ok).toBe(true);
+      expect(s1.filterViewNames()).toEqual(["Open items"]);
+      await s1.flushPersist();
+      const s2 = await reload(doc.host);
+      expect(
+        s2.state().engine!.listFilterViews!().map(
+          (v) => (v as { name: string }).name,
+        ),
+      ).toEqual(["Open items"]);
+      s1.dispose();
+      s2.dispose();
+    });
+
     it("edit, deactivate before the debounce fires, reload: the edit is flushed, not dropped", async () => {
       const doc = fakeDocument();
       const s1 = createWorkbookSession(doc.host);
