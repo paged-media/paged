@@ -217,6 +217,7 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   imported: "Imported",
   sheetKicker: "Sheet",
   activeSheet: "Active sheet",
+  chartSheetOption: "{name} (chart sheet)",
   sheetAdded: "Sheet added.",
   addSheet: "Add sheet",
   newName: "New name",
