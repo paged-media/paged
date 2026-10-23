@@ -1635,6 +1635,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         pageRects={rects}
         elementGeometry={props.elementGeometry}
         hostRef={wrapperRef}
+        hostSize={hostSize}
       />
       {/* F-36 — where typed and composed text arrives while a caret is
           in a story (ADR 234). */}

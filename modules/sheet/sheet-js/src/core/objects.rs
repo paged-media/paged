@@ -232,6 +232,7 @@ impl SheetSession {
             .charts
             .iter()
             .enumerate()
+            .filter(|(i, _)| !self.removed_charts.contains(&(*i as u32)))
             .map(|(i, c)| ChartSpec {
                 index: i as u32,
                 host_sheet: c.host_sheet,
@@ -287,6 +288,7 @@ impl SheetSession {
             .ok_or_else(|| {
                 SessionError(format!("chart index {index} out of range ({count} charts)"))
             })?;
+        self.live_chart(index)?;
         let kind = match &patch.kind {
             None => None,
             Some(tag) => Some(chart_kind_from_tag(tag).ok_or_else(|| {
@@ -346,6 +348,37 @@ impl SheetSession {
         }
         Ok(())
     }
+
+    /// Refuse a chart index that names a deleted chart.
+    pub(crate) fn live_chart(&self, index: u32) -> Result<(), SessionError> {
+        if self.removed_charts.contains(&index) {
+            return Err(SessionError(format!("chart {index} was deleted")));
+        }
+        Ok(())
+    }
+
+    /// Delete chart `index`. Its slot stays, so every other chart keeps its
+    /// index; it is no longer listed (`list_charts`, `chart_specs`), drawn or
+    /// patched. Page-side only, like `add_chart`: a chart read from the
+    /// workbook keeps its parts in the saved xlsx (the writer never
+    /// re-derives chart parts), so a caller that reloads the bytes replays
+    /// the delete (the object model's chart journal does).
+    pub fn delete_chart(&mut self, index: u32) -> Result<(), SessionError> {
+        let count = self.doc.charts.len();
+        if index as usize >= count {
+            return Err(SessionError(format!(
+                "chart index {index} out of range ({count} charts)"
+            )));
+        }
+        self.live_chart(index)?;
+        self.removed_charts.insert(index);
+        Ok(())
+    }
+
+    /// How many charts are not deleted.
+    pub(crate) fn live_chart_count(&self) -> usize {
+        self.doc.charts.len() - self.removed_charts.len()
+    }
 }
 
 #[cfg(test)]
@@ -370,6 +403,36 @@ mod tests {
             }
         }
         s
+    }
+
+    #[test]
+    fn delete_chart_keeps_the_other_indices__feat__sheet_objects() {
+        let mut s = session();
+        let a = s
+            .add_chart(0, "B2:B3", "A2:A3", "column", "A", "columns")
+            .unwrap();
+        let b = s
+            .add_chart(0, "C2:C3", "A2:A3", "line", "B", "columns")
+            .unwrap();
+        s.delete_chart(a).unwrap();
+        let specs = s.chart_specs();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].index, b);
+        assert_eq!(s.list_charts().len(), 1);
+        assert_eq!(s.list_charts()[0].index, b);
+        assert!(s.get_chart_geometry(a, 200.0, 100.0).is_err());
+        assert!(s.get_chart_geometry(b, 200.0, 100.0).is_ok());
+        assert!(s
+            .update_chart(a, ChartPatch::default())
+            .unwrap_err()
+            .0
+            .contains("deleted"));
+        // Twice, or out of range, is refused.
+        assert!(s.delete_chart(a).is_err());
+        assert!(s.delete_chart(9).is_err());
+        // A chart added later takes the next slot, never the deleted one.
+        let c = s.add_chart(0, "B2:C3", "", "bar", "", "columns").unwrap();
+        assert_eq!(c, b + 1);
     }
 
     #[test]

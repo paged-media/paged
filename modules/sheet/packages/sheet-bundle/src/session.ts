@@ -64,6 +64,7 @@ import {
   type FindMatch,
   type FindOptions,
   type Restyle,
+  type RangeStats,
   type SheetEngine,
   type SheetInfo,
   type StructuralEditKind,
@@ -72,8 +73,14 @@ import {
   forgetShownContent,
   lowerPaginatedToChain,
   lowerSelectionToFrame,
+  a1OfCell,
   pageContent,
+  placementContent,
   placementForContent,
+  placementWindow,
+  rangeFramePage,
+  refreshWantsReplace,
+  stampPlacedView,
   recallShownContent,
   refreshBands,
   refreshLoweredTable,
@@ -170,6 +177,9 @@ export interface SessionNotice {
 
 export type SessionChange =
   | { kind: "selection" }
+  /** The in-frame cell edit opened, changed, committed or was cancelled
+   *  (the formula bar and the frame surface's editor follow it). */
+  | { kind: "edit" }
   | { kind: "cells"; regions: readonly CellRegion[] }
   | { kind: "other" };
 
@@ -247,7 +257,8 @@ class Emitter {
     };
   }
   emit(change: SessionChange = OTHER_CHANGE): void {
-    this.beforeEmit?.();
+    // The cell-edit buffer is not engine state: no cached read goes stale.
+    if (change.kind !== "edit") this.beforeEmit?.();
     for (const l of [...this.listeners]) l(change);
   }
   clear(): void {
@@ -277,6 +288,10 @@ export interface ObjectBridge {
   hostFrames(): string[];
   /** Re-read the document's sheet-bound frames when none are known. */
   discoverHostFrames(): Promise<string[]>;
+  /** Plan G4 — stop tracking this session's placements of chart `index`
+   *  (it is being deleted) and hand them over: the caller removes their
+   *  page elements in its own write. */
+  takeChartPlacements(index: number): PlacedChart[];
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -384,9 +399,39 @@ export interface WorkbookSession {
   /** K-1 — abandon the in-frame cell edit (Esc): drop the buffer + re-render
    *  the committed value. */
   cancelCellEdit(): void;
+  /** The open in-frame cell edit: its cell, its text and how it began
+   *  (`"enter"`: typing replaced the value, arrows commit and move;
+   *  `"edit"`: F2 or a click into the text, arrows move the caret). */
+  /** Ctrl+X: copy the selection and empty it when its paste lands. */
+  cutSelection(): void;
+  /** Status-bar statistics of the selection (Sum, Average, Count), or null
+   *  without a selection or an engine that cannot say. */
+  selectionStats(): RangeStats | null;
+  cellEditState(): {
+    row: number;
+    col: number;
+    text: string;
+    mode: "enter" | "edit";
+  } | null;
+  /** Open an edit on the active cell: with `text` it replaces the value
+   *  (typing), with `null` it starts from the cell's input (F2). */
+  beginCellEdit(text: string | null, mode: "enter" | "edit"): boolean;
+  /** Replace the open edit's text (a text field owns the caret); opens an
+   *  `"enter"` edit on the active cell when none is open. */
+  setCellEditText(text: string): boolean;
   /** Clear the in-frame grid layer (the frame returns to its native
-   *  lowered content). */
+   *  lowered content). A window frame's view moves to where the grid was
+   *  scrolled (unless locked) and the page shows it (ADR 510). */
   hideGridInFrame(): void;
+  /** The view of a placed frame (default: the last entered one): its
+   *  top-left cell and lock, or null for a frame that is not a window. */
+  frameView(frameId?: string): { topLeft: string; lock: boolean } | null;
+  /** Lock or unlock a window frame's view (default: the last entered
+   *  frame). Locking pins the window to where the frame's view stands now,
+   *  or — while the frame is entered — where the grid is scrolled; the
+   *  binding records it with the next page write. False when no window
+   *  frame is known. */
+  setFrameViewLock(lock: boolean, frameId?: string): boolean;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -636,9 +681,11 @@ export interface WorkbookSession {
    *  text frame (or, with none selected, the frame last placed into), live:
    *  a resize of a chain frame re-paginates (debounced) and REPLACES the
    *  tables; workbook edits refresh them too. `repeatHeaderRows` (Wave 6)
-   *  repeats that many leading rows at the top of every frame. */
+   *  repeats that many leading rows at the top of every frame. `frameId`
+   *  names a frame of the chain instead (plan G4, the typed `place`). */
   paginateSelection(opts?: {
     repeatHeaderRows?: number;
+    frameId?: string;
   }): Promise<SessionResult>;
   /** Bring every placed table, chart and paginated chain up to date with
    *  the workbook now (edits schedule this on their own, debounced). */
@@ -955,6 +1002,8 @@ export function createWorkbookSession(
   };
 
   let sceneSurface: SceneLayerSurface | null = null;
+  // Ctrl+X: the cut range, cleared when its paste lands (Excel moves it).
+  let cutPending: GridSelection | null = null;
   // Extensions ADR 334 — the mounted frame surface's sink and cell area;
   // while set, the grid goes there instead of the scene layer.
   let surfaceSink: ((scene: GridScene) => void) | null = null;
@@ -1412,6 +1461,7 @@ export function createWorkbookSession(
     } else {
       cellEdit = { ...cellEdit, text: cellEdit.text + ch };
     }
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1430,6 +1480,7 @@ export function createWorkbookSession(
       cellEditMode = "edit";
     }
     cellEdit = { ...cellEdit, text: cellEdit.text.slice(0, -1) };
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1448,6 +1499,7 @@ export function createWorkbookSession(
     }
     cellEdit = { row: at.row, col: at.col, text };
     cellEditMode = "edit";
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1476,6 +1528,7 @@ export function createWorkbookSession(
   function cancelEdit(): void {
     if (!cellEdit) return;
     cellEdit = null;
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
   }
 
@@ -1910,6 +1963,153 @@ export function createWorkbookSession(
         return api.undoCellEdit();
       case "redo":
         return api.redoCellEdit();
+      case "jump": {
+        if (!m || !state.engine?.dataEdge || state.activeSheet === null)
+          return false;
+        const from = a.extend ? m.focus : m.active;
+        let target: [number, number];
+        try {
+          target = state.engine.dataEdge(
+            state.activeSheet,
+            from.row,
+            from.col,
+            a.dRow,
+            a.dCol,
+          );
+        } catch (err) {
+          host.log.debug("jump: engine refused", err);
+          return false;
+        }
+        const cell = { row: target[0], col: target[1] };
+        applyModel(a.extend ? extendTo(m, cell) : collapsed(cell));
+        return true;
+      }
+      case "lastCell": {
+        const info = api.sheets().find((x) => x.id === state.activeSheet);
+        if (!info) return false;
+        applyModel(
+          collapsed({
+            row: Math.max(0, info.rows - 1),
+            col: Math.max(0, info.cols - 1),
+          }),
+        );
+        return true;
+      }
+      case "selectRow":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: m.active.row, col: 0 },
+          focus: { row: m.active.row, col: 16_383 },
+          active: m.active,
+        });
+        return true;
+      case "selectColumn":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: 0, col: m.active.col },
+          focus: { row: 1_048_575, col: m.active.col },
+          active: m.active,
+        });
+        return true;
+      case "insertNow": {
+        // ISO text, which typed entry reads as a date / a time in every
+        // locale; the cell stays in edit mode, as in Excel.
+        const now = new Date(Date.now());
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const text =
+          a.what === "date"
+            ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+            : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        if (cellEdit) return api.setCellEditText(cellEdit.text + text);
+        return api.beginCellEdit(text, "enter");
+      }
+      case "commitFill": {
+        if (!cellEdit) return false;
+        const sel = state.gridSelection;
+        const engine = state.engine;
+        const sheet = state.activeSheet;
+        if (
+          !sel ||
+          !engine ||
+          sheet === null ||
+          (sel.rows === 1 && sel.cols === 1)
+        ) {
+          commitEdit();
+          return true;
+        }
+        const text = cellEdit.text;
+        cellEdit = null;
+        const targets: CellEditRecord[] = [];
+        const rows = Math.min(sel.rows, 10_000);
+        const cols = Math.min(sel.cols, 256);
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++)
+            targets.push({
+              sheet,
+              row: sel.anchorRow + r,
+              col: sel.anchorCol + c,
+              prevInput: "",
+              nextInput: text,
+            });
+        const { written, journaled } = writeTargets(
+          engine,
+          targets,
+          "commitFill",
+        );
+        if (journaled) journalBatch(written);
+        else markEdited();
+        emitter.emit({ kind: "edit" });
+        emitter.emit({ kind: "cells", regions: regionsOf(written) });
+        void submitInFrameGrid();
+        return true;
+      }
+      case "cut":
+        cutPending = state.gridSelection ? { ...state.gridSelection } : null;
+        void api.copySelection().then((r) => {
+          if (!r.ok) {
+            cutPending = null;
+            host.log.warn(`cut: ${r.message}`);
+          }
+        });
+        return true;
+      case "toggleStyle": {
+        const st = api.styleAtTarget();
+        const r = api.setStyle({ [a.style]: !st?.[a.style] });
+        if (!r.ok) host.log.warn(`${a.style}: ${r.message}`);
+        return true;
+      }
+      case "formatCells":
+        void host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+        return true;
+      case "calculate": {
+        try {
+          state.engine?.calculateNow?.();
+        } catch (err) {
+          host.log.warn("calculate: engine refused", err);
+        }
+        emitter.emit();
+        void submitInFrameGrid();
+        return true;
+      }
+      case "pageAcross": {
+        if (!m) return false;
+        const cols =
+          lastGridScene && lastGridWindow
+            ? fullyVisible(
+                lastGridScene,
+                lastGridWindow.wPt,
+                lastGridWindow.hPt,
+              ).cols
+            : 8;
+        if (lastGridWindow) {
+          lastGridWindow = {
+            ...lastGridWindow,
+            firstCol: Math.max(0, lastGridWindow.firstCol + a.dir * cols),
+          };
+        }
+        applyModel(moveBy(m, 0, a.dir * cols, a.extend));
+        return true;
+      }
       case "none":
         return false;
     }
@@ -2379,6 +2579,9 @@ export function createWorkbookSession(
   // session write's own events to it.
   let ownWrites = 0;
   const unverified = new Set<string>();
+  /** Frames whose view moved (ADR 510 render on leave): refreshed even when
+   *  no cell changed since they were written. */
+  const viewMoved = new Set<string>();
   async function ownWrite<T>(write: () => Promise<T>): Promise<T> {
     ownWrites += 1;
     try {
@@ -2427,21 +2630,33 @@ export function createWorkbookSession(
         const engine = state.engine;
         if (!engine) return;
         const version = revision;
-        for (const [frameId, info] of [...loweredTables]) {
+        for (let [frameId, info] of [...loweredTables]) {
           const name = sheetNameOf(info.sheet);
           if (name === null) continue;
           let next: LoweredContent;
+          let windowed: string | null = null;
           try {
-            next = pageContent(engine, info.sheet, info.range);
+            const win = placementWindow(engine, info);
+            windowed = win?.range ?? null;
+            next = win?.content ?? pageContent(engine, info.sheet, info.range);
           } catch (err) {
             host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
+          const moved = viewMoved.delete(frameId);
+          // A window frame's binding names the cells it shows now.
+          if (windowed && windowed !== info.range) {
+            info = { ...info, range: windowed };
+            loweredTables.set(frameId, info);
+          }
           if (info.content) {
-            if (
-              info.contentVersion === version ||
-              JSON.stringify(next) === JSON.stringify(info.content)
-            ) {
+            if (!moved && info.contentVersion === version) continue;
+            if (JSON.stringify(next) === JSON.stringify(info.content)) {
+              // Same cells, new view (a lock): the binding alone records it.
+              if (moved) {
+                const placedInfo = info;
+                await ownWrite(() => stampPlacedView(host, placedInfo, name));
+              }
               continue;
             }
             // In place: only what changed is re-poured, and the table — its
@@ -2452,7 +2667,14 @@ export function createWorkbookSession(
             const bands = unverified.has(frameId)
               ? await refreshBands(host, info, info.content)
               : { header: info.headerRows ?? 0, footer: 0 };
-            if (bands) {
+            // A scroll that re-pours most of a window frame writes a new
+            // table instead (fewer ops, and no host band to keep).
+            const rewrite =
+              moved &&
+              info.sizing === "window" &&
+              !(bands?.header ?? 0) &&
+              refreshWantsReplace(info, next);
+            if (bands && !rewrite) {
               const banded = { ...info, headerRows: bands.header || undefined };
               const updated = await ownWrite(() =>
                 refreshLoweredTable(host, banded, next, version, name),
@@ -2589,9 +2811,31 @@ export function createWorkbookSession(
         ids = await tableUnderFrame(host, frameId, rec.widths);
         if (!ids) continue;
       }
+      const d = binding.data;
+      // A window frame lowers the window that fits its box: read the box.
+      let boxPt: { widthPt: number; heightPt: number } | undefined;
+      if (d.sizing === "window") {
+        try {
+          const g = await host.document.elementGeometry([
+            { kind: "textFrame", id: frameId } as ElementId,
+          ]);
+          const b = g[0]?.bounds;
+          if (b) boxPt = { widthPt: b[3] - b[1], heightPt: b[2] - b[0] };
+        } catch {
+          // No box: the frame lowers its recorded range until entered.
+        }
+      }
+      const placed = {
+        sheet: sheet.id,
+        range: d.range,
+        view: d.view,
+        print: d.print,
+        sizing: d.sizing,
+        ...(boxPt ? { boxPt } : {}),
+      };
       let now: LoweredContent;
       try {
-        now = pageContent(engine, sheet.id, binding.data.range);
+        now = placementContent(engine, placed);
       } catch {
         continue;
       }
@@ -2609,8 +2853,7 @@ export function createWorkbookSession(
         frameId,
         storyId: ids.storyId,
         tableId: ids.tableId,
-        sheet: sheet.id,
-        range: binding.data.range,
+        ...placed,
         content: shown,
         columnWidths: rec.widths,
         contentVersion: binding.data.contentVersion,
@@ -2919,6 +3162,11 @@ export function createWorkbookSession(
   const bridge: ObjectBridge = {
     engine: () => state.engine,
     epoch: () => loadEpoch,
+    takeChartPlacements(index) {
+      const taken = placedCharts.filter((p) => p.chartIndex === index);
+      placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
+      return taken;
+    },
     afterWrite(regions) {
       markEdited();
       emitter.emit(
@@ -3026,7 +3274,10 @@ export function createWorkbookSession(
       let placement;
       let content: LoweredContent;
       try {
-        content = pageContent(
+        // ADR 510 — a window frame shows the range's own tracks lowered as a
+        // frame page: the lowering every later refresh makes, so the first
+        // edit re-pours one cell, not the table.
+        content = rangeFramePage(
           state.engine,
           state.activeSheet,
           state.selectedRange,
@@ -3047,6 +3298,8 @@ export function createWorkbookSession(
           fitHeight: true,
           contentVersion: revision,
           content,
+          // ADR 510 — the frame is a window onto the sheet.
+          sizing: "window",
           // S-04 — record the resolved native table so "new style from cell"
           // can address its cells.
           onLowered: (info) => {
@@ -3102,6 +3355,22 @@ export function createWorkbookSession(
       } catch (err) {
         host.log.debug("showGridInFrame: frame geometry read failed", err);
       }
+      // The page lowers the window that fits this box (ADR 510).
+      const placedInfo = lastFrameId
+        ? loweredTables.get(lastFrameId)
+        : undefined;
+      if (
+        placedInfo &&
+        !placedInfo.boxPt &&
+        lastFrameId &&
+        wPt > 0 &&
+        hPt > 0
+      ) {
+        loweredTables.set(lastFrameId, {
+          ...placedInfo,
+          boxPt: { widthPt: wPt, heightPt: hPt },
+        });
+      }
       // Wave 5 — keep the window's scroll when re-showing the same frame.
       const keep =
         lastGridWindow && prevFrame === target ? lastGridWindow : null;
@@ -3156,6 +3425,49 @@ export function createWorkbookSession(
       cancelEdit();
     },
 
+    cutSelection() {
+      runGridAction({ kind: "cut" });
+    },
+
+    selectionStats() {
+      const t = formatTarget();
+      if (!t || !state.engine?.rangeStats) return null;
+      try {
+        return state.engine.rangeStats(t.sheet, t.range);
+      } catch (err) {
+        host.log.debug("selectionStats: engine refused", err);
+        return null;
+      }
+    },
+
+    cellEditState() {
+      return cellEdit ? { ...cellEdit, mode: cellEditMode } : null;
+    },
+
+    beginCellEdit(text, mode) {
+      if (text === null) {
+        const ok = openEdit();
+        if (ok) cellEditMode = mode;
+        return ok;
+      }
+      const at = activeOf();
+      if (!at) return false;
+      cellEdit = { row: at.row, col: at.col, text };
+      cellEditMode = mode;
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
+    },
+
+    setCellEditText(text) {
+      if (!cellEdit) return api.beginCellEdit(text, "enter");
+      if (cellEdit.text === text) return true;
+      cellEdit = { ...cellEdit, text };
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
+    },
+
     attachFrameSurface(sink, cellArea) {
       surfaceSink = sink;
       surfaceArea = {
@@ -3182,8 +3494,38 @@ export function createWorkbookSession(
       fillPreview = null;
       inFrameActive = false;
       if (lastFrameId) void sceneSurface?.clear(lastFrameId);
+      // ADR 510 — leaving the frame moves its view to where the user
+      // scrolled (a locked view snaps back), and the page shows it.
+      let viewChanged = false;
+      const placedInfo = lastFrameId
+        ? loweredTables.get(lastFrameId)
+        : undefined;
+      if (
+        lastFrameId &&
+        placedInfo?.sizing === "window" &&
+        placedInfo.view &&
+        !placedInfo.view.lock &&
+        lastGridWindow
+      ) {
+        const topLeft = a1OfCell(
+          lastGridWindow.firstRow,
+          lastGridWindow.firstCol,
+        );
+        if (topLeft !== placedInfo.view.topLeft) {
+          loweredTables.set(lastFrameId, {
+            ...placedInfo,
+            view: { ...placedInfo.view, topLeft },
+          });
+          viewMoved.add(lastFrameId);
+          viewChanged = true;
+        }
+      }
       // Tier 2 — the session's edits reach the page as ONE refresh now.
-      if (refreshDeferred) {
+      if (
+        refreshDeferred ||
+        viewChanged ||
+        (lastFrameId !== null && viewMoved.has(lastFrameId))
+      ) {
         refreshDeferred = false;
         void refreshPlacements();
       }
@@ -3193,6 +3535,30 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    frameView(frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!info || info.sizing !== "window" || !info.view) return null;
+      return { ...info.view };
+    },
+
+    setFrameViewLock(lock, frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!id || !info || info.sizing !== "window" || !info.view) return false;
+      const topLeft =
+        inFrameActive && id === lastFrameId && lastGridWindow
+          ? a1OfCell(lastGridWindow.firstRow, lastGridWindow.firstCol)
+          : info.view.topLeft;
+      if (info.view.lock === lock && info.view.topLeft === topLeft) return true;
+      loweredTables.set(id, { ...info, view: { topLeft, lock } });
+      viewMoved.add(id);
+      // While entered, the page is written on leaving; otherwise now.
+      if (!inFrameActive) void refreshPlacements();
+      emitter.emit();
+      return true;
     },
 
     listCharts() {
@@ -3504,6 +3870,32 @@ export function createWorkbookSession(
       );
       if (edits.length === 0) {
         return { ok: false as const, message: "the paste wrote no cells" };
+      }
+      // A cut moves: the source cells outside the paste are emptied in the
+      // same undo step.
+      if (cutPending) {
+        const src = cutPending;
+        cutPending = null;
+        const inPaste = (r: number, c: number) =>
+          r >= area.anchorRow &&
+          r < area.anchorRow + area.rows &&
+          c >= area.anchorCol &&
+          c < area.anchorCol + area.cols;
+        const clears: CellEditRecord[] = [];
+        for (let r = src.anchorRow; r < src.anchorRow + src.rows; r++)
+          for (let c = src.anchorCol; c < src.anchorCol + src.cols; c++)
+            if (!inPaste(r, c))
+              clears.push({
+                sheet,
+                row: r,
+                col: c,
+                prevInput: "",
+                nextInput: "",
+              });
+        if (clears.length > 0) {
+          const cleared = writeTargets(engine, clears, "cut");
+          edits.push(...cleared.written);
+        }
       }
       if (journaled)
         journalBatch(edits); // one grouped Cmd-Z undoes the whole paste
@@ -3970,7 +4362,8 @@ export function createWorkbookSession(
       const selected = host.selection
         .get()
         .find((id) => id.kind === "textFrame");
-      const frameId = selected ? (selected.id as string) : lastFrameId;
+      const frameId =
+        opts?.frameId ?? (selected ? (selected.id as string) : lastFrameId);
       if (!frameId) {
         return {
           ok: false as const,

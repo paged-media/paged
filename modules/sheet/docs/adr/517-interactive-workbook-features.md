@@ -73,6 +73,28 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   saved and reloaded, SUBTOTAL 109 over collapsed rows, hidden columns and sheets, locked cells
   refused and unlocked ones accepted, allow flags, workbook structure, wrong passwords).
 
+- Data validation: `sheet-xlsx/src/parts/validation.rs` (the rule model, `sqref` arithmetic,
+  the write that keeps each untouched rule's element), `sheet-js/src/core/validation.rs`,
+  `sheet-calc/src/adhoc.rs` (`Engine::eval_formula_at` / `eval_formula_block_at` /
+  `eval_reference_at`: a formula evaluated as if it stood in a cell, nothing stored),
+  `sheet-conformance/tests/it/w2_validation.rs` (every kind, the three alert styles, inline and
+  dynamic lists, custom rules with the entry in place, Circle Invalid Data, authoring that moves
+  cells between rules, the round trip, the corpus workbook's own rules enforced and its zero-edit
+  save unchanged).
+- Sort and filter: `sheet-js/src/core/sort.rs`, `sheet-js/src/core/filter.rs`,
+  `sheet-xlsx/src/parts/autofilter.rs` (every criterion read and written, a byte-identical round
+  trip of Excel's forms), `sheet-xlsx/src/style_edit.rs` (`color_dxf`: the differential format a
+  colour sort or filter names), `sheet-conformance/tests/it/w2_sort_filter.rs` (two-level, custom
+  list, case-sensitive, left-to-right and colour sorts with their `sortState`; every criterion,
+  the clock-driven dynamic dates, the dropdown data, named views; property tests: a two-key sort
+  is stable against brute force, the custom-condition engine equals a brute-force reading).
+
+**Frozen type amendment (filter criteria).** `sheet_core::FilterCriterion` gains `DateGroups`,
+`Custom`, `Dynamic`, `Color` and `Icon` (with `FilterOp`, `CustomCondition`, `DateGroup`);
+`Unsupported` remains for criteria in extensions Paged does not read. The existing variants keep
+their meaning. A sheet's filter is now its `<autoFilter>`: what was a Paged-only view written
+nowhere is written as Excel writes it, and the rows it hides are saved hidden.
+
 ## Consequences
 
 The workbook panel's "preserved, not enforced" line for validations goes away when validation

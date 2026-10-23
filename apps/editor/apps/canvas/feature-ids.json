@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 368,
+    "command": 376,
     "keybinding": 88,
-    "menu": 260,
+    "menu": 270,
     "panel": 122,
     "tool": 72
   },
@@ -111,6 +111,11 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.defineBinding",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.defineProperty",
       "kind": "command",
       "owner": "media.paged.data"
@@ -131,12 +136,22 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.importSource",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.importVariableLibrary",
       "kind": "command",
       "owner": "media.paged.data"
     },
     {
       "id": "command:media.paged.data.merge",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.planBatch",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -866,6 +881,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.filterRegion",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.flipHorizontal",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1011,6 +1031,16 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.cutSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.deleteChart",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.deleteColumns",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1042,6 +1072,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.findReplace",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.formatCells",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1102,6 +1137,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.pasteSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.place",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2309,6 +2349,56 @@
       "id": "keybinding:x→paged.fillStroke.swap",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "menu:Context/Clear contents",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Copy",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Cut",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Delete columns",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Delete rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Format cells…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Insert columns",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Insert rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Paste",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Sort…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
     },
     {
       "id": "menu:Data/Apply a data set…",

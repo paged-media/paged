@@ -182,7 +182,22 @@ export interface LoweredContent {
    *  lane). ADDITIVE — optional so existing fixtures stay valid; the engine
    *  emits it (empty unless a data-bar cf rule covers numeric cells). */
   databars?: DataBarRect[];
+  /** How many leading rows are table HEADER rows (repeat on continuation
+   *  frames): a frame page's frozen rows plus its printed heading row.
+   *  ADDITIVE — absent means 0 (range lowerings, paginated pages). */
+  headerRows?: number;
+  /** Set by the bundle (not the engine) on a frame page printed without
+   *  gridlines (ADR 510): the table writes every cell edge as no line
+   *  instead of leaving it to the document's default stroke. Absent on
+   *  every other lowering, whose missing rules mean "unspecified". */
+  noGridlines?: true;
 }
+
+/** The `index` of a frame page's printed heading row and heading column
+ *  (Rust `sheet_lower::HEADING_INDEX`, `u32::MAX`): no sheet track has it.
+ *  A frame page's other rows/cols carry SHEET indices (a refresh after a
+ *  scroll aligns tracks by them). */
+export const HEADING_INDEX = 0xffffffff;
 
 /** One paginated frame (the TS MIRROR of the Rust `sheet_lower::Page`,
  *  Wave 2D / S-05). The engine threads a tall range across the host frame

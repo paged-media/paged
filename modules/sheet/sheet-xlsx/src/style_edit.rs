@@ -1293,8 +1293,15 @@ impl XlsxDocument {
             map.insert(base, StyleId(idx as u32));
         }
 
-        // Re-parse with the loader's own parser: ids are positional, the
-        // visual side table is the parser's output.
+        let table = self.store_styles(xml)?;
+        Ok((map, table))
+    }
+
+    /// Store new `styles.xml` bytes (creating the part when the package has
+    /// none) and re-parse them with the loader's own parser: ids are
+    /// positional, the visual side table and the dxfs are the parser's
+    /// output. Returns the style table the model must adopt.
+    fn store_styles(&mut self, xml: Vec<u8>) -> Result<StyleTable, XlsxError> {
         let mut table = StyleTable::new();
         let colors = ColorContext::new(&xml, self.theme_palette());
         let parsed = crate::parts::styles::parse_with_colors(&xml, &mut table, &colors)?;
@@ -1325,7 +1332,49 @@ impl XlsxDocument {
                 self.styles_part = Some(part);
             }
         }
-        Ok((map, table))
+        Ok(table)
+    }
+
+    /// The index of a differential format (`<dxfs>`) that paints a solid
+    /// fill (`cell_color`) or a font colour `rgb` (`#RRGGBB`) — found, or
+    /// appended. A colour sort or colour filter names its colour this way
+    /// (sheet ADR 517). The cell style table is unchanged.
+    pub fn color_dxf(&mut self, rgb: &str, cell_color: bool) -> Result<u32, XlsxError> {
+        let xml = self.styles_bytes();
+        let prefix = root_prefix(&xml)?;
+        let c = argb(rgb)?;
+        let el = if cell_color {
+            Elem {
+                name: format!("{prefix}dxf"),
+                attrs: Vec::new(),
+                children: vec![Elem {
+                    name: format!("{prefix}fill"),
+                    attrs: Vec::new(),
+                    children: vec![Elem {
+                        name: format!("{prefix}patternFill"),
+                        attrs: vec![("patternType".into(), "solid".into())],
+                        children: vec![
+                            Elem::new(format!("{prefix}fgColor")).with_attr("rgb", &c),
+                            Elem::new(format!("{prefix}bgColor")).with_attr("rgb", &c),
+                        ],
+                    }],
+                }],
+            }
+        } else {
+            Elem {
+                name: format!("{prefix}dxf"),
+                attrs: Vec::new(),
+                children: vec![Elem {
+                    name: format!("{prefix}font"),
+                    attrs: Vec::new(),
+                    children: vec![Elem::new(format!("{prefix}color")).with_attr("rgb", &c)],
+                }],
+            }
+        };
+        let (xml, idx) = find_or_append(xml, "dxfs", "dxf", &el, &prefix)?;
+        // cellXfs is untouched, so the model's style table stays as it is.
+        self.store_styles(xml)?;
+        Ok(idx as u32)
     }
 
     /// The scheme of the theme part the workbook relates (`/theme`);

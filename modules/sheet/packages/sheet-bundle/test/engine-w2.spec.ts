@@ -50,4 +50,57 @@ describe.skipIf(!built)("W2 engine doors (real wasm)", () => {
     expect(() => e.addSheet!("New")).toThrow(/protected/);
     e.dispose();
   });
+
+  it("validates entries and lists dropdown items", async () => {
+    const e = await engine();
+    e.setValidation!(0, "A1:A3", { type: "list", listItems: ["Yes", "No"] });
+    expect(e.validationAt!(0, 1, 0)?.listItems).toEqual(["Yes", "No"]);
+    const bad = e.enterCell!(0, 0, 0, "Maybe");
+    expect(bad.applied).toBe(false);
+    expect(bad.alert?.style).toBe("stop");
+    expect(e.enterCell!(0, 0, 0, "no").applied).toBe(true);
+    e.setValidation!(0, "B1", {
+      type: "whole",
+      operator: "lessThan",
+      formula1: "10",
+      errorStyle: "warning",
+    });
+    expect(e.checkEntry!(0, 0, 1, "12").valid).toBe(false);
+    expect(e.enterCell!(0, 0, 1, "12", true).applied).toBe(true);
+    expect(e.invalidCells!(0)).toEqual([{ row: 0, col: 1, rule: 1 }]);
+    expect(e.listValidationRules!(0)).toHaveLength(2);
+    e.dispose();
+  });
+
+  it("sorts by two keys and filters through the facade", async () => {
+    const e = await engine();
+    const rows = [
+      ["R", "N"],
+      ["b", "2"],
+      ["a", "9"],
+      ["b", "1"],
+    ];
+    rows.forEach((r, i) => r.forEach((v, c) => e.setCell(0, i, c, v)));
+    e.sortRangeBy!(0, "A1:B4", {
+      keys: [{ index: 0 }, { index: 1, descending: true }],
+      hasHeader: true,
+    });
+    expect([1, 2, 3].map((r) => e.getCellDisplay(0, r, 1))).toEqual([
+      "9",
+      "2",
+      "1",
+    ]);
+    const f = e.setFilterColumn!(0, "A1:B4", 0, {
+      kind: "values",
+      values: ["b"],
+    });
+    expect(f.hiddenRows).toEqual([1]);
+    const v = e.filterColumnValues!(0, 0);
+    expect(v.items.map((i) => [i.text, i.selected])).toEqual([
+      ["a", false],
+      ["b", true],
+    ]);
+    expect(e.filterState!(0)?.range).toBe("A1:B4");
+    e.dispose();
+  });
 });

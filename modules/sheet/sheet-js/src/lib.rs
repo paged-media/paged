@@ -312,6 +312,26 @@ mod wasm {
             to_js(&lowered)
         }
 
+        /// Lower explicit tracks for the page (ADR 510):
+        /// `{rows, cols, headerRows?, frozenCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` with sheet indices.
+        pub fn get_tracks_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::TracksSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_tracks_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
+        /// The page table of a frame (ADR 510): `{topRow, leftCol, widthPt,
+        /// heightPt, freezeRows?, freezeCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` (frame window + tracks).
+        pub fn get_frame_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::FramePageSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_frame_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
         /// Wave 5 — the re-enterable INPUT text of every cell in `range`
         /// (row-major `string[][]`; formulas with `=`): a copy's snapshot.
         pub fn get_range_inputs(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
@@ -439,6 +459,29 @@ mod wasm {
                 .get_frame_window(sheet, spec)
                 .map_err(map_err)?;
             to_js(&window)
+        }
+
+        /// Where Ctrl+arrow lands: `[row, col]`.
+        pub fn data_edge(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            d_row: i32,
+            d_col: i32,
+        ) -> Result<Vec<u32>, JsValue> {
+            let (r, c) = self
+                .session
+                .data_edge(sheet, row, col, d_row, d_col)
+                .map_err(map_err)?;
+            Ok(vec![r, c])
+        }
+
+        /// Status-bar statistics of a range: `{count, numbers, sum, average,
+        /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
+        pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+            let stats = self.session.range_stats(sheet, range).map_err(map_err)?;
+            to_js(&stats)
         }
 
         /// Record the sheets-mode selection rectangle (consumed by the next
@@ -851,6 +894,12 @@ mod wasm {
             let patch: crate::core::ChartPatch = serde_wasm_bindgen::from_value(patch)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             self.session.update_chart(index, patch).map_err(map_err)
+        }
+
+        /// Delete chart `index` (its slot stays, so other charts keep their
+        /// indices). Page-side only, like `add_chart`.
+        pub fn delete_chart(&mut self, index: u32) -> Result<(), JsValue> {
+            self.session.delete_chart(index).map_err(map_err)
         }
 
         /// Resolve a range argument (A1, `Sheet!A1:B2`, a defined name or a
