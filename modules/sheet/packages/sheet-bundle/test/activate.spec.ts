@@ -160,6 +160,8 @@ describe("sheet_plugin_bundle_activate", () => {
     sheetBundle.activate(fake.host);
     expect(fake.commands.map((c) => c.id)).toEqual([
       "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.exportCsv",
+      "media.paged.sheet.command.toggleR1C1",
       "media.paged.sheet.command.lowerToFrame",
       "media.paged.sheet.command.lowerChartToFrame",
       "media.paged.sheet.command.openGrid",
@@ -189,6 +191,11 @@ describe("sheet_plugin_bundle_activate", () => {
       "media.paged.sheet.command.dataValidation",
       "media.paged.sheet.command.circleInvalid",
       "media.paged.sheet.command.toggleFilter",
+      "media.paged.sheet.command.hideSelection",
+      "media.paged.sheet.command.unhideSelection",
+      "media.paged.sheet.command.groupSelection",
+      "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek",
     ]);
   });
 
@@ -256,14 +263,27 @@ describe("sheet_plugin_bundle_activate", () => {
     expect(fake.importers.map((i) => i.id)).toEqual([
       "media.paged.sheet.importer.xlsx",
       "media.paged.sheet.importer.csv",
+      "media.paged.sheet.importer.ods",
     ]);
-    expect(fake.importers[0].extensions).toEqual([".xlsx"]);
+    // Sheet ADR 521 — the macro-enabled workbook and the templates are the
+    // same package.
+    expect(fake.importers[0].extensions).toEqual([
+      ".xlsx",
+      ".xlsm",
+      ".xltx",
+      ".xltm",
+    ]);
     // Wave 4 [sheet.import.csv] — CSV/TSV open through the same door.
     expect(fake.importers[1].extensions).toEqual([".csv", ".tsv"]);
+    expect(fake.importers[2].extensions).toEqual([".ods", ".ots"]);
     expect(fake.exporters.map((e) => e.id)).toEqual([
       "media.paged.sheet.exporter.xlsx",
+      "media.paged.sheet.exporter.xlsm",
+      "media.paged.sheet.exporter.csv",
     ]);
     expect(fake.exporters[0].extension).toBe(".xlsx");
+    expect(fake.exporters[1].extension).toBe(".xlsm");
+    expect(fake.exporters[2].extension).toBe(".csv");
     // The declared ids match the manifest's contributes block.
     expect(fake.importers.map((i) => i.id)).toEqual(
       sheetBundle.manifest.contributes?.importers,

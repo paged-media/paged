@@ -45,7 +45,7 @@ use std::collections::BTreeMap;
 
 use paged_ooxml::{OoxmlError, OpcPackage};
 use splice::{
-    patch_document_xml_cols, ColumnAction, ResolvedCellTarget, ResolvedParaTarget,
+    patch_document_xml_cols, CellParaAction, ColumnAction, ResolvedCellTarget, ResolvedParaTarget,
     ResolvedRowTarget, ResolvedTarget,
 };
 
@@ -102,8 +102,65 @@ pub fn apply_edits(
     // At most ONE column action per table per save (they shift each other's
     // indices, so a second would need re-resolution against the patched grid).
     let mut columns: BTreeMap<u32, ColumnAction> = BTreeMap::new();
+    // Cell paragraph actions, keyed by `(table_ord, row, cell, para)`.
+    let mut cell_paras: BTreeMap<(u32, u32, u32, u32), CellParaAction> = BTreeMap::new();
+    let cell_key = |p: docx_core::CellPath| (p.table_ord, p.row, p.cell, p.para);
     for s in &edits.structural {
         match s {
+            StructuralEdit::DeleteCellParagraph { block, cell, para } => {
+                let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
+                    skips.push(format!(
+                        "delete-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
+                    ));
+                    continue;
+                };
+                cell_paras.entry(cell_key(path)).or_default().delete = true;
+            }
+            StructuralEdit::CloneCellParagraph {
+                block,
+                cell,
+                para,
+                before,
+                text,
+            } => {
+                let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
+                    skips.push(format!(
+                        "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
+                    ));
+                    continue;
+                };
+                let src = pkg.require(main_part)?;
+                let Some(frag) = splice::clone_cell_paragraph(src, path, text, !*before) else {
+                    skips.push(format!(
+                        "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not in the document part"
+                    ));
+                    continue;
+                };
+                let action = cell_paras.entry(cell_key(path)).or_default();
+                if *before {
+                    action.insert_before.push(frag);
+                } else {
+                    action.insert_after.push(frag);
+                }
+            }
+            StructuralEdit::InsertCellRun {
+                block,
+                cell,
+                para,
+                text,
+            } => {
+                let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
+                    skips.push(format!(
+                        "insert-cell-run skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
+                    ));
+                    continue;
+                };
+                cell_paras
+                    .entry(cell_key(path))
+                    .or_default()
+                    .append_runs
+                    .push(rpr::render_run(text, &docx_core::RunProps::default(), None));
+            }
             StructuralEdit::DeleteRun { block, run } => {
                 let Some(a) = bindings.resolve(*block, *run) else {
                     skips.push(format!(
@@ -326,13 +383,22 @@ pub fn apply_edits(
         && cell_targets.is_empty()
         && rows.is_empty()
         && columns.is_empty()
+        && cell_paras.is_empty()
     {
         return Ok(skips);
     }
 
     let (patched, refused) = {
         let src = pkg.require(main_part)?;
-        patch_document_xml_cols(src, &targets, &paras, &cell_targets, &rows, &columns)
+        patch_document_xml_cols(
+            src,
+            &targets,
+            &paras,
+            &cell_targets,
+            &rows,
+            &columns,
+            &cell_paras,
+        )
     };
     skips.extend(refused);
     // Every edit refused: the part is untouched, so keep it lazy-verbatim.

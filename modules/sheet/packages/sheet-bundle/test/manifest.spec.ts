@@ -56,6 +56,8 @@ describe("sheet_plugin_manifest_valid", () => {
     ]);
     expect(manifest.contributes.commands).toEqual([
       "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.exportCsv",
+      "media.paged.sheet.command.toggleR1C1",
       "media.paged.sheet.command.lowerToFrame",
       "media.paged.sheet.command.lowerChartToFrame",
       "media.paged.sheet.command.openGrid",
@@ -85,6 +87,11 @@ describe("sheet_plugin_manifest_valid", () => {
       "media.paged.sheet.command.dataValidation",
       "media.paged.sheet.command.circleInvalid",
       "media.paged.sheet.command.toggleFilter",
+      "media.paged.sheet.command.hideSelection",
+      "media.paged.sheet.command.unhideSelection",
+      "media.paged.sheet.command.groupSelection",
+      "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek",
     ]);
   });
 

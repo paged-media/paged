@@ -73,7 +73,10 @@ const linkButton: CSSProperties = {
   textDecoration: "underline",
 };
 
-const cellStyle: CSSProperties = { padding: "2px 2px", verticalAlign: "middle" };
+const cellStyle: CSSProperties = {
+  padding: "2px 2px",
+  verticalAlign: "middle",
+};
 
 type Slot = "para" | "char" | "cell";
 const LIST_OF: Record<Slot, keyof Omit<DocumentStyleLists, "swatches">> = {
@@ -175,9 +178,7 @@ export function DocStylesSection(props: {
 
   return (
     <div data-sheet-docstyles style={body}>
-      <label
-        style={{ display: "flex", alignItems: "center", gap: space[1] }}
-      >
+      <label style={{ display: "flex", alignItems: "center", gap: space[1] }}>
         <input
           type="checkbox"
           data-sheet-docstyles-enabled
@@ -267,18 +268,26 @@ export function DocStylesSection(props: {
           data-sheet-docstyles-create
           style={button}
           onClick={() =>
-            void session.createDocStylesFromWorkbook().then((r) =>
-              setMsg(
-                r.ok ? t(M.created, { count: r.created ?? 0 }) : r.message,
-              ),
-            )
+            void session
+              .createDocStylesFromWorkbook()
+              .then((r) =>
+                setMsg(
+                  r.ok ? t(M.created, { count: r.created ?? 0 }) : r.message,
+                ),
+              )
           }
         >
           {t(M.create)}
         </button>
       </div>
       {missing.length > 0 && (
-        <p data-sheet-docstyles-missing style={{ ...note, color: "var(--status-warning, var(--pg-muted-fg))" }}>
+        <p
+          data-sheet-docstyles-missing
+          style={{
+            ...note,
+            color: "var(--status-warning, var(--pg-muted-fg))",
+          }}
+        >
           {t(M.missing, { count: missing.length })}
           {" · "}
           <button
@@ -345,7 +354,10 @@ export function DocStylesSection(props: {
         </p>
       )}
       {msg && (
-        <p data-sheet-docstyles-msg style={{ ...body, margin: `${space[1]} 0 0` }}>
+        <p
+          data-sheet-docstyles-msg
+          style={{ ...body, margin: `${space[1]} 0 0` }}
+        >
           {msg}
         </p>
       )}

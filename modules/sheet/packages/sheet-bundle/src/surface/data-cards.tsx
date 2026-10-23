@@ -17,7 +17,7 @@
  */
 
 // The data cards of the sheet bar (sheet ADR 517): the entry alert, Data
-// validation and the AutoFilter menu. Like paste special
+// validation, the AutoFilter menu, Sort and Goal Seek. Like paste special
 // they hang under the bar, which is not scaled with the frame, so they read
 // at any zoom. Each card takes a snapshot of what it edits when it opens
 // (as Excel's dialogs do) and hands the answer to the session; the engine
@@ -27,6 +27,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -39,7 +40,8 @@ import type {
   ValidationRuleArg,
   ValidationRuleInfo,
 } from "../engine-w2";
-import type { DataToolsApi } from "../data-tools";
+import { parseA1Range, type DataToolsApi } from "../data-tools";
+import { a1Of } from "./formula-refs";
 
 /** What the cards need from the session. */
 export type DataCardSession = DataToolsApi &
@@ -1230,6 +1232,477 @@ export function FilterMenuCard({
   );
 }
 
+// ── sort ──────────────────────────────────────────────────────────────
+
+interface SortLevel {
+  index: number;
+  sortBy: "value" | "cellColor" | "fontColor";
+  order: "asc" | "desc" | "custom";
+  color: string;
+  customList: string;
+}
+
+const newLevel = (index = 0): SortLevel => ({
+  index,
+  sortBy: "value",
+  order: "asc",
+  color: "#ffff00",
+  customList: "",
+});
+
+/** The card's levels as the engine's keys. */
+export function sortKeysOf(levels: readonly SortLevel[]): SortKey[] {
+  return levels.map((l) => {
+    const key: SortKey = { index: l.index, descending: l.order === "desc" };
+    if (l.sortBy !== "value") {
+      key.sortBy = l.sortBy;
+      key.color = l.color;
+    } else if (l.order === "custom") {
+      key.descending = false;
+      key.customList = l.customList
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s !== "");
+    }
+    return key;
+  });
+}
+
+export function SortCard({
+  session,
+  chrome,
+}: {
+  session: DataCardSession;
+  chrome: CardChrome;
+}) {
+  const [info] = useState(() => session.sortDialogInfo());
+  const [levels, setLevels] = useState<SortLevel[]>(() => [newLevel()]);
+  const [selected, setSelected] = useState(0);
+  const [hasHeader, setHasHeader] = useState(info?.hasHeader ?? false);
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [leftToRight, setLeftToRight] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancel = () => {
+    session.closeDataCard();
+    chrome.done();
+  };
+  if (!info) {
+    return (
+      <Card
+        label="Sort"
+        testId="sheet-sort-card"
+        chrome={chrome}
+        onCancel={cancel}
+      >
+        <span style={muted}>Select the data to sort.</span>
+      </Card>
+    );
+  }
+  const rect = parseA1Range(info.range);
+  const keyChoices: { index: number; label: string }[] = leftToRight
+    ? Array.from(
+        { length: rect ? Math.min(rect.bottom - rect.top + 1, 256) : 0 },
+        (_, i) => ({ index: i, label: `Row ${(rect?.top ?? 0) + i + 1}` }),
+      )
+    : info.columns.map((c) => ({
+        index: c.index,
+        label: hasHeader && c.header ? c.header : c.label,
+      }));
+  const update = (i: number, patch: Partial<SortLevel>) =>
+    setLevels(levels.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const ok = () => {
+    const r = session.sortWith(
+      {
+        keys: sortKeysOf(levels),
+        hasHeader: leftToRight ? false : hasHeader,
+        leftToRight,
+        caseSensitive,
+      },
+      info.range,
+    );
+    if (!r.ok) return setError(r.message);
+    session.closeDataCard();
+    chrome.done();
+  };
+  return (
+    <Card
+      label="Sort"
+      testId="sheet-sort-card"
+      chrome={chrome}
+      onCancel={cancel}
+      onSubmit={ok}
+      minWidth={460}
+    >
+      <div style={{ ...group, justifyContent: "space-between" }}>
+        <span style={group}>
+          <button
+            type="button"
+            data-testid="sheet-sort-add"
+            style={chrome.button}
+            disabled={levels.length >= 64}
+            onClick={() => {
+              setLevels([...levels, newLevel()]);
+              setSelected(levels.length);
+            }}
+          >
+            + Add level
+          </button>
+          <button
+            type="button"
+            data-testid="sheet-sort-delete"
+            style={chrome.button}
+            disabled={levels.length <= 1}
+            onClick={() => {
+              setLevels(levels.filter((_, j) => j !== selected));
+              setSelected(Math.max(0, selected - 1));
+            }}
+          >
+            Delete level
+          </button>
+          <button
+            type="button"
+            data-testid="sheet-sort-copy"
+            style={chrome.button}
+            onClick={() => {
+              const copy = { ...levels[selected]! };
+              setLevels([
+                ...levels.slice(0, selected + 1),
+                copy,
+                ...levels.slice(selected + 1),
+              ]);
+              setSelected(selected + 1);
+            }}
+          >
+            Copy level
+          </button>
+        </span>
+        <label>
+          <input
+            type="checkbox"
+            data-testid="sheet-sort-header"
+            checked={hasHeader && !leftToRight}
+            disabled={leftToRight}
+            onChange={(e) => setHasHeader(e.currentTarget.checked)}
+          />{" "}
+          My data has headers
+        </label>
+      </div>
+      <span style={muted}>{info.range}</span>
+      <div style={column}>
+        {levels.map((l, i) => (
+          <div
+            key={i}
+            data-testid="sheet-sort-level"
+            aria-selected={i === selected}
+            style={{
+              ...group,
+              padding: 2,
+              borderRadius: 4,
+              background:
+                i === selected ? "var(--pg-accent-bg, #e6eefc)" : "transparent",
+            }}
+            onFocus={() => setSelected(i)}
+            onClick={() => setSelected(i)}
+          >
+            <span style={{ minWidth: 52 }}>
+              {i === 0 ? "Sort by" : "Then by"}
+            </span>
+            <select
+              aria-label="Key"
+              data-testid="sheet-sort-key"
+              value={l.index}
+              style={field}
+              onChange={(e) =>
+                update(i, { index: Number(e.currentTarget.value) })
+              }
+            >
+              {keyChoices.map((c) => (
+                <option key={c.index} value={c.index}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Sort on"
+              data-testid="sheet-sort-on"
+              value={l.sortBy}
+              style={field}
+              onChange={(e) =>
+                update(i, {
+                  sortBy: e.currentTarget.value as SortLevel["sortBy"],
+                  order: "asc",
+                })
+              }
+            >
+              <option value="value">Cell values</option>
+              <option value="cellColor">Cell color</option>
+              <option value="fontColor">Font color</option>
+            </select>
+            {l.sortBy === "value" ? (
+              <select
+                aria-label="Order"
+                data-testid="sheet-sort-order"
+                value={l.order}
+                style={field}
+                onChange={(e) =>
+                  update(i, {
+                    order: e.currentTarget.value as SortLevel["order"],
+                  })
+                }
+              >
+                <option value="asc">A to Z</option>
+                <option value="desc">Z to A</option>
+                <option value="custom">Custom list…</option>
+              </select>
+            ) : (
+              <>
+                <input
+                  type="color"
+                  aria-label="Color"
+                  value={l.color}
+                  onChange={(e) => update(i, { color: e.currentTarget.value })}
+                />
+                <select
+                  aria-label="Position"
+                  value={l.order === "desc" ? "desc" : "asc"}
+                  style={field}
+                  onChange={(e) =>
+                    update(i, {
+                      order: e.currentTarget.value as SortLevel["order"],
+                    })
+                  }
+                >
+                  <option value="asc">On top</option>
+                  <option value="desc">On bottom</option>
+                </select>
+              </>
+            )}
+            {l.sortBy === "value" && l.order === "custom" ? (
+              <input
+                aria-label="Custom list"
+                data-testid="sheet-sort-custom-list"
+                placeholder="Low, Medium, High"
+                value={l.customList}
+                style={{ ...field, flex: 1 }}
+                onChange={(e) =>
+                  update(i, { customList: e.currentTarget.value })
+                }
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <div style={group}>
+        <label>
+          <input
+            type="checkbox"
+            checked={caseSensitive}
+            onChange={(e) => setCaseSensitive(e.currentTarget.checked)}
+          />{" "}
+          Case sensitive
+        </label>
+        <label style={group}>
+          Orientation
+          <select
+            aria-label="Orientation"
+            value={leftToRight ? "ltr" : "ttb"}
+            style={field}
+            onChange={(e) => {
+              setLeftToRight(e.currentTarget.value === "ltr");
+              setLevels(levels.map((l) => ({ ...l, index: 0 })));
+            }}
+          >
+            <option value="ttb">Sort top to bottom</option>
+            <option value="ltr">Sort left to right</option>
+          </select>
+        </label>
+      </div>
+      {error ? (
+        <span role="alert" style={{ color: "#b42318" }}>
+          {error}
+        </span>
+      ) : null}
+      <Buttons>
+        <button type="button" style={chrome.button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-sort-ok"
+          style={chrome.button}
+          onClick={ok}
+        >
+          OK
+        </button>
+      </Buttons>
+    </Card>
+  );
+}
+
+// ── Goal Seek ─────────────────────────────────────────────────────────
+
+/** The selection's reference, re-read on every session change (a click in
+ *  the grid while a reference field is focused fills it in). */
+function useSelectionRef(session: DataCardSession): string {
+  return useSyncExternalStore(
+    (onChange) => {
+      const sub = session.onDidChange(() => onChange());
+      return () => sub.dispose();
+    },
+    () => {
+      const a = session.activeCell();
+      return a ? a1Of(a.row, a.col) : "";
+    },
+  );
+}
+
+type GoalField = "set" | "changing";
+
+export function GoalSeekCard({
+  session,
+  chrome,
+}: {
+  session: DataCardSession;
+  chrome: CardChrome;
+}) {
+  const selection = useSelectionRef(session);
+  const [typed, setTyped] = useState<Record<GoalField, string>>(() => ({
+    set: selection,
+    changing: "",
+  }));
+  // The field a grid click fills: the last focused one, and the selection
+  // when it got focus (a later selection is a click meant for it).
+  const [picking, setPicking] = useState<{
+    field: GoalField;
+    base: string;
+  } | null>(null);
+  const [target, setTarget] = useState("");
+  const [outcome, setOutcome] = useState<{
+    found: boolean;
+    value: number;
+    result: number;
+    set: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const valueOf = (f: GoalField) =>
+    picking?.field === f && selection !== picking.base ? selection : typed[f];
+  const cancel = () => {
+    session.closeDataCard();
+    chrome.done();
+  };
+  const run = () => {
+    const set = valueOf("set");
+    const r = session.goalSeek(set, Number(target), valueOf("changing"));
+    if (!r.ok) return setError(r.message);
+    setError(null);
+    setOutcome({ found: r.found, value: r.value, result: r.result, set });
+  };
+  if (outcome) {
+    const keep = () => {
+      session.closeDataCard();
+      chrome.done();
+    };
+    const undo = () => {
+      session.undoCellEdit();
+      session.closeDataCard();
+      chrome.done();
+    };
+    return (
+      <Card
+        label="Goal Seek status"
+        testId="sheet-goal-seek-status"
+        chrome={chrome}
+        onCancel={undo}
+        onSubmit={keep}
+      >
+        <span>
+          {outcome.found
+            ? `Goal Seeking with cell ${outcome.set} found a solution.`
+            : `Goal Seeking with cell ${outcome.set} may not have found a solution.`}
+        </span>
+        <span>Target value: {target}</span>
+        <span data-testid="sheet-goal-seek-current">
+          Current value: {outcome.result}
+        </span>
+        <Buttons>
+          <button
+            type="button"
+            data-testid="sheet-goal-seek-keep"
+            style={chrome.button}
+            onClick={keep}
+          >
+            OK
+          </button>
+          <button type="button" style={chrome.button} onClick={undo}>
+            Cancel
+          </button>
+        </Buttons>
+      </Card>
+    );
+  }
+  const refField = (f: GoalField, label: string, testId: string) => (
+    <label style={group}>
+      <span style={{ minWidth: 110 }}>{label}</span>
+      <input
+        data-testid={testId}
+        value={valueOf(f)}
+        style={{ ...field, flex: 1, fontFamily: "var(--font-mono, monospace)" }}
+        onFocus={() => {
+          setTyped({ ...typed, [f]: valueOf(f) });
+          setPicking({ field: f, base: selection });
+        }}
+        onChange={(e) => {
+          setTyped({ ...typed, [f]: e.currentTarget.value });
+          setPicking({ field: f, base: selection });
+        }}
+      />
+    </label>
+  );
+  return (
+    <Card
+      label="Goal Seek"
+      testId="sheet-goal-seek"
+      chrome={chrome}
+      onCancel={cancel}
+      onSubmit={run}
+    >
+      {refField("set", "Set cell", "sheet-goal-seek-set")}
+      <label style={group}>
+        <span style={{ minWidth: 110 }}>To value</span>
+        <input
+          data-testid="sheet-goal-seek-target"
+          inputMode="decimal"
+          value={target}
+          style={{ ...field, flex: 1 }}
+          onChange={(e) => setTarget(e.currentTarget.value)}
+        />
+      </label>
+      {refField("changing", "By changing cell", "sheet-goal-seek-changing")}
+      <span style={muted}>
+        Click a cell in the grid to fill the focused field.
+      </span>
+      {error ? (
+        <span role="alert" style={{ color: "#b42318" }}>
+          {error}
+        </span>
+      ) : null}
+      <Buttons>
+        <button type="button" style={chrome.button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-goal-seek-ok"
+          style={chrome.button}
+          onClick={run}
+        >
+          OK
+        </button>
+      </Buttons>
+    </Card>
+  );
+}
+
 /** The card the session has open (the alert first), under the bar. */
 export function DataCards({
   session,
@@ -1266,7 +1739,9 @@ export function DataCards({
           chrome={chrome}
         />
       );
-    default:
-      return null;
+    case "sort":
+      return <SortCard session={session} chrome={chrome} />;
+    case "goalSeek":
+      return <GoalSeekCard session={session} chrome={chrome} />;
   }
 }

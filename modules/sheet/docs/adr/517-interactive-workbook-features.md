@@ -102,6 +102,21 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   `[n]Sheet!A1` reads the read-only shadow sheets `SheetModel::external_sheets` (no AST variant
   was needed). A defined name of another workbook (`[1]!Name`) is still not parsed; such a
   formula keeps its cached value.
+- Excel opens what Paged authors: the open-check lane (`excel_opencheck.rs`,
+  `recorded/opencheck.tsv`) gained seven cases — a table created with a calculated column, totals
+  and style switches; a table renamed with its totals toggled; validations authored (list, whole
+  number with a warning, custom) and edited; sheet and workbook protection with unlocked and
+  hidden-formula cells; a colour-and-value sort under an AutoFilter with custom, top-10 and
+  dynamic criteria; row and column outlines, a hidden column and a hidden sheet. Excel 16 opens
+  each without a repair and its re-save reads back the same (protection, AutoFilter, outline and
+  sheet states are now part of the compared inventory). Two writer faults the lane found are
+  fixed: a new `<sheetFormatPr>` went after a new `<cols>` (insertions at one offset now go in
+  schema order), and a `<col>` record without a width read as hidden (it carries the sheet's
+  default width); a formula inside a table is written as a plain formula with its `[@Col]`
+  references naming the table (`Sales[[#This Row],[Col]]`), never as a dynamic array.
+- On the private corpus (728 workbooks) a zero-edit save through the session is byte-identical
+  in every part (`real_xlsx_corpus::zero_edit_saves_…`); of 1778 inserts and deletes, the 24
+  refused are on protected sheets that do not allow them, as in Excel.
 
 **Frozen type amendment (filter criteria).** `sheet_core::FilterCriterion` gains `DateGroups`,
 `Custom`, `Dynamic`, `Color` and `Icon` (with `FilterOp`, `CustomCondition`, `DateGroup`);

@@ -180,9 +180,7 @@ export function createDocStylesPlan(
   lists: DocumentStyleLists,
   knownSwatches: KnownSwatchIds,
 ): { ops: Mutation[]; entries: Record<string, DocStyleTarget> } {
-  const mapped = new Set(
-    Object.keys(map.entries).map((k) => k.toLowerCase()),
-  );
+  const mapped = new Set(Object.keys(map.entries).map((k) => k.toLowerCase()));
   const ids = new Set(lists.paragraph.map((p) => p.id));
   const basic = basicParagraphStyle(lists);
   const ops: Mutation[] = [];
@@ -216,7 +214,12 @@ export function createDocStylesPlan(
     } as Parameters<typeof styleProps>[0])) {
       ops.push({
         op: "setStyleProperty",
-        args: { collection: "paragraph", styleId: id, path: p.path, value: p.value },
+        args: {
+          collection: "paragraph",
+          styleId: id,
+          path: p.path,
+          value: p.value,
+        },
       });
     }
     entries[u.name] = { para: id };

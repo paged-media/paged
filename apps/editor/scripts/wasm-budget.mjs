@@ -13,8 +13,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The APP-WIDE wasm budget: 100 MB for the whole editor including every
-// plugin (maintainer decision, 2026-08-19).
+// The APP-WIDE wasm budget: 120 MB for the whole editor including every
+// plugin (maintainer decision: 100 MB on 2026-08-19, raised to 120 MB on
+// 2026-10-23 as the sheet, data and web engines grew to Excel and browser
+// parity).
 //
 // Why this script exists at all: until now every wasm ceiling in the
 // platform was PER THING — plugin-sdk's `WASM_BUDGETS.maxArtifactBytes`
@@ -68,8 +70,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const APP = join(ROOT, "apps/canvas");
 const REPO = join(ROOT, "..", "..");
 
-/** The app-wide ceiling. 100 MB decimal, as a download is quoted. */
-export const APP_WASM_BUDGET_BYTES = 100 * 1000 * 1000;
+/** The app-wide ceiling. 120 MB decimal, as a download is quoted. */
+export const APP_WASM_BUDGET_BYTES = 120 * 1000 * 1000;
 
 /** Every `.wasm` under `dir`, following symlinks, depth-limited. */
 function wasmFilesUnder(dir, depth = 0, out = []) {

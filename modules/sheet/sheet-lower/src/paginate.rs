@@ -119,6 +119,9 @@ pub struct Page {
     /// `true` when this frame holds a single block/row taller than the whole
     /// frame — the spec's pathological case, placed alone and flagged.
     pub oversize: bool,
+    /// Which of the areas this page shows ([`paginate_sequence`]; `0` for a
+    /// single range).
+    pub area: u32,
 }
 
 /// Paginate `range` of `sheet` across the ordered `frames` (spec §8.2).
@@ -261,9 +264,77 @@ pub fn paginate_lowered(
             content,
             continued,
             oversize,
+            area: 0,
         });
     }
 
+    pages
+}
+
+/// Paginate several ALREADY-LOWERED areas in sequence across one chain (a
+/// print area of several ranges, plan G4): each area is paginated as
+/// [`paginate_lowered`] paginates one range — its own header band, its own
+/// keep-together blocks (range-relative to the area) — and the next area
+/// starts in the room the previous one left in its last frame, when that room
+/// holds the area's header band and first body row; otherwise on the next
+/// frame. Every page carries its area's index ([`Page::area`]); pages come in
+/// story order (area by area, frame by frame), so two pages may share a frame.
+/// Areas that find no frame left are dropped, as rows are in
+/// [`paginate_lowered`] (the caller under-provisioned the chain).
+pub fn paginate_sequence(
+    areas: Vec<LoweredContent>,
+    frames: &[FrameBox],
+    opts: &PaginateOptions,
+) -> Vec<Page> {
+    let mut pages: Vec<Page> = Vec::new();
+    // The frame the last page landed on and the height used in it.
+    let mut frame = 0usize;
+    let mut used = 0.0_f64;
+    for (k, full) in areas.into_iter().enumerate() {
+        if frame >= frames.len() || full.rows.is_empty() {
+            continue;
+        }
+        let header = (opts.repeated_header_rows as usize).min(full.rows.len());
+        let first_unit: f64 = full.rows[..(header + 1).min(full.rows.len())]
+            .iter()
+            .map(|r| r.height_pt)
+            .sum();
+        let room = frames[frame].height_pt - used;
+        let (start, boxes): (usize, Vec<FrameBox>) = if used <= 0.0 {
+            (frame, frames[frame..].to_vec())
+        } else if room >= first_unit {
+            let mut b = vec![FrameBox {
+                width_pt: frames[frame].width_pt,
+                height_pt: room,
+            }];
+            b.extend_from_slice(&frames[frame + 1..]);
+            (frame, b)
+        } else {
+            (frame + 1, frames[(frame + 1).min(frames.len())..].to_vec())
+        };
+        if boxes.is_empty() {
+            frame = frames.len();
+            continue;
+        }
+        let shared = used > 0.0 && start == frame;
+        let sub = paginate_lowered(full, &boxes, opts);
+        let Some(last) = sub.last() else {
+            continue;
+        };
+        let last_height: f64 = last.content.rows.iter().map(|r| r.height_pt).sum();
+        let last_frame = start + last.frame_index;
+        used = if shared && last.frame_index == 0 {
+            used + last_height
+        } else {
+            last_height
+        };
+        frame = last_frame;
+        pages.extend(sub.into_iter().map(|p| Page {
+            frame_index: start + p.frame_index,
+            area: k as u32,
+            ..p
+        }));
+    }
     pages
 }
 
@@ -435,6 +506,7 @@ fn assemble_page_content(
         // thread cf geometry, matching how it does not thread cf style
         // overrides either).
         databars: Vec::new(),
+        icons: Vec::new(),
         // A paginated frame is a slice; its repeated band is laid out by
         // the paginator, not declared as table header rows.
         header_rows: 0,

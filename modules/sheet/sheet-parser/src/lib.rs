@@ -40,6 +40,7 @@
 //!   signature): a ref prints a sheet prefix iff its sheet differs from
 //!   `home`. Without a home sheet the prefix decision is undefined.
 
+pub mod dialect;
 mod error;
 mod extract;
 mod future;

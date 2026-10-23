@@ -488,6 +488,41 @@ pub fn run_attrs(
     a
 }
 
+/// Resolve a differential format into a [`crate::VisualDelta`]: each facet
+/// the format sets (an explicit "bold off" included), colours through the
+/// one resolver (W2.4).
+pub fn resolve_dxf_delta(d: &DifferentialFormat, palette: &ColorPalette) -> crate::VisualDelta {
+    let mut out = crate::VisualDelta::default();
+    if let Some(f) = &d.font {
+        out.bold = f.bold;
+        out.italic = f.italic;
+        out.underline = f.underline.map(|u| u != UnderlineKind::None);
+        out.strike = f.strike;
+        out.font_size_pt = f.size;
+        out.font_name = f.name.clone();
+        out.text = f
+            .color
+            .as_ref()
+            .and_then(|c| resolve(c, palette))
+            .map(|r| (r.hex(), r.swatch));
+    }
+    if let Some(fill) = &d.fill {
+        let mut a = VisualAttrs::default();
+        apply_fill(&mut a, fill, palette);
+        if a.fill_rgb.is_some() {
+            out.fill = Some(Box::new(a));
+        }
+    }
+    if let Some(b) = &d.border {
+        let mut a = VisualAttrs::default();
+        apply_border(&mut a, b, palette);
+        if !a.border_lines.is_empty() {
+            out.border = Some(a.border_lines);
+        }
+    }
+    out
+}
+
 /// Resolve a differential format into the facets it sets (an unset facet
 /// stays default — the conditional-formatting bridge).
 pub fn resolve_delta(d: &DifferentialFormat, palette: &ColorPalette) -> VisualAttrs {

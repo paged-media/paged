@@ -38,3 +38,7 @@ proptest.workspace = true
 [[bench]]
 name = "calc"
 harness = false
+
+[[bench]]
+name = "cf"
+harness = false

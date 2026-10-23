@@ -59,7 +59,7 @@
 // their `when` (`objectVerbApplies`), and this listener prevents the
 // default so the keybinding registry's widget-key guard agrees.
 
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import {
   DIRECT_SELECT_TOOL_ID,
@@ -67,6 +67,8 @@ import {
   canvasSurfaceOf,
   elementSupportsPathEdit,
   useCanvasClient,
+  useEditContextEntry,
+  useEditContextStack,
   useEditorScope,
   useOptionalTool,
   useSelection,
@@ -103,6 +105,32 @@ export function usePathEditMode() {
   // modifier posture, not a request to edit points.
   const baseTool = useOptionalTool()?.toolState.base ?? null;
   const directSelect = baseTool === DIRECT_SELECT_TOOL_ID;
+
+  // Editor ADR 282 — Enter on content a plugin owns (a sheet frame, a web
+  // frame) enters that plugin's edit context, as a double-click does,
+  // instead of editing the frame's path. Whether the single selected
+  // element is owned is resolved ahead of the key, so the key stays
+  // synchronous.
+  const { isOwnedContent, tryEnterOwnedContent } = useEditContextEntry();
+  const { active: activeContext } = useEditContextStack();
+  const single = elementSelection.length === 1 ? elementSelection[0] : null;
+  const singleKey = single ? JSON.stringify(single) : null;
+  const [ownedKey, setOwnedKey] = useState<string | null>(null);
+  // The element is read back from its key: a new array of the same
+  // element is the same question, so the effect depends on the key alone.
+  useEffect(() => {
+    if (!singleKey) return;
+    const element = JSON.parse(singleKey) as NonNullable<typeof single>;
+    let live = true;
+    void isOwnedContent(element)
+      .then((owned) => {
+        if (live) setOwnedKey(owned ? singleKey : null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [singleKey, isOwnedContent]);
 
   const target =
     pathEditMode &&
@@ -196,6 +224,19 @@ export function usePathEditMode() {
       if (e.key === "Enter") {
         if (canvasSurfaceOf(e.target) === "text") return;
         if (pathEditMode) return; // already on; let other handlers see Enter
+        if (
+          !activeContext &&
+          single &&
+          singleKey !== null &&
+          singleKey === ownedKey &&
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey
+        ) {
+          e.preventDefault();
+          void tryEnterOwnedContent({ element: single, groupChain: [] });
+          return;
+        }
         if (elementSelection.length !== 1) return;
         if (!elementSupportsPathEdit(elementSelection[0])) return;
         e.preventDefault();
@@ -227,6 +268,11 @@ export function usePathEditMode() {
     pathEditMode,
     pathEditSession,
     elementSelection,
+    activeContext,
+    single,
+    singleKey,
+    ownedKey,
+    tryEnterOwnedContent,
     problemsSink,
     setPathEditMode,
   ]);

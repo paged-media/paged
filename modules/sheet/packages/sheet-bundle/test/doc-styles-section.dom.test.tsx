@@ -23,7 +23,10 @@ function fake(info: DocStylesInfo | null) {
     documentStyleLists: async () => ({
       lists: {
         paragraph: [
-          { id: "ParagraphStyle/$ID/NormalParagraphStyle", name: "[Basic Paragraph]" },
+          {
+            id: "ParagraphStyle/$ID/NormalParagraphStyle",
+            name: "[Basic Paragraph]",
+          },
           { id: "ParagraphStyle/H1", name: "Heading 1" },
         ],
         character: [{ id: "CharacterStyle/Em", name: "Emphasis" }],
@@ -102,11 +105,7 @@ describe("Document styles section [sheet.format.doc-style-map]", () => {
       q(container, '[data-sheet-docstyles-select="Normal:char"]')!,
       { target: { value: "CharacterStyle/Em" } },
     );
-    expect(calls[1]).toEqual([
-      "map",
-      "Normal",
-      { char: "CharacterStyle/Em" },
-    ]);
+    expect(calls[1]).toEqual(["map", "Normal", { char: "CharacterStyle/Em" }]);
 
     await act(async () => {
       fireEvent.click(q(container, "[data-sheet-docstyles-create]")!);
@@ -116,20 +115,30 @@ describe("Document styles section [sheet.format.doc-style-map]", () => {
       "2",
     );
 
-    expect(q(container, "[data-sheet-docstyles-missing]")?.textContent).toContain(
-      "1",
-    );
+    expect(
+      q(container, "[data-sheet-docstyles-missing]")?.textContent,
+    ).toContain("1");
     fireEvent.click(q(container, "[data-sheet-docstyles-remap]")!);
     fireEvent.change(
-      q(container, '[data-sheet-docstyles-select="remap:ParagraphStyle/Gone"]')!,
+      q(
+        container,
+        '[data-sheet-docstyles-select="remap:ParagraphStyle/Gone"]',
+      )!,
       { target: { value: "ParagraphStyle/H1" } },
     );
     await act(async () => {
       fireEvent.click(
-        q(container, '[data-sheet-docstyles-remap-apply="ParagraphStyle/Gone"]')!,
+        q(
+          container,
+          '[data-sheet-docstyles-remap-apply="ParagraphStyle/Gone"]',
+        )!,
       );
     });
-    expect(calls[3]).toEqual(["remap", "ParagraphStyle/Gone", "ParagraphStyle/H1"]);
+    expect(calls[3]).toEqual([
+      "remap",
+      "ParagraphStyle/Gone",
+      "ParagraphStyle/H1",
+    ]);
   });
 
   it("says to open a workbook first without one", () => {
