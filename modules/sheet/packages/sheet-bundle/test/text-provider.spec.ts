@@ -162,6 +162,7 @@ describe("paged.sheet text provider — the declaration", () => {
       type: "text",
       value: "CenterAlign",
     });
+    await write("frameFillColor", { type: "colorRef", value: "Color/Brand" });
     expect(patches).toEqual([
       { docParaStyle: "ParagraphStyle/Table body" },
       {
@@ -173,6 +174,13 @@ describe("paged.sheet text provider — the declaration", () => {
       },
       { bold: true, italic: true },
       { hAlign: "center" },
+      {
+        fillSwatch: {
+          id: "Color/Brand",
+          model: "spot",
+          fallbackRgb: "#C8102E",
+        },
+      },
     ]);
     // A swatch the document lacks is refused, not guessed.
     expect(
