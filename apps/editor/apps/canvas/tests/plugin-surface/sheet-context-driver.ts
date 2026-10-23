@@ -36,6 +36,7 @@
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateRawSync } from "node:zlib";
 
 import { expect, type Locator, type Page } from "@playwright/test";
 
@@ -198,14 +199,21 @@ export async function enterSheet(
     want: (i: number) => string,
     count: number,
     other: number,
+    start: number,
+    step: number,
   ) => {
     const span = axis === "x" ? box.width : box.height;
     const hits = new Map<number, number[]>();
-    for (let p = 2; p < span - 1; p += 3) {
+    // Stop at the first cell past the ones wanted: a click on a cell the
+    // frame shows only in part scrolls the grid's window, which would move
+    // every cell measured so far.
+    const past = want(count);
+    for (let p = start; p < span - 1; p += step) {
       const name = await probe(
         axis === "x" ? p : other,
         axis === "x" ? other : p,
       );
+      if (name === past) break;
       for (let i = 0; i < count; i++)
         if (name === want(i)) hits.set(i, [...(hits.get(i) ?? []), p]);
     }
@@ -215,19 +223,17 @@ export async function enterSheet(
       return (ps[0] + ps[ps.length - 1]) / 2;
     });
   };
-  // A point in the first column, below the headings: the first click that
-  // names A-something.
-  let firstColX = -1;
-  let firstRowY = -1;
-  for (let x = 2; x < box.width && firstColX < 0; x += 3)
-    for (let y = 2; y < Math.min(box.height, 60) && firstColX < 0; y += 3)
-      if ((await probe(x, y)) === "A1") {
-        firstColX = x + 4;
-        firstRowY = y + 3;
-      }
-  expect(firstColX, "A1 is on the frame surface").toBeGreaterThan(0);
-  const xs = await band("x", (c) => a1(0, c), cols, firstRowY);
-  const ys = await band("y", (r) => a1(r, 0), rows, xs[0]);
+  // Only the cell area is clicked: a click on a heading selects a whole
+  // row or column, and near a heading's border it grabs the border. The
+  // headings are 26 pt (rows) and 16 pt (columns) at the frame's scale.
+  const widthPt = await page.evaluate(async (id) => {
+    const c = (globalThis as unknown as CanvasHandle).__canvas;
+    const g = (await c.client.elementGeometry([id]))[0]!;
+    return g.bounds[3] - g.bounds[1];
+  }, frame);
+  const k = box.width / widthPt;
+  const ys = await band("y", (r) => a1(r, 0), rows, 29 * k, 17 * k, 1);
+  const xs = await band("x", (c) => a1(0, c), cols, ys[0], 27 * k, 2);
   return {
     surface,
     cell: async (row, col) => {
@@ -275,9 +281,16 @@ export async function openContextMenu(
   return menu;
 }
 
-/** A row of the open context menu, by its exact label. */
+/** A row of the open context menu, by its label. A row's accessible name
+ *  carries its shortcut after the label (`Copy ⌘C`), so the label is matched
+ *  whole, optionally followed by a shortcut, and never as a prefix of a
+ *  longer label (`Paste` is not `Paste special…`). */
 export const contextRow = (menu: Locator, label: string) =>
-  menu.getByRole("menuitem", { name: label, exact: true });
+  menu.getByRole("menuitem", {
+    name: new RegExp(
+      `^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( (⌘|⌥|⇧|⌃|Ctrl|Alt|Shift|Meta).*)?$`,
+    ),
+  });
 
 /** Right-click cell (row, col), click the row `label`, and assert it ran
  *  exactly `command`, once, with no payload, settling without an error. */
@@ -318,4 +331,58 @@ export async function clickContextRow(
     `${label}: the handler settles without throwing`,
   ).toBe(null);
   return seen;
+}
+
+/** One part of the open workbook as the sheet's .xlsx exporter writes it
+ *  now (`xl/worksheets/sheet1.xml` …): what the grid holds that it does not
+ *  draw (an outline group) is read back from the file Excel would open. */
+export async function workbookPart(page: Page, part: string): Promise<string> {
+  const bytes = await page.evaluate(async () => {
+    const r = (
+      globalThis as unknown as {
+        __canvas: {
+          registries: {
+            exporters: {
+              list(): Array<{
+                id: string;
+                export(): Promise<{ bytes: Uint8Array } | null>;
+              }>;
+            };
+          };
+        };
+      }
+    ).__canvas.registries;
+    const e = r.exporters
+      .list()
+      .find((x) => x.id === "media.paged.sheet.exporter.xlsx");
+    const out = await e!.export();
+    return out ? Array.from(out.bytes) : null;
+  });
+  expect(bytes, "the workbook exports").not.toBeNull();
+  const zip = Buffer.from(bytes!);
+  // The ZIP's central directory names each entry and where it is.
+  let eocd = zip.length - 22;
+  while (eocd >= 0 && zip.readUInt32LE(eocd) !== 0x06054b50) eocd--;
+  let at = zip.readUInt32LE(eocd + 16);
+  const count = zip.readUInt16LE(eocd + 10);
+  for (let i = 0; i < count; i++) {
+    const method = zip.readUInt16LE(at + 10);
+    const size = zip.readUInt32LE(at + 20);
+    const nameLen = zip.readUInt16LE(at + 28);
+    const skip =
+      nameLen + zip.readUInt16LE(at + 30) + zip.readUInt16LE(at + 32);
+    const name = zip.toString("utf8", at + 46, at + 46 + nameLen);
+    if (name === part) {
+      const local = zip.readUInt32LE(at + 42);
+      const start =
+        local +
+        30 +
+        zip.readUInt16LE(local + 26) +
+        zip.readUInt16LE(local + 28);
+      const data = zip.subarray(start, start + size);
+      return (method === 0 ? data : inflateRawSync(data)).toString("utf8");
+    }
+    at += 46 + skip;
+  }
+  throw new Error(`the exported workbook has no ${part}`);
 }
