@@ -1,0 +1,12 @@
+# PHI(x) - standard normal density.
+# id	formula	setup	expected
+ph-0	=PHI(0.75)	-	0.301137432154804
+ph-1	=PHI(0)	-	0.398942280401433
+ph-2	=PHI(-2)	-	0.053990966513188
+ph-3	=PHI(5)	-	1.4867195147343E-06
+ph-4	=PHI(40)	-	0
+ph-5	=PHI(1E-5)	-	0.398942280381486
+ph-6	=SUM(PHI({1,-1}))	-	0.483941449038287
+ph-txt	=PHI("x")	-	#VALUE!
+ph-err	=PHI(A1)	A1=#DIV/0!	#DIV/0!
+ph-numtxt	=PHI("0.75")	-	0.301137432154804

@@ -487,4 +487,45 @@ impl SheetEngine {
         let a: TableStyleArg = arg(arg_v)?;
         to_js(&self.session.set_table_style(name, a).map_err(map_err)?)
     }
+
+    // ── what-if (ADR 517) ───────────────────────────────────────────────
+
+    /// Goal Seek: `{found, value, result, iterations, prevInput}`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn goal_seek(
+        &mut self,
+        sheet: u16,
+        set_row: u32,
+        set_col: u32,
+        target: f64,
+        changing_sheet: u16,
+        changing_row: u32,
+        changing_col: u32,
+    ) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .goal_seek(
+                    sheet,
+                    set_row,
+                    set_col,
+                    target,
+                    changing_sheet,
+                    changing_row,
+                    changing_col,
+                )
+                .map_err(map_err)?,
+        )
+    }
+
+    /// Recalculate the data tables now (the result cells that changed,
+    /// `[[sheet, row, col]]`).
+    pub fn calculate_data_tables(&mut self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.calculate_data_tables().map_err(map_err)?)
+    }
+
+    /// The data tables: `[[sheet, "B6:C10"]]`.
+    pub fn list_data_tables(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.list_data_tables())
+    }
 }

@@ -77,6 +77,9 @@ import {
   offsetTableRows,
   tableRefreshOps,
   tableDataBarOps,
+  tableDiagonalOps,
+  cellRotationOps,
+  needsRotationStyles,
   cellAlignApplies,
   cellAlignStyleMints,
   cellsNeedingRealign,
@@ -499,12 +502,14 @@ async function tableContentOps(
   const wantsFills = cellFillSwatchOps(content).length > 0;
   const wantsText = cellCharacterStyles(content).size > 0;
   const wantsAlign = needsAlignStyles(content);
-  const [swatches, styles, paragraphs] = await Promise.all([
+  const wantsRotation = needsRotationStyles(content);
+  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+    wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const fillMints = wantsFills ? cellFillSwatchOps(content, swatches) : [];
   const styleOps = [
@@ -523,6 +528,10 @@ async function tableContentOps(
             available: paragraphs === null ? new Set() : undefined,
           }),
         ]
+      : []),
+    // W2.2: rotated cells take a rotation cell style.
+    ...(wantsRotation
+      ? cellRotationOps(content, storyId, tableId, cellStyles)
       : []),
   ];
   return { ops: [...fillMints, ...pourOps, ...decor.ops], styleOps };
@@ -543,14 +552,22 @@ async function barOps(
   content: LoweredContent,
   at: BarPlacement | undefined,
 ): Promise<Mutation[]> {
-  if (!at || (content.databars ?? []).length === 0) return [];
-  return tableDataBarOps(
-    content,
-    at.widths,
-    at.pageId,
-    at.origin,
-    await readKnownSwatchIds(host),
-  );
+  if (!at) return [];
+  const bars = (content.databars ?? []).length > 0;
+  // W2.2: diagonal borders are drawn page lines beside the bars (their
+  // colours are the table's own cell-stroke mints).
+  const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
+  if (!bars) return diagonals;
+  return [
+    ...tableDataBarOps(
+      content,
+      at.widths,
+      at.pageId,
+      at.origin,
+      await readKnownSwatchIds(host),
+    ),
+    ...diagonals,
+  ];
 }
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
@@ -668,6 +685,21 @@ async function readKnownParagraphStyleIds(
     return new Set(rows.map((r) => r.selfId));
   } catch (err) {
     host.log.warn("cell alignment: paragraph-style read failed", err);
+    return null;
+  }
+}
+
+/** The document's cell-style ids, or null when the read failed. */
+async function readKnownCellStyleIds(
+  host: BundleHost,
+): Promise<Set<string> | null> {
+  try {
+    const rows = await host.document.collection<{ selfId: string }>(
+      "cellStyles",
+    );
+    return new Set(rows.map((r) => r.selfId));
+  } catch (err) {
+    host.log.warn("cell rotation: cell-style read failed", err);
     return null;
   }
 }
@@ -1808,12 +1840,16 @@ async function tableRefreshLanes(
   const wantsFills = cellFillSwatchOps(next).length > 0;
   const wantsText = restyle.size > 0 && cellCharacterStyles(next).size > 0;
   const wantsAlign = realign.size > 0 && needsAlignStyles(next);
-  const [swatches, styles, paragraphs] = await Promise.all([
+  const wantsRotation =
+    needsRotationStyles(next) &&
+    JSON.stringify(prev.styles) !== JSON.stringify(next.styles);
+  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+    wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const decor = [
     ...(wantsFills ? cellFillSwatchOps(next, swatches) : []),
@@ -1848,7 +1884,10 @@ async function tableRefreshLanes(
         ];
   // Below a host header band: the workbook's row 0 is the table's row
   // `headerRows` (ops naming no row pass unchanged).
-  return [ops.structure, ops.text, decor, [...style, ...align]]
+  const rotation = wantsRotation
+    ? cellRotationOps(next, storyId, tableId, cellStyles)
+    : [];
+  return [ops.structure, ops.text, decor, [...style, ...align, ...rotation]]
     .filter((l) => l.length > 0)
     .map((l) => offsetTableRows(l, tableId, headerRows));
 }

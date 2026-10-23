@@ -216,6 +216,49 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect(tables[0].get("0:0")).toBe("price");
   });
 
+  it("the document's basic paragraph face is the grid's default (P7)", async () => {
+    const session = createWorkbookSession(host);
+    s = session;
+    const made = await host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "createParagraphStyle",
+            args: {
+              selfId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              name: "$ID/NormalParagraphStyle",
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontFamily",
+              value: { type: "text", value: "Minion Pro" },
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontSize",
+              value: { type: "length", value: 9 },
+            },
+          },
+        ],
+      },
+    });
+    expect(made.applied).toBe(true);
+    expect(await session.documentTextDefault()).toEqual({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    });
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);

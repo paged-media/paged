@@ -83,6 +83,8 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
     state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
     setFrameSheet: () => true,
+    documentTextDefault: async () => null,
+    documentFontFace: async () => null,
   };
   return { session, calls, changed };
 }

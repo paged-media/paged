@@ -1,0 +1,9 @@
+# NEGBINOMDIST(number_f,number_s,probability_s) - legacy density.
+# id	formula	setup	expected
+nbl-0	=NEGBINOMDIST(10,5,0.25)	-	0.055048660375178
+nbl-1	=NEGBINOMDIST(0,1,0.5)	-	0.5
+nbl-2	=NEGBINOMDIST(100,20,0.2)	-	0.010488489257218
+nbl-3	=NEGBINOMDIST(-1,5,0.25)	-	#NUM!
+nbl-4	=NEGBINOMDIST(10,5,1.5)	-	#NUM!
+nbl-5	=NEGBINOMDIST("x",5,0.25)	-	#VALUE!
+nbl-6	=NEGBINOMDIST(10,0,0.25)	-	#NUM!
