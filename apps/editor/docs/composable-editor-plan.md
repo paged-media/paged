@@ -1259,8 +1259,9 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   2026-10-23).
 - **doc:** done: the exporter works after reopening a saved document; `block.text` writable;
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
-  heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
-  headless host has no native-open door, so `paged-node` places it in a frame).
+  heading anchor (`{ heading: n }`); a `.docx` opens standalone headless (the SDK's headless
+  host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
+  table cells are saved back on export.
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

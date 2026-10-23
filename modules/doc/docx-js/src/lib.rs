@@ -157,7 +157,8 @@ mod wasm {
         }
 
         /// M2 edited save-back driven by the DOC-03 read: forward the host's
-        /// `StoryContent` JSON (`host.document.storyContent(storyId)`); it is
+        /// `StoryContent` JSON (`host.document.storyContent(storyId)`), plus
+        /// `cells: [{ block, cell, text }]` for the native tables' cells; it is
         /// overlaid on the import baseline, diffed, and saved. This is the LIVE
         /// path — live once the host injects the v54 read backend (gated by the
         /// bundle on `supports("document.readStory@1")`).
@@ -168,8 +169,16 @@ mod wasm {
                 .ok_or_else(|| JsValue::from_str("no document loaded"))?;
             let content: docx_export::StoryContentIn = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            // The native tables' cells ride along as `cells` (absent: none).
+            #[derive(serde::Deserialize)]
+            struct Cells {
+                #[serde(default)]
+                cells: Vec<docx_export::CellContentIn>,
+            }
+            let Cells { cells } = serde_json::from_str(content_json)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let (bytes, skips) = session
-                .save_edited_from_content(&content)
+                .save_edited_from_content_and_cells(&content, &cells)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)
