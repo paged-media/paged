@@ -26,13 +26,17 @@
 //! - Every covered kernel against the shader on a device (the GPU lanes).
 //! - The region filter's two lanes (`image_js::region_filter`) against
 //!   each other on a device, and the CPU lane's own properties without
-//!   one.
+//!   one — over a rectangle and over a mask given as data (polygons,
+//!   feather, an alpha mask).
 
 use image_conformance::harness::{assert_within, parity, ParityResult, RefTile};
 use image_conformance::quantize::{f16_ulp_distance, f32_to_f16_bits};
 use image_conformance::Px;
 use image_js::ingest::AdjustParams;
-use image_js::region_filter::{filter_region_cpu, filter_region_gpu, PixelRect};
+use image_js::region_filter::{
+    filter_masked_cpu, filter_masked_gpu, filter_region_cpu, filter_region_gpu, mask_coverage,
+    PixelRect, RegionMask,
+};
 use image_kernels::cpu::{self, CPU_KERNELS};
 use image_kernels::families::adjust::*;
 use image_kernels::families::conv::{
@@ -498,5 +502,270 @@ fn the_cpu_and_gpu_region_filters_agree__feat__image_editor_region_filter() {
             .max()
             .unwrap();
         assert!(worst <= 1, "CPU and GPU lanes differ by {worst} levels");
+    }
+}
+
+// ───────────────────────── a mask given as data ─────────────────────────
+
+const FULL: PixelRect = PixelRect {
+    x: 0,
+    y: 0,
+    w: 40,
+    h: 30,
+};
+
+fn square(x0: f32, y0: f32, x1: f32, y1: f32) -> Vec<(f32, f32)> {
+    vec![(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+}
+
+/// Polygons rasterise to coverage (unioned, anti-aliased), an alpha mask
+/// intersects, the region clips hard, and a feather softens the edge.
+#[test]
+#[allow(non_snake_case)]
+fn a_mask_rasterises_to_coverage__feat__image_editor_region_filter() {
+    let (w, h) = (40u32, 30u32);
+    let at = |c: &image_gpu::SelectionCoverage, x: u32, y: u32| c.coverage_at(x, y);
+
+    // Two squares, one with a half-pixel edge: inside 255, outside 0,
+    // the half-covered column at 128.
+    let mask = RegionMask {
+        polygons: vec![square(2.0, 2.0, 10.5, 10.0), square(20.0, 5.0, 30.0, 15.0)],
+        ..RegionMask::default()
+    };
+    let c = mask_coverage(w, h, FULL, &mask).unwrap();
+    assert_eq!(at(&c, 5, 5), 255);
+    assert_eq!(at(&c, 25, 10), 255);
+    assert_eq!(at(&c, 15, 8), 0);
+    assert_eq!(at(&c, 1, 1), 0);
+    assert_eq!(at(&c, 10, 5), 128, "a half-covered pixel");
+
+    // The region clips: nothing at or right of x = 24.
+    let clip = PixelRect {
+        x: 0,
+        y: 0,
+        w: 24,
+        h: 30,
+    };
+    let c = mask_coverage(w, h, clip, &mask).unwrap();
+    assert_eq!(at(&c, 23, 10), 255);
+    assert_eq!(at(&c, 24, 10), 0);
+    assert_eq!(at(&c, 5, 5), 255);
+
+    // An alpha mask alone is the coverage; with a polygon, the smaller.
+    let alpha: Vec<u8> = (0..w * h).map(|i| ((i % w) * 6) as u8).collect();
+    let only = RegionMask {
+        alpha: Some(alpha.clone()),
+        ..RegionMask::default()
+    };
+    assert_eq!(mask_coverage(w, h, FULL, &only).unwrap().data(), &alpha[..]);
+    let both = RegionMask {
+        polygons: mask.polygons.clone(),
+        alpha: Some(alpha),
+        ..RegionMask::default()
+    };
+    let c = mask_coverage(w, h, FULL, &both).unwrap();
+    assert_eq!(at(&c, 5, 5), 30);
+    assert_eq!(at(&c, 25, 10), 150);
+    assert_eq!(at(&c, 15, 8), 0);
+
+    // A feather: the hard edge becomes a ramp, the centre stays full,
+    // far outside stays empty.
+    let hard = RegionMask {
+        polygons: vec![square(10.0, 5.0, 30.0, 25.0)],
+        ..RegionMask::default()
+    };
+    let soft = RegionMask {
+        feather: 2.0,
+        ..hard.clone()
+    };
+    let c = mask_coverage(w, h, FULL, &soft).unwrap();
+    assert_eq!(at(&c, 20, 15), 255);
+    assert_eq!(at(&c, 2, 15), 0);
+    let ramp: Vec<u8> = (6..14).map(|x| at(&c, x, 15)).collect();
+    assert!(ramp.windows(2).all(|p| p[0] <= p[1]), "a ramp: {ramp:?}");
+    assert!(ramp.iter().any(|&v| v > 0 && v < 255), "partial: {ramp:?}");
+    assert!(at(&c, 9, 15) > 0 && at(&c, 10, 15) < 255);
+
+    // What is wrong is said.
+    let bad = |m: RegionMask| mask_coverage(w, h, FULL, &m).unwrap_err();
+    assert!(bad(RegionMask {
+        polygons: vec![vec![(0.0, 0.0), (1.0, 1.0)]],
+        ..RegionMask::default()
+    })
+    .contains("at least 3"));
+    assert!(bad(RegionMask {
+        alpha: Some(vec![0; 10]),
+        ..RegionMask::default()
+    })
+    .contains("1200 bytes"));
+    assert!(bad(RegionMask {
+        feather: -1.0,
+        ..hard.clone()
+    })
+    .contains("feather"));
+    assert!(bad(RegionMask {
+        polygons: vec![vec![(0.0, 0.0), (f32::NAN, 1.0), (3.0, 3.0)]],
+        ..RegionMask::default()
+    })
+    .contains("not a number"));
+}
+
+/// Under a mask the CPU lane writes only where coverage is non-zero, a
+/// full coverage is the rectangle's result, and partial coverage blends
+/// the filtered and the original pixel.
+#[test]
+#[allow(non_snake_case)]
+fn the_cpu_masked_filter_touches_only_its_mask__feat__image_editor_region_filter() {
+    let (w, h) = (40u32, 30u32);
+    let src = image(w, h);
+    let mask = RegionMask {
+        polygons: vec![vec![(4.0, 3.0), (35.0, 6.0), (18.0, 27.0)]],
+        feather: 1.5,
+        ..RegionMask::default()
+    };
+    let cov = mask_coverage(w, h, FULL, &mask).unwrap();
+    let mut out = src.clone();
+    filter_masked_cpu(w, h, &mut out, &chain(), &cov).unwrap();
+    let mut changed = 0;
+    for y in 0..h {
+        for x in 0..w {
+            let o = ((y * w + x) * 4) as usize;
+            if cov.coverage_at(x, y) == 0 {
+                assert_eq!(&out[o..o + 4], &src[o..o + 4], "({x}, {y}) is unmasked");
+            } else if out[o..o + 4] != src[o..o + 4] {
+                changed += 1;
+            }
+        }
+    }
+    assert!(changed > 200, "the mask was filtered ({changed} changed)");
+
+    // Full coverage over a rectangle is the rectangle's filter.
+    let rect = PixelRect {
+        x: 5,
+        y: 4,
+        w: 20,
+        h: 15,
+    };
+    let as_mask = mask_coverage(w, h, rect, &RegionMask::default()).unwrap();
+    let (mut a, mut b) = (src.clone(), src.clone());
+    filter_masked_cpu(w, h, &mut a, &chain(), &as_mask).unwrap();
+    filter_region_cpu(w, h, &mut b, &chain(), rect).unwrap();
+    assert_eq!(a, b);
+
+    // A constant half coverage of an invert lands half way.
+    let flat: Vec<u8> = (0..w * h).flat_map(|_| [200, 200, 200, 255]).collect();
+    let half = mask_coverage(
+        w,
+        h,
+        FULL,
+        &RegionMask {
+            alpha: Some(vec![128; (w * h) as usize]),
+            ..RegionMask::default()
+        },
+    )
+    .unwrap();
+    let mut inv = flat.clone();
+    let p = AdjustParams {
+        invert: true,
+        ..AdjustParams::default()
+    };
+    filter_masked_cpu(w, h, &mut inv, &p, &half).unwrap();
+    // mix(200, 55, 128/255) ≈ 127.2; alpha stays.
+    assert!(inv[0].abs_diff(127) <= 1, "got {}", inv[0]);
+    assert_eq!(inv[3], 255);
+
+    // A mask that covers nothing is refused.
+    let none = mask_coverage(
+        w,
+        h,
+        FULL,
+        &RegionMask {
+            alpha: Some(vec![0; (w * h) as usize]),
+            ..RegionMask::default()
+        },
+    )
+    .unwrap();
+    let err = filter_masked_cpu(w, h, &mut out, &chain(), &none).unwrap_err();
+    assert!(err.contains("covers no pixel"), "{err}");
+}
+
+/// The two lanes agree under a mask (polygons with a feather, an alpha
+/// gradient), within one level, and neither writes outside it.
+#[test]
+#[allow(non_snake_case)]
+fn the_cpu_and_gpu_masked_filters_agree__feat__image_editor_region_filter() {
+    let Some(ctx) = image_conformance::device::test_device() else {
+        return;
+    };
+    let (w, h) = (300u32, 270u32);
+    let src = image(w, h);
+    let all = PixelRect { x: 0, y: 0, w, h };
+    let lasso = RegionMask {
+        polygons: vec![
+            vec![(20.5, 30.0), (250.0, 12.25), (280.0, 200.0), (60.0, 240.5)],
+            square(150.0, 150.0, 299.0, 269.0),
+        ],
+        feather: 3.0,
+        ..RegionMask::default()
+    };
+    let gradient = RegionMask {
+        alpha: Some((0..w * h).map(|i| ((i % w) * 255 / w) as u8).collect()),
+        ..RegionMask::default()
+    };
+    for (params, mask, rect) in [
+        (chain(), lasso.clone(), all),
+        (
+            AdjustParams {
+                blur_sigma: 6.0,
+                ..AdjustParams::default()
+            },
+            gradient.clone(),
+            all,
+        ),
+        (
+            AdjustParams {
+                sharpen_amount: 1.2,
+                invert: true,
+                threshold: Some(0.5),
+                ..AdjustParams::default()
+            },
+            RegionMask {
+                feather: 2.0,
+                ..gradient
+            },
+            PixelRect {
+                x: 100,
+                y: 40,
+                w: 137,
+                h: 200,
+            },
+        ),
+    ] {
+        let cov = mask_coverage(w, h, rect, &mask).unwrap();
+        let mut cpu_out = src.clone();
+        filter_masked_cpu(w, h, &mut cpu_out, &params, &cov).unwrap();
+        let mut gpu_out = src.clone();
+        pollster::block_on(filter_masked_gpu(
+            ctx,
+            w,
+            h,
+            &mut gpu_out,
+            &params,
+            cov.clone(),
+        ))
+        .unwrap();
+        let worst = cpu_out
+            .iter()
+            .zip(&gpu_out)
+            .map(|(a, b)| a.abs_diff(*b))
+            .max()
+            .unwrap();
+        assert!(worst <= 1, "CPU and GPU lanes differ by {worst} levels");
+        for (i, &c) in cov.data().iter().enumerate() {
+            if c == 0 {
+                let o = i * 4;
+                assert_eq!(&gpu_out[o..o + 4], &src[o..o + 4], "GPU wrote pixel {i}");
+            }
+        }
     }
 }
