@@ -1257,7 +1257,8 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   window (sheet ADR 510) to be wired to placement (`modules/sheet/docs/status.md`).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
-  `defineBinding` (the session binding kinds), `apply`, and `merge` (now with `imageBase`,
+  `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
+  `expr`, so expression bindings apply), `apply`, and `merge` (now with `imageBase`,
   `imageFields` and the undo steps it took). `generate <template> --per record|group [--by …]`
   is the batch verb: paged.data's `planBatch` splits the records, each unit is merged, written
   and undone. Read-only inspection commands: `previewQuery`, `checkExpression`, `refreshDiff`,
@@ -1279,7 +1280,9 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
   (exit 1 on an error finding). `paged-node package <doc> -o <dir|x.zip>`, InDesign's
   package as the Rust `paged package` lays it out: the IDML with its links rebased into
-  `Links/`, the linked files, the fonts, instructions and a report. Fonts are collected only
+  `Links/`, the linked files, the fonts, instructions and a report, and the document as
+  `.paged` with the module content IDML cannot carry (the report lists those parts;
+  `--no-paged` leaves it out; the Rust `paged package` the same). Fonts are collected only
   from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
   whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
 

@@ -78,9 +78,19 @@ fn main() -> Result<()> {
             doc,
             out,
             instructions,
+            no_paged,
             json,
             assets,
-        } => paged_cli::package::run(&doc, &assets, &out, instructions.as_deref(), json),
+        } => paged_cli::package::run(
+            &doc,
+            &assets,
+            &out,
+            paged_cli::package::PackageOptions {
+                instructions: instructions.as_deref(),
+                no_paged,
+                json,
+            },
+        ),
         Command::New { size, format, out } => paged_cli::new::run(&size, &out, &format),
         Command::Gen { what } => match what {
             GenCommand::Emit { sample, out } => paged_cli::gen::emit(&sample, &out),
