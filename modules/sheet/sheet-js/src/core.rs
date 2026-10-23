@@ -625,6 +625,16 @@ fn spill_areas(engine: &Engine) -> std::collections::BTreeMap<(SheetId, u32, u32
                 .region_of(cell_ref(si, r, c))
                 .map(|rect| (rect.row1 - rect.row0 + 1, rect.col1 - rect.col0 + 1))
                 .unwrap_or((1, 1));
+            // Excel refuses a dynamic array inside a table (a calculated
+            // column is a plain formula per row): a one-cell result there is
+            // written as a plain formula (sheet ADR 517).
+            let in_table = ws.tables.iter().any(|t| {
+                let n = t.range.normalized();
+                n.start.row <= r && r <= n.end.row && n.start.col <= c && c <= n.end.col
+            });
+            if in_table && area == (1, 1) {
+                continue;
+            }
             out.insert((si, r, c), area);
         }
     }
@@ -851,8 +861,8 @@ impl SheetSession {
         };
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
-        // Data tables are calculated with the workbook (ADR 517).
-        session.data_tables_after_write()?;
+        // Data tables keep the values the file cached until the first write
+        // (ADR 517): a zero-edit save stays byte-identical.
         Ok(session)
     }
 
@@ -888,7 +898,10 @@ impl SheetSession {
                         // xlsx formula text carries NO leading '=' — print bare,
                         // in the OOXML storage dialect (`_xlfn.` prefixes etc.)
                         // so Excel does not open a newer function as #NAME?.
-                        let text = print_ooxml(formula, sheet, &names);
+                        // `[@Col]` names its table in the file (sheet ADR 517).
+                        let qualified = tables::qualify_this_row(model, sheet, row, col, formula);
+                        let text =
+                            print_ooxml(qualified.as_ref().unwrap_or(formula), sheet, &names);
                         self.doc.formula_texts.insert((sheet, row, col), text);
                     }
                 }
