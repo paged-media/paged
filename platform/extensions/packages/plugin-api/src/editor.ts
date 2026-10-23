@@ -348,6 +348,10 @@ export interface FrameSurfaceProps {
   /** `"frame"` over the frame on the page; `"fullscreen"` filling the
    *  editor's work area (only when the host supports it). */
   presentation: "frame" | "fullscreen";
+  /** The frame's content box, pt, in either presentation: full screen
+   *  shows more than the frame, and a surface may mark the part that
+   *  lands on the page. */
+  frameBoxPt: { widthPt: number; heightPt: number };
   /** A client (viewport) position mapped into content points, or null when
    *  it falls outside the content box. Honours rotation and skew, which a
    *  bounding rect does not. */
@@ -494,6 +498,9 @@ export interface EditContextRegistry {
 /** Frame surfaces (extensions ADR 334), keyed by their edit-context type. */
 export interface FrameSurfaceRegistry {
   register(contribution: FrameSurfaceContribution): Disposable;
+  /** True when the host can show a surface full screen
+   *  (`supports("editContext.frameSurface.fullscreen@1")`). */
+  readonly fullscreen?: boolean;
 }
 /** W3.2 — the object-type registry (the shell owns hit-routing; a
  *  matching element's double-click enters its `editContextType`). */

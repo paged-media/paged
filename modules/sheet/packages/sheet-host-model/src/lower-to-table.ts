@@ -93,8 +93,9 @@ export function tableCellPositionOf(
 /** Phase-2 op: create the table in an already-resolved story. `rows`/`cols`
  *  are the lowered grid extent; `columnWidths` (pt) are caller-measured
  *  (font metrics, S-13), falling back to the IR's char-based widths;
- *  `rowHeights` (pt) come straight from the IR. Header/footer rows are 0 in
- *  T0 (repeated-header view options are a later wire-through). The host
+ *  `rowHeights` (pt) come straight from the IR. Header rows are the IR's
+ *  `headerRows` (a frame page's frozen rows + printed heading row; 0 for a
+ *  range lowering), footer rows 0. The host
  *  returns `createdId = tableId`. */
 export function tableInsertOp(
   content: LoweredContent,
@@ -107,7 +108,7 @@ export function tableInsertOp(
       storyId,
       rows: content.rows.length,
       cols: content.cols.length,
-      headerRows: 0,
+      headerRows: Math.min(content.headerRows ?? 0, content.rows.length),
       footerRows: 0,
       columnWidths,
       rowHeights: content.rows.map((r) => r.heightPt),
