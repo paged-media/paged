@@ -2088,6 +2088,11 @@ export function createWorkbookSession(
       }
       case "dropdown":
         return data.api.openCellDropdown();
+      case "group": {
+        const r = data.api.groupSelection(a.on);
+        if (!r.ok) host.log.warn(`group: ${r.message}`);
+        return true;
+      }
 
       case "cancel":
         cancelEdit();
