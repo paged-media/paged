@@ -22,10 +22,27 @@
 - Canvas edits in table cells are saved back (editor plan G4): the export reads each native
   cell's `text` (`src/save-cells.ts`; the story read-back holds no table) and docx-js patches
   the changed span into the cell paragraph's runs, keeping the runs, their properties and
-  fields (`overlay_cells`). A cell whose paragraphs were added or removed keeps its Word text
-  and is reported in the save-back diagnostics. Runs the engine read back joined (one style)
-  are patched in place the same way, which fixes the duplicated text on export of a document
-  with coalesced runs (it was pinned as an expected failure).
+  fields (`overlay_cells`). Runs the engine read back joined (one style) are patched in place
+  the same way, which fixes the duplicated text on export of a document with coalesced runs
+  (it was pinned as an expected failure).
+- Structural cell edits are saved back too: a cell whose paragraph count changed on the canvas
+  is aligned paragraph by paragraph by text (`align_cell_paragraphs`, shared by the overlay and
+  the differ). An added paragraph becomes a new `<w:p>` cloned from its neighbour — the
+  paragraph before it, or after it at the cell's start: its `<w:pPr>` verbatim and the
+  `<w:rPr>` of the run it continues (`CloneCellParagraph`); a removed one is dropped
+  (`DeleteCellParagraph`). A cell's last `<w:p>` is never removed (Word requires a `<w:tc>` to
+  end in one): when the last paragraph goes, the last `<w:p>` takes the last text and the
+  paragraph that held it is removed. Text typed into a Word paragraph with no text run gets a
+  run (`InsertCellRun`). Every other byte stays; an empty `<w:p/>` in a cell now counts in the
+  patcher's cell locator as it does in the import.
+- Native tables are found again by signature, not by their ordinal in the story
+  (`matchTables` in doc-host-model, `src/tables.ts`): the live tables of the document's
+  stories are read (`tableRowCount`, `tableColumnCount`, each cell's `text`) and paired with
+  the poured ones of the same shape, most unchanged non-empty cells first, then the same story
+  and the nearest ordinal; a table every cell of which was edited pairs by its place between
+  its matched neighbours. A placed document whose story gained, lost or reordered tables still
+  saves and writes its cells; only a table that cannot be found (deleted, or reshaped with
+  every cell edited) is reported. The object model's cell writes locate tables the same way.
 - A `.docx` opens standalone headless: the SDK's headless host has the native-open door, so
   `paged-node` opens it as its own document as the editor does, and saves or exports it as
   `.docx` through the exporter.
