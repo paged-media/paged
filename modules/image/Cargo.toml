@@ -64,3 +64,12 @@ qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-e
 zune-png = "0.5"
 zune-core = "0.5"
 png = "0.18"
+
+# The shipped wasm (scripts/build-wasm.sh). Whole-program LTO in one
+# codegen unit lets the optimiser see across every crate before
+# `wasm-opt -Oz`: about 13 % smaller at the same optimisation level, so the
+# kernels keep their speed. Native release builds keep `release`.
+[profile.wasm-release]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

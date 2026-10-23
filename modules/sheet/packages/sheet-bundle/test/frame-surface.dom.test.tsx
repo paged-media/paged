@@ -169,6 +169,7 @@ function fakeSession(shown: GridScene = scene) {
     },
     styleAtTarget: () => null,
     grabAt: () => "cell" as const,
+    selectionAreas: () => [],
     scrollInFrame: (dRows, dCols) => (
       calls.push(["scroll", dRows, dCols]),
       true
@@ -239,7 +240,12 @@ describe("sheet frame surface", () => {
       shiftKey: true,
     });
     fireEvent.pointerUp(root, { button: 0, clientX: hw + 10, clientY: hh + 5 });
-    expect(calls).toContainEqual(["down", 10, 5, { shift: true, copy: false }]);
+    expect(calls).toContainEqual([
+      "down",
+      10,
+      5,
+      { shift: true, copy: false, add: false },
+    ]);
     expect(calls).toContainEqual(["up", 10, 5]);
   });
 

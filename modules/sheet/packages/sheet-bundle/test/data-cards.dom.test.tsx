@@ -102,6 +102,7 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     },
     styleAtTarget: () => null,
     grabAt: () => "cell" as const,
+    selectionAreas: () => [],
     scrollInFrame: (dRows, dCols) => (
       calls.push(["scroll", dRows, dCols]),
       true
