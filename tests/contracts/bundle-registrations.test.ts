@@ -193,12 +193,16 @@ const CHECKS: Record<string, BundleCheck> = {
         gates:
           "panel.slide, .transition, .placeholder, .deck (and .notes without the page doors)",
       },
+      {
+        feature: "contribute.command@1",
+        gates: "the palette commands and their menu entries",
+      },
       { feature: "contribute.panel@1", gates: "panel.slides, panel.notes" },
       { feature: "render.snapshot@1", gates: "panel.slides, panel.notes" },
       {
         feature: "viewport.pages@1",
         gates:
-          "panel.slides, panel.notes — DRIVEN: the check passes a pages backend",
+          "panel.slides, panel.notes and the slide verbs (command.newSlide, …) — DRIVEN: the check passes a pages backend",
       },
     ],
     options: { pages: PAGES },

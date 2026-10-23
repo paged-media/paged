@@ -49,9 +49,14 @@
 //     contributed: both use the id `media.paged.slide.panel.notes`, and
 //     the React one wins.
 //
+//   · the palette commands (open and export a deck; new, duplicate, delete
+//     and move the active slide) with a menu entry each — only when the
+//     host answers `contribute.command@1`; the slide verbs also need the
+//     page doors (`viewport.pages@1`) and Export needs `storage.parts@1`.
+//
 // The editor answers every one of those doors, so all of it is live here.
-// paged.slide declares NO palette command, tool, keybinding, menu entry,
-// edit context or object type, and the audit test at the bottom pins that.
+// paged.slide declares NO tool, keybinding, edit context or object type,
+// and the audit test at the bottom pins that, and how its verbs are reached.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -107,6 +112,18 @@ const IMPORT_PPTX = "media.paged.slide.importPptx";
 const DUPLICATE_SLIDE = "media.paged.slide.duplicateSlide";
 const EXPORT_PPTX = "media.paged.slide.exportPptx";
 
+/** The palette commands and the menu entry onto each (the bundle's
+ *  `src/menu.ts`, restated). */
+const PALETTE = {
+  "media.paged.slide.command.newSlide": "Slide/New slide",
+  "media.paged.slide.command.duplicateSlide": "Slide/Duplicate slide",
+  "media.paged.slide.command.deleteSlide": "Slide/Delete slide",
+  "media.paged.slide.command.moveSlideUp": "Slide/Move slide up",
+  "media.paged.slide.command.moveSlideDown": "Slide/Move slide down",
+  "media.paged.slide.command.importPptx": "File/Open PowerPoint deck…",
+  "media.paged.slide.command.exportPptx": "File/Export PowerPoint deck…",
+} as const;
+
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
 /** THE IDS, SPELLED OUT. Comparing the manifest to the registries proves
@@ -128,6 +145,7 @@ const DECLARED = {
   partTypes: ["pptx", "slideImport"],
   objectKinds: ["deck", "slide", "layout", "placeholder"],
   typedCommands: [NEW_SLIDE, IMPORT_PPTX, DUPLICATE_SLIDE, EXPORT_PPTX],
+  commands: Object.keys(PALETTE),
 } as const;
 
 /** Each panel's title, and what it is: the sorter and the notes are
@@ -393,8 +411,10 @@ test.describe("plugin surface · paged.slide", () => {
     expect(c.objectModel.commands.map((k) => k.id)).toEqual([
       ...DECLARED.typedCommands,
     ]);
+    expect([...(c.commands ?? [])].sort()).toEqual(
+      [...DECLARED.commands].sort(),
+    );
     // …and declares nothing in the categories it does not use.
-    expect(c.commands, "no palette commands are declared").toBeUndefined();
     expect(c.tools, "no tools are declared").toBeUndefined();
     expect(c.editContexts, "no edit context is declared").toBeUndefined();
     expect(c.objectTypes, "no object type is declared").toBeUndefined();
@@ -404,10 +424,10 @@ test.describe("plugin surface · paged.slide", () => {
       expect(live.importers, `importer ${id}`).toContain(id);
     for (const id of c.exporters)
       expect(live.exporters, `exporter ${id}`).toContain(id);
-    // The registries hold nothing of paged.slide's that it did not declare.
+    // The registries hold every command it declared, and nothing else.
     expect(
-      live.commands.filter((id) => id.startsWith("media.paged.slide.")),
-    ).toEqual([]);
+      live.commands.filter((id) => id.startsWith("media.paged.slide.")).sort(),
+    ).toEqual([...DECLARED.commands].sort());
     expect(
       live.tools.filter((id) => id.startsWith("media.paged.slide.")),
     ).toEqual([]);
@@ -1005,70 +1025,88 @@ test.describe("plugin surface · paged.slide", () => {
 
   // ── 7. AUDIT — is any of this REACHABLE? ─────────────────────────
 
-  test("AUDIT — paged.slide has no palette verb, no menu verb, no tool and no shortcut; opening a file is its only front door @feat:editor-shell.plugin-bundles @level:edge", async ({
+  test("AUDIT — paged.slide's verbs are in the palette and the menu bar, offered where they apply; no tool, no shortcut @feat:editor-shell.plugin-bundles @level:edge", async ({
     page,
   }) => {
-    await bootBlank(page);
+    const designer = await bootBlank(page);
 
-    const reach = await page.evaluate(() => {
-      const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const mine = (s: string) => s.startsWith("media.paged.slide.");
-      const panelShow = (s: string) =>
-        s.startsWith("paged.panel.show.media.paged.slide.");
-      return {
-        commands: r.commands
-          .list()
-          .map((c) => c.id)
-          .filter(mine),
-        tools: r.tools
-          .list()
-          .map((t) => t.id)
-          .filter(mine),
-        keybindings: r.keybindings
-          .list()
-          .filter((k) => mine(k.command) || panelShow(k.command))
-          .map((k) => k.key),
-        // Menu entries onto paged.slide that are NOT its panels' show items.
-        verbItems: r.menus
-          .list()
-          .filter(
-            (m) =>
-              mine(m.command) ||
-              (/powerpoint|pptx/i.test(m.path) && !panelShow(m.command)),
-          )
-          .map((m) => m.path),
-        // For contrast: the host curates a File-menu front door for
-        // paged.pdf's importer.
-        pdfCourtesyItem: r.menus
-          .list()
-          .some((m) => m.path === "File/Open PDF…"),
-        genericOpen: r.menus.list().some((m) => m.path === "File/Open…"),
-        pluginToolsTotal: r.tools
-          .list()
-          .filter((t) => t.id.startsWith("media.paged.")).length,
-      };
-    });
+    const reach = () =>
+      page.evaluate(() => {
+        const c = (globalThis as unknown as CanvasGlobal).__canvas;
+        const r = c.registries;
+        const mine = (s: string) => s.startsWith("media.paged.slide.");
+        const panelShow = (s: string) =>
+          s.startsWith("paged.panel.show.media.paged.slide.");
+        // paged.slide's predicates read its own store, not the state.
+        const applies = (id: string) => {
+          const w = (r.commands.get(id) as { when?: unknown } | undefined)
+            ?.when;
+          return typeof w === "function"
+            ? Boolean((w as (s: unknown) => boolean)(null))
+            : true;
+        };
+        return {
+          commands: r.commands
+            .list()
+            .filter((x) => mine(x.id))
+            .map((x) => ({
+              id: x.id,
+              title: x.title,
+              category: x.category ?? null,
+              applies: applies(x.id),
+            })),
+          tools: r.tools
+            .list()
+            .map((t) => t.id)
+            .filter(mine),
+          keybindings: r.keybindings
+            .list()
+            .filter((k) => mine(k.command) || panelShow(k.command))
+            .map((k) => k.key),
+          // Menu entries onto paged.slide that are NOT its panels' show items.
+          verbItems: r.menus
+            .list()
+            .filter((m) => mine(m.command))
+            .map((m) => ({ path: m.path, command: m.command })),
+          pluginToolsTotal: r.tools
+            .list()
+            .filter((t) => t.id.startsWith("media.paged.")).length,
+        };
+      });
 
-    expect(reach.commands, "paged.slide registers no palette command").toEqual(
-      [],
-    );
-    expect(reach.tools, "paged.slide contributes no tool").toEqual([]);
+    const blank = await reach();
+    // Seven palette commands, titled for a user, in their own drawer.
     expect(
-      reach.pluginToolsTotal,
+      Object.fromEntries(blank.commands.map((x) => [x.id, x.title])),
+    ).toEqual({
+      "media.paged.slide.command.newSlide": "New slide",
+      "media.paged.slide.command.duplicateSlide": "Duplicate slide",
+      "media.paged.slide.command.deleteSlide": "Delete slide",
+      "media.paged.slide.command.moveSlideUp": "Move slide up",
+      "media.paged.slide.command.moveSlideDown": "Move slide down",
+      "media.paged.slide.command.importPptx": "Open PowerPoint deck…",
+      "media.paged.slide.command.exportPptx": "Export PowerPoint deck…",
+    });
+    for (const x of blank.commands)
+      expect(x.category, `${x.id} category`).toBe("Slide");
+    // A menu entry onto each.
+    expect(
+      Object.fromEntries(blank.verbItems.map((m) => [m.command, m.path])),
+    ).toEqual(PALETTE);
+    // Outside a deck only Open is offered.
+    expect(
+      blank.commands.filter((x) => x.applies).map((x) => x.id),
+      "a blank document offers only Open PowerPoint deck…",
+    ).toEqual(["media.paged.slide.command.importPptx"]);
+
+    expect(blank.tools, "paged.slide contributes no tool").toEqual([]);
+    expect(
+      blank.pluginToolsTotal,
       "the tool door works — other bundles use it",
     ).toBeGreaterThan(10);
-    expect(reach.keybindings, "paged.slide contributes no keybinding").toEqual(
+    expect(blank.keybindings, "paged.slide contributes no keybinding").toEqual(
       [],
     );
-    expect(reach.verbItems, "no menu entry beyond the six panel items").toEqual(
-      [],
-    );
-    expect(
-      reach.pdfCourtesyItem,
-      "the host curates File ▸ Open PDF… for paged.pdf",
-    ).toBe(true);
-    expect(reach.genericOpen, "File ▸ Open… is the deck's door").toBe(true);
-
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
       page.locator(
@@ -1076,12 +1114,54 @@ test.describe("plugin surface · paged.slide", () => {
       ),
     ).toHaveCount(0);
 
-    // The typed commands are titled for a user ("New slide", "Open a
-    // PowerPoint deck") but the editor's typed-command picker (Edit ▸ Run
-    // command…) lists CORE commands only, so neither is offered there:
-    // they are reachable from scripts, the Node CLI and `host.objects`.
-    // New slide has a button in the Slides panel; Open a PowerPoint deck
-    // is the importer by another name.
+    // Through the real palette: "slide" finds Open in the Slide drawer and
+    // not New slide, which needs a deck.
+    const row = (id: string) => `[cmdk-item][data-value="${id}"]`;
+    const search = async (text: string) => {
+      await page.evaluate(() =>
+        (
+          globalThis as unknown as CanvasGlobal
+        ).__canvas.registries.commands.invoke("paged.palette.toggle"),
+      );
+      const input = page.getByPlaceholder("Ask or search anything…");
+      await expect(input).toBeVisible({ timeout: 10_000 });
+      await input.fill(text);
+    };
+    await search("powerpoint");
+    await expect(
+      page.locator(row("media.paged.slide.command.importPptx")),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator(row("media.paged.slide.command.exportPptx")),
+      "no deck to export",
+    ).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    // In a deck, on its first slide, the slide verbs are offered, except
+    // Move slide up (no slide above the first).
+    await openDeck(page, designer);
+    await expect
+      .poll(
+        async () =>
+          (await reach()).commands
+            .filter((x) => x.applies)
+            .map((x) => x.id)
+            .sort(),
+        { timeout: 15_000 },
+      )
+      .toEqual(
+        Object.keys(PALETTE)
+          .filter((id) => id !== "media.paged.slide.command.moveSlideUp")
+          .sort(),
+      );
+    await search("slide");
+    await expect(
+      page.locator(row("media.paged.slide.command.newSlide")),
+    ).toBeVisible({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+
+    // The TYPED commands stay out of Edit ▸ Run command…, which lists core
+    // commands only; their palette twins above are how a user runs them.
     await page.evaluate(() =>
       (
         globalThis as unknown as CanvasGlobal
@@ -1096,19 +1176,16 @@ test.describe("plugin surface · paged.slide", () => {
     expect(offered, "Run command… does not offer New slide").not.toContain(
       "New slide",
     );
-    expect(offered, "…nor Open a PowerPoint deck").not.toContain(
-      "Open a PowerPoint deck",
-    );
     await page.keyboard.press("Escape");
 
     test.info().annotations.push({
       type: "surface-finding",
       description:
-        "paged.slide's whole front door is File ▸ Open… (or a drop) of a .pptx: no palette " +
-        "command, no menu verb (the host curates File ▸ Open PDF… for paged.pdf but nothing for " +
-        "PowerPoint), no tool, no keybinding. Its typed commands are not offered by Edit ▸ " +
-        "Run command…, which lists core commands only. New slide is reachable from the Slides " +
-        "panel's button.",
+        "paged.slide's verbs are palette commands (category Slide) with a menu entry each: " +
+        "File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint deck…, and New, Duplicate, " +
+        "Delete, Move up and Move down under Plugins ▸ Slide. Each is offered only where it " +
+        "applies (a deck open, a slide active, a neighbour to pass). The typed commands stay " +
+        "out of Edit ▸ Run command…, which lists core commands only. No tool, no keybinding.",
     });
   });
 });
