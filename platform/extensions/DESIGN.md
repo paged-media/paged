@@ -2728,3 +2728,7 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `shell.exitEditContext@1`.
 - **Isolate.** React in the host realm, like panels (§6). The isolate form is a transferred
   `OffscreenCanvas`, a plain-data input stream and the host's input-method proxy.
+- **Document styles (ADR 336).** A surface draws with the document's styles through
+  `host.document.styleProperties(collection, styleId)` (resolved through `BasedOn`) and
+  `host.document.swatchDisplay(ids)` (display colours after colour management, CMYK, gamut);
+  probes `document.styleProperties@1`, `document.swatchDisplay@1`.
