@@ -54,6 +54,8 @@ function mount(strings?: Strings): void {
   const mounted = mountEditor(root, {
     search: location.search,
     devTools: true,
+    ownsPage: true,
+    guardUnload: true,
     ...(strings ? { strings } : {}),
   });
   if (devBuild) publishDevHandles(mounted.instance);

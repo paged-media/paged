@@ -290,6 +290,10 @@ export interface EditorInstance {
   readonly role: RoleStore;
   /** Renders the page's dev and demo tools (`MountOptions.devTools`). */
   readonly devTools: boolean;
+  /** The editor is the page (`MountOptions.ownsPage`). */
+  readonly ownsPage: boolean;
+  /** Asks before the page unloads with unsaved edits. */
+  readonly guardUnload: boolean;
   /** The editor's own stores (the shell's and the app's), handed to
    *  `<PagedShell scope>`. */
   readonly scope: EditorScope;

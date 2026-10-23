@@ -45,8 +45,10 @@ import {
   directionOf,
   transitionWith,
 } from "../../view-transitions";
+import { queryEditor, useEditorRoot } from "../../state/editor-root";
 
 export function ThumbnailRail() {
+  const root = useEditorRoot();
   const navigateToPages = usePageNavigation();
   const strings = useStrings();
   const { handle, snapshots } = useDocument();
@@ -57,7 +59,7 @@ export function ThumbnailRail() {
   const entries = handle ? groupSpreads(handle.pageIds, spreads) : [];
 
   const scrollBy = (dir: -1 | 1) => {
-    const el = document.querySelector<HTMLElement>("[data-thumbnail-strip]");
+    const el = queryEditor<HTMLElement>(root, "[data-thumbnail-strip]");
     el?.scrollBy({ left: dir * 260, behavior: "smooth" });
   };
 

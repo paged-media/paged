@@ -1606,6 +1606,8 @@ function CanvasAppRoot() {
       bindingProviders={instance.services.bindingProviders}
       objectModel={instance.services.objects.model}
       scope={instance.scope}
+      ownsPage={instance.ownsPage}
+      guardUnload={instance.guardUnload}
     >
       <CanvasAppIntegration />
       <InstanceBridge />
@@ -1667,6 +1669,15 @@ export interface MountOptions {
    *  iframe scripting bridge, which drive the page's `__canvas`. The page
    *  entry's (entry.tsx); an embedded editor has none. */
   devTools?: boolean;
+  /** The editor is the page (the page entry): keys typed with nothing
+   *  focused are its from the start. Default false: an embedded editor
+   *  takes the keyboard once it is pointed at or focused, and keys typed
+   *  in the host's own elements stay the host's. */
+  ownsPage?: boolean;
+  /** Ask before the page unloads with unsaved edits (`beforeunload`).
+   *  Default false: the page is the host's, and so is that question. The
+   *  page entry asks. */
+  guardUnload?: boolean;
 }
 
 export function createEditorInstance(
@@ -1712,6 +1723,8 @@ export function createEditorInstance(
     onShell: options.onShell,
     role: createRoleStore(profile.role),
     devTools: options.devTools === true,
+    ownsPage: options.ownsPage === true,
+    guardUnload: options.guardUnload === true,
     scope,
     services: createEditorServices(scope),
     ...(options.engineWasm ? { engineWasm: options.engineWasm } : {}),

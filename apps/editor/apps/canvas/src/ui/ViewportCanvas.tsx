@@ -50,6 +50,7 @@ import {
   useEditorScope,
   type MarqueeRectPageLocal,
   type SelectionState,
+  useEditorKeys,
 } from "@paged-media/shell";
 
 import type { CanvasClient } from "@paged-media/client";
@@ -199,6 +200,7 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 const WHEEL_LINE_PX = 16;
 
 export function ViewportCanvas(props: ViewportCanvasProps) {
+  const keys = useEditorKeys();
   const scope = useEditorScope();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1401,9 +1403,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+    return keys.listen("keydown", onKeyDown, undefined, document);
+  }, [keys]);
 
   // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
   // drag is in flight must abort it. Without this the gesture stays

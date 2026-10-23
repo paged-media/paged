@@ -33,26 +33,30 @@ import type { FocusEvent, PointerEvent } from "react";
 
 import { CANVAS_SURFACE_ATTR } from "./key-ownership";
 
+import { queryEditor } from "../state/editor-dom";
+
 const ENGAGED_ATTR = "data-pointer-engaged";
 
 /** Elements inside the viewport that take focus themselves when clicked. */
 const OWN_FOCUS =
   'input,textarea,select,button,a[href],[contenteditable="true"],[tabindex]';
 
-/** The viewport surface element, if one is mounted. */
-export function canvasViewport(): HTMLElement | null {
-  if (typeof document === "undefined") return null;
-  return document.querySelector<HTMLElement>(
-    `[${CANVAS_SURFACE_ATTR}="viewport"]`,
-  );
+/** The viewport surface element of the editor whose root is `root` (the
+ *  page's without one), if one is mounted. */
+export function canvasViewport(
+  root: HTMLElement | null = null,
+): HTMLElement | null {
+  return queryEditor<HTMLElement>(root, `[${CANVAS_SURFACE_ATTR}="viewport"]`);
 }
 
 /** Focus the canvas viewport: a pointer click on a tool hands focus back
  *  to the document, as InDesign does, so the next arrow nudges and the
  *  next Tab hides the chrome (`engaged`: the hand-back counts as pointer
  *  focus). No-op when none is mounted or focus is already inside it. */
-export function focusCanvasViewport(options: { engaged?: boolean } = {}): void {
-  const viewport = canvasViewport();
+export function focusCanvasViewport(
+  options: { engaged?: boolean; root?: HTMLElement | null } = {},
+): void {
+  const viewport = canvasViewport(options.root ?? null);
   if (!viewport || viewport.contains(document.activeElement)) return;
   if (options.engaged) viewport.setAttribute(ENGAGED_ATTR, "true");
   viewport.focus({ preventScroll: true });

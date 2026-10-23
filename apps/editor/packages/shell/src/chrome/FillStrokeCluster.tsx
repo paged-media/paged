@@ -45,6 +45,7 @@ import {
 import { contentSelectionInactive } from "../state/commands/tool-commands";
 import { IconButton } from "@paged-media/panel-kit";
 import { FILL_STROKE } from "./messages";
+import { usePortalContainer } from "../state/editor-root";
 
 // Concept 1 (T3) — the fill/stroke/apply foot cluster. NOT a tool: a
 // small composition over Concept 2's colour model. The wells read +
@@ -81,6 +82,7 @@ function unwrapColorRef(v: Value | null): string | null {
 }
 
 export function FillStrokeCluster() {
+  const portalContainer = usePortalContainer();
   const strings = useStrings();
   const { activeWell, setActiveWell, affects, toggleAffects } =
     useFormattingAffects();
@@ -582,7 +584,7 @@ export function FillStrokeCluster() {
               }}
             />
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </div>
   );

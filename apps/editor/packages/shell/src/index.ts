@@ -46,6 +46,17 @@ export {
   type ValueStore,
 } from "./state/editor-scope";
 export {
+  EditorRoot,
+  editorRootOf,
+  listenForEditorKeys,
+  ownsEvent,
+  queryEditor,
+  useEditorKeys,
+  useEditorRoot,
+  usePortalContainer,
+  type EditorKeys,
+} from "./state/editor-root";
+export {
   debugHandlesEnabled,
   debugHandlesOf,
   setDebugHandle,
