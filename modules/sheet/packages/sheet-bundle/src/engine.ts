@@ -46,6 +46,11 @@ import {
   type SheetEngineW2,
   type SheetWasmEngineW2,
 } from "./engine-w2";
+import {
+  wrapDocStyles,
+  type SheetEngineDocStyles,
+  type SheetWasmEngineDocStyles,
+} from "./engine-docstyles";
 
 import type {
   ChartGeometry,
@@ -310,7 +315,8 @@ export interface FunctionInfo {
 
 /** The stable engine contract the bundle codes against. Every method is
  *  a forward to the wasm surface; the facade only renames + shapes. */
-export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
+export interface SheetEngine
+  extends SheetEngineW2, SheetEngineFiles, SheetEngineDocStyles {
   /** Parse XLSX bytes into the in-memory model (preservation-first; the
    *  bytes round-trip on save — spec §10). */
   loadXlsx(bytes: Uint8Array): void;
@@ -998,7 +1004,7 @@ export const SYSTEM_CLOCK: HostClock = {
  *  only the members the bundle drives. The artifact lands in Phase 2;
  *  this shape is the contract the facade maps over. */
 export interface SheetWasmEngine
-  extends SheetWasmEngineW2, SheetWasmEngineFiles {
+  extends SheetWasmEngineW2, SheetWasmEngineFiles, SheetWasmEngineDocStyles {
   load_xlsx(bytes: Uint8Array): void;
   save_xlsx(): Uint8Array;
   set_cell(
@@ -1437,6 +1443,8 @@ export function wrapEngine(
     ...wrapW2(need as Parameters<typeof wrapW2>[0], tick),
     // Sheet ADR 521 — files and dialect (src/engine-files.ts).
     ...wrapFiles(need as Parameters<typeof wrapFiles>[0], tick),
+    // Sheet ADR 524 — the document-style mapping (src/engine-docstyles.ts).
+    ...wrapDocStyles(need as Parameters<typeof wrapDocStyles>[0]),
   };
   return guardTraps(facade);
 }

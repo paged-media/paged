@@ -99,6 +99,9 @@ pub use style::{
     VisualStyleSource, INDENT_LEVEL_PT,
 };
 pub use styler::CellStyler;
+/// Excel named styles → document styles (sheet ADR 524).
+pub mod docmap;
+pub use docmap::{apply_doc_map, DocStyleMap, DocStyleTarget};
 
 // ---- Conditional formatting → style overrides (T2 cond-fmt track; §10.4). ----
 //
