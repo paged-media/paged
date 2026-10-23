@@ -435,7 +435,7 @@ pub(crate) fn parse_elem(xml: &[u8]) -> Result<Elem, XlsxError> {
 
 /// The `<styleSheet>` element prefix (`""` or `"x:"`), so appended records
 /// land in the part's own namespace binding.
-fn root_prefix(xml: &[u8]) -> Result<String, XlsxError> {
+pub(crate) fn root_prefix(xml: &[u8]) -> Result<String, XlsxError> {
     let mut reader = quick_xml::Reader::from_reader(xml);
     let mut buf = Vec::new();
     loop {
@@ -452,7 +452,7 @@ fn root_prefix(xml: &[u8]) -> Result<String, XlsxError> {
 }
 
 /// The root child named `local`, if present.
-fn section(xml: &[u8], local: &str) -> Result<Option<Span>, XlsxError> {
+pub(crate) fn section(xml: &[u8], local: &str) -> Result<Option<Span>, XlsxError> {
     let (kids, _) = root_children(xml)?;
     Ok(kids.into_iter().find(|k| k.local == local))
 }
@@ -487,7 +487,7 @@ fn ensure_section(xml: Vec<u8>, local: &str, prefix: &str) -> Result<Vec<u8>, Xl
 }
 
 /// The record spans (children named `rec`) of section `sec`.
-fn records(xml: &[u8], sec: &Span, rec: &str) -> Result<Vec<Span>, XlsxError> {
+pub(crate) fn records(xml: &[u8], sec: &Span, rec: &str) -> Result<Vec<Span>, XlsxError> {
     let (items, _) = children_of(xml, sec)?;
     Ok(items.into_iter().filter(|s| s.local == rec).collect())
 }
@@ -1268,7 +1268,7 @@ fn color_of(el: Option<&Elem>, ctx: &ColorContext) -> Option<String> {
 impl XlsxDocument {
     /// The current `styles.xml` bytes (Excel's minimal sheet when the
     /// package has none).
-    fn styles_bytes(&self) -> Vec<u8> {
+    pub(crate) fn styles_bytes(&self) -> Vec<u8> {
         self.styles_part
             .as_deref()
             .and_then(|p| self.part_bytes(p))
@@ -1320,10 +1320,16 @@ impl XlsxDocument {
     /// none) and re-parse them with the loader's own parser: ids are
     /// positional, the visual side table and the dxfs are the parser's
     /// output. Returns the style table the model must adopt.
-    fn store_styles(&mut self, xml: Vec<u8>) -> Result<StyleTable, XlsxError> {
+    pub(crate) fn store_styles(&mut self, xml: Vec<u8>) -> Result<StyleTable, XlsxError> {
         let mut table = StyleTable::new();
         let colors = ColorContext::new(&xml, self.theme_palette());
-        let parsed = crate::parts::styles::parse_with_colors(&xml, &mut table, &colors)?;
+        let available = self.visual_styles.doc_available().cloned();
+        let parsed = crate::parts::styles::parse_with_context(
+            &xml,
+            &mut table,
+            &colors,
+            available.as_ref(),
+        )?;
         let mut visual = parsed.visual;
         visual.take_rich_from(&mut self.visual_styles);
         self.visual_styles = visual;

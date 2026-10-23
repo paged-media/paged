@@ -76,7 +76,7 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
-import { BINDING_KEY, type Binding } from "./binding";
+import { BINDING_KEY, withView, type Binding } from "./binding";
 import {
   distinctChartHexes,
   normalizePaletteHex,
@@ -396,6 +396,35 @@ export interface ChartLowerResult {
   /** The text labels, in the SAME order their `insertTextFrame`s appear in
    *  the batch — the phase-2 pour list. */
   texts: ChartTextLabel[];
+  /** The page-space outline `[top, left, bottom, right]` of the element
+   *  the binding rides (the first one created), as the batch draws it —
+   *  recorded in the binding as its `art`. Absent on an empty chart. */
+  art?: [number, number, number, number];
+}
+
+/** The outline `[top, left, bottom, right]` of a created element, from its
+ *  create op: a path's anchors, a text frame's bounds. */
+function createdOutline(
+  op: Mutation | undefined,
+): [number, number, number, number] | undefined {
+  if (op?.op === "insertTextFrame") {
+    const b = (op.args as { bounds: [number, number, number, number] }).bounds;
+    return [b[0], b[1], b[2], b[3]];
+  }
+  if (op?.op !== "insertPath") return undefined;
+  const anchors = (op.args as { anchors: { anchor: [number, number] }[] })
+    .anchors;
+  let top = Infinity;
+  let left = Infinity;
+  let bottom = -Infinity;
+  let right = -Infinity;
+  for (const { anchor } of anchors) {
+    left = Math.min(left, anchor[0]);
+    right = Math.max(right, anchor[0]);
+    top = Math.min(top, anchor[1]);
+    bottom = Math.max(bottom, anchor[1]);
+  }
+  return Number.isFinite(top) ? [top, left, bottom, right] : undefined;
 }
 
 // ── Arc flattening (wedges) ─────────────────────────────────────────────────
@@ -642,10 +671,13 @@ export function chartGeometryToMutations(
   // don't re-bind. `firstKind` records what the first created node IS so the
   // binding's `$created` placeholder carries the matching element kind.
   let bound = false;
+  let art: [number, number, number, number] | undefined;
 
   /** Append a created path/frame's style ops, then — if this is the FIRST
-   *  created element — the binding (while `$created` still points at it). */
+   *  created element — the binding (while `$created` still points at it),
+   *  with that element's outline as the chart's `art`. */
   const afterCreate = (kind: "polygon" | "textFrame", styles: Mutation[]) => {
+    if (!bound) art = createdOutline(ops[ops.length - 1]);
     ops.push(...styles);
     if (!bound) {
       bound = true;
@@ -654,7 +686,7 @@ export function chartGeometryToMutations(
         args: {
           elementId: { kind, id: "$created" },
           key: BINDING_KEY,
-          value: JSON.stringify(binding),
+          value: JSON.stringify(art ? withView(binding, { art }) : binding),
         },
       });
     }
@@ -772,5 +804,9 @@ export function chartGeometryToMutations(
     return { batch: { op: "batch", args: { ops: [] } }, texts };
   }
 
-  return { batch: { op: "batch", args: { ops } }, texts };
+  return {
+    batch: { op: "batch", args: { ops } },
+    texts,
+    ...(art ? { art } : {}),
+  };
 }
