@@ -164,7 +164,7 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
         bounds: [bottom + 40, left, bottom + 40 + (bottom - top), right],
       },
     });
-    expect(made.applied).toBe(true);
+    if (!made.applied) throw new Error("insertTextFrame was refused");
     const next = (made.createdId as { id: string }).id;
     const link = await host.document.mutate({
       op: "linkFrames",
