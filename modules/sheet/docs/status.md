@@ -288,8 +288,25 @@ each published canary added is under [Releases](#releases).
 - **Layout commands** (plan G4; `src/layout-commands.ts`). Typed `importCsv { text, name }`,
   `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
 bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
-size? }` (no size clears it), each one workbook version and one undo step. Deleting a chart
-  is not a command: the engine has no door that removes one.
+size? }` (no size clears it), each one workbook version and one undo step.
+- **Placement and chart delete** (plan G4). Typed `place { source: range | name | printArea,
+ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the placement
+  keeps the name, as the panel's Place does) or a sheet's print area (`_xlnm.Print_Area`,
+  resolved by the engine; `ref` is the sheet) on the page as one table in a new frame, or,
+  with `chain` (a frame of a threaded chain), paginated across the chain with the leading rows
+  repeated, live as the palette's Paginate is. Each placement is one document write and one
+  undo step: the first pagination of a chain is one batch on a host with in-batch handles
+  (core protocol 66), every page's table addressed by its handle and each swatch or style
+  minted once; an older host places table by table. Typed `deleteChart { chart }` removes the
+  chart from the workbook (`delete_chart`: the slot stays, so every other chart keeps its
+  index; the chart journal replays the delete) and every placed copy of it (found on the scene
+  tree by its binding, so a chart placed in an earlier session goes too), one workbook version
+  and one undo step; a `host.objects` delete of `chart/<n>` does the same in its batch.
+  `apps/cli/test/cli-sheet.spec.ts` runs both through `paged-node invoke`. Not a placement
+  kind yet: a frame's view and sizing (`sizing: "window"`, print headings and gridlines, ADR
+  510), whose page side is not wired to placement; a print area of several ranges; a chart read
+  from the workbook stays in the saved xlsx (the writer never re-derives chart parts) and is
+  deleted again from the journal when the version is loaded.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.

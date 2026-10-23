@@ -1969,6 +1969,89 @@ async function deleteTables(
   return false;
 }
 
+/** The within-batch handle prefix of a chain's tables (`c0`, `c1`, …). */
+const CHAIN_TABLE_HANDLE = "c";
+
+/** A batch's ops with every repeated document-resource mint (a swatch or
+ *  style that two of its tables both ask for, at the same content-addressed
+ *  id) and its repeated property sets kept once: core refuses a second
+ *  mint of an id, and the refusal would fail the whole batch. */
+function oneMintEach(ops: readonly Mutation[]): Mutation[] {
+  const seen = new Set<string>();
+  return ops.filter((op) => {
+    if (!op.op.startsWith("create") && op.op !== "setStyleProperty")
+      return true;
+    const key = JSON.stringify(op);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * A chain's first pagination as ONE `mutate` (protocol 66, plan G4): every
+ * page's table appended to the chain's story, its cells poured and styled
+ * through the table's in-batch handle. One undo step for the placement. Null
+ * when the host refused the batch (nothing landed; the caller places table
+ * by table) or the reply does not name every table.
+ */
+async function paginateInOneCall(
+  host: BundleHost,
+  storyId: string,
+  pages: readonly Page[],
+): Promise<ChainTable[] | null> {
+  const ops: Mutation[] = [];
+  const styles: Mutation[] = [];
+  const widths: number[][] = [];
+  for (const [i, page] of pages.entries()) {
+    const w = await measureColumnWidths(host, page.content);
+    widths.push(w);
+    const handle = `${CHAIN_TABLE_HANDLE}${i}`;
+    const content = await tableContentOps(
+      host,
+      page.content,
+      storyId,
+      `$h:${handle}`,
+    );
+    ops.push(
+      pageTableMutations(page, storyId, w).insert,
+      { op: "bindCreated", args: { handle } },
+      ...content.ops,
+    );
+    styles.push(...content.styleOps);
+  }
+  const r = await host.document.mutate({
+    op: "batch",
+    args: { ops: oneMintEach([...ops, ...styles]) },
+  });
+  if (!r.applied) {
+    host.log.debug("chain-lower: one-call pagination refused", r);
+    return null;
+  }
+  const minted = r.minted ?? [];
+  const byHandle = pages.map(
+    (_, i) =>
+      minted.find((m) => m.handle === `${CHAIN_TABLE_HANDLE}${i}`)?.element ??
+      minted.filter((m) => m.element.kind === "table")[i]?.element,
+  );
+  if (byHandle.some((e) => e?.kind !== "table")) {
+    // Applied — the tables stand — but the reply does not name them all.
+    host.log.warn(
+      "chain-lower: one-call pagination applied without naming its tables",
+      r,
+    );
+  }
+  return pages.map((page, i) => {
+    const e = byHandle[i];
+    return {
+      tableId: e?.kind === "table" ? e.id.table_id : "",
+      content: page.content,
+      widths: widths[i]!,
+      blank: false,
+    };
+  });
+}
+
 /**
  * One pagination pass over a chain (Wave 2D / S-05; Wave 4 replace). Asks
  * the engine to paginate the range into the chain's content boxes (all
@@ -1998,6 +2081,17 @@ async function paginatePass(
       keepRowsTogether: opts?.keepRowsTogether,
     },
   );
+  if (owned.length === 0 && pages.length > 0) {
+    const one = await paginateInOneCall(host, storyId, pages);
+    if (one)
+      return {
+        storyId,
+        chain,
+        pages,
+        tableIds: one.map((t) => t.tableId),
+        tables: one,
+      };
+  }
   const tables: ChainTable[] = [];
   const tableIds: (string | null)[] = [];
   for (const [i, page] of pages.entries()) {

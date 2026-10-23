@@ -282,6 +282,10 @@ export interface ObjectBridge {
   hostFrames(): string[];
   /** Re-read the document's sheet-bound frames when none are known. */
   discoverHostFrames(): Promise<string[]>;
+  /** Plan G4 — stop tracking this session's placements of chart `index`
+   *  (it is being deleted) and hand them over: the caller removes their
+   *  page elements in its own write. */
+  takeChartPlacements(index: number): PlacedChart[];
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -661,9 +665,11 @@ export interface WorkbookSession {
    *  text frame (or, with none selected, the frame last placed into), live:
    *  a resize of a chain frame re-paginates (debounced) and REPLACES the
    *  tables; workbook edits refresh them too. `repeatHeaderRows` (Wave 6)
-   *  repeats that many leading rows at the top of every frame. */
+   *  repeats that many leading rows at the top of every frame. `frameId`
+   *  names a frame of the chain instead (plan G4, the typed `place`). */
   paginateSelection(opts?: {
     repeatHeaderRows?: number;
+    frameId?: string;
   }): Promise<SessionResult>;
   /** Bring every placed table, chart and paginated chain up to date with
    *  the workbook now (edits schedule this on their own, debounced). */
@@ -3097,6 +3103,11 @@ export function createWorkbookSession(
   const bridge: ObjectBridge = {
     engine: () => state.engine,
     epoch: () => loadEpoch,
+    takeChartPlacements(index) {
+      const taken = placedCharts.filter((p) => p.chartIndex === index);
+      placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
+      return taken;
+    },
     afterWrite(regions) {
       markEdited();
       emitter.emit(
@@ -4217,7 +4228,8 @@ export function createWorkbookSession(
       const selected = host.selection
         .get()
         .find((id) => id.kind === "textFrame");
-      const frameId = selected ? (selected.id as string) : lastFrameId;
+      const frameId =
+        opts?.frameId ?? (selected ? (selected.id as string) : lastFrameId);
       if (!frameId) {
         return {
           ok: false as const,
