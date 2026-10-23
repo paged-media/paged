@@ -31,7 +31,8 @@ it stood, for decisions made earlier; their status says so.
 | [515](515-structural-edits-shift-preserved-content.md) | A row or column insert or delete shifts the preserved content | Accepted 2026-10-22; extends 503 |
 | [516](516-function-library-w3.md) | The function library towards Excel's full set: recorded expected values, numeric agreement, the document-name amendment | Accepted 2026-10-23; extends 507 |
 | [517](517-interactive-workbook-features.md) | Validation, what-if, external links, outline and protection are interpreted; pivots stay preserved | Accepted 2026-10-23; amends 504 |
-| [518](518-charts-excel-parity.md) | Charts as Excel draws them: plots, every kind, style roles, written back | Accepted 2026-10-23; amends 016, 503 |
+| [518](518-cell-visual-model-and-colour-references.md) | The cell visual model: colour and text-style references, one resolver | Accepted 2026-10-23; amends the frozen style types, extends 503, 508 |
+| [519](519-charts-excel-parity.md) | Charts as Excel draws them: plots, every kind, style roles, written back | Accepted 2026-10-23; amends 016, 503 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

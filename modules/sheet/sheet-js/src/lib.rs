@@ -770,6 +770,22 @@ mod wasm {
             to_js(&r)
         }
 
+        /// The cell visual model of one cell (W2.2): every colour a
+        /// `ColorRef` (`concrete` + optional document swatch).
+        pub fn get_cell_visual(&self, sheet: u16, row: u32, col: u32) -> Result<JsValue, JsValue> {
+            let r = self
+                .session
+                .get_cell_visual(sheet, row, col)
+                .map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// The workbook's Excel named cell styles and the built-ins it can
+        /// add: `[{name, builtinId?, present}]`.
+        pub fn named_styles(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.named_styles())
+        }
+
         /// The style ids of every cell of `range`, row-major — a snapshot
         /// for `set_style_ids` (the in-session undo of a format change).
         pub fn get_style_ids(&self, sheet: u16, range: &str) -> Result<Vec<u32>, JsValue> {

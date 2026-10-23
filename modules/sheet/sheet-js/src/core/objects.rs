@@ -35,7 +35,7 @@ use sheet_core::{CellRef, RangeRef, SheetId, SheetModel};
 
 use super::charts::{chart_kind_from_tag, chart_kind_tag, CHART_KIND_TAGS};
 use super::{SessionError, SheetSession};
-use sheet_chart::model::{ColorRef, ColorValue, DataLabels, Legend, LegendPosition, Series};
+use sheet_chart::model::{ColorRef, ConcreteColor, DataLabels, Legend, LegendPosition, Series};
 
 /// One structured table (ListObject).
 #[derive(serde::Serialize, Debug, Clone, PartialEq)]
@@ -272,7 +272,7 @@ impl SheetSession {
             let th = sheet_chart::colors::Theme {
                 colors: theme.unwrap_or(sheet_chart::colors::OFFICE_THEME),
             };
-            (!matches!(c.concrete, ColorValue::Auto)).then(|| th.paint(c, "#808080").hex)
+            (!matches!(c.concrete, ConcreteColor::Auto)).then(|| th.paint(c, "#808080").hex)
         };
         self.doc
             .charts
@@ -300,7 +300,7 @@ impl SheetSession {
                                 .fill
                                 .as_ref()
                                 .and_then(|f| f.doc.as_ref())
-                                .map(|d| d.to_string()),
+                                .map(|d| d.id.clone()),
                             kind: chart_kind_tag(p.kind, p.grouping),
                             secondary: p.secondary,
                             x_values: s.x_values.as_ref().map(|r| plain_range(model, r)),
@@ -324,7 +324,7 @@ impl SheetSession {
                     flattened3d: m.flattened_3d,
                     title_paragraph_style: m
                         .title_style
-                        .doc_paragraph
+                        .doc_para_style
                         .as_ref()
                         .map(|t| t.to_string()),
                 }
@@ -399,7 +399,11 @@ impl SheetSession {
                     s.name = non_empty(&a.name).map(Into::into);
                     let mut fill = non_empty(&a.color).and_then(|c| ColorRef::from_hex(&c));
                     if let Some(sw) = non_empty(&a.color_swatch) {
-                        fill = Some(fill.unwrap_or_default().with_doc(sw));
+                        // A swatch named without a colour paints automatic
+                        // until the document resolves it.
+                        let base = fill.unwrap_or_else(ColorRef::auto);
+                        let fallback = sheet_chart::model::rgb_of(&base).unwrap_or(0x808080);
+                        fill = Some(base.with_doc(sheet_chart::model::doc_swatch(&sw, fallback)));
                     }
                     s.fill = fill;
                     if let Some(k) = non_empty(&a.kind) {
@@ -496,7 +500,7 @@ impl SheetSession {
             m.style = v.filter(|s| (1..=48).contains(s));
         }
         if let Some(v) = patch.title_paragraph_style {
-            m.title_style.doc_paragraph = v.and_then(|t| non_empty(&t)).map(Into::into);
+            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t)).map(Into::into);
         }
         Ok(())
     }

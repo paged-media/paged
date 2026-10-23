@@ -58,7 +58,7 @@
     Line emits a Line polyline per series with Excel's markers (automatic
     symbols unless the series says none; authored lines have none); Area adds
     a closed Polygon to the crossing value. Stacked and percent-stacked lines
-    and areas accumulate in series order (W4, ADR 518).
+    and areas accumulate in series order (W4, ADR 519).
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
@@ -71,7 +71,7 @@
     share, clockwise from the first-slice angle. A doughnut draws one ring per
     series as ring segments (the Wedge's optional `innerR`), no longer a pie
     under a page-white disc. A pie draws its first series, as Excel does
-    (ruling sheet.chart.kinds.pie-series, ADR 518).
+    (ruling sheet.chart.kinds.pie-series, ADR 519).
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
@@ -82,7 +82,7 @@
   ruling: >
     A marker per point in (x, y) value space; each series carries its own X
     range (c:xVal), several series per chart, lines unless the series' line is
-    none; a series without X plots 1, 2, 3… (ADR 518).
+    none; a series without X plots 1, 2, 3… (ADR 519).
   status: implemented
   provenance: ["spec §8.4", "ECMA-376 §21.2 (c:scatterChart)", "sheet-chart/src/geometry.rs"]
   tests:
@@ -91,7 +91,7 @@
 - id: sheet.chart.geometry.stacked
   title: "Geometry: stacked column / stacked bar — segments share one bar per category over a totals-based value scale"
   ruling: >
-    Excel's rule since W4 (ADR 518): the segments share one bar per category;
+    Excel's rule since W4 (ADR 519): the segments share one bar per category;
     positive values stack upward and negative values downward on separate
     running totals; percent-stacked divides each category by the sum of its
     magnitudes on a 0–100% axis. (Before W4 a sub-floor segment had no height;
@@ -142,7 +142,7 @@
   title: XLSX chart part — c:grouping selects the stacked kind; c:radarChart parses
   ruling: >
     `c:grouping` selects the grouping on bar, line and area plots (standard,
-    stacked, percent-stacked — all drawn as such since W4, ADR 518), and every
+    stacked, percent-stacked — all drawn as such since W4, ADR 519), and every
     plot element maps to its own kind (sheet.chart.kinds). The part stays
     opaque, so a zero-edit round-trip is byte-identical.
   status: implemented
@@ -273,9 +273,9 @@
     element nothing draws (region map, unknown) is Unsupported, a labelled
     placeholder. The drawing's /chartEx relationship is followed. The opt-in
     corpus lane (sheet-conformance chart_corpus, private corpus) checks 172 of
-    172 real charts (ADR 518).
+    172 real charts (ADR 519).
   status: implemented
-  provenance: ["ECMA-376 §21.2", "[MS-ODRAWXML] chartEx", "ADR 518", "sheet-xlsx/src/parts/chart.rs"]
+  provenance: ["ECMA-376 §21.2", "[MS-ODRAWXML] chartEx", "ADR 519", "sheet-xlsx/src/parts/chart.rs"]
   tests:
     rust:
       - "sheet-xlsx/src/parts/chart_tests.rs::every_element_maps_to_its_own_kind"
@@ -284,7 +284,7 @@
 
 - id: sheet.chart.chartex
   title: chartEx parts (cx:chartSpace) — series, data dimensions and layout options read
-  ruling: "dml_chart::chart_ex reads each cx:series as a plot (element cx:<layoutId>), its data dimensions by dataId as the series' ranges, and cx:layoutPr (subtotals, binning, statistics, visibility, parent labels) as the plot's ExLayout; a pareto line folds into its owner's pareto layout (ADR 518)."
+  ruling: "dml_chart::chart_ex reads each cx:series as a plot (element cx:<layoutId>), its data dimensions by dataId as the series' ranges, and cx:layoutPr (subtotals, binning, statistics, visibility, parent labels) as the plot's ExLayout; a pareto line folds into its owner's pareto layout (ADR 519)."
   status: implemented
   provenance: ["[MS-ODRAWXML] §2.24 (chartEx)", "platform/shared/dml-chart/src/read_ex.rs"]
   tests:
@@ -292,9 +292,9 @@
 
 - id: sheet.chart.combo
   title: Combo charts — several plots, each with its kind, grouping and axis group; a secondary value axis
-  ruling: "ChartModel.plots is a list; a plot whose value axis is not the first plot's is on the secondary axis, drawn on the right with its own scale. Authoring a combo gives each series a kind and axis group; set_series groups consecutive series into plots (ADR 518)."
+  ruling: "ChartModel.plots is a list; a plot whose value axis is not the first plot's is on the secondary axis, drawn on the right with its own scale. Authoring a combo gives each series a kind and axis group; set_series groups consecutive series into plots (ADR 519)."
   status: implemented
-  provenance: ["ECMA-376 §21.2.2.145 (c:plotArea)", "ADR 518"]
+  provenance: ["ECMA-376 §21.2.2.145 (c:plotArea)", "ADR 519"]
   tests:
     rust:
       - "sheet-xlsx/src/parts/chart_tests.rs::a_combo_keeps_its_plots"
@@ -302,9 +302,9 @@
 
 - id: sheet.chart.stacking
   title: Stacked and 100% stacked bars, lines and areas as Excel draws them
-  ruling: "Positive values stack up, negative down, on separate totals; percent-stacked normalises each category to 100% on a 0–100% axis; stacked lines and areas accumulate in series order (ADR 518)."
+  ruling: "Positive values stack up, negative down, on separate totals; percent-stacked normalises each category to 100% on a 0–100% axis; stacked lines and areas accumulate in series order (ADR 519)."
   status: implemented
-  provenance: ["ADR 518", "sheet-chart/src/cartesian.rs"]
+  provenance: ["ADR 519", "sheet-chart/src/cartesian.rs"]
   tests:
     rust:
       - "sheet-chart/tests/kinds.rs::percent_stacked_columns_fill_the_axis"
@@ -312,9 +312,9 @@
 
 - id: sheet.chart.series-features
   title: Markers, data labels, trendlines (R², equation) and error bars
-  ruling: "Excel's marker symbols and automatic sequence; data labels with value/category/series/percent/bubble size, position and number format; trendlines fitted with the function library's least-squares solver (the one behind LINEST): linear, exponential, logarithmic, polynomial 2–6, power, moving average; error bars fixed, percentage, standard deviation (centred on the mean), standard error, custom (ADR 518)."
+  ruling: "Excel's marker symbols and automatic sequence; data labels with value/category/series/percent/bubble size, position and number format; trendlines fitted with the function library's least-squares solver (the one behind LINEST): linear, exponential, logarithmic, polynomial 2–6, power, moving average; error bars fixed, percentage, standard deviation (centred on the mean), standard error, custom (ADR 519)."
   status: implemented
-  provenance: ["ECMA-376 §21.2.2 (c:marker, c:dLbls, c:trendline, c:errBars)", "ADR 518"]
+  provenance: ["ECMA-376 §21.2.2 (c:marker, c:dLbls, c:trendline, c:errBars)", "ADR 519"]
   tests:
     rust:
       - "sheet-xlsx/src/parts/chart_tests.rs::series_features_are_read"
@@ -324,7 +324,7 @@
 
 - id: sheet.chart.axes
   title: Axes — Excel's automatic bounds, log scale, reversed, crossing, date axis, number format, gridlines
-  ruling: "Automatic bounds with 5% headroom and a 1-2-5 unit, zero included unless the data sit in a narrow band; explicit min/max/unit win; logarithmic and reversed scales; bars grow from the crossing value; date axes by base unit; axis or source number format; major/minor gridlines; legend positions r/l/t/b/tr (ADR 518)."
+  ruling: "Automatic bounds with 5% headroom and a 1-2-5 unit, zero included unless the data sit in a narrow band; explicit min/max/unit win; logarithmic and reversed scales; bars grow from the crossing value; date axes by base unit; axis or source number format; major/minor gridlines; legend positions r/l/t/b/tr (ADR 519)."
   status: implemented
   provenance: ["ECMA-376 §21.2.2 (c:valAx, c:dateAx, c:scaling)", "sheet-chart/src/scale.rs"]
   tests:
@@ -335,9 +335,9 @@
 
 - id: sheet.chart.style-roles
   title: Chart colour and text roles carry document swatch / style references beside the concrete value
-  ruling: "ColorRef { concrete, doc } and TextStyleRef { concrete, doc_paragraph, doc_character } on every role; the geometry carries fillSwatchRef/strokeSwatchRef/colorSwatchRef/paragraphStyle/characterStyle beside the resolved colour; the page lowering references the swatch (never mints it) and applies the style with an auto-sizing label frame. Paged's c:extLst records references; a reference is restored on import only while the concrete value is unchanged (ADR 518)."
+  ruling: "The shared ColorRef / TextStyleRef (sheet-core visual, ADR 518) on every role; the geometry carries fillSwatchRef/strokeSwatchRef/colorSwatchRef/paragraphStyle/characterStyle beside the resolved colour; the page lowering references the swatch (never mints it) and applies the style with an auto-sizing label frame. Paged's c:extLst records references; a reference is restored on import only while the concrete value is unchanged (ADR 519)."
   status: implemented
-  provenance: ["ADR 518", "packages/sheet-host-model/src/chart.ts"]
+  provenance: ["ADR 519", "packages/sheet-host-model/src/chart.ts"]
   tests:
     rust:
       - "sheet-chart/tests/kinds.rs::style_refs_ride_beside_the_colour"
@@ -347,7 +347,7 @@
 
 - id: sheet.chart.sparklines
   title: Sparklines (x14 line, column, win/loss) read and drawn in a cell box
-  ruling: "x14:sparklineGroups in a worksheet's captured extLst become SparklineGroups (colours rgb or theme+tint, markers, high/low/first/last/negative, axis, custom bounds, blanks); sheet_chart::sparkline draws one in its cell's box; the captured bytes round-trip unchanged (ADR 518)."
+  ruling: "x14:sparklineGroups in a worksheet's captured extLst become SparklineGroups (colours rgb or theme+tint, markers, high/low/first/last/negative, axis, custom bounds, blanks); sheet_chart::sparkline draws one in its cell's box; the captured bytes round-trip unchanged (ADR 519)."
   status: implemented
   provenance: ["[MS-XLSX] §2.6.86 (sparklineGroup)", "sheet-xlsx/src/parts/sparkline.rs", "sheet-chart/src/sparkline.rs"]
   tests:

@@ -31,7 +31,8 @@ import {
 import type { EmbeddedFaceReport } from "../src/engine";
 import { giveDocumentEmbeddedFonts } from "../src/fonts";
 import { slidePanels } from "../src/panels";
-import "../src/messages";
+import { COMMANDS } from "../src/messages";
+import { t } from "@paged-media/strings";
 
 const german = () =>
   setActiveStrings(createStrings("de", BUILT_IN_LOCALES["de"]));
@@ -55,6 +56,15 @@ describe("paged.slide in German", () => {
       "Platzhalter",
       "Präsentation",
     ]);
+  });
+
+  it("titles its palette commands in German", () => {
+    german();
+    expect(t(COMMANDS.newSlide)).toBe("Neue Folie");
+    expect(t(COMMANDS.moveSlideDown)).toBe("Folie nach unten verschieben");
+    expect(t(COMMANDS.exportPptx)).toBe(
+      "PowerPoint-Präsentation exportieren …",
+    );
   });
 
   it("says in German that the host cannot take the deck's fonts", async () => {

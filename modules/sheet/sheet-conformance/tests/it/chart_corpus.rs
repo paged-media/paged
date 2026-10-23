@@ -15,7 +15,7 @@
 #![allow(non_snake_case)]
 
 //! Every chart in the real corpus renders with its real kind (W4 acceptance,
-//! ADR 518): each plot element of every chart part maps to the kind it
+//! ADR 519): each plot element of every chart part maps to the kind it
 //! names (a 3-D element to its 2-D kind, flagged), no chart Paged can draw
 //! is a placeholder, and every chart produces geometry through the session.
 //!

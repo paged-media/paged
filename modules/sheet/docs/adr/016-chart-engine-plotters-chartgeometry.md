@@ -176,7 +176,7 @@ The chart PART is read by the DrawingML chart reader shared with paged.slide (`d
 the frozen `ChartModel`, with this module's reading rules. The layout decision recorded here
 (plotters, the custom backend, `ChartGeometry`) is unchanged.
 
-## Amendment 2026-10-23 (W4, [ADR 518](518-charts-excel-parity.md))
+## Amendment 2026-10-23 (W4, [ADR 519](519-charts-excel-parity.md))
 
 The decision stands: `sheet_chart::generate` is the only code that drives plotters, every text
 label still flows through the custom backend, and the output is still the five-primitive IR.
@@ -191,4 +191,4 @@ Three things changed.
    radius, a line's dash, a text's colour, weight, face, document styles and role, and the
    geometry's `flattened3d`. Each is omitted from the JSON when unset.
 3. **There are 29 authorable kind tags over 21 kinds**, plus `unsupported`; the model is a list
-   of plots (combo charts). See ADR 518.
+   of plots (combo charts). See ADR 519.

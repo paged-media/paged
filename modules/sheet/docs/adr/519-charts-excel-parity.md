@@ -1,4 +1,4 @@
-# ADR 518 — Charts as Excel draws them: plots, every kind, style roles, written back
+# ADR 519 — Charts as Excel draws them: plots, every kind, style roles, written back
 
 **2026-10-23 · decision record · status: ACCEPTED (W4 of the Excel-in-the-frame program;
 amends [016](016-chart-engine-plotters-chartgeometry.md) and
@@ -50,14 +50,15 @@ In the corpus 17 of 172 charts were drawn as the wrong kind.
    standard error, custom ranges).
 
 5. **Style roles.** Every colour role (series fill and line, markers, axis, gridlines, plot
-   area, chart area, label text) is a `ColorRef { concrete, doc }` and every text role (title,
-   axis titles, tick labels, data labels, legend) a `TextStyleRef { concrete, doc_paragraph,
-   doc_character }`. The geometry carries the document reference next to the resolved colour
+   area, chart area, label text) is a `ColorRef` and every text role (title, axis titles, tick
+   labels, data labels, legend) a `TextStyleRef` — the cell visual model's own types
+   (`sheet-core` `visual`, [ADR 518](518-cell-visual-model-and-colour-references.md)): the
+   concrete colour or font beside an optional document swatch or paragraph/character style. The geometry carries the document reference next to the resolved colour
    (`fillSwatchRef`, `strokeSwatchRef`, a text's `colorSwatchRef`, `paragraphStyle`,
    `characterStyle`); the page lowering references the swatch instead of minting one, applies
    the paragraph or character style to the label and lets its frame size itself
-   (`textFrameAutoSizing`). The two types mirror the document-styles program's cell types
-   field for field, so the chart roles switch to the shared types without a change of shape.
+   (`textFrameAutoSizing`). A DrawingML scheme slot maps to the shared type's spreadsheet theme
+   index (dk1/lt1 and dk2/lt2 swap) on read and back on write.
 
 6. **The IR grows only optional fields.** `ChartGeometry` keeps its five primitives; W4 adds
    fields that are omitted when unset (the references above, a wedge's `innerR`, a line's

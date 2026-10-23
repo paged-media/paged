@@ -148,13 +148,13 @@ fn page_lowering_resolves_theme_indexed_and_tint__feat__sheet_lower_page() {
         "the workbook's own palette"
     );
 
-    // Without a theme part: the default scheme answers what it knows, the
-    // tint still applies, and an unknown slot is left to the document.
+    // Without a theme part: the Office theme answers every slot (W2.2's
+    // resolver carries all twelve; accent3 is #A5A5A5), the tint applies.
     let s = SheetSession::load_xlsx(&package(false)).unwrap();
     let page = s
         .get_range_page(0, "A1:A1", LowerOptions::default())
         .unwrap();
     let a1 = &page.styles[page.rows[0].cells[0].style_key as usize];
-    assert_eq!(a1.text_rgb, None);
+    assert_eq!(a1.text_rgb.as_deref(), Some("#A5A5A5"));
     assert_eq!(a1.fill_rgb.as_deref(), Some("#DAE3F3"));
 }

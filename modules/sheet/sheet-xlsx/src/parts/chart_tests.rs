@@ -71,7 +71,7 @@ fn parses_column_chart_series_title_legend_color() {
     assert_eq!(m.legend.as_ref().unwrap().position, LegendPosition::Bottom);
     let s = m.series().next().unwrap();
     assert_eq!(s.name.as_deref(), Some("Revenue"));
-    assert_eq!(s.fill, Some(ColorRef::rgb(0x3366CC)));
+    assert_eq!(s.fill, Some(color_rgb(0x3366CC)));
     assert_eq!(
         (s.values.start.row, s.values.start.col, s.values.end.row),
         (1, 1, 3)
@@ -207,7 +207,7 @@ fn series_features_are_read__feat__sheet_chart_series_features() {
     assert_eq!(s.x_values.unwrap().start.sheet, 1);
     assert_eq!(s.values.start.col, 1);
     let l = s.line.as_ref().unwrap();
-    assert_eq!(l.color, Some(ColorRef::theme(5, -0.25)));
+    assert_eq!(l.color, Some(color_scheme(5, -0.25)));
     assert_eq!((l.width_pt, l.dash.as_deref()), (Some(2.25), Some("dash")));
     let mk = s.marker.as_ref().unwrap();
     assert_eq!((mk.symbol, mk.size), (MarkerSymbol::Triangle, 8.0));
@@ -276,9 +276,12 @@ fn document_references_return_only_while_the_value_holds__feat__sheet_chart_styl
     };
     let same = model(&mk("00A0E0"));
     let fill = same.series().next().unwrap().fill.clone().unwrap();
-    assert_eq!(fill.doc.as_deref(), Some("Color/Brand"));
     assert_eq!(
-        same.title_style.doc_paragraph.as_deref(),
+        fill.doc.as_ref().map(|d| d.id.as_str()),
+        Some("Color/Brand")
+    );
+    assert_eq!(
+        same.title_style.doc_para_style.as_deref(),
         Some("ParagraphStyle/Head")
     );
     // Recoloured in Excel: the concrete value wins, the reference is dropped.
@@ -312,8 +315,8 @@ fn titles_are_whole_and_automatic_titles_name_the_series() {
     );
     let m = model(xml.as_bytes());
     assert_eq!(m.title.as_deref(), Some("North Sales"));
-    assert_eq!(m.title_style.concrete.size_pt, Some(16.0));
-    assert_eq!(m.title_style.concrete.bold, Some(true));
+    assert_eq!(m.title_style.font.size, Some(16.0));
+    assert!(m.title_style.font.bold);
     // No c:title, one series, not deleted: Excel titles it with the series.
     let auto = format!(
         r#"<c:chartSpace {NS}><c:chart><c:autoTitleDeleted val="0"/><c:plotArea><c:pieChart><c:ser><c:tx><c:v>Units</c:v></c:tx><c:val><c:numRef><c:f>$A$1:$A$3</c:f></c:numRef></c:val></c:ser></c:pieChart></c:plotArea></c:chart></c:chartSpace>"#

@@ -28,7 +28,7 @@
 //! shades of one accent from dark to light across the series.
 
 use crate::geometry::PlotData;
-use crate::model::{ColorRef, ColorValue};
+use crate::model::{dml_to_sheet_index, ColorRef, ConcreteColor};
 
 /// The Office theme (2013+): dk1, lt1, dk2, lt2, accent1–6, hlink, folHlink.
 pub const OFFICE_THEME: [u32; 12] = [
@@ -79,27 +79,33 @@ impl Theme {
     /// Resolve a colour role; `auto` paints `fallback`.
     pub fn paint(&self, c: &ColorRef, fallback: &str) -> Paint {
         let hex = match c.concrete {
-            ColorValue::Rgb(v) => hex_of(v),
-            ColorValue::Theme { index, tint } => hex_of(apply_tint(
-                self.colors.get(index as usize).copied().unwrap_or(0),
+            ConcreteColor::Rgb { r, g, b } => {
+                hex_of((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
+            }
+            // The shared type counts theme slots the spreadsheet way.
+            ConcreteColor::Theme { index, tint } => hex_of(apply_tint(
+                self.colors
+                    .get(usize::from(dml_to_sheet_index(index.min(255) as u8)))
+                    .copied()
+                    .unwrap_or(0),
                 tint,
             )),
-            ColorValue::Indexed(i) => hex_of(indexed(i)),
-            ColorValue::Auto => fallback.to_string(),
+            ConcreteColor::Indexed { index } => hex_of(indexed(index.min(255) as u8)),
+            ConcreteColor::Auto => fallback.to_string(),
         };
         Paint {
             hex,
-            swatch: c.doc.as_ref().map(|s| s.to_string()),
+            swatch: c.doc.as_ref().map(|s| s.id.clone()),
         }
     }
 
     /// Resolve an optional role, with an automatic value when absent.
     pub fn paint_or(&self, c: Option<&ColorRef>, auto: impl FnOnce() -> Paint) -> Paint {
         match c {
-            Some(c) if !matches!(c.concrete, ColorValue::Auto) => self.paint(c, "#808080"),
+            Some(c) if !matches!(c.concrete, ConcreteColor::Auto) => self.paint(c, "#808080"),
             Some(c) if c.doc.is_some() => {
                 let mut p = auto();
-                p.swatch = c.doc.as_ref().map(|s| s.to_string());
+                p.swatch = c.doc.as_ref().map(|s| s.id.clone());
                 p
             }
             _ => auto(),
@@ -278,7 +284,11 @@ mod tests {
         let t = Theme {
             colors: OFFICE_THEME,
         };
-        let p = t.paint(&ColorRef::theme(5, 0.0).with_doc("Color/Brand"), "#000000");
+        let p = t.paint(
+            &crate::model::color_scheme(5, 0.0)
+                .with_doc(crate::model::doc_swatch("Color/Brand", 0xED7D31)),
+            "#000000",
+        );
         assert_eq!(p.hex, "#ED7D31");
         assert_eq!(p.swatch.as_deref(), Some("Color/Brand"));
         assert_eq!(tint_of(Some(0.6), Some(0.4)), 0.4);

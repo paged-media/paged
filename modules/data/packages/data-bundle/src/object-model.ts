@@ -41,7 +41,7 @@ import {
 } from "./merge-command";
 import { objectsOf } from "./property-lane";
 import type { PropertyBindingSpec } from "./property-session";
-import type { DataSourceSession } from "./session";
+import type { BarcodeSymbology, DataSourceSession } from "./session";
 import { dataTemplateFields, inspectionCommands } from "./template-fields";
 
 export const PLUGIN_ID = "media.paged.data";
@@ -659,7 +659,140 @@ function commands(
         session,
       ),
     ),
+    // Plan G4: what the Node CLI's `apply`, `merge` and `generate` drive the
+    // data through, so a script reaches every step the CLI takes.
+    cmd<{ bytes: Uint8Array; fileName: string; name?: string; sheet?: string }>(
+      "media.paged.data.importSource",
+      async (a) => {
+        await session.whenRestored();
+        const r = await session.importFile(a.fileName, a.bytes, {
+          ...(a.name ? { name: a.name } : {}),
+          ...(a.sheet ? { sheet: a.sheet } : {}),
+        });
+        if (r.error) throw new Error(`invalidValue: ${r.error}`);
+        return {
+          source: r.source,
+          format: r.format,
+          ...(r.sheet ? { sheet: r.sheet } : {}),
+        };
+      },
+    ),
+    cmd<BindingArgs>("media.paged.data.defineBinding", async (a) => {
+      await session.whenRestored();
+      defineSessionBinding(session, a);
+      return { id: a.id, kind: a.kind };
+    }),
+    cmd<{
+      query?: string;
+      mode: "perRecord" | "perGroup" | "oneCatalog";
+      by?: string[];
+    }>("media.paged.data.planBatch", async (a) => {
+      await session.whenRestored();
+      const query = a.query || session.getState().queries[0];
+      if (!query)
+        throw new Error("invalidValue: no query to plan a batch over");
+      if (a.mode === "perGroup" && !a.by?.length)
+        throw new Error("invalidValue: perGroup needs the columns to group by");
+      await session.refreshData();
+      const plan = await session.planBatch(
+        query,
+        a.mode === "perGroup" ? { mode: a.mode, by: a.by! } : { mode: a.mode },
+      );
+      return {
+        query,
+        mode: plan.mode,
+        totalRecords: plan.totalRecords,
+        units: plan.units.map((u) => ({
+          label: u.label,
+          records: u.recordIndices,
+        })),
+      };
+    }),
   ];
+}
+
+/** `media.paged.data.defineBinding`'s args: one binding of a session kind,
+ *  the fields its kind needs (the Bindings panel's own add* paths). */
+interface BindingArgs {
+  id: string;
+  kind: "variable" | "image" | "barcode" | "visibility" | "table" | "rule";
+  query: string;
+  target?: string;
+  region?: string;
+  scope?: string;
+  expr?: string;
+  when?: string;
+  symbology?: "ean13" | "upca" | "code128" | "qr";
+  columns?: { header?: string; expr: string }[];
+  options?: Record<string, unknown>;
+  apply?: Record<string, unknown>;
+}
+
+function defineSessionBinding(
+  session: DataSourceSession,
+  a: BindingArgs,
+): void {
+  const need = (key: keyof BindingArgs): string => {
+    const v = a[key];
+    if (typeof v !== "string" || v === "")
+      throw new Error(`invalidValue: a ${a.kind} binding needs "${key}"`);
+    return v;
+  };
+  const options = a.options as never;
+  switch (a.kind) {
+    case "variable":
+      session.addVariableBinding(a.id, need("target"), a.query, need("expr"));
+      return;
+    case "image":
+      session.addImageBinding(
+        a.id,
+        need("target"),
+        a.query,
+        need("expr"),
+        options,
+      );
+      return;
+    case "visibility":
+      session.addVisibilityBinding(
+        a.id,
+        need("target"),
+        a.query,
+        need("expr"),
+        options,
+      );
+      return;
+    case "barcode":
+      session.addBarcodeBinding(
+        a.id,
+        need("target"),
+        a.query,
+        (a.symbology ?? "code128") as BarcodeSymbology,
+        need("expr"),
+        options,
+      );
+      return;
+    case "table":
+      session.addTableBinding(
+        a.id,
+        need("region"),
+        a.query,
+        (a.columns ?? []).map((c) => ({
+          header: c.header ?? "",
+          expr: c.expr,
+        })),
+      );
+      return;
+    case "rule":
+      session.addRuleBinding(
+        a.id,
+        need("scope"),
+        a.query,
+        need("when"),
+        (a.apply ?? {}) as never,
+        (a.options?.["target"] ?? undefined) as never,
+      );
+      return;
+  }
 }
 
 /** Register the object model; a no-op on a host without the door. */

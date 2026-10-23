@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The chart doors (spec §8.4; W4, ADR 518): authoring a chart over live
+//! The chart doors (spec §8.4; W4, ADR 519): authoring a chart over live
 //! data, the chart list, the geometry of a chart resolved against the live
 //! workbook, the chartsheets, and the sparklines.
 //!
