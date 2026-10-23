@@ -85,6 +85,8 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     setFrameSheet: () => true,
     documentTextDefault: async () => null,
     documentFontFace: async () => null,
+    documentSwatchColors: async () => new Map(),
+    documentStyleRevision: () => 0,
   };
   return { session, calls, changed };
 }
