@@ -56,6 +56,7 @@ and each one names the plugins that follow it and those that do not.
 | [333](333-a-bundles-words-follow-the-editors-language.md) | A bundle's words follow the editor's language | Accepted 2026-10-23 |
 | [334](334-a-frame-surface-for-live-editing.md) | A frame surface: a bundle's live DOM editing surface over its frame | Accepted 2026-10-22 |
 | [335](335-modules-contribute-template-field-kinds.md) | Modules contribute template field kinds | Accepted 2026-10-23 |
+| [336](336-document-style-reads-for-bundles.md) | Document style reads for bundles | Accepted 2026-10-23 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
