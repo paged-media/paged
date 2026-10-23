@@ -99,11 +99,15 @@ test.describe("journey · embedding demos", () => {
       timeout: 60_000,
     });
     await page.locator("[data-demo-accent]").selectOption("160 84% 30%");
+    // On the editor's root element, not the host's page (plan task E1).
     expect(
-      await page.evaluate(() =>
+      await page.evaluate(() => [
+        document
+          .querySelector<HTMLElement>("[data-paged-editor]")!
+          .style.getPropertyValue("--paged-primary"),
         document.documentElement.style.getPropertyValue("--paged-primary"),
-      ),
-    ).toBe("160 84% 30%");
+      ]),
+    ).toEqual(["160 84% 30%", ""]);
     // The form in German: the card's empty picture field.
     await expect(page.locator('[data-field-picture="photo"]')).toHaveText(
       "Kein Bild",

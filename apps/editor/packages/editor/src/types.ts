@@ -256,7 +256,8 @@ export interface EditorHandle {
    * The editor's look: its dark or light theme, and design tokens
    * (`--paged-*`, `--chrome-*`, … from `@paged-media/editor/theme-tokens.json`)
    * the host overrides with its brand. A token set to null returns to the
-   * editor's own.
+   * editor's own. Both are set on the editor's root element
+   * (`[data-paged-editor]`), never on the host's page.
    */
   setTheme(theme: {
     mode?: "dark" | "light";

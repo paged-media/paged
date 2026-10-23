@@ -41,9 +41,10 @@ const css = readFileSync(
   "utf8",
 );
 
-/** The `:root` block's custom properties, value by name. */
+/** The `:root` block's custom properties, value by name (the block is
+ *  `:root, [data-paged-editor] { … }`: the editor's root carries them too). */
 function rootTokens(): Map<string, string> {
-  const start = css.indexOf(":root {");
+  const start = css.search(/^:root[^{]*\{/m);
   const end = css.indexOf("\n}", start);
   const block = css
     .slice(start, end)

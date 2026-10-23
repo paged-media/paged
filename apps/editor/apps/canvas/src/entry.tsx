@@ -50,6 +50,29 @@ if (!found) {
 }
 const root: HTMLElement = found;
 
+/** The page is the editor's, so its <html> follows the editor's theme:
+ *  the page's canvas (index.html's body background) wears the editor's
+ *  surface. The editor itself writes nothing on the page; this page does,
+ *  for itself. */
+function mirrorTheme(host: HTMLElement): void {
+  const html = document.documentElement;
+  let watched: Element | null = null;
+  const onClass = new MutationObserver(() => {
+    html.classList.toggle("dark", watched?.classList.contains("dark") ?? true);
+  });
+  const follow = () => {
+    const root = host.querySelector(":scope > [data-paged-editor]");
+    if (!root || root === watched) return;
+    watched = root;
+    onClass.disconnect();
+    onClass.observe(root, { attributes: true, attributeFilter: ["class"] });
+    html.classList.toggle("dark", root.classList.contains("dark"));
+  };
+  new MutationObserver(follow).observe(host, { childList: true });
+  html.classList.add("dark");
+  follow();
+}
+
 function mount(strings?: Strings): void {
   const mounted = mountEditor(root, {
     search: location.search,
@@ -59,6 +82,7 @@ function mount(strings?: Strings): void {
     ...(strings ? { strings } : {}),
   });
   if (devBuild) publishDevHandles(mounted.instance);
+  mirrorTheme(root);
 }
 
 const locale = new URLSearchParams(location.search).get("locale");

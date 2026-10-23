@@ -14,6 +14,10 @@
       }
       body {
         overflow: hidden;
+        /* The page is the editor's (src/entry.tsx mirrors its theme onto
+           <html>): its canvas wears the editor's surface, also where an
+           element paints past the editor's root. */
+        background: hsl(var(--paged-bg));
       }
       @keyframes paged-canvas-spin {
         from {

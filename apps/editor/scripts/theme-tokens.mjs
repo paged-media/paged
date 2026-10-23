@@ -21,10 +21,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = join(HERE, "../packages/shell/src/styles/theme.css");
 const OUT = join(HERE, "../docs/theme-tokens.json");
 
-/** The declarations of the first top-level block opened by `selector`. */
+/** The declarations of the first top-level block opened by `selector`
+ *  (alone, or first in a selector list: `:root, [data-paged-editor]`). */
 function block(css, selector) {
   const start = css.search(
-    new RegExp(`^${selector.replace(".", "\\.")}\\s*\\{`, "m"),
+    new RegExp(`^${selector.replace(".", "\\.")}(\\s*,[^{]*)?\\s*\\{`, "m"),
   );
   if (start < 0)
     throw new Error(`theme-tokens: no ${selector} block in theme.css`);

@@ -8,7 +8,7 @@
       "key": "paged.theme",
       "default": "dark",
       "values": ["dark", "light"],
-      "effect": "the `dark` class on <html>",
+      "effect": "the `dark` class on the editor's root element ([data-paged-editor])",
       "source": "apps/editor/packages/shell/src/state/theme-context.tsx",
       "marker": "\"paged.theme\"",
       "sites": [
