@@ -113,6 +113,10 @@ pub struct VisualAttrs {
     pub doc_char_style: Option<String>,
     pub doc_para_style: Option<String>,
     pub doc_cell_style: Option<String>,
+    /// The document styles come from the cell's Excel named style through
+    /// the workbook's mapping (sheet ADR 524): table regions leave its text
+    /// alone. Not on the wire.
+    pub doc_style_mapped: bool,
 }
 
 /// One Excel indent level in points (Excel 16 indents by about 9 px — three
