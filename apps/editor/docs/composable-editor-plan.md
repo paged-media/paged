@@ -1255,8 +1255,11 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
   heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
   headless host has no native-open door, so `paged-node` places it in a frame).
-- **slide:** the typed `newSlide` places the layout's placeholders like the panel does; reorder
-  and duplicate; a typed `exportPptx`; menus and commands.
+- **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
+  reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
+  commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
+  and New, Duplicate, Delete, Move up and Move down of the active slide under Plugins ▸ Slide,
+  each offered only where it applies (`modules/slide/docs/status.md`).
 - **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
 - **publish / pdf:** bookmarks and tagged PDF in the typed exporter; `template fill -o x.pdf` and
   `merge` through the typed exporter; a `preflight` command and verb; `paged-node package`.
