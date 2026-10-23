@@ -691,6 +691,14 @@ export interface SheetEngine
   /** ADR 323 — patch one chart (validated whole; spliced into its part
    *  on save, sheet ADR 519). */
   updateChart?(index: number, patch: ChartPatch): void;
+  /** Sheet ADR 525 — the workbook's document chart style. */
+  chartStyle?(): ChartStyle;
+  /** Sheet ADR 525 — replace it (`{roles: {}}` clears it); spliced into
+   *  the workbook part, so it rides the next save. */
+  setChartStyle?(style: ChartStyle): void;
+  /** Sheet ADR 525 — chart `index`'s overrides become the workbook
+   *  default; the chart then follows it. */
+  useChartStyleAsDefault?(index: number): void;
   /** Plan G4 — delete one chart (its slot stays: the other charts keep
    *  their indices). A chart read from the file leaves the package on the
    *  next save; its slot is then a tombstone (`chartTombstones`). */
@@ -765,7 +773,51 @@ export interface ChartSpec {
   style?: number | null;
   flattened3d?: boolean;
   titleParagraphStyle?: string | null;
+  /** Sheet ADR 525 — the chart's own document-style overrides by role;
+   *  a role absent here follows the workbook default. */
+  roles?: Record<string, ChartRoleStyle>;
+  /** The chart's own series palette (a document colour group). */
+  seriesPalette?: ChartPalette | null;
 }
+
+/** Sheet ADR 525 — one chart style role's document references (a colour
+ *  role uses `swatch` only; a text role all three). */
+export interface ChartRoleStyle {
+  swatch?: DocSwatch | null;
+  paragraphStyle?: string | null;
+  characterStyle?: string | null;
+}
+
+/** A document colour group as series colours (series `i` takes swatch
+ *  `i mod n`). */
+export interface ChartPalette {
+  group: string;
+  swatches: DocSwatch[];
+}
+
+/** Sheet ADR 525 — the workbook's document chart style: what every chart
+ *  follows where it does not override a role. */
+export interface ChartStyle {
+  roles: Record<string, ChartRoleStyle>;
+  palette?: ChartPalette | null;
+}
+
+/** The colour roles, then the text roles, in panel order (the engine's
+ *  `sheet_chart::style` tags). */
+export const CHART_COLOR_ROLES = [
+  "chartArea",
+  "plotArea",
+  "axisLine",
+  "gridlines",
+] as const;
+export const CHART_TEXT_ROLES = [
+  "text",
+  "title",
+  "axisTitle",
+  "tickLabels",
+  "legend",
+  "dataLabels",
+] as const;
 
 /** A chart patch: absent = unchanged, `null` clears a nullable field. A
  *  series argument's empty strings mean none. */
@@ -778,7 +830,8 @@ export interface ChartPatch {
     categories: string;
     name: string;
     color: string;
-    colorSwatch?: string;
+    /** A document swatch: the full reference, or a bare id. */
+    colorSwatch?: string | DocSwatch;
     /** A combo: this series' kind tag (empty = the chart's). */
     kind?: string;
     secondary?: boolean;
@@ -795,6 +848,13 @@ export interface ChartPatch {
   dataLabels?: boolean;
   style?: number | null;
   titleParagraphStyle?: string | null;
+  /** Sheet ADR 525 — per-role overrides, merged; `null` gives a role's
+   *  override up (the workbook default applies). */
+  roles?: Record<string, ChartRoleStyle | null>;
+  /** Give every override up first (roles, series swatches, palette). */
+  resetRoles?: boolean;
+  /** The chart's own series palette; `null` = the workbook default's. */
+  seriesPalette?: ChartPalette | null;
 }
 
 /** A range argument resolved by the engine: its sheet, normalized A1, and
@@ -1191,6 +1251,9 @@ export interface SheetWasmEngine
   list_tables?(): TableInfo[];
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
+  chart_style?(): ChartStyle;
+  set_chart_style?(style: ChartStyle): void;
+  use_chart_style_as_default?(index: number): void;
   delete_chart?(index: number): void;
   chart_tombstones?(): Uint32Array | number[];
   restore_chart_slots?(slots: Uint32Array): void;
@@ -1425,6 +1488,13 @@ export function wrapEngine(
     chartSpecs: () => need("chart_specs")() as ChartSpec[],
     updateChart: (index, patch) => {
       need("update_chart")(index, patch);
+    },
+    chartStyle: () => need("chart_style")() as ChartStyle,
+    setChartStyle: (style) => {
+      need("set_chart_style")(style);
+    },
+    useChartStyleAsDefault: (index) => {
+      need("use_chart_style_as_default")(index);
     },
     deleteChart: (index) => {
       need("delete_chart")(index);
