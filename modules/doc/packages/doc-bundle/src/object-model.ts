@@ -86,6 +86,7 @@ import manifestJson from "../manifest.json" with { type: "json" };
 import { DocEngine } from "./engine.js";
 import { DOC } from "./messages.js";
 import { headingLevel, styleNameById } from "./panels/outline-model.js";
+import { locateTables } from "./tables.js";
 import { docTemplateFields } from "./template-fields.js";
 import {
   discoverDocs,
@@ -496,9 +497,10 @@ async function commitPlans(
         text: texts.map((t) => `\n${t}`).join(""),
       });
     }
-    // A table cell's runs: the native table is the story's n-th, the cell
-    // its row and column; checked against the cell's live text.
-    const tables = new Map<string, string[]>();
+    // A table cell's runs: the native table is found on the canvas by
+    // signature (`locateTables`), the cell is its row and column; checked
+    // against the cell's live text.
+    let located: Awaited<ReturnType<typeof locateTables>> | null = null;
     const cells = new Map<
       string,
       { story: string; tableId: string; row: number; col: number }
@@ -507,38 +509,36 @@ async function commitPlans(
       at: NonNullable<ReturnType<typeof cellRunLocation>>,
       block: number,
     ) => {
-      const storyId = stories[at.story];
-      if (!storyId)
+      if (!stories[at.story])
         throw new Rejected(
           "the document's label names no story to write (placed by an older version)",
         );
       if (!host.supports("objects@1"))
         throw new Rejected("this host cannot read a table cell's text");
-      let ids = tables.get(storyId);
-      if (!ids) {
-        ids = (await host.objects.query(`story:${storyId} > table`)).map((a) =>
-          decodeURIComponent(a.replace(/^table:/, "")),
-        );
-        tables.set(storyId, ids);
-      }
-      const tableId = ids[at.table];
-      if (ids.length !== at.tables || !tableId)
+      located ??= await locateTables(host, plan.ir, stories);
+      const place = located.places.get(block);
+      if (!place)
         throw new Rejected(
-          `the table of block ${block} cannot be found: the story's tables changed on the canvas since the document was last written`,
+          `the table of block ${block} cannot be found on the canvas (deleted, or reshaped with every cell edited)`,
         );
-      const key = `${tableId}/${at.row},${at.col}`;
+      const key = `${place.tableId}/${at.row},${at.col}`;
       if (!cells.has(key)) {
-        const read = await host.objects.get(`cell:${key}`, "text");
-        if (read.kind !== "value")
+        const text = place.cells[`${at.row},${at.col}`];
+        if (text === undefined)
           throw new Rejected(
-            `the cell of block ${block} cannot be read (${read.kind === "refused" ? read.reason : read.kind}); this engine cannot write a table cell`,
+            `the cell of block ${block} cannot be read; this engine cannot write a table cell`,
           );
-        if (read.value !== at.cellText)
+        if (text !== at.cellText)
           throw new Rejected(
             `a cell of block ${block} was edited on the canvas since the document was last written; ` +
               "export the document (save-back) before writing it through the object model",
           );
-        cells.set(key, { story: storyId, tableId, row: at.row, col: at.col });
+        cells.set(key, {
+          story: place.storyId,
+          tableId: place.tableId,
+          row: at.row,
+          col: at.col,
+        });
       }
       return cells.get(key)!;
     };
