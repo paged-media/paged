@@ -1,150 +1,150 @@
 {
-  "widthPt": 360.0,
   "heightPt": 240.0,
   "prims": [
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 180.0,
-      "y": 20.0,
+      "role": "title",
       "s": "Funnel",
       "sizePt": 14.0,
-      "anchor": "middle",
-      "role": "title"
+      "x": 180.0,
+      "y": 20.0
     },
     {
-      "kind": "rect",
-      "x": 329.1,
-      "y": 126.9,
-      "w": 7.0,
-      "h": 7.0,
       "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 126.9
     },
     {
+      "anchor": "start",
       "kind": "text",
-      "x": 340.1,
-      "y": 133.55,
+      "role": "legend",
       "s": "S1",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
+      "x": 340.1,
+      "y": 133.55
     },
     {
+      "anchor": "end",
       "kind": "text",
-      "x": 37.7,
-      "y": 55.85,
+      "role": "tick",
       "s": "Leads",
       "sizePt": 9.0,
-      "anchor": "end",
-      "role": "tick"
+      "x": 37.7,
+      "y": 55.85
     },
     {
-      "kind": "rect",
-      "x": 41.70000000000002,
-      "y": 36.5125,
-      "w": 279.40000000000003,
-      "h": 32.37499999999999,
       "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 279.4,
+      "x": 41.7,
+      "y": 36.513
     },
     {
+      "anchor": "middle",
+      "color": "#FFFFFF",
       "kind": "text",
-      "x": 181.40000000000003,
-      "y": 55.85,
+      "role": "dataLabel",
       "s": "500",
       "sizePt": 9.0,
-      "anchor": "middle",
-      "color": "#FFFFFF",
-      "role": "dataLabel"
+      "x": 181.4,
+      "y": 55.85
     },
     {
+      "anchor": "end",
       "kind": "text",
-      "x": 37.7,
-      "y": 107.64999999999999,
+      "role": "tick",
       "s": "Calls",
       "sizePt": 9.0,
-      "anchor": "end",
-      "role": "tick"
+      "x": 37.7,
+      "y": 107.65
     },
     {
-      "kind": "rect",
-      "x": 91.99200000000002,
-      "y": 88.31249999999999,
-      "w": 178.81600000000003,
-      "h": 32.37499999999999,
       "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 178.816,
+      "x": 91.992,
+      "y": 88.312
     },
     {
+      "anchor": "middle",
+      "color": "#FFFFFF",
       "kind": "text",
-      "x": 181.40000000000003,
-      "y": 107.64999999999999,
+      "role": "dataLabel",
       "s": "320",
       "sizePt": 9.0,
-      "anchor": "middle",
-      "color": "#FFFFFF",
-      "role": "dataLabel"
+      "x": 181.4,
+      "y": 107.65
     },
     {
+      "anchor": "end",
       "kind": "text",
-      "x": 37.7,
-      "y": 159.45000000000002,
+      "role": "tick",
       "s": "Offers",
       "sizePt": 9.0,
-      "anchor": "end",
-      "role": "tick"
+      "x": 37.7,
+      "y": 159.45
     },
     {
-      "kind": "rect",
-      "x": 131.10800000000003,
-      "y": 140.1125,
-      "w": 100.58400000000002,
-      "h": 32.37499999999999,
       "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 100.584,
+      "x": 131.108,
+      "y": 140.113
     },
     {
+      "anchor": "middle",
+      "color": "#FFFFFF",
       "kind": "text",
-      "x": 181.40000000000003,
-      "y": 159.45000000000002,
+      "role": "dataLabel",
       "s": "180",
       "sizePt": 9.0,
-      "anchor": "middle",
-      "color": "#FFFFFF",
-      "role": "dataLabel"
+      "x": 181.4,
+      "y": 159.45
     },
     {
+      "anchor": "end",
       "kind": "text",
-      "x": 37.7,
-      "y": 211.25,
+      "role": "tick",
       "s": "Won",
       "sizePt": 9.0,
-      "anchor": "end",
-      "role": "tick"
+      "x": 37.7,
+      "y": 211.25
     },
     {
-      "kind": "rect",
-      "x": 164.63600000000002,
-      "y": 191.9125,
-      "w": 33.528000000000006,
-      "h": 32.37499999999999,
       "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 33.528,
+      "x": 164.636,
+      "y": 191.913
     },
     {
-      "kind": "text",
-      "x": 181.40000000000003,
-      "y": 211.25,
-      "s": "60",
-      "sizePt": 9.0,
       "anchor": "middle",
       "color": "#FFFFFF",
-      "role": "dataLabel"
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "60",
+      "sizePt": 9.0,
+      "x": 181.4,
+      "y": 211.25
     }
-  ]
+  ],
+  "widthPt": 360.0
 }
