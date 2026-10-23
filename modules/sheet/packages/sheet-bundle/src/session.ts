@@ -464,6 +464,18 @@ export interface WorkbookSession extends DataToolsApi {
   /** Bumps whenever the document's swatches may have changed (a swatch
    *  edit, an undo): the grid re-reads `documentSwatchColors`. */
   documentStyleRevision(): number;
+  /** The document's paragraph styles and swatches (with their display
+   *  colour) for the sheet bar's style menu and swatch pickers (P7). */
+  documentStyleChoices(): Promise<{
+    paragraphStyles: { id: string; name: string }[];
+    swatches: { id: string; name: string; rgbHex: string }[];
+  }>;
+  /** Apply a document swatch to the selected cells' fill or text (null
+   *  clears it) — one undo step. */
+  applyDocumentSwatch(
+    target: "fill" | "text",
+    swatchId: string | null,
+  ): Promise<SessionResult>;
   /** The face and size text takes on the page when a cell names none: the
    *  document's basic paragraph style (P7 — the grid draws un-styled cells
    *  in it, as the placed table prints them). Null when unreadable. */
@@ -3960,6 +3972,70 @@ export function createWorkbookSession(
         host.log.debug("documentSwatchColors: read failed", err);
       }
       return out;
+    },
+
+    async documentStyleChoices() {
+      const out = {
+        paragraphStyles: [] as { id: string; name: string }[],
+        swatches: [] as { id: string; name: string; rgbHex: string }[],
+      };
+      // Interface names (`$ID/…`) read as the user sees them.
+      const shown = (name: string) => name.replace(/^\$ID\//, "");
+      try {
+        const ps = await host.document.collection<{
+          selfId: string;
+          name: string;
+        }>("paragraphStyles");
+        out.paragraphStyles = ps
+          .filter((p) => !p.selfId.endsWith("[No paragraph style]"))
+          .map((p) => ({ id: p.selfId, name: shown(p.name) }));
+      } catch (err) {
+        host.log.debug("documentStyleChoices: paragraph styles", err);
+      }
+      try {
+        const sw = await host.document.collection<{
+          selfId: string;
+          name: string;
+          kind: string;
+        }>("swatches");
+        const usable = sw.filter(
+          (x) =>
+            !/\/(None|Registration)$/.test(x.selfId) &&
+            !x.selfId.startsWith("Gradient/"),
+        );
+        const colors = await api.documentSwatchColors(
+          usable.map((x) => x.selfId),
+        );
+        out.swatches = usable
+          .filter((x) => colors.has(x.selfId))
+          .map((x) => ({
+            id: x.selfId,
+            name: shown(x.name),
+            rgbHex: colors.get(x.selfId)!,
+          }));
+      } catch (err) {
+        host.log.debug("documentStyleChoices: swatches", err);
+      }
+      return out;
+    },
+
+    async applyDocumentSwatch(target, swatchId) {
+      if (swatchId === null) {
+        return api.setStyle(
+          target === "fill"
+            ? { fill: "", fillSwatch: null }
+            : { fontColor: "", fontSwatch: null },
+        );
+      }
+      const ref = await api.documentSwatchRef(swatchId);
+      if (!ref)
+        return {
+          ok: false as const,
+          message: `no swatch "${swatchId}" in the document`,
+        };
+      return api.setStyle(
+        target === "fill" ? { fillSwatch: ref } : { fontSwatch: ref },
+      );
     },
 
     documentStyleRevision() {

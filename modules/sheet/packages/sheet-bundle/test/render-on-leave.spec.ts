@@ -279,6 +279,40 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect(st?.textRgb?.toUpperCase()).toBe("#C8102E");
   });
 
+  it("the bar's swatch picker lists document swatches and applies a CMYK spot as a reference (P7)", async () => {
+    const { s } = await placed();
+    const made = await host.document.mutate({
+      op: "createSwatch",
+      args: {
+        spec: {
+          selfId: "Color/Brand Red",
+          name: "Brand Red",
+          space: "CMYK",
+          value: [0, 100, 80, 5],
+          model: "Spot",
+        },
+      },
+    });
+    expect(made.applied).toBe(true);
+    const choices = await s.documentStyleChoices();
+    const brand = choices.swatches.find((x) => x.id === "Color/Brand Red");
+    expect(brand?.name).toBe("Brand Red");
+    expect(brand?.rgbHex).toMatch(/^#[0-9a-f]{6}$/i);
+    s.selectCell(0, 0);
+    expect((await s.applyDocumentSwatch("fill", "Color/Brand Red")).ok).toBe(
+      true,
+    );
+    const engine = s.state().engine!;
+    const sheet = s.sheets()[0]!.id;
+    const page = engine.getRangePage!(sheet, "A1:A1", {
+      includeGridRules: true,
+    });
+    const key = page.rows[0]?.cells[0]?.styleKey ?? 0;
+    const st = page.styles?.find((x) => x.key === key);
+    expect(st?.fillSwatch).toBe("Color/Brand Red");
+    expect(s.styleAtTarget()?.fillSwatch?.model).toBe("spot");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);
