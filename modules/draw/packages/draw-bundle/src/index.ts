@@ -1147,6 +1147,7 @@ export {
   REFLECT_COPY_UNAVAILABLE_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
+  WIDTH_PROFILE_SECTION_NOTE,
 } from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified
@@ -1393,3 +1394,24 @@ export {
   applyShapeBuild,
   type ShapeBuildOutcome,
 } from "./handlers/shape-builder";
+export {
+  WIDTH_PROFILE_COMMAND_ID,
+  WIDTH_PROFILE_COMMAND_IDS,
+  WIDTH_PROFILE_MAX_STOPS,
+  applyWidthProfile,
+  contributeWidthProfileCommands,
+  widthProfileOf,
+} from "./commands/width-profile";
+export {
+  RECIPE_KINDS,
+  RECIPE_UPDATE_COMMAND_IDS,
+  UPDATE_LINKED_RECIPES_COMMAND_ID,
+  allRecipes,
+  applyUpdateLinkedRecipes,
+  contributeRecipeUpdateCommands,
+  recipesOfSources,
+  recipesSourcedBy,
+  updateRecipe,
+  type RecipeKind,
+  type RecipeRef,
+} from "./commands/recipe-update";

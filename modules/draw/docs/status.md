@@ -16,7 +16,8 @@ canary added is under [Releases](#releases).
 - **Drawing tools.** Curvature inserts a path. (The Pencil is the host's `paged.tool.pencil`,
   a shim over this repo's `PencilMachine`, ADR 359.) Paintbrush sweeps a calligraphic
   outline, Blob Brush unites the sweep with a selected element of the same fill, Eraser
-  subtracts one from the selected paths. Width outlines an open path at a varying width.
+  subtracts one from the selected paths. Width outlines an open path at a varying width; the
+  `widthProfile` command does the same with the widths given as data (below).
 - **The graphic default.** A path drawn with Curvature wears the document's
   `[Normal Graphics Frame]` object style (fill, stroke colour and stroke weight), or
   InDesign's own values for it (no fill, a 1 pt `Color/Black` stroke) when the document has
@@ -53,8 +54,9 @@ canary added is under [Releases](#releases).
   Minus back; Make and Release compound path; five corner presets for rectangles, polygons
   and text frames; Select same fill, stroke or stroke weight (with a tolerance); Insert arc,
   spiral, rectangular grid and polar grid; Reflect (horizontal, vertical, a typed axis, and
-  a copy) and Transform again; a dash editor. Parameters are typed in a Path Options panel,
-  which the menu's "…" entries open. Reflect writes a group's transform in the frame of the
+  a copy) and Transform again; a dash editor; a width profile (start, middle and end widths)
+  that replaces each selected open path with its outline. Parameters are typed in a Path
+  Options panel, which the menu's "…" entries open. Reflect writes a group's transform in the frame of the
   group holding it, so a group nested in a rotated or scaled parent mirrors about the axis
   asked for, on an engine that keeps a nested group's transform relative to its parent and
   reports a group's geometry (canvas-wasm 0.71.11). On an engine that reports no geometry
@@ -75,7 +77,7 @@ canary added is under [Releases](#releases).
 - **Image trace.** One command turns a placed raster image into grouped, filled paths. It
   runs in a host worker where the host offers one, and on the calling thread otherwise.
 - **SVG.** An importer for `.svg` files and an exporter for the selection.
-- **Menu.** 80 commands have menu entries on a host that offers the menu door.
+- **Menu.** 82 commands have menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -123,13 +125,30 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
   checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
   `doc > plugin:media.paged.draw/repeat` select.
-- **Typed commands.** 100 of the 110 commands have a typed twin with the same id; the ten
+- **Typed commands.** 102 of the 112 commands have a typed twin with the same id; the ten
   Path Options "…" commands, which only raise a panel, are the untyped remainder. The
   Knife, Scissors and Shape Builder, tools before, are commands too, their gesture given as
   data: `knife { page, cut }`, `scissorsAt { point, tolerance }` and
   `shapeBuild { path, mode }` act on their `targets` as the tool would, in one undo step,
   and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
   scripted Shape Builder refuses ovals (the tool reads them through stand-ins).
+- **Width profile.** `widthProfile { targets, widths }` is the Width tool's bake with the
+  profile as data: `widths` are full stroke widths at evenly spaced stops along the path by
+  arc length (one width is uniform, `[0, 8, 0]` swells in the middle and tapers to points).
+  Each selected single-contour open path is replaced by its outline in one batch, one undo
+  step; closed and compound paths are skipped, and a call that outlines nothing fails with
+  the reason (`commands/width-profile.ts`). In the editor the Path Options panel's Width
+  profile section types a three-stop profile; the command run bare (the Draw ▸ Stroke ▸ Width
+  profile… row) raises that section.
+- **Updating the recipes a source feeds.** `updateLinkedRecipes { targets, all }` runs, for
+  every recipe whose sources are among the targets (or, with `all`, every recipe in the
+  document), the update its own panel runs (`updateRepeat`, `updateBlend`,
+  `editPatternField`, `updateObjectsOnPath`, `regenerateLivePaint`), and answers the
+  addresses of the recipes it rebuilt. A source is what the make linked as one: a repeat's or
+  a pattern's source items, a blend's keys and spine, the objects and the path of an
+  objects-on-path, a live-paint group's inputs. A script or `paged-node invoke` that edits a
+  path calls it afterwards with that path (`commands/recipe-update.ts`; the menu row is Draw ▸
+  Update linked recipes).
 - **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed
   update command (`updateRepeat`, `updateBlend`, `editPatternField`, `regenerateLivePaint`,
   `updateObjectsOnPath`): two undo steps, because an update mints new ids.
@@ -203,7 +222,11 @@ panel of these rows. The fields:
 ## Limits of what is shipped
 
 - **No construct updates itself.** Editing a source does not change a pattern, repeat,
-  blend, symbol instance or live-paint fill; a command rebuilds it. Recipe and library
+  blend, symbol instance or live-paint fill; a command rebuilds it (`updateLinkedRecipes`
+  finds every recipe an edited source feeds). A rebuild on every edit is not built: the
+  engine reports a change after it is committed, so the rebuild would be a second undo step
+  that clears the redo stack, and undoing the edit would trigger another rebuild. It needs a
+  write that continues after its commit in the same undo step (a contract gap). Recipe and library
   writes made by a COMMAND are not undoable (a make or update records the ids its own batch
   minted, so the recipe can only be written after it); writes through the object model are
   (below). Both need a host with `storage.parts@1`.
@@ -238,7 +261,8 @@ panel of these rows. The fields:
   holes off by the page's origin, because nothing the placement reads reports it; reset and
   redefine read it from the instance. Create Outlines reads it from the text frame, so on an
   engine that reports no origin its glyphs with holes land off by it there.
-- **Tools.** Width replaces the path with its outline. Eyedropper samples properties, not
+- **Tools.** Width (and `widthProfile`) replaces the path with its outline; the profile is not
+  kept as an editable stroke. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.
 - **Opacity mask and type on a path.** Options cannot be edited in place; release or detach

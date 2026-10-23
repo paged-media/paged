@@ -108,6 +108,14 @@ import {
   CUT_COMMAND_IDS,
 } from "./commands/cut-commands";
 import {
+  contributeWidthProfileCommands,
+  WIDTH_PROFILE_COMMAND_IDS,
+} from "./commands/width-profile";
+import {
+  contributeRecipeUpdateCommands,
+  RECIPE_UPDATE_COMMAND_IDS,
+} from "./commands/recipe-update";
+import {
   contributePatternCommands,
   PATTERN_COMMAND_IDS,
 } from "./commands/pattern";
@@ -150,6 +158,7 @@ import {
 } from "./commands/path-ops";
 import {
   contributePathOptionsCommands,
+  openPathOptions,
   lastUsedPayload,
   PATH_OPTIONS_COMMAND_IDS,
   PATH_OPTIONS_PANEL_ID,
@@ -503,6 +512,12 @@ export function activate(host: BundleHost): BundleHandle {
   const textOnPathCommandsSub = contributeTextOnPathCommands(host);
   // The Knife, Scissors and Shape Builder as commands (their gesture as data).
   const cutCommandsSub = contributeCutCommands(host);
+  // The width profile as data, and the rebuild of the recipes a changed
+  // source feeds (G4).
+  const widthProfileCommandsSub = contributeWidthProfileCommands(host, () =>
+    openPathOptions(host, "widthProfile"),
+  );
+  const recipeUpdateCommandsSub = contributeRecipeUpdateCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -636,7 +651,9 @@ export function activate(host: BundleHost): BundleHandle {
         IMAGE_TRACE_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
-        CUT_COMMAND_IDS.length
+        CUT_COMMAND_IDS.length +
+        WIDTH_PROFILE_COMMAND_IDS.length +
+        RECIPE_UPDATE_COMMAND_IDS.length
       } commands + 1 edit context + ` +
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -662,6 +679,8 @@ export function activate(host: BundleHost): BundleHandle {
       selectSameCommandsSub.dispose();
       textOnPathCommandsSub.dispose();
       cutCommandsSub.dispose();
+      widthProfileCommandsSub.dispose();
+      recipeUpdateCommandsSub.dispose();
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();

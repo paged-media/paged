@@ -57,6 +57,8 @@ defineMessages("menu", {
   "Transform again": "Transform again",
   Stroke: "Stroke",
   "Dashes…": "Dashes…",
+  "Width profile…": "Width profile…",
+  "Update linked recipes": "Update linked recipes",
   Pathfinder: "Pathfinder",
   Unite: "Unite",
   Subtract: "Subtract",
@@ -166,6 +168,9 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    section: up to three dash/gap pairs, read back for the selection).
   //    An ellipsis, so it RAISES the panel at that section. ──
   ["Draw/Stroke/Dashes…", "strokeDashOptions", "stroke"],
+  //    The width profile (the Width tool's bake, typed): run bare, the
+  //    command raises the panel's Width profile section.
+  ["Draw/Stroke/Width profile…", "widthProfile", "stroke"],
 
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──
@@ -258,6 +263,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Masks ──
   ["Draw/Opacity mask/Make", "makeOpacityMask", "mask"],
   ["Draw/Opacity mask/Release", "releaseOpacityMask", "mask"],
+
+  // ── Every recipe the selection is a source of (pattern, repeat, blend,
+  //    objects on a path, live paint), rebuilt in one go. ──
+  ["Draw/Update linked recipes", "updateLinkedRecipes", "recipes"],
 
   // ── Insert — these MERGE into the host's existing Object menu rather
   //    than living under Draw, because they mint a new page item and

@@ -457,6 +457,14 @@ export const TWINS: readonly TwinSpec[] = [
     path: { kind: "list", of: POINT },
     mode: enumOf(["keep", "remove"]),
   }),
+  // The width profile (the Width tool's bake, its profile as data) and the
+  // rebuild of the recipes a changed source feeds.
+  twin("widthProfile", { ...T, widths: { kind: "list", of: LEN } }),
+  twin(
+    "updateLinkedRecipes",
+    { ...T, all: BOOL },
+    { result: { kind: "list", of: TEXT } },
+  ),
   // Image trace — the full option set.
   twin("imageTrace", { ...T, ...TRACE }),
 ];
