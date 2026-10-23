@@ -275,6 +275,16 @@ each published canary added is under [Releases](#releases).
   agree, two colour-scale cells differ by one level (a recorded divergence). A 1,000,000-cell
   sheet with 20 rules: 0.7 ms per grid viewport, 46 ms for the first frame after an edit. Not on
   the page: gradient data bars (solid), bars and icons on a paginated chain.
+- **Excel named styles in the document's styles** (P7, ADR 524). "Use document styles" and a
+  table from Excel named styles (Normal for the un-named cells) to document paragraph, character
+  and cell styles, kept in a `styles.xml` extension and folded into every resolved cell style in
+  the engine (conditional formatting > direct formatting > the named style's mapping > table
+  regions > Normal's mapping > Excel defaults), so the placed table applies the mapped styles and
+  the grid draws their faces, sizes and colours. On for workbooks made in paged, offered for
+  imported ones; turning it on maps styles by name and Normal to the basic paragraph style.
+  The workbook panel's Document styles section edits the table, creates document styles from the
+  workbook's named styles and lists the references the document lacks with a remap; a mapped
+  style the document no longer has falls back to the workbook's look.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -336,7 +346,7 @@ each published canary added is under [Releases](#releases).
   else above, else to its right or left), never on top of it, and in the margin box's top-left
   corner with nothing selected. It is shrunk proportionally only when the margin box cannot
   hold 360 × 240 pt.
-- **Document chart styles** (ADR 524). A chart's chart area, plot area, axis lines and
+- **Document chart styles** (ADR 525). A chart's chart area, plot area, axis lines and
   gridlines take document swatches, and its chart text, title, axis titles, axis labels, legend
   and data labels take document paragraph and character styles and a swatch, each with the
   swatch's real colour model (RGB, CMYK, spot, Lab). The series can take a document colour group
@@ -430,9 +440,14 @@ gridlines }` prints Excel's headings and gridlines. A print area of several rang
   one formula, `print_areas`) places one table per area, in order, each frame under the one
   before, or with `chain` paginates the areas in sequence (`paginate_areas`, the next one
   starting in the room the one before left). Each placement is one document write and one undo
-  step (each area one step); the first pagination of a chain is one batch on a host with
-  in-batch handles (core protocol 66), every page's table addressed by its handle and each
-  swatch or style minted once; an older host places table by table. Typed `deleteChart { chart
+  step: every area of a print area is one batch (each frame and table addressed by its in-batch
+  handle, each swatch or style minted once), and so is the first pagination of a chain, on a
+  host with in-batch handles (core protocol 66); an older host places area by area and table by
+  table. A chain records itself on its first frame (its source, the repeated rows, its tables
+  with their content hashes and widths), written into the pagination's own undo step and
+  re-stamped with every pass that changes its tables, so a reopened document finds the chain
+  again and keeps it live: a resize reflows it, an edit refreshes its tables in place (tables
+  whose hashes no longer match the workbook are replaced on the next refresh). Typed `deleteChart { chart
 }` removes the chart from the workbook (`delete_chart`: the slot stays, so every other chart
   keeps its index) and every placed copy of it (found on the scene tree by its binding, so a
   chart placed in an earlier session goes too), one workbook version and one undo step; a
@@ -442,7 +457,11 @@ gridlines }` prints Excel's headings and gridlines. A print area of several rang
   stored with the bytes and re-opened on load, so the other charts keep their indices. Placed
   charts are tracked from the page: after a document undo or redo and on open, every copy on
   the scene tree (by its binding, at the box it records) refreshes with later edits — the art an
-  undone `deleteChart` restored, and a reopened document's charts. `apps/cli/test/
+  undone `deleteChart` restored, and a reopened document's charts. A chart follows its art: the
+  binding records where its first element was drawn, and a refresh (or a later session) reads
+  where that element stands now and moves and scales the box with it, so a chart moved on the
+  page is redrawn where it now is. A chart placed before its box was recorded gets one on
+  discovery (the outline of its elements) and from then on behaves as a new one. `apps/cli/test/
 cli-sheet.spec.ts` runs placement, a view and chart delete through `paged-node invoke`.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
@@ -498,11 +517,18 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   band's height.
 - **Rediscovery** finds tables placed by this version; a table placed before the binding
   carried its table record is not found again. Charts are found by their binding; one placed
-  before the binding recorded its box is tracked at the extent of its elements. Paginated chains
-  are not rediscovered.
+  before its box was recorded keeps the box it is given on discovery in the session only (a
+  discovery writes nothing: it would be an undo step of its own) until its next redraw records
+  it, and a chart whose binding recorded its box but not its art (placed by the version just
+  before) is not followed for a move made before the document was reopened. A paginated chain is
+  found again from the record on its first frame, which is written only on a host that can amend
+  an undo step (engine ADR 1004) or, for a pass that refreshes its tables in place, in that pass's
+  own batch; a chain paginated before the record, or on a host without amend that added or
+  deleted tables, is not rediscovered. The chain's first frame stays a text frame (it is not a
+  sheet frame to enter).
 - **Placement.** A view, print options and fixed sizing are for one frame: a chain paginates its
-  range, and a defined name is placed by name. Each area of a print area placed without a chain
-  is its own undo step. A chartsheet's chart stays in the saved file when deleted (the tab is the
+  range, and a defined name is placed by name. On a host without in-batch handles each area of a
+  print area placed without a chain is its own undo step. A chartsheet's chart stays in the saved file when deleted (the tab is the
   chart; the journal replays the delete). A version before this one does not read the deleted
   chart slots: opening bytes saved after a delete, it sees the later charts one index lower.
 - **Colours.** `getStyle` and the page lowering resolve theme and indexed colours through the

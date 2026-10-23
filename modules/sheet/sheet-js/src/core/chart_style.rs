@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The document chart-style doors (sheet ADR 524).
+//! The document chart-style doors (sheet ADR 525).
 //!
 //! - [`SheetSession::chart_style`] / [`SheetSession::set_chart_style`] —
 //!   the workbook default: role references (`chartArea`, `plotArea`,

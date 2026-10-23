@@ -53,6 +53,7 @@ mod cf;
 mod chart_style;
 mod charts;
 pub mod csv;
+mod docstyles;
 pub mod files;
 mod fill;
 pub mod filter;
@@ -69,6 +70,7 @@ pub use chart_style::{
     ChartStyleIn, ChartStyleOut, PaletteIn, PaletteOut, RoleIn, RoleOut, SwatchIn,
 };
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
+pub use docstyles::{DocReferences, NamedStyleUsage};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
     ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,

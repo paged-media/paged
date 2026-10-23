@@ -269,7 +269,7 @@ pub struct ChartModel {
     /// Empty cells: `gap` (default), `zero` or `span` (`c:dispBlanksAs`).
     pub blanks: Blanks,
     /// The chart's own series colours from a document colour group (sheet
-    /// ADR 524; `None` = the workbook default's, if any). Applied when the
+    /// ADR 525; `None` = the workbook default's, if any). Applied when the
     /// chart is drawn ([`crate::style::effective`]).
     pub palette: Option<crate::style::SeriesPalette>,
 }

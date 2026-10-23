@@ -223,13 +223,23 @@ impl TableBand {
 /// wins, what it leaves default shows the table's.
 pub fn under(table: &VisualAttrs, own: &VisualAttrs) -> VisualAttrs {
     let mut out = own.clone();
+    // A named style mapped to document styles ranks above table regions
+    // (sheet ADR 524): its text is the document's, and with a document cell
+    // style so is its box.
+    let mapped = own.doc_style_mapped;
+    let boxed = mapped && own.doc_cell_style.is_some();
+    if boxed {
+        return out;
+    }
     if out.fill_rgb.is_none() && out.fill_pattern.is_none() && out.fill_gradient.is_none() {
         out.fill_rgb = table.fill_rgb.clone();
     }
-    if out.text_rgb.is_none() {
-        out.text_rgb = table.text_rgb.clone();
+    if !mapped {
+        if out.text_rgb.is_none() {
+            out.text_rgb = table.text_rgb.clone();
+        }
+        out.bold |= table.bold;
     }
-    out.bold |= table.bold;
     for (mine, theirs, flag_mine, flag_theirs) in [
         (
             &mut out.border_lines.top,

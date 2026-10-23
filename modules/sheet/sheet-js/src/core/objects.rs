@@ -95,7 +95,7 @@ pub struct ChartSpec {
     pub style: Option<u32>,
     pub flattened3d: bool,
     pub title_paragraph_style: Option<String>,
-    /// The chart's own document-style overrides by role (sheet ADR 524);
+    /// The chart's own document-style overrides by role (sheet ADR 525);
     /// a role absent here follows the workbook default.
     pub roles: BTreeMap<String, RoleOut>,
     /// The chart's own series palette (a document colour group).
@@ -152,7 +152,7 @@ pub struct ChartPatch {
     /// A document paragraph style for the title (`ParagraphStyle/…`).
     #[serde(deserialize_with = "present")]
     pub title_paragraph_style: Option<Option<String>>,
-    /// Sheet ADR 524 — per-role document-style overrides, merged: a role
+    /// Sheet ADR 525 — per-role document-style overrides, merged: a role
     /// given `null` gives its override up (the workbook default applies).
     pub roles: Option<BTreeMap<String, Option<RoleIn>>>,
     /// Give every override up first (roles, series swatches, palette).

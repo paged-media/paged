@@ -1,4 +1,4 @@
-# ADR 524 — Document chart styles: roles, a colour-group palette, a workbook default
+# ADR 525 — Document chart styles: roles, a colour-group palette, a workbook default
 
 - **Status:** Accepted, 2026-10-23. Completes the chart half of P7 (document styles); builds on
   [ADR 518](518-cell-visual-model-and-colour-references.md) (colour and text-style references),

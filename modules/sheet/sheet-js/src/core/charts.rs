@@ -467,7 +467,7 @@ impl SheetSession {
         })?;
         self.live_chart(chart_index)?;
         // Drawn with its palette and the workbook's document chart style
-        // where it does not override a role (sheet ADR 524).
+        // where it does not override a role (sheet ADR 525).
         let model = sheet_chart::style::effective(&chart.model, &self.doc.chart_style);
         let data = self.plot_data(&model);
         Ok(generate_chart(&model, &data, w_pt, h_pt))

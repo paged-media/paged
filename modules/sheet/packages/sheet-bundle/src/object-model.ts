@@ -188,7 +188,7 @@ const text: ValueType = { kind: "text" };
 const bool: ValueType = { kind: "bool" };
 const int: ValueType = { kind: "number", integer: true };
 const grid: ValueType = { kind: "list", of: { kind: "list", of: text } };
-/** Sheet ADR 524 — a role map: role tag → its document ids. */
+/** Sheet ADR 525 — a role map: role tag → its document ids. */
 const chartRoles: ValueType = {
   kind: "map",
   of: {
@@ -1564,7 +1564,7 @@ export function contributeObjectModel(
    *  doc-hosted `state` write. */
   async function batchWrite(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
     const deletedCharts: number[] = [];
-    // Sheet ADR 524 — the document references a chart-style write names
+    // Sheet ADR 525 — the document references a chart-style write names
     // are read first: planning is synchronous.
     const styleValues = ops
       .filter(
