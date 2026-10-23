@@ -122,6 +122,79 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect(tables[0].get("0:0")).toBe("r10c1");
   });
 
+  it("resizing the frame re-windows the page table (P6)", async () => {
+    const { s, frame } = await placed();
+    const [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frame },
+    ]);
+    const [top, left, bottom, right] = g.bounds;
+    // Twice as tall: about twice the rows fit.
+    const r = await host.document.mutate({
+      op: "resizeFrame",
+      args: {
+        frameId: frame,
+        bounds: [top, left, top + 2 * (bottom - top), right],
+      },
+    });
+    expect(r.applied).toBe(true);
+    await settle();
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.view.topLeft).toBe("A1");
+    const [cells] = await exportedTableCells(h);
+    // The range showed rows 1–5; the taller frame shows more of them.
+    expect(cells.get("8:0")).toBe("r8c0");
+    expect(b?.range.startsWith("A1:")).toBe(true);
+    expect(b?.range).not.toBe("A1:C5");
+  });
+
+  it("a frame linked to another becomes one window over both (P6)", async () => {
+    const { s, frame } = await placed();
+    const [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frame },
+    ]);
+    const [top, left, bottom, right] = g.bounds;
+    const pageId = g.pageId!;
+    // A second frame below, as tall as the first, threaded after it.
+    const made = await host.document.mutate({
+      op: "insertTextFrame",
+      args: {
+        pageId,
+        bounds: [bottom + 40, left, bottom + 40 + (bottom - top), right],
+      },
+    });
+    expect(made.applied).toBe(true);
+    const next = (made.createdId as { id: string }).id;
+    const link = await host.document.mutate({
+      op: "linkFrames",
+      args: { from: frame, to: next },
+    });
+    expect(link.applied).toBe(true);
+    // The chain read is debounced; then the refresh lowers the window.
+    await new Promise((r) => setTimeout(r, 600));
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.range.startsWith("A1:")).toBe(true);
+    const [cells] = await exportedTableCells(h);
+    // About twice the rows: the table flows into the second frame.
+    expect(cells.get("8:0")).toBe("r8c0");
+    const storyId = (g as { storyId?: string }).storyId!;
+    const chain = await host.document.frameChain(storyId);
+    expect(chain.map((l) => l.frameId)).toEqual([frame, next]);
+    expect(chain.some((l) => l.overflow)).toBe(false);
+
+    // Entering the continuation starts its grid at the rows it holds;
+    // scrolling there and leaving scrolls the chain.
+    expect(await s.showGridInFrame(next)).toBe(true);
+    expect(s.scrollInFrame(3, 0)).toBe(true);
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    expect((await bindingOf(frame))?.view.topLeft).toBe("A4");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);
