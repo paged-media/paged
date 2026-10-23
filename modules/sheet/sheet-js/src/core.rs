@@ -51,6 +51,7 @@ use sheet_xlsx::XlsxDocument;
 
 mod charts;
 pub mod csv;
+pub mod files;
 mod fill;
 pub mod filter;
 mod format;
@@ -452,6 +453,9 @@ pub struct SheetSession {
     removed_charts: BTreeSet<u32>,
     /// Named filter views (criteria saved beside the workbook, ADR 517).
     filter_views: Vec<filter::FilterViewInfo>,
+    /// The language formulas are shown and typed in (sheet ADR 521); the
+    /// reference style is the workbook's own (`<calcPr refMode>`).
+    formula_lang: sheet_parser::dialect::FormulaLang,
 }
 
 /// The T0 cap on cells materialized by a single [`SheetSession::get_range_lowered`]
@@ -719,6 +723,7 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            formula_lang: Default::default(),
         }
     }
 
@@ -741,6 +746,11 @@ impl SheetSession {
             ..EngineConfig::default()
         };
         let mut doc = XlsxDocument::open(bytes).map_err(|e| SessionError(e.to_string()))?;
+        let template = doc.kind().is_template();
+        if template {
+            doc.set_kind(doc.kind().instantiated())
+                .map_err(|e| SessionError(e.to_string()))?;
+        }
         let mut model = std::mem::take(&mut doc.model);
         model.external_sheets = external_sheets(&doc.external_links);
 
@@ -848,7 +858,20 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            formula_lang: Default::default(),
         };
+        // A chart slot a save left empty (a deleted chart) stays deleted, so
+        // every other chart keeps its index (ADR 519).
+        session.removed_charts = session
+            .doc
+            .charts
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.removed)
+            .map(|(i, _)| i as u32)
+            .collect();
+        // A template opens as a new workbook (sheet ADR 521), unsaved.
+        session.structure_changed = template;
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
         // Data tables are calculated with the workbook (ADR 517).
@@ -916,6 +939,12 @@ impl SheetSession {
         // Every spilling formula is written as Excel writes a dynamic array:
         // an array formula over its spill area, flagged dynamic. Without the
         // flag the area's cached values would reload as cells blocking it.
+        // Charts authored, edited or deleted in the session are written
+        // into the package (ADR 519): generated, spliced or removed.
+        self.doc
+            .write_charts(model, &self.removed_charts)
+            .map_err(|e| SessionError(e.to_string()))?;
+
         let spills = spill_areas(engine);
         let bytes = self
             .doc

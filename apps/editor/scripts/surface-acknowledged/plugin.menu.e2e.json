@@ -1,1 +1,4 @@
-{}
+{
+  "menu:Sheet/Export sheet as CSV…": "The item only invokes its command (media.paged.sheet.command.exportCsv), whose behaviour the bundle's unit and headless tests assert (modules/sheet/packages/sheet-bundle/test/files-dialect.spec.ts, test/headless/files-dialect.headless.test.ts); no browser journey opens the Sheet menu for it yet.",
+  "menu:Sheet/R1C1 reference style": "The item only invokes its command (media.paged.sheet.command.toggleR1C1), whose behaviour the bundle's unit and headless tests assert (modules/sheet/packages/sheet-bundle/test/files-dialect.spec.ts, test/headless/files-dialect.headless.test.ts); no browser journey opens the Sheet menu for it yet."
+}

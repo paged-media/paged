@@ -1886,6 +1886,40 @@ pub fn cell_fields_docx() -> Vec<u8> {
     ])
 }
 
+/// A document whose table cells carry paragraph and run properties, for
+/// structural cell save-back (paragraphs added and removed on the canvas):
+/// a cell of three styled paragraphs (the last one bold), a cell with an
+/// empty `<w:p/>` after a paragraph, and a cell whose only paragraph has no
+/// text run.
+pub fn cell_paragraphs_docx() -> Vec<u8> {
+    let content_types = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#;
+    let document = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Notes</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid>
+      <w:tr>
+        <w:tc><w:tcPr><w:tcW w:w="4680" w:type="dxa"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/></w:rPr><w:t>One</w:t></w:r></w:p><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>Two</w:t></w:r></w:p><w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:t xml:space="preserve">Three </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>bold</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Top</w:t></w:r></w:p><w:p/></w:tc>
+        <w:tc><w:p><w:pPr><w:spacing w:after="0"/></w:pPr></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t>End</w:t></w:r></w:p>
+  </w:body>
+</w:document>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", content_types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+    ])
+}
+
 /// A document with a footnote: an in-text `w:footnoteReference` plus a
 /// `word/footnotes.xml` carrying the note body (and Word's two separator
 /// pseudo-notes, which must be skipped).

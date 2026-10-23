@@ -58,7 +58,11 @@ import { useStrings } from "@paged-media/strings";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { FunctionEntry } from "../../../sheet-host-model/src";
-import { DELIMITED_MIMES, importBytes, XLSX_MIME } from "../import-xlsx";
+import {
+  importBytes,
+  SPREADSHEET_ACCEPT,
+  SPREADSHEET_EXTENSIONS,
+} from "../import-xlsx";
 import { columnLabel, type WorkbookSession } from "../session";
 import { COMMANDS, WORKBOOK as M } from "../messages";
 import { FormatSection, NamesSection, tokenLabel } from "./format-section";
@@ -212,7 +216,7 @@ export function makeWorkbookPanel(
     const onPick = async () => {
       try {
         const files = await host.shell.pickFile({
-          accept: [".xlsx", XLSX_MIME, ".csv", ".tsv", ...DELIMITED_MIMES],
+          accept: SPREADSHEET_ACCEPT,
           multiple: false,
         });
         const file = files[0];
@@ -392,7 +396,7 @@ export function makeWorkbookPanel(
               ref={fileRef}
               data-sheet-file
               type="file"
-              accept=".xlsx,.csv,.tsv"
+              accept={SPREADSHEET_EXTENSIONS}
               aria-label={t(M.openAria)}
               onChange={onFile}
               style={{ ...body, maxWidth: "100%" }}
@@ -812,8 +816,8 @@ export function makeWorkbookPanel(
 
             {/* CHART AUTHORING — the chart engine was import-only. Authored
              *  charts render + place through the SAME generator as parsed
-             *  ones, and stay PAGE-side (never written back to the xlsx —
-             *  the publishing-first ruling, asserted in conformance).
+             *  ones, and are written into the xlsx on save (a generated
+             *  chart part, sheet ADR 519).
              *  The kind list is READ FROM THE ENGINE (session.chartKinds),
              *  never hard-coded here: which kinds exist is a Rust decision,
              *  so the panel cannot offer one the engine refuses. */}

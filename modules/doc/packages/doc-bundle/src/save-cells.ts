@@ -20,12 +20,15 @@
 // (`host.document.storyContent`) holds no table, so each cell of a table the
 // pour built natively is read on its own — the engine's cell `text`, its
 // paragraphs joined by `\n` — and handed to docx-js next to the story
-// (`cells`), which patches the edits into the cell's runs. Which native
-// table a lowered table became is the pour's replay (`tableLocation`), as the
-// object model's cell writes find it.
+// (`cells`), which patches the edits into the cell's runs and adds or drops
+// the cell's paragraphs. Which native table a lowered table became is found
+// again by signature (`locateTables`), so a table survives the story around
+// it being edited, moved or partly deleted.
 
-import { tableLocation, type LoweredDoc } from "@paged-media/doc-host-model";
+import type { LoweredDoc } from "@paged-media/doc-host-model";
 import type { BundleHost } from "@paged-media/plugin-api";
+
+import { locateTables } from "./tables.js";
 
 /** One cell read back: the table's lowered block, the lowered cell index and
  *  the cell's live text. */
@@ -38,8 +41,9 @@ export interface CellContent {
 /**
  * Read every native table cell of `ir` from the stories it was poured into
  * (`storyIds`, in section order). Answers the cells read and what could not
- * be read (a host without the object door, a table no longer where the pour
- * put it): those cells keep their Word text, and the reasons are reported.
+ * be read (a host without the object door, a table that cannot be found on
+ * the canvas any more): those cells keep their Word text, and the reasons
+ * are reported.
  */
 export async function readTableCells(
   host: BundleHost,
@@ -59,39 +63,18 @@ export async function readTableCells(
     );
     return { cells, skips };
   }
-  const tables = new Map<string, string[]>();
-  for (let b = 0; b < blocks.length; b += 1) {
+  const { places, missing } = await locateTables(host, ir, storyIds);
+  for (const b of missing)
+    skips.push(
+      `block ${b}: the table is no longer on the canvas (deleted, or reshaped with every cell edited); it keeps its Word text`,
+    );
+  for (const [b, place] of places) {
     const block = blocks[b]!;
     if (block.kind !== "table") continue;
-    const at = tableLocation(ir, b);
-    if (!at) continue; // poured as text: save-back keeps the Word table
-    const storyId = storyIds[at.story];
-    if (!storyId) {
-      skips.push(`block ${b}: the table's story is not known`);
-      continue;
-    }
-    let ids = tables.get(storyId);
-    if (!ids) {
-      ids = (await host.objects.query(`story:${storyId} > table`)).map((a) =>
-        decodeURIComponent(a.replace(/^table:/, "")),
-      );
-      tables.set(storyId, ids);
-    }
-    const tableId = ids[at.table];
-    if (ids.length !== at.tables || !tableId) {
-      skips.push(
-        `block ${b}: the story's tables changed on the canvas; the table keeps its Word text`,
-      );
-      continue;
-    }
     for (let k = 0; k < block.cells.length; k += 1) {
       const c = block.cells[k]!;
-      const read = await host.objects.get(
-        `cell:${tableId}/${c.row},${c.col}`,
-        "text",
-      );
-      if (read.kind === "value" && typeof read.value === "string")
-        cells.push({ block: b, cell: k, text: read.value });
+      const text = place.cells[`${c.row},${c.col}`];
+      if (text !== undefined) cells.push({ block: b, cell: k, text });
       else
         skips.push(
           `block ${b} cell ${k}: the cell cannot be read; it keeps its Word text`,

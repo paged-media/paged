@@ -19,6 +19,18 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
+- **Files and dialect** (ADR 521). Macro-enabled workbooks (`.xlsm`) open and save with their
+  VBA project kept byte for byte and never run; templates (`.xltx`, `.xltm`) open as a new
+  workbook; saving as `.xlsx` (the `.xlsx` exporter) leaves the VBA project out, the `.xlsm`
+  exporter keeps it. OpenDocument spreadsheets (`.ods`, `.ots`) import: every table, values of
+  each type, OpenFormula formulas translated to Excel's syntax (else the cached value), named
+  ranges, merges, number formats, bold/italic/underline, font colours, fills, alignment; not
+  widths, borders, conditional formats or charts. The active sheet (or a range) exports as CSV:
+  RFC 4180 quoting, formatted or raw values, `,` `;` or tab, UTF-8 with an optional BOM
+  ("Export sheet as CSV…", the CSV exporter, the typed `exportCsv`). Formulas show and take
+  R1C1 references when the workbook is in R1C1 mode (kept in `<calcPr refMode>`, toggled by "R1C1
+  reference style") and German function names, `;` separators and `,` decimals when the host
+  language is German (`SUMME`, `WENN`, `SVERWEIS`, `Z1S1`); stored formulas stay A1 and English.
 - **Calculation.** 519 registered functions: 501 evaluated, and 18 that need a network, a cube
   connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
   `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
@@ -295,7 +307,11 @@ each published canary added is under [Releases](#releases).
   crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
   Colour and text roles carry document swatch and style references, which the page uses.
   Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
-  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  render with their real kind. Charts are written back into the xlsx: an edited chart is
+  spliced into its part, an authored one generated (with its drawing anchor, relationships and,
+  for the Office 2016 kinds, the style parts Excel needs), a deleted one removed; every chart
+  keeps its index across a save. Excel opens all of them without a repair and reports the chart
+  type Paged wrote (the open-check lane). Charts are placed as vector paths and labelled text frames in
   one document write, grouped as one object, and replaced in one write when their data
   changes. Each label frame is sized to its text (measured with the document's font metrics,
   or sized by the frame when a document style sets the label), justified to its anchor, inside
@@ -432,9 +448,8 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 
 - **Object model.** The version label is the document's, not a frame's:
   core keeps one label per plugin per host, and a frame's already holds the placement binding.
-  The page refresh after a write is a second document step. Charts the object model creates or
-  changes are kept as a chart-op journal next to each version; charts authored in the panel are
-  not.
+  The page refresh after a write is a second document step. Charts live in each version's xlsx
+  (ADR 519); a version saved before the engine wrote charts still replays its chart-op journal.
 - **Engines before protocol 66.** Placing a range takes two writes and so two undo steps (frame
   and table, then content), because one write needs the engine to resolve a table handle inside
   a batch; and each in-frame grid change invalidates every page cache. Core v0.66.0 and later
@@ -494,9 +509,11 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 - **Interpreting pivot tables, slicers or macros**
   ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
-- **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
-  refused.
-- **Localised function names and argument separators**, and CJK display locales.
+- **Other file formats.** `.xlsx`/`.xlsm`/`.xltx`/`.xltm`, `.ods`/`.ots`, CSV and TSV are read;
+  `.xlsx`, `.xlsm` and CSV are written; a legacy `.xls` is refused, `.xlsb` is not read, ODS is
+  not written.
+- **Localised function names in languages other than German** (they show English names), and
+  CJK display locales.
 - **A worker-hosted engine.** The manifest declares no worker capability.
 - **Three registry rows marked `planned`:** `sheet.chart.design-markers`,
   `sheet.format.locale.cjk-followup`, `sheet.style.doc-style-group`.
