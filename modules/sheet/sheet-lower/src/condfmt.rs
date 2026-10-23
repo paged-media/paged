@@ -190,6 +190,10 @@ impl CfBlock {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SheetCondFmt {
     pub blocks: Vec<CfBlock>,
+    /// The sheet's tables with their resolved styles (sheet ADR 517): they
+    /// paint UNDER the cells' own formatting, cf paints over. Carried here
+    /// because every styler caller already holds the sheet's cf.
+    pub tables: Vec<crate::table_band::TableBand>,
 }
 
 impl SheetCondFmt {
@@ -459,6 +463,7 @@ mod tests {
     #[test]
     fn cellis_greater_than_matches() {
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![block_cellis(
                 (0, 0, 2, 0),
                 CfOperator::GreaterThan,
@@ -483,6 +488,7 @@ mod tests {
     #[test]
     fn cellis_between_inclusive() {
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![block_cellis(
                 (0, 0, 0, 0),
                 CfOperator::Between,
@@ -507,6 +513,7 @@ mod tests {
     fn lowest_priority_dxf_wins() {
         // Two matching cellIs rules; priority 1 beats priority 5.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 0, 0)],
                 rules: vec![
@@ -536,6 +543,7 @@ mod tests {
     #[test]
     fn expression_reduced_comparison_matches() {
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 4, 0)],
                 rules: vec![CfRule {
@@ -555,6 +563,7 @@ mod tests {
     #[test]
     fn expression_unsupported_paints_nothing() {
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 0, 0)],
                 rules: vec![CfRule {
@@ -571,6 +580,7 @@ mod tests {
     fn two_color_scale_interpolates_midpoint() {
         // White (#FFFFFF) → red (#FF0000) over domain [0, 100]; at 50 → #FF8080.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 9, 0)],
                 rules: vec![CfRule {
@@ -606,6 +616,7 @@ mod tests {
     fn three_color_scale_uses_middle_stop() {
         // 0=red, 50=yellow, 100=green; at 25 halfway red→yellow = #FF8000.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 9, 0)],
                 rules: vec![CfRule {
@@ -639,6 +650,7 @@ mod tests {
     fn dxf_rule_wins_over_color_scale() {
         // A cell under both a matching cellIs and a colour scale takes the dxf.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![
                 block_cellis(
                     (0, 0, 0, 0),
@@ -678,6 +690,7 @@ mod tests {
         // A data bar over A1:A5 with derived (min/max) endpoints; the cell's
         // fill fraction is (value - lo) / (hi - lo), clamped, over the domain.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 4, 0)],
                 rules: vec![CfRule {
@@ -712,6 +725,7 @@ mod tests {
     fn sheet_lower_condfmt_databar_geometry_explicit_endpoints_and_degenerate() {
         // Explicit num endpoints win over the derived domain.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 0, 0)],
                 rules: vec![CfRule {
@@ -732,6 +746,7 @@ mod tests {
 
         // A degenerate (zero-width) domain paints no bar (no div-by-zero).
         let degen = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![CfBlock {
                 ranges: vec![(0, 0, 0, 0)],
                 rules: vec![CfRule {

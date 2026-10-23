@@ -381,12 +381,18 @@
         {
           "id": "media.paged.sheet.command.cutSelection",
           "title": "Cut sheet selection",
-          "args": { "kind": "struct", "fields": {} }
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
         },
         {
           "id": "media.paged.sheet.command.formatCells",
           "title": "Format cells",
-          "args": { "kind": "struct", "fields": {} }
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
         },
         {
           "id": "media.paged.sheet.command.clearCells",

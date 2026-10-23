@@ -59,6 +59,8 @@ mod shift;
 pub mod splice;
 pub mod structure;
 pub mod style_edit;
+pub mod table_doc;
+pub mod table_style;
 pub mod write;
 pub mod ws_child;
 pub mod xtree;
@@ -828,10 +830,13 @@ impl XlsxDocument {
     /// `sheet_lower::lower_range_condfmt` (it reproduces the styled path when
     /// empty). M2 conditional-formatting track, spec §10.4.
     pub fn lowered_conditional_formats(&self, sheet: SheetId) -> sheet_lower::SheetCondFmt {
-        match self.conditional_formats.get(&sheet) {
+        let mut cf = match self.conditional_formats.get(&sheet) {
             Some(cf) => cf.to_lower(&self.dxfs),
             None => sheet_lower::SheetCondFmt::default(),
-        }
+        };
+        // The tables' styles paint under the cells (sheet ADR 517).
+        cf.tables = self.table_bands(sheet);
+        cf
     }
 
     /// The frozen-pane split of a sheet (spec §8.1), or the default `(0, 0)`

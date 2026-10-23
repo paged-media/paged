@@ -757,6 +757,38 @@ pub fn grid_scene_styled(
                 }
             }
         }
+        // Empty cells inside a table carry its style (Excel bands them).
+        for band in &cf.tables {
+            for (dr, &r) in win.rows.iter().enumerate() {
+                for (dc, &c) in win.cols.iter().enumerate() {
+                    if !band.covers(r, c) || ws.cell(r, c).is_some() {
+                        continue;
+                    }
+                    if frags_by_row[dr]
+                        .iter()
+                        .any(|&fi| dc >= frags[fi].dc0 && dc < frags[fi].dc1)
+                    {
+                        continue;
+                    }
+                    let key = styler.key_for_empty(r, c);
+                    if key == 0 {
+                        continue;
+                    }
+                    meta.push((dr, dc, false));
+                    cells.push(GridCell {
+                        row: r,
+                        col: c,
+                        text: String::new(),
+                        align: Align::General,
+                        style_key: key,
+                        wrap: false,
+                        v_align: None,
+                        overflow_to: None,
+                        fill: None,
+                    });
+                }
+            }
+        }
         // Anchors outside the window (scrolled away, or hidden): resolved
         // after the walk so they only append to the styles table.
         for f in &frags {
@@ -1361,6 +1393,7 @@ mod tests {
     /// uses. Geometry is viewport-local + inside the cell box.
     fn databar_cf(range: (u32, u32, u32, u32), rgb: (u8, u8, u8)) -> SheetCondFmt {
         SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![range],
                 rules: vec![condfmt::CfRule {
@@ -1829,6 +1862,7 @@ mod tests {
             ws.hidden_rows.insert(4);
         }
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(0, 2, 11, 2)],
                 rules: vec![condfmt::CfRule {
@@ -2037,6 +2071,7 @@ mod tests {
         }
         // A cf block far away forces the per-cell (uncached) style path.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(900_000, 0, 900_000, 0)],
                 rules: vec![],
