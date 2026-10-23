@@ -457,6 +457,33 @@ pub fn resolve_visual(
     a
 }
 
+/// A rich-text run's effective style: the cell's resolved style with the
+/// run's font facets.
+pub fn run_attrs(
+    base: &VisualAttrs,
+    font: &FontSpec,
+    palette: &ColorPalette,
+    default_font: &FontSpec,
+) -> VisualAttrs {
+    let mut a = base.clone();
+    a.text_rgb = None;
+    a.text_swatch = None;
+    a.font_size_pt = None;
+    a.font_name = None;
+    apply_font(&mut a, font, default_font, palette);
+    if a.text_rgb.is_none() {
+        a.text_rgb = base.text_rgb.clone();
+        a.text_swatch = base.text_swatch.clone();
+    }
+    if a.font_size_pt.is_none() && font.size.is_none() {
+        a.font_size_pt = base.font_size_pt;
+    }
+    if a.font_name.is_none() && font.name.is_none() {
+        a.font_name = base.font_name.clone();
+    }
+    a
+}
+
 /// Resolve a differential format into the facets it sets (an unset facet
 /// stays default — the conditional-formatting bridge).
 pub fn resolve_delta(d: &DifferentialFormat, palette: &ColorPalette) -> VisualAttrs {
@@ -497,6 +524,21 @@ pub trait VisualStyleSource {
     fn format_color_rgb(&self, color: sheet_format::FormatColor) -> String {
         let (r, g, b) = color.default_rgb();
         format!("#{r:02X}{g:02X}{b:02X}")
+    }
+
+    /// The formatted runs of a rich-text cell (W2.2): each run's text and
+    /// its effective style (`base`, the cell's style, with the run's font
+    /// facets). `None` = plain text. `text` is what the cell shows now — a
+    /// source answers `None` when its runs no longer spell it.
+    fn rich_runs(
+        &self,
+        _sheet: sheet_core::SheetId,
+        _row: u32,
+        _col: u32,
+        _text: &str,
+        _base: &VisualAttrs,
+    ) -> Option<Vec<(String, VisualAttrs)>> {
+        None
     }
 }
 

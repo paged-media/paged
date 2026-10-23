@@ -121,6 +121,42 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         key
     }
 
+    /// The formatted runs of a rich-text cell (W2.2): `(text, style_key)`
+    /// per run, keys in the same table, or `None` for plain text. A cell a
+    /// conditional format paints shows plain text in the painted style.
+    pub fn runs(
+        &mut self,
+        sheet: sheet_core::SheetId,
+        row: u32,
+        col: u32,
+        cell: &Cell,
+        text: &str,
+    ) -> Option<Vec<(String, u32)>> {
+        if !matches!(cell.value, CellValue::Text(_)) {
+            return None;
+        }
+        let base = self.visual.visual(cell.style).unwrap_or_default();
+        let runs = self.visual.rich_runs(sheet, row, col, text, &base)?;
+        if !self.cf.is_empty() {
+            let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
+            if condfmt::override_for(cf, row, col, &cell.value, &mut |rng| {
+                domain(ws, rng, domains)
+            })
+            .is_some()
+            {
+                return None;
+            }
+        }
+        Some(
+            runs.into_iter()
+                .map(|(t, a)| {
+                    let k = self.intern(a);
+                    (t, k)
+                })
+                .collect(),
+        )
+    }
+
     /// The data bar to draw in the cell at sheet `(row, col)`, if any:
     /// `(fill_fraction, rgb)` (see [`condfmt::databar_for`]).
     pub fn databar(&mut self, row: u32, col: u32, cell: &Cell) -> Option<(f64, (u8, u8, u8))> {
