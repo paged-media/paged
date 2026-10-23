@@ -1,0 +1,8 @@
+# CONFIDENCE(alpha,standard_dev,size) - legacy.
+# id	formula	setup	expected
+cnl-0	=CONFIDENCE(0.05,2.5,50)	-	0.692951912174839
+cnl-1	=CONFIDENCE(0.01,1,1)	-	2.5758293035489
+cnl-2	=CONFIDENCE(0,2.5,50)	-	#NUM!
+cnl-3	=CONFIDENCE(0.05,0,50)	-	#NUM!
+cnl-4	=CONFIDENCE(0.05,2.5,0.5)	-	#NUM!
+cnl-5	=CONFIDENCE("x",2.5,50)	-	#VALUE!

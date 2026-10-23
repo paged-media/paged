@@ -1,0 +1,17 @@
+# F.DIST.RT(x,deg_freedom1,deg_freedom2).
+# id	formula	setup	expected
+fdr-0	=F.DIST.RT(15.2069,6,4)	-	0.009999956997237
+fdr-1	=F.DIST.RT(1,1,1)	-	0.5
+fdr-2	=F.DIST.RT(0.5,10,20)	-	0.8701603741696
+fdr-3	=F.DIST.RT(3,50,60)	-	2.97287408278036E-05
+fdr-4	=F.DIST.RT(0,4,5)	-	1
+fdr-5	=F.DIST.RT(-1,4,5)	-	#NUM!
+fdr-6	=F.DIST.RT(1,0,5)	-	#NUM!
+fdr-7	=F.DIST.RT(100,2,2)	-	0.00990099009901
+fdr-8	=F.DIST.RT(1000,5,8)	-	5.86464390102083E-11
+fdr-9	=F.DIST.RT(2,3.5,7.5)	-	0.202693642486651
+fdr-10	=F.DIST.RT(4,1,1E10)	-	0.045500263923354
+fdr-11	=F.DIST.RT(4,1E10,1)	-	0.382924922537024
+fdr-txt	=F.DIST.RT("x",4,5)	-	#VALUE!
+fdr-err	=F.DIST.RT(A1,4,5)	A1=#DIV/0!	#DIV/0!
+fdr-numtxt	=F.DIST.RT("1",4,5)	-	0.485657196759214

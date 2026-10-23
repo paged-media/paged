@@ -1,0 +1,16 @@
+# DOLLARDE(fractional_dollar,fraction).
+# id	formula	setup	expected
+dde-0	=DOLLARDE(1.02,16)	-	1.125
+dde-1	=DOLLARDE(1.1,32)	-	1.3125
+dde-2	=DOLLARDE(1.1,8)	-	1.125
+dde-3	=DOLLARDE(-1.02,16)	-	-1.125
+dde-4	=DOLLARDE(1.02,16.9)	-	1.125
+dde-5	=DOLLARDE(1.02,0)	-	#DIV/0!
+dde-6	=DOLLARDE(1.02,-1)	-	#NUM!
+dde-7	=DOLLARDE(1.02,0.5)	-	#DIV/0!
+dde-8	=DOLLARDE(1.125,100)	-	1.125
+dde-9	=DOLLARDE(1.5,3)	-	2.66666666666667
+dde-10	=DOLLARDE(100.31,32)	-	100.96875
+dde-11	=DOLLARDE("x",16)	-	#VALUE!
+dde-12	=DOLLARDE(1.02,1)	-	1.02
+dde-13	=DOLLARDE(0.15,10)	-	0.15
