@@ -73,8 +73,14 @@ import {
   forgetShownContent,
   lowerPaginatedToChain,
   lowerSelectionToFrame,
+  a1OfCell,
   pageContent,
+  placementContent,
   placementForContent,
+  placementWindow,
+  rangeFramePage,
+  refreshWantsReplace,
+  stampPlacedView,
   recallShownContent,
   refreshBands,
   refreshLoweredTable,
@@ -410,8 +416,18 @@ export interface WorkbookSession {
    *  `"enter"` edit on the active cell when none is open. */
   setCellEditText(text: string): boolean;
   /** Clear the in-frame grid layer (the frame returns to its native
-   *  lowered content). */
+   *  lowered content). A window frame's view moves to where the grid was
+   *  scrolled (unless locked) and the page shows it (ADR 510). */
   hideGridInFrame(): void;
+  /** The view of a placed frame (default: the last entered one): its
+   *  top-left cell and lock, or null for a frame that is not a window. */
+  frameView(frameId?: string): { topLeft: string; lock: boolean } | null;
+  /** Lock or unlock a window frame's view (default: the last entered
+   *  frame). Locking pins the window to where the frame's view stands now,
+   *  or — while the frame is entered — where the grid is scrolled; the
+   *  binding records it with the next page write. False when no window
+   *  frame is known. */
+  setFrameViewLock(lock: boolean, frameId?: string): boolean;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -2557,6 +2573,9 @@ export function createWorkbookSession(
   // session write's own events to it.
   let ownWrites = 0;
   const unverified = new Set<string>();
+  /** Frames whose view moved (ADR 510 render on leave): refreshed even when
+   *  no cell changed since they were written. */
+  const viewMoved = new Set<string>();
   async function ownWrite<T>(write: () => Promise<T>): Promise<T> {
     ownWrites += 1;
     try {
@@ -2605,21 +2624,33 @@ export function createWorkbookSession(
         const engine = state.engine;
         if (!engine) return;
         const version = revision;
-        for (const [frameId, info] of [...loweredTables]) {
+        for (let [frameId, info] of [...loweredTables]) {
           const name = sheetNameOf(info.sheet);
           if (name === null) continue;
           let next: LoweredContent;
+          let windowed: string | null = null;
           try {
-            next = pageContent(engine, info.sheet, info.range);
+            const win = placementWindow(engine, info);
+            windowed = win?.range ?? null;
+            next = win?.content ?? pageContent(engine, info.sheet, info.range);
           } catch (err) {
             host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
+          const moved = viewMoved.delete(frameId);
+          // A window frame's binding names the cells it shows now.
+          if (windowed && windowed !== info.range) {
+            info = { ...info, range: windowed };
+            loweredTables.set(frameId, info);
+          }
           if (info.content) {
-            if (
-              info.contentVersion === version ||
-              JSON.stringify(next) === JSON.stringify(info.content)
-            ) {
+            if (!moved && info.contentVersion === version) continue;
+            if (JSON.stringify(next) === JSON.stringify(info.content)) {
+              // Same cells, new view (a lock): the binding alone records it.
+              if (moved) {
+                const placedInfo = info;
+                await ownWrite(() => stampPlacedView(host, placedInfo, name));
+              }
               continue;
             }
             // In place: only what changed is re-poured, and the table — its
@@ -2630,7 +2661,14 @@ export function createWorkbookSession(
             const bands = unverified.has(frameId)
               ? await refreshBands(host, info, info.content)
               : { header: info.headerRows ?? 0, footer: 0 };
-            if (bands) {
+            // A scroll that re-pours most of a window frame writes a new
+            // table instead (fewer ops, and no host band to keep).
+            const rewrite =
+              moved &&
+              info.sizing === "window" &&
+              !(bands?.header ?? 0) &&
+              refreshWantsReplace(info, next);
+            if (bands && !rewrite) {
               const banded = { ...info, headerRows: bands.header || undefined };
               const updated = await ownWrite(() =>
                 refreshLoweredTable(host, banded, next, version, name),
@@ -2767,9 +2805,31 @@ export function createWorkbookSession(
         ids = await tableUnderFrame(host, frameId, rec.widths);
         if (!ids) continue;
       }
+      const d = binding.data;
+      // A window frame lowers the window that fits its box: read the box.
+      let boxPt: { widthPt: number; heightPt: number } | undefined;
+      if (d.sizing === "window") {
+        try {
+          const g = await host.document.elementGeometry([
+            { kind: "textFrame", id: frameId } as ElementId,
+          ]);
+          const b = g[0]?.bounds;
+          if (b) boxPt = { widthPt: b[3] - b[1], heightPt: b[2] - b[0] };
+        } catch {
+          // No box: the frame lowers its recorded range until entered.
+        }
+      }
+      const placed = {
+        sheet: sheet.id,
+        range: d.range,
+        view: d.view,
+        print: d.print,
+        sizing: d.sizing,
+        ...(boxPt ? { boxPt } : {}),
+      };
       let now: LoweredContent;
       try {
-        now = pageContent(engine, sheet.id, binding.data.range);
+        now = placementContent(engine, placed);
       } catch {
         continue;
       }
@@ -2787,8 +2847,7 @@ export function createWorkbookSession(
         frameId,
         storyId: ids.storyId,
         tableId: ids.tableId,
-        sheet: sheet.id,
-        range: binding.data.range,
+        ...placed,
         content: shown,
         columnWidths: rec.widths,
         contentVersion: binding.data.contentVersion,
@@ -3204,7 +3263,10 @@ export function createWorkbookSession(
       let placement;
       let content: LoweredContent;
       try {
-        content = pageContent(
+        // ADR 510 — a window frame shows the range's own tracks lowered as a
+        // frame page: the lowering every later refresh makes, so the first
+        // edit re-pours one cell, not the table.
+        content = rangeFramePage(
           state.engine,
           state.activeSheet,
           state.selectedRange,
@@ -3225,6 +3287,8 @@ export function createWorkbookSession(
           fitHeight: true,
           contentVersion: revision,
           content,
+          // ADR 510 — the frame is a window onto the sheet.
+          sizing: "window",
           // S-04 — record the resolved native table so "new style from cell"
           // can address its cells.
           onLowered: (info) => {
@@ -3279,6 +3343,22 @@ export function createWorkbookSession(
         }
       } catch (err) {
         host.log.debug("showGridInFrame: frame geometry read failed", err);
+      }
+      // The page lowers the window that fits this box (ADR 510).
+      const placedInfo = lastFrameId
+        ? loweredTables.get(lastFrameId)
+        : undefined;
+      if (
+        placedInfo &&
+        !placedInfo.boxPt &&
+        lastFrameId &&
+        wPt > 0 &&
+        hPt > 0
+      ) {
+        loweredTables.set(lastFrameId, {
+          ...placedInfo,
+          boxPt: { widthPt: wPt, heightPt: hPt },
+        });
       }
       // Wave 5 — keep the window's scroll when re-showing the same frame.
       const keep =
@@ -3403,8 +3483,38 @@ export function createWorkbookSession(
       fillPreview = null;
       inFrameActive = false;
       if (lastFrameId) void sceneSurface?.clear(lastFrameId);
+      // ADR 510 — leaving the frame moves its view to where the user
+      // scrolled (a locked view snaps back), and the page shows it.
+      let viewChanged = false;
+      const placedInfo = lastFrameId
+        ? loweredTables.get(lastFrameId)
+        : undefined;
+      if (
+        lastFrameId &&
+        placedInfo?.sizing === "window" &&
+        placedInfo.view &&
+        !placedInfo.view.lock &&
+        lastGridWindow
+      ) {
+        const topLeft = a1OfCell(
+          lastGridWindow.firstRow,
+          lastGridWindow.firstCol,
+        );
+        if (topLeft !== placedInfo.view.topLeft) {
+          loweredTables.set(lastFrameId, {
+            ...placedInfo,
+            view: { ...placedInfo.view, topLeft },
+          });
+          viewMoved.add(lastFrameId);
+          viewChanged = true;
+        }
+      }
       // Tier 2 — the session's edits reach the page as ONE refresh now.
-      if (refreshDeferred) {
+      if (
+        refreshDeferred ||
+        viewChanged ||
+        (lastFrameId !== null && viewMoved.has(lastFrameId))
+      ) {
         refreshDeferred = false;
         void refreshPlacements();
       }
@@ -3414,6 +3524,30 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    frameView(frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!info || info.sizing !== "window" || !info.view) return null;
+      return { ...info.view };
+    },
+
+    setFrameViewLock(lock, frameId) {
+      const id = frameId ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!id || !info || info.sizing !== "window" || !info.view) return false;
+      const topLeft =
+        inFrameActive && id === lastFrameId && lastGridWindow
+          ? a1OfCell(lastGridWindow.firstRow, lastGridWindow.firstCol)
+          : info.view.topLeft;
+      if (info.view.lock === lock && info.view.topLeft === topLeft) return true;
+      loweredTables.set(id, { ...info, view: { topLeft, lock } });
+      viewMoved.add(id);
+      // While entered, the page is written on leaving; otherwise now.
+      if (!inFrameActive) void refreshPlacements();
+      emitter.emit();
+      return true;
     },
 
     listCharts() {

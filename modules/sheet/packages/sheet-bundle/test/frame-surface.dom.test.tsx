@@ -68,7 +68,15 @@ function fakeSession() {
   const changed = () => {
     for (const l of listeners) l();
   };
+  let lock = false;
   const session: FrameSurfaceSession = {
+    frameView: () => ({ topLeft: "A1", lock }),
+    setFrameViewLock: (next) => {
+      calls.push(["lock", next]);
+      lock = next;
+      changed();
+      return true;
+    },
     attachFrameSurface(sink, area) {
       calls.push(["attach", area]);
       sink(scene);
@@ -252,6 +260,20 @@ describe("sheet frame surface", () => {
     fireEvent.keyDown(formula, { key: "Enter" });
     expect(calls).toContainEqual(["text", "=1+1"]);
     expect(calls).toContainEqual(["key", "Enter"]);
+  });
+
+  it("the bar's lock button pins the frame's view", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    const lockButton = r.getByTestId("sheet-bar-lock");
+    expect(lockButton.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(lockButton);
+    expect(calls).toContainEqual(["lock", true]);
+    expect(r.getByTestId("sheet-bar-lock").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
   });
 
   it("detaches on unmount", () => {

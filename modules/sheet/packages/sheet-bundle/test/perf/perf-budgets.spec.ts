@@ -263,7 +263,8 @@ describe.skipIf(!ENGINE_BUILT)(
         "text.measureString": 20,
         "document.mutate": 1, // was 2 (0.64): frame + table, then the content
         "selection.set": 1,
-        "engine.getRangePage": 1,
+        // ADR 510: a window frame lowers its range's tracks as a frame page.
+        "engine.getTracksPage": 1,
         "selection.get": 1,
         "engine.listSheets": 1,
         "document.collection": 1, // the swatch read before the fill mints
@@ -301,7 +302,8 @@ describe.skipIf(!ENGINE_BUILT)(
       expectBudget("refresh 10x3", work, {
         "engine.setCells": 1,
         "engine.listSheets": 1,
-        "engine.getRangePage": 1,
+        // ADR 510: a window frame refreshes from its frame page.
+        "engine.getFramePage": 1,
         "text.measureString": 3,
         "document.mutate": 1,
         "=mutations": 1,
