@@ -787,6 +787,7 @@ function SheetFrameSurfaceView({
     facesLoaded,
     textDefault,
     swatchColors,
+    session,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
