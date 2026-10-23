@@ -101,6 +101,7 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
       return { ok: true as const };
     },
     styleAtTarget: () => null,
+    grabAt: () => "cell" as const,
     setStyle: (patch) => {
       calls.push(["style", patch]);
       return { ok: true as const };
