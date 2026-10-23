@@ -39,7 +39,8 @@ use crate::operation::{NodeId, NodeSpec, Operation, PropertyPath, Value};
 /// What a permission is asked of.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// A page item, by `Self` id.
+    /// A page item, or a page, by `Self` id (a page's policy is its label,
+    /// keyed by its id like an item's).
     Item(String),
     /// A story; decided by the frame that hosts it.
     Story(String),
@@ -201,8 +202,15 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::ReplaceStoryParagraphs { story_id, .. } | O::RestoreParagraphs { story_id, .. } => {
             vec![story(P::TextEdit, story_id)]
         }
+        // Removing or duplicating a page is asked of that page: its own
+        // policy (an `x-paged:template` label keyed by the page's id) may
+        // grant `document.pages` beyond the document's defaults, so a
+        // template can open the pages a data flow generates, and the page
+        // they are copied from, without opening every page (data ADR 560).
+        // A copy carries its source's labels, so it is open as well.
+        O::RemovePage { page_id } => vec![req(P::DocumentPages, Target::Item(page_id.clone()))],
+        O::DuplicatePage { page, .. } => vec![req(P::DocumentPages, Target::Item(page.clone()))],
         O::InsertPage { .. }
-        | O::RemovePage { .. }
         | O::MoveLayer { .. }
         | O::InsertLayer { .. }
         | O::RemoveLayer { .. } => vec![doc(P::DocumentPages)],
@@ -333,7 +341,6 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::OnMaster { .. }
         | O::MovePage { .. }
         | O::SetSpreadOrder { .. }
-        | O::DuplicatePage { .. }
         | O::RemovePageClone { .. }
         | O::InsertSection { .. }
         | O::EditSection { .. }
