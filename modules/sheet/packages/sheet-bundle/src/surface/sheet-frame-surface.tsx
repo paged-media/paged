@@ -74,6 +74,7 @@ export type FrameSurfaceSession = Pick<
   | "pasteAtSelection"
   | "frameView"
   | "setFrameSheet"
+  | "documentFontFace"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -199,6 +200,84 @@ export function makeSheetFrameSurface(
   return { render: SheetFrameSurface, bar: SheetBar };
 }
 
+// ── document faces: the grid draws in the fonts the page uses ─────────
+
+/** The faces a session asked for (family|style → loaded), so each face is
+ *  requested once per session. */
+const requestedFaces = new WeakMap<FrameSurfaceSession, Map<string, boolean>>();
+
+/** The CSS face descriptors of a cell style. */
+function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
+  style: string;
+  weight: string;
+  name: string;
+} {
+  const bold = !!st.bold;
+  const italic = !!st.italic;
+  return {
+    style: italic ? "italic" : "normal",
+    weight: bold ? "700" : "400",
+    name:
+      bold && italic
+        ? "Bold Italic"
+        : bold
+          ? "Bold"
+          : italic
+            ? "Italic"
+            : "Regular",
+  };
+}
+
+/** Load the document's faces for the families `scene` names into the
+ *  page's font set; answers a counter that moves whenever one arrived, so
+ *  the grid repaints in it. */
+function useDocumentFaces(
+  session: FrameSurfaceSession,
+  scene: GridScene | null,
+): number {
+  const [loaded, setLoaded] = useState(0);
+  useEffect(() => {
+    if (!scene || typeof document === "undefined" || !("fonts" in document))
+      return;
+    if (typeof FontFace === "undefined") return;
+    let asked = requestedFaces.get(session);
+    if (!asked) {
+      asked = new Map();
+      requestedFaces.set(session, asked);
+    }
+    let live = true;
+    for (const st of scene.styles) {
+      const family = st.fontName;
+      if (!family) continue;
+      const face = faceOfStyle(st);
+      const key = `${family}|${face.name}`;
+      if (asked.has(key)) continue;
+      asked.set(key, false);
+      const memo = asked;
+      void session
+        .documentFontFace(family, face.name)
+        .then(async (got) => {
+          if (!got) return;
+          const ff = new FontFace(family, new Uint8Array(got.bytes), {
+            style: face.style,
+            weight: face.weight,
+          });
+          await ff.load();
+          document.fonts.add(ff);
+          memo.set(key, true);
+          if (live) setLoaded((n) => n + 1);
+        })
+        .catch(() => {
+          // A face the browser cannot load keeps the fallback family.
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [session, scene]);
+  return loaded;
+}
+
 function SheetFrameSurfaceView({
   link,
   ...props
@@ -208,6 +287,7 @@ function SheetFrameSurfaceView({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [scene, setScene] = useState<GridScene | null>(null);
+  const facesLoaded = useDocumentFaces(session, scene);
   const edit = useSessionView(session, () => session.cellEditState());
   const [completion, setCompletion] = useState<{
     items: FunctionEntry[];
@@ -279,7 +359,8 @@ function SheetFrameSurfaceView({
   // The grid, at screen resolution, and the formula's reference boxes.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !scene) return;
+    // (Repainted when a document face arrives: `facesLoaded` moves.)
+    if (!canvas || !scene || facesLoaded < 0) return;
     const dpr =
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     const scale = Math.min(props.pxPerPt * dpr, 8);
@@ -354,6 +435,7 @@ function SheetFrameSurfaceView({
     headW,
     edit?.text,
     resizeGhost,
+    facesLoaded,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
