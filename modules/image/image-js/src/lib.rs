@@ -216,10 +216,15 @@ mod wasm {
     /// A filter on a region (ADR 465): the adjustment chain whose
     /// parameters are the adjustment-layer wire block (`AdjustParams::
     /// to_wire`) applied to the rectangle `x, y, w, h` of a straight
-    /// RGBA8 image; returns the whole image. On the GPU when `init_gpu`
+    /// RGBA8 image, narrowed by a mask given as data; returns the whole
+    /// image. The mask: `polygons` (flat `x, y` pairs in image pixels,
+    /// `polygon_lens` points each; unioned), `alpha` (`width · height`
+    /// coverage bytes, empty for none; intersected) and `feather` (σ px,
+    /// 0 for none) — `region_filter::mask_coverage`. Partial coverage
+    /// blends filtered and original pixels. On the GPU when `init_gpu`
     /// succeeded, otherwise on the shipped CPU twins of the same kernels
-    /// — the one place a kernel runs without a device. Pixels outside
-    /// the rectangle are returned unchanged.
+    /// — the one place a kernel runs without a device. Pixels the mask
+    /// leaves at 0 are returned unchanged.
     #[wasm_bindgen]
     #[allow(clippy::too_many_arguments)]
     pub async fn filter_region_rgba8(
@@ -231,8 +236,14 @@ mod wasm {
         y: u32,
         w: u32,
         h: u32,
+        polygons: Vec<f32>,
+        polygon_lens: Vec<u32>,
+        alpha: Vec<u8>,
+        feather: f32,
     ) -> Result<js_sys::Uint8Array, JsValue> {
-        use crate::region_filter::{filter_region_cpu, filter_region_gpu, PixelRect};
+        use crate::region_filter::{
+            filter_masked_cpu, filter_masked_gpu, mask_coverage, PixelRect, RegionMask,
+        };
         let params =
             AdjustParams::from_wire(&wire).map_err(|e| JsValue::from_str(&e.to_string()))?;
         let rect = PixelRect { x, y, w, h };
@@ -242,11 +253,28 @@ mod wasm {
                 rgba.len()
             )));
         }
+        let total: usize = polygon_lens.iter().map(|&n| n as usize).sum();
+        if total * 2 != polygons.len() {
+            return Err(JsValue::from_str(&format!(
+                "polygon_lens name {total} points, polygons carries {} numbers",
+                polygons.len()
+            )));
+        }
+        let mut pts = polygons.as_chunks::<2>().0.iter().map(|&[x, y]| (x, y));
+        let mask = RegionMask {
+            polygons: polygon_lens
+                .iter()
+                .map(|&n| pts.by_ref().take(n as usize).collect())
+                .collect(),
+            feather,
+            alpha: (!alpha.is_empty()).then_some(alpha),
+        };
+        let cov = mask_coverage(width, height, rect, &mask).map_err(|e| JsValue::from_str(&e))?;
         let mut px = rgba;
         let ctx = GPU.with(|g| g.borrow().clone());
         match ctx {
-            Some(ctx) => filter_region_gpu(&ctx, width, height, &mut px, &params, rect).await,
-            None => filter_region_cpu(width, height, &mut px, &params, rect),
+            Some(ctx) => filter_masked_gpu(&ctx, width, height, &mut px, &params, cov).await,
+            None => filter_masked_cpu(width, height, &mut px, &params, &cov),
         }
         .map_err(|e| JsValue::from_str(&e))?;
         Ok(js_sys::Uint8Array::from(&px[..]))
