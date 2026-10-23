@@ -229,10 +229,29 @@ export function styleProps(style: LoweredStyle): StyleProp[] {
   // `cellTextSwatchOps` mints; a malformed hex emits nothing.
   const textHex =
     style.textRgb == null ? null : normalizePaletteHex(style.textRgb);
-  if (textHex != null)
+  // A document swatch is named as it is (sheet ADR 518).
+  const textRef =
+    style.textSwatch ??
+    (textHex != null ? paletteSwatchId("cellText", textHex) : null);
+  if (textRef != null)
     props.push({
       path: "characterFillColor",
-      value: { type: "colorRef", value: paletteSwatchId("cellText", textHex) },
+      value: { type: "colorRef", value: textRef },
+    });
+
+  // W2.2: strike-through and super/subscript.
+  if (style.strike)
+    props.push({
+      path: "characterStrikethru",
+      value: { type: "bool", value: true },
+    });
+  if (style.vertAlign === "superscript" || style.vertAlign === "subscript")
+    props.push({
+      path: "characterPosition",
+      value: {
+        type: "text",
+        value: style.vertAlign === "superscript" ? "Superscript" : "Subscript",
+      },
     });
 
   return props;
