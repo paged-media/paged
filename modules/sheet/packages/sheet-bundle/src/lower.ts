@@ -98,6 +98,8 @@ import {
   type Placement,
   type TableFit,
   cellOfA1,
+  chartGeometryToMutations,
+  type ChartGeometry,
   HEADING_INDEX,
   rangeTopLeft,
   type BindingViewOptions,
@@ -555,20 +557,67 @@ async function barOps(
   if (!at) return [];
   const bars =
     (content.databars ?? []).length > 0 || (content.icons ?? []).length > 0;
+  const sparks = content.sparklines ?? [];
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
-  if (!bars) return diagonals;
+  if (!bars && sparks.length === 0) return diagonals;
+  const known = await readKnownSwatchIds(host);
   return [
-    ...tableDataBarOps(
-      content,
-      at.widths,
-      at.pageId,
-      at.origin,
-      await readKnownSwatchIds(host),
-    ),
+    ...(bars
+      ? tableDataBarOps(content, at.widths, at.pageId, at.origin, known)
+      : []),
+    ...sparklineOps(content, at, known),
     ...diagonals,
   ];
+}
+
+/** W4 — the page art of `content`'s sparklines, each drawn in its table
+ *  cell (the chart translator at the cell's page box; no binding of its
+ *  own — the table's refresh redraws it like a data bar). */
+export function sparklineOps(
+  content: LoweredContent,
+  at: BarPlacement,
+  known: Awaited<ReturnType<typeof readKnownSwatchIds>>,
+): Mutation[] {
+  const sparks = content.sparklines ?? [];
+  if (sparks.length === 0) return [];
+  const colX = new Map<number, number>();
+  let x = 0;
+  content.cols.forEach((c, i) => {
+    colX.set(c.index, x);
+    x += at.widths[i] ?? c.widthPt;
+  });
+  const rowY = new Map<number, number>();
+  let y = 0;
+  for (const r of content.rows) {
+    rowY.set(r.index, y);
+    y += r.heightPt;
+  }
+  const [top, left] = at.origin;
+  const dummy = makeBinding("", "", 0);
+  const ops: Mutation[] = [];
+  for (const sp of sparks) {
+    const cx = colX.get(sp.col);
+    const cy = rowY.get(sp.row);
+    if (cx === undefined || cy === undefined) continue;
+    const t = top + cy;
+    const l = left + cx;
+    const r = chartGeometryToMutations(
+      {
+        widthPt: sp.wPt,
+        heightPt: sp.hPt,
+        prims: sp.prims as ChartGeometry["prims"],
+      },
+      { pageId: at.pageId, bounds: [t, l, t + sp.hPt, l + sp.wPt] },
+      dummy,
+      known ?? undefined,
+    );
+    const inner =
+      r.batch.op === "batch" ? (r.batch.args as { ops: Mutation[] }).ops : [];
+    for (const op of inner) if (op.op !== "setPluginMetadata") ops.push(op);
+  }
+  return ops;
 }
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
@@ -962,14 +1011,69 @@ export function rangeFramePage(
       { length: Math.abs(hi - lo) + 1 },
       (_, i) => Math.min(lo, hi) + i,
     );
-  return withoutGridlines(
-    engine.getTracksPage(sheet, {
-      rows: span(from.row, to.row),
-      cols: span(from.col, to.col),
-      ...(print?.headings ? { printHeadings: true } : {}),
-      ...(print?.gridlines ? { printGridlines: true } : {}),
-    }),
+  return withSparklines(
+    engine,
+    sheet,
+    withoutGridlines(
+      engine.getTracksPage(sheet, {
+        rows: span(from.row, to.row),
+        cols: span(from.col, to.col),
+        ...(print?.headings ? { printHeadings: true } : {}),
+        ...(print?.gridlines ? { printGridlines: true } : {}),
+      }),
+    ),
   );
+}
+
+/** Each engine's sparkline list per sheet (see `withSparklines`). */
+const sparklineLists = new WeakMap<
+  SheetEngine,
+  Map<number, ReturnType<NonNullable<SheetEngine["listSparklines"]>>>
+>();
+
+/** The sparklines of `sheet` that fall in `content`'s cells, each drawn in
+ *  its cell box (W4 `sparklineGeometry`), attached for the page
+ *  (`LoweredContent.sparklines`). Content without any is returned as is. */
+export function withSparklines(
+  engine: SheetEngine,
+  sheet: number,
+  content: LoweredContent,
+): LoweredContent {
+  if (!engine.listSparklines || !engine.sparklineGeometry) return content;
+  // A workbook's sparklines come with it (no door authors them), so each
+  // sheet's list is read once per engine: a refresh costs no extra call.
+  let perSheet = sparklineLists.get(engine);
+  if (!perSheet) {
+    perSheet = new Map();
+    sparklineLists.set(engine, perSheet);
+  }
+  let list = perSheet.get(sheet);
+  if (!list) {
+    try {
+      list = engine.listSparklines(sheet);
+    } catch {
+      return content;
+    }
+    perSheet.set(sheet, list);
+  }
+  if (list.length === 0) return content;
+  const rows = new Map(content.rows.map((r) => [r.index, r.heightPt]));
+  const cols = new Map(content.cols.map((c) => [c.index, c.widthPt]));
+  const out: NonNullable<LoweredContent["sparklines"]> = [];
+  for (const sp of list) {
+    const hPt = rows.get(sp.row);
+    const wPt = cols.get(sp.col);
+    if (hPt === undefined || wPt === undefined) continue;
+    let prims: unknown[] | null = null;
+    try {
+      prims = engine.sparklineGeometry(sheet, sp.row, sp.col, wPt, hPt);
+    } catch {
+      prims = null;
+    }
+    if (prims && prims.length > 0)
+      out.push({ row: sp.row, col: sp.col, wPt, hPt, prims });
+  }
+  return out.length > 0 ? { ...content, sparklines: out } : content;
 }
 
 /** A frame page lowered without gridlines says so to the table writer
@@ -1029,7 +1133,7 @@ export function placementWindow(
         printGridlines: info.print?.gridlines ?? false,
       });
       return {
-        content: withoutGridlines(content),
+        content: withSparklines(engine, info.sheet, withoutGridlines(content)),
         range: windowRange(content),
       };
     }
@@ -1092,7 +1196,7 @@ function chainWindow(
     printGridlines: print?.gridlines ?? false,
   });
   return {
-    content: withoutGridlines(content),
+    content: withSparklines(engine, sheet, withoutGridlines(content)),
     range: windowRange(content),
     chainStarts,
   };
@@ -2080,7 +2184,11 @@ export async function refreshLoweredTable(
   );
   const oldBars = info.barIds ?? [];
   let drawn: Mutation[] = [];
-  if (oldBars.length > 0 || (next.databars ?? []).length > 0) {
+  if (
+    oldBars.length > 0 ||
+    (next.databars ?? []).length > 0 ||
+    (next.sparklines ?? []).length > 0
+  ) {
     const at = await frameOrigin(host, info.frameId);
     if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });
   }

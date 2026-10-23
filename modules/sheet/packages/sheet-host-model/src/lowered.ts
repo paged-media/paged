@@ -278,6 +278,17 @@ export interface LoweredContent {
    *  instead of leaving it to the document's default stroke. Absent on
    *  every other lowering, whose missing rules mean "unspecified". */
   noGridlines?: true;
+  /** Set by the bundle (not the engine): the sparklines in this content's
+   *  cells (sheet indices), each with its chart primitives in its cell box
+   *  (W4 `sparklineGeometry`). The page draws them over the table like
+   *  data bars. */
+  sparklines?: {
+    row: number;
+    col: number;
+    wPt: number;
+    hPt: number;
+    prims: unknown[];
+  }[];
 }
 
 /** The `index` of a frame page's printed heading row and heading column
