@@ -28,6 +28,7 @@ import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import { createImporterRegistry } from "../../src/registries/document-io";
 import { openFile } from "../../src/state/commands/file-commands";
+import { createEditorScope } from "../../src/state/editor-scope";
 import {
   attachReplacePromptSurface,
   confirmReplace,
@@ -39,7 +40,10 @@ import {
 } from "../../src/state/replace-guard";
 
 const disposers: Array<() => void> = [];
+// One editor per test.
+let scope = createEditorScope();
 afterEach(() => {
+  scope = createEditorScope();
   for (const d of disposers.splice(0)) d();
   unstubAllGlobals();
 });
@@ -60,13 +64,13 @@ function dirtyClient(initial: boolean) {
 
 /** Mount a prompt surface (what `<ReplaceDocumentPrompt>` does). */
 function surface() {
-  disposers.push(attachReplacePromptSurface());
+  disposers.push(attachReplacePromptSurface(scope));
 }
 
 /** The question the guard is asking right now, once it asks. */
 async function asked() {
   for (let i = 0; i < 20; i++) {
-    const p = replacePrompts.current();
+    const p = replacePrompts(scope).current();
     if (p) return p;
     await Promise.resolve();
   }
@@ -78,32 +82,34 @@ describe("the replace question (ADR 230)", () => {
     covers("command:paged.file.new");
     surface();
     const { client } = dirtyClient(false);
-    expect(await confirmReplace(client, { action: "Opening a.idml" })).toBe(
-      true,
-    );
+    expect(
+      await confirmReplace(scope, client, { action: "Opening a.idml" }),
+    ).toBe(true);
     const none = {
       async documentMeta(): Promise<{ dirty: boolean }> {
         throw new Error("noDocument");
       },
     };
-    expect(await confirmReplace(none, { action: "Opening a.idml" })).toBe(true);
-    expect(replacePrompts.current()).toBeNull();
+    expect(
+      await confirmReplace(scope, none, { action: "Opening a.idml" }),
+    ).toBe(true);
+    expect(replacePrompts(scope).current()).toBeNull();
   });
 
   test("Don't save goes on; Cancel keeps the document", async () => {
     covers("command:paged.file.new");
     surface();
     const { client } = dirtyClient(true);
-    const discard = confirmReplace(client, { action: "Opening a.idml" });
+    const discard = confirmReplace(scope, client, { action: "Opening a.idml" });
     const p1 = await asked();
     expect(p1.action).toBe("Opening a.idml");
     expect(p1.canSave).toBe(false);
     p1.answer("discard");
     expect(await discard).toBe(true);
-    const cancel = confirmReplace(client, { action: "Opening a.idml" });
+    const cancel = confirmReplace(scope, client, { action: "Opening a.idml" });
     (await asked()).answer("cancel");
     expect(await cancel).toBe(false);
-    expect(replacePrompts.current()).toBeNull();
+    expect(replacePrompts(scope).current()).toBeNull();
   });
 
   test("Save runs the registered save and goes on only when it left the document clean", async () => {
@@ -113,12 +119,14 @@ describe("the replace question (ADR 230)", () => {
     let saves = 0;
     let saveCleans = true;
     disposers.push(
-      setDocumentSaver(() => {
+      setDocumentSaver(scope, () => {
         saves += 1;
         if (saveCleans) state.dirty = false;
       }),
     );
-    const saved = confirmReplace(client, { action: "Creating a new document" });
+    const saved = confirmReplace(scope, client, {
+      action: "Creating a new document",
+    });
     const p = await asked();
     expect(p.canSave).toBe(true);
     p.answer("save");
@@ -128,7 +136,7 @@ describe("the replace question (ADR 230)", () => {
     // A save that did not happen (the user cancelled its picker): keep.
     state.dirty = true;
     saveCleans = false;
-    const abandoned = confirmReplace(client, {
+    const abandoned = confirmReplace(scope, client, {
       action: "Creating a new document",
     });
     (await asked()).answer("save");
@@ -140,7 +148,7 @@ describe("the replace question (ADR 230)", () => {
     covers("command:paged.file.new");
     surface();
     const { client } = dirtyClient(true);
-    const r = confirmReplace(client, {
+    const r = confirmReplace(scope, client, {
       action: "Opening Catalog (merged)",
       requester: "Data",
       documentName: "Catalog (merged)",
@@ -155,8 +163,8 @@ describe("the replace question (ADR 230)", () => {
     covers("command:paged.file.new");
     surface();
     const { client } = dirtyClient(true);
-    const a = confirmReplace(client, { action: "Opening a.idml" });
-    const b = confirmReplace(client, { action: "Opening b.idml" });
+    const a = confirmReplace(scope, client, { action: "Opening a.idml" });
+    const b = confirmReplace(scope, client, { action: "Opening b.idml" });
     const first = await asked();
     expect(first.action).toBe("Opening a.idml");
     first.answer("cancel");
@@ -168,9 +176,9 @@ describe("the replace question (ADR 230)", () => {
 
   test("a prompt unmounted mid-question keeps the document", async () => {
     covers("command:paged.file.new");
-    const detach = attachReplacePromptSurface();
+    const detach = attachReplacePromptSurface(scope);
     const { client } = dirtyClient(true);
-    const r = confirmReplace(client, { action: "Opening a.idml" });
+    const r = confirmReplace(scope, client, { action: "Opening a.idml" });
     await asked();
     detach();
     expect(await r).toBe(false);
@@ -181,9 +189,9 @@ describe("the replace question (ADR 230)", () => {
     const seen: string[] = [];
     stubGlobal("confirm", (m: string) => (seen.push(m), false));
     const { client } = dirtyClient(true);
-    expect(await confirmReplace(client, { action: "Opening a.idml" })).toBe(
-      false,
-    );
+    expect(
+      await confirmReplace(scope, client, { action: "Opening a.idml" }),
+    ).toBe(false);
     expect(seen).toEqual([replaceConfirmText({ action: "Opening a.idml" })]);
     expect(seen[0]).toMatch(
       /^This document has unsaved edits\. Opening a\.idml will discard them\./,
@@ -204,6 +212,7 @@ describe("SH-10 (UX audit F-01): a dropped file takes File ▸ Open's path", () 
   function editorWith(dirty: boolean) {
     const loads: string[] = [];
     const editor = {
+      scope,
       client: {
         async documentMeta() {
           return { dirty };

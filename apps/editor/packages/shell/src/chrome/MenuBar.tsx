@@ -50,6 +50,11 @@ import { useRovingFocus } from "../focus/roving-focus";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { MENU_BAR, menuLabel } from "./messages";
+import {
+  queryEditor,
+  useEditorKeys,
+  useEditorRoot,
+} from "../state/editor-root";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -94,6 +99,8 @@ export const CORE_MENUS: readonly string[] = [
 const INSERT_VERB = /^Insert (.+)$/;
 
 export function MenuBar() {
+  const keys = useEditorKeys();
+  const root = useEditorRoot();
   const strings = useStrings();
   const registries = useRegistries();
   const chrome = useChromeRegions();
@@ -148,16 +155,16 @@ export function MenuBar() {
       if (e.key !== "F10" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey)
         return;
       if (e.defaultPrevented) return;
-      const first = document.querySelector<HTMLElement>(
+      const first = queryEditor<HTMLElement>(
+        root,
         '[role="menubar"] [data-menu-trigger]',
       );
       if (!first) return;
       e.preventDefault();
       first.focus();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    return keys.listen("keydown", onKey);
+  }, [keys, root]);
   const navRef = useRef<MenuNavigation>({
     origin: "keyboard",
     returnTo: null,

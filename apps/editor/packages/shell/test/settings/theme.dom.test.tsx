@@ -19,18 +19,34 @@
 
 // Setting `paged.theme` (theme-context.tsx): the editor theme, dark by
 // default, persisted under `localStorage["paged.theme"]`, applied as the
-// `dark` class on <html> so portals and dockview overlays inherit it.
+// `dark` class on the editor's root element, where its portals render.
 
 import { act, cleanup, renderHook } from "@testing-library/react";
+import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { covers } from "@paged-media/test-kit";
 
+import { EditorRoot } from "../../src/state/editor-root";
 import { ThemeProvider, useTheme } from "../../src/state/theme-context";
 
 const KEY = "paged.theme";
+// The theme is the editor's: the class sits on its root element, and the
+// page's <html> never carries it (plan task E1).
 const html = () => document.documentElement;
-const mount = () => renderHook(() => useTheme(), { wrapper: ThemeProvider });
+const root = () => document.querySelector("[data-paged-editor]")!;
+const isDark = () => {
+  expect(html().classList.contains("dark")).toBe(false);
+  return root().classList.contains("dark");
+};
+const mount = () =>
+  renderHook(() => useTheme(), {
+    wrapper: ({ children }: PropsWithChildren) => (
+      <ThemeProvider>
+        <EditorRoot>{children}</EditorRoot>
+      </ThemeProvider>
+    ),
+  });
 
 beforeEach(() => {
   localStorage.clear();
@@ -46,7 +62,7 @@ describe("setting paged.theme", () => {
     covers("setting:paged.theme");
     const { result } = mount();
     expect(result.current.theme).toBe("dark");
-    expect(html().classList.contains("dark")).toBe(true);
+    expect(isDark()).toBe(true);
     expect(localStorage.getItem(KEY)).toBe("dark");
   });
 
@@ -59,18 +75,18 @@ describe("setting paged.theme", () => {
     // A new provider is what a reload builds.
     const second = mount();
     expect(second.result.current.theme).toBe("light");
-    expect(html().classList.contains("dark")).toBe(false);
+    expect(isDark()).toBe(false);
   });
 
-  test("changing it flips the <html> class both ways", () => {
+  test("changing it flips the editor root's class both ways", () => {
     covers("setting:paged.theme");
     const { result } = mount();
     act(() => result.current.toggleTheme());
     expect(result.current.theme).toBe("light");
-    expect(html().classList.contains("dark")).toBe(false);
+    expect(isDark()).toBe(false);
     act(() => result.current.toggleTheme());
     expect(result.current.theme).toBe("dark");
-    expect(html().classList.contains("dark")).toBe(true);
+    expect(isDark()).toBe(true);
     expect(localStorage.getItem(KEY)).toBe("dark");
   });
 
@@ -104,7 +120,7 @@ describe("setting paged.theme", () => {
       expect(result.current.theme).toBe("dark");
       act(() => result.current.setTheme("light"));
       // The choice still applies for the session.
-      expect(html().classList.contains("dark")).toBe(false);
+      expect(isDark()).toBe(false);
     } finally {
       proto.getItem = getItem;
       proto.setItem = setItem;

@@ -36,6 +36,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
 import { CommandPalette, notifyPalette } from "../../src/chrome/CommandPalette";
+import { detachedEditorScope } from "../../src/state/editor-scope";
 import type { CommandRegistry } from "../../src/registries/command";
 import {
   RegistriesProvider,
@@ -77,7 +78,7 @@ function mount(extra?: (c: CommandRegistry) => void) {
   return view;
 }
 
-const open = () => act(() => notifyPalette("open"));
+const open = () => act(() => notifyPalette(detachedEditorScope(), "open"));
 const item = (id: string) =>
   document.body.querySelector<HTMLElement>(`[cmdk-item][data-value="${id}"]`);
 const recentIds = () =>
@@ -101,7 +102,7 @@ beforeEach(() => {
   ran.length = 0;
 });
 afterEach(() => {
-  act(() => notifyPalette("close"));
+  act(() => notifyPalette(detachedEditorScope(), "close"));
   cleanup();
   commands = null;
   localStorage.clear();
@@ -181,7 +182,7 @@ describe("setting paged.palette.recents.v1", () => {
         raw,
         recents: [...want],
       });
-      act(() => notifyPalette("close"));
+      act(() => notifyPalette(detachedEditorScope(), "close"));
       view.unmount();
     }
   });

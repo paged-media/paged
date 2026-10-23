@@ -33,7 +33,11 @@ import type {
   TemplateFieldValue,
 } from "@paged-media/client";
 import {
+  memoryStorage,
   mintBlankDocument,
+  noStorage,
+  pageStorage,
+  type StorageAdapter,
   openDocumentFile,
   type EditorProfile,
   type FeatureStore,
@@ -42,7 +46,6 @@ import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
 import { mountEditor } from "../main";
-import { bootBundlesSettled } from "../plugin-bundle-loader";
 
 /** A field's value, as the handle takes and gives it. */
 export type FieldValue = TemplateFieldValue["value"];
@@ -71,6 +74,26 @@ export interface EditorConfig {
    * `@paged-media/editor` package fills it from its dependency (PM-0013).
    */
   engineWasm?: string;
+  /**
+   * Where the editor keeps its settings (theme, workflow mode, dock tabs,
+   * palette recents, export options, remembered grants): `"memory"` (the
+   * default) for this editor's lifetime only, so an embedded editor never
+   * reads or writes the host's origin storage unasked; `"local"` the
+   * page's `localStorage`, under the editor's own keys; `"none"` nothing
+   * kept; or the host's own store (Web Storage's getItem / setItem /
+   * removeItem).
+   */
+  storage?: "local" | "memory" | "none" | EditorStorage;
+}
+
+/** A host's settings store for the editor (`EditorConfig.storage`). */
+export type EditorStorage = StorageAdapter;
+
+function storageOf(choice: EditorConfig["storage"]): StorageAdapter {
+  if (choice === "local") return pageStorage();
+  if (choice === "none") return noStorage();
+  if (choice === undefined || choice === "memory") return memoryStorage();
+  return choice;
 }
 
 export type EditorEvent =
@@ -93,7 +116,8 @@ export interface EditorHandle {
    * The editor's look: its dark or light theme, and design tokens
    * (`--paged-*`, `--chrome-*`, … from apps/editor/docs/theme-tokens.json)
    * the host overrides with its brand. A token set to null returns to the
-   * editor's own.
+   * editor's own. Both are set on the editor's root element
+   * (`[data-paged-editor]`), never on the host's page.
    */
   setTheme(theme: {
     mode?: "dark" | "light";
@@ -170,9 +194,10 @@ export async function createEditor(
     strings,
     onShell: (shell) => resolveShell(shell),
     ...(config.engineWasm ? { engineWasm: config.engineWasm } : {}),
+    storage: storageOf(config.storage),
   });
   const shell = await shellReady;
-  await bootBundlesSettled();
+  await mounted.instance.services.boot.settled();
   const { client, paged, registries } = shell;
 
   const listeners = new Set<(event: EditorEvent) => void>();
@@ -244,9 +269,10 @@ export async function createEditor(
     },
     setTheme({ mode, tokens }) {
       if (mode) shell.setThemeMode(mode);
-      // On the root, not the editor's element: the editor's popovers and
-      // floating panels render outside it and read the same tokens.
-      const root = document.documentElement.style;
+      // On the editor's root element: its popovers and floating panels
+      // portal inside it and read the same tokens; the host's page keeps
+      // its own.
+      const root = shell.root.style;
       for (const [name, value] of Object.entries(tokens ?? {})) {
         if (!name.startsWith("--"))
           throw new Error(`setTheme: "${name}" is not a token (--name)`);
@@ -267,8 +293,7 @@ export async function createEditor(
     dispose() {
       offClient();
       listeners.clear();
-      for (const name of themed)
-        document.documentElement.style.removeProperty(name);
+      for (const name of themed) shell.root.style.removeProperty(name);
       mounted.dispose();
     },
   };

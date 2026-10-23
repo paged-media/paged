@@ -33,44 +33,55 @@
 // document never takes the slot; the caller clears it when the import
 // settles, so a stale name cannot leak into a later open.
 
-let pendingImportSource: string | null = null;
+import { scoped, type EditorScope } from "./editor-scope";
 
-// ADR 230 — the import as a whole is ONE replacement, asked about once.
-// An importer may open more than one document on the way (paged.doc opens
-// a skeleton, styles it, and re-opens it when the engine refuses span
-// columns); the second open must not ask about the importer's own
-// half-built document. The session lives from `setPendingImportSource(name)`
-// to `setPendingImportSource(null)`, independent of the single-shot name.
-let session: { name: string; replaceAllowed: boolean } | null = null;
+// Per editor (plan task E1): each editor's import is its own.
+const IMPORT = scoped("importSource", () => ({
+  pending: null as string | null,
+  // ADR 230 — the import as a whole is ONE replacement, asked about once.
+  // An importer may open more than one document on the way (paged.doc
+  // opens a skeleton, styles it, and re-opens it when the engine refuses
+  // span columns); the second open must not ask about the importer's own
+  // half-built document. The session lives from
+  // `setPendingImportSource(name)` to `setPendingImportSource(null)`,
+  // independent of the single-shot name.
+  session: null as { name: string; replaceAllowed: boolean } | null,
+}));
 
 /** Park (or clear, with `null`) the file name of the import being
  *  dispatched to a plugin importer. A name starts the import's session,
  *  `null` ends it. */
-export function setPendingImportSource(name: string | null): void {
-  pendingImportSource = name;
-  session = name === null ? null : { name, replaceAllowed: false };
+export function setPendingImportSource(
+  scope: EditorScope,
+  name: string | null,
+): void {
+  const st = scope.get(IMPORT);
+  st.pending = name;
+  st.session = name === null ? null : { name, replaceAllowed: false };
 }
 
 /** The file of the import in progress (its session's name), or null. */
-export function currentImportName(): string | null {
-  return session?.name ?? null;
+export function currentImportName(scope: EditorScope): string | null {
+  return scope.get(IMPORT).session?.name ?? null;
 }
 
 /** True once the user agreed to replace the document for the import in
  *  progress: later opens of the same import do not ask again. */
-export function importReplaceAllowed(): boolean {
-  return session?.replaceAllowed ?? false;
+export function importReplaceAllowed(scope: EditorScope): boolean {
+  return scope.get(IMPORT).session?.replaceAllowed ?? false;
 }
 
 /** Record that the user agreed to replace the document for the import in
  *  progress (no-op outside an import). */
-export function allowImportReplace(): void {
+export function allowImportReplace(scope: EditorScope): void {
+  const { session } = scope.get(IMPORT);
   if (session) session.replaceAllowed = true;
 }
 
 /** Single-shot read: returns the parked name and clears the slot. */
-export function takePendingImportSource(): string | null {
-  const name = pendingImportSource;
-  pendingImportSource = null;
+export function takePendingImportSource(scope: EditorScope): string | null {
+  const st = scope.get(IMPORT);
+  const name = st.pending;
+  st.pending = null;
   return name;
 }

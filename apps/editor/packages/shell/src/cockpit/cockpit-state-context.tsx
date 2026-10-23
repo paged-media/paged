@@ -40,6 +40,12 @@ import {
 } from "react";
 
 import { useWorkflowMode } from "../state/workflow-mode-context";
+import {
+  scoped,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import type { WorkflowMode } from "../state/workflow-mode-context";
@@ -78,12 +84,12 @@ export interface CockpitState {
 
 const CockpitStateContext = createContext<CockpitState | null>(null);
 
-/** Module-level dispatch — the provider keeps these pointed at the
- *  live actions so code rendered ABOVE the provider (the shell's
- *  `window.__canvas` hook, the panel show/hide commands) can reach
- *  the cockpit without context plumbing. Null while no cockpit
- *  provider is mounted (the legacy dockview path). */
-export const cockpitActions: {
+/** The cockpit's panel placement as plain functions, per editor (plan
+ *  task E1): the provider keeps them pointed at the live actions so code
+ *  rendered ABOVE the provider (the panel show/hide commands, the plugin
+ *  host's `shell.openPanel`) can reach the cockpit without context
+ *  plumbing. Null while no cockpit provider is mounted. */
+export interface CockpitActions {
   openPanel: ((id: string, options?: { activate?: boolean }) => void) | null;
   closeTab: ((id: string) => void) | null;
   /** The tab currently ON SCREEN (this dock shows only that one; the
@@ -91,7 +97,41 @@ export const cockpitActions: {
    *  null. Read by the edit-context controller to decide whether raising
    *  a context's own panels would displace a panel it serves. */
   activeTab: (() => string | null) | null;
-} = { openPanel: null, closeTab: null, activeTab: null };
+}
+
+const COCKPIT_ACTIONS = scoped("cockpitActions", (): CockpitActions => ({
+  openPanel: null,
+  closeTab: null,
+  activeTab: null,
+}));
+
+/** `scope`'s cockpit actions (one object for the editor's lifetime). */
+export function cockpitActionsOf(scope: EditorScope): CockpitActions {
+  return scope.get(COCKPIT_ACTIONS);
+}
+
+/** Point `scope`'s actions at a mounted cockpit; returns the unbind. */
+function bindCockpitActions(
+  scope: EditorScope,
+  live: {
+    openPanel: NonNullable<CockpitActions["openPanel"]>;
+    closeTab: NonNullable<CockpitActions["closeTab"]>;
+    activeTab: NonNullable<CockpitActions["activeTab"]>;
+  },
+): () => void {
+  const actions = cockpitActionsOf(scope);
+  Object.assign(actions, live);
+  return () => {
+    actions.openPanel = null;
+    actions.closeTab = null;
+    actions.activeTab = null;
+  };
+}
+
+/** The cockpit actions of the editor this component is mounted in. */
+export function useCockpitActions(): CockpitActions {
+  return useScoped(COCKPIT_ACTIONS);
+}
 
 /** Seed a mode's tab list from its registered slots. */
 function seedTabs(
@@ -108,7 +148,8 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   // What was persisted when the cockpit mounted, for a mode's first visit;
   // every later change of a mode's state is in `byMode` as well.
-  const [persisted] = useState(loadCockpitStore);
+  const scope = useEditorScope();
+  const [persisted] = useState(() => loadCockpitStore(scope));
   const storeRef = useRef<CockpitStore>(persisted);
 
   // Per-mode state map kept in a single useState so a mode switch is
@@ -131,9 +172,9 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
   const commit = useCallback(
     (next: ModeUiState) => {
       setByMode((prev) => ({ ...prev, [mode]: next }));
-      storeRef.current = saveModeUiState(storeRef.current, mode, next);
+      storeRef.current = saveModeUiState(scope, storeRef.current, mode, next);
     },
-    [mode],
+    [mode, scope],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable; context consumers compare it (ADR 229)
@@ -183,18 +224,17 @@ export function CockpitStateProvider({ children }: PropsWithChildren) {
     [commit, current],
   );
 
-  // Keep the module-level dispatch pointed at the live actions.
+  // Keep the editor's dispatch pointed at the live actions.
   const activeTab = current.activeTab;
-  useEffect(() => {
-    cockpitActions.openPanel = openPanel;
-    cockpitActions.closeTab = closeTab;
-    cockpitActions.activeTab = () => activeTab;
-    return () => {
-      cockpitActions.openPanel = null;
-      cockpitActions.closeTab = null;
-      cockpitActions.activeTab = null;
-    };
-  }, [activeTab, closeTab, openPanel]);
+  useEffect(
+    () =>
+      bindCockpitActions(scope, {
+        openPanel,
+        closeTab,
+        activeTab: () => activeTab,
+      }),
+    [activeTab, closeTab, openPanel, scope],
+  );
 
   // eslint-disable-next-line no-restricted-syntax -- a context value its consumers compare; its type argument types it (ADR 229)
   const value = useMemo<CockpitState>(

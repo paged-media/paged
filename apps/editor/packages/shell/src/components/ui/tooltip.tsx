@@ -21,6 +21,7 @@ import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../../state/editor-root";
 
 const TooltipProvider = TooltipPrimitive.Provider;
 
@@ -34,7 +35,7 @@ function TooltipContent({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
   return (
-    <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Portal container={usePortalContainer()}>
       <TooltipPrimitive.Content
         sideOffset={sideOffset}
         className={cn(

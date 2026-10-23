@@ -24,7 +24,8 @@
 import { t } from "@paged-media/strings";
 import { COMMANDS } from "../messages";
 import { notifyPalette } from "../../chrome/CommandPalette";
-import { cockpitActions } from "../../cockpit/cockpit-state-context";
+import { scopeOf } from "../editor-scope";
+import { cockpitActionsOf } from "../../cockpit/cockpit-state-context";
 import type { PanelContribution, CommandContribution } from "../../registries";
 
 export const PAGED_PALETTE_TOGGLE = "paged.palette.toggle";
@@ -39,8 +40,8 @@ export const PALETTE_TOGGLE_COMMAND: CommandContribution = {
     return t(COMMANDS.togglePalette);
   },
   category: "View",
-  handler: () => {
-    notifyPalette("toggle");
+  handler: (paged) => {
+    notifyPalette(scopeOf(paged), "toggle");
   },
 };
 
@@ -80,16 +81,16 @@ export function buildPanelToggleCommands(
     id: `paged.panel.show.${panel.id}`,
     title: t(COMMANDS.showPanel, { panel: panel.title }),
     category: "View",
-    handler: () => {
-      cockpitActions.openPanel?.(panel.id);
+    handler: (paged) => {
+      cockpitActionsOf(scopeOf(paged)).openPanel?.(panel.id);
     },
   };
   const hide: CommandContribution = {
     id: `paged.panel.hide.${panel.id}`,
     title: t(COMMANDS.hidePanel, { panel: panel.title }),
     category: "View",
-    handler: () => {
-      cockpitActions.closeTab?.(panel.id);
+    handler: (paged) => {
+      cockpitActionsOf(scopeOf(paged)).closeTab?.(panel.id);
     },
   };
   return [show, hide];

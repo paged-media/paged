@@ -32,6 +32,7 @@ import { useEffect } from "react";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { CommandPalette, notifyPalette } from "../../src/chrome/CommandPalette";
+import { detachedEditorScope } from "../../src/state/editor-scope";
 import {
   resetAiAvailability,
   setAiAvailability,
@@ -83,7 +84,7 @@ const row = (id: string) =>
   document.body.querySelector<HTMLElement>(`[cmdk-item][data-value="${id}"]`);
 
 afterEach(() => {
-  act(() => notifyPalette("close"));
+  act(() => notifyPalette(detachedEditorScope(), "close"));
   cleanup();
   resetAiAvailability();
   commands = null;
@@ -94,7 +95,7 @@ describe("command palette rows", () => {
   test("F-16: a row shows its chord, and never the command id", async () => {
     setAiAvailability("available");
     mount();
-    act(() => notifyPalette("open"));
+    act(() => notifyPalette(detachedEditorScope(), "open"));
     const bound = await waitFor(() => {
       const el = row("t.bound");
       if (!el) throw new Error("no row");
@@ -112,7 +113,7 @@ describe("command palette rows", () => {
   test('a prompt shows the ask row, not "No results."', async () => {
     setAiAvailability("available");
     mount();
-    act(() => notifyPalette("open"));
+    act(() => notifyPalette(detachedEditorScope(), "open"));
     const input = await waitFor(() => {
       const el = document.body.querySelector<HTMLInputElement>("[cmdk-input]");
       if (!el) throw new Error("no input");
@@ -143,7 +144,7 @@ describe("command palette rows", () => {
         title: "Ask",
         handler: () => void asked++,
       });
-      notifyPalette("open");
+      notifyPalette(detachedEditorScope(), "open");
     });
     const input = await waitFor(() => {
       const el = document.body.querySelector<HTMLInputElement>("[cmdk-input]");

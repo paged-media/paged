@@ -38,12 +38,18 @@
 import { useSyncExternalStore } from "react";
 import type { CanvasClient } from "@paged-media/client";
 import {
+  createValueStore,
+  editorStorage,
   oneOf,
   parseStored,
   printReadinessLabel,
   printStandardReason,
   readStoredShape,
+  scoped,
+  useScoped,
+  type EditorScope,
   type ExporterContribution,
+  type StorageAdapter,
   type PrintOutputFacts,
 } from "@paged-media/shell";
 
@@ -181,22 +187,20 @@ export function exportTargetById(id: string): ExportTarget {
 
 // ── Tiny cross-panel store: which output target is selected. The
 //    Outputs nav (left) writes; the Export inspector (right) and the
-//    Export Center (canvas) read. Module-level, no provider plumbing
-//    (same pattern as notifyExportPdfDialog). ─────────────────────
-let selectedTarget: ExportTargetId = "pdf-x4";
-const listeners = new Set<() => void>();
-export function setSelectedExportTarget(id: ExportTargetId): void {
-  selectedTarget = id;
-  for (const fn of listeners) fn();
+//    Export Center (canvas) read. In the editor's scope (plan task E1),
+//    no provider plumbing. ─────────────────────────────────────────────
+const SELECTED = scoped("exportTarget", () =>
+  createValueStore<ExportTargetId>("pdf-x4"),
+);
+export function setSelectedExportTarget(
+  scope: EditorScope,
+  id: ExportTargetId,
+): void {
+  scope.get(SELECTED).set(id);
 }
 export function useSelectedExportTarget(): ExportTargetId {
-  return useSyncExternalStore(
-    (fn) => {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
-    () => selectedTarget,
-  );
+  const store = useScoped(SELECTED);
+  return useSyncExternalStore(store.subscribe, store.get);
 }
 
 // ── Inline per-output settings for the LIVE image output. Persisted
@@ -271,16 +275,18 @@ const IMAGE_DEFAULTS: ImageSettings = {
   quality: 0.9,
 };
 
-let imageSettings: ImageSettings = loadImageSettings();
-const imageListeners = new Set<() => void>();
+/** The editor's image settings, read from storage when first used. */
+const IMAGE = scoped("exportImageSettings", (scope) =>
+  createValueStore<ImageSettings>(loadImageSettings(editorStorage(scope))),
+);
 
 /** The stored settings, field by field: a value the panel never offers
  *  (a DPI of "huge" or 100000, an unknown scope) reads as the default
  *  (SH-102, ADR 247). */
-function loadImageSettings(): ImageSettings {
+function loadImageSettings(storage: StorageAdapter): ImageSettings {
   let raw: string | null = null;
   try {
-    raw = localStorage.getItem(IMAGE_KEY);
+    raw = storage.getItem(IMAGE_KEY);
   } catch {
     return IMAGE_DEFAULTS;
   }
@@ -292,24 +298,23 @@ function loadImageSettings(): ImageSettings {
   });
 }
 
-export function setImageSettings(patch: Partial<ImageSettings>): void {
-  imageSettings = { ...imageSettings, ...patch };
+export function setImageSettings(
+  scope: EditorScope,
+  patch: Partial<ImageSettings>,
+): void {
+  const store = scope.get(IMAGE);
+  const next = { ...store.get(), ...patch };
   try {
-    localStorage.setItem(IMAGE_KEY, JSON.stringify(imageSettings));
+    editorStorage(scope).setItem(IMAGE_KEY, JSON.stringify(next));
   } catch {
     /* quota — last-used settings are a convenience only */
   }
-  for (const fn of imageListeners) fn();
+  store.set(next);
 }
 
 export function useImageSettings(): ImageSettings {
-  return useSyncExternalStore(
-    (fn) => {
-      imageListeners.add(fn);
-      return () => imageListeners.delete(fn);
-    },
-    () => imageSettings,
-  );
+  const store = useScoped(IMAGE);
+  return useSyncExternalStore(store.subscribe, store.get);
 }
 
 /** Snapshot widths come from page width × DPI / 72 (the fidelity

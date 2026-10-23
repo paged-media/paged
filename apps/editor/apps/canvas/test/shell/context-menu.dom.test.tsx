@@ -30,7 +30,6 @@ import { useEffect } from "react";
 
 import { CanvasClient } from "@paged-media/client";
 import {
-  closeCanvasContextMenu,
   PagedShell,
   useRegistries,
   type ModeContribution,
@@ -96,7 +95,6 @@ function Register({
 
 let deleted = 0;
 afterEach(() => {
-  closeCanvasContextMenu();
   cleanup();
   deleted = 0;
 });

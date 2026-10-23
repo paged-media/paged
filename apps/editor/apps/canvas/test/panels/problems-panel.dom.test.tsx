@@ -26,14 +26,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
 import { ProblemsPanel } from "../../src/panels/problems-panel";
-import { problemsSink, resetProblems } from "../../src/panels/problems-store";
+import { problemsOf } from "../../src/panels/problems-store";
 import { richScene } from "./fixtures";
 import { structureIdml } from "./support/structure";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
 afterEach(() => {
   unmountAll();
-  resetProblems();
 });
 
 const mount = () =>
@@ -61,7 +60,7 @@ describe("Problems panel", () => {
     covers("panel:paged.problems");
     const h = await mount();
     await h.act(() => {
-      problemsSink.publish("media.paged.web", "html", [
+      problemsOf(h.scope).publish("media.paged.web", "html", [
         {
           severity: "warning",
           message: "Unknown attribute",
@@ -70,7 +69,7 @@ describe("Problems panel", () => {
         },
         { severity: "error", message: "Unclosed tag", source: "html", line: 3 },
       ]);
-      problemsSink.publish("media.paged.sheet", "formulas", [
+      problemsOf(h.scope).publish("media.paged.sheet", "formulas", [
         { severity: "info", message: "Circular reference resolved" },
       ]);
     });
@@ -103,17 +102,17 @@ describe("Problems panel", () => {
     covers("panel:paged.problems");
     const h = await mount();
     await h.act(() => {
-      problemsSink.publish("media.paged.web", "html", [
+      problemsOf(h.scope).publish("media.paged.web", "html", [
         { severity: "error", message: "A" },
       ]);
-      problemsSink.publish("media.paged.web", "css", [
+      problemsOf(h.scope).publish("media.paged.web", "css", [
         { severity: "error", message: "B" },
       ]);
     });
     expect(rows(h)).toHaveLength(2);
-    await h.act(() => problemsSink.clear("media.paged.web", "html"));
+    await h.act(() => problemsOf(h.scope).clear("media.paged.web", "html"));
     expect(rows(h).map((r) => r.message)).toEqual(["B"]);
-    await h.act(() => problemsSink.clear("media.paged.web"));
+    await h.act(() => problemsOf(h.scope).clear("media.paged.web"));
     expect(h.root.querySelector("[data-problems-empty]")).not.toBeNull();
   });
 
@@ -126,7 +125,7 @@ describe("Problems panel", () => {
       component: () => null,
     });
     await h.act(() =>
-      problemsSink.publish("media.paged.web", "html", [
+      problemsOf(h.scope).publish("media.paged.web", "html", [
         { severity: "error", message: "Unclosed tag" },
       ]),
     );

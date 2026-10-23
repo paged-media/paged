@@ -34,14 +34,13 @@ import {
   toggleViewToggle,
   type ViewToggle,
 } from "../../src/state/view-toggles";
+import { createEditorScope } from "../../src/state/editor-scope";
 
-type ViewTogglesModule = typeof import("../../src/state/view-toggles");
-
-/** A fresh module instance: what a page reload evaluates. */
-const reload = (tag: string): Promise<ViewTogglesModule> =>
-  import(`../../src/state/view-toggles.ts?reload=${tag}`);
-
-afterEach(() => resetViewToggles());
+// The toggles are an editor's (plan task E1): each test is a new one.
+let scope = createEditorScope();
+afterEach(() => {
+  scope = createEditorScope();
+});
 
 const DEFAULTS: Record<ViewToggle, boolean> = {
   textThreads: false,
@@ -57,7 +56,7 @@ describe("view toggles", () => {
       "setting:view.headingAnchors",
     );
     for (const [k, v] of Object.entries(DEFAULTS))
-      expect({ k, v: getViewToggle(k as ViewToggle) }).toEqual({ k, v });
+      expect({ k, v: getViewToggle(scope, k as ViewToggle) }).toEqual({ k, v });
   });
 
   test("each flag changes alone, and toggling returns the new value", () => {
@@ -67,31 +66,31 @@ describe("view toggles", () => {
       "setting:view.headingAnchors",
     );
     for (const k of Object.keys(DEFAULTS) as ViewToggle[]) {
-      resetViewToggles();
-      expect(toggleViewToggle(k)).toBe(!DEFAULTS[k]);
+      resetViewToggles(scope);
+      expect(toggleViewToggle(scope, k)).toBe(!DEFAULTS[k]);
       for (const other of Object.keys(DEFAULTS) as ViewToggle[]) {
-        expect({ k, other, v: getViewToggle(other) }).toEqual({
+        expect({ k, other, v: getViewToggle(scope, other) }).toEqual({
           k,
           other,
           v: other === k ? !DEFAULTS[k] : DEFAULTS[other],
         });
       }
-      expect(toggleViewToggle(k)).toBe(DEFAULTS[k]);
+      expect(toggleViewToggle(scope, k)).toBe(DEFAULTS[k]);
     }
   });
 
   test("subscribers hear a change, never a no-op, and stop hearing on unsubscribe", () => {
     covers("setting:view.textThreads", "setting:view.snapToPoints");
     let heard = 0;
-    const off = subscribeViewToggles(() => heard++);
-    setViewToggle("textThreads", false); // already false
+    const off = subscribeViewToggles(scope, () => heard++);
+    setViewToggle(scope, "textThreads", false); // already false
     expect(heard).toBe(0);
-    setViewToggle("textThreads", true);
+    setViewToggle(scope, "textThreads", true);
     expect(heard).toBe(1);
-    toggleViewToggle("snapToPoints");
+    toggleViewToggle(scope, "snapToPoints");
     expect(heard).toBe(2);
     off();
-    toggleViewToggle("snapToPoints");
+    toggleViewToggle(scope, "snapToPoints");
     expect(heard).toBe(2);
   });
 
@@ -101,29 +100,30 @@ describe("view toggles", () => {
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
     );
-    const before = await reload("a");
-    before.setViewToggle("textThreads", true);
-    before.setViewToggle("snapToPoints", false);
-    before.setViewToggle("headingAnchors", true);
-    const after = await reload("b");
+    // A reload mounts a new editor, with a new scope.
+    const before = createEditorScope();
+    setViewToggle(before, "textThreads", true);
+    setViewToggle(before, "snapToPoints", false);
+    setViewToggle(before, "headingAnchors", true);
+    const after = createEditorScope();
     expect({
-      textThreads: after.getViewToggle("textThreads"),
-      snapToPoints: after.getViewToggle("snapToPoints"),
-      headingAnchors: after.getViewToggle("headingAnchors"),
+      textThreads: getViewToggle(after, "textThreads"),
+      snapToPoints: getViewToggle(after, "snapToPoints"),
+      headingAnchors: getViewToggle(after, "headingAnchors"),
     }).toEqual(DEFAULTS);
   });
 
   test("reset restores the defaults and tells subscribers once", () => {
     covers("setting:view.headingAnchors");
-    setViewToggle("headingAnchors", true);
-    setViewToggle("textThreads", true);
+    setViewToggle(scope, "headingAnchors", true);
+    setViewToggle(scope, "textThreads", true);
     let heard = 0;
-    const off = subscribeViewToggles(() => heard++);
-    resetViewToggles();
+    const off = subscribeViewToggles(scope, () => heard++);
+    resetViewToggles(scope);
     expect(heard).toBe(1);
-    resetViewToggles(); // nothing to reset
+    resetViewToggles(scope); // nothing to reset
     expect(heard).toBe(1);
     off();
-    expect(getViewToggle("headingAnchors")).toBe(false);
+    expect(getViewToggle(scope, "headingAnchors")).toBe(false);
   });
 });

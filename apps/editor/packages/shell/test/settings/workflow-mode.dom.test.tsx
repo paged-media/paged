@@ -30,6 +30,10 @@ import { covers } from "@paged-media/test-kit";
 
 import { setChromeStorageScope } from "../../src/state/chrome-storage-scope";
 import {
+  createEditorScope,
+  EditorScopeProvider,
+} from "../../src/state/editor-scope";
+import {
   WorkflowModeProvider,
   useWorkflowMode,
   type WorkflowMode,
@@ -37,23 +41,24 @@ import {
 
 const KEY = "paged.workflowMode";
 
-const mount = (initialMode?: WorkflowMode) =>
+/** One editor: its own scope (plan task E1). */
+const mount = (initialMode?: WorkflowMode, scope = createEditorScope()) =>
   renderHook(() => useWorkflowMode(), {
     wrapper: ({ children }: PropsWithChildren) => (
-      <WorkflowModeProvider initialMode={initialMode}>
-        {children}
-      </WorkflowModeProvider>
+      <EditorScopeProvider scope={scope}>
+        <WorkflowModeProvider initialMode={initialMode}>
+          {children}
+        </WorkflowModeProvider>
+      </EditorScopeProvider>
     ),
   });
 
 beforeEach(() => {
   localStorage.clear();
-  setChromeStorageScope("");
 });
 afterEach(() => {
   cleanup();
   localStorage.clear();
-  setChromeStorageScope("");
 });
 
 describe("setting paged.workflowMode", () => {
@@ -118,8 +123,9 @@ describe("setting paged.workflowMode", () => {
   test("the key is scoped: a solo workspace keeps its own mode", () => {
     covers("setting:paged.workflowMode");
     localStorage.setItem(KEY, "prepress");
-    setChromeStorageScope(".solo.paged.draw");
-    const solo = mount();
+    const soloScope = createEditorScope();
+    setChromeStorageScope(soloScope, ".solo.paged.draw");
+    const solo = mount(undefined, soloScope);
     // The ordinary editor's mode is not inherited.
     expect(solo.result.current.mode).toBe("design");
     act(() => solo.result.current.setMode("export"));
@@ -127,7 +133,6 @@ describe("setting paged.workflowMode", () => {
     // …and it did not overwrite the ordinary editor's.
     expect(localStorage.getItem(KEY)).toBe("prepress");
     solo.unmount();
-    setChromeStorageScope("");
     expect(mount().result.current.mode).toBe("prepress");
   });
 

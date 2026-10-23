@@ -34,10 +34,7 @@ import type { PanelProps } from "@paged-media/shell";
 
 import { ExportCenterPanel } from "../../src/panels/cockpit/export-center-panel";
 import { ExportInspectorPanel } from "../../src/panels/cockpit/export-views";
-import {
-  setImageSettings,
-  setSelectedExportTarget,
-} from "../../src/panels/cockpit/export-targets";
+import {} from "../../src/panels/cockpit/export-targets";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 import {
   action,
@@ -52,14 +49,16 @@ beforeEach(() => {
   // The selected target and the image settings are module stores shared
   // by the three Export panels (and persisted); start each test from the
   // defaults.
-  setSelectedExportTarget("pdf-x4");
-  setImageSettings({
-    dpi: 72,
-    scope: "all",
-    format: "png",
-    quality: 0.9,
-    range: "",
-  });
+  localStorage.setItem(
+    "paged.export.image.v1",
+    JSON.stringify({
+      dpi: 72,
+      scope: "all",
+      format: "png",
+      quality: 0.9,
+      range: "",
+    }),
+  );
   capture = captureDownloads();
 });
 afterEach(() => {

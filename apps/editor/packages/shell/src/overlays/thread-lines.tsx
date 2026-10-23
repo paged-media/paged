@@ -71,6 +71,7 @@ import type { ElementGeometryItem, ElementId } from "@paged-media/client";
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useCanvasClient } from "../state/canvas-client-context";
 import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
+import { useEditorScope } from "../state/editor-scope";
 
 import { applyAffine } from "./affine";
 
@@ -155,9 +156,10 @@ interface Stub {
 
 function ThreadLinesRender(props: OverlayProps) {
   const client = useCanvasClient();
+  const scope = useEditorScope();
   const on = useSyncExternalStore(
-    subscribeViewToggles,
-    () => getViewToggle("textThreads"),
+    (l) => subscribeViewToggles(scope, l),
+    () => getViewToggle(scope, "textThreads"),
     () => false,
   );
 

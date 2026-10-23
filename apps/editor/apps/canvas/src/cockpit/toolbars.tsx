@@ -50,6 +50,7 @@ import { useState, type ReactNode } from "react";
 import {
   Icon,
   notifyExportPdfDialog,
+  useEditorScope,
   printOutputFacts,
   printStandardReason,
   useCanvasClient,
@@ -374,6 +375,7 @@ export function ContentToolbar(_props: ModeToolbarProps) {
 // ── Prepress — REAL working-space chip + live preflight + bleed ─
 
 export function PrepressToolbar(_props: ModeToolbarProps) {
+  const scope = useEditorScope();
   const strings = useStrings();
   const meta = useDocumentMeta();
   const client = useCanvasClient();
@@ -417,7 +419,7 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
     setRunning(true);
     void client
       .exportPdf({ standard: "pdf17" })
-      .then(recordFindings)
+      .then((result) => recordFindings(scope, result))
       .catch(() => {
         /* surfaced in the Preflight panel; the badge stays as-is */
       })
@@ -565,6 +567,7 @@ export function ReviewToolbar(_props: ModeToolbarProps) {
 // ── Export — drives the REAL PDF / image / IDML outputs ────────
 
 export function ExportToolbar(_props: ModeToolbarProps) {
+  const scope = useEditorScope();
   const strings = useStrings();
   const meta = useDocumentMeta();
   const { handle } = useDocument();
@@ -580,7 +583,7 @@ export function ExportToolbar(_props: ModeToolbarProps) {
         testId="export-pdf"
         disabled={!meta}
         title={strings.t(M.exportPdfTitle)}
-        onClick={() => notifyExportPdfDialog("open")}
+        onClick={() => notifyExportPdfDialog(scope, "open")}
       >
         {strings.t(M.exportPdf)}
       </Chip>
@@ -590,7 +593,7 @@ export function ExportToolbar(_props: ModeToolbarProps) {
         testId="export-image"
         disabled={!handle}
         title={strings.t(M.pageImagesTitle)}
-        onClick={() => setSelectedExportTarget("image")}
+        onClick={() => setSelectedExportTarget(scope, "image")}
       >
         {strings.t(M.pageImages)}
       </Chip>

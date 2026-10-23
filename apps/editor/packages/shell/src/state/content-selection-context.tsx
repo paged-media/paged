@@ -76,17 +76,23 @@ export interface TypingStyle {
 const Context = createContext<ContentSelectionContextValue | null>(null);
 
 // The held style, mirrored for the text input path, which inserts from a
-// key handler outside React's render (`heldTypingStyle`). One editor, one
-// caret: written only by the provider's setter.
-let held: TypingStyle | null = null;
+// key handler outside React's render (`heldTypingStyle`). One caret per
+// editor, so it is kept by the editor's client (plan task E1): written
+// only by that editor's provider's setter.
+const heldBy = new WeakMap<object, TypingStyle | null>();
 
-/** The character style held for the caret `sel` (finding PN-152), or
- *  `null`: what an insert at that caret applies to the text it adds. */
-export function heldTypingStyle(sel: {
-  storyId: string;
-  start: number;
-  end: number;
-}): string | null {
+/** The character style held for the caret `sel` in `client`'s editor
+ *  (finding PN-152), or `null`: what an insert at that caret applies to
+ *  the text it adds. */
+export function heldTypingStyle(
+  client: object,
+  sel: {
+    storyId: string;
+    start: number;
+    end: number;
+  },
+): string | null {
+  const held = heldBy.get(client);
   return held &&
     sel.start === sel.end &&
     held.storyId === sel.storyId &&
@@ -109,10 +115,13 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const newestSelection = useRef(0);
   const [typingStyle, setTypingStyleRaw] = useState<TypingStyle | null>(null);
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const setTypingStyle = useCallback((style: TypingStyle | null) => {
-    held = style;
-    setTypingStyleRaw(style);
-  }, []);
+  const setTypingStyle = useCallback(
+    (style: TypingStyle | null) => {
+      heldBy.set(client, style);
+      setTypingStyleRaw(style);
+    },
+    [client],
+  );
   // Written during render on purpose: the caret reader handed to plugins
   // (`getEditor().contentSelection.contentSelectionRef`) may be read by a
   // panel while it renders. It keeps this provider uncompiled (ADR 229).

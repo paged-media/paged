@@ -32,6 +32,7 @@ import {
   usePaged,
   useRegistryView,
   type CanvasPointerEvent,
+  useEditorKeys,
 } from "@paged-media/shell";
 
 // Concept 1 (Phase 2) — mounts the gesture spine in the canvas app
@@ -68,6 +69,7 @@ export function useGestureSpine(): {
    *  click-zoom) through its proven legacy machinery. */
   effectiveTool: string;
 } {
+  const keys = useEditorKeys();
   const paged = usePaged();
   const [spine] = useState(() => new GestureSpine());
 
@@ -100,9 +102,8 @@ export function useGestureSpine(): {
       if (canvasKeyYields(e)) return;
       spine.key(e);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [spine]);
+    return keys.listen("keydown", onKeyDown);
+  }, [keys, spine]);
 
   // Tear the handler down on unmount.
   useEffect(() => () => spine.clear(), [spine]);

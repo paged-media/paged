@@ -33,6 +33,7 @@ export { confirmDiscard };
 import type { DocumentHandle } from "@paged-media/client";
 import type { ImporterContribution } from "../../registries";
 import type { PagedEditor } from "../paged-editor";
+import type { EditorScope } from "../editor-scope";
 import type { CommandContribution } from "../../registries";
 
 export const PAGED_FILE_OPEN_IDML = "paged.file.openIdml";
@@ -112,6 +113,7 @@ export async function mintBlankDocument(
         });
       },
       resetForNewDocument: editor.document.resetForNewDocument,
+      scope: editor.scope,
       pushWarning: sinks.pushWarning,
     },
   );
@@ -176,7 +178,7 @@ export async function openFile(
   }
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
-    const outcome = await runImporter(importer, file, sinks);
+    const outcome = await runImporter(editor.scope, importer, file, sinks);
     // An importer that only ADDS content (a workbook's range, …) and found
     // nothing open left the canvas empty: give it a document and run it
     // again, told the document is new so it places its content there
@@ -186,7 +188,9 @@ export async function openFile(
       const handle = await mintBlankDocument(editor, LETTER_PT, sinks);
       if (!handle) return;
       await liveEditorWith(editor, handle);
-      await runImporter(importer, file, sinks, { newDocument: true });
+      await runImporter(editor.scope, importer, file, sinks, {
+        newDocument: true,
+      });
     }
     return;
   }
@@ -229,6 +233,7 @@ export async function openDocumentFile(
     },
     resetForNewDocument: editor.document.resetForNewDocument,
     pushWarning: sinks.pushWarning,
+    scope: editor.scope,
   });
 }
 
@@ -301,6 +306,7 @@ function hasDocument(editor: PagedEditor): boolean {
  *  to whatever is open (`added`), failed, or the user kept the open
  *  document at the replace question (`declined`). */
 async function runImporter(
+  scope: EditorScope,
   importer: ImporterContribution,
   file: File,
   sinks: {
@@ -315,7 +321,7 @@ async function runImporter(
     // U14 — park the file name for the open orchestration: an
     // importer that OPENS a document does so through
     // `nativeDocument.open(bytes)`, which carries no name.
-    setPendingImportSource(file.name);
+    setPendingImportSource(scope, file.name);
     await importer.import({
       name: file.name,
       bytes,
@@ -325,7 +331,7 @@ async function runImporter(
     sinks.setStatus(`imported ${file.name}`);
     // The open orchestration marks the session when the importer replaced
     // (or first opened) the document.
-    return importReplaceAllowed() ? "opened" : "added";
+    return importReplaceAllowed(scope) ? "opened" : "added";
   } catch (err) {
     if (isReplaceDeclined(err)) {
       // The user kept the open document at the replace question: an
@@ -342,7 +348,7 @@ async function runImporter(
     );
     return "failed";
   } finally {
-    setPendingImportSource(null);
+    setPendingImportSource(scope, null);
   }
 }
 

@@ -33,7 +33,6 @@ import {
   runAlign,
   type AlignKind,
 } from "../../src/align-plan";
-import { objectRegistry } from "../../src/object-model";
 import { AlignPanel } from "../../src/panels/align-panel";
 import { richScene, type RichScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
@@ -56,7 +55,7 @@ async function mount() {
     args: ALIGN_ARGS,
     handler: (_paged: unknown, payload?: unknown) =>
       runAlign(
-        objectRegistry,
+        h.objects.registry,
         payload as { kind: AlignKind; targets: string[] },
       ),
   });

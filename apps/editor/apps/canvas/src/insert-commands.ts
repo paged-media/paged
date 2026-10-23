@@ -80,7 +80,12 @@ import type {
   MenuItemContribution,
   PagedEditor,
 } from "@paged-media/shell";
-import { awaitPlacementPoint } from "@paged-media/shell";
+import {
+  awaitPlacementPoint,
+  editorRootOf,
+  queryEditor,
+  scopeOf,
+} from "@paged-media/shell";
 import type { ElementId, Mutation, PageId } from "@paged-media/client";
 import { viewportToDoc } from "@paged-media/client";
 import {
@@ -274,7 +279,10 @@ function clientPointToDoc(
   clientX: number,
   clientY: number,
 ): [number, number] | null {
-  const wrap = document.querySelector("[data-paged-viewport]");
+  const wrap = queryEditor(
+    editorRootOf(scopeOf(paged)),
+    "[data-paged-viewport]",
+  );
   if (!wrap) return null;
   const cam = paged.camera.camera;
   if (!cam || cam.scale <= 0) return null;
@@ -945,7 +953,7 @@ export async function placeImage(
   // previews the frame it draws.
   const point = dropped?.at
     ? { clientX: dropped.at.clientX, clientY: dropped.at.clientY }
-    : await awaitPlacementPoint({
+    : await awaitPlacementPoint(scopeOf(paged), {
         onDrag: (from, to) => {
           const a = to
             ? clientPointToDoc(paged, from.clientX, from.clientY)

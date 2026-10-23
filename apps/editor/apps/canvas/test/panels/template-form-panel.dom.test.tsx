@@ -26,7 +26,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
-import { objectRegistry } from "../../src/object-model";
 import { TemplateFormPanel } from "../../src/panels/template/form-panel";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
@@ -126,7 +125,7 @@ describe("Template form", () => {
     covers("panel:paged.template.form");
     const h = await mount();
     const values = new Map<string, number>([["B4", 12.5]]);
-    const registered = objectRegistry.register({
+    const registered = h.objects.registry.register({
       plugin: "acme.sheet",
       model: {
         kinds: [],

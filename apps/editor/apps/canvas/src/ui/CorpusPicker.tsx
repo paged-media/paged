@@ -35,6 +35,7 @@ import {
   loadDocumentFile,
   useCanvasClient,
   useDocument,
+  useEditorScope,
 } from "@paged-media/shell";
 
 interface CorpusEntry {
@@ -52,6 +53,7 @@ const GROUP_MARK: Record<string, string> = {
 };
 
 export function CorpusPicker() {
+  const scope = useEditorScope();
   const client = useCanvasClient();
   const doc = useDocument();
   const [entries, setEntries] = useState<CorpusEntry[]>([]);
@@ -92,7 +94,11 @@ export function CorpusPicker() {
       });
       // The dev picker replaces the document like File ▸ Open does, so it
       // asks the same question first (ADR 230).
-      if (!(await confirmReplace(client, { action: `Opening ${file.name}` })))
+      if (
+        !(await confirmReplace(scope, client, {
+          action: `Opening ${file.name}`,
+        }))
+      )
         return;
       await loadDocumentFile(client, file, {
         setHandle: doc.setHandle,
@@ -104,6 +110,7 @@ export function CorpusPicker() {
           doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
         resetForNewDocument: doc.resetForNewDocument,
         pushWarning: (w) => console.warn("[corpus]", w),
+        scope,
       });
     })().finally(() => setBusy(false));
   };

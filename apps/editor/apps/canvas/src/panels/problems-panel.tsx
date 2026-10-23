@@ -34,17 +34,13 @@
 import { useSyncExternalStore } from "react";
 
 import {
-  cockpitActions,
+  useCockpitActions,
   useCollection,
   useRegistries,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 
-import {
-  getProblemsSnapshot,
-  subscribeProblems,
-  type ProblemEntry,
-} from "./problems-store";
+import { useProblems, type ProblemEntry } from "./problems-store";
 import { font, radius, space } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -124,11 +120,13 @@ function useDocumentProblems(): ListedProblem[] {
 }
 
 export function ProblemsPanel() {
+  const cockpitActions = useCockpitActions();
   const strings = useStrings();
+  const store = useProblems();
   const reported = useSyncExternalStore(
-    subscribeProblems,
-    getProblemsSnapshot,
-    getProblemsSnapshot,
+    store.subscribe,
+    store.snapshot,
+    store.snapshot,
   );
   const documentProblems = useDocumentProblems();
   const problems: ListedProblem[] = [...documentProblems, ...reported];

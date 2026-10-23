@@ -49,7 +49,7 @@ import {
   type FontSummary,
 } from "@paged-media/client";
 import {
-  navigateToPages,
+  usePageNavigation,
   useCamera,
   useCanvasClient,
   useCollection,
@@ -172,6 +172,7 @@ export function DesignControlBar() {
 // ── nothing selected ───────────────────────────────────────────────
 
 function DocumentControls() {
+  const navigateToPages = usePageNavigation();
   const strings = useStrings();
   const { handle } = useDocument();
   const { camera, viewportSize } = useCamera();

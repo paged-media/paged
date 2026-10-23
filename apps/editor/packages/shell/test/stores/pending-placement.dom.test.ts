@@ -30,6 +30,9 @@ import {
   cancelPendingPlacement,
   placementArmed,
 } from "../../src/state/pending-placement";
+import { createEditorScope } from "../../src/state/editor-scope";
+
+const scope = createEditorScope();
 
 let viewport: HTMLElement;
 let outside: HTMLElement;
@@ -64,7 +67,7 @@ beforeEach(() => {
   root().style.removeProperty("cursor");
 });
 afterEach(() => {
-  cancelPendingPlacement();
+  cancelPendingPlacement(scope);
   viewport.remove();
   outside.remove();
 });
@@ -72,20 +75,20 @@ afterEach(() => {
 describe("pending placement", () => {
   test("armed: the flag, the attribute and the copy cursor; restored after", async () => {
     root().style.setProperty("cursor", "wait");
-    const point = awaitPlacementPoint();
-    expect(placementArmed()).toBe(true);
+    const point = awaitPlacementPoint(scope);
+    expect(placementArmed(scope)).toBe(true);
     expect(root().getAttribute("data-paged-placement")).toBe("armed");
     expect(root().style.getPropertyValue("cursor")).toBe("copy");
     pointer("pointerdown", viewport, 10, 20);
     pointer("pointerup", viewport, 10, 20);
     expect(await point).toEqual({ clientX: 10, clientY: 20 });
-    expect(placementArmed()).toBe(false);
+    expect(placementArmed(scope)).toBe(false);
     expect(root().hasAttribute("data-paged-placement")).toBe(false);
     expect(root().style.getPropertyValue("cursor")).toBe("wait");
   });
 
   test("a click inside the canvas resolves its point", async () => {
-    const point = awaitPlacementPoint();
+    const point = awaitPlacementPoint(scope);
     pointer("pointerdown", viewport, 100, 50);
     pointer("pointermove", viewport, 102, 51); // under the drag threshold
     pointer("pointerup", viewport, 102, 51);
@@ -94,7 +97,7 @@ describe("pending placement", () => {
 
   test("a drag resolves the box, with a live preview that ends with null", async () => {
     const previews: unknown[] = [];
-    const point = awaitPlacementPoint({
+    const point = awaitPlacementPoint(scope, {
       onDrag: (from, to) => previews.push(to ? [from, to] : null),
     });
     pointer("pointerdown", viewport, 100, 100);
@@ -115,35 +118,35 @@ describe("pending placement", () => {
   });
 
   test("Escape, a right-click or a click outside the canvas resolve null", async () => {
-    const esc = awaitPlacementPoint();
+    const esc = awaitPlacementPoint(scope);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(await esc).toBeNull();
 
-    const right = awaitPlacementPoint();
+    const right = awaitPlacementPoint(scope);
     pointer("pointerdown", viewport, 5, 5, 2);
     expect(await right).toBeNull();
 
-    const away = awaitPlacementPoint();
+    const away = awaitPlacementPoint(scope);
     pointer("pointerdown", outside, 5, 5);
     expect(await away).toBeNull();
-    expect(placementArmed()).toBe(false);
+    expect(placementArmed(scope)).toBe(false);
   });
 
   test("other keys do not cancel", async () => {
-    const point = awaitPlacementPoint();
+    const point = awaitPlacementPoint(scope);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }));
-    expect(placementArmed()).toBe(true);
+    expect(placementArmed(scope)).toBe(true);
     pointer("pointerdown", viewport, 1, 2);
     pointer("pointerup", viewport, 1, 2);
     expect(await point).toEqual({ clientX: 1, clientY: 2 });
   });
 
   test("cancelPendingPlacement stands an armed placement down (File > New / Open)", async () => {
-    const point = awaitPlacementPoint();
-    cancelPendingPlacement();
+    const point = awaitPlacementPoint(scope);
+    cancelPendingPlacement(scope);
     expect(await point).toBeNull();
     // With nothing armed it is a no-op.
-    cancelPendingPlacement();
-    expect(placementArmed()).toBe(false);
+    cancelPendingPlacement(scope);
+    expect(placementArmed(scope)).toBe(false);
   });
 });

@@ -57,14 +57,24 @@ import {
   type PrintOutputFacts,
 } from "../lib/print-output";
 import { EXPORT_PDF } from "./messages";
+import {
+  createEmitter,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
+import { useEditorStorage, type StorageAdapter } from "../state/storage";
 import { richText } from "./rich";
 
 type DialogAction = "open" | "close";
-const listeners = new Set<(action: DialogAction) => void>();
+const DIALOG = scoped("exportPdfDialog", () => createEmitter<DialogAction>());
 
-/** Open/close the export dialog from anywhere (command handlers). */
-export function notifyExportPdfDialog(action: DialogAction): void {
-  for (const fn of listeners) fn(action);
+/** Open/close `scope`'s export dialog (command handlers, toolbars). */
+export function notifyExportPdfDialog(
+  scope: EditorScope,
+  action: DialogAction,
+): void {
+  scope.get(DIALOG).emit(action);
 }
 
 /** Persisted last-used options (schema drift falls back to defaults). */
@@ -107,10 +117,10 @@ const DEFAULTS: FormState = {
 /** The stored form, field by field: a value the dialog does not offer
  *  (`standard: "bogus"`) reads as the default rather than reaching the
  *  export (SH-103, ADR 247). */
-function loadSaved(): FormState {
+function loadSaved(storage: StorageAdapter): FormState {
   let raw: string | null = null;
   try {
-    raw = localStorage.getItem(OPTIONS_KEY);
+    raw = storage.getItem(OPTIONS_KEY);
   } catch {
     return DEFAULTS;
   }
@@ -151,7 +161,8 @@ export function ExportPdfDialog() {
   const client = useCanvasClient();
   const { handle } = useDocument();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(loadSaved);
+  const storage = useEditorStorage();
+  const [form, setForm] = useState<FormState>(() => loadSaved(storage));
   const [profiles, setProfiles] = useState<string[]>([]);
   const [docName, setDocName] = useState("document");
   // The print-output facts (ADR 266): the Export Center's pill and this
@@ -172,20 +183,19 @@ export function ExportPdfDialog() {
     return () => clearTimeout(t);
   }, [notice]);
 
-  // Module-emitter subscription (the notifyPalette pattern).
-  useEffect(() => {
-    const fn = (action: DialogAction) => {
-      setOpen(action === "open");
-      if (action === "open") {
-        setPhase({ kind: "idle" });
-        setNotice(null);
-      }
-    };
-    listeners.add(fn);
-    return () => {
-      listeners.delete(fn);
-    };
-  }, []);
+  // The editor's dialog event (the notifyPalette pattern).
+  const dialog = useScoped(DIALOG);
+  useEffect(
+    () =>
+      dialog.subscribe((action) => {
+        setOpen(action === "open");
+        if (action === "open") {
+          setPhase({ kind: "idle" });
+          setNotice(null);
+        }
+      }),
+    [dialog],
+  );
 
   // Registered profile names — the X-4 output-intent choices.
   useEffect(() => {
@@ -220,20 +230,20 @@ export function ExportPdfDialog() {
         // decides again.
         standard:
           canMeetX4 || f.outputIntentProfile !== ""
-            ? loadSaved().standard
+            ? loadSaved(storage).standard
             : "pdf17",
       }));
     });
     return () => {
       cancelled = true;
     };
-  }, [open, handle, client]);
+  }, [open, handle, client, storage]);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((f) => {
       const next = { ...f, [key]: value };
       try {
-        localStorage.setItem(OPTIONS_KEY, JSON.stringify(next));
+        storage.setItem(OPTIONS_KEY, JSON.stringify(next));
       } catch {
         /* quota — last-used options are a convenience only */
       }

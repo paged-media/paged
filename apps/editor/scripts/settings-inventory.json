@@ -8,7 +8,7 @@
       "key": "paged.theme",
       "default": "dark",
       "values": ["dark", "light"],
-      "effect": "the `dark` class on <html>",
+      "effect": "the `dark` class on the editor's root element ([data-paged-editor])",
       "source": "apps/editor/packages/shell/src/state/theme-context.tsx",
       "marker": "\"paged.theme\"",
       "sites": [
@@ -43,8 +43,8 @@
       "source": "apps/editor/packages/shell/src/state/workflow-mode-context.tsx",
       "marker": "\"paged.workflowMode\"",
       "sites": [
-        ["getItem", "storageKey()"],
-        ["setItem", "storageKey()"]
+        ["getItem", "storageKey(scope)"],
+        ["setItem", "storageKey(scope)"]
       ]
     },
     {
@@ -60,8 +60,8 @@
       "marker": "\"paged.cockpit.v1\"",
       "sites": [
         ["removeItem", "k"],
-        ["getItem", "KEY()"],
-        ["setItem", "KEY()"]
+        ["getItem", "KEY(scope)"],
+        ["setItem", "KEY(scope)"]
       ]
     },
     {
@@ -97,7 +97,11 @@
       "kind": "persisted-ui-state",
       "storage": "localStorage",
       "key": "paged.demoGuide.v1",
-      "default": { "collapsed": false, "side": "left", "script": false },
+      "default": {
+        "collapsed": false,
+        "side": "left",
+        "script": false
+      },
       "effect": "the live-demo guide: collapsed to its pill or open, the bottom corner it docks to, and whether its script shows",
       "source": "apps/editor/apps/canvas/src/playground/guide-prefs.ts",
       "marker": "\"paged.demoGuide.v1\"",
@@ -181,7 +185,7 @@
       "default": "on (absent)",
       "values": ["off"],
       "effect": "\"off\" keeps the local document library (origin-private file system) from starting",
-      "source": "apps/editor/apps/canvas/src/main.tsx",
+      "source": "apps/editor/apps/canvas/src/app/mount.tsx",
       "marker": "\"paged.library\"",
       "sites": [["getItem", "\"paged.library\""]]
     },
@@ -381,6 +385,18 @@
       "source": "apps/editor/apps/canvas/src/document-identity.ts",
       "marker": "\"paged.documentIdentity\"",
       "sites": [["indexedDB.open", "DB"]]
+    },
+    {
+      "key": "(any: the editor's settings adapter)",
+      "storage": "localStorage",
+      "reason": "the page-storage adapter (plan task E1): the store every setting above goes through when the editor's host keeps them in the page's localStorage (the app entry, createEditor `storage: \"local\"`). Its calls take the setting's key from the call sites listed above; it holds no key of its own.",
+      "source": "apps/editor/packages/shell/src/state/storage.ts",
+      "marker": "export function pageStorage()",
+      "sites": [
+        ["getItem", "key"],
+        ["setItem", "key"],
+        ["removeItem", "key"]
+      ]
     }
   ]
 }

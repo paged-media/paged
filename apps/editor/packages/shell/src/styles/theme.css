@@ -31,11 +31,16 @@
  *      status signals, rhythm and motion — consumed by inline chrome
  *      styles and plain CSS.
  *
- * DARK IS THE DEFAULT (the `.dark` class is applied by ThemeProvider
- * at boot); `:root` carries the light theme for the toggle.
+ * DARK IS THE DEFAULT (the `.dark` class sits on the editor's root
+ * element, [data-paged-editor], from its theme); `:root` and the root
+ * element carry the light theme for the toggle. The tokens are defined on
+ * the editor's root too, so an editor in a host's page reads its own
+ * values even where the host redefines a name, and `.dark` there (not on
+ * <html>) switches only the editor (plan task E1).
  */
 
-:root {
+:root,
+[data-paged-editor] {
   color-scheme: light;
   /* ── Paged semantic channels (light) ───────────────────────── */
   --paged-bg: 0 0% 100%;

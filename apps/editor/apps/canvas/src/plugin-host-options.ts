@@ -66,7 +66,7 @@ import {
   createEditorModulesBackend,
   type ModuleManifest,
 } from "./plugin-modules";
-import { pagesBackend, textRevealBackend } from "./plugin-pages";
+import type { PageDoors } from "./plugin-pages";
 import {
   createEditorWorkerBackend,
   type BundleWorkerModuleResolver,
@@ -122,7 +122,7 @@ export interface EditorHostOptionDeps {
   /** The build's module manifest (`virtual:paged-modules`) and the page origin. */
   moduleManifest: ModuleManifest;
   origin: string;
-  /** The app-wide instances main.tsx shares with its dialogs and panels. */
+  /** The editor's instances mount.tsx shares with its dialogs and panels. */
   consent: ConsentBackend;
   secrets: SecretStoreBackend;
   documents: DocumentsBackend;
@@ -131,6 +131,8 @@ export interface EditorHostOptionDeps {
   willSave: WillSaveBackend;
   objects: NonNullable<CreateBundleHostOptions["objects"]>;
   diagnosticsSink: DiagnosticsSink;
+  /** The editor's page and text doors (`./plugin-pages.ts`). */
+  pages: PageDoors;
 }
 
 /** The shared host options plus the backends main.tsx also exposes as test
@@ -266,10 +268,10 @@ export function createEditorHostOptions(
     // D-26 — flips supports("documents.open@1") true.
     documents: deps.documents,
     // v70 — page navigation and the active page (`viewport.pages@1`).
-    pages: pagesBackend,
+    pages: deps.pages.pages,
     // Taking the user to a range of text — an outline entry, a find hit
     // (`viewport.revealText@1`).
-    text: textRevealBackend,
+    text: deps.pages.text,
     diagnosticsSink: deps.diagnosticsSink,
     // ADR 025 / HOST-4 — `host.journal` records into the editor's ONE
     // journal (the Journal panel, the bug-report export). The SDK has

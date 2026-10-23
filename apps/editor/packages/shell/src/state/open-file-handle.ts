@@ -31,12 +31,13 @@
 // OffscreenCanvas), so this is not a portability regression — it is
 // available wherever the editor runs at all.
 //
-// A MODULE-SCOPE STORE, not a context. The writer is the shell's file
-// picker and the reader is the canvas app's save command, and threading
-// a handle between them through React state would mean a provider that
-// exists for one value that never renders anything. It also has to
-// survive a dock close/reopen, which module scope does for free — the
-// same reasoning the layers panel's binding surface uses.
+// A STORE IN THE EDITOR'S SCOPE, not a context. The writer is the shell's
+// file picker and the reader is the canvas app's save command, and
+// threading a handle between them through React state would mean a
+// provider that exists for one value that never renders anything. It also
+// has to survive a dock close/reopen, which the scope (the editor's
+// lifetime) does for free. Per editor (plan task E1): each editor saves
+// back to the file IT opened.
 //
 // Cleared on New, because a blank document is not the file you opened,
 // and on a picker that yields no handle (the `<input type=file>`
@@ -45,6 +46,7 @@
 // no feature, so absence is the safe default everywhere it is unclear.
 
 import { noteFileWritten } from "./document-source";
+import { scoped, type EditorScope } from "./editor-scope";
 
 /** The subset of FileSystemFileHandle this uses. Declared rather than
  *  relying on lib.dom, whose typings for the File System Access API vary
@@ -61,17 +63,24 @@ export interface WritableFileHandle {
   }): Promise<PermissionState>;
 }
 
-let current: WritableFileHandle | null = null;
+const HANDLE = scoped("openFileHandle", () => ({
+  current: null as WritableFileHandle | null,
+}));
 
-/** Remember the file a document was opened from. `null` clears it. */
-export function setOpenFileHandle(handle: WritableFileHandle | null): void {
-  current = handle;
+/** Remember the file `scope`'s document was opened from. `null` clears it. */
+export function setOpenFileHandle(
+  scope: EditorScope,
+  handle: WritableFileHandle | null,
+): void {
+  scope.get(HANDLE).current = handle;
 }
 
 /** The handle to save back into, or null when the document did not come
  *  from one (a blank document, a drag-drop, or the input fallback). */
-export function getOpenFileHandle(): WritableFileHandle | null {
-  return current;
+export function getOpenFileHandle(
+  scope: EditorScope,
+): WritableFileHandle | null {
+  return scope.get(HANDLE).current;
 }
 
 /** True when the platform can hand out real file handles at all. */
@@ -89,10 +98,11 @@ export function supportsFileHandles(): boolean {
  *  which means the caller must fall back to a download rather than
  *  report a save that did not happen. */
 export async function writeToOpenFile(
+  scope: EditorScope,
   bytes: Uint8Array,
   mimeType: string,
 ): Promise<boolean> {
-  const handle = current;
+  const handle = getOpenFileHandle(scope);
   if (!handle) return false;
   try {
     // Permission can lapse between sessions even though the handle
@@ -116,7 +126,7 @@ export async function writeToOpenFile(
       .getFile?.()
       .catch(() => null);
     if (written)
-      noteFileWritten(handle as never, {
+      noteFileWritten(scope, handle as never, {
         lastModified: written.lastModified,
         size: written.size,
       });

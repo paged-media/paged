@@ -40,9 +40,11 @@ import {
   getLibrary,
   libraryVersion,
   loadDocumentFile,
+  scoped,
   subscribeLibrary,
   transitionWith,
   usePaged,
+  useScoped,
 } from "@paged-media/shell";
 import {
   accessToken,
@@ -184,18 +186,24 @@ type LibrarySnapshot = {
   library: ReturnType<typeof getLibrary>;
   current: ReturnType<typeof currentLibraryDocument>;
 };
-let librarySnap: LibrarySnapshot | null = null;
-function librarySnapshot(): LibrarySnapshot {
-  const version = libraryVersion();
-  if (librarySnap?.version !== version) {
-    librarySnap = {
-      version,
-      library: getLibrary(),
-      current: currentLibraryDocument(),
-    };
-  }
-  return librarySnap;
-}
+/** The panel's view of its editor's library (one per editor). */
+const LIBRARY_VIEW = scoped("libraryPanelView", (scope) => {
+  let snap: LibrarySnapshot | null = null;
+  return {
+    subscribe: (listener: () => void) => subscribeLibrary(scope, listener),
+    read(): LibrarySnapshot {
+      const version = libraryVersion(scope);
+      if (snap?.version !== version) {
+        snap = {
+          version,
+          library: getLibrary(scope),
+          current: currentLibraryDocument(scope),
+        };
+      }
+      return snap;
+    },
+  };
+});
 
 /** What the panel lists, read outside the component (the compiler does not
  *  compile a component with a conditional inside a `try`). */
@@ -212,10 +220,11 @@ async function readLibrary(
 export function LibraryPanel() {
   const strings = useStrings();
   const editor = usePaged();
+  const view = useScoped(LIBRARY_VIEW);
   const { version, library, current } = useSyncExternalStore(
-    subscribeLibrary,
-    librarySnapshot,
-    librarySnapshot,
+    view.subscribe,
+    view.read,
+    view.read,
   );
   const [docs, setDocs] = useState<DocumentEntry[]>([]);
   const [log, setLog] = useState<CommitInfo[]>([]);
@@ -308,6 +317,7 @@ export function LibraryPanel() {
         resetForNewDocument: doc.resetForNewDocument,
         pushWarning: (w) => console.warn("[library]", w),
         libraryDocument: entry,
+        scope: editor.scope,
       },
     );
   };
@@ -750,7 +760,9 @@ export function LibraryPanel() {
                     style={button}
                     disabled={live.state() === "connecting"}
                     title={strings.t(M.connectTitle)}
-                    onClick={act(() => connectLive(SERVER, editor.client))}
+                    onClick={act(() =>
+                      connectLive(SERVER, editor.client, editor.scope),
+                    )}
                   >
                     {live.state() === "connecting"
                       ? strings.t(M.connecting)

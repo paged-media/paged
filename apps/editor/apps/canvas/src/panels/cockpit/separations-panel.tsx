@@ -53,7 +53,7 @@ import {
   CockpitPanelHeader,
   CockpitSection,
   StatusPill,
-  navigateToPages,
+  usePageNavigation,
   useCollection,
 } from "@paged-media/shell";
 import type { SwatchSummary } from "@paged-media/client";
@@ -150,6 +150,7 @@ function overLimitFromHistogram(histogram: number[], limit: number): number {
 const pct = (v: number, digits = 1) => `${v.toFixed(digits)}%`;
 
 export function SeparationsPanel() {
+  const navigateToPages = usePageNavigation();
   const strings = useStrings();
   const coverage = useCollection<InkCoverageSummary>("inkCoverage");
   const swatches = useCollection<SwatchSummary>("swatches");

@@ -24,7 +24,7 @@
 //
 //   · "boot"     — fetched in parallel right after the shell mounts and
 //                  activated in the declared order. Document loads wait for
-//                  this lane (`bootBundlesSettled`), so a document whose
+//                  this lane (the editor's `BootGate`), so a document whose
 //                  container parts a bundle restores is never opened before
 //                  that bundle listens.
 //   · "onDemand" — never fetched at boot. The host registers a placeholder
@@ -276,33 +276,42 @@ export function createBundleActivator<
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Boot readiness — module scope, so the document-load gate and the test
-// affordance see the same promise across StrictMode remounts.
+// Boot readiness — one per editor (plan task E1), held by its instance, so
+// the document-load gate and the test affordance see the same promise
+// across StrictMode remounts and a second editor waits for its own
+// bundles.
 // ─────────────────────────────────────────────────────────────────────
 
-let resolveBoot: () => void = () => {};
-let bootSettled = false;
-const bootPromise = new Promise<void>((r) => {
-  resolveBoot = r;
-});
-
-/** Called by the live activator once every boot bundle activated or failed. */
-export function markBootBundlesSettled(): void {
-  bootSettled = true;
-  resolveBoot();
+export interface BootGate {
+  /** Called by the live activator once every boot bundle activated or
+   *  failed. */
+  markSettled(): void;
+  isSettled(): boolean;
+  /** A document load waits for the boot lane — bounded, so a chunk that
+   *  never arrives (offline mid-boot) delays an open instead of blocking
+   *  it forever. The failed bundle is already on the Problems panel by
+   *  then. */
+  settled(timeoutMs?: number): Promise<void>;
 }
 
-export function bootBundlesAreSettled(): boolean {
-  return bootSettled;
-}
-
-/** A document load waits for the boot lane — bounded, so a chunk that never
- *  arrives (offline mid-boot) delays an open instead of blocking it forever.
- *  The failed bundle is already on the Problems panel by then. */
-export function bootBundlesSettled(timeoutMs = 20_000): Promise<void> {
-  if (bootSettled) return Promise.resolve();
-  return Promise.race([
-    bootPromise,
-    new Promise<void>((r) => setTimeout(r, timeoutMs)),
-  ]);
+export function createBootGate(): BootGate {
+  let resolveBoot: () => void = () => {};
+  let bootSettled = false;
+  const bootPromise = new Promise<void>((r) => {
+    resolveBoot = r;
+  });
+  return {
+    markSettled() {
+      bootSettled = true;
+      resolveBoot();
+    },
+    isSettled: () => bootSettled,
+    settled(timeoutMs = 20_000) {
+      if (bootSettled) return Promise.resolve();
+      return Promise.race([
+        bootPromise,
+        new Promise<void>((r) => setTimeout(r, timeoutMs)),
+      ]);
+    },
+  };
 }

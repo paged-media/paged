@@ -99,6 +99,7 @@ export async function mountEditor(
     actions: options.actions ?? {},
     library: false,
     engineWasm: engineWasm(options),
+    ...(options.storage ? { storage: options.storage } : {}),
   });
   return { dispose: () => mounted.dispose() };
 }
