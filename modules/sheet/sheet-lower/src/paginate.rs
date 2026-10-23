@@ -506,6 +506,7 @@ fn assemble_page_content(
         // thread cf geometry, matching how it does not thread cf style
         // overrides either).
         databars: Vec::new(),
+        icons: Vec::new(),
         // A paginated frame is a slice; its repeated band is laid out by
         // the paginator, not declared as table header rows.
         header_rows: 0,

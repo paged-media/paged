@@ -567,6 +567,13 @@ impl SheetSession {
                     self.doc.charts.len()
                 )));
             }
+            // A slot the load already re-opened (a chart Paged wrote records
+            // the deleted slots, ADR 519) stays as it is.
+            if self.removed_charts.contains(&slot)
+                && self.doc.charts.get(at).is_some_and(|c| c.removed)
+            {
+                continue;
+            }
             // Later deletes move up with their charts.
             self.removed_charts = self
                 .removed_charts
