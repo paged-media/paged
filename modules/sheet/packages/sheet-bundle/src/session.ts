@@ -555,8 +555,8 @@ export interface WorkbookSession extends DataToolsApi {
   chartKinds(): string[];
   /** AUTHOR a chart over the ACTIVE sheet's live data (editor-ui-coverage
    *  M — the model was import-only). `seriesIn` is the transpose control
-   *  (`"columns"` default / `"rows"`). Page-side only: never written back
-   *  to the xlsx (the writer re-derives no chart parts). */
+   *  (`"columns"` default / `"rows"`). The chart is written into the xlsx
+   *  on save (sheet ADR 519). */
   authorChart(
     values: string,
     categories: string,

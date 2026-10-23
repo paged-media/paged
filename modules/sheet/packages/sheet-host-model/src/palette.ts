@@ -187,11 +187,21 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
 export function distinctDataBarHexes(content: LoweredContent): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const bar of content.databars ?? []) {
-    const h = normalizePaletteHex(bar.fill);
-    if (h == null || seen.has(h)) continue;
+  const add = (raw: string | null | undefined) => {
+    const h = raw == null ? null : normalizePaletteHex(raw);
+    if (h == null || seen.has(h)) return;
     seen.add(h);
     out.push(h);
+  };
+  for (const bar of content.databars ?? []) {
+    // A bar naming a document swatch mints nothing for its fill (W2.4).
+    if (!bar.swatch) add(bar.fill);
+    add(bar.border);
+    if (bar.axisX != null) add(bar.axisColor ?? "#000000");
+  }
+  // Icon-set colours are drawn on the same lane (W2.4).
+  for (const icon of content.icons ?? []) {
+    for (const sh of icon.shapes) add(sh.fill);
   }
   return out;
 }

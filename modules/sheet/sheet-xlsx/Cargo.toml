@@ -24,9 +24,10 @@ sheet-lower = { path = "../sheet-lower" }
 # DOCUMENTED DEVIATION from the spec §4 dependency table (xlsx -> core only).
 # The M2 charts track (spec §8.4) parses `xl/charts/chartN.xml` into the FROZEN
 # `sheet_chart::ChartModel` so the engine can list + render charts. `sheet-chart`
-# is a PURE leaf crate (model + geometry IR, no SDK; deps = core+format), so this
+# is a PURE leaf crate (model + geometry IR, no SDK; deps = core, format and fn —
+# fn for the least-squares solver its trendlines share with LINEST), so this
 # is leaf-IR reuse like the sheet-lower dep above — NOT a render-surface
-# dependency, no inter-plugin contact, no cycle (xlsx -> chart -> core+format).
+# dependency, no inter-plugin contact, no cycle (xlsx -> chart -> core/format/fn).
 sheet-chart = { path = "../sheet-chart" }
 # DOCUMENTED DEVIATION from the spec §4 dependency table (xlsx -> core only).
 # The M3 localization track (spec §9, D-8) derives the workbook display locale
