@@ -326,6 +326,12 @@ export interface OverlayContribution {
 export interface FrameSurfaceContribution {
   contextType: string;
   render: ComponentType<FrameSurfaceProps>;
+  /** An optional BAR the host shows with the surface: a floating card in
+   *  screen space, upright and unscaled whatever the zoom or the frame's
+   *  rotation, attached above the frame (below it when there is no room).
+   *  A spreadsheet's formula bar, a text editor's toolbar. It gets the same
+   *  props as the surface; its form fields own their keys. */
+  bar?: ComponentType<FrameSurfaceProps>;
 }
 
 /** What the host hands a {@link FrameSurfaceContribution}'s component. */

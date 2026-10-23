@@ -2,8 +2,9 @@
 
 - id: sheet.format.general
   title: General format — shortest round-trip capped at 15 significant digits, scientific switch for extreme magnitudes
+  ruling: "Number-to-text coercion (&, CONCAT, VALUETOTEXT) is the 15-significant-digit shortest round-trip. A General CELL and TEXT(x,\"General\") fit the number into 11 characters, as Excel 16 shows it (recorded, display lane and TEXT probes): the 15-digit form when it fits, else the decimals rounded to fit (3.141592654), else scientific with the mantissa rounded beside the exponent (1.23457E+14, 1.23457E-07); a small number that fits exactly stays decimal (0.000000015). Excel's narrowing of General to a column narrower than 11 characters is not modelled."
   status: implemented
-  provenance: ["ECMA-376 §18.8.30 (General)", "Excel 15-digit display semantics (public docs)"]
+  provenance: ["ECMA-376 §18.8.30 (General)", "Excel 15-digit display semantics (public docs)", "Excel 16 recordings (oracle display lane)"]
   tests:
     rust: ["sheet-conformance/tests/it/format.rs::sheet_format_general"]
     corpus: ["corpus/format-corpus/general.golden.tsv"]

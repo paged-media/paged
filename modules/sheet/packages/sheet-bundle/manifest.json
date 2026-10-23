@@ -61,7 +61,9 @@
       "media.paged.sheet.command.fillRight",
       "media.paged.sheet.command.clearCells",
       "media.paged.sheet.command.findInSheet",
-      "media.paged.sheet.command.findNext"
+      "media.paged.sheet.command.findNext",
+      "media.paged.sheet.command.cutSelection",
+      "media.paged.sheet.command.formatCells"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -375,6 +377,16 @@
               }
             }
           }
+        },
+        {
+          "id": "media.paged.sheet.command.cutSelection",
+          "title": "Cut sheet selection",
+          "args": { "kind": "struct", "fields": {} }
+        },
+        {
+          "id": "media.paged.sheet.command.formatCells",
+          "title": "Format cells",
+          "args": { "kind": "struct", "fields": {} }
         },
         {
           "id": "media.paged.sheet.command.clearCells",

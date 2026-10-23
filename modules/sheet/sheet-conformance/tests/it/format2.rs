@@ -267,12 +267,18 @@ fn sheet_format_color_brackets() {
         styled("[Red]0.0;[Blue]0.0", -5.0).1,
         Some(FormatColor::Blue)
     );
-    // Indexed [ColorN] palette entries are not modeled — no sidecar color.
-    assert_eq!(styled("[Color12]0", 8.0).1, None);
-    // A color bracket on a text section colors text values too.
+    // [ColorN] names the workbook palette (slot N + 7); the named colours
+    // are palette entries too ([Red] is [Color3]).
+    assert_eq!(styled("[Color12]0", 8.0).1, Some(FormatColor::Indexed(12)));
+    assert_eq!(FormatColor::Indexed(12).palette_index(), 19);
+    assert_eq!(FormatColor::Indexed(12).default_rgb(), (0x80, 0x80, 0x00));
+    assert_eq!(FormatColor::Red.palette_index(), 10);
+    assert_eq!(styled("[Color57]0", 8.0).1, None);
+    // A colour bracket does not colour a TEXT value (Excel 16's display
+    // format shows `[Red]@` text in the font colour — recorded, display lane).
     let ftext = compile("[Red]@").unwrap();
     let (s, c) = format_value_styled(&CellValue::from("hi"), &ftext, &ctx);
-    assert_eq!((s.as_str(), c), ("hi", Some(FormatColor::Red)));
+    assert_eq!((s.as_str(), c), ("hi", None));
 }
 
 /// `sheet.format.padding` — the `*x` repeat-fill char (emitted once in T0).
@@ -290,6 +296,46 @@ fn sheet_format_padding() {
     assert_eq!(nfmt("*-0", -5.0), "--5");
     // The companion _x (skip a char width) is approximated as one space (M0).
     assert_eq!(nfmt("_(0", 5.0), " 5");
+
+    // The display API reports where the fill stands, so a surface that knows
+    // the cell width repeats it there (the grid painter, the page tab stop).
+    let disp = |code: &str, v: CellValue| {
+        sheet_format::format_value_display(&v, &compile(code).unwrap(), &FormatCtx::default())
+    };
+    let d = disp("$* #,##0", CellValue::Number(1234.0));
+    assert_eq!(d.text, "$ 1,234");
+    assert_eq!(d.fill, Some(sheet_format::FillSpec { at: 1, ch: ' ' }));
+    let d = disp("*-0", CellValue::Number(-5.0));
+    assert_eq!((d.text.as_str(), d.fill.map(|f| f.at)), ("--5", Some(1)));
+    // Only the first fill of a section counts; a text section fills too.
+    let d = disp("@*.", CellValue::from("Total"));
+    assert_eq!(d.text, "Total.");
+    assert_eq!(d.fill, Some(sheet_format::FillSpec { at: 5, ch: '.' }));
+    assert_eq!(disp("0.00", CellValue::Number(1.0)).fill, None);
+}
+
+/// `sheet.format.system-formats` — `[$-F800]` / `[$-F400]` (and the
+/// `[$-x-sysdate]` / `[$-x-systime]` spellings) render the display locale's
+/// system long date / long time, whatever pattern follows the bracket.
+#[test]
+fn sheet_format_system_formats() {
+    // 2021-01-01 is a Friday.
+    assert_eq!(
+        nfmt("[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy", 44197.0),
+        "Friday, January 1, 2021"
+    );
+    assert_eq!(
+        nfmt("[$-x-sysdate]dddd, mmmm dd, yyyy", 44197.0),
+        "Friday, January 1, 2021"
+    );
+    assert_eq!(nfmt("[$-F400]h:mm:ss\\ AM/PM", 44197.75), "6:00:00 PM");
+    assert_eq!(nfmt("[$-x-systime]h:mm:ss AM/PM", 0.5), "12:00:00 PM");
+    let de = FormatCtx::new(sheet_core::DateSystem::Date1900, sheet_core::Locale::DeDe);
+    let f = compile("[$-F800]dddd, mmmm dd, yyyy").unwrap();
+    assert_eq!(
+        format_value(&CellValue::Number(44197.0), &f, &de),
+        "Freitag, 1. Januar 2021"
+    );
 }
 
 /// `sheet.format.locale-currency-token` — `[$symbol-locale]` parsing/emit.

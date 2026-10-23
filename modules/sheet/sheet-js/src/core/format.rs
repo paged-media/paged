@@ -67,6 +67,11 @@ pub struct StylePatchArg {
     /// Excel's quote prefix (a leading `'` was typed; ruling
     /// `sheet.edit.typed-entry`).
     pub quote_prefix: Option<bool>,
+    /// Format Cells ▸ Protection ▸ Locked (sheet ADR 517).
+    pub locked: Option<bool>,
+    /// Format Cells ▸ Protection ▸ Hidden (the formula is not shown while
+    /// the sheet is protected).
+    pub formula_hidden: Option<bool>,
 }
 
 impl From<StylePatchArg> for StylePatch {
@@ -94,6 +99,8 @@ impl From<StylePatchArg> for StylePatch {
             v_align: a.v_align,
             wrap: a.wrap,
             quote_prefix: a.quote_prefix,
+            locked: a.locked,
+            formula_hidden: a.formula_hidden,
         }
     }
 }
@@ -123,6 +130,8 @@ impl From<StylePatch> for StylePatchArg {
             v_align: p.v_align,
             wrap: p.wrap,
             quote_prefix: p.quote_prefix,
+            locked: p.locked,
+            formula_hidden: p.formula_hidden,
         }
     }
 }
@@ -288,6 +297,7 @@ impl SheetSession {
                 "range exceeds the style cap ({T0_LOWER_CELL_CAP} cells)"
             )));
         }
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let patch: StylePatch = patch.into();
         if let Some(code) = &patch.num_fmt {
             // The engine must be able to RENDER the code it stores.
@@ -561,6 +571,7 @@ impl SheetSession {
         if top == bottom && left == right {
             return Err(SessionError("a merge needs at least two cells".into()));
         }
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let overlaps = |m: &sheet_core::RangeRef| {
             let n = m.normalized();
             n.start.row <= bottom && n.end.row >= top && n.start.col <= right && n.end.col >= left
@@ -649,6 +660,7 @@ impl SheetSession {
     /// Remove every merge that intersects `range`; returns how many.
     pub fn unmerge(&mut self, sheet: u16, range: &str) -> Result<u32, SessionError> {
         let (sheet, cr) = self.resolve_range(sheet, range)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let (top, left, bottom, right) = bounds(&cr);
         let layout = self
             .engine_mut()
@@ -681,6 +693,7 @@ impl SheetSession {
         width: Option<f64>,
     ) -> Result<(), SessionError> {
         self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatColumns)?;
         if let Some(w) = width {
             if !(w.is_finite() && (0.0..=MAX_COL_WIDTH).contains(&w)) {
                 return Err(SessionError(format!(
@@ -713,6 +726,7 @@ impl SheetSession {
         height: Option<f64>,
     ) -> Result<(), SessionError> {
         self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatRows)?;
         if let Some(h) = height {
             if !(h.is_finite() && (0.0..=MAX_ROW_HEIGHT).contains(&h)) {
                 return Err(SessionError(format!(

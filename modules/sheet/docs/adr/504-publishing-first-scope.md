@@ -88,3 +88,11 @@ the code today:
   engine whose scope this bounds; what happens to a formula the parser rejects
 - [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)
   — why grouping in `paged.data` is not reached from this plugin's code
+
+## Amendment 2026-10-23
+
+The scope was decided again for the frame-as-Excel program ([ADR 517](517-interactive-workbook-features.md)):
+data validation (enforced, listed, authored), data tables and Goal Seek, and external links
+recalculated from their cached values are now interpreted; outline, visibility and protection
+are too. Pivot tables, slicers, `GETPIVOTDATA`, VBA, Scenario Manager and Solver stay preserved
+and never interpreted, for the reasons above.

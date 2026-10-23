@@ -189,6 +189,10 @@ impl VisualStyle {
 #[derive(Clone, Debug, Default)]
 pub struct VisualStyles {
     by_style: BTreeMap<u32, VisualStyle>,
+    /// The workbook's own indexed palette (`<colors><indexedColors>`), in
+    /// slot order; empty when it keeps the default. A number format's
+    /// `[ColorN]` reads it.
+    palette: Vec<Option<String>>,
 }
 
 impl VisualStyles {
@@ -251,6 +255,16 @@ impl VisualStyle {
 impl sheet_lower::VisualStyleSource for VisualStyles {
     fn visual(&self, id: StyleId) -> Option<sheet_lower::VisualAttrs> {
         self.get(id).map(VisualStyle::to_attrs)
+    }
+
+    fn format_color_rgb(&self, color: sheet_format::FormatColor) -> String {
+        match self.palette.get(color.palette_index() as usize) {
+            Some(Some(rgb)) => rgb.clone(),
+            _ => {
+                let (r, g, b) = color.default_rgb();
+                format!("#{r:02X}{g:02X}{b:02X}")
+            }
+        }
     }
 }
 
@@ -317,7 +331,10 @@ pub fn parse_with_colors(
     }
 
     let mut xf_to_style = Vec::with_capacity(parsed.xfs.len());
-    let mut visual = VisualStyles::default();
+    let mut visual = VisualStyles {
+        palette: colors.indexed.clone(),
+        ..VisualStyles::default()
+    };
     for (i, xf) in parsed.xfs.iter().enumerate() {
         // Custom code wins (ids >= 164 are always custom); else built-in.
         let code: String = parsed
@@ -1044,6 +1061,44 @@ mod tests {
         // locale/currency ids have no canonical code in T0
         assert_eq!(builtin_num_fmt(5), None);
         assert_eq!(builtin_num_fmt(164), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn format_colors_read_the_workbook_palette__feat__sheet_format_engine() {
+        use sheet_lower::VisualStyleSource;
+        // Slot 10 ([Red] = [Color3]) and slot 19 ([Color12]) overridden.
+        let mut pal = String::new();
+        for i in 0..64 {
+            let rgb = match i {
+                10 => "FF112233",
+                19 => "FFAABBCC",
+                _ => "FF000000",
+            };
+            pal.push_str(&format!(r#"<rgbColor rgb="{rgb}"/>"#));
+        }
+        let xml = format!(
+            r#"<styleSheet><colors><indexedColors>{pal}</indexedColors></colors>
+<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellXfs></styleSheet>"#
+        );
+        let mut table = StyleTable::new();
+        let ctx = ColorContext::new(xml.as_bytes(), None);
+        let parsed = parse_with_colors(xml.as_bytes(), &mut table, &ctx).unwrap();
+        let v = &parsed.visual;
+        assert_eq!(
+            v.format_color_rgb(sheet_format::FormatColor::Red),
+            "#112233"
+        );
+        assert_eq!(
+            v.format_color_rgb(sheet_format::FormatColor::Indexed(12)),
+            "#AABBCC"
+        );
+        // Without an override the default palette answers.
+        let plain = VisualStyles::default();
+        assert_eq!(
+            plain.format_color_rgb(sheet_format::FormatColor::Blue),
+            "#0000FF"
+        );
     }
 
     #[test]

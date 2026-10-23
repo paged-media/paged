@@ -60,7 +60,7 @@ pub use general::format_general;
 pub use locale::{locale_data, locale_from_lcid, LocaleData};
 pub use number::{parse_number_locale, parse_number_seps};
 pub use parse::{compile, FormatError};
-pub use sections::{CompiledFormat, FormatColor};
+pub use sections::{CompiledFormat, FormatColor, SystemFormat, DEFAULT_PALETTE};
 
 /// Context for a format pass (spec §9): the workbook date system AND the
 /// display [`Locale`] (D-8). The locale rides INSIDE `FormatCtx` so the
@@ -166,6 +166,82 @@ pub fn format_value_styled(
     fmt: &CompiledFormat,
     ctx: &FormatCtx,
 ) -> (String, Option<FormatColor>) {
+    let (s, color) = format_value_marked(v, fmt, ctx);
+    if s.contains(sections::FILL_MARK) {
+        (s.replace(sections::FILL_MARK, ""), color)
+    } else {
+        (s, color)
+    }
+}
+
+/// Where a repeat-fill character (`*x`) stands in a displayed string: the
+/// CHARACTER index of the fill character in [`Display::text`] and the
+/// character. A surface that knows the cell's width repeats `ch` at `at`
+/// until the text fills the cell (Excel's `*` — `_($* #,##0_)` pushes the
+/// currency symbol to the left edge and the number to the right); one that
+/// does not shows the character once, as the string APIs do. Only the first
+/// fill of a section counts, as in Excel.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct FillSpec {
+    pub at: usize,
+    pub ch: char,
+}
+
+/// A cell value as a cell displays it: the text, the format's colour (a
+/// `[Red]` / `[ColorN]` bracket on the selected section) and the repeat-fill
+/// position. `text` equals [`format_value`]'s output.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Display {
+    pub text: String,
+    pub color: Option<FormatColor>,
+    pub fill: Option<FillSpec>,
+}
+
+/// Format a value for a cell ([`Display`]): text, colour and fill position
+/// (rulings `sheet.format.color-brackets`, `sheet.format.padding`).
+pub fn format_value_display(v: &CellValue, fmt: &CompiledFormat, ctx: &FormatCtx) -> Display {
+    let (marked, color) = format_value_marked(v, fmt, ctx);
+    let mut fill = None;
+    let mut text = String::with_capacity(marked.len());
+    let mut chars = marked.chars();
+    let mut n = 0usize;
+    while let Some(c) = chars.next() {
+        if c == sections::FILL_MARK {
+            if let Some(ch) = chars.next() {
+                if fill.is_none() {
+                    fill = Some(FillSpec { at: n, ch });
+                }
+                text.push(ch);
+                n += 1;
+            }
+            continue;
+        }
+        text.push(c);
+        n += 1;
+    }
+    Display { text, color, fill }
+}
+
+/// The display locale's pattern for a system format (`[$-F800]`/`[$-F400]`).
+pub fn system_pattern(locale: Locale, kind: SystemFormat) -> &'static str {
+    match (kind, locale) {
+        (SystemFormat::LongDate, Locale::EnUs) => "dddd, mmmm d, yyyy",
+        (SystemFormat::LongDate, Locale::DeDe) => "dddd, d\". \"mmmm yyyy",
+        (SystemFormat::LongDate, Locale::FrFr) => "dddd d mmmm yyyy",
+        (SystemFormat::LongDate, Locale::EsEs) => "dddd, d \"de\" mmmm \"de\" yyyy",
+        (SystemFormat::LongDate, Locale::ItIt) => "dddd d mmmm yyyy",
+        (SystemFormat::LongTime, Locale::EnUs) => "h:mm:ss AM/PM",
+        (SystemFormat::LongTime, Locale::EsEs) => "h:mm:ss",
+        (SystemFormat::LongTime, _) => "hh:mm:ss",
+    }
+}
+
+/// The renderers' output with fill marks left in.
+fn format_value_marked(
+    v: &CellValue,
+    fmt: &CompiledFormat,
+    ctx: &FormatCtx,
+) -> (String, Option<FormatColor>) {
     match v {
         // Errors render as their token regardless of the code (no color).
         CellValue::Error(e) => (e.as_str().to_string(), None),
@@ -193,7 +269,7 @@ fn format_number_value(
     // The General keyword (or empty whole-code) renders via General. A color
     // bracket on a `[Red]General` section still colors the output.
     if section.general {
-        return (format_general(&CellValue::Number(n)), color);
+        return (general::general_cell_number(n), color);
     }
     // An explicitly empty section (e.g. from `;;;`) hides the value.
     if section.tokens.is_empty() {
@@ -207,6 +283,14 @@ fn format_number_value(
     // locale on load (ruling `sheet.format.locale.locale-from-workbook`).
     let names = locale::locale_data(fmt.locale.unwrap_or(ctx.locale));
     let loc = locale::locale_data(ctx.locale);
+    if let [sections::Token::System(kind)] = section.tokens.as_slice() {
+        let pattern = system_pattern(fmt.locale.unwrap_or(ctx.locale), *kind);
+        let s = compile(pattern)
+            .ok()
+            .and_then(|f| datetime::render_datetime(n, &f.pos, ctx.date_system, names))
+            .unwrap_or_else(|| format_general(&CellValue::Number(n)));
+        return (s, color);
+    }
     let s = match section.kind {
         sections::SectionKind::DateTime => {
             match datetime::render_datetime(n, section, ctx.date_system, names) {
@@ -217,9 +301,10 @@ fn format_number_value(
             }
         }
         sections::SectionKind::Number => number::render_number(n, section, force_minus, loc),
-        // A text-classified section selected for a number renders its
-        // literals only (no @ substitution for numbers).
-        sections::SectionKind::Text => render_text_section(section, ""),
+        // A text section selected for a number (`@`, `"x"@`) shows the number
+        // as General (Excel 16, recorded: `@` over 123 shows `123`, `"x"@`
+        // over 5 shows `5`).
+        sections::SectionKind::Text => general::general_cell_number(n),
     };
     (s, color)
 }
@@ -244,8 +329,11 @@ fn format_text_value(v: &CellValue, fmt: &CompiledFormat) -> (String, Option<For
             None
         }
     });
+    // The section's colour bracket does not colour a text value: Excel 16's
+    // display format paints `note` under `[Red]@` or `0;0;0;[Red]@` in the
+    // font colour (recorded, display lane).
     match text_section {
-        Some(sec) => (render_text_section(sec, &raw), sec.color),
+        Some(sec) => (render_text_section(sec, &raw), None),
         None => (raw, None),
     }
 }
@@ -259,6 +347,10 @@ fn render_text_section(section: &sections::Section, value: &str) -> String {
         match t {
             Token::TextPlaceholder => out.push_str(value),
             Token::Literal(s) => out.push_str(s),
+            Token::Fill(c) => {
+                out.push(sections::FILL_MARK);
+                out.push(*c);
+            }
             _ => {}
         }
     }

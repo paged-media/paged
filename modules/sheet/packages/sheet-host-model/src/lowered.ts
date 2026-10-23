@@ -60,6 +60,12 @@ export interface LoweredCell {
   text: string;
   align: Align;
   styleKey?: number;
+  /** The number format's repeat-fill character (`*x`). When set, `text`
+   *  holds a TAB where the fill stands: the part before sits at the cell's
+   *  left edge, the part after at its right edge, the character repeating
+   *  between (the page: a right tab stop with this leader at the cell's
+   *  inner width). */
+  fill?: string;
 }
 
 /** One visual cell style (IR v2, M1 style-map track) — the mirror of the
@@ -89,6 +95,9 @@ export interface LoweredStyle {
   /** The per-edge border lines behind the `border*` presence flags: the
    *  xlsx line style, its weight (pt) and colour (`#RRGGBB`, absent = auto). */
   borderLines?: BorderLines;
+  /** Excel's indent (`<alignment indent>`), in points (one level = three
+   *  times the default font's character width); absent = none. */
+  indentPt?: number | null;
 }
 
 /** One border edge's line (Wave 6). */

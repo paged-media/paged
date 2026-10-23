@@ -595,6 +595,28 @@
           }
         },
         {
+          "id": "media.paged.image.command.filterRegion",
+          "title": "Filter a region",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "layer": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/layer"
+              },
+              "params": {
+                "kind": "struct",
+                "fields": {},
+                "open": true
+              },
+              "region": {
+                "kind": "bounds",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
           "id": "media.paged.image.command.replaceLayerPixels",
           "title": "Replace layer pixels",
           "args": {

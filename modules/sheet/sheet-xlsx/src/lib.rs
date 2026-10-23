@@ -51,6 +51,7 @@ pub mod opc;
 pub mod parts;
 mod patch;
 pub mod preserve;
+mod protect_doc;
 pub mod rels;
 pub mod sheet_doc;
 pub mod sheet_view;
@@ -59,6 +60,8 @@ pub mod splice;
 pub mod structure;
 pub mod style_edit;
 pub mod write;
+pub mod ws_child;
+pub mod xtree;
 
 pub use error::XlsxError;
 

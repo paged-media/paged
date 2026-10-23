@@ -4,8 +4,6 @@
 # engine/excel are typed tokens (n: s: b: e: blank). The lane fails on an unlisted
 # disagreement, on a row whose values moved, and on a row that now agrees.
 # file	id	kind	engine	excel	reason
-arraytotext.golden.tsv	tx-2	defect	s:100000000000000000000	s:1E+20	defect: TEXT(x,"General") follows the cell General format, which Excel renders in 11 characters (1E+20); the engine's format engine keeps the fixed form
-arraytotext.golden.tsv	tx-4	defect	s:0.00000012345678901	s:1.23457E-07	defect: TEXT(x,"General") follows the cell General format, which Excel renders in 11 characters (1.23457E-07); the engine's format engine keeps all 15 digits in fixed notation
 cell.golden.tsv	cell-19	diverges	n:8	n:10	harness artifact: Excel's CELL("width") is the Mac default column (10); the engine's default is Excel's 8.43 (8)
 cell.golden.tsv	cell-20	diverges	s:	s:/Users/drietsch/Library/Containers/com.microsoft.Excel/Data/Documents/paged-oracle.f78v8w/[in.xlsx]c21	harness artifact: CELL("filename") is the oracle's file path in Excel; the engine names the document only when the host does (unsaved: "")
 cell.golden.tsv	cell-23	diverges	s:$C$5	s:[in.xlsx]c1!$A$1	ruling: CELL without a reference reads the formula's own cell; Excel reads the last changed cell (the oracle's active sheet c1)
