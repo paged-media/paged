@@ -125,6 +125,24 @@
     "summary": "[top, left, bottom, right] in image pixels."
   },
   {
+    "path": "filter",
+    "type": {
+      "kind": "struct",
+      "fields": {
+        "params": {
+          "kind": "struct",
+          "fields": {},
+          "open": true
+        },
+        "region": {
+          "kind": "bounds",
+          "optional": true
+        }
+      }
+    },
+    "summary": "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths (blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] in image pixels; the whole canvas when absent). On the GPU where one exists, otherwise on the CPU twins of the same kernels (ADR 465). Reads nothing."
+  },
+  {
     "path": "pixelSource",
     "type": {
       "kind": "asset"

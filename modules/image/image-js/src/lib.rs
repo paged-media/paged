@@ -59,6 +59,7 @@ pub mod mip;
 pub mod paths;
 pub mod pixels;
 pub mod psd_vector_mask;
+pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
 pub mod selection;
@@ -210,6 +211,45 @@ mod wasm {
     #[wasm_bindgen]
     pub fn gpu_ready() -> bool {
         GPU.with(|g| g.borrow().is_some())
+    }
+
+    /// A filter on a region (ADR 465): the adjustment chain whose
+    /// parameters are the adjustment-layer wire block (`AdjustParams::
+    /// to_wire`) applied to the rectangle `x, y, w, h` of a straight
+    /// RGBA8 image; returns the whole image. On the GPU when `init_gpu`
+    /// succeeded, otherwise on the shipped CPU twins of the same kernels
+    /// — the one place a kernel runs without a device. Pixels outside
+    /// the rectangle are returned unchanged.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn filter_region_rgba8(
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+        wire: Vec<f32>,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        use crate::region_filter::{filter_region_cpu, filter_region_gpu, PixelRect};
+        let params =
+            AdjustParams::from_wire(&wire).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let rect = PixelRect { x, y, w, h };
+        if rgba.len() != width as usize * height as usize * 4 {
+            return Err(JsValue::from_str(&format!(
+                "expected {width}×{height} RGBA8, got {} bytes",
+                rgba.len()
+            )));
+        }
+        let mut px = rgba;
+        let ctx = GPU.with(|g| g.borrow().clone());
+        match ctx {
+            Some(ctx) => filter_region_gpu(&ctx, width, height, &mut px, &params, rect).await,
+            None => filter_region_cpu(width, height, &mut px, &params, rect),
+        }
+        .map_err(|e| JsValue::from_str(&e))?;
+        Ok(js_sys::Uint8Array::from(&px[..]))
     }
 
     /// A decoded image's identity on the surface: the handle keys the
