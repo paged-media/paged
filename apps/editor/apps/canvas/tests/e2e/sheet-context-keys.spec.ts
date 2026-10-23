@@ -391,6 +391,28 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       void at;
     });
 
+    test("AC-ENTER-1 — Enter on a selected sheet frame enters its grid, as a double-click does @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B3");
+      // The placed frame is selected; focus the canvas without a click
+      // that could change the selection.
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement)?.blur(),
+      );
+      const at = await elementScreenCenter(page, frame);
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(300);
+      expect((await selectedElement(page))?.kind).toBe(frame.kind);
+      await page.keyboard.press("Enter");
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(
+        page.locator('[data-testid="sheet-frame-surface"]'),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
     test("AC-STYLES-1 — in an entered sheet frame the Paragraph Styles panel applies a document style to the selected cell @feat:sheet.grid.inframe @level:gesture", async ({
       page,
     }) => {

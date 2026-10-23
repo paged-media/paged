@@ -87,6 +87,7 @@ export type FrameSurfaceSession = Pick<
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
+  | "grabAt"
   | "pointerUpInFrame"
   | "wheelInFrame"
   | "handleGridKey"
@@ -466,6 +467,14 @@ function SheetFrameSurfaceView({
     | { kind: "heading-row"; anchor: number }
     | null
   >(null);
+  const [cursor, setCursor] = useState<"cell" | "move" | "crosshair">("cell");
+  const lastDrag = useRef<[number, number] | null>(null);
+  const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopAutoScroll = () => {
+    if (autoScroll.current !== null) clearInterval(autoScroll.current);
+    autoScroll.current = null;
+  };
+  useEffect(() => stopAutoScroll, []);
   const [resizeGhost, setResizeGhost] = useState<{
     axis: "col" | "row";
     at: number;
@@ -757,12 +766,24 @@ function SheetFrameSurfaceView({
       }
     }
     gesture.current = { kind: "cells" };
-    session.pointerDownInFrame(cx, cy, { shift: e.shiftKey });
+    // Excel: Ctrl (Option on a Mac) while dragging the border copies.
+    session.pointerDownInFrame(cx, cy, {
+      shift: e.shiftKey,
+      copy: e.ctrlKey || e.altKey,
+    });
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const p = contentPoint(e.clientX, e.clientY);
+    if (!g && p && scene && p[0] >= headW && p[1] >= headH) {
+      // The pointer says what a press would grab (Excel's move grip on
+      // the selection border, the fill handle's crosshair).
+      const grab = session.grabAt(p[0] - headW, p[1] - headH);
+      const next =
+        grab === "move" ? "move" : grab === "fill" ? "crosshair" : "cell";
+      if (next !== cursor) setCursor(next);
+    }
     if (!g || !p || !scene) return;
     const [x, y] = p;
     const vp = scene.viewport;
@@ -796,11 +817,24 @@ function SheetFrameSurfaceView({
       return;
     }
     session.pointerMoveInFrame(x - headW, y - headH);
+    // Past the cell area's edge the window keeps scrolling while the
+    // pointer stays there (Excel's auto-scroll).
+    lastDrag.current = [x - headW, y - headH];
+    const outside =
+      x - headW < 0 || y - headH < 0 || x > props.widthPt || y > props.heightPt;
+    if (outside && autoScroll.current === null) {
+      autoScroll.current = setInterval(() => {
+        const at = lastDrag.current;
+        if (!at || gesture.current?.kind !== "cells") return;
+        session.pointerMoveInFrame(at[0], at[1]);
+      }, 70);
+    } else if (!outside) stopAutoScroll();
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     gesture.current = null;
+    stopAutoScroll();
     if (!g) return;
     const p = contentPoint(e.clientX, e.clientY);
     if (g.kind === "resize-col") {
@@ -1072,7 +1106,7 @@ function SheetFrameSurfaceView({
         position: "relative",
         width: "100%",
         height: "100%",
-        cursor: "cell",
+        cursor,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}

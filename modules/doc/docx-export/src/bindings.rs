@@ -169,6 +169,16 @@ impl DocxBindings {
         }
     }
 
+    /// The `w:tbl`/`w:tr`/`w:tc`/`w:p` source path of a TABLE-CELL paragraph
+    /// (lowered `block`, `cell`, `para`) — what the cell paragraph clone,
+    /// delete and run insert resolve on.
+    pub fn cell_para_path(&self, block: usize, cell: usize, para: usize) -> Option<CellPath> {
+        let BlockBinding::Table { cells, .. } = self.blocks.get(block)? else {
+            return None;
+        };
+        Some(cells.get(cell)?.paragraphs.get(para)?.path)
+    }
+
     /// Resolve a TABLE-CELL run to its `(CellPath, run_ord, wrapper)` source
     /// address — `wrapper` set when the run sits inside a hyperlink or
     /// `w:fldSimple` of the cell paragraph, `run_ord` then counting the runs
