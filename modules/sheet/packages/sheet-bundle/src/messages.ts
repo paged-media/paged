@@ -62,6 +62,8 @@ export const COMMANDS = defineMessages("sheet.command", {
   cutSelection: "Cut sheet selection",
   formatCells: "Format cells…",
   pasteSpecial: "Paste special…",
+  dataValidation: "Data validation…",
+  circleInvalid: "Circle invalid data",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
   defaultStyleName: "Cell style",

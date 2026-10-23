@@ -38,6 +38,7 @@ import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
 } from "../src/surface/sheet-frame-surface";
+import { dataToolsStub } from "./data-tools-stub";
 
 afterEach(cleanup);
 
@@ -72,6 +73,8 @@ function fakeSession() {
   let pasteCard = false;
   let activeSheet = 0;
   const session: FrameSurfaceSession = {
+    ...dataToolsStub(),
+    undoCellEdit: () => false,
     pasteSpecialOpen: () => pasteCard,
     closePasteSpecial: () => {
       pasteCard = false;

@@ -241,6 +241,9 @@ export type GridKeyAction =
   | { kind: "pasteSpecial" }
   /** F9: recalculate (manual calculation mode). */
   | { kind: "calculate" }
+  /** Alt+Down: the active cell's dropdown (a validation list, a filter
+   *  menu). */
+  | { kind: "dropdown" }
   /** Alt+PageDown / Alt+PageUp: a screen to the right / left. */
   | { kind: "pageAcross"; dir: 1 | -1; extend: boolean }
   | { kind: "none" };
@@ -336,6 +339,7 @@ export function gridKeyAction(
     if (key.length === 1) return { kind: "type", ch: key };
     return { kind: "none" };
   }
+  if (e.altKey && key === "ArrowDown" && !shift) return { kind: "dropdown" };
   if (key in ARROWS) {
     const [dRow, dCol] = ARROWS[key];
     return { kind: "move", dRow, dCol, extend: shift };
