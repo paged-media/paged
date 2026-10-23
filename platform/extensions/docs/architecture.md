@@ -219,6 +219,14 @@ was registered with what `contributes` (and `capabilities.keybindings`) declares
 returns `{ declaredNotRegistered, registeredNotDeclared }` per category, with a `drive` step
 for a lazy registration and allowances that must give a reason.
 
+The headless host wires the native-document door as the editor does (`nativeDocument`): the
+reads answer the core-owned `paged/core/` parts through the part wire ops, and `open` loads a
+package as the active document and fans its `documentLoaded` out like `load`. So
+`supports("document.openNative@1")` is true headlessly, and an importer that opens its file as
+the whole document (a `.docx`, a `.pptx`, a `.pdf`) does so in Node and in `paged-node`
+([ADR 305](adr/305-doors-always-present.md)). `nativeDocument: false` builds the host without
+the door; a backend given there replaces the engine's.
+
 ## The editor, the plugins and the documentation site
 
 - **`editor`** (the host app). It calls `loadBundle` once per bundle and passes the

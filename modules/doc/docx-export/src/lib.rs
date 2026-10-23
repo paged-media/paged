@@ -36,7 +36,10 @@ mod splice;
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, RunBinding};
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, StructuralEdit};
-pub use overlay::{overlay_story_content, ParagraphContentIn, RunContentIn, StoryContentIn};
+pub use overlay::{
+    overlay_cells, overlay_story_content, CellContentIn, ParagraphContentIn, RunContentIn,
+    StoryContentIn,
+};
 
 use std::collections::BTreeMap;
 

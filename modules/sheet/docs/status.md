@@ -193,6 +193,17 @@ each published canary added is under [Releases](#releases).
   `recorded/display.tsv`: the text and the font colour of 190 cells) and replayed in CI: all 190
   agree. Not modelled: General narrowing to a column narrower than 11 characters, `_x` as the
   exact width of `x` (it is one space).
+- **The cell visual model** (W2.2, ADR 518). A cell style reads into `CellVisual`: the 18 fill
+  patterns with both colours, gradients, every border line style and the diagonals, indent,
+  rotation (0–180, stacked), shrink-to-fit, strike-through, super- and subscript, the underline
+  kinds and the Excel named cell style it derives from; every colour is a reference (the stored
+  RGB / theme / indexed / automatic colour plus an optional document swatch, RGB, CMYK, spot or
+  Lab) and one resolver gives the page and the grid the same colour. `set_style` authors all of
+  it, applies an Excel named style by name (adding a built-in the workbook lacks from Excel's
+  definition), and sets document swatches and character / paragraph / cell styles; an xlsx save
+  writes the concrete colours and keeps the references in the style record's own `extLst`,
+  restored on re-import only while the concrete colour is unchanged. `get_cell_visual` and
+  `named_styles` read the model. The lowered styles carry the new facets beside the colours.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

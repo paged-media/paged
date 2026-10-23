@@ -80,7 +80,7 @@ pub use parts::external_link::{ExternalBook, ExternalLinks};
 pub use parts::freeze::FreezePanes;
 pub use parts::shared_strings::{RichRun, RichText};
 pub use parts::styles::{VisualStyle, VisualStyles};
-pub use style_edit::{EdgePatch, StylePatch};
+pub use style_edit::{EdgePatch, GradientPatch, StyleExt, StylePatch};
 
 use opc::{ModeledKind, OpcContainer, PartEntry};
 use parts::chart::{ParsedChart, SheetResolver};
@@ -119,6 +119,11 @@ pub struct XlsxDocument {
     /// lowering pairs this with [`conditional_formats`](Self::conditional_formats)
     /// to fold cf matches into the lowered style. Read-only derived state.
     pub dxfs: Vec<parts::styles::VisualStyle>,
+
+    /// The differential formats as the visual model holds them (W2.2):
+    /// unresolved colours, explicit "off" facets and the number format —
+    /// what conditional-format evaluation merges.
+    pub dxf_models: Vec<sheet_core::DifferentialFormat>,
 
     /// Parsed conditional-format blocks per sheet (M2 track, spec §10.4),
     /// derived from each worksheet's captured `<conditionalFormatting>`
@@ -322,7 +327,7 @@ impl XlsxDocument {
         // AND the workbook display locale derived from a custom numFmt's
         // `[$…-LCID]` token (M3 localization track, ruling
         // `sheet.format.locale.locale-from-workbook`).
-        let (xf_to_style, visual_styles, dxfs, workbook_locale) = match &styles_part {
+        let (xf_to_style, visual_styles, dxfs, dxf_models, workbook_locale) = match &styles_part {
             Some(name) => match container.part(name) {
                 Some(p) => {
                     // The theme part's scheme resolves `theme="N"` colours
@@ -339,6 +344,7 @@ impl XlsxDocument {
                         parsed.xf_to_style,
                         parsed.visual,
                         parsed.dxfs,
+                        parsed.dxf_models,
                         parsed.workbook_locale,
                     )
                 }
@@ -346,12 +352,14 @@ impl XlsxDocument {
                     Vec::new(),
                     parts::styles::VisualStyles::default(),
                     Vec::new(),
+                    Vec::new(),
                     None,
                 ),
             },
             None => (
                 Vec::new(),
                 parts::styles::VisualStyles::default(),
+                Vec::new(),
                 Vec::new(),
                 None,
             ),
@@ -656,6 +664,7 @@ impl XlsxDocument {
             formula_texts,
             visual_styles,
             dxfs,
+            dxf_models,
             conditional_formats,
             charts,
             external_links,
