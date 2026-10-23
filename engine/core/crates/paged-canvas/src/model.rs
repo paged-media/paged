@@ -10840,6 +10840,7 @@ impl CanvasModel {
             Notes => json(self.notes()),
             XmlTags => json(&self.scene.designmap.xml_tags),
             TemplateFields => json(self.template_fields()),
+            TemplateFindings => json(paged_template::preflight(&self.scene)),
             XmlElements => json(self.xml_elements()),
             TrackedChanges => json(self.tracked_changes()),
             Endnotes => json(self.endnotes()),

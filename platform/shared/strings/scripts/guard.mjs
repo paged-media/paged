@@ -174,9 +174,10 @@ for (const file of files) {
     german.set(key, { value, file: relative(ROOT, file) });
 }
 
+// A parameter is `{name}` or a plural's `{name, plural, …}`; a plural
+// branch (`{Kept, though …}`) is text, not a parameter.
 const params = (s) =>
-  [...s.matchAll(/\{(\w+)[},]/g)]
-    .map((m) => m[1])
+  [...new Set([...s.matchAll(/\{(\w+)(?:\}|,\s*plural\b)/g)].map((m) => m[1]))]
     .sort()
     .join(",");
 for (const [key, { value, file }] of english) {

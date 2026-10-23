@@ -2911,6 +2911,10 @@ pub enum CollectionName {
     /// v75 — the template's fields (engine ADR 1001), in form order, with
     /// their definitions and current values (`TemplateFieldSummary`).
     TemplateFields,
+    /// v76 — the template's preflight (editor plan F3): what is wrong with
+    /// its policy before anyone fills it, errors first
+    /// (`paged_template::TemplateFinding`).
+    TemplateFindings,
     /// D-02 — the document's XML structure depth-first, one row per
     /// element: its tag, depth, what it tags, its attributes. An element
     /// tagging a story is followed by the elements tagging its ranges.
@@ -2983,6 +2987,7 @@ impl CollectionName {
             Self::Notes => "notes",
             Self::XmlTags => "xmlTags",
             Self::TemplateFields => "templateFields",
+            Self::TemplateFindings => "templateFindings",
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
             Self::Endnotes => "endnotes",
@@ -3024,6 +3029,7 @@ impl CollectionName {
             "notes" => Self::Notes,
             "xmlTags" => Self::XmlTags,
             "templateFields" => Self::TemplateFields,
+            "templateFindings" => Self::TemplateFindings,
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
             "endnotes" => Self::Endnotes,
