@@ -46,6 +46,9 @@ const C = (s: string) => `${PLUGIN_ID}.command.${s}`;
 const text: ValueType = { kind: "text" };
 const int: ValueType = { kind: "number", integer: true };
 const num: ValueType = { kind: "number" };
+const bool: ValueType = { kind: "bool" };
+/** The CSV export's delimiters (`tab` for a tab). */
+const CSV_DELIMITERS = [",", ";", "tab"] as const;
 const struct = (fields: Record<string, StructField>): ValueType => ({
   kind: "struct",
   fields,
@@ -243,6 +246,79 @@ export function layoutCommands(
         if (!e || e.listSheets().length === 0)
           throw new Error(`${name} could not be read as delimited text`);
         return WORKBOOK_ADDRESS;
+      },
+    },
+    // Sheet ADR 521 — files and dialect.
+    {
+      id: C("importOds"),
+      title: "Import OpenDocument spreadsheet (.ods)",
+      args: struct({
+        bytes: {
+          kind: "bytes",
+          mime: ["application/vnd.oasis.opendocument.spreadsheet"],
+        },
+        name: dflt(text, "workbook.ods"),
+      }),
+      result: text,
+      async handler(_ctx, a) {
+        const { bytes, name } = a as { bytes: Uint8Array; name: string };
+        await session.importOds(bytes, name);
+        const e = session.state().engine;
+        if (!e || e.listSheets().length === 0)
+          throw new Error(
+            `${name} could not be read as an OpenDocument spreadsheet`,
+          );
+        return WORKBOOK_ADDRESS;
+      },
+    },
+    {
+      id: C("exportCsv"),
+      title: "Export a sheet as CSV",
+      args: struct({
+        sheet: optional(text),
+        range: optional(text),
+        delimiter: dflt({ kind: "enum", members: CSV_DELIMITERS }, ","),
+        formatted: dflt(bool, true),
+        bom: dflt(bool, false),
+      }),
+      result: text,
+      async handler(_ctx, a) {
+        const { sheet, range, delimiter, formatted, bom } = a as {
+          sheet?: string;
+          range?: string;
+          delimiter: string;
+          formatted: boolean;
+          bom: boolean;
+        };
+        await session.ensureRestored();
+        const e = session.state().engine;
+        if (!e) throw new Error("no workbook is open");
+        if (!e.exportCsv) throw new Error("engine wasm predates export_csv");
+        const id =
+          sheet !== undefined
+            ? sheetIdOf(e, sheet)
+            : (session.state().activeSheet ?? e.listSheets()[0]?.id ?? 0);
+        return e.exportCsv(id, {
+          delimiter: delimiter === "tab" ? "\t" : delimiter,
+          formatted,
+          bom,
+          range: range ?? "",
+        });
+      },
+    },
+    {
+      id: C("toggleR1C1"),
+      title: "R1C1 reference style",
+      args: struct({ r1c1: optional(bool), lang: optional(text) }),
+      result: struct({ r1c1: bool, lang: text }),
+      async handler(_ctx, a) {
+        const { r1c1, lang } = a as { r1c1?: boolean; lang?: string };
+        await session.ensureRestored();
+        const now = session.formulaDisplay();
+        if (!now) throw new Error("no workbook is open");
+        if (!session.setFormulaDisplay({ r1c1: r1c1 ?? !now.r1c1, lang }))
+          throw new Error("engine wasm predates set_formula_display");
+        return session.formulaDisplay() ?? now;
       },
     },
     {

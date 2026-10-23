@@ -19,6 +19,18 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
+- **Files and dialect** (ADR 521). Macro-enabled workbooks (`.xlsm`) open and save with their
+  VBA project kept byte for byte and never run; templates (`.xltx`, `.xltm`) open as a new
+  workbook; saving as `.xlsx` (the `.xlsx` exporter) leaves the VBA project out, the `.xlsm`
+  exporter keeps it. OpenDocument spreadsheets (`.ods`, `.ots`) import: every table, values of
+  each type, OpenFormula formulas translated to Excel's syntax (else the cached value), named
+  ranges, merges, number formats, bold/italic/underline, font colours, fills, alignment; not
+  widths, borders, conditional formats or charts. The active sheet (or a range) exports as CSV:
+  RFC 4180 quoting, formatted or raw values, `,` `;` or tab, UTF-8 with an optional BOM
+  ("Export sheet as CSV…", the CSV exporter, the typed `exportCsv`). Formulas show and take
+  R1C1 references when the workbook is in R1C1 mode (kept in `<calcPr refMode>`, toggled by "R1C1
+  reference style") and German function names, `;` separators and `,` decimals when the host
+  language is German (`SUMME`, `WENN`, `SVERWEIS`, `Z1S1`); stored formulas stay A1 and English.
 - **Calculation.** 389 registered functions: 371 evaluated, and 18 that need a network, a cube
   connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
   `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
@@ -388,9 +400,11 @@ ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the 
 - **Interpreting pivot tables, slicers or macros**
   ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
-- **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
-  refused.
-- **Localised function names and argument separators**, and CJK display locales.
+- **Other file formats.** `.xlsx`/`.xlsm`/`.xltx`/`.xltm`, `.ods`/`.ots`, CSV and TSV are read;
+  `.xlsx`, `.xlsm` and CSV are written; a legacy `.xls` is refused, `.xlsb` is not read, ODS is
+  not written.
+- **Localised function names in languages other than German** (they show English names), and
+  CJK display locales.
 - **A worker-hosted engine.** The manifest declares no worker capability.
 - **Three registry rows marked `planned`:** `sheet.chart.design-markers`,
   `sheet.format.locale.cjk-followup`, `sheet.style.doc-style-group`.

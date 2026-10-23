@@ -46,13 +46,19 @@ import { t } from "@paged-media/strings";
 
 import manifest from "../manifest.json";
 
+import { defaultCsvOptions } from "./engine-files";
 import { COMMANDS, FILES, PANELS } from "./messages";
 
 import {
   DELIMITED_MIMES,
   importBytes,
+  ODS_EXTENSIONS,
+  ODS_MIMES,
   pickAndImport,
   placeIntoNewDocument,
+  XLSM_MIME,
+  XLSX_FAMILY_EXTENSIONS,
+  XLSX_FAMILY_MIMES,
   XLSX_MIME,
 } from "./import-xlsx";
 import { makeSwatchesBindingProvider } from "./binding-provider/swatches-provider";
@@ -218,6 +224,39 @@ export function activate(host: BundleHost): BundleHandle {
     // S-11: the command now opens the HOST file picker (and falls back to
     // the panel's own input when no picker is wired).
     handler: () => void pickAndImport(host, session, PANEL_ID),
+  });
+  // Sheet ADR 521 — the active sheet as CSV through the host's save door;
+  // the R1C1 reference style (kept in the workbook).
+  host.contribute.command({
+    id: "media.paged.sheet.command.exportCsv",
+    title: t(COMMANDS.exportCsv),
+    category: "Sheet",
+    handler: async () => {
+      const out = session.exportCsv(defaultCsvOptions());
+      if (!out) {
+        host.log.warn("exportCsv: no workbook / sheet to export");
+        return;
+      }
+      if (!host.supports("shell.saveFile@1")) {
+        host.log.warn("exportCsv: the host has no save door");
+        return;
+      }
+      await host.shell.saveFile({
+        suggestedName: out.fileName,
+        bytes: out.bytes,
+        mimeType: "text/csv",
+      });
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.toggleR1C1",
+    title: t(COMMANDS.toggleR1C1),
+    category: "Sheet",
+    handler: () => {
+      const now = session.formulaDisplay();
+      if (!now) return;
+      session.setFormulaDisplay({ r1c1: !now.r1c1 });
+    },
   });
   host.contribute.command({
     id: "media.paged.sheet.command.lowerToFrame",
@@ -678,8 +717,11 @@ export function activate(host: BundleHost): BundleHandle {
     host.contribute.importer({
       id: "media.paged.sheet.importer.xlsx",
       title: t(FILES.spreadsheet),
-      extensions: [".xlsx"],
-      mimeTypes: [XLSX_MIME],
+      // Sheet ADR 521 — the macro-enabled workbook and the templates are
+      // the same package (macros kept, never run; a template opens as a
+      // new workbook).
+      extensions: XLSX_FAMILY_EXTENSIONS,
+      mimeTypes: XLSX_FAMILY_MIMES,
       import: async ({ name, bytes, newDocument }) => {
         await session.import(bytes, name);
         await placeIntoNewDocument(session, newDocument);
@@ -699,6 +741,18 @@ export function activate(host: BundleHost): BundleHandle {
         host.shell.openPanel(PANEL_ID);
       },
     });
+    // Sheet ADR 521 — OpenDocument spreadsheets, read (converted in Rust).
+    host.contribute.importer({
+      id: "media.paged.sheet.importer.ods",
+      title: t(FILES.ods),
+      extensions: ODS_EXTENSIONS,
+      mimeTypes: ODS_MIMES,
+      import: async ({ name, bytes, newDocument }) => {
+        await importBytes(session, bytes, name);
+        await placeIntoNewDocument(session, newDocument);
+        host.shell.openPanel(PANEL_ID);
+      },
+    });
   }
   // K-2 / S-06 — register the .xlsx EXPORTER: the Export Center pulls the
   // workbook bytes on demand (the host owns blob→download). Preservation-
@@ -709,7 +763,25 @@ export function activate(host: BundleHost): BundleHandle {
       title: t(FILES.xlsx),
       extension: ".xlsx",
       mimeType: XLSX_MIME,
-      export: () => session.saveWorkbook(),
+      // A macro workbook saved as .xlsx leaves its VBA project out (Excel
+      // refuses an .xlsx with one); the .xlsm exporter keeps it.
+      export: () => session.saveWorkbookAs("xlsx"),
+    });
+    // Sheet ADR 521 — the macro-enabled workbook, and the active sheet as
+    // CSV (UTF-8 with a BOM, the host language's list separator).
+    host.contribute.exporter({
+      id: "media.paged.sheet.exporter.xlsm",
+      title: t(FILES.xlsm),
+      extension: ".xlsm",
+      mimeType: XLSM_MIME,
+      export: () => session.saveWorkbookAs("xlsm"),
+    });
+    host.contribute.exporter({
+      id: "media.paged.sheet.exporter.csv",
+      title: t(FILES.csv),
+      extension: ".csv",
+      mimeType: "text/csv",
+      export: () => session.exportCsv(defaultCsvOptions()),
     });
   }
 
