@@ -418,7 +418,7 @@ fn sep_char(a: Option<&Arg>, fallback: char) -> Result<char, CellError> {
 /// with zero decimals (`FIXED(1234.567, -1)` → `"1,230"`). The rounding and
 /// grouping are `sheet_format`'s, so the §9 number-format engine stays the
 /// single source. An error propagates.
-pub fn fixed(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
+pub fn fixed(args: &[Arg], ctx: &EvalCtx) -> CellValue {
     if let Some(e) = coerce::first_error(args) {
         return CellValue::Error(e);
     }
@@ -434,17 +434,18 @@ pub fn fixed(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
         Ok(b) => b,
         Err(e) => return CellValue::Error(e),
     };
-    text_or_err(format_currency(number, decimals, no_commas, ""))
+    text_or_err(format_currency(number, decimals, no_commas, None, ctx))
 }
 
 /// The general fixed/currency renderer (powers both `FIXED` and `DOLLAR`).
-/// `prefix` is a literal string put inside the format code before the number
-/// pattern (DOLLAR passes `"$"`).
+/// `currency` is the locale whose currency pattern wraps the number (DOLLAR),
+/// `None` for plain fixed-point text (FIXED).
 fn format_currency(
     value: f64,
     decimals: i32,
     no_commas: bool,
-    prefix: &str,
+    currency: Option<sheet_core::Locale>,
+    ctx: &EvalCtx,
 ) -> Result<String, CellError> {
     // Negative `decimals`: round left of the point, then format at 0 decimals.
     let (rounded, eff_decimals) = if decimals < 0 {
@@ -453,34 +454,44 @@ fn format_currency(
     } else {
         (value, decimals as usize)
     };
+    // A value that rounds to zero shows no sign (Excel-recorded:
+    // `FIXED(-0.004,2)` is "0.00").
+    let rounded = if eff_decimals <= 15 {
+        let pow = 10f64.powi(eff_decimals as i32);
+        if round_half_away(rounded.abs() * pow) == 0.0 {
+            0.0
+        } else {
+            rounded
+        }
+    } else {
+        rounded
+    };
 
-    // Build the ECMA-376 pattern. The literal currency prefix is quoted so the
-    // format parser treats it verbatim, then the integer/grouping pattern, then
-    // the optional fractional places.
+    // Build the ECMA-376 pattern: the integer/grouping pattern, then the
+    // optional fractional places; a currency symbol is quoted so the format
+    // parser takes it verbatim.
     let group = if no_commas { "0" } else { "#,##0" };
     let frac = if eff_decimals > 0 {
         format!(".{}", "0".repeat(eff_decimals))
     } else {
         String::new()
     };
-    let quoted_prefix = if prefix.is_empty() {
-        String::new()
-    } else {
-        format!("\"{prefix}\"")
-    };
-    // Negative section: FIXED (no prefix) writes a leading minus; DOLLAR
-    // uses the en-US currency negative pattern "($1,234.50)" (recorded on
-    // Excel 16 — the earlier leading-minus ruling was a deviation).
-    let pos = format!("{quoted_prefix}{group}{frac}");
-    let neg = if prefix.is_empty() {
-        format!("-{group}{frac}")
-    } else {
-        format!("({quoted_prefix}{group}{frac})")
+    // The currency pattern of the workbook locale (Excel-recorded under each
+    // region): en-US `$1,234.57` / `($1,234.57)`; de, es, it `1.234,57 €` /
+    // `-1.234,57 €`; fr `€1 234,57` / `-€1 234,57`.
+    let body = format!("{group}{frac}");
+    let (pos, neg) = match currency {
+        None => (body.clone(), format!("-{body}")),
+        Some(sheet_core::Locale::EnUs) => (format!("\"$\"{body}"), format!("(\"$\"{body})")),
+        Some(sheet_core::Locale::FrFr) => (format!("\"€\"{body}"), format!("-\"€\"{body}")),
+        Some(_) => (format!("{body}\" €\""), format!("-{body}\" €\"")),
     };
     let code = format!("{pos};{neg}");
 
     let compiled = sheet_format::compile(&code).map_err(|_| CellError::Value)?;
-    let fctx = sheet_format::FormatCtx::default();
+    // Rendered in the workbook's locale (separators), as Excel shows FIXED
+    // and DOLLAR there.
+    let fctx = sheet_format::FormatCtx::new(ctx.date_system, ctx.locale);
     Ok(sheet_format::format_value(
         &CellValue::Number(rounded),
         &compiled,
@@ -502,10 +513,10 @@ fn round_half_away(v: f64) -> f64 {
 /// `DOLLAR(number, [decimals])` → `number` formatted as currency text with a
 /// leading `$`, thousands grouping, and `decimals` places (default `2`) (spec
 /// §11; ECMA-376 §18.17.7). A negative `decimals` rounds left of the point as
-/// in `FIXED`. The currency style comes from `sheet_format` (§9). The locale
-/// currency symbol is the T0 `$` literal (D-8: no locale tailoring yet). An
-/// error propagates.
-pub fn dollar(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
+/// in `FIXED`. The currency symbol and pattern follow the workbook's locale
+/// (W3: `$` for en-US, `€` after or before the number elsewhere, as Excel
+/// shows it under that region). An error propagates.
+pub fn dollar(args: &[Arg], ctx: &EvalCtx) -> CellValue {
     if let Some(e) = coerce::first_error(args) {
         return CellValue::Error(e);
     }
@@ -518,7 +529,13 @@ pub fn dollar(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
         Err(e) => return CellValue::Error(e),
     };
     // DOLLAR always groups thousands (no `no_commas` argument).
-    text_or_err(format_currency(number, decimals, false, "$"))
+    text_or_err(format_currency(
+        number,
+        decimals,
+        false,
+        Some(ctx.locale),
+        ctx,
+    ))
 }
 
 // ============================ REPLACE ============================

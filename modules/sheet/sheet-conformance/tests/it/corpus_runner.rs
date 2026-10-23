@@ -274,3 +274,13 @@ fn sheet_calc_corpus_array3() {
 fn sheet_calc_corpus_fix3() {
     run_family("fix3");
 }
+
+#[test]
+fn sheet_calc_corpus_stat3() {
+    run_family("stat3");
+}
+
+#[test]
+fn sheet_calc_corpus_fin2() {
+    run_family("fin2");
+}

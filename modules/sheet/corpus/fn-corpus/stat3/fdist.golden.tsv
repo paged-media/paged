@@ -1,0 +1,10 @@
+# FDIST(x,deg_freedom1,deg_freedom2) - legacy right tail.
+# id	formula	setup	expected
+fdl-0	=FDIST(15.2069,6,4)	-	0.009999956997237
+fdl-1	=FDIST(1,1,1)	-	0.5
+fdl-2	=FDIST(3,50,60)	-	2.97287408278036E-05
+fdl-3	=FDIST(0,4,5)	-	1
+fdl-4	=FDIST(-1,4,5)	-	#NUM!
+fdl-5	=FDIST(1,0,5)	-	#NUM!
+fdl-6	=FDIST("x",4,5)	-	#VALUE!
+fdl-7	=FDIST(1000,5,8)	-	5.86464390102083E-11
