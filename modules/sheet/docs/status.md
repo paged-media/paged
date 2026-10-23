@@ -203,7 +203,18 @@ each published canary added is under [Releases](#releases).
   definition), and sets document swatches and character / paragraph / cell styles; an xlsx save
   writes the concrete colours and keeps the references in the style record's own `extLst`,
   restored on re-import only while the concrete colour is unchanged. `get_cell_visual` and
-  `named_styles` read the model. The lowered styles carry the new facets beside the colours.
+  `named_styles` read the model. Both surfaces draw it from the same lowered style: the grid
+  paints the 18 patterns, gradients, diagonals, rotated and stacked text, indent, shrink-to-fit,
+  strike-through, super- and subscript, double underlines and rich-text runs (each run in its
+  own font); the page table names a document swatch instead of minting one, applies the
+  document character and cell styles as they are and bases its paragraph styles on the
+  document paragraph style, sets strike-through and super/subscript, applies each rich-text
+  run's character style over its range, turns rotated cells by a rotation cell style (the
+  table's quarter turns: 45–135° turn, smaller angles stay upright), stacks text one character
+  per line, and draws diagonals as page lines. Not on the page: a pattern shows as the blend of
+  its colours and a gradient as its mean colour, dashed and double borders as solid lines of
+  their weight, shrink-to-fit and the double underlines (the table model has no such
+  properties).
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

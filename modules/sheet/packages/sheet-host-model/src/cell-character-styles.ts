@@ -85,6 +85,12 @@ export function cellCharacterStyles(
   >();
   for (const style of content.styles ?? []) {
     if (style.key === 0) continue;
+    // A document character style is applied as it is (sheet ADR 518): the
+    // cell's concrete font is its xlsx fallback, not an override.
+    if (style.docCharStyle) {
+      out.set(style.key, { id: style.docCharStyle, name: "", props: [] });
+      continue;
+    }
     const props = styleProps(style);
     if (props.length === 0) continue;
     out.set(style.key, {
@@ -96,6 +102,19 @@ export function cellCharacterStyles(
   return out;
 }
 
+/** The style keys the content's populated cells and rich-text runs use. */
+function usedStyleKeys(content: LoweredContent): Set<number> {
+  const used = new Set<number>();
+  for (const row of content.rows) {
+    for (const cell of row.cells) {
+      if (cell.text.length > 0 && cell.styleKey) used.add(cell.styleKey);
+      for (const run of cell.runs ?? [])
+        if (run.styleKey) used.add(run.styleKey);
+    }
+  }
+  return used;
+}
+
 /** createCharacterStyle + one setStyleProperty per facet for every style
  *  the content uses and the document lacks. `knownStyleIds === null` (the
  *  read failed) mints nothing. Text colours name `cellText` swatches — mint
@@ -105,17 +124,14 @@ export function cellCharacterStyleMints(
   knownStyleIds: ReadonlySet<string> | null,
 ): Mutation[] {
   if (knownStyleIds === null) return [];
-  const used = new Set<number>();
-  for (const row of content.rows) {
-    for (const cell of row.cells) {
-      if (cell.text.length > 0 && cell.styleKey) used.add(cell.styleKey);
-    }
-  }
+  const used = usedStyleKeys(content);
   const ops: Mutation[] = [];
   const minted = new Set<string>();
   for (const [key, st] of cellCharacterStyles(content)) {
     if (!used.has(key) || knownStyleIds.has(st.id) || minted.has(st.id))
       continue;
+    // A document style is the document's: never minted here.
+    if (st.props.length === 0) continue;
     minted.add(st.id);
     ops.push({
       op: "createCharacterStyle",
@@ -140,19 +156,29 @@ export function cellCharacterStyleMints(
  *  for an unformatted cell). Keyed `row:col` at TABLE positions. */
 export function cellCharacterStyleMap(
   content: LoweredContent,
-): Map<string, { style: string; text: string }> {
+): Map<string, { style: string; text: string; runs?: string[] }> {
   const styles = cellCharacterStyles(content);
   const colPos = new Map<number, number>();
   columnOrder(content).forEach((m, i) => colPos.set(m, i));
-  const out = new Map<string, { style: string; text: string }>();
+  const out = new Map<
+    string,
+    { style: string; text: string; runs?: string[] }
+  >();
   content.rows.forEach((row, r) => {
     for (const cell of row.cells) {
       const c = colPos.get(cell.col);
       if (c === undefined || cell.text.length === 0) continue;
       const st = cell.styleKey ? styles.get(cell.styleKey) : undefined;
+      // A rich-text cell: one style per run (W2.2), in the run order.
+      const runs = cell.runs?.map(
+        (run) =>
+          (run.styleKey ? styles.get(run.styleKey)?.id : undefined) ??
+          NO_CHARACTER_STYLE,
+      );
       out.set(`${r}:${c}`, {
         style: st?.id ?? NO_CHARACTER_STYLE,
         text: cell.text,
+        ...(runs && cell.runs ? { runs } : {}),
       });
     }
   });
@@ -170,10 +196,44 @@ export function cellCharacterStyleApplies(
   opts: { cells?: ReadonlySet<string>; includeDefault?: boolean } = {},
 ): Mutation[] {
   const ops: Mutation[] = [];
-  for (const [key, { style, text }] of cellCharacterStyleMap(content)) {
+  const runTexts = new Map<string, string[]>();
+  content.rows.forEach((row, r) => {
+    const order = columnOrder(content);
+    for (const cell of row.cells) {
+      if (cell.runs)
+        runTexts.set(
+          `${r}:${order.indexOf(cell.col)}`,
+          cell.runs.map((x) => x.text),
+        );
+    }
+  });
+  for (const [key, { style, text, runs }] of cellCharacterStyleMap(content)) {
     if (opts.cells && !opts.cells.has(key)) continue;
-    if (style === NO_CHARACTER_STYLE && !opts.includeDefault) continue;
     const [row, col] = key.split(":").map(Number);
+    const texts = runTexts.get(key);
+    if (runs && texts) {
+      // Each run's range takes its style (offsets in the text's units).
+      let start = 0;
+      runs.forEach((runStyle, i) => {
+        const end = start + textOffsetLength(texts[i] ?? "");
+        if (runStyle !== NO_CHARACTER_STYLE || opts.includeDefault) {
+          ops.push({
+            op: "applyStyle",
+            args: {
+              storyId,
+              start,
+              end,
+              style: runStyle,
+              scope: "character",
+              cell: { tableId, row, col },
+            },
+          });
+        }
+        start = end;
+      });
+      continue;
+    }
+    if (style === NO_CHARACTER_STYLE && !opts.includeDefault) continue;
     ops.push({
       op: "applyStyle",
       args: {
@@ -204,6 +264,7 @@ export function cellsNeedingRestyle(
     const old = a.get(k);
     const oldStyle = old?.style ?? NO_CHARACTER_STYLE;
     if (oldStyle !== v.style) out.add(k);
+    else if (JSON.stringify(old?.runs) !== JSON.stringify(v.runs)) out.add(k);
     else if (old?.text !== v.text && v.style !== NO_CHARACTER_STYLE) out.add(k);
   }
   return out;

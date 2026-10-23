@@ -226,7 +226,8 @@ function distinctStyleHexes(
  *  colours `lower-to-table.ts` mints swatches for before referencing
  *  them from a `cellFillColor`. */
 export function distinctCellFillHexes(content: LoweredContent): string[] {
-  return distinctStyleHexes(content, (s) => s.fillRgb);
+  // A fill that names a document swatch mints nothing (sheet ADR 518).
+  return distinctStyleHexes(content, (s) => (s.fillSwatch ? null : s.fillRgb));
 }
 
 /** The distinct cell BORDER colours across a lowered region (every edge of
@@ -237,8 +238,26 @@ export function distinctCellStrokeHexes(content: LoweredContent): string[] {
   for (const style of content.styles ?? []) {
     if (style.key === 0) continue;
     const l = style.borderLines;
-    for (const line of [l?.top, l?.right, l?.bottom, l?.left]) {
-      const h = line?.rgb == null ? null : normalizePaletteHex(line.rgb);
+    for (const line of [
+      l?.top,
+      l?.right,
+      l?.bottom,
+      l?.left,
+      l?.diagonalUp,
+      l?.diagonalDown,
+    ]) {
+      if (line?.swatch) continue; // a document swatch: nothing to mint
+      // An automatic diagonal is drawn as a page line in black (a table edge
+      // takes the table's default).
+      const auto =
+        line != null &&
+        line.rgb == null &&
+        (line === l?.diagonalUp || line === l?.diagonalDown);
+      const h = auto
+        ? "000000"
+        : line?.rgb == null
+          ? null
+          : normalizePaletteHex(line.rgb);
       if (h == null || seen.has(h)) continue;
       seen.add(h);
       out.push(h);
@@ -252,7 +271,7 @@ export function distinctCellStrokeHexes(content: LoweredContent): string[] {
  *  colours `lower-to-mutations.ts` mints swatches for before
  *  referencing them from a `characterFillColor`. */
 export function distinctCellTextHexes(content: LoweredContent): string[] {
-  return distinctStyleHexes(content, (s) => s.textRgb);
+  return distinctStyleHexes(content, (s) => (s.textSwatch ? null : s.textRgb));
 }
 
 /** What the palette is derived FROM. Both members are optional: a
