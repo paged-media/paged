@@ -1,0 +1,11 @@
+$ paged-node package <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "package needs -o <dir|x.zip>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

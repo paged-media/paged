@@ -3,13 +3,13 @@ $ paged-node merge --help
 # stdout
 paged-node merge <template>
 
-Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged
+Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged (through paged.data's typed commands)
 
 options:
   --data <x.csv>                     the records (CSV/TSV/JSON/Parquet/XLSX through paged.data)
   --query <sql>                      select the records (default SELECT * FROM "data")
   --out <dir>                        output directory (required)
-  --format <pdf|idml|paged>          output format (default paged)
+  --format <pdf|idml|paged>          output format (default paged); pdf through the typed exporter (paged.publish) when installed
   --per-record                       one document per record instead of one merged document
   --records-per-page <single|multiple> Data Merge layout (default single)
   --arrange <rows|columns>           multiple records: fill rows or columns first (default rows)
