@@ -79,6 +79,10 @@ export type FrameSurfaceSession = Pick<
   | "documentFontFace"
   | "documentTextDefault"
   | "documentSwatchColors"
+  | "documentStyleChoices"
+  | "applyDocumentSwatch"
+  | "styleAtTarget"
+  | "setStyle"
   | "documentStyleRevision"
   | "setFrameViewLock"
   | "pointerDownInFrame"
@@ -1430,6 +1434,15 @@ function SheetBarView({
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
+      // P7 — the document references on the active cell.
+      docStyle: (() => {
+        const cs = session.styleAtTarget();
+        return {
+          para: cs?.docParaStyle ?? "",
+          fill: cs?.fillSwatch?.id ?? null,
+          text: cs?.fontSwatch?.id ?? null,
+        };
+      })(),
       alert: session.entryAlert(),
       card: session.dataCard(),
       filterHeader: filterHeaderText(session),
@@ -1534,6 +1547,14 @@ function SheetBarView({
               focusGrid();
             }
           }}
+        />
+        <DocumentStylePickers
+          session={session}
+          current={view.docStyle}
+          box={box}
+          button={button}
+          card={bar}
+          done={() => requestAnimationFrame(focusGrid)}
         />
         {view.stats && view.stats.count > 0 ? (
           <span
@@ -1647,6 +1668,172 @@ function filterHeaderText(session: FrameSurfaceSession): string {
   const fb = session.filterButtons();
   if (card?.kind !== "filter" || !fb) return "";
   return session.cellInputAt(fb.row, card.col);
+}
+
+// ── document styles on the bar: paragraph style, fill and text swatch ──
+
+type StyleChoices = {
+  paragraphStyles: { id: string; name: string }[];
+  swatches: { id: string; name: string; rgbHex: string }[];
+};
+
+/** The document's choices, re-read when its styles may have changed. */
+function useStyleChoices(session: FrameSurfaceSession): StyleChoices {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [choices, setChoices] = useState<StyleChoices>({
+    paragraphStyles: [],
+    swatches: [],
+  });
+  useEffect(() => {
+    let live = true;
+    void session.documentStyleChoices().then((c) => {
+      if (live) setChoices(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, revision]);
+  return choices;
+}
+
+function DocumentStylePickers({
+  session,
+  current,
+  box,
+  button,
+  card,
+  done,
+}: {
+  session: FrameSurfaceSession;
+  current: { para: string; fill: string | null; text: string | null };
+  box: CSSProperties;
+  button: CSSProperties;
+  card: CSSProperties;
+  done: () => void;
+}) {
+  const choices = useStyleChoices(session);
+  const [open, setOpen] = useState<"fill" | "text" | null>(null);
+  const colorOf = (id: string | null) =>
+    choices.swatches.find((x) => x.id === id)?.rgbHex ?? null;
+  const chip = (rgb: string | null): CSSProperties => ({
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    border: "1px solid var(--pg-border, #c9c9c4)",
+    background:
+      rgb ??
+      "linear-gradient(to top right, transparent 45%, #d33 45%, #d33 55%, transparent 55%)",
+    verticalAlign: "middle",
+  });
+  const pick = (id: string | null) => {
+    const target = open;
+    setOpen(null);
+    if (!target) return;
+    void session.applyDocumentSwatch(target, id).then(done);
+  };
+  return (
+    <span style={{ position: "relative", display: "inline-flex", gap: 4 }}>
+      <select
+        data-testid="sheet-bar-style"
+        aria-label="Paragraph style"
+        title="Paragraph style (document)"
+        value={current.para}
+        style={{ ...box, maxWidth: 140 }}
+        onChange={(e) => {
+          session.setStyle({ docParaStyle: e.currentTarget.value });
+          done();
+        }}
+      >
+        <option value="">No paragraph style</option>
+        {choices.paragraphStyles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        data-testid="sheet-bar-fill"
+        aria-label="Cell fill"
+        title="Cell fill (document swatch)"
+        aria-expanded={open === "fill"}
+        style={button}
+        onClick={() => setOpen(open === "fill" ? null : "fill")}
+      >
+        <span style={chip(colorOf(current.fill))} /> ▾
+      </button>
+      <button
+        type="button"
+        data-testid="sheet-bar-text-color"
+        aria-label="Text colour"
+        title="Text colour (document swatch)"
+        aria-expanded={open === "text"}
+        style={button}
+        onClick={() => setOpen(open === "text" ? null : "text")}
+      >
+        A <span style={chip(colorOf(current.text))} />
+      </button>
+      {open ? (
+        <div
+          data-testid="sheet-swatch-picker"
+          role="listbox"
+          aria-label={open === "fill" ? "Cell fill" : "Text colour"}
+          style={{
+            ...card,
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            minWidth: 0,
+            width: 196,
+            flexWrap: "wrap",
+            gap: 4,
+            padding: 8,
+            zIndex: 1,
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setOpen(null);
+              done();
+            }
+          }}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={
+              (open === "fill" ? current.fill : current.text) === null
+            }
+            title="None"
+            data-swatch=""
+            style={{ ...button, padding: 2 }}
+            onClick={() => pick(null)}
+          >
+            <span style={chip(null)} />
+          </button>
+          {choices.swatches.map((sw) => (
+            <button
+              key={sw.id}
+              type="button"
+              role="option"
+              aria-selected={
+                (open === "fill" ? current.fill : current.text) === sw.id
+              }
+              title={sw.name}
+              data-swatch={sw.id}
+              style={{ ...button, padding: 2 }}
+              onClick={() => pick(sw.id)}
+            >
+              <span style={chip(sw.rgbHex)} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
+  );
 }
 
 // ── paste special: the options card under the bar ─────────────────────
