@@ -46,6 +46,7 @@ const C = (s: string) => `${PLUGIN_ID}.command.${s}`;
 const text: ValueType = { kind: "text" };
 const int: ValueType = { kind: "number", integer: true };
 const num: ValueType = { kind: "number" };
+const bool: ValueType = { kind: "bool" };
 const struct = (fields: Record<string, StructField>): ValueType => ({
   kind: "struct",
   fields,
@@ -74,6 +75,12 @@ export const BORDER_EDGES = [
  *  name or table (the placement keeps the NAME, so a redefinition moves
  *  it), or a sheet's print area (`ref` is the sheet's name). */
 export const PLACE_SOURCES = ["range", "name", "printArea"] as const;
+
+/** How `place` sizes a single frame (plan G4): `window` — a window onto
+ *  the sheet the size of the range in sheet tracks (the default); `fixed` —
+ *  a window filling the `box` the caller gives; `fit` — the earlier fixed
+ *  range with text-measured column widths. */
+export const PLACE_SIZINGS = ["window", "fixed", "fit"] as const;
 
 /** The built-in defined name a sheet's print area is stored under. */
 const PRINT_AREA = "_xlnm.Print_Area";
@@ -174,33 +181,88 @@ export function layoutCommands(
         ref: text,
         chain: optional(text),
         repeatHeaderRows: dflt(int, 0),
+        sizing: dflt({ kind: "enum", members: PLACE_SIZINGS }, "window"),
+        box: optional(struct({ width: num, height: num })),
+        view: optional(
+          struct({ topLeft: optional(text), lock: dflt(bool, false) }),
+        ),
+        print: optional(
+          struct({ headings: dflt(bool, false), gridlines: dflt(bool, false) }),
+        ),
       }),
-      result: struct({ frame: text }),
+      result: struct({ frame: text, frames: { kind: "list", of: text } }),
       async handler(_ctx, a) {
-        const { source, ref, chain, repeatHeaderRows } = a as {
+        const {
+          source,
+          ref,
+          chain,
+          repeatHeaderRows,
+          sizing,
+          box,
+          view,
+          print,
+        } = a as {
           source: (typeof PLACE_SOURCES)[number];
           ref: string;
           chain?: string;
           repeatHeaderRows: number;
+          sizing: (typeof PLACE_SIZINGS)[number];
+          box?: { width: number; height: number };
+          view?: { topLeft?: string; lock: boolean };
+          print?: { headings: boolean; gridlines: boolean };
         };
         if (!(repeatHeaderRows >= 0))
           throw new Error("invalidValue: repeatHeaderRows must be 0 or more");
+        // What a view needs, checked before anything is read or written.
+        if (sizing === "fixed" && !(box && box.width > 0 && box.height > 0))
+          throw new Error(
+            "invalidValue: sizing fixed needs a box with a width and height above 0",
+          );
+        if (sizing !== "fixed" && box)
+          throw new Error('invalidValue: a box is given with sizing "fixed"');
+        const printing = !!(print?.headings || print?.gridlines);
+        const viewing = !!(view?.topLeft || view?.lock);
+        if (sizing === "fit" && (printing || viewing))
+          throw new Error(
+            'invalidValue: sizing "fit" places a fixed range; a view and print options need "window" or "fixed"',
+          );
+        if (chain !== undefined && (printing || viewing || sizing !== "window"))
+          throw new Error(
+            "invalidValue: a chain paginates the range; a view, print options and sizing are for one frame",
+          );
+        if (source === "name" && (printing || viewing || sizing === "fixed"))
+          throw new Error(
+            "invalidValue: a defined name is placed by name; a view, print options and fixed sizing need a range or a print area",
+          );
+        const topLeft = view?.topLeft?.replaceAll("$", "").toUpperCase();
+        if (
+          topLeft !== undefined &&
+          !/^[A-Z]{1,3}[1-9][0-9]{0,6}$/.test(topLeft)
+        )
+          throw new Error(
+            `invalidValue: view topLeft "${view?.topLeft}" is not a cell`,
+          );
         if (!(await session.ensureRestored()))
           throw new Error("no workbook is open");
         const e = session.state().engine;
         if (!e?.resolveRange)
           throw new Error("engine wasm predates resolve_range");
-        // Which sheet and what range the placement binds; every name is
-        // resolved by the engine.
+        // Which sheet and what ranges the placement binds; every name is
+        // resolved by the engine (a print area of several ranges gives one
+        // range per area, in the order it lists them).
         let sheet: number;
-        let range: string;
+        let ranges: string[];
         if (source === "printArea") {
           sheet = sheetIdOf(e, ref);
           try {
-            range = e.resolveRange(sheet, PRINT_AREA).range;
+            ranges = e.printAreas
+              ? e.printAreas(sheet).map((r) => r.range)
+              : [e.resolveRange(sheet, PRINT_AREA).range];
           } catch {
             throw new Error(`invalidValue: sheet "${ref}" has no print area`);
           }
+          if (ranges.length === 0)
+            throw new Error(`invalidValue: sheet "${ref}" has no print area`);
         } else if (source === "name") {
           if (ref.includes("!") || ref.includes(":"))
             throw new Error(`invalidValue: "${ref}" is a range, not a name`);
@@ -209,26 +271,51 @@ export function layoutCommands(
           } catch {
             throw new Error(`invalidValue: no defined name or table "${ref}"`);
           }
-          range = ref;
+          ranges = [ref];
         } else {
           const r = resolveRange(e, ref);
           sheet = r.sheet;
-          range = r.range;
+          ranges = [r.range];
         }
+        if (topLeft !== undefined && ranges.length > 1)
+          throw new Error(
+            "invalidValue: a print area of several ranges places each from its own top-left; a view topLeft is for one range",
+          );
         session.setActiveSheet(sheet);
-        session.setRange(range);
+        session.setRange(ranges[0]!);
         if (chain === undefined) {
-          const frame = await session.lowerSelection();
-          if (!frame) throw new Error(`could not place ${ref}`);
-          return { frame: `textFrame:${frame}` };
+          // One table per range, in order, each in its own frame: the first
+          // at the selection, each next one under the one before.
+          const frames: string[] = [];
+          for (const [i, range] of ranges.entries()) {
+            session.setRange(range);
+            const frame = await session.lowerSelection({
+              sizing,
+              ...(box
+                ? { boxPt: { widthPt: box.width, heightPt: box.height } }
+                : {}),
+              ...(view
+                ? { view: { ...view, ...(topLeft ? { topLeft } : {}) } }
+                : {}),
+              ...(print ? { print } : {}),
+              below: i > 0,
+            });
+            if (!frame) throw new Error(`could not place ${ref}`);
+            frames.push(`textFrame:${frame}`);
+          }
+          return { frame: frames[0]!, frames };
         }
         const frameId = frameIdOf(chain);
         const r = await session.paginateSelection({
           frameId,
           repeatHeaderRows,
+          ...(ranges.length > 1 ? { areas: ranges } : {}),
         });
         if (!r.ok) throw new Error(`could not place ${ref}: ${r.message}`);
-        return { frame: `textFrame:${frameId}` };
+        return {
+          frame: `textFrame:${frameId}`,
+          frames: [`textFrame:${frameId}`],
+        };
       },
     },
     {

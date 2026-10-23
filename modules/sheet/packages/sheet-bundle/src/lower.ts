@@ -77,6 +77,9 @@ import {
   offsetTableRows,
   tableRefreshOps,
   tableDataBarOps,
+  tableDiagonalOps,
+  cellRotationOps,
+  needsRotationStyles,
   cellAlignApplies,
   cellAlignStyleMints,
   cellsNeedingRealign,
@@ -499,12 +502,14 @@ async function tableContentOps(
   const wantsFills = cellFillSwatchOps(content).length > 0;
   const wantsText = cellCharacterStyles(content).size > 0;
   const wantsAlign = needsAlignStyles(content);
-  const [swatches, styles, paragraphs] = await Promise.all([
+  const wantsRotation = needsRotationStyles(content);
+  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+    wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const fillMints = wantsFills ? cellFillSwatchOps(content, swatches) : [];
   const styleOps = [
@@ -523,6 +528,10 @@ async function tableContentOps(
             available: paragraphs === null ? new Set() : undefined,
           }),
         ]
+      : []),
+    // W2.2: rotated cells take a rotation cell style.
+    ...(wantsRotation
+      ? cellRotationOps(content, storyId, tableId, cellStyles)
       : []),
   ];
   return { ops: [...fillMints, ...pourOps, ...decor.ops], styleOps };
@@ -543,14 +552,22 @@ async function barOps(
   content: LoweredContent,
   at: BarPlacement | undefined,
 ): Promise<Mutation[]> {
-  if (!at || (content.databars ?? []).length === 0) return [];
-  return tableDataBarOps(
-    content,
-    at.widths,
-    at.pageId,
-    at.origin,
-    await readKnownSwatchIds(host),
-  );
+  if (!at) return [];
+  const bars = (content.databars ?? []).length > 0;
+  // W2.2: diagonal borders are drawn page lines beside the bars (their
+  // colours are the table's own cell-stroke mints).
+  const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
+  if (!bars) return diagonals;
+  return [
+    ...tableDataBarOps(
+      content,
+      at.widths,
+      at.pageId,
+      at.origin,
+      await readKnownSwatchIds(host),
+    ),
+    ...diagonals,
+  ];
 }
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
@@ -668,6 +685,21 @@ async function readKnownParagraphStyleIds(
     return new Set(rows.map((r) => r.selfId));
   } catch (err) {
     host.log.warn("cell alignment: paragraph-style read failed", err);
+    return null;
+  }
+}
+
+/** The document's cell-style ids, or null when the read failed. */
+async function readKnownCellStyleIds(
+  host: BundleHost,
+): Promise<Set<string> | null> {
+  try {
+    const rows = await host.document.collection<{ selfId: string }>(
+      "cellStyles",
+    );
+    return new Set(rows.map((r) => r.selfId));
+  } catch (err) {
+    host.log.warn("cell rotation: cell-style read failed", err);
     return null;
   }
 }
@@ -810,30 +842,67 @@ export interface LowerLaneOptions {
    *  top-left, re-windowed to its box on every refresh. Default `"fit"`
    *  (a fixed range with text-measured widths). */
   sizing?: FrameSizing;
+  /** Plan G4 — a window frame's view: where the window starts (default the
+   *  range's top-left) and whether leaving the frame snaps back to it. */
+  view?: Partial<FrameView>;
+  /** Plan G4 — what a window frame prints besides the cells (headings,
+   *  gridlines; both off by default, as Excel prints). */
+  print?: Partial<FramePrint>;
+  /** Plan G4 — a window frame's box (pt), when the caller fixed it; default
+   *  the range's own size in sheet tracks. */
+  boxPt?: { widthPt: number; heightPt: number };
 }
 
 /** Slack (pt) added to a window measured from its own tracks, so float
  *  sums never drop the last whole row or column. */
 export const WINDOW_SLACK_PT = 0.5;
 
-/** The view fields a fresh placement records (ADR 510). */
+/** The view fields a fresh placement records (ADR 510; plan G4 adds the
+ *  caller's view, print options and box). */
 function placedView(
   range: string,
-  sizing: FrameSizing | undefined,
+  opts:
+    Pick<LowerLaneOptions, "sizing" | "view" | "print" | "boxPt"> | undefined,
   content: LoweredContent,
-): Pick<LoweredTableInfo, "view" | "sizing" | "boxPt"> {
-  if (sizing !== "window") return {};
+): Pick<LoweredTableInfo, "view" | "print" | "sizing" | "boxPt"> {
+  if (opts?.sizing !== "window") return {};
   // The window is the range's own size in sheet tracks (the frame itself is
   // fitted a little taller to the table the engine lays out), so a refresh
-  // shows the same cells until the user scrolls.
+  // shows the same cells until the user scrolls — unless the caller fixed
+  // the box.
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  const { view, print } = placedViewOptions(range, opts);
   return {
-    view: { topLeft: rangeTopLeft(range), lock: false },
+    view: view as FrameView,
+    ...(print?.headings || print?.gridlines
+      ? { print: print as FramePrint }
+      : {}),
     sizing: "window",
-    boxPt: {
+    boxPt: opts.boxPt ?? {
       widthPt: sum(content.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
       heightPt: sum(content.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
     },
+  };
+}
+
+/** The binding options a fresh placement writes: a window frame's view
+ *  (its top-left defaulting to the range's), print options and sizing;
+ *  nothing for a `"fit"` frame. */
+export function placedViewOptions(
+  range: string,
+  opts: Pick<LowerLaneOptions, "sizing" | "view" | "print"> | undefined,
+): BindingViewOptions {
+  if (opts?.sizing !== "window") return {};
+  return {
+    view: {
+      topLeft: opts.view?.topLeft ?? rangeTopLeft(range),
+      lock: opts.view?.lock ?? false,
+    },
+    print: {
+      headings: opts.print?.headings ?? false,
+      gridlines: opts.print?.gridlines ?? false,
+    },
+    sizing: "window",
   };
 }
 
@@ -878,6 +947,8 @@ export function rangeFramePage(
   engine: SheetEngine,
   sheet: number,
   range: string,
+  /** Plan G4 — printed headings and gridlines (off by default). */
+  print?: Partial<FramePrint>,
 ): LoweredContent {
   const bang = range.lastIndexOf("!");
   const [a, b] = (bang >= 0 ? range.slice(bang + 1) : range).split(":");
@@ -894,6 +965,8 @@ export function rangeFramePage(
     engine.getTracksPage(sheet, {
       rows: span(from.row, to.row),
       cols: span(from.col, to.col),
+      ...(print?.headings ? { printHeadings: true } : {}),
+      ...(print?.gridlines ? { printGridlines: true } : {}),
     }),
   );
 }
@@ -1127,10 +1200,7 @@ export async function lowerSelectionToFrame(
   let placement = opts?.placement ?? defaultPlacement(pageId, content);
   // The session's workbook revision (Wave 4) — a refresh rewrites it.
   const contentVersion = opts?.contentVersion ?? 0;
-  const viewOpts: BindingViewOptions =
-    opts?.sizing === "window"
-      ? { view: { topLeft: rangeTopLeft(range) }, sizing: "window" }
-      : {};
+  const viewOpts: BindingViewOptions = placedViewOptions(range, opts);
   const binding = makeBinding(
     sheetName,
     range,
@@ -1303,7 +1373,7 @@ export async function lowerSelectionToFrame(
     columnWidths,
     contentVersion,
     barIds,
-    ...placedView(range, opts?.sizing, content),
+    ...placedView(range, opts, content),
   });
   if (opts?.select !== false)
     await host.selection.set([{ kind: "textFrame", id: frameId }]);
@@ -1366,9 +1436,7 @@ async function placeInOneCall(
       hash: contentHash(content),
       widths: [...columnWidths],
     },
-    opts.sizing === "window"
-      ? { view: { topLeft: rangeTopLeft(range) }, sizing: "window" }
-      : {},
+    placedViewOptions(range, opts),
   );
   const r = await host.document.mutate({
     op: "batch",
@@ -1435,7 +1503,7 @@ async function placeInOneCall(
     columnWidths,
     contentVersion,
     barIds,
-    ...placedView(range, opts.sizing, content),
+    ...placedView(range, opts, content),
   });
   if (opts.select !== false)
     await host.selection.set([{ kind: "textFrame", id: frameId }]);
@@ -1808,12 +1876,16 @@ async function tableRefreshLanes(
   const wantsFills = cellFillSwatchOps(next).length > 0;
   const wantsText = restyle.size > 0 && cellCharacterStyles(next).size > 0;
   const wantsAlign = realign.size > 0 && needsAlignStyles(next);
-  const [swatches, styles, paragraphs] = await Promise.all([
+  const wantsRotation =
+    needsRotationStyles(next) &&
+    JSON.stringify(prev.styles) !== JSON.stringify(next.styles);
+  const [swatches, styles, paragraphs, cellStyles] = await Promise.all([
     wantsFills || wantsText
       ? readKnownSwatchIds(host)
       : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
+    wantsRotation ? readKnownCellStyleIds(host) : Promise.resolve(null),
   ]);
   const decor = [
     ...(wantsFills ? cellFillSwatchOps(next, swatches) : []),
@@ -1848,7 +1920,10 @@ async function tableRefreshLanes(
         ];
   // Below a host header band: the workbook's row 0 is the table's row
   // `headerRows` (ops naming no row pass unchanged).
-  return [ops.structure, ops.text, decor, [...style, ...align]]
+  const rotation = wantsRotation
+    ? cellRotationOps(next, storyId, tableId, cellStyles)
+    : [];
+  return [ops.structure, ops.text, decor, [...style, ...align, ...rotation]]
     .filter((l) => l.length > 0)
     .map((l) => offsetTableRows(l, tableId, headerRows));
 }
@@ -2450,22 +2525,28 @@ async function paginatePass(
   host: BundleHost,
   engine: SheetEngine,
   sheet: number,
-  range: string,
+  range: string | readonly string[],
   storyId: string,
   chain: ChainFrame[],
   owned: ChainTable[],
   opts?: ChainOptions,
 ): Promise<ChainLowerResult> {
-  const pages = engine.paginate(
-    sheet,
-    range,
-    chain.map((c) => c.box),
-    {
-      repeatedHeaderRows: opts?.repeatedHeaderRows,
-      continuedMarker: opts?.continuedMarker,
-      keepRowsTogether: opts?.keepRowsTogether,
-    },
-  );
+  const paginateOpts = {
+    repeatedHeaderRows: opts?.repeatedHeaderRows,
+    continuedMarker: opts?.continuedMarker,
+    keepRowsTogether: opts?.keepRowsTogether,
+  };
+  const boxes = chain.map((c) => c.box);
+  // Plan G4 — several ranges (a print area of several areas) paginate in
+  // sequence, each range's tables after the one before in the story.
+  let pages: Page[];
+  if (typeof range === "string")
+    pages = engine.paginate(sheet, range, boxes, paginateOpts);
+  else if (range.length === 1)
+    pages = engine.paginate(sheet, range[0]!, boxes, paginateOpts);
+  else if (engine.paginateAreas)
+    pages = engine.paginateAreas(sheet, [...range], boxes, paginateOpts);
+  else throw new Error("engine wasm predates paginate_areas");
   if (owned.length === 0 && pages.length > 0) {
     const one = await paginateInOneCall(host, storyId, pages);
     if (one)
@@ -2562,7 +2643,7 @@ export async function lowerPaginatedToChain(
   host: BundleHost,
   engine: SheetEngine,
   sheet: number,
-  range: string,
+  range: string | readonly string[],
   chainStoryId: string,
   opts?: ChainOptions & { chain?: ChainFrame[] },
 ): Promise<ChainLowerResult | null> {
@@ -2616,7 +2697,7 @@ export function subscribeChainReflow(
   host: BundleHost,
   engine: SheetEngine,
   sheet: number,
-  range: string,
+  range: string | readonly string[],
   chainStoryId: string,
   opts?: ChainOptions & { from?: ChainLowerResult | null; debounceMs?: number },
 ): ChainSubscription {

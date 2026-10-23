@@ -28,6 +28,7 @@ import type {
   BundleHost,
   DataProviderInfo,
   ElementId,
+  PageId,
   ProviderRecordSet,
   SceneLayerSurface,
   TabularClipboard,
@@ -40,6 +41,7 @@ import {
   cellOfA1,
   contentHash,
   parseBinding,
+  rangeTopLeft,
   workbookPalette,
   type ChartGeometry,
   type FunctionEntry,
@@ -57,6 +59,7 @@ import {
   type CalcSettingsInfo,
   type CellEditRecord,
   type CellStylePatch,
+  type DocSwatch,
   type EdgeStyle,
   type NameInfo,
   type SheetLayoutInfo,
@@ -80,6 +83,8 @@ import {
   placementWindow,
   rangeFramePage,
   refreshWantsReplace,
+  selectionBox,
+  WINDOW_SLACK_PT,
   stampPlacedView,
   recallShownContent,
   refreshBands,
@@ -93,11 +98,15 @@ import {
   type LoweredTableInfo,
 } from "./lower";
 import { NOTICES } from "./messages";
+import { createDataTools, type DataToolsApi } from "./data-tools";
+import type { EnterResult } from "./engine-w2";
 import {
   chartPlacement,
   chartSizeOf,
   lowerChartToFrame,
+  placedChartCopies,
   type PlacedChart,
+  type PlacedChartCopy,
 } from "./lower-chart";
 import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
 import {
@@ -194,6 +203,13 @@ export interface CellRegion {
 
 const OTHER_CHANGE: SessionChange = { kind: "other" };
 
+/** The IDML styles un-styled story text falls back to: the basic
+ *  paragraph style, else the root "no paragraph style". */
+const BASIC_PARAGRAPH_STYLES = [
+  "ParagraphStyle/$ID/NormalParagraphStyle",
+  "ParagraphStyle/$ID/[No paragraph style]",
+];
+
 /** The regions (one bounding box per sheet) covering `cells`. */
 export function regionsOf(
   cells: readonly { sheet: number; row: number; col: number }[],
@@ -270,6 +286,23 @@ class Emitter {
  *  session: the engine, the after-write bookkeeping, the version swap a
  *  document undo/redo or open drives, and the frames that host the
  *  workbook's label. */
+/** Plan G4 — how `lowerSelection` places the range: as a window frame
+ *  (`"window"`, the default: the range's own size in sheet tracks), a window
+ *  with a box the caller fixes (`"fixed"`, `boxPt` required), or the earlier
+ *  fixed range with text-measured widths (`"fit"`); the view's top-left cell
+ *  and lock, the printed headings and gridlines; and whether it goes below
+ *  the selected item instead of at it. */
+export interface PlaceOptions {
+  sizing?: "window" | "fit" | "fixed";
+  boxPt?: { widthPt: number; heightPt: number };
+  view?: { topLeft?: string; lock?: boolean };
+  print?: { headings?: boolean; gridlines?: boolean };
+  below?: boolean;
+}
+
+/** The gap (pt) between a print area's placed areas. */
+const PLACE_GAP_PT = 12;
+
 export interface ObjectBridge {
   engine(): SheetEngine | null;
   /** Bumps whenever the workbook is REPLACED (import, blank, CSV, dataset,
@@ -292,6 +325,13 @@ export interface ObjectBridge {
    *  (it is being deleted) and hand them over: the caller removes their
    *  page elements in its own write. */
   takeChartPlacements(index: number): PlacedChart[];
+  /** Plan G4 — re-open the chart slots a stored version's bytes no longer
+   *  carry (right after `loadVersion`, before its chart ops replay). */
+  restoreChartSlots(slots: readonly number[]): void;
+  /** Plan G4 — track again the placed charts the page carries (after a
+   *  document undo or redo, or an open): copies an undo restored refresh
+   *  with later edits. Returns how many were added. */
+  rediscoverCharts(): Promise<number>;
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -331,7 +371,7 @@ export interface SessionState {
   findRequest: number;
 }
 
-export interface WorkbookSession {
+export interface WorkbookSession extends DataToolsApi {
   /** Read the current state snapshot. */
   state(): SessionState;
   /** Subscribe to state changes (the panel's render trigger). The
@@ -368,7 +408,7 @@ export interface WorkbookSession {
   setRange(range: string): void;
   /** Lower the active sheet's selected range to a new page frame
    *  (the two-phase flow in lower.ts). Returns the created frame id. */
-  lowerSelection(): Promise<string | null>;
+  lowerSelection(opts?: PlaceOptions): Promise<string | null>;
   /** C-1 / S-02 — render the active sheet's grid INSIDE a frame as a live
    *  vector layer (`host.contribute.sceneLayer()`): gridlines + cell fills
    *  + cell values, clipped to the frame's content box by core. `frameId`
@@ -436,6 +476,44 @@ export interface WorkbookSession {
    *  window onto a component): the grid moves to its A1, and a window
    *  frame's page shows that sheet when the frame is left. */
   setFrameSheet(sheetId: number): boolean;
+  /** The bytes of a font face the document holds (`host.assets`), so the
+   *  frame surface draws cell text in the faces the page uses. Null when
+   *  the host serves none (no asset door, a family the document lacks). */
+  documentFontFace(
+    family: string,
+    style?: string,
+  ): Promise<{ bytes: Uint8Array; family: string; style?: string } | null>;
+  /** A document swatch as a cell colour reference (sheet ADR 518): its
+   *  colour model and the sRGB the document shows it as, the fallback an
+   *  xlsx reader sees. Null when the document has no such swatch. */
+  documentSwatchRef(id: string): Promise<DocSwatch | null>;
+  /** How document swatches `ids` show on screen now (`#rrggbb`, colour
+   *  managed), for the grid to draw referenced colours as the canvas does.
+   *  Unknown ids are left out. */
+  documentSwatchColors(ids: readonly string[]): Promise<Map<string, string>>;
+  /** Bumps whenever the document's swatches may have changed (a swatch
+   *  edit, an undo): the grid re-reads `documentSwatchColors`. */
+  documentStyleRevision(): number;
+  /** The document's paragraph styles and swatches (with their display
+   *  colour) for the sheet bar's style menu and swatch pickers (P7). */
+  documentStyleChoices(): Promise<{
+    paragraphStyles: { id: string; name: string }[];
+    swatches: { id: string; name: string; rgbHex: string }[];
+  }>;
+  /** Apply a document swatch to the selected cells' fill or text (null
+   *  clears it) — one undo step. */
+  applyDocumentSwatch(
+    target: "fill" | "text",
+    swatchId: string | null,
+  ): Promise<SessionResult>;
+  /** The face and size text takes on the page when a cell names none: the
+   *  document's basic paragraph style (P7 — the grid draws un-styled cells
+   *  in it, as the placed table prints them). Null when unreadable. */
+  documentTextDefault(): Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -698,6 +776,9 @@ export interface WorkbookSession {
   paginateSelection(opts?: {
     repeatHeaderRows?: number;
     frameId?: string;
+    /** Plan G4 — several ranges of the active sheet paginated in sequence
+     *  (a print area of several areas) instead of the selected range. */
+    areas?: readonly string[];
   }): Promise<SessionResult>;
   /** Bring every placed table, chart and paginated chain up to date with
    *  the workbook now (edits schedule this on their own, debounced). */
@@ -1018,8 +1099,26 @@ export function createWorkbookSession(
   const chainHeaderRows = new Map<string, number>();
   const chains = new Map<
     string,
-    { sub: ChainSubscription; sheet: number; range: string }
+    {
+      sub: ChainSubscription;
+      sheet: number;
+      range: string | readonly string[];
+    }
   >();
+  /** Plan G4 — a chart of this workbook was deleted (or its stored bytes
+   *  came with deleted slots): every save then carries the slots the bytes
+   *  no longer hold (`chartTombstones`). */
+  let chartSlotsTracked = false;
+  /** Re-open deleted chart slots in the engine right after a load. */
+  function restoreChartSlots(slots: readonly number[]): void {
+    if (slots.length === 0 || !state.engine) return;
+    chartSlotsTracked = true;
+    try {
+      state.engine.restoreChartSlots?.([...slots]);
+    } catch (err) {
+      host.log.warn("deleted chart slots could not be restored", err);
+    }
+  }
   // The workbook content version: +1 per committed edit. Placed frames'
   // bindings carry the version they show (it was always 0 before).
   let revision = 0;
@@ -1210,6 +1309,59 @@ export function createWorkbookSession(
     markEdited();
     stampRev();
     return true;
+  }
+
+  /** A typed entry through the engine's validation (`enterCell`, sheet ADR
+   *  517) and journaled like `journaledSetCell`: the prior input is read
+   *  first, the format the text implied rides the same step. An engine
+   *  without the door takes `journaledSetCell`. Null when the write failed
+   *  (logged; nothing journaled). */
+  function journaledEnterCell(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed: boolean,
+  ): EnterResult | null {
+    const engine = state.engine;
+    if (!engine) return null;
+    if (!engine.enterCell)
+      return journaledSetCell(sheet, row, col, input)
+        ? { applied: true }
+        : null;
+    let prev: string;
+    let res: EnterResult;
+    try {
+      // Free when the formula bar just showed the cell (a memoised read).
+      prev =
+        cachedRead(`input:${sheet}:${row}:${col}`, () =>
+          engine.getCellInput(sheet, row, col),
+        ) ?? "";
+      res = engine.enterCell(sheet, row, col, input, confirmed);
+    } catch (err) {
+      host.log.warn("enterCell refused", err);
+      return null;
+    }
+    if (!res.applied) return res;
+    const restyled = (res.result as { restyled?: readonly Restyle[] } | null)
+      ?.restyled;
+    editJournal.length = journalCursor; // drop any redo tail
+    const batch = nextJournalBatch++;
+    if (restyled && restyled.length > 0)
+      editJournal.push({
+        sheet,
+        row,
+        col,
+        prev: "",
+        next: "",
+        batch,
+        fmt: restyleStep(restyled),
+      });
+    editJournal.push({ sheet, row, col, prev, next: input, batch });
+    journalCursor = editJournal.length;
+    markEdited();
+    stampRev();
+    return res;
   }
 
   /** Write one cell and return its PRIOR input (the journal's inverse).
@@ -1517,7 +1669,7 @@ export function createWorkbookSession(
     if (ch.length !== 1) return false;
     if (!cellEdit) {
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text: ch };
       cellEditMode = "enter";
     } else {
@@ -1553,6 +1705,7 @@ export function createWorkbookSession(
     if (cellEdit) return true;
     const at = activeOf();
     if (!at || !state.engine || state.activeSheet === null) return false;
+    if (!data.mayEdit(at.row, at.col)) return false;
     let text = "";
     try {
       text = state.engine.getCellInput(state.activeSheet, at.row, at.col) ?? "";
@@ -1574,7 +1727,13 @@ export function createWorkbookSession(
     cellEdit = null;
     const sheet = state.activeSheet;
     if (state.engine && sheet !== null) {
-      journaledSetCell(sheet, row, col, text);
+      // Sheet ADR 517 — protection and validation decide; a held-back
+      // entry waits on its alert (Retry / Yes / OK reopen or apply it).
+      if (!data.enterTyped(sheet, row, col, text)) {
+        emitter.emit({ kind: "edit" });
+        void submitInFrameGrid();
+        return false;
+      }
       emitter.emit({
         kind: "cells",
         regions: regionsOf([{ sheet, row, col }]),
@@ -1976,12 +2135,28 @@ export function createWorkbookSession(
         return backspaceEdit();
       case "commit":
         commitEdit();
-        if (m && a.then) applyModel(advance(m, a.then));
+        // A held-back entry stays where it is until its alert is answered.
+        if (m && a.then && !data.api.entryAlert())
+          applyModel(advance(m, a.then));
         return true;
       case "commitMove":
         commitEdit();
-        if (m) applyModel(moveBy(m, a.dRow, a.dCol, false));
+        if (m && !data.api.entryAlert())
+          applyModel(moveBy(m, a.dRow, a.dCol, false));
         return true;
+      case "toggleFilter": {
+        const r = data.api.toggleAutofilter();
+        if (!r.ok) host.log.warn(`filter: ${r.message}`);
+        return true;
+      }
+      case "dropdown":
+        return data.api.openCellDropdown();
+      case "group": {
+        const r = data.api.groupSelection(a.on);
+        if (!r.ok) host.log.warn(`group: ${r.message}`);
+        return true;
+      }
+
       case "cancel":
         cancelEdit();
         return true;
@@ -2483,9 +2658,13 @@ export function createWorkbookSession(
    *  it travels WITH the document, the read PREFERENCE on restore) and the
    *  per-browser `host.blob` (a fast local cache + backward-compat for hosts
    *  with no container writer). */
-  async function writeWorkbook(bytes: Uint8Array, name: string): Promise<void> {
+  async function writeWorkbook(
+    bytes: Uint8Array,
+    name: string,
+    chartSlots: readonly number[] | null = null,
+  ): Promise<void> {
     try {
-      await writeWorkbookPart(host, bytes, name);
+      await writeWorkbookPart(host, bytes, name, chartSlots);
     } catch (err) {
       host.log.warn("workbook container-part persist failed", err);
     }
@@ -2518,10 +2697,14 @@ export function createWorkbookSession(
   let docEpoch = 0;
   let loadEpoch = 0;
 
-  function enqueueWrite(bytes: Uint8Array, name: string): Promise<void> {
+  function enqueueWrite(
+    bytes: Uint8Array,
+    name: string,
+    chartSlots: readonly number[] | null = null,
+  ): Promise<void> {
     const epoch = docEpoch;
     persistChain = persistChain.then(() =>
-      epoch === docEpoch ? writeWorkbook(bytes, name) : undefined,
+      epoch === docEpoch ? writeWorkbook(bytes, name, chartSlots) : undefined,
     );
     return persistChain;
   }
@@ -2570,7 +2753,17 @@ export function createWorkbookSession(
       );
       return persistChain;
     }
-    return enqueueWrite(bytes, state.fileName ?? "workbook.xlsx");
+    // Plan G4 — the slots of the charts this save dropped ride with it
+    // (asked only of a workbook a chart was deleted from).
+    let chartSlots: number[] | null = null;
+    if (chartSlotsTracked) {
+      try {
+        chartSlots = state.engine.chartTombstones?.() ?? null;
+      } catch {
+        // An engine without the door keeps no slots.
+      }
+    }
+    return enqueueWrite(bytes, state.fileName ?? "workbook.xlsx", chartSlots);
   }
 
   // A .paged save takes the workbook part as it stands; an edit still in the
@@ -2657,6 +2850,10 @@ export function createWorkbookSession(
   }
   const foreignChangeSub = host.document.onDidChange((e) => {
     if (e.kind === "mutationApplied" && ownWrites > 0) return;
+    // P7 — a swatch or style the cells reference may have changed: the
+    // grid re-reads the document's colours (debounced with the rest).
+    docStyleRevision += 1;
+    scheduleStyleNotice();
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
     // ADR 510 (P6) — a window frame's box is its window: a resize shows
     // what fits now. The engine names the resized frame's content box; a
@@ -2735,6 +2932,18 @@ export function createWorkbookSession(
   }
   /** The last frame box seen per window frame (`rereadWindowBoxes`). */
   const resizedBoxes = new Map<string, string>();
+
+  /** P7 — the document style revision the grid follows. */
+  let docStyleRevision = 0;
+  let styleNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleStyleNotice(): void {
+    if (!inFrameActive) return;
+    if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
+    styleNoticeTimer = setTimeout(() => {
+      styleNoticeTimer = null;
+      emitter.emit();
+    }, REFRESH_DEBOUNCE_MS);
+  }
 
   /** P6 — continuation frame → the chain's head (a window frame). */
   const chainHeadOf = new Map<string, string>();
@@ -3085,7 +3294,126 @@ export function createWorkbookSession(
       revision += 1;
       scheduleRefresh();
     }
+    found += await rediscoverCharts();
     return found;
+  }
+
+  /** Plan G4 — track the placed charts the page carries and this session
+   *  does not: a reopened document's, and the copies an undo brought back
+   *  (a deleteChart undone restores the art, which the delete had taken out
+   *  of the tracking). Each copy is found on the scene tree by its binding
+   *  (`chart:<n>`, `placedChartCopies`) and tracked at the box its binding
+   *  recorded — a chart placed before the box was recorded at the extent of
+   *  its elements — with the geometry it shows now, so the next edit that
+   *  changes the chart redraws it. A copy of a chart the workbook no longer
+   *  has is left alone. Tracked charts whose art is gone from the page (an
+   *  undone placement) are dropped. Returns how many were added. */
+  async function rediscoverCharts(): Promise<number> {
+    const engine = state.engine;
+    if (!engine) return 0;
+    const copies = await placedChartCopies(host);
+    // Art that left the page is no longer tracked (only when the tree was
+    // read: an unreadable tree finds no copies and changes nothing).
+    if (copies.length > 0 || placedCharts.length > 0) {
+      const tree = await host.document.tree().catch(() => null);
+      if (tree) {
+        const ids = new Set<string>();
+        const walk = (nodes: typeof tree) => {
+          for (const n of nodes) {
+            if (n.id) ids.add(String(n.id.id));
+            if (n.children) walk(n.children);
+          }
+        };
+        walk(tree);
+        placedCharts = placedCharts.filter(
+          (p) =>
+            p.elementIds.length === 0 ||
+            p.elementIds.some((id) => ids.has(String(id.id))),
+        );
+      }
+    }
+    const known = new Set(
+      placedCharts.flatMap((p) => [
+        ...(p.groupId ? [p.groupId] : []),
+        ...p.elementIds.map((id) => String(id.id)),
+      ]),
+    );
+    const live = new Set(engine.listCharts().map((c) => c.index));
+    let added = 0;
+    for (const copy of copies) {
+      if (!live.has(copy.chartIndex)) continue;
+      const ids = copy.elementIds.map((id) => String(id.id));
+      if (
+        (copy.groupId && known.has(copy.groupId)) ||
+        ids.some((id) => known.has(id))
+      )
+        continue;
+      const at = await chartCopyBox(copy);
+      if (!at) continue;
+      let geometryKey: string;
+      try {
+        geometryKey = JSON.stringify(
+          engine.getChartGeometry(copy.chartIndex, ...chartSizeOf(at.bounds)),
+        );
+      } catch {
+        continue;
+      }
+      placedCharts.push({
+        chartIndex: copy.chartIndex,
+        pageId: at.pageId,
+        bounds: at.bounds,
+        elementIds: copy.elementIds,
+        groupId: copy.groupId ?? null,
+        contentVersion: revision,
+        geometryKey,
+      });
+      for (const id of ids) known.add(id);
+      added += 1;
+    }
+    return added;
+  }
+
+  /** Where a found chart copy stands: its page (from its elements'
+   *  geometry) and its recorded box, else the page-space extent of its
+   *  elements. Null when no element has a page. */
+  async function chartCopyBox(copy: PlacedChartCopy): Promise<{
+    pageId: PageId;
+    bounds: [number, number, number, number];
+  } | null> {
+    let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+    try {
+      geom = await host.document.elementGeometry(copy.elementIds);
+    } catch {
+      return null;
+    }
+    const pageId = geom.find((g) => g?.pageId)?.pageId;
+    if (!pageId) return null;
+    if (copy.box) return { pageId, bounds: copy.box };
+    let top = Infinity;
+    let left = Infinity;
+    let bottom = -Infinity;
+    let right = -Infinity;
+    for (const g of geom) {
+      if (!g?.bounds) continue;
+      const [t, l, b, r] = g.bounds;
+      const [a, bb, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+      for (const [x, y] of [
+        [l, t],
+        [r, t],
+        [r, b],
+        [l, b],
+      ] as const) {
+        const px = a * x + c * y + tx;
+        const py = bb * x + d * y + ty;
+        top = Math.min(top, py);
+        bottom = Math.max(bottom, py);
+        left = Math.min(left, px);
+        right = Math.max(right, px);
+      }
+    }
+    return Number.isFinite(top)
+      ? { pageId, bounds: [top, left, bottom, right] }
+      : null;
   }
 
   /** The placements belong to the workbook they were lowered from: a new
@@ -3171,6 +3499,8 @@ export function createWorkbookSession(
     name: string,
     persist: boolean,
     epoch?: number,
+    /** Plan G4 — deleted chart slots stored with the bytes. */
+    chartSlots: readonly number[] = [],
   ): Promise<boolean> {
     try {
       if (!state.engine) {
@@ -3205,6 +3535,10 @@ export function createWorkbookSession(
     };
     try {
       state.engine.loadXlsx(bytes);
+      // Plan G4 — the charts a save dropped keep their slots, so every
+      // other chart is at the index the page's bindings name.
+      chartSlotsTracked = false;
+      if (chartSlots.length > 0) restoreChartSlots(chartSlots);
       // CELL("filename") reads the workbook's name (sheet ADR 516).
       state.engine.setDocumentName?.(name);
       loadEpoch += 1;
@@ -3283,7 +3617,7 @@ export function createWorkbookSession(
     blobFallback: "always" | "ifBound",
   ): Promise<boolean> {
     const epoch = loadEpoch;
-    let fromPart: { bytes: Uint8Array; name: string } | null = null;
+    let fromPart: Awaited<ReturnType<typeof readWorkbookPart>> = null;
     try {
       fromPart = await readWorkbookPart(host);
     } catch (err) {
@@ -3296,6 +3630,7 @@ export function createWorkbookSession(
         fromPart.name,
         false,
         epoch,
+        fromPart.chartSlots,
       );
       if (ok)
         await rediscoverPlacements().catch((err) =>
@@ -3381,11 +3716,21 @@ export function createWorkbookSession(
   const bridge: ObjectBridge = {
     engine: () => state.engine,
     epoch: () => loadEpoch,
+    restoreChartSlots(slots) {
+      restoreChartSlots(slots);
+    },
     takeChartPlacements(index) {
+      // A chart is being deleted: its slot rides every later save.
+      chartSlotsTracked = true;
       const taken = placedCharts.filter((p) => p.chartIndex === index);
       placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
       return taken;
     },
+    rediscoverCharts: () =>
+      rediscoverCharts().catch((err) => {
+        host.log.warn("chart rediscovery failed", err);
+        return 0;
+      }),
     afterWrite(regions) {
       markEdited();
       emitter.emit(
@@ -3441,7 +3786,48 @@ export function createWorkbookSession(
     },
   };
 
+  // Sheet ADR 517 — validation, filter, sort, outline, protection and Goal
+  // Seek in the grid (src/data-tools.ts).
+  const data = createDataTools({
+    host,
+    engine: () => state.engine,
+    sheet: () => state.activeSheet,
+    selection: () => {
+      if (state.gridSelection) return state.gridSelection;
+      const at = activeOf();
+      return at
+        ? { anchorRow: at.row, anchorCol: at.col, rows: 1, cols: 1 }
+        : null;
+    },
+    active: () => activeOf(),
+    revision: () => revision,
+    extent: () => {
+      const info = api.sheets().find((x) => x.id === state.activeSheet);
+      return info ? { rows: info.rows, cols: info.cols } : null;
+    },
+    enter: journaledEnterCell,
+    reopenEdit: (row, col, text) => {
+      applyModel(collapsed({ row, col }));
+      cellEdit = { row, col, text };
+      cellEditMode = "edit";
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+    },
+    journal: (edits, step) => journalBatch(edits, step),
+    edited: () => {
+      markEdited();
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    repaint: () => {
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    changedUi: () => emitter.emit(),
+  });
+
   const api: WorkbookSession = {
+    ...data.api,
     objectBridge: () => bridge,
     state: () => state,
     onDidChange: (l) => emitter.on(l),
@@ -3484,41 +3870,104 @@ export function createWorkbookSession(
       emitter.emit();
     },
 
-    async lowerSelection() {
+    async lowerSelection(opts: PlaceOptions = {}) {
       if (!state.engine || state.activeSheet === null || !state.selectedRange) {
         host.log.warn("lowerSelection: no workbook / sheet / range");
-        return null;
-      }
-      // Wave 4 — land at the current selection, not a fixed page inset.
-      let placement;
-      let content: LoweredContent;
-      try {
-        // ADR 510 — a window frame shows the range's own tracks lowered as a
-        // frame page: the lowering every later refresh makes, so the first
-        // edit re-pours one cell, not the table.
-        content = rangeFramePage(
-          state.engine,
-          state.activeSheet,
-          state.selectedRange,
-        );
-        placement = await placementForContent(host, content);
-      } catch (err) {
-        host.log.warn("lowerSelection: could not lower the range", err);
         return null;
       }
       const engine = state.engine;
       const sheet = state.activeSheet;
       const range = state.selectedRange;
+      const kind = opts.sizing ?? "window";
+      const print = {
+        headings: opts.print?.headings ?? false,
+        gridlines: opts.print?.gridlines ?? false,
+      };
+      const topLeft = opts.view?.topLeft ?? rangeTopLeft(range);
+      // Wave 4 — land at the current selection, not a fixed page inset.
+      let placement;
+      let content: LoweredContent;
+      let shown = range;
+      let boxPt = kind === "fixed" ? opts.boxPt : undefined;
+      try {
+        if (kind === "fit") {
+          // The earlier behaviour: a fixed range, text-measured widths.
+          content = pageContent(engine, sheet, range);
+        } else {
+          // ADR 510 — a window frame shows the range's own tracks lowered as
+          // a frame page: the lowering every later refresh makes, so the
+          // first edit re-pours one cell, not the table.
+          const own = rangeFramePage(engine, sheet, range, print);
+          if (kind === "window" && topLeft === rangeTopLeft(range)) {
+            content = own;
+          } else {
+            // Plan G4 — a window that starts elsewhere, or a fixed box: the
+            // window of the sheet that fits the box from the view's cell.
+            const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+            boxPt ??= {
+              widthPt: sum(own.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
+              heightPt: sum(own.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
+            };
+            const win = placementWindow(engine, {
+              sheet,
+              range,
+              view: { topLeft, lock: false },
+              print,
+              sizing: "window",
+              boxPt,
+            });
+            if (!win) throw new Error("engine wasm predates get_frame_page");
+            content = win.content;
+            shown = win.range ?? range;
+          }
+        }
+        placement = await placementForContent(host, content);
+        // Plan G4 — the next area of a print area goes under the last one.
+        const under = opts.below ? await selectionBox(host) : null;
+        if (placement && under) {
+          const [t, l, b, r] = placement.bounds;
+          const top = under.bottom + PLACE_GAP_PT;
+          placement = {
+            pageId: under.pageId,
+            bounds: [top, under.left, top + (b - t), under.left + (r - l)] as [
+              number,
+              number,
+              number,
+              number,
+            ],
+          };
+        }
+        if (placement && kind === "fixed" && boxPt) {
+          const [t, l] = placement.bounds;
+          placement = {
+            ...placement,
+            bounds: [t, l, t + boxPt.heightPt, l + boxPt.widthPt] as [
+              number,
+              number,
+              number,
+              number,
+            ],
+          };
+        }
+      } catch (err) {
+        host.log.warn("lowerSelection: could not lower the range", err);
+        return null;
+      }
       const id = await ownWrite(() =>
-        lowerSelectionToFrame(host, engine, sheet, range, {
+        lowerSelectionToFrame(host, engine, sheet, shown, {
           placement: placement ?? undefined,
           // The placement's height is the workbook's rows; the lowering
-          // sizes it to the table the engine lays out.
-          fitHeight: true,
+          // sizes it to the table the engine lays out — unless the caller
+          // fixed the box.
+          fitHeight: kind !== "fixed",
           contentVersion: revision,
           content,
-          // ADR 510 — the frame is a window onto the sheet.
-          sizing: "window",
+          // ADR 510 — the frame is a window onto the sheet (plan G4: with
+          // the caller's view, print options and box).
+          sizing: kind === "fit" ? "fit" : "window",
+          view: { topLeft, lock: opts.view?.lock ?? false },
+          print,
+          ...(boxPt ? { boxPt } : {}),
           // S-04 — record the resolved native table so "new style from cell"
           // can address its cells.
           onLowered: (info) => {
@@ -3682,7 +4131,7 @@ export function createWorkbookSession(
         return ok;
       }
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text };
       cellEditMode = mode;
       emitter.emit({ kind: "edit" });
@@ -3721,6 +4170,7 @@ export function createWorkbookSession(
 
     hideGridInFrame() {
       cellEdit = null;
+      data.reset();
       drag = null;
       fillPreview = null;
       inFrameActive = false;
@@ -3787,6 +4237,169 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    async documentSwatchColors(ids) {
+      const out = new Map<string, string>();
+      if (ids.length === 0 || !host.supports("document.swatchDisplay@1"))
+        return out;
+      try {
+        for (const shown of await host.document.swatchDisplay(ids))
+          out.set(shown.id, shown.rgbHex);
+      } catch (err) {
+        host.log.debug("documentSwatchColors: read failed", err);
+      }
+      return out;
+    },
+
+    async documentStyleChoices() {
+      const out = {
+        paragraphStyles: [] as { id: string; name: string }[],
+        swatches: [] as { id: string; name: string; rgbHex: string }[],
+      };
+      // Interface names (`$ID/…`) read as the user sees them.
+      const shown = (name: string) => name.replace(/^\$ID\//, "");
+      try {
+        const ps = await host.document.collection<{
+          selfId: string;
+          name: string;
+        }>("paragraphStyles");
+        out.paragraphStyles = ps
+          .filter((p) => !p.selfId.endsWith("[No paragraph style]"))
+          .map((p) => ({ id: p.selfId, name: shown(p.name) }));
+      } catch (err) {
+        host.log.debug("documentStyleChoices: paragraph styles", err);
+      }
+      try {
+        const sw = await host.document.collection<{
+          selfId: string;
+          name: string;
+          kind: string;
+        }>("swatches");
+        const usable = sw.filter(
+          (x) =>
+            !/\/(None|Registration)$/.test(x.selfId) &&
+            !x.selfId.startsWith("Gradient/"),
+        );
+        const colors = await api.documentSwatchColors(
+          usable.map((x) => x.selfId),
+        );
+        out.swatches = usable
+          .filter((x) => colors.has(x.selfId))
+          .map((x) => ({
+            id: x.selfId,
+            name: shown(x.name),
+            rgbHex: colors.get(x.selfId)!,
+          }));
+      } catch (err) {
+        host.log.debug("documentStyleChoices: swatches", err);
+      }
+      return out;
+    },
+
+    async applyDocumentSwatch(target, swatchId) {
+      if (swatchId === null) {
+        return api.setStyle(
+          target === "fill"
+            ? { fill: "", fillSwatch: null }
+            : { fontColor: "", fontSwatch: null },
+        );
+      }
+      const ref = await api.documentSwatchRef(swatchId);
+      if (!ref)
+        return {
+          ok: false as const,
+          message: `no swatch "${swatchId}" in the document`,
+        };
+      return api.setStyle(
+        target === "fill" ? { fillSwatch: ref } : { fontSwatch: ref },
+      );
+    },
+
+    documentStyleRevision() {
+      return docStyleRevision;
+    },
+
+    async documentSwatchRef(id) {
+      if (!host.supports("document.swatchDisplay@1")) return null;
+      try {
+        const [shown] = await host.document.swatchDisplay([id]);
+        if (!shown) return null;
+        const m = shown.model.toLowerCase();
+        const model: DocSwatch["model"] = m.includes("spot")
+          ? "spot"
+          : m.includes("lab")
+            ? "lab"
+            : shown.cmyk
+              ? "cmyk"
+              : "rgb";
+        return {
+          id,
+          model,
+          fallbackRgb: `#${shown.rgbHex.replace(/^#/, "").toUpperCase()}`,
+        };
+      } catch (err) {
+        host.log.debug(`documentSwatchRef: ${id} unreadable`, err);
+        return null;
+      }
+    },
+
+    async documentTextDefault() {
+      if (!host.supports("document.styleProperties@1")) return null;
+      try {
+        let props: Awaited<ReturnType<typeof host.document.styleProperties>> =
+          null;
+        for (const id of BASIC_PARAGRAPH_STYLES) {
+          props = await host.document.styleProperties("paragraph", id);
+          if (props) break;
+        }
+        if (!props) return null;
+        const entries = props.entries;
+        const entry = (path: string) =>
+          entries.find((e) => e.path === path)?.value ?? null;
+        // An unset entry reads as "" (text) or null (length): absent.
+        const text = (v: unknown) => {
+          const raw =
+            v && typeof v === "object" && "value" in v
+              ? (v as { value: unknown }).value
+              : null;
+          return raw === null || raw === undefined || raw === ""
+            ? null
+            : String(raw);
+        };
+        const num = (v: unknown) => {
+          const t = text(v);
+          const n = t === null ? NaN : Number(t);
+          return Number.isFinite(n) ? n : null;
+        };
+        const family = text(entry("characterFontFamily"));
+        if (!family) return null;
+        return {
+          family,
+          style: text(entry("characterFontStyle")),
+          sizePt: num(entry("characterFontSize")),
+        };
+      } catch (err) {
+        host.log.debug("documentTextDefault: style read failed", err);
+        return null;
+      }
+    },
+
+    async documentFontFace(family, style) {
+      if (!host.supports("assets.fonts@1")) return null;
+      try {
+        const face = await host.assets.getFontFace(family, style);
+        return face
+          ? {
+              bytes: face.bytes,
+              family: face.family,
+              ...(face.style ? { style: face.style } : {}),
+            }
+          : null;
+      } catch (err) {
+        host.log.debug(`documentFontFace: ${family} unavailable`, err);
+        return null;
+      }
     },
 
     setFrameSheet(sheetId) {
@@ -4716,7 +5329,10 @@ export function createWorkbookSession(
         };
       }
       const sheet = state.activeSheet;
-      const range = state.selectedRange;
+      const range: string | readonly string[] =
+        opts?.areas && opts.areas.length > 0
+          ? [...opts.areas]
+          : state.selectedRange;
       // Re-paginating the same chain replaces the old placement's handle
       // (its tables are refreshed by the new pass, not duplicated).
       const prior = chains.get(storyId);
@@ -5364,6 +5980,7 @@ export function createWorkbookSession(
       historySub.dispose();
       foreignChangeSub.dispose();
       if (chainTimer !== null) clearTimeout(chainTimer);
+      if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).

@@ -273,7 +273,12 @@ export function activate(host: BundleHost): BundleHandle {
     id: "media.paged.sheet.command.sortRange",
     title: t(COMMANDS.sortRange),
     category: "Sheet",
-    handler: () => host.shell.openPanel(PANEL_ID),
+    // In an entered sheet frame: the Sort card under the sheet bar (sheet
+    // ADR 517); elsewhere the workbook panel's sort.
+    handler: () => {
+      if (!session.isInFrameActive() || !session.openDataCard({ kind: "sort" }))
+        host.shell.openPanel(PANEL_ID);
+    },
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findReplace",
@@ -484,6 +489,77 @@ export function activate(host: BundleHost): BundleHandle {
     when: workbookIsOpen,
     handler: () => session.openPasteSpecial(),
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.dataValidation",
+    title: t(COMMANDS.dataValidation),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "validation" }),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.circleInvalid",
+    title: t(COMMANDS.circleInvalid),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.toggleInvalidCircles(),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.toggleFilter",
+    title: t(COMMANDS.toggleFilter),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.toggleAutofilter();
+      if (!r.ok) host.log.warn(`toggleFilter: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.hideSelection",
+    title: t(COMMANDS.hideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(true);
+      if (!r.ok) host.log.warn(`hideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.unhideSelection",
+    title: t(COMMANDS.unhideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(false);
+      if (!r.ok) host.log.warn(`unhideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.groupSelection",
+    title: t(COMMANDS.groupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(true);
+      if (!r.ok) host.log.warn(`groupSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.ungroupSelection",
+    title: t(COMMANDS.ungroupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(false);
+      if (!r.ok) host.log.warn(`ungroupSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.goalSeek",
+    title: t(COMMANDS.goalSeek),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "goalSeek" }),
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
@@ -662,6 +738,13 @@ export function activate(host: BundleHost): BundleHandle {
                 includeGridRules: false,
               });
             },
+            // P7 — the host's Character / Paragraph / style panels write
+            // the selected cells (sheet ADR 518 `setStyle`).
+            applyStyle: (patch) => {
+              const r = session.setStyle(patch);
+              return r.ok ? { ok: true } : { ok: false, message: r.message };
+            },
+            swatchRef: (id) => session.documentSwatchRef(id),
           }).provider,
         )
       : null;

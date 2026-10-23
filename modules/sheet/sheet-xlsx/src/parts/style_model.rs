@@ -590,6 +590,24 @@ fn apply_doc_refs(v: &mut CellVisual, refs: &XfDocRefs, palette: &ColorPalette) 
     v.doc_cell_style = refs.cell_style.clone();
 }
 
+/// A rich shared string's runs as visual runs (each run's `<rPr>` read as
+/// a font; a run without one keeps the cell's font).
+pub fn rich_runs_visual(
+    rich: &crate::parts::shared_strings::RichText,
+) -> Vec<sheet_core::RichRunVisual> {
+    rich.runs
+        .iter()
+        .map(|r| sheet_core::RichRunVisual {
+            text: r.text.clone(),
+            font: r
+                .rpr
+                .as_deref()
+                .and_then(|x| parse_elem(x.as_bytes()).ok())
+                .map(|e| font_of(&e)),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(non_snake_case)]
 mod tests {

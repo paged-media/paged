@@ -66,6 +66,8 @@ export interface LoweredCell {
    *  between (the page: a right tab stop with this leader at the cell's
    *  inner width). */
   fill?: string;
+  /** A rich-text cell's runs (W2.2); their texts spell `text`. */
+  runs?: LoweredRun[];
 }
 
 /** One visual cell style (IR v2, M1 style-map track) — the mirror of the
@@ -95,9 +97,63 @@ export interface LoweredStyle {
   /** The per-edge border lines behind the `border*` presence flags: the
    *  xlsx line style, its weight (pt) and colour (`#RRGGBB`, absent = auto). */
   borderLines?: BorderLines;
-  /** Excel's indent (`<alignment indent>`), in points (one level = three
-   *  times the default font's character width); absent = none. */
+  /** Excel's indent (`<alignment indent>`), in points (one level is
+   *  6.75 pt); absent = none. */
   indentPt?: number | null;
+  // ── W2.2 (sheet ADR 518), each absent when default ──
+  /** The document swatch the fill names (the page uses it instead of a
+   *  minted swatch). */
+  fillSwatch?: string | null;
+  /** The document swatch the text colour names. */
+  textSwatch?: string | null;
+  /** A pattern fill (not solid); `fillRgb` holds its blend. */
+  fillPattern?: FillPattern | null;
+  /** A gradient fill; `fillRgb` holds its mean colour. */
+  fillGradient?: FillGradient | null;
+  /** `textRotation`: 1–90 counter-clockwise degrees, 91–180 clockwise
+   *  (`value − 90`), 255 stacked (the text then holds one character per
+   *  line). */
+  rotation?: number | null;
+  shrink?: boolean;
+  strike?: boolean;
+  /** `superscript` / `subscript`. */
+  vertAlign?: string | null;
+  /** `double` / `singleAccounting` / `doubleAccounting`. */
+  underlineStyle?: string | null;
+  /** `fill` / `justify` / `centerContinuous` / `distributed`. */
+  hAlign?: string | null;
+  /** The Excel named cell style (not Normal). */
+  namedStyle?: string | null;
+  /** Document character / paragraph / cell styles the cell maps to. */
+  docCharStyle?: string | null;
+  docParaStyle?: string | null;
+  docCellStyle?: string | null;
+}
+
+/** A pattern fill (W2.2): the xlsx pattern and its colours. */
+export interface FillPattern {
+  pattern: string;
+  fgRgb?: string | null;
+  bgRgb?: string | null;
+  fgSwatch?: string | null;
+  bgSwatch?: string | null;
+}
+
+/** A gradient fill (W2.2). */
+export interface FillGradient {
+  kind: "linear" | "path";
+  degree: number;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  stops: { position: number; rgb: string; swatch?: string | null }[];
+}
+
+/** One run of a rich-text cell: its text and style key. */
+export interface LoweredRun {
+  text: string;
+  styleKey: number;
 }
 
 /** One border edge's line (Wave 6). */
@@ -105,6 +161,8 @@ export interface BorderLine {
   style: string;
   weightPt: number;
   rgb?: string | null;
+  /** The document swatch the line colour names (W2.2). */
+  swatch?: string | null;
 }
 
 /** The four edges' lines (an absent edge has none). */
@@ -113,6 +171,9 @@ export interface BorderLines {
   right?: BorderLine;
   bottom?: BorderLine;
   left?: BorderLine;
+  /** The diagonals (W2.2): bottom-left → top-right, top-left → bottom-right. */
+  diagonalUp?: BorderLine;
+  diagonalDown?: BorderLine;
 }
 
 /** One row's geometry + its populated cells (sparse — empty cells are
@@ -217,6 +278,10 @@ export interface Page {
   /** `true` when this frame holds a single block/row taller than the whole
    *  frame — the spec's pathological case, placed alone and flagged. */
   oversize: boolean;
+  /** Which range of a sequence this page shows (`paginate_areas`, a print
+   *  area of several ranges); 0 for a single range. Absent from an older
+   *  engine. */
+  area?: number;
 }
 
 /** Total content width (pt) — the sum of column widths. Pure geometry,
