@@ -126,7 +126,7 @@ jobs:
       # wasm-bindgen-cli and binaryen at the pins in tooling/bootstrap.sh
       # (prebuilt; the build script checks the CLI against Cargo.lock).
       - uses: ./.github/actions/wasm-tools
-      - name: build the engine wasm (100 MB app-wide budget gate)
+      - name: build the engine wasm (120 MB app-wide budget gate)
         run: bash scripts/build-wasm.sh
       # Bun and Node at the versions in /.prototools, installed by proto.
       - uses: moonrepo/setup-toolchain@v0.6.4

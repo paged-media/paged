@@ -38,4 +38,8 @@ pub struct SheetBinding {
     /// part was read, in order: the save finds each original row and cell
     /// at its new address through them (patch.rs).
     pub edits: Vec<sheet_parser::Edit>,
+    /// The result ranges of the sheet's what-if data tables as read
+    /// `(r0, c0, r1, c1)`: their text results are written as formula
+    /// strings (`t="str"`), as Excel writes them (sheet ADR 517).
+    pub data_tables: Vec<(u32, u32, u32, u32)>,
 }

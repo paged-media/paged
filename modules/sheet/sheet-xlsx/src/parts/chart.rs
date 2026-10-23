@@ -75,6 +75,35 @@ pub const PAGED_EXT_NS: &str = "http://paged.media/2026/chart-refs";
 /// Resolves an XLSX sheet NAME to its model [`SheetId`].
 pub trait SheetResolver {
     fn resolve(&self, name: &str) -> Option<SheetId>;
+    /// The reference a workbook defined name stands for (`Sheet1!$A$1:$A$4`):
+    /// Excel writes a chartEx part's data as hidden `_xlchart.v1.N` names.
+    fn defined(&self, _name: &str) -> Option<String> {
+        None
+    }
+}
+
+/// The text a defined name of `model` refers to, when it is a reference.
+pub fn defined_reference(model: &sheet_core::SheetModel, name: &str) -> Option<String> {
+    use sheet_core::names::NameTarget;
+    let (_, def) = model
+        .names
+        .iter()
+        .find(|(_, d)| d.name.eq_ignore_ascii_case(name))?;
+    match &def.target {
+        NameTarget::Formula(t) => Some(t.trim_start_matches('=').to_string()),
+        NameTarget::Range(r) => {
+            let n = r.normalized();
+            let sheet = model.sheet(n.start.sheet)?;
+            Some(format!(
+                "{}!${}${}:${}${}",
+                crate::structure::quote_sheet(&sheet.name),
+                sheet_core::col_to_a1(n.start.col),
+                n.start.row + 1,
+                sheet_core::col_to_a1(n.end.col),
+                n.end.row + 1
+            ))
+        }
+    }
 }
 
 /// A parsed chart plus where it lives.
@@ -106,6 +135,8 @@ pub struct ParsedChart {
     /// Where an authored chart is anchored: (from col, from row, to col,
     /// to row), zero-based cells.
     pub anchor: Option<(u32, u32, u32, u32)>,
+    /// A deleted chart's slot (its part is gone; the index stays taken).
+    pub removed: bool,
 }
 
 impl ParsedChart {
@@ -122,6 +153,7 @@ impl ParsedChart {
             chartsheet: false,
             dirty: true,
             anchor: None,
+            removed: false,
         }
     }
 }
@@ -321,6 +353,7 @@ pub fn parse(
         chartsheet: false,
         dirty: false,
         anchor: None,
+        removed: false,
     })
 }
 
@@ -512,6 +545,18 @@ fn fold(chart: &DChart, host: SheetId, resolver: &impl SheetResolver) -> ChartMo
             plot.series.push(series_of(s, kind, markers_off, &range));
         }
         model.plots.push(plot);
+    }
+    // A chartEx part writes one series element per series: consecutive
+    // series of one layout are one plot.
+    if chart.chart_ex {
+        let mut merged: Vec<Plot> = Vec::new();
+        for p in std::mem::take(&mut model.plots) {
+            match merged.last_mut() {
+                Some(last) if last.kind == p.kind => last.series.extend(p.series),
+                _ => merged.push(p),
+            }
+        }
+        model.plots = merged;
     }
     if model.plots.is_empty() {
         // An empty or unreadable plot area: a placeholder, never a column.
@@ -978,6 +1023,14 @@ pub fn parse_f_ref(
     let s = s.split(',').next()?.trim();
     if s.is_empty() {
         return None;
+    }
+    // A defined name (no sheet, no cell address): what it refers to.
+    if !s.contains('!') && !s.contains('$') && parse_a1(s).is_none() {
+        let target = resolver.defined(s)?;
+        if target == s {
+            return None;
+        }
+        return parse_f_ref(&target, host_sheet, resolver);
     }
     let (sheet_part, range_part) = split_sheet_ref(s);
     let sheet = sheet_part

@@ -109,8 +109,9 @@ that looks as the grid did.
 - **No gridlines means no lines.** A frame page without gridlines is marked `noGridlines`, and
   the table writes every cell edge as no line instead of leaving it to the document's default
   stroke (which drew a border and made rows taller than the frame was fitted to).
-- **Leaving.** The view moves to the grid's top-left cell unless the view is locked; a refresh
-  then runs even when no cell changed. A view change that leaves the cells as they were
+- **Leaving.** Unless the view is locked, the page window moves only as far as it must to hold
+  what the grid showed (the grid's headings take room, so a step that scrolled the grid by a row
+  need not move the page; `viewToContain`); a refresh then runs even when no cell changed. A view change that leaves the cells as they were
   re-stamps the binding alone. A scroll that would re-pour most of the table writes a new table
   (`replace`); an edit never does.
 - **Lock.** `session.setFrameViewLock` / the bar's lock button pin the window where it stands;

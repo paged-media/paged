@@ -67,6 +67,10 @@ pub(crate) struct PatchInput<'a> {
     pub shared: &'a [CompactString],
 }
 
+/// Excel's stored default column width for the default font (Calibri 11:
+/// 8.43 characters plus padding).
+const DEFAULT_COL_WIDTH: f64 = 9.140625;
+
 /// How an original `<f>` stores its formula.
 #[derive(Clone, Debug, PartialEq)]
 enum FKind {
@@ -404,6 +408,19 @@ fn render_cell(
         set_attr(&mut attrs, "vm", None);
     }
 
+    // A data table's result keeps its `<f t="dataTable">` (below), and a
+    // text result is a formula string (`t="str"`), as Excel writes it.
+    let data_table_f = formula.is_none()
+        && o.is_some_and(|o| {
+            matches!(o.f.as_ref(), Some((_, FKind::DataTable))) && (o.row, o.col) == (r, c)
+        });
+    let in_data_table = formula.is_none()
+        && input
+            .binding
+            .data_tables
+            .iter()
+            .any(|&(r0, c0, r1, c1)| r0 <= r && r <= r1 && c0 <= c && c <= c1);
+
     // Type + value children.
     let mut value_xml = String::new();
     let t: Option<&str> = match &cell.value {
@@ -421,7 +438,7 @@ fn render_cell(
             Some("e")
         }
         CellValue::Text(text) => {
-            if formula.is_some() {
+            if formula.is_some() || data_table_f || in_data_table {
                 value_xml = format!("<{prefix}v>{}</{prefix}v>", escape_text(text));
                 Some("str")
             } else if let Some(idx) = o.and_then(|o| {
@@ -670,7 +687,7 @@ fn compose_cols(widths: &BTreeMap<u32, f64>, meta: &[ColMeta]) -> BTreeMap<u32, 
 }
 
 /// A `<cols>` element for `cols` (`None` when there is nothing to say).
-fn render_cols(prefix: &str, cols: &BTreeMap<u32, ColRec>) -> Option<String> {
+fn render_cols(prefix: &str, cols: &BTreeMap<u32, ColRec>, default_width: f64) -> Option<String> {
     let mut s = String::new();
     let mut it = cols.iter().peekable();
     while let Some((&c0, rec)) = it.next() {
@@ -688,9 +705,10 @@ fn render_cols(prefix: &str, cols: &BTreeMap<u32, ColRec>) -> Option<String> {
             ("min".into(), (c0 + 1).to_string()),
             ("max".into(), (c1 + 1).to_string()),
         ];
-        if let Some(w) = rec.width {
-            a.push(("width".into(), fmt_f64(w)));
-        }
+        // Excel reads a `<col>` without `width` as width 0 (hidden): a
+        // record for an outline, a style or a flag carries the sheet's
+        // default width.
+        a.push(("width".into(), fmt_f64(rec.width.unwrap_or(default_width))));
         if m.style != 0 {
             a.push(("style".into(), m.style.to_string()));
         }
@@ -957,7 +975,17 @@ pub(crate) fn patch_worksheet(input: &PatchInput<'_>) -> Result<Option<Vec<u8>>,
                 rec.meta.custom_width = true;
             }
         }
-        let new = render_cols(&prefix, &want).unwrap_or_default();
+        let default_width = input
+            .binding
+            .captured
+            .items
+            .iter()
+            .find(|c| captured_local(&c.bytes) == "sheetFormatPr")
+            .and_then(|c| crate::xtree::XNode::parse(&c.bytes).ok())
+            .and_then(|n| n.attr("defaultColWidth"))
+            .and_then(|w| w.parse::<f64>().ok())
+            .unwrap_or(DEFAULT_COL_WIDTH);
+        let new = render_cols(&prefix, &want, default_width).unwrap_or_default();
         match cols_span {
             Some(s) => edits.push((s.start, s.end, new.into_bytes())),
             None => edits.push((sd.start, sd.start, new.into_bytes())),
@@ -1064,7 +1092,16 @@ pub(crate) fn patch_worksheet(input: &PatchInput<'_>) -> Result<Option<Vec<u8>>,
         return Ok(Some(xml.to_vec()));
     }
     // Apply front to back; insertions at one offset keep their order.
-    edits.sort_by_key(|e| (e.0, e.1));
+    // Two insertions at one offset go in schema order (a new
+    // `<sheetFormatPr>` before a new `<cols>`, both before `<sheetData>`).
+    edits.sort_by_key(|e| {
+        let rank = if e.0 == e.1 {
+            crate::ws_child::ws_rank(&captured_local(&e.2))
+        } else {
+            0
+        };
+        (e.0, e.1, rank)
+    });
     let mut out = Vec::with_capacity(xml.len() + 256);
     let mut pos = 0;
     for (s, e, bytes) in edits {

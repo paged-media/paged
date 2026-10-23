@@ -188,7 +188,8 @@ Rules for every code change in this repo:
   FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
   amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`
   and `EvalCtx::locale`, ADR 516; the filter criteria `DateGroups`/`Custom`/`Dynamic`/
-  `Color`/`Icon`, ADR 517; the cell visual model `sheet_core::visual`, ADR 518.)
+  `Color`/`Icon`, ADR 517; the cell visual model `sheet_core::visual`, ADR 518; the conditional-formatting model
+  `sheet_core::condfmt`, ADR 523.)
 
 ## Two-registry split
 
