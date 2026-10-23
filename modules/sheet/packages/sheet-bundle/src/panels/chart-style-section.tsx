@@ -199,7 +199,7 @@ function SwatchPicker(props: {
             onClick={() => pick(null)}
           >
             <span style={chip(null)} />
-            {fallback ? t(M.useDefault) : t(M.none)}
+            {fallback ? t(M.followDefault) : t(M.none)}
           </button>
           {choices.swatches.map((x) => (
             <button
@@ -235,6 +235,30 @@ const optionStyle = (styles: ChartStyleSectionStyles): CSSProperties => ({
   cursor: "pointer",
 });
 
+/** One object-model write: a single set, or a batch (one undo step). */
+async function commit(
+  host: BundleHost,
+  ops: ObjectOp[],
+  label: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  const first = ops[0];
+  const single = ops.length === 1 && first?.op === "set" ? first : null;
+  let r: { applied: boolean; reason?: string };
+  try {
+    r = single
+      ? await host.objects.set(single.address, single.path, single.value, {
+          label,
+        })
+      : await host.objects.batch(ops, { label });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
+  return { ok: r.applied, reason: r.reason };
+}
+
 /** The section. */
 export function ChartStyleSection(props: {
   host: BundleHost;
@@ -267,22 +291,10 @@ export function ChartStyleSection(props: {
     ? idsOf(chart.roles, chart.seriesPalette)
     : defaults;
 
-  const run = async (ops: ObjectOp[]): Promise<void> => {
-    try {
-      const r =
-        ops.length === 1 && ops[0]!.op === "set"
-          ? await host.objects.set(
-              ops[0]!.address,
-              ops[0]!.path,
-              ops[0]!.value,
-              { label: t(M.title) },
-            )
-          : await host.objects.batch(ops, { label: t(M.title) });
-      setMsg(r.applied ? t(M.updated) : (r.reason ?? t(M.failed)));
-    } catch (err) {
-      setMsg(err instanceof Error ? err.message : String(err));
-    }
-  };
+  const run = (ops: ObjectOp[]): Promise<void> =>
+    commit(host, ops, t(M.title)).then((r) =>
+      setMsg(r.ok ? t(M.updated) : (r.reason ?? t(M.failed))),
+    );
 
   const chartAddress = (index: number): Address =>
     addressOf("chart", String(index));
@@ -331,7 +343,7 @@ export function ChartStyleSection(props: {
     write({ ...current, roles });
   };
 
-  const useAsDefault = () => {
+  const makeDefault = () => {
     if (!chart) return;
     void run([
       {
@@ -503,9 +515,9 @@ export function ChartStyleSection(props: {
             type="button"
             data-chart-style-use-default
             style={styles.button}
-            onClick={useAsDefault}
+            onClick={makeDefault}
           >
-            {t(M.useAsDefault)}
+            {t(M.makeDefault)}
           </button>
           <button
             type="button"
