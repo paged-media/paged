@@ -41,13 +41,13 @@ fn chart(title: &str) -> ParsedChart {
 
 #[test]
 fn recorded_indexes_keep_every_handle__feat__sheet_chart_writer() {
-    // Discovery order: a, b (unrecorded, read from the file), then the
-    // authored c recorded at 0… no: c recorded at 2, d recorded at 4.
+    // Discovery order: a, b (unrecorded, read from the file), the authored
+    // c and d recorded at 2 and 4, slot 3 recorded as deleted.
     let found = vec![
-        (chart("a"), None),
-        (chart("d"), Some(4)),
-        (chart("b"), None),
-        (chart("c"), Some(2)),
+        (chart("a"), (None, vec![])),
+        (chart("d"), (Some(4), vec![3])),
+        (chart("b"), (None, vec![])),
+        (chart("c"), (Some(2), vec![3])),
     ];
     let out = order_by_recorded_index(found);
     let titles: Vec<String> = out
@@ -62,7 +62,10 @@ fn recorded_indexes_keep_every_handle__feat__sheet_chart_writer() {
         .collect();
     assert_eq!(titles, ["a", "b", "c", "-", "d"]);
     // Nothing recorded: discovery order as it was.
-    let plain = order_by_recorded_index(vec![(chart("x"), None), (chart("y"), None)]);
+    let plain = order_by_recorded_index(vec![
+        (chart("x"), (None, vec![])),
+        (chart("y"), (None, vec![])),
+    ]);
     assert_eq!(plain[1].model.title.as_deref(), Some("y"));
 }
 

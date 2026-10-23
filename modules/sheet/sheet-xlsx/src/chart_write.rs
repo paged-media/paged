@@ -45,7 +45,6 @@
 
 use std::collections::BTreeSet;
 
-use compact_str::CompactString;
 use dml_chart::write::{self as w, ChartExOut, ChartOut, ColorOut, DataOut, ExtOut};
 use paged_ooxml::tree::{El, Ns};
 use sheet_chart::model::*;
@@ -102,17 +101,16 @@ impl XlsxDocument {
         // A chart written by Paged records its index; when one was removed,
         // the charts after it record theirs too, so a reload finds every
         // handle where it was.
-        let first_removed = removed.iter().next().copied();
+        let tomb: Vec<u32> = removed.iter().copied().collect();
         for i in 0..self.charts.len() {
             if removed.contains(&(i as u32)) {
                 continue;
             }
             let c = &self.charts[i];
-            let needs_index = first_removed.is_some_and(|r| (i as u32) > r);
             if c.part.is_none() {
-                self.generate_chart(i, model)?;
-            } else if c.dirty || needs_index {
-                self.splice_chart(i, model)?;
+                self.generate_chart(i, model, &tomb)?;
+            } else if c.dirty {
+                self.splice_chart(i, model, &tomb)?;
             }
         }
         Ok(())
@@ -185,7 +183,12 @@ impl XlsxDocument {
     }
 
     /// Splice an edited chart into its part.
-    fn splice_chart(&mut self, i: usize, model: &SheetModel) -> Result<(), XlsxError> {
+    fn splice_chart(
+        &mut self,
+        i: usize,
+        model: &SheetModel,
+        tomb: &[u32],
+    ) -> Result<(), XlsxError> {
         let part = self.charts[i].part.clone().expect("a parsed chart");
         let Some(orig) = self.part_bytes(&part) else {
             return Ok(());
@@ -195,13 +198,13 @@ impl XlsxDocument {
         let before = parse(&orig, host, &names)?.model;
         let after = self.charts[i].model.clone();
         let mut root = paged_ooxml::tree::parse(&orig).map_err(XlsxError::Structure)?;
-        let ext = Some(ext_of(&after, i as u32));
+        let ext = Some(ext_of(&after, i as u32, tomb));
         if root.is(Ns::Cx, "chartSpace") {
             // A chartEx part: only the extension and the title are spliced
             // (its data dimensions name the same cells); a structural edit
             // regenerates it.
             if before.plots != after.plots || before.title != after.title {
-                let out = chart_ex_out(&after, model, i as u32);
+                let out = chart_ex_out(&after, model, i as u32, tomb);
                 if let Some(out) = out {
                     self.set_part_bytes(&part, w::generate_ex(&out).into_bytes());
                     self.charts[i].dirty = false;
@@ -214,7 +217,7 @@ impl XlsxDocument {
             return Ok(());
         }
         w::ensure_prefixes(&mut root);
-        let out = chart_out(&after, model, i as u32);
+        let out = chart_out(&after, model, i as u32, tomb);
         splice_tree(&mut root, &before, &after, &out).map_err(XlsxError::Structure)?;
         w::put_ext(&mut root, ext.as_ref(), PAGED_EXT_URI).map_err(XlsxError::Structure)?;
         self.set_part_bytes(&part, w::serialise(&orig, &root));
@@ -223,18 +226,23 @@ impl XlsxDocument {
     }
 
     /// Generate an authored chart's part, anchor and relationships.
-    fn generate_chart(&mut self, i: usize, model: &SheetModel) -> Result<(), XlsxError> {
+    fn generate_chart(
+        &mut self,
+        i: usize,
+        model: &SheetModel,
+        tomb: &[u32],
+    ) -> Result<(), XlsxError> {
         let chart = self.charts[i].clone();
         let ex = chart.model.kind().is_chart_ex();
         let bytes = if ex {
-            match chart_ex_out(&chart.model, model, i as u32) {
+            match chart_ex_out(&chart.model, model, i as u32, tomb) {
                 Some(out) => w::generate_ex(&out).into_bytes(),
                 None => return Ok(()),
             }
         } else if chart.model.kind() == ChartKind::Unsupported {
             return Ok(());
         } else {
-            w::generate(&chart_out(&chart.model, model, i as u32)).into_bytes()
+            w::generate(&chart_out(&chart.model, model, i as u32, tomb)).into_bytes()
         };
         // The part.
         let stem = if ex { "chartEx" } else { "chart" };
@@ -1048,7 +1056,7 @@ fn axes_out(m: &ChartModel) -> Vec<w::AxisOut> {
 }
 
 /// The paged extension: the chart's index and its document references.
-pub(crate) fn ext_of(m: &ChartModel, index: u32) -> ExtOut {
+pub(crate) fn ext_of(m: &ChartModel, index: u32, removed: &[u32]) -> ExtOut {
     let mut m = m.clone();
     let mut refs = Vec::new();
     for (role, slot) in color_roles(&mut m) {
@@ -1082,11 +1090,17 @@ pub(crate) fn ext_of(m: &ChartModel, index: u32) -> ExtOut {
         ns: PAGED_EXT_NS.into(),
         refs,
         index: Some(index),
+        removed: removed.to_vec(),
     }
 }
 
 /// The whole chart as written.
-pub(crate) fn chart_out(m: &ChartModel, model: &SheetModel, index: u32) -> ChartOut {
+pub(crate) fn chart_out(
+    m: &ChartModel,
+    model: &SheetModel,
+    index: u32,
+    removed: &[u32],
+) -> ChartOut {
     let mut first = 0u32;
     let plots = m
         .plots
@@ -1125,13 +1139,18 @@ pub(crate) fn chart_out(m: &ChartModel, model: &SheetModel, index: u32) -> Chart
         text: run_out(&m.text),
         date1904: model.calc.date_system == sheet_core::DateSystem::Date1904,
         contour: m.kind() == ChartKind::Surface,
-        ext: Some(ext_of(m, index)),
+        ext: Some(ext_of(m, index, removed)),
     }
 }
 
 /// An Office 2016 chart as written (`None` for a kind without a chartEx
 /// layout).
-pub(crate) fn chart_ex_out(m: &ChartModel, model: &SheetModel, index: u32) -> Option<ChartExOut> {
+pub(crate) fn chart_ex_out(
+    m: &ChartModel,
+    model: &SheetModel,
+    index: u32,
+    removed: &[u32],
+) -> Option<ChartExOut> {
     let p = m.plots.first()?;
     let layout = match p.kind {
         ChartKind::Waterfall => "waterfall",
@@ -1175,7 +1194,7 @@ pub(crate) fn chart_ex_out(m: &ChartModel, model: &SheetModel, index: u32) -> Op
         pareto: p.kind == ChartKind::Pareto,
         legend: m.legend.as_ref().map(|l| l.position.tag().to_string()),
         show_values: first.labels.as_ref().is_some_and(DataLabels::any),
-        ext: Some(ext_of(m, index)),
+        ext: Some(ext_of(m, index, removed)),
     })
 }
 
@@ -1640,38 +1659,74 @@ fn patch_axes(
             w::put_child(ax, Ns::C, "majorUnit", u, w::ORDER_AXIS);
         }
     }
-    let _ = CompactString::default;
     Ok(())
 }
 
-/// Every chart's recorded session index, read back on load (the paged
-/// extension), for [`order_by_recorded_index`].
-pub fn recorded_index(xml: &[u8]) -> Option<u32> {
-    let root = paged_ooxml::tree::parse(xml).ok()?;
+/// A chart's recorded session index and the deleted slots recorded with
+/// it, read back on load (the paged extension), for
+/// [`order_by_recorded_index`].
+pub fn recorded_index(xml: &[u8]) -> (Option<u32>, Vec<u32>) {
+    let Ok(root) = paged_ooxml::tree::parse(xml) else {
+        return (None, Vec::new());
+    };
     let ns = if root.ns == Ns::Cx { Ns::Cx } else { Ns::C };
-    let ext = root
-        .child(ns, "extLst")?
-        .children
-        .iter()
-        .find(|e| e.attr("uri") == Some(PAGED_EXT_URI))?;
-    ext.children
-        .iter()
-        .find(|c| c.local == "refs")?
-        .attr_u32("index")
+    let refs = root
+        .child(ns, "extLst")
+        .and_then(|l| {
+            l.children
+                .iter()
+                .find(|e| e.attr("uri") == Some(PAGED_EXT_URI))
+        })
+        .and_then(|e| e.children.iter().find(|c| c.local == "refs"));
+    let Some(refs) = refs else {
+        return (None, Vec::new());
+    };
+    let removed = refs
+        .attr("removed")
+        .map(|r| {
+            r.split_whitespace()
+                .filter_map(|v| v.parse().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    (refs.attr_u32("index"), removed)
 }
 
-/// Put charts with a recorded index at that index; the others fill the
-/// remaining slots in discovery order. A slot no chart claims is a removed
-/// chart: a placeholder marked `removed`.
-pub fn order_by_recorded_index(charts: Vec<(ParsedChart, Option<u32>)>) -> Vec<ParsedChart> {
-    if charts.iter().all(|(_, i)| i.is_none()) {
+/// Put charts with a recorded index at that index; a recorded deleted slot
+/// is a placeholder marked `removed` (read from the file); the other charts
+/// fill the remaining slots in discovery order.
+pub fn order_by_recorded_index(
+    charts: Vec<(ParsedChart, (Option<u32>, Vec<u32>))>,
+) -> Vec<ParsedChart> {
+    if charts.iter().all(|(_, (i, _))| i.is_none()) {
         return charts.into_iter().map(|(c, _)| c).collect();
     }
-    let max_recorded = charts.iter().filter_map(|(_, i)| *i).max().unwrap_or(0) as usize;
-    let len = charts.len().max(max_recorded + 1);
+    let removed: BTreeSet<u32> = charts
+        .iter()
+        .flat_map(|(_, (_, r))| r.iter().copied())
+        .collect();
+    let max_recorded = charts
+        .iter()
+        .filter_map(|(_, (i, _))| *i)
+        .chain(removed.iter().copied())
+        .max()
+        .unwrap_or(0) as usize;
+    let len = (charts.len() + removed.len()).max(max_recorded + 1);
     let mut slots: Vec<Option<ParsedChart>> = vec![None; len];
+    let placeholder = || {
+        let mut gone = ParsedChart::authored(0, ChartModel::default());
+        gone.dirty = false;
+        gone.removed = true;
+        gone.from_file = true;
+        gone
+    };
+    for &r in &removed {
+        if (r as usize) < len {
+            slots[r as usize] = Some(placeholder());
+        }
+    }
     let mut rest = Vec::new();
-    for (c, i) in charts {
+    for (c, (i, _)) in charts {
         match i {
             Some(i) if (i as usize) < len && slots[i as usize].is_none() => {
                 slots[i as usize] = Some(c)
@@ -1686,17 +1741,11 @@ pub fn order_by_recorded_index(charts: Vec<(ParsedChart, Option<u32>)>) -> Vec<P
             Some(c) => out.push(c),
             None => match rest.next() {
                 Some(c) => out.push(c),
-                None => {
-                    let mut gone = ParsedChart::authored(0, ChartModel::default());
-                    gone.dirty = false;
-                    gone.removed = true;
-                    out.push(gone);
-                }
+                None => out.push(placeholder()),
             },
         }
     }
     out.extend(rest);
-    // Trailing removed placeholders carry nothing.
     while out.last().is_some_and(|c| c.removed) {
         out.pop();
     }

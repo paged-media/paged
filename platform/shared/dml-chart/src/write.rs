@@ -298,6 +298,9 @@ pub struct ExtOut {
     pub ns: String,
     pub refs: Vec<RefOut>,
     pub index: Option<u32>,
+    /// The chart slots a save left empty (deleted charts): recorded so a
+    /// reload keeps every index.
+    pub removed: Vec<u32>,
 }
 
 // ── XML helpers ─────────────────────────────────────────────────────────────
@@ -956,6 +959,10 @@ pub fn ext_xml(e: &ExtOut) -> String {
     );
     if let Some(i) = e.index {
         let _ = write!(x, r#" index="{i}""#);
+    }
+    if !e.removed.is_empty() {
+        let list: Vec<String> = e.removed.iter().map(|r| r.to_string()).collect();
+        let _ = write!(x, r#" removed="{}""#, list.join(" "));
     }
     x.push('>');
     for r in &e.refs {
