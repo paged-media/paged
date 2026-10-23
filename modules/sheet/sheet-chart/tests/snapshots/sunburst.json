@@ -1,213 +1,213 @@
 {
-  "widthPt": 360.0,
   "heightPt": 240.0,
   "prims": [
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 180.0,
-      "y": 20.0,
+      "role": "title",
       "s": "Sunburst",
       "sizePt": 14.0,
-      "anchor": "middle",
-      "role": "title"
+      "x": 180.0,
+      "y": 20.0
     },
     {
-      "kind": "rect",
-      "x": 314.25,
-      "y": 120.6,
-      "w": 7.0,
-      "h": 7.0,
       "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 120.6
     },
     {
+      "anchor": "start",
       "kind": "text",
-      "x": 325.25,
-      "y": 127.25,
+      "role": "legend",
       "s": "Fruit",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
-    },
-    {
-      "kind": "rect",
-      "x": 314.25,
-      "y": 133.20000000000002,
-      "w": 7.0,
-      "h": 7.0,
-      "fill": "#ED7D31",
-      "stroke": null,
-      "strokeW": 0.0
-    },
-    {
-      "kind": "text",
       "x": 325.25,
-      "y": 139.85000000000002,
+      "y": 127.25
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 133.2
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
       "s": "Veg",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
+      "x": 325.25,
+      "y": 139.85
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 56.59149999999999,
-      "startDeg": 229.99999999999997,
       "endDeg": 360.0,
       "fill": "#ED7D31",
-      "stroke": "#FFFFFF",
-      "innerR": 14.762999999999998
+      "innerR": 14.763,
+      "kind": "wedge",
+      "r": 56.591,
+      "startDeg": 230.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 123.7904305049467,
-      "y": 118.15714262131162,
+      "role": "dataLabel",
       "s": "Veg",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 123.79,
+      "y": 118.157
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 320.0,
       "endDeg": 360.0,
       "fill": "#F09150",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 320.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 129.61647227643658,
-      "y": 60.40341865652261,
+      "role": "dataLabel",
       "s": "Bean",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 129.616,
+      "y": 60.403
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 260.0,
       "endDeg": 320.0,
       "fill": "#F09150",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 260.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 83.2934186565226,
-      "y": 106.72647227643654,
+      "role": "dataLabel",
       "s": "Kale",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 83.293,
+      "y": 106.726
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 229.99999999999997,
       "endDeg": 260.0,
       "fill": "#F09150",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 230.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 85.88093523488418,
-      "y": 165.9903453399092,
+      "role": "dataLabel",
       "s": "Leek",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 85.881,
+      "y": 165.99
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 56.59149999999999,
-      "startDeg": 0.0,
-      "endDeg": 229.99999999999997,
+      "endDeg": 230.0,
       "fill": "#4472C4",
-      "stroke": "#FFFFFF",
-      "innerR": 14.762999999999998
+      "innerR": 14.763,
+      "kind": "wedge",
+      "r": 56.591,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 188.4595694950533,
-      "y": 148.31285737868836,
+      "role": "dataLabel",
       "s": "Fruit",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 188.46,
+      "y": 148.313
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 149.99999999999997,
-      "endDeg": 229.99999999999994,
+      "endDeg": 230.0,
       "fill": "#6087CD",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 150.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 142.6662677537914,
-      "y": 209.56326350302595,
+      "role": "dataLabel",
       "s": "Plum",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 142.666,
+      "y": 209.563
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 99.99999999999999,
-      "endDeg": 149.99999999999997,
+      "endDeg": 150.0,
       "fill": "#6087CD",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 100.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 219.6139935566515,
-      "y": 177.69047188171507,
+      "role": "dataLabel",
       "s": "Pear",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 219.614,
+      "y": 177.69
     },
     {
-      "kind": "wedge",
       "cx": 156.125,
       "cy": 130.4,
-      "r": 98.41999999999999,
-      "startDeg": 0.0,
-      "endDeg": 99.99999999999999,
+      "endDeg": 100.0,
       "fill": "#6087CD",
-      "stroke": "#FFFFFF",
-      "innerR": 56.59149999999999
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
     },
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 215.49784909726873,
-      "y": 83.41526422053751,
+      "role": "dataLabel",
       "s": "Apple",
       "sizePt": 8.0,
-      "anchor": "middle",
-      "role": "dataLabel"
+      "x": 215.498,
+      "y": 83.415
     }
-  ]
+  ],
+  "widthPt": 360.0
 }
