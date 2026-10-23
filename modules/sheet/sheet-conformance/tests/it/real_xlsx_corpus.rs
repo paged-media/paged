@@ -356,7 +356,8 @@ fn legacy_xls_is_refused_rather_than_half_read() {
 
 /// Every workbook Excel wrote (authored + converted) takes a row insert and
 /// a column delete on each of its first sheets without refusing (W1.2),
-/// apart from pivots (ADR 504); the result reopens. And editing one cell
+/// apart from pivots (ADR 504) and protected sheets (ADR 517); the result
+/// reopens. And editing one cell
 /// changes only that cell's row and the `<dimension>` of the sheet part (W1.4).
 /// The refusals are REPORTED by reason; anything but a pivot fails the lane.
 #[test]
@@ -397,9 +398,12 @@ fn excel_workbooks_take_structural_edits_and_one_cell_edits() {
                     }
                     Err(e) => {
                         let msg = e.to_string();
-                        // The one honest refusal is a pivot (ADR 504).
+                        // The honest refusals: a pivot (ADR 504), and a
+                        // protected sheet that does not allow the edit (ADR 517).
                         let reason = if msg.contains("pivot") {
                             "pivot".to_string()
+                        } else if msg.contains("sheet is protected") {
+                            "protected".to_string()
                         } else {
                             unexpected.push(format!("{} sheet {sheet}: {msg}", path.display()));
                             msg.split(": ")
@@ -582,4 +586,76 @@ fn every_conditional_format_in_the_corpus_evaluates__feat__sheet_lower_condfmt()
     println!("conditional formats by kind: {kinds:?}; blocks lowered: {lowered}");
     assert!(unknown.is_empty(), "rules of an unknown kind: {unknown:#?}");
     assert!(lowered > 0);
+}
+
+/// ADR 517 on real workbooks: a zero-edit save through the session (with the
+/// filter, table, validation, protection and data-table reads a load now
+/// does) writes every part byte for byte, `calcChain.xml` excepted; and the
+/// W2 read doors answer every sheet without failing.
+#[test]
+#[ignore = "corpus: xlsx"]
+fn zero_edit_saves_stay_byte_identical_and_the_w2_reads_answer() {
+    use sheet_js::core::SheetSession;
+    use std::io::Read;
+    let mut files = Vec::new();
+    for src in ["authored", "poi-converted", "poi"] {
+        if let Some(f) = source_files(src) {
+            files.extend(f.into_iter().filter(|p| ext_of(p) == "xlsx"));
+        }
+    }
+    if files.is_empty() {
+        return;
+    }
+    let parts = |b: &[u8]| -> std::collections::BTreeMap<String, Vec<u8>> {
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(b)).unwrap();
+        (0..z.len())
+            .filter_map(|i| {
+                let mut f = z.by_index(i).ok()?;
+                let n = f.name().ok()?.to_string();
+                let mut d = Vec::new();
+                f.read_to_end(&mut d).ok()?;
+                Some((n, d))
+            })
+            .collect()
+    };
+    let (mut checked, mut changed) = (0usize, Vec::new());
+    for path in &files {
+        let bytes = std::fs::read(path).unwrap();
+        let Ok(mut s) = SheetSession::load_xlsx(&bytes) else {
+            continue;
+        };
+        let sheets = s.list_sheets().len() as u16;
+        for i in 0..sheets {
+            s.list_validation_rules(i).unwrap();
+            s.filter_state(i).unwrap();
+            s.outline(i).unwrap();
+            s.sheet_protection(i).unwrap();
+        }
+        s.list_table_details();
+        let Ok(out) = s.save_xlsx() else {
+            changed.push(format!("{}: save failed", path.display()));
+            continue;
+        };
+        checked += 1;
+        let (a, b) = (parts(&bytes), parts(&out));
+        // The calcChain drop also takes its content type and relationship.
+        let had_chain = a.keys().any(|n| n.ends_with("calcChain.xml"));
+        for (n, d) in &a {
+            // A zip directory entry is not a part.
+            if n.ends_with('/')
+                || n.ends_with("calcChain.xml")
+                || (had_chain && (n == "[Content_Types].xml" || n.ends_with("workbook.xml.rels")))
+            {
+                continue;
+            }
+            if b.get(n) != Some(d) {
+                changed.push(format!("{}: {n}", path.display()));
+            }
+        }
+    }
+    eprintln!(
+        "zero-edit saves: {checked} workbooks, {} parts changed",
+        changed.len()
+    );
+    assert!(changed.is_empty(), "{changed:#?}");
 }
