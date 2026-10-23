@@ -45,6 +45,9 @@
 pub mod core;
 
 #[cfg(target_arch = "wasm32")]
+mod wasm_w2;
+
+#[cfg(target_arch = "wasm32")]
 mod wasm {
     use crate::core::{
         CellInput, FindOptions, FrameBoxArg, GridSceneOptions, LowerOptions, PaginateOptionsArg,
@@ -57,7 +60,7 @@ mod wasm {
     /// forwards; nothing computes here (semantics live in the Rust crates).
     #[wasm_bindgen]
     pub struct SheetEngine {
-        session: SheetSession,
+        pub(crate) session: SheetSession,
     }
 
     #[wasm_bindgen]
@@ -853,13 +856,13 @@ mod wasm {
 
     /// Map a session error to a JS string error. Calc errors (`#DIV/0!`) are
     /// NOT boundary errors — they are display strings, never reach here.
-    fn map_err(e: crate::core::SessionError) -> JsValue {
+    pub(crate) fn map_err(e: crate::core::SessionError) -> JsValue {
         JsValue::from_str(&e.to_string())
     }
 
     /// Serialise a serde value to a `JsValue` (camelCase shapes are decided in
     /// the serde derives, matching the TS contract).
-    fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 

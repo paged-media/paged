@@ -1158,182 +1158,199 @@ fn apply_curve_lut_f16(
     }
 }
 
-/// THE adjustment chain, built once and shared by both depths.
+/// One stage of THE adjustment chain, with its kernel parameters.
 ///
-/// Extracted when the f16 path was added, and extracted rather than
-/// copied for the obvious reason: two transcriptions of a thirteen-stage
-/// ordered chain drift, and the drift would show up as an 8-bit preview
-/// that does not match its own 16-bit composite.
-fn build_adjust_chain(
-    pipe: &mut Pipeline,
-    node: image_pipeline::NodeId,
-    params: &AdjustParams,
-) -> image_pipeline::NodeId {
-    let mut node = node;
+/// The chain is listed once ([`adjust_stages`]) and consumed twice: the
+/// GPU pipeline ([`build_adjust_chain`]) and the CPU path that runs where
+/// no device exists (`crate::region_filter`, ADR 465). Two transcriptions
+/// of an eighteen-stage ordered chain would drift.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AdjustStage {
+    Exposure(AdjustExposureParams),
+    WhiteBalance(AdjustWhiteBalanceParams),
+    Levels(AdjustLevelsParams),
+    LevelsRgb(AdjustLevelsRgbParams),
+    BrightnessContrast(AdjustBrightnessContrastParams),
+    ColorBalance(AdjustColorBalanceParams),
+    PhotoFilter(AdjustPhotoFilterParams),
+    ChannelMixer(AdjustChannelMixerParams),
+    Vibrance(AdjustVibranceParams),
+    Saturation(AdjustSaturationParams),
+    BlackWhite(AdjustBlackWhiteParams),
+    Posterize(AdjustPosterizeParams),
+    Threshold(AdjustThresholdParams),
+    HueRotate(AdjustHueRotateParams),
+    HueSaturation(AdjustHueSaturationParams),
+    Invert,
+    /// The separable Gaussian: `conv.gaussian_h`, then `conv.gaussian_v`.
+    Blur(ConvGaussianParams),
+    /// `conv.unsharp` against a Gaussian of the current image.
+    Sharpen(ConvGaussianParams, ConvUnsharpParams),
+}
+
+/// The kernel stages `params` runs, in the chain's fixed order (the
+/// order and its rationale are documented on [`adjust_f16`]). The curves
+/// pass is not a stage: it is a CPU table lookup after the chain.
+pub fn adjust_stages(params: &AdjustParams) -> Vec<AdjustStage> {
+    use AdjustStage as S;
+    let mut out = Vec::new();
     if params.exposure_ev != 0.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_EXPOSURE,
-            Arc::<[u8]>::from(AdjustExposureParams::encoded(params.exposure_ev).as_bytes()),
-        );
+        out.push(S::Exposure(AdjustExposureParams::encoded(
+            params.exposure_ev,
+        )));
     }
     if params.temp != 0.0 || params.tint != 0.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_WHITE_BALANCE,
-            Arc::<[u8]>::from(AdjustWhiteBalanceParams::new(params.temp, params.tint).as_bytes()),
-        );
+        out.push(S::WhiteBalance(AdjustWhiteBalanceParams::new(
+            params.temp,
+            params.tint,
+        )));
     }
     if !params.levels.is_identity() {
         let l = &params.levels;
-        node = pipe.apply(
-            node,
-            &ADJUST_LEVELS,
-            Arc::<[u8]>::from(
-                AdjustLevelsParams::new(l.in_black, l.in_white, l.gamma, l.out_black, l.out_white)
-                    .as_bytes(),
-            ),
-        );
+        out.push(S::Levels(AdjustLevelsParams::new(
+            l.in_black,
+            l.in_white,
+            l.gamma,
+            l.out_black,
+            l.out_white,
+        )));
     }
     // 4 — per-channel levels (the composite output range stays on
     // stage 3; this one is the input/gamma remap per r, g, b).
     if !params.levels_rgb.is_identity() {
         let l = &params.levels_rgb;
-        node = pipe.apply(
-            node,
-            &ADJUST_LEVELS_RGB,
-            Arc::<[u8]>::from(AdjustLevelsRgbParams::new(l.r, l.g, l.b).as_bytes()),
-        );
+        out.push(S::LevelsRgb(AdjustLevelsRgbParams::new(l.r, l.g, l.b)));
     }
     if params.brightness != 0.0 || params.contrast != 1.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_BRIGHTNESS_CONTRAST,
-            Arc::<[u8]>::from(
-                AdjustBrightnessContrastParams::new(params.brightness, params.contrast).as_bytes(),
-            ),
-        );
+        out.push(S::BrightnessContrast(AdjustBrightnessContrastParams::new(
+            params.brightness,
+            params.contrast,
+        )));
     }
     // 6, 7, 8 — the colour-grading trio.
     if !params.color_balance.is_identity() {
         let c = &params.color_balance;
-        node = pipe.apply(
-            node,
-            &ADJUST_COLOR_BALANCE,
-            Arc::<[u8]>::from(
-                AdjustColorBalanceParams::new(c.shadows, c.midtones, c.highlights).as_bytes(),
-            ),
-        );
+        out.push(S::ColorBalance(AdjustColorBalanceParams::new(
+            c.shadows,
+            c.midtones,
+            c.highlights,
+        )));
     }
     if !params.photo_filter.is_identity() {
         let f = &params.photo_filter;
-        node = pipe.apply(
-            node,
-            &ADJUST_PHOTO_FILTER,
-            Arc::<[u8]>::from(
-                AdjustPhotoFilterParams::new(f.color, f.density, f.preserve_luminosity).as_bytes(),
-            ),
-        );
+        out.push(S::PhotoFilter(AdjustPhotoFilterParams::new(
+            f.color,
+            f.density,
+            f.preserve_luminosity,
+        )));
     }
     if !params.channel_mixer.is_identity() {
         let m = &params.channel_mixer;
-        node = pipe.apply(
-            node,
-            &ADJUST_CHANNEL_MIXER,
-            Arc::<[u8]>::from(AdjustChannelMixerParams::new(m.r, m.g, m.b).as_bytes()),
-        );
+        out.push(S::ChannelMixer(AdjustChannelMixerParams::new(
+            m.r, m.g, m.b,
+        )));
     }
     // 9 — vibrance BEFORE the global saturation (it reads the
     // still-unsaturated chroma to weight its own boost). The kernel's
     // second term is the global saturation offset; we keep it 0 so
     // stage 10 stays the single global control.
     if params.vibrance != 0.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_VIBRANCE,
-            Arc::<[u8]>::from(AdjustVibranceParams::new(params.vibrance, 0.0).as_bytes()),
-        );
+        out.push(S::Vibrance(AdjustVibranceParams::new(params.vibrance, 0.0)));
     }
     if params.saturation != 1.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_SATURATION,
-            Arc::<[u8]>::from(AdjustSaturationParams::new(params.saturation).as_bytes()),
-        );
+        out.push(S::Saturation(AdjustSaturationParams::new(
+            params.saturation,
+        )));
     }
     // 11, 12, 13 — the range-destroying stages, LAST among the point
     // adjustments (posterize/threshold quantize, so anything after
     // them would work on a collapsed range).
     if params.black_white.enabled {
         let w = params.black_white.weights;
-        node = pipe.apply(
-            node,
-            &ADJUST_BLACK_WHITE,
-            Arc::<[u8]>::from(
-                AdjustBlackWhiteParams::new(w[0], w[1], w[2], w[3], w[4], w[5]).as_bytes(),
-            ),
-        );
+        out.push(S::BlackWhite(AdjustBlackWhiteParams::new(
+            w[0], w[1], w[2], w[3], w[4], w[5],
+        )));
     }
     if let Some(levels) = params.posterize {
-        node = pipe.apply(
-            node,
-            &ADJUST_POSTERIZE,
-            Arc::<[u8]>::from(AdjustPosterizeParams::new(levels).as_bytes()),
-        );
+        out.push(S::Posterize(AdjustPosterizeParams::new(levels)));
     }
     if let Some(t) = params.threshold {
-        node = pipe.apply(
-            node,
-            &ADJUST_THRESHOLD,
-            Arc::<[u8]>::from(AdjustThresholdParams::new(t).as_bytes()),
-        );
+        out.push(S::Threshold(AdjustThresholdParams::new(t)));
     }
-    // FILTER stages (first wasm reach for the registered T1/T2
-    // kernels — same registry-driven dispatch, nothing new): hue
-    // rotation, per-color invert, separable Gaussian blur, and
-    // unsharp masking (the classic a + amount·(a − blur(a)) blend —
-    // CONV_UNSHARP is the 2-input point kernel; its blur input is a
-    // fixed σ1.5 Gaussian of the current node).
+    // FILTER stages: hue rotation, Hue/Saturation, per-color invert,
+    // separable Gaussian blur, and unsharp masking (the classic
+    // a + amount·(a − blur(a)) blend — CONV_UNSHARP is the 2-input point
+    // kernel; its blur input is a fixed σ1.5 Gaussian of the current
+    // node).
     if params.hue_degrees != 0.0 {
-        node = pipe.apply(
-            node,
-            &ADJUST_HUE_ROTATE,
-            Arc::<[u8]>::from(AdjustHueRotateParams::new(params.hue_degrees).as_bytes()),
-        );
+        out.push(S::HueRotate(AdjustHueRotateParams::new(params.hue_degrees)));
     }
     if !params.hue_sat.is_identity() {
-        node = pipe.apply(
-            node,
-            &ADJUST_HUE_SATURATION,
-            Arc::<[u8]>::from(params.hue_sat.as_bytes()),
-        );
+        out.push(S::HueSaturation(params.hue_sat));
     }
     if params.invert {
-        node = pipe.apply(
-            node,
-            &ADJUST_INVERT_RGB,
-            Arc::<[u8]>::from(AdjustInvertRgbParams::new().as_bytes()),
-        );
+        out.push(S::Invert);
     }
     if params.blur_sigma > 0.0 {
         let sigma = params.blur_sigma;
         let radius = (sigma * 3.0).ceil().min(f32::from(GAUSSIAN_MAX_RADIUS)) as u32;
-        let p = Arc::<[u8]>::from(ConvGaussianParams::new(sigma, radius).as_bytes());
-        node = pipe.apply(node, &CONV_GAUSSIAN_H, Arc::clone(&p));
-        node = pipe.apply(node, &CONV_GAUSSIAN_V, p);
+        out.push(S::Blur(ConvGaussianParams::new(sigma, radius)));
     }
     if params.sharpen_amount > 0.0 {
-        let p = Arc::<[u8]>::from(ConvGaussianParams::new(1.5, 5).as_bytes());
-        let mut blurred = pipe.apply(node, &CONV_GAUSSIAN_H, Arc::clone(&p));
-        blurred = pipe.apply(blurred, &CONV_GAUSSIAN_V, p);
-        node = pipe.apply2(
-            node,
-            blurred,
-            &CONV_UNSHARP,
-            Arc::<[u8]>::from(ConvUnsharpParams::new(params.sharpen_amount, 0.0).as_bytes()),
-        );
+        out.push(S::Sharpen(
+            ConvGaussianParams::new(1.5, 5),
+            ConvUnsharpParams::new(params.sharpen_amount, 0.0),
+        ));
     }
+    out
+}
 
+/// THE adjustment chain on the GPU pipeline, from [`adjust_stages`].
+fn build_adjust_chain(
+    pipe: &mut Pipeline,
+    node: image_pipeline::NodeId,
+    params: &AdjustParams,
+) -> image_pipeline::NodeId {
+    use AdjustStage as S;
+    let bytes = |b: &[u8]| Arc::<[u8]>::from(b);
+    let mut node = node;
+    for stage in adjust_stages(params) {
+        node = match stage {
+            S::Exposure(p) => pipe.apply(node, &ADJUST_EXPOSURE, bytes(p.as_bytes())),
+            S::WhiteBalance(p) => pipe.apply(node, &ADJUST_WHITE_BALANCE, bytes(p.as_bytes())),
+            S::Levels(p) => pipe.apply(node, &ADJUST_LEVELS, bytes(p.as_bytes())),
+            S::LevelsRgb(p) => pipe.apply(node, &ADJUST_LEVELS_RGB, bytes(p.as_bytes())),
+            S::BrightnessContrast(p) => {
+                pipe.apply(node, &ADJUST_BRIGHTNESS_CONTRAST, bytes(p.as_bytes()))
+            }
+            S::ColorBalance(p) => pipe.apply(node, &ADJUST_COLOR_BALANCE, bytes(p.as_bytes())),
+            S::PhotoFilter(p) => pipe.apply(node, &ADJUST_PHOTO_FILTER, bytes(p.as_bytes())),
+            S::ChannelMixer(p) => pipe.apply(node, &ADJUST_CHANNEL_MIXER, bytes(p.as_bytes())),
+            S::Vibrance(p) => pipe.apply(node, &ADJUST_VIBRANCE, bytes(p.as_bytes())),
+            S::Saturation(p) => pipe.apply(node, &ADJUST_SATURATION, bytes(p.as_bytes())),
+            S::BlackWhite(p) => pipe.apply(node, &ADJUST_BLACK_WHITE, bytes(p.as_bytes())),
+            S::Posterize(p) => pipe.apply(node, &ADJUST_POSTERIZE, bytes(p.as_bytes())),
+            S::Threshold(p) => pipe.apply(node, &ADJUST_THRESHOLD, bytes(p.as_bytes())),
+            S::HueRotate(p) => pipe.apply(node, &ADJUST_HUE_ROTATE, bytes(p.as_bytes())),
+            S::HueSaturation(p) => pipe.apply(node, &ADJUST_HUE_SATURATION, bytes(p.as_bytes())),
+            S::Invert => pipe.apply(
+                node,
+                &ADJUST_INVERT_RGB,
+                bytes(AdjustInvertRgbParams::new().as_bytes()),
+            ),
+            S::Blur(p) => {
+                let p = bytes(p.as_bytes());
+                let h = pipe.apply(node, &CONV_GAUSSIAN_H, Arc::clone(&p));
+                pipe.apply(h, &CONV_GAUSSIAN_V, p)
+            }
+            S::Sharpen(g, u) => {
+                let g = bytes(g.as_bytes());
+                let mut blurred = pipe.apply(node, &CONV_GAUSSIAN_H, Arc::clone(&g));
+                blurred = pipe.apply(blurred, &CONV_GAUSSIAN_V, g);
+                pipe.apply2(node, blurred, &CONV_UNSHARP, bytes(u.as_bytes()))
+            }
+        };
+    }
     node
 }
 
@@ -1405,7 +1422,7 @@ pub async fn adjust_rgba8(
     Ok(out)
 }
 
-async fn adjust_rgba8_uncached(
+pub(crate) async fn adjust_rgba8_uncached(
     ctx: &GpuContext,
     image: &DecodedImage,
     params: &AdjustParams,

@@ -105,6 +105,17 @@ export interface ImageCodec {
     rgba: Uint8Array;
   };
   encodePng(rgba: Uint8Array, width: number, height: number): Uint8Array;
+  /** The adjustment chain (an adjustment layer's wire block) on a
+   *  rectangle of straight RGBA8, the whole image back; `gpu` says which
+   *  lane ran (ADR 465: the GPU where a device exists, else the CPU
+   *  twins). Absent on a codec that cannot filter. */
+  filterRegion?(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    wire: Float32Array,
+    rect: { x: number; y: number; w: number; h: number },
+  ): Promise<{ rgba: Uint8Array; gpu: boolean }>;
 }
 
 /** What one stored revision adds to the session store's record. */
@@ -141,6 +152,9 @@ class Refused extends Error {}
 
 const value = (v: unknown): ObjectValue => ({ kind: "value", value: v });
 const absent: ObjectValue = { kind: "absent" };
+/** The adjustment wire at its defaults: a filter must differ from it. */
+const IDENTITY_WIRE = defaultAdjust();
+
 const refusedValue = (
   code: "unknownAddress" | "unknownPath" | "failed",
   reason: string,
@@ -278,6 +292,21 @@ const LAYER_ROWS: PropertySchema[] = [
     summary: "[top, left, bottom, right] in image pixels.",
   },
   {
+    path: "filter",
+    type: {
+      kind: "struct",
+      fields: {
+        params: { kind: "struct", fields: {}, open: true },
+        region: { kind: "bounds", optional: true },
+      },
+    },
+    summary:
+      "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths " +
+      "(blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] " +
+      "in image pixels; the whole canvas when absent). On the GPU where one exists, otherwise on the " +
+      "CPU twins of the same kernels (ADR 465). Reads nothing.",
+  },
+  {
     path: "pixelSource",
     type: { kind: "asset" },
     // Up to 2 KiB of data: URL per layer: `getAll` skips it unless asked.
@@ -405,6 +434,9 @@ export interface ImageObjectCounters {
   encodes: number;
   /** Planner calls (one per `host.objects` batch, whatever its kinds). */
   plans: number;
+  /** Region filters run, and how many of them on the GPU. */
+  filters: number;
+  gpuFilters: number;
 }
 
 export interface ImageObjects {
@@ -437,6 +469,8 @@ export function createImageObjects(
     decodes: 0,
     encodes: 0,
     plans: 0,
+    filters: 0,
+    gpuFilters: 0,
   };
   /** Stacks by `frameId|marker`. A marker names a content-addressed
    *  record, so an entry never goes stale for its key — but the frame's
@@ -614,6 +648,8 @@ export function createImageObjects(
         return value(l.mask !== null);
       case "bounds":
         return value(bounds);
+      case "filter":
+        return absent;
       case "pixelSource": {
         const src = s.sources[String(l.id)];
         return src === undefined ? absent : value(src);
@@ -955,6 +991,57 @@ export function createImageObjects(
     rememberSource(s, String(l.id), label);
   }
 
+  /** A filter on a region of a pixel layer (ADR 465): the adjustment
+   *  chain baked into the pixels inside the rectangle, destructively. */
+  async function filterRegion(s: FrameState, l: PgilLayer, v: unknown) {
+    if (l.kind !== "pixels")
+      throw new Refused(
+        l.kind === "adjustment"
+          ? "an adjustment layer has no pixels to filter"
+          : "a smart object re-renders from its source; filter its source or rasterize it in the editor",
+      );
+    if (l.locked)
+      throw new Refused(`layer "${l.name}" is locked (its pixels are)`);
+    if (l.depth !== 8)
+      throw new Refused("a 16-bit layer is filtered in the editor");
+    const { params, region } = (v ?? {}) as {
+      params?: Record<string, unknown>;
+      region?: number[];
+    };
+    const wire = defaultAdjust();
+    for (const [p, val] of Object.entries(params ?? {})) {
+      const why = writeAdjust(wire, p, val);
+      if (why) throw new Refused(why);
+    }
+    if (wire.every((x, i) => Object.is(x, IDENTITY_WIRE[i])))
+      throw new Refused(
+        "the filter changes nothing: every parameter is at its default",
+      );
+    const { width: W, height: H } = s.stack;
+    const [top, left, bottom, right] = region ?? [0, 0, H, W];
+    const rect = {
+      x: left!,
+      y: top!,
+      w: right! - left!,
+      h: bottom! - top!,
+    };
+    if (![rect.x, rect.y, rect.w, rect.h].every(Number.isInteger))
+      throw new Refused("a region is whole pixels");
+    if (rect.w < 1 || rect.h < 1)
+      throw new Refused("a region covers at least one pixel");
+    if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > W || rect.y + rect.h > H)
+      throw new Refused(`the region must lie inside the ${W}×${H} canvas`);
+    const c = await codec();
+    if (!c.filterRegion)
+      throw new Refused("this host's image engine cannot run a filter");
+    const pixels = l.rect ? expandBounded(l, W, H) : l.pixels;
+    const out = await c.filterRegion(pixels, W, H, wire, rect);
+    counters.filters++;
+    if (out.gpu) counters.gpuFilters++;
+    l.pixels = out.rgba;
+    l.rect = null;
+  }
+
   function replaceSmartSource(
     s: FrameState,
     l: PgilLayer,
@@ -1069,6 +1156,7 @@ export function createImageObjects(
       case "layer":
         if (path === "content") return replacePixels(s, l, v, null);
         if (path === "pixelSource") return replacePixels(s, l, v, v as string);
+        if (path === "filter") return filterRegion(s, l, v);
         return applyLayerSet(s, l, path, v);
       case "mask": {
         if (!l.mask)

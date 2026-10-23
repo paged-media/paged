@@ -1666,6 +1666,18 @@ fn eval_special_form(
     }
 }
 
+/// [`eval_as_ref`] for callers outside the evaluator: the area a
+/// reference-shaped expression denotes (a range, a name, OFFSET, INDIRECT,
+/// INDEX, a structured or spill reference), `None` for a value.
+pub fn eval_as_reference(
+    model: &SheetModel,
+    expr: &Expr,
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> Option<RangeRef> {
+    eval_as_ref(model, expr, ctx, spills)
+}
+
 /// Resolve an argument expression AS A REFERENCE (not a value): the building
 /// block special forms need. Handles a bare cell ref, a range, a defined name
 /// that targets a range, a structured (table) reference, a spill reference, and
