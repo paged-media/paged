@@ -11,6 +11,7 @@
     },
     "rendering": ["hitTest", "sceneLayer"],
     "network": false,
+    "assets": ["fonts"],
     "dataProviders": {
       "consume": ["dataset"],
       "publish": ["dataset"]

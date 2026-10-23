@@ -1,0 +1,515 @@
+# sheet.fn.fin.* (W3 F3) — the coupon schedule and bond functions, discount
+# securities, T-bills, odd first/last periods, French depreciation, VDB,
+# cumulative interest/principal and the rate conversions. Kernels in
+# sheet-fn/src/families/fin2.rs. Expected values are recorded from Excel
+# (sheet-conformance/oracle/excel/recorded/fin2.tsv); provenance: Microsoft's
+# public function reference, conventions it leaves open recorded from Excel.
+
+- id: sheet.fn.fin.coupdaybs
+  name: COUPDAYBS
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::coupdaybs
+  status: implemented
+  provenance: ["Microsoft function reference (COUPDAYBS) — the shared coupon schedule"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_coupdaybs"]
+    corpus: ["corpus/fn-corpus/fin2/coupdaybs.golden.tsv"]
+
+- id: sheet.fn.fin.coupdays
+  name: COUPDAYS
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::coupdays
+  status: implemented
+  provenance: ["Microsoft function reference (COUPDAYS) — the shared coupon schedule"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_coupdays"]
+    corpus: ["corpus/fn-corpus/fin2/coupdays.golden.tsv"]
+
+- id: sheet.fn.fin.coupdaysnc
+  name: COUPDAYSNC
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::coupdaysnc
+  status: implemented
+  provenance: ["Microsoft function reference (COUPDAYSNC) — the shared coupon schedule; basis 0 = COUPDAYS - COUPDAYBS"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_coupdaysnc"]
+    corpus: ["corpus/fn-corpus/fin2/coupdaysnc.golden.tsv"]
+
+- id: sheet.fn.fin.coupncd
+  name: COUPNCD
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::coupncd
+  status: implemented
+  provenance: ["Microsoft function reference (COUPNCD) — the shared coupon schedule"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_coupncd"]
+    corpus: ["corpus/fn-corpus/fin2/coupncd.golden.tsv"]
+
+- id: sheet.fn.fin.coupnum
+  name: COUPNUM
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::coupnum
+  status: implemented
+  provenance: ["Microsoft function reference (COUPNUM) — the shared coupon schedule"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_coupnum"]
+    corpus: ["corpus/fn-corpus/fin2/coupnum.golden.tsv"]
+
+- id: sheet.fn.fin.couppcd
+  name: COUPPCD
+  family: fin
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::couppcd
+  status: implemented
+  provenance: ["Microsoft function reference (COUPPCD) — the shared coupon schedule"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_couppcd"]
+    corpus: ["corpus/fn-corpus/fin2/couppcd.golden.tsv"]
+
+- id: sheet.fn.fin.price
+  name: PRICE
+  family: fin
+  arity: { min: 6, max: 7 }
+  volatility: none
+  range_aware: false
+  rust: fin2::price
+  status: implemented
+  provenance: ["Microsoft function reference (PRICE) — DSC = E - A"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_price"]
+    corpus: ["corpus/fn-corpus/fin2/price.golden.tsv"]
+
+- id: sheet.fn.fin.yield
+  name: YIELD
+  family: fin
+  arity: { min: 6, max: 7 }
+  volatility: none
+  range_aware: false
+  rust: fin2::yield_fn
+  status: implemented
+  provenance: ["Microsoft function reference (YIELD) — closed form for one period, bracketed root of PRICE beyond"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_yield"]
+    corpus: ["corpus/fn-corpus/fin2/yield.golden.tsv"]
+
+- id: sheet.fn.fin.duration
+  name: DURATION
+  family: fin
+  arity: { min: 5, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::duration
+  status: implemented
+  provenance: ["Microsoft function reference (DURATION) — Macaulay duration"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_duration"]
+    corpus: ["corpus/fn-corpus/fin2/duration.golden.tsv"]
+
+- id: sheet.fn.fin.mduration
+  name: MDURATION
+  family: fin
+  arity: { min: 5, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::mduration
+  status: implemented
+  provenance: ["Microsoft function reference (MDURATION)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_mduration"]
+    corpus: ["corpus/fn-corpus/fin2/mduration.golden.tsv"]
+
+- id: sheet.fn.fin.accrint
+  name: ACCRINT
+  family: fin
+  arity: { min: 6, max: 8 }
+  volatility: none
+  range_aware: false
+  rust: fin2::accrint
+  status: implemented
+  provenance: ["Microsoft function reference (ACCRINT) — accrued from issue; quasi-coupon periods on the actual basis"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_accrint"]
+    corpus: ["corpus/fn-corpus/fin2/accrint.golden.tsv"]
+
+- id: sheet.fn.fin.accrintm
+  name: ACCRINTM
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::accrintm
+  status: implemented
+  provenance: ["Microsoft function reference (ACCRINTM)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_accrintm"]
+    corpus: ["corpus/fn-corpus/fin2/accrintm.golden.tsv"]
+
+- id: sheet.fn.fin.disc
+  name: DISC
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::disc
+  status: implemented
+  provenance: ["Microsoft function reference (DISC) — YEARFRAC day basis"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_disc"]
+    corpus: ["corpus/fn-corpus/fin2/disc.golden.tsv"]
+
+- id: sheet.fn.fin.intrate
+  name: INTRATE
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::intrate
+  status: implemented
+  provenance: ["Microsoft function reference (INTRATE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_intrate"]
+    corpus: ["corpus/fn-corpus/fin2/intrate.golden.tsv"]
+
+- id: sheet.fn.fin.received
+  name: RECEIVED
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::received
+  status: implemented
+  provenance: ["Microsoft function reference (RECEIVED)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_received"]
+    corpus: ["corpus/fn-corpus/fin2/received.golden.tsv"]
+
+- id: sheet.fn.fin.pricedisc
+  name: PRICEDISC
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::pricedisc
+  status: implemented
+  provenance: ["Microsoft function reference (PRICEDISC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_pricedisc"]
+    corpus: ["corpus/fn-corpus/fin2/pricedisc.golden.tsv"]
+
+- id: sheet.fn.fin.yielddisc
+  name: YIELDDISC
+  family: fin
+  arity: { min: 4, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: fin2::yielddisc
+  status: implemented
+  provenance: ["Microsoft function reference (YIELDDISC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_yielddisc"]
+    corpus: ["corpus/fn-corpus/fin2/yielddisc.golden.tsv"]
+
+- id: sheet.fn.fin.pricemat
+  name: PRICEMAT
+  family: fin
+  arity: { min: 5, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::pricemat
+  status: implemented
+  provenance: ["Microsoft function reference (PRICEMAT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_pricemat"]
+    corpus: ["corpus/fn-corpus/fin2/pricemat.golden.tsv"]
+
+- id: sheet.fn.fin.yieldmat
+  name: YIELDMAT
+  family: fin
+  arity: { min: 5, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::yieldmat
+  status: implemented
+  provenance: ["Microsoft function reference (YIELDMAT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_yieldmat"]
+    corpus: ["corpus/fn-corpus/fin2/yieldmat.golden.tsv"]
+
+- id: sheet.fn.fin.tbilleq
+  name: TBILLEQ
+  family: fin
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: fin2::tbilleq
+  status: implemented
+  provenance: ["Microsoft function reference (TBILLEQ) — the quadratic form past half a year"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_tbilleq"]
+    corpus: ["corpus/fn-corpus/fin2/tbilleq.golden.tsv"]
+
+- id: sheet.fn.fin.tbillprice
+  name: TBILLPRICE
+  family: fin
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: fin2::tbillprice
+  status: implemented
+  provenance: ["Microsoft function reference (TBILLPRICE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_tbillprice"]
+    corpus: ["corpus/fn-corpus/fin2/tbillprice.golden.tsv"]
+
+- id: sheet.fn.fin.tbillyield
+  name: TBILLYIELD
+  family: fin
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: fin2::tbillyield
+  status: implemented
+  provenance: ["Microsoft function reference (TBILLYIELD)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_tbillyield"]
+    corpus: ["corpus/fn-corpus/fin2/tbillyield.golden.tsv"]
+
+- id: sheet.fn.fin.oddfprice
+  name: ODDFPRICE
+  family: fin
+  arity: { min: 8, max: 9 }
+  volatility: none
+  range_aware: false
+  rust: fin2::oddfprice
+  status: implemented
+  provenance: ["Microsoft function reference (ODDFPRICE) — the documented short and long first-period formulas"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_oddfprice"]
+    corpus: ["corpus/fn-corpus/fin2/oddfprice.golden.tsv"]
+
+- id: sheet.fn.fin.oddfyield
+  name: ODDFYIELD
+  family: fin
+  arity: { min: 8, max: 9 }
+  volatility: none
+  range_aware: false
+  rust: fin2::oddfyield
+  status: implemented
+  provenance: ["Microsoft function reference (ODDFYIELD) — bracketed root of ODDFPRICE"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_oddfyield"]
+    corpus: ["corpus/fn-corpus/fin2/oddfyield.golden.tsv"]
+
+- id: sheet.fn.fin.oddlprice
+  name: ODDLPRICE
+  family: fin
+  arity: { min: 7, max: 8 }
+  volatility: none
+  range_aware: false
+  rust: fin2::oddlprice
+  status: implemented
+  provenance: ["Microsoft function reference (ODDLPRICE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_oddlprice"]
+    corpus: ["corpus/fn-corpus/fin2/oddlprice.golden.tsv"]
+
+- id: sheet.fn.fin.oddlyield
+  name: ODDLYIELD
+  family: fin
+  arity: { min: 7, max: 8 }
+  volatility: none
+  range_aware: false
+  rust: fin2::oddlyield
+  status: implemented
+  provenance: ["Microsoft function reference (ODDLYIELD)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_oddlyield"]
+    corpus: ["corpus/fn-corpus/fin2/oddlyield.golden.tsv"]
+
+- id: sheet.fn.fin.amordegrc
+  name: AMORDEGRC
+  family: fin
+  arity: { min: 6, max: 7 }
+  volatility: none
+  range_aware: false
+  rust: fin2::amordegrc
+  status: implemented
+  provenance: ["Microsoft function reference (AMORDEGRC) — coefficients and the last-two-periods rule recorded from Excel"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_amordegrc"]
+    corpus: ["corpus/fn-corpus/fin2/amordegrc.golden.tsv"]
+
+- id: sheet.fn.fin.amorlinc
+  name: AMORLINC
+  family: fin
+  arity: { min: 6, max: 7 }
+  volatility: none
+  range_aware: false
+  rust: fin2::amorlinc
+  status: implemented
+  provenance: ["Microsoft function reference (AMORLINC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_amorlinc"]
+    corpus: ["corpus/fn-corpus/fin2/amorlinc.golden.tsv"]
+
+- id: sheet.fn.fin.vdb
+  name: VDB
+  family: fin
+  arity: { min: 5, max: 7 }
+  volatility: none
+  range_aware: false
+  rust: fin2::vdb
+  status: implemented
+  provenance: ["Microsoft function reference (VDB) — declining balance switching to straight line"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_vdb"]
+    corpus: ["corpus/fn-corpus/fin2/vdb.golden.tsv"]
+
+- id: sheet.fn.fin.cumipmt
+  name: CUMIPMT
+  family: fin
+  arity: { min: 6, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::cumipmt
+  status: implemented
+  provenance: ["Microsoft function reference (CUMIPMT) — start rounded up, end truncated"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_cumipmt"]
+    corpus: ["corpus/fn-corpus/fin2/cumipmt.golden.tsv"]
+
+- id: sheet.fn.fin.cumprinc
+  name: CUMPRINC
+  family: fin
+  arity: { min: 6, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: fin2::cumprinc
+  status: implemented
+  provenance: ["Microsoft function reference (CUMPRINC)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_cumprinc"]
+    corpus: ["corpus/fn-corpus/fin2/cumprinc.golden.tsv"]
+
+- id: sheet.fn.fin.effect
+  name: EFFECT
+  family: fin
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: fin2::effect
+  status: implemented
+  provenance: ["Microsoft function reference (EFFECT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_effect"]
+    corpus: ["corpus/fn-corpus/fin2/effect.golden.tsv"]
+
+- id: sheet.fn.fin.nominal
+  name: NOMINAL
+  family: fin
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: fin2::nominal
+  status: implemented
+  provenance: ["Microsoft function reference (NOMINAL)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_nominal"]
+    corpus: ["corpus/fn-corpus/fin2/nominal.golden.tsv"]
+
+- id: sheet.fn.fin.ispmt
+  name: ISPMT
+  family: fin
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: fin2::ispmt
+  status: implemented
+  provenance: ["Microsoft function reference (ISPMT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_ispmt"]
+    corpus: ["corpus/fn-corpus/fin2/ispmt.golden.tsv"]
+
+- id: sheet.fn.fin.pduration
+  name: PDURATION
+  xlfn_prefix: "_xlfn."
+  family: fin
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: fin2::pduration
+  status: implemented
+  provenance: ["Microsoft function reference (PDURATION)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_pduration"]
+    corpus: ["corpus/fn-corpus/fin2/pduration.golden.tsv"]
+
+- id: sheet.fn.fin.rri
+  name: RRI
+  xlfn_prefix: "_xlfn."
+  family: fin
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: fin2::rri
+  status: implemented
+  provenance: ["Microsoft function reference (RRI)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_rri"]
+    corpus: ["corpus/fn-corpus/fin2/rri.golden.tsv"]
+
+- id: sheet.fn.fin.fvschedule
+  name: FVSCHEDULE
+  family: fin
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: fin2::fvschedule
+  status: implemented
+  provenance: ["Microsoft function reference (FVSCHEDULE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_fvschedule"]
+    corpus: ["corpus/fn-corpus/fin2/fvschedule.golden.tsv"]
+
+- id: sheet.fn.fin.dollarde
+  name: DOLLARDE
+  family: fin
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: fin2::dollarde
+  status: implemented
+  provenance: ["Microsoft function reference (DOLLARDE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_dollarde"]
+    corpus: ["corpus/fn-corpus/fin2/dollarde.golden.tsv"]
+
+- id: sheet.fn.fin.dollarfr
+  name: DOLLARFR
+  family: fin
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: fin2::dollarfr
+  status: implemented
+  provenance: ["Microsoft function reference (DOLLARFR)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_fin2.rs::sheet_fn_fin2_dollarfr"]
+    corpus: ["corpus/fn-corpus/fin2/dollarfr.golden.tsv"]

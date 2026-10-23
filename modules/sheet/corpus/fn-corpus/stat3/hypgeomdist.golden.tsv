@@ -1,0 +1,9 @@
+# HYPGEOMDIST(sample_s,number_sample,population_s,number_pop) - legacy.
+# id	formula	setup	expected
+hgl-0	=HYPGEOMDIST(1,4,8,20)	-	0.363261093911249
+hgl-1	=HYPGEOMDIST(0,4,8,20)	-	0.102167182662539
+hgl-2	=HYPGEOMDIST(5,4,8,20)	-	0
+hgl-3	=HYPGEOMDIST(3,15,8,20)	-	0.003611971104231
+hgl-4	=HYPGEOMDIST(1,25,8,20)	-	#NUM!
+hgl-5	=HYPGEOMDIST("x",4,8,20)	-	#VALUE!
+hgl-6	=HYPGEOMDIST(50,200,300,1000)	-	0.015592189268737

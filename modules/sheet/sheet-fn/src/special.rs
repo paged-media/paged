@@ -609,3 +609,611 @@ pub(crate) fn bessel_yn(n: u32, x: f64) -> f64 {
     }
     by
 }
+
+// ---- gamma and beta functions (W3 statistics) ---------------------------------
+//
+// The distributions of the statistical family rest on four functions, all
+// from the published mathematics (Abramowitz & Stegun ch. 6 and 26, the
+// Lanczos approximation, Lentz's evaluation of continued fractions, and
+// Loader's saddle-point form of the discrete densities):
+//
+// - `ln_gamma`: the Lanczos approximation (g = 7, nine terms) on (0.5, 10),
+//   the Stirling series beyond, the Taylor series of ln Γ(1+z) in ζ values
+//   around the zeros at 1 and 2, the reflection formula below 0.5;
+// - `gamma_p_q`: the regularised incomplete gamma functions P and Q, by the
+//   series below `a + 1` and the continued fraction above, with the prefactor
+//   `x^a e^-x / Γ(a)` taken in a form that keeps its relative accuracy for a
+//   large shape;
+// - `beta_i`: the regularised incomplete beta function by its continued
+//   fraction, on the side of the symmetry `I_x(a,b) = 1 − I_{1−x}(b,a)` where
+//   it converges fast, returning both tails;
+// - `dbinom_raw` / `dpois_raw`: Loader's binomial and Poisson densities
+//   (Stirling-error and deviance terms), accurate in the far tails.
+//
+// The inverses solve on whichever tail is smaller with a safeguarded root
+// finder (bracketing, secant and bisection steps, Brent's method) to a few
+// ulps.
+
+const LN_SQRT_2PI: f64 = 0.918_938_533_204_672_8;
+
+/// ζ(k) for an integer `k >= 2`.
+fn zeta(k: u32) -> f64 {
+    use std::f64::consts::PI;
+    match k {
+        2 => PI * PI / 6.0,
+        3 => 1.202_056_903_159_594_2,
+        4 => PI.powi(4) / 90.0,
+        5 => 1.036_927_755_143_37,
+        6 => PI.powi(6) / 945.0,
+        7 => 1.008_349_277_381_922_8,
+        _ => {
+            // 1 + 2^-k + 3^-k + …: from k = 8 the terms past 60 are below
+            // 1e-14 of the sum.
+            let mut s = 0.0;
+            for n in (2..=60u32).rev() {
+                s += f64::from(n).powi(-(k as i32));
+            }
+            1.0 + s
+        }
+    }
+}
+
+/// `ln Γ(1 + z)` for `|z| <= 0.25`: `−γz + Σ (−1)^k ζ(k) z^k / k`.
+fn ln_gamma_1p(z: f64) -> f64 {
+    const EULER: f64 = std::f64::consts::EULER_GAMMA;
+    let mut sum = -EULER * z;
+    // (−z)^k, so the term is (−1)^k ζ(k) z^k / k.
+    let mut zk = -z;
+    for k in 2..80u32 {
+        zk *= -z;
+        let term = zeta(k) * zk / f64::from(k);
+        sum += term;
+        if term.abs() <= 1e-18 * sum.abs().max(1e-300) {
+            break;
+        }
+    }
+    sum
+}
+
+/// The Lanczos sum `A(x)` (g = 7, nine coefficients), with
+/// `Γ(x) = √(2π) · t^(x−½) · e^(−t) · A(x)`, `t = x + 6.5`.
+fn lanczos_sum(x: f64) -> f64 {
+    const P: [f64; 9] = [
+        0.999_999_999_999_809_9,
+        676.520_368_121_885_1,
+        -1_259.139_216_722_402_8,
+        771.323_428_777_653_1,
+        -176.615_029_162_140_6,
+        12.507_343_278_686_905,
+        -0.138_571_095_265_720_12,
+        9.984_369_578_019_572e-6,
+        1.505_632_735_149_311_6e-7,
+    ];
+    let xm = x - 1.0;
+    let mut a = P[0];
+    for (i, &p) in P.iter().enumerate().skip(1) {
+        a += p / (xm + i as f64);
+    }
+    a
+}
+
+/// The Stirling series `ln Γ(x) − ((x−½) ln x − x + ln √(2π))`, `x >= 10`.
+fn stirling_correction(x: f64) -> f64 {
+    let r = 1.0 / x;
+    let r2 = r * r;
+    r * (1.0 / 12.0
+        - r2 * (1.0 / 360.0
+            - r2 * (1.0 / 1260.0
+                - r2 * (1.0 / 1680.0 - r2 * (1.0 / 1188.0 - r2 * 691.0 / 360_360.0)))))
+}
+
+/// `ln Γ(x)` for `x > 0` (NaN otherwise).
+pub(crate) fn ln_gamma(x: f64) -> f64 {
+    if x.is_nan() || x <= 0.0 {
+        return f64::NAN;
+    }
+    if x < 0.5 {
+        if x < 0.25 {
+            // ln Γ(x) = ln Γ(1+x) − ln x.
+            return ln_gamma_1p(x) - x.ln();
+        }
+        // Reflection: Γ(x) Γ(1−x) = π / sin(πx).
+        return (std::f64::consts::PI / sin_pi(x)).ln() - ln_gamma(1.0 - x);
+    }
+    if (0.75..=1.25).contains(&x) {
+        return ln_gamma_1p(x - 1.0);
+    }
+    if (1.75..=2.25).contains(&x) {
+        let z = x - 2.0;
+        return z.ln_1p() + ln_gamma_1p(z);
+    }
+    if x >= 10.0 {
+        return (x - 0.5) * x.ln() - x + LN_SQRT_2PI + stirling_correction(x);
+    }
+    let t = x + 6.5;
+    LN_SQRT_2PI + (x - 0.5) * t.ln() - t + lanczos_sum(x).ln()
+}
+
+/// `sin(πx)` with the argument reduced exactly first.
+fn sin_pi(x: f64) -> f64 {
+    let r = x - 2.0 * (x / 2.0).round(); // [-1, 1]
+    if r == 0.0 || r.abs() == 1.0 {
+        return 0.0;
+    }
+    if r.abs() == 0.5 {
+        return r.signum();
+    }
+    (std::f64::consts::PI * r).sin()
+}
+
+/// `Γ(x)` for real `x`; NaN at 0 and the negative integers.
+pub(crate) fn gamma(x: f64) -> f64 {
+    if x.is_nan() || (x <= 0.0 && x == x.floor()) {
+        return f64::NAN;
+    }
+    if x == x.floor() && x <= 171.0 {
+        let mut p = 1.0;
+        let mut k = 2.0;
+        while k < x {
+            p *= k;
+            k += 1.0;
+        }
+        return p;
+    }
+    if x < 0.5 {
+        return std::f64::consts::PI / (sin_pi(x) * gamma(1.0 - x));
+    }
+    if x > 171.7 {
+        return f64::INFINITY;
+    }
+    // Γ(x) = √(2π) t^(x−½) e^(−t) A(x), the power split so it cannot
+    // overflow before the exponential brings it back.
+    let t = x + 6.5;
+    let h = t.powf((x - 0.5) / 2.0);
+    (2.0 * std::f64::consts::PI).sqrt() * h * ((-t).exp() * h) * lanczos_sum(x)
+}
+
+/// `x^a e^(−x) / Γ(a)`, the prefactor of the incomplete gamma functions,
+/// keeping its relative accuracy for a large `a` (the exponent is formed as
+/// `a·(ln(1+t) − t)` with `x = a(1+t)` instead of `a ln x − x`).
+fn gamma_prefactor(a: f64, x: f64) -> f64 {
+    if a < 10.0 {
+        return (a * x.ln() - x - ln_gamma(a)).exp();
+    }
+    let t = (x - a) / a;
+    let l = if t.abs() < 0.3 {
+        // ln(1+t) − t = −t²/2 + t³/3 − …
+        let mut s = 0.0;
+        let mut tk = t * t;
+        let mut k = 2.0;
+        loop {
+            let term = tk / k;
+            s += if (k as i64) % 2 == 0 { -term } else { term };
+            if term.abs() <= 1e-18 * s.abs() {
+                break;
+            }
+            tk *= t;
+            k += 1.0;
+            if k > 200.0 {
+                break;
+            }
+        }
+        s
+    } else {
+        t.ln_1p() - t
+    };
+    // x^a e^−x / Γ(a) = e^{a(ln(1+t) − t)} · a^a e^−a / Γ(a)
+    //                 = e^{a(...)} · √(a / 2π) · e^{−stirling(a)}.
+    (a * l - stirling_correction(a)).exp() * (a / (2.0 * std::f64::consts::PI)).sqrt()
+}
+
+/// The regularised incomplete gamma functions `(P(a,x), Q(a,x))`, `a > 0`,
+/// `x >= 0`.
+pub(crate) fn gamma_p_q(a: f64, x: f64) -> (f64, f64) {
+    if x <= 0.0 {
+        return (0.0, 1.0);
+    }
+    if x.is_infinite() {
+        return (1.0, 0.0);
+    }
+    let pre = gamma_prefactor(a, x);
+    if x < a + 1.0 {
+        // P = pre/a · (1 + x/(a+1) + x²/((a+1)(a+2)) + …)
+        let mut term = 1.0;
+        let mut sum = 1.0;
+        let mut ap = a;
+        for _ in 0..100_000 {
+            ap += 1.0;
+            term *= x / ap;
+            sum += term;
+            if term <= sum * 1e-17 {
+                break;
+            }
+        }
+        let p = (pre / a * sum).min(1.0);
+        (p, 1.0 - p)
+    } else {
+        // Q = pre · 1/(x+1−a− 1(1−a)/(x+3−a− 2(2−a)/(x+5−a− …))) (Lentz).
+        let tiny = 1e-300;
+        let mut b = x + 1.0 - a;
+        let mut c = 1.0 / tiny;
+        let mut d = 1.0 / b;
+        let mut h = d;
+        for i in 1..100_000 {
+            let an = -(i as f64) * (i as f64 - a);
+            b += 2.0;
+            d = an * d + b;
+            if d.abs() < tiny {
+                d = tiny;
+            }
+            c = b + an / c;
+            if c.abs() < tiny {
+                c = tiny;
+            }
+            d = 1.0 / d;
+            let del = d * c;
+            h *= del;
+            if (del - 1.0).abs() < 1e-16 {
+                break;
+            }
+        }
+        let q = (pre * h).min(1.0);
+        (1.0 - q, q)
+    }
+}
+
+/// `ln B(a, b)`.
+pub(crate) fn ln_beta(a: f64, b: f64) -> f64 {
+    let (a, b) = if a <= b { (a, b) } else { (b, a) };
+    if b < 10.0 {
+        return ln_gamma(a) + ln_gamma(b) - ln_gamma(a + b);
+    }
+    // ln Γ(b) − ln Γ(a+b) by the Stirling form, without the cancellation of
+    // two large logarithms: −(b−½) ln(1 + a/b) − a ln(a+b) + a + the series
+    // corrections.
+    ln_gamma(a) - (b - 0.5) * (a / b).ln_1p() - a * (a + b).ln() + a + stirling_correction(b)
+        - stirling_correction(a + b)
+}
+
+/// The continued fraction of the incomplete beta function (Lentz).
+fn beta_cf(a: f64, b: f64, x: f64) -> f64 {
+    let tiny = 1e-300;
+    let (qab, qap, qam) = (a + b, a + 1.0, a - 1.0);
+    let mut c = 1.0;
+    let mut d = 1.0 - qab * x / qap;
+    if d.abs() < tiny {
+        d = tiny;
+    }
+    d = 1.0 / d;
+    let mut h = d;
+    for m in 1..100_000 {
+        let m = m as f64;
+        let m2 = 2.0 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        h *= d * c;
+        let aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1.0 + aa * d;
+        if d.abs() < tiny {
+            d = tiny;
+        }
+        c = 1.0 + aa / c;
+        if c.abs() < tiny {
+            c = tiny;
+        }
+        d = 1.0 / d;
+        let del = d * c;
+        h *= del;
+        if (del - 1.0).abs() < 1e-16 {
+            break;
+        }
+    }
+    h
+}
+
+/// The regularised incomplete beta function, both tails:
+/// `(I_x(a,b), 1 − I_x(a,b))` for `a, b > 0`, `0 <= x <= 1`. `y` is `1 − x`,
+/// passed separately so a caller that has it exactly keeps the precision.
+pub(crate) fn beta_i(a: f64, b: f64, x: f64, y: f64) -> (f64, f64) {
+    if x <= 0.0 {
+        return (0.0, 1.0);
+    }
+    if y <= 0.0 {
+        return (1.0, 0.0);
+    }
+    // ln x and ln y from whichever of x, y is the accurate small one.
+    let ln_x = if x < 0.5 { x.ln() } else { (-y).ln_1p() };
+    let ln_y = if y < 0.5 { y.ln() } else { (-x).ln_1p() };
+    let lbt = a * ln_x + b * ln_y - ln_beta(a, b);
+    if x < (a + 1.0) / (a + b + 2.0) {
+        let lo = ((lbt).exp() * beta_cf(a, b, x) / a).min(1.0);
+        (lo, 1.0 - lo)
+    } else if x < 0.1 && b * x <= 500.0 {
+        // Near the mean of a very large b the continued fraction converges
+        // slowly; the all-positive hypergeometric series
+        // I_x(a,b) = x^a y^b / (a B(a,b)) · 2F1(a+b, 1; a+1; x)
+        // (DLMF 8.17.8) does not.
+        let mut term = 1.0;
+        let mut sum = 1.0;
+        let mut n = 0.0;
+        while n < 1e6 {
+            term *= (a + b + n) * x / (a + 1.0 + n);
+            sum += term;
+            if term <= sum * 1e-17 {
+                break;
+            }
+            n += 1.0;
+        }
+        let lo = (lbt.exp() * sum / a).min(1.0);
+        (lo, 1.0 - lo)
+    } else {
+        let hi = ((lbt).exp() * beta_cf(b, a, y) / b).min(1.0);
+        (1.0 - hi, hi)
+    }
+}
+
+/// Find `x` in `[lo, hi]` with `f(x) = 0`, `f(lo)` and `f(hi)` of opposite
+/// signs (Brent's method: inverse quadratic interpolation, secant and
+/// bisection steps), to a few ulps of `x`.
+pub(crate) fn solve_bracketed(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+    let mut fa = f(a);
+    let mut fb = f(b);
+    if fa == 0.0 {
+        return a;
+    }
+    if fb == 0.0 {
+        return b;
+    }
+    if fa.abs() < fb.abs() {
+        std::mem::swap(&mut a, &mut b);
+        std::mem::swap(&mut fa, &mut fb);
+    }
+    let mut c = a;
+    let mut fc = fa;
+    let mut mflag = true;
+    let mut d = 0.0;
+    for _ in 0..400 {
+        if fb == 0.0 || (b - a).abs() <= 2.0 * f64::EPSILON * b.abs().max(1e-300) {
+            return b;
+        }
+        let mut s = if fa != fc && fb != fc {
+            a * fb * fc / ((fa - fb) * (fa - fc))
+                + b * fa * fc / ((fb - fa) * (fb - fc))
+                + c * fa * fb / ((fc - fa) * (fc - fb))
+        } else {
+            b - fb * (b - a) / (fb - fa)
+        };
+        let q = (3.0 * a + b) / 4.0;
+        let between = if q < b {
+            s > q && s < b
+        } else {
+            s > b && s < q
+        };
+        if !between
+            || (mflag && (s - b).abs() >= (b - c).abs() / 2.0)
+            || (!mflag && (s - b).abs() >= (c - d).abs() / 2.0)
+            || (mflag && (b - c).abs() < 1e-300)
+            || (!mflag && (c - d).abs() < 1e-300)
+        {
+            s = (a + b) / 2.0;
+            mflag = true;
+        } else {
+            mflag = false;
+        }
+        let fs = f(s);
+        d = c;
+        c = b;
+        fc = fb;
+        if fa * fs < 0.0 {
+            b = s;
+            fb = fs;
+        } else {
+            a = s;
+            fa = fs;
+        }
+        if fa.abs() < fb.abs() {
+            std::mem::swap(&mut a, &mut b);
+            std::mem::swap(&mut fa, &mut fb);
+        }
+    }
+    b
+}
+
+/// Invert an increasing tail pair on `[0, ∞)` (or `[0, 1]` when `upper` is
+/// 1): `tails(x) = (lower, upper)`; the target lower-tail probability `p`
+/// (`q = 1 − p` given exactly). Solves on the smaller tail.
+pub(crate) fn invert_tails(
+    tails: impl Fn(f64) -> (f64, f64),
+    p: f64,
+    q: f64,
+    bound: Option<f64>,
+) -> f64 {
+    let use_lower = p <= q;
+    let g = |x: f64| {
+        let (lo, hi) = tails(x);
+        if use_lower {
+            lo - p
+        } else {
+            q - hi
+        }
+    };
+    let (lo, hi) = match bound {
+        Some(b) => (0.0, b),
+        None => {
+            let mut hi = 1.0;
+            let mut n = 0;
+            while g(hi) < 0.0 && n < 2000 {
+                hi *= 2.0;
+                n += 1;
+            }
+            (0.0, hi)
+        }
+    };
+    solve_bracketed(g, lo, hi)
+}
+
+/// Invert the regularised incomplete beta function: the `(z, 1 − z)` with
+/// `I_z(a, b) = p` (`q = 1 − p` given exactly). The smaller of `z` and `1 − z`
+/// is the variable solved for, so both keep their relative precision.
+pub(crate) fn invert_beta(a: f64, b: f64, p: f64, q: f64) -> (f64, f64) {
+    let lower = || invert_tails(|z| beta_i(a, b, z, 1.0 - z), p, q, Some(1.0));
+    let upper = || invert_tails(|w| beta_i(b, a, w, 1.0 - w), q, p, Some(1.0));
+    // Solve once on the tail of the smaller probability, then once more for
+    // the complement variable when the root lies past the middle.
+    if p <= q {
+        let z = lower();
+        if z <= 0.5 {
+            (z, 1.0 - z)
+        } else {
+            let w = upper();
+            (1.0 - w, w)
+        }
+    } else {
+        let w = upper();
+        if w <= 0.5 {
+            (1.0 - w, w)
+        } else {
+            let z = lower();
+            (z, 1.0 - z)
+        }
+    }
+}
+
+/// Loader's Stirling error `ln Γ(n+1) − (n+½) ln n + n − ln √(2π)`.
+fn stirlerr(n: f64) -> f64 {
+    if n <= 15.0 {
+        if n == 0.0 {
+            return 1.0 - LN_SQRT_2PI;
+        }
+        return ln_gamma(n + 1.0) - (n + 0.5) * n.ln() + n - LN_SQRT_2PI;
+    }
+    stirling_correction(n)
+}
+
+/// Loader's deviance term `x ln(x/np) + np − x`, accurate when `x ≈ np`.
+fn bd0(x: f64, np: f64) -> f64 {
+    if (x - np).abs() < 0.1 * (x + np) {
+        let v = (x - np) / (x + np);
+        let mut s = (x - np) * v;
+        let mut ej = 2.0 * x * v;
+        let v2 = v * v;
+        for j in 1..1000 {
+            ej *= v2;
+            let s1 = s + ej / f64::from(2 * j + 1);
+            if s1 == s {
+                return s1;
+            }
+            s = s1;
+        }
+        return s;
+    }
+    x * (x / np).ln() + np - x
+}
+
+/// The binomial density `C(n,x) p^x q^(n−x)` (Loader), `q = 1 − p`.
+pub(crate) fn dbinom_raw(x: f64, n: f64, p: f64, q: f64) -> f64 {
+    if p == 0.0 {
+        return if x == 0.0 { 1.0 } else { 0.0 };
+    }
+    if q == 0.0 {
+        return if x == n { 1.0 } else { 0.0 };
+    }
+    if x == 0.0 {
+        if n == 0.0 {
+            return 1.0;
+        }
+        let lc = if p < 0.1 {
+            -bd0(n, n * q) - n * p
+        } else {
+            n * q.ln()
+        };
+        return lc.exp();
+    }
+    if x == n {
+        let lc = if q < 0.1 {
+            -bd0(n, n * p) - n * q
+        } else {
+            n * p.ln()
+        };
+        return lc.exp();
+    }
+    if x < 0.0 || x > n {
+        return 0.0;
+    }
+    let lc = stirlerr(n) - stirlerr(x) - stirlerr(n - x) - bd0(x, n * p) - bd0(n - x, n * q);
+    let lf = (2.0 * std::f64::consts::PI).ln() + x.ln() + (-x / n).ln_1p();
+    (lc - 0.5 * lf).exp()
+}
+
+/// The Poisson density `λ^x e^−λ / x!` (Loader).
+pub(crate) fn dpois_raw(x: f64, lambda: f64) -> f64 {
+    if lambda == 0.0 {
+        return if x == 0.0 { 1.0 } else { 0.0 };
+    }
+    if x == 0.0 {
+        return (-lambda).exp();
+    }
+    if x < 0.0 {
+        return 0.0;
+    }
+    (-stirlerr(x) - bd0(x, lambda)).exp() / (2.0 * std::f64::consts::PI * x).sqrt()
+}
+
+#[cfg(test)]
+mod dist_tests {
+    use super::*;
+
+    fn close(a: f64, b: f64, tol: f64) -> bool {
+        a == b || (a - b).abs() <= tol * a.abs().max(b.abs())
+    }
+
+    #[test]
+    fn ln_gamma_and_gamma_reference_values() {
+        assert_eq!(ln_gamma(1.0), 0.0);
+        assert_eq!(ln_gamma(2.0), 0.0);
+        assert!(close(ln_gamma(0.5), 0.572_364_942_924_700_1, 1e-15));
+        assert!(close(ln_gamma(1.1), -0.049_872_441_259_839_53, 1e-14));
+        assert!(close(ln_gamma(1.9), -0.038_984_275_923_083_44, 1e-14));
+        assert!(close(ln_gamma(0.1), 2.252_712_651_734_205_5, 1e-14));
+        assert!(close(ln_gamma(100.0), 359.134_205_369_575_4, 1e-15));
+        assert!(close(ln_gamma(4.0), 6f64.ln(), 1e-15));
+        assert!(close(gamma(0.5), std::f64::consts::PI.sqrt(), 1e-15));
+        assert!(close(gamma(2.5), 1.329_340_388_179_137, 1e-14));
+        assert!(close(gamma(-0.5), -3.544_907_701_811_032, 1e-14));
+        assert!(gamma(-2.0).is_nan());
+    }
+
+    #[test]
+    fn incomplete_functions_reference_values() {
+        // P(1, x) = 1 − e^−x; I_x(1, 1) = x; I_x(a, 1) = x^a.
+        let (p, q) = gamma_p_q(1.0, 2.0);
+        assert!(close(p, 1.0 - (-2.0f64).exp(), 1e-15));
+        assert!(close(q, (-2.0f64).exp(), 1e-14));
+        let (p, _) = gamma_p_q(50.0, 45.0);
+        assert!(close(p, 0.246_802_034_400_170_27, 1e-14), "{p}");
+        let (lo, hi) = beta_i(1.0, 1.0, 0.3, 0.7);
+        assert!(close(lo, 0.3, 1e-15) && close(hi, 0.7, 1e-15));
+        let (lo, _) = beta_i(3.0, 1.0, 0.5, 0.5);
+        assert!(close(lo, 0.125, 1e-14));
+    }
+
+    #[test]
+    fn densities_match_closed_forms() {
+        assert!(close(
+            dbinom_raw(6.0, 10.0, 0.5, 0.5),
+            210.0 / 1024.0,
+            1e-14
+        ));
+        assert!(close(dpois_raw(2.0, 5.0), 12.5 * (-5.0f64).exp(), 1e-14));
+        let x = invert_tails(|x| gamma_p_q(2.0, x), 0.5, 0.5, None);
+        assert!(close(gamma_p_q(2.0, x).0, 0.5, 1e-14));
+    }
+}

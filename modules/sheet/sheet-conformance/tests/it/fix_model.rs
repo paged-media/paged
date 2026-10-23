@@ -50,6 +50,110 @@ fn text_renders_in_the_workbook_locale__feat__sheet_fn_library() {
     assert_eq!(value(&us, 0, 0), CellValue::Text("1,234.50".into()));
 }
 
+/// FIXED and DOLLAR in the workbook's locale. Expected values recorded from
+/// Excel 16 (macOS) with the region set to each locale.
+#[allow(non_snake_case)]
+#[test]
+fn fixed_and_dollar_render_in_the_workbook_locale__feat__sheet_fn_financial() {
+    let formulas = [
+        "=FIXED(1234.567)",
+        "=FIXED(-1234.567,0)",
+        "=FIXED(1234.567,-1)",
+        "=FIXED(1234567.891,2,TRUE)",
+        "=FIXED(-0.004,2)",
+        "=DOLLAR(1234.567)",
+        "=DOLLAR(-1234.567)",
+        "=DOLLAR(1234.567,-2)",
+        "=DOLLAR(-1234567.891,1)",
+    ];
+    let cases: [(Locale, [&str; 9]); 5] = [
+        (
+            Locale::EnUs,
+            [
+                "1,234.57",
+                "-1,235",
+                "1,230",
+                "1234567.89",
+                "0.00",
+                "$1,234.57",
+                "($1,234.57)",
+                "$1,200",
+                "($1,234,567.9)",
+            ],
+        ),
+        (
+            Locale::DeDe,
+            [
+                "1.234,57",
+                "-1.235",
+                "1.230",
+                "1234567,89",
+                "0,00",
+                "1.234,57 €",
+                "-1.234,57 €",
+                "1.200 €",
+                "-1.234.567,9 €",
+            ],
+        ),
+        (
+            Locale::FrFr,
+            [
+                "1 234,57",
+                "-1 235",
+                "1 230",
+                "1234567,89",
+                "0,00",
+                "€1 234,57",
+                "-€1 234,57",
+                "€1 200",
+                "-€1 234 567,9",
+            ],
+        ),
+        (
+            Locale::EsEs,
+            [
+                "1.234,57",
+                "-1.235",
+                "1.230",
+                "1234567,89",
+                "0,00",
+                "1.234,57 €",
+                "-1.234,57 €",
+                "1.200 €",
+                "-1.234.567,9 €",
+            ],
+        ),
+        (
+            Locale::ItIt,
+            [
+                "1.234,57",
+                "-1.235",
+                "1.230",
+                "1234567,89",
+                "0,00",
+                "1.234,57 €",
+                "-1.234,57 €",
+                "1.200 €",
+                "-1.234.567,9 €",
+            ],
+        ),
+    ];
+    for (locale, want) in cases {
+        let mut e = engine(locale);
+        for (i, f) in formulas.iter().enumerate() {
+            e.enter(0, i as u32, 0, f).unwrap();
+        }
+        for (i, w) in want.iter().enumerate() {
+            assert_eq!(
+                value(&e, i as u32, 0),
+                CellValue::Text((*w).into()),
+                "{locale:?} {}",
+                formulas[i]
+            );
+        }
+    }
+}
+
 #[allow(non_snake_case)]
 #[test]
 fn subtotal_recalculates_when_rows_hide__feat__sheet_fn_library() {

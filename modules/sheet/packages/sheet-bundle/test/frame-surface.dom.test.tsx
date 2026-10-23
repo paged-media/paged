@@ -57,7 +57,7 @@ const scene: GridScene = {
   selection: { anchorRow: 0, anchorCol: 0, rows: 1, cols: 1 },
 };
 
-function fakeSession() {
+function fakeSession(shown: GridScene = scene) {
   const calls: Array<[string, ...unknown[]]> = [];
   let edit: {
     row: number;
@@ -95,7 +95,7 @@ function fakeSession() {
     },
     attachFrameSurface(sink, area) {
       calls.push(["attach", area]);
-      sink(scene);
+      sink(shown);
       return () => calls.push(["detach"]);
     },
     pointerDownInFrame: (x, y, m) => (calls.push(["down", x, y, m]), true),
@@ -155,6 +155,15 @@ function fakeSession() {
     ],
     state: () =>
       ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    documentTextDefault: async () => ({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    }),
+    documentFontFace: async (family, style) => {
+      calls.push(["face", family, style]);
+      return null;
+    },
     setFrameSheet: (id) => {
       calls.push(["sheet", id]);
       activeSheet = id;
@@ -338,6 +347,52 @@ describe("sheet frame surface", () => {
     expect((r.getByTestId("sheet-bar-sheet") as HTMLSelectElement).value).toBe(
       "1",
     );
+  });
+
+  it("asks the document for the faces the cells use", async () => {
+    const g = globalThis as { FontFace?: unknown };
+    const hadFontFace = g.FontFace !== undefined;
+    if (!hadFontFace)
+      g.FontFace = class {
+        load() {
+          return Promise.resolve(this);
+        }
+      };
+    const doc = document as unknown as { fonts?: unknown };
+    const hadFonts = "fonts" in document;
+    if (!hadFonts)
+      Object.defineProperty(document, "fonts", {
+        configurable: true,
+        value: { add() {} },
+      });
+    try {
+      const styled: GridScene = {
+        ...scene,
+        styles: [
+          {
+            key: 1,
+            bold: true,
+            italic: false,
+            borderTop: false,
+            borderRight: false,
+            borderBottom: false,
+            borderLeft: false,
+            fontName: "Minion Pro",
+          },
+        ],
+      };
+      const { session, calls } = fakeSession(styled);
+      render(createElement(makeSheetFrameSurface(session).render, props()));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(calls).toContainEqual(["face", "Minion Pro", "Bold"]);
+      // The document's default face is asked for too (un-styled cells).
+      expect(calls).toContainEqual(["face", "Minion Pro", "Regular"]);
+    } finally {
+      if (!hadFontFace) delete g.FontFace;
+      if (!hadFonts) delete doc.fonts;
+    }
   });
 
   it("detaches on unmount", () => {

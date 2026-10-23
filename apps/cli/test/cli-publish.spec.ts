@@ -22,7 +22,8 @@
 // typed preflight, and `paged-node package` (InDesign's File ▸ Package):
 // the document as IDML with its links rebased into Links/, the linked
 // files, the fonts it sets in (a face whose licence restricts embedding is
-// reported, not copied), a report, as a folder or a .zip. The bundle is the
+// reported, not copied), a report, and the document as .paged with the
+// module content IDML cannot carry, as a folder or a .zip. The bundle is the
 // workspace's paged.publish source; the fonts are the engine corpus's
 // licence-clear faces.
 
@@ -40,6 +41,7 @@ import { inflateRawSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { facesOf } from "../src/fonts";
+import { openSession } from "../src/session";
 import { cli, REPO_ROOT, tempDir, writeFixture } from "./helpers";
 
 const NP = "--no-plugins";
@@ -197,6 +199,7 @@ describe("paged-node package", () => {
       "Links",
       "card Report.txt",
       "card.idml",
+      "card.paged",
       "card.pdf",
     ]);
     expect(readFileSync(join(out, "Links", "red.png"))).toEqual(
@@ -281,6 +284,7 @@ describe("paged-node package", () => {
       "card-package/Links/red.png",
       "card-package/card Report.txt",
       "card-package/card.idml",
+      "card-package/card.paged",
     ]);
     expect(entries.get("card-package/Links/red.png")).toEqual(
       new Uint8Array(readFileSync(RED)),
@@ -293,6 +297,51 @@ describe("paged-node package", () => {
           .includes(join(tmp.dir, "card-package", "Links", "red.png")),
       ),
     ).toBe(true);
+  });
+
+  it("module content IDML cannot carry is in <name>.paged, and the report says so; --no-paged leaves it out", async () => {
+    // A document with one module part, as a module's save writes it.
+    const PART = "paged/media.example.module/o1/spec.json";
+    const withPart = join(tmp.dir, "module.paged");
+    const s = await openSession(doc, { plugins: [] });
+    try {
+      const w = (await s.driver.editor.client.send({
+        kind: "writePagedPart",
+        payload: {
+          path: PART,
+          bytes: [...new TextEncoder().encode('{"cells":1}')],
+        },
+      } as never)) as unknown as { kind: string };
+      expect(w.kind).toBe("pagedPartWritten");
+      await s.save(withPart);
+    } finally {
+      s.dispose();
+    }
+
+    const out = join(tmp.dir, "pkg-module");
+    const r = await cli(["package", withPart, "-o", out, NP]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.json.paged).toBe(join(out, "module.paged"));
+    expect(r.json.moduleParts).toEqual([PART]);
+    const container = unzip(readFileSync(join(out, "module.paged")));
+    expect(new TextDecoder().decode(container.get(PART))).toBe('{"cells":1}');
+    // The IDML has no such part: the .paged is where it lives.
+    expect(unzip(readFileSync(join(out, "module.idml"))).has(PART)).toBe(false);
+    const report = readFileSync(join(out, "module Report.txt"), "utf8");
+    expect(report).toContain(
+      "Module content: 1 part(s), in module.paged (IDML does not carry them)",
+    );
+    expect(report).toContain(`  ${PART}`);
+    expect(report).toContain("Paged document: module.paged");
+
+    const bare = join(tmp.dir, "pkg-no-paged");
+    const n = await cli(["package", withPart, "-o", bare, "--no-paged", NP]);
+    expect(n.code, n.out).toBe(0);
+    expect(n.json.paged).toBeNull();
+    expect(existsSync(join(bare, "module.paged"))).toBe(false);
+    expect(readFileSync(join(bare, "module Report.txt"), "utf8")).toContain(
+      "Module content not carried by IDML: 1 part(s) (left out: --no-paged)",
+    );
   });
 
   it("a link whose file is gone is reported missing; a folder with files in it is refused", async () => {

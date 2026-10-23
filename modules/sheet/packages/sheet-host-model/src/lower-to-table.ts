@@ -450,18 +450,31 @@ export function tableDecorOps(
       // The colorRef is a SWATCH ID (`Graphic::resolve`), never a hex —
       // see `cellFillSwatchOps`, which mints the swatch this names. A
       // malformed hex degrades to "no fill", never a dangling ref.
+      // A document swatch is named as it is (sheet ADR 518); a plain
+      // workbook colour names its minted content-addressed swatch.
       const fillHex =
         style.fillRgb == null ? null : normalizePaletteHex(style.fillRgb);
-      if (fillHex != null) {
+      const fillRef =
+        style.fillSwatch ??
+        (fillHex != null ? paletteSwatchId("cellFill", fillHex) : null);
+      if (fillRef != null) {
         fills.push({
           op: "setElementProperty",
           args: {
             elementId: cellId(storyId, tableId, r, c),
             path: "cellFillColor",
-            value: {
-              type: "colorRef",
-              value: paletteSwatchId("cellFill", fillHex),
-            },
+            value: { type: "colorRef", value: fillRef },
+          },
+        });
+      }
+      // A document cell style the cell maps to (sheet ADR 518).
+      if (style.docCellStyle) {
+        cellProps.push({
+          op: "setElementProperty",
+          args: {
+            elementId: cellId(storyId, tableId, r, c),
+            path: "appliedCellStyle",
+            value: { type: "text", value: style.docCellStyle },
           },
         });
       }
@@ -477,16 +490,16 @@ export function tableDecorOps(
         const line = style.borderLines?.[edge];
         putEdge(r, c, weightPath, line?.weightPt);
         const hex = line?.rgb == null ? null : normalizePaletteHex(line.rgb);
-        if (hex != null) {
+        const ref =
+          line?.swatch ??
+          (hex != null ? paletteSwatchId("cellStroke", hex) : null);
+        if (ref != null) {
           cellProps.push({
             op: "setElementProperty",
             args: {
               elementId: cellId(storyId, tableId, r, c),
               path: colorPath,
-              value: {
-                type: "colorRef",
-                value: paletteSwatchId("cellStroke", hex),
-              },
+              value: { type: "colorRef", value: ref },
             },
           });
         }
