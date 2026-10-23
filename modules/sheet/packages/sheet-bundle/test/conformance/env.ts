@@ -144,7 +144,9 @@ export interface SheetEnv {
   /** Document mutations applied since `mark()` (the fake's log, or the
    *  harness's fan-out of every `mutate`). */
   mark(): number;
-  mutationsSince(mark: number): Array<{ op: string; applied: boolean }>;
+  mutationsSince(
+    mark: number,
+  ): Array<{ op: string; applied: boolean; amended?: boolean }>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   /** The page every scenario places into. */
@@ -190,7 +192,7 @@ function withEditorDoors(
   opened: string[],
   scene: SceneCall[],
   pickQueue: PickedFile[][],
-  mutations: Array<{ op: string; applied: boolean }>,
+  mutations: Array<{ op: string; applied: boolean; amended?: boolean }>,
 ): BundleHost {
   const surface = {
     submit: async (elementId: string, layer: { items: unknown[] }) => {
@@ -226,11 +228,16 @@ function withEditorDoors(
   const document = new Proxy(host.document, {
     get(o, p, r) {
       if (p === "mutate") {
-        return async (m: Parameters<BundleHost["document"]["mutate"]>[0]) => {
-          const outcome = await o.mutate(m);
+        return async (
+          m: Parameters<BundleHost["document"]["mutate"]>[0],
+          options?: Parameters<BundleHost["document"]["mutate"]>[1],
+        ) => {
+          const outcome = await o.mutate(m, options);
           mutations.push({
             op: (m as { op: string }).op,
             applied: !!(outcome as { applied?: boolean }).applied,
+            // A write that joined the step before it (engine ADR 1004).
+            ...(options?.amend !== undefined ? { amended: true } : {}),
           });
           return outcome;
         };
@@ -312,7 +319,8 @@ export function unitEnv(
       },
     },
   );
-  const mutations: Array<{ op: string; applied: boolean }> = [];
+  const mutations: Array<{ op: string; applied: boolean; amended?: boolean }> =
+    [];
   const host = withEditorDoors(
     handle.host,
     opened,
@@ -392,7 +400,8 @@ export async function headlessEnv(): Promise<SheetEnv & { h: HeadlessHost }> {
   const [pageId] = await h.load(blankPageIdml());
   // The REAL bundle, loaded the way the editor loads it; its own host is
   // captured so the two UI doors can be recorded around it.
-  const mutations: Array<{ op: string; applied: boolean }> = [];
+  const mutations: Array<{ op: string; applied: boolean; amended?: boolean }> =
+    [];
   let captured: BundleHost | null = null;
   const { out: loaded, session } = sessionOf(() =>
     h.loadBundle({
