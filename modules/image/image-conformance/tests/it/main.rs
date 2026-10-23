@@ -13,6 +13,7 @@ mod codec_jpeg;
 mod codec_png;
 mod codec_png_16bit;
 mod composite_defects;
+mod cpu_twins;
 mod dispatch_batch;
 mod distance_transform;
 mod engine_b_incremental;

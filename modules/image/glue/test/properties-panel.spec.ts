@@ -96,14 +96,17 @@ describe("image properties panel (property rows)", () => {
     );
     // The image kind's writable rows are canvas operations (crop, canvas
     // size, rotate / flip) on the whole stack, reached by typed commands;
-    // this panel edits one layer.
+    // this panel edits one layer. The layer's `filter` is an action too
+    // (a region filter, reached by the typed `filterRegion`).
+    const ACTIONS = new Set(["layer.filter"]);
     const writable = Object.entries(KIND_ROWS)
       .filter(([kind]) => kind !== "image")
       .flatMap(([kind, rows]) =>
         (rows as readonly PropertySchema[])
           .filter((r) => (r.access ?? "readWrite") === "readWrite")
           .map((r) => `${kind}.${r.path}`),
-      );
+      )
+      .filter((w) => !ACTIONS.has(w));
     expect(writable.length).toBeGreaterThan(90);
     expect(writable.filter((w) => !declared.has(w))).toEqual([]);
   });
