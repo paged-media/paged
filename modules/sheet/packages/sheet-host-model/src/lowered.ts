@@ -186,6 +186,11 @@ export interface LoweredContent {
    *  frames): a frame page's frozen rows plus its printed heading row.
    *  ADDITIVE — absent means 0 (range lowerings, paginated pages). */
   headerRows?: number;
+  /** Set by the bundle (not the engine) on a frame page printed without
+   *  gridlines (ADR 510): the table writes every cell edge as no line
+   *  instead of leaving it to the document's default stroke. Absent on
+   *  every other lowering, whose missing rules mean "unspecified". */
+  noGridlines?: true;
 }
 
 /** The `index` of a frame page's printed heading row and heading column
