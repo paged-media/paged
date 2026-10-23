@@ -101,6 +101,7 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
       return { ok: true as const };
     },
     styleAtTarget: () => null,
+    grabAt: () => "cell" as const,
     setStyle: (patch) => {
       calls.push(["style", patch]);
       return { ok: true as const };
@@ -531,5 +532,50 @@ describe("Sort card [sheet.sort.multikey]", () => {
       ],
     ]);
     expect(r.queryByTestId("sheet-sort-card")).toBeNull();
+  });
+});
+
+describe("Goal Seek card [sheet.whatif.goalseek]", () => {
+  it("takes typed references or a click in the grid, then reports the result", () => {
+    let open = true;
+    const seeks: [string, number, string][] = [];
+    const fake = fakeSession({
+      dataCard: () => (open ? { kind: "goalSeek" } : null),
+      closeDataCard: () => {
+        open = false;
+        fake.changed();
+      },
+      goalSeek: (set, target, changing) => {
+        seeks.push([set, target, changing]);
+        return { ok: true, found: true, value: 7, result: 49, iterations: 4 };
+      },
+    });
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    const set = r.getByTestId("sheet-goal-seek-set") as HTMLInputElement;
+    expect(set.value).toBe("A1"); // the active cell
+    fireEvent.change(set, { target: { value: "B1" } });
+    fireEvent.change(r.getByTestId("sheet-goal-seek-target"), {
+      target: { value: "49" },
+    });
+    // Focus the changing cell, then click C3 in the grid.
+    const changing = r.getByTestId(
+      "sheet-goal-seek-changing",
+    ) as HTMLInputElement;
+    fireEvent.focus(changing);
+    act(() => fake.session.selectCell(2, 2));
+    expect(changing.value).toBe("C3");
+    fireEvent.click(r.getByTestId("sheet-goal-seek-ok"));
+    expect(seeks).toEqual([["B1", 49, "C3"]]);
+    expect(r.getByTestId("sheet-goal-seek-current").textContent).toContain(
+      "49",
+    );
+    // Cancel on the status takes the change back.
+    fireEvent.keyDown(r.getByTestId("sheet-goal-seek-status"), {
+      key: "Escape",
+    });
+    expect(fake.calls).toContainEqual(["undo"]);
+    expect(r.queryByTestId("sheet-goal-seek-status")).toBeNull();
   });
 });

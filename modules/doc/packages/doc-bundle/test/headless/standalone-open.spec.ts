@@ -196,14 +196,52 @@ describe.skipIf(!docxPresent)(
       expect(back.body).toEqual(BODY);
     });
 
-    it("a paragraph added in a cell is not saved and is reported", async () => {
+    it("paragraphs added and removed in a cell are in the exported .docx", async () => {
+      // A paragraph added after "Item"; "Line two" removed from its cell;
+      // a word typed into another cell alongside.
       await typeInCell(0, 0, "Item".length, "\nSecond");
+      await typeInCell(2, 0, "Line one".length, "", "\nLine two".length);
       await typeInCell(1, 0, 0, "Red ");
       const back = await reimported();
-      expect(back.cells[0]).toBe("Item");
+      const after = [...CELLS];
+      after[0] = "Item\nSecond";
+      after[2] = "Red Apples";
+      after[4] = "Line one";
+      expect(back.cells).toEqual(after);
+      expect(back.body).toEqual(BODY);
+      expect(saveBackDiagnostics()).toEqual([]);
+    });
+
+    it("cells are saved back when another table was added to the story", async () => {
+      const storyId = await story();
+      const id = await tableId();
+      const added = await h.host.document.mutate({
+        op: "insertTable",
+        args: {
+          storyId,
+          rows: 3,
+          cols: 2,
+          headerRows: 0,
+          footerRows: 0,
+          columnWidths: [100, 100],
+          rowHeights: [],
+        },
+      } as never);
+      expect(added.applied).toBe(true);
+      expect(await h.objects.query(`story:${storyId} > table`)).toHaveLength(2);
+      const ins = await h.host.document.mutate({
+        op: "insertText",
+        args: {
+          storyId,
+          offset: 0,
+          text: "Red ",
+          cell: { tableId: id, row: 1, col: 0 },
+        },
+      });
+      expect(ins.applied).toBe(true);
+      const back = await reimported();
       expect(back.cells[2]).toBe("Red Apples");
-      const messages = saveBackDiagnostics().map((d) => d.message);
-      expect(messages.join("\n")).toMatch(/paragraphs were added or removed/);
+      expect(saveBackDiagnostics()).toEqual([]);
     });
   },
 );

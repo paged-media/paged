@@ -1273,7 +1273,8 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
   heading anchor (`{ heading: n }`); a `.docx` opens standalone headless (the SDK's headless
   host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
-  table cells are saved back on export.
+  table cells are saved back on export, paragraphs added or removed in a cell included, and a
+  placed document's tables are found by their content after the story around them changed.
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

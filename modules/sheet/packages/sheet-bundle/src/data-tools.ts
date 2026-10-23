@@ -34,6 +34,7 @@ import type {
   FilterColumnValues,
   FilterCriterion,
   FilterState,
+  GoalSeekResult,
   InvalidCell,
   SortKey,
   SortSpec,
@@ -99,19 +100,6 @@ export interface GoalSeekOutcome {
   value: number;
   result: number;
   iterations: number;
-}
-
-/** The Goal Seek door (optional on the facade; the engine owns the search). */
-interface GoalSeekDoor {
-  goalSeek?(
-    sheet: number,
-    setRow: number,
-    setCol: number,
-    target: number,
-    chSheet: number,
-    chRow: number,
-    chCol: number,
-  ): GoalSeekOutcome & { prevInput?: string };
 }
 
 /** A journal step the session undoes and redoes with the engine. */
@@ -797,13 +785,11 @@ export function createDataTools(ctx: DataToolsContext): {
     },
 
     canGoalSeek() {
-      return (
-        typeof (ctx.engine() as GoalSeekDoor | null)?.goalSeek === "function"
-      );
+      return typeof ctx.engine()?.goalSeek === "function";
     },
 
     goalSeek(setCell, targetValue, changingCell) {
-      const e = ctx.engine() as (SheetEngine & GoalSeekDoor) | null;
+      const e = ctx.engine();
       const sheet = ctx.sheet();
       if (!e?.goalSeek || sheet === null)
         return { ok: false, message: "this engine cannot Goal Seek" };
@@ -819,7 +805,7 @@ export function createDataTools(ctx: DataToolsContext): {
       let set: { sheet: number; row: number; col: number };
       let ch: { sheet: number; row: number; col: number };
       let prev: string;
-      let out: GoalSeekOutcome & { prevInput?: string };
+      let out: GoalSeekResult;
       try {
         set = resolve(setCell);
         ch = resolve(changingCell);

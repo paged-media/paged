@@ -17,7 +17,7 @@
  */
 
 // The data cards of the sheet bar (sheet ADR 517): the entry alert, Data
-// validation, the AutoFilter menu and Sort. Like paste special
+// validation, the AutoFilter menu, Sort and Goal Seek. Like paste special
 // they hang under the bar, which is not scaled with the frame, so they read
 // at any zoom. Each card takes a snapshot of what it edits when it opens
 // (as Excel's dialogs do) and hands the answer to the session; the engine
@@ -27,6 +27,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactNode,
 } from "react";
@@ -40,6 +41,7 @@ import type {
   ValidationRuleInfo,
 } from "../engine-w2";
 import { parseA1Range, type DataToolsApi } from "../data-tools";
+import { a1Of } from "./formula-refs";
 
 /** What the cards need from the session. */
 export type DataCardSession = DataToolsApi &
@@ -1537,6 +1539,170 @@ export function SortCard({
   );
 }
 
+// ── Goal Seek ─────────────────────────────────────────────────────────
+
+/** The selection's reference, re-read on every session change (a click in
+ *  the grid while a reference field is focused fills it in). */
+function useSelectionRef(session: DataCardSession): string {
+  return useSyncExternalStore(
+    (onChange) => {
+      const sub = session.onDidChange(() => onChange());
+      return () => sub.dispose();
+    },
+    () => {
+      const a = session.activeCell();
+      return a ? a1Of(a.row, a.col) : "";
+    },
+  );
+}
+
+type GoalField = "set" | "changing";
+
+export function GoalSeekCard({
+  session,
+  chrome,
+}: {
+  session: DataCardSession;
+  chrome: CardChrome;
+}) {
+  const selection = useSelectionRef(session);
+  const [typed, setTyped] = useState<Record<GoalField, string>>(() => ({
+    set: selection,
+    changing: "",
+  }));
+  // The field a grid click fills: the last focused one, and the selection
+  // when it got focus (a later selection is a click meant for it).
+  const [picking, setPicking] = useState<{
+    field: GoalField;
+    base: string;
+  } | null>(null);
+  const [target, setTarget] = useState("");
+  const [outcome, setOutcome] = useState<{
+    found: boolean;
+    value: number;
+    result: number;
+    set: string;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const valueOf = (f: GoalField) =>
+    picking?.field === f && selection !== picking.base ? selection : typed[f];
+  const cancel = () => {
+    session.closeDataCard();
+    chrome.done();
+  };
+  const run = () => {
+    const set = valueOf("set");
+    const r = session.goalSeek(set, Number(target), valueOf("changing"));
+    if (!r.ok) return setError(r.message);
+    setError(null);
+    setOutcome({ found: r.found, value: r.value, result: r.result, set });
+  };
+  if (outcome) {
+    const keep = () => {
+      session.closeDataCard();
+      chrome.done();
+    };
+    const undo = () => {
+      session.undoCellEdit();
+      session.closeDataCard();
+      chrome.done();
+    };
+    return (
+      <Card
+        label="Goal Seek status"
+        testId="sheet-goal-seek-status"
+        chrome={chrome}
+        onCancel={undo}
+        onSubmit={keep}
+      >
+        <span>
+          {outcome.found
+            ? `Goal Seeking with cell ${outcome.set} found a solution.`
+            : `Goal Seeking with cell ${outcome.set} may not have found a solution.`}
+        </span>
+        <span>Target value: {target}</span>
+        <span data-testid="sheet-goal-seek-current">
+          Current value: {outcome.result}
+        </span>
+        <Buttons>
+          <button
+            type="button"
+            data-testid="sheet-goal-seek-keep"
+            style={chrome.button}
+            onClick={keep}
+          >
+            OK
+          </button>
+          <button type="button" style={chrome.button} onClick={undo}>
+            Cancel
+          </button>
+        </Buttons>
+      </Card>
+    );
+  }
+  const refField = (f: GoalField, label: string, testId: string) => (
+    <label style={group}>
+      <span style={{ minWidth: 110 }}>{label}</span>
+      <input
+        data-testid={testId}
+        value={valueOf(f)}
+        style={{ ...field, flex: 1, fontFamily: "var(--font-mono, monospace)" }}
+        onFocus={() => {
+          setTyped({ ...typed, [f]: valueOf(f) });
+          setPicking({ field: f, base: selection });
+        }}
+        onChange={(e) => {
+          setTyped({ ...typed, [f]: e.currentTarget.value });
+          setPicking({ field: f, base: selection });
+        }}
+      />
+    </label>
+  );
+  return (
+    <Card
+      label="Goal Seek"
+      testId="sheet-goal-seek"
+      chrome={chrome}
+      onCancel={cancel}
+      onSubmit={run}
+    >
+      {refField("set", "Set cell", "sheet-goal-seek-set")}
+      <label style={group}>
+        <span style={{ minWidth: 110 }}>To value</span>
+        <input
+          data-testid="sheet-goal-seek-target"
+          inputMode="decimal"
+          value={target}
+          style={{ ...field, flex: 1 }}
+          onChange={(e) => setTarget(e.currentTarget.value)}
+        />
+      </label>
+      {refField("changing", "By changing cell", "sheet-goal-seek-changing")}
+      <span style={muted}>
+        Click a cell in the grid to fill the focused field.
+      </span>
+      {error ? (
+        <span role="alert" style={{ color: "#b42318" }}>
+          {error}
+        </span>
+      ) : null}
+      <Buttons>
+        <button type="button" style={chrome.button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-goal-seek-ok"
+          style={chrome.button}
+          onClick={run}
+        >
+          OK
+        </button>
+      </Buttons>
+    </Card>
+  );
+}
+
 /** The card the session has open (the alert first), under the bar. */
 export function DataCards({
   session,
@@ -1575,7 +1741,7 @@ export function DataCards({
       );
     case "sort":
       return <SortCard session={session} chrome={chrome} />;
-    default:
-      return null;
+    case "goalSeek":
+      return <GoalSeekCard session={session} chrome={chrome} />;
   }
 }

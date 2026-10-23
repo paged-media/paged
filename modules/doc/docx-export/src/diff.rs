@@ -127,11 +127,30 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                 for (&bci, &eci) in brows[bi].iter().zip(&erows[ei]) {
                     let (bc, ec) = (&bt.cells[bci], &et.cells[eci]);
                     let cell_idx = bci;
-                    for (para_idx, (bpara, epara)) in
-                        bc.paragraphs.iter().zip(&ec.paragraphs).enumerate()
-                    {
+                    // The cell's paragraphs, paired base → edited. Same count:
+                    // index for index. A paragraph added or removed on the
+                    // canvas: aligned by text, the rest structural ops.
+                    let para_pairs: Vec<(usize, usize)> =
+                        if bc.paragraphs.len() == ec.paragraphs.len() {
+                            (0..bc.paragraphs.len()).map(|k| (k, k)).collect()
+                        } else {
+                            align_cell(block_idx, cell_idx, bc, ec, &mut structural)
+                        };
+                    for (para_idx, epara_idx) in para_pairs {
+                        let (bpara, epara) = (&bc.paragraphs[para_idx], &ec.paragraphs[epara_idx]);
+                        if bpara.runs.is_empty() && !epara.runs.is_empty() {
+                            // Text typed into an empty Word paragraph: there is
+                            // no run to patch, so one is added.
+                            structural.push(StructuralEdit::InsertCellRun {
+                                block: block_idx,
+                                cell: cell_idx,
+                                para: para_idx,
+                                text: para_text(epara),
+                            });
+                            continue;
+                        }
                         if bpara.runs.len() != epara.runs.len() {
-                            continue; // cell structure changed — deferred
+                            continue; // run structure changed — deferred
                         }
                         for (run_idx, (br, er)) in bpara.runs.iter().zip(&epara.runs).enumerate() {
                             let mut edit = CellRunEdit {
@@ -336,6 +355,95 @@ fn cell_text(c: &docx_lower::ir::LoweredCell) -> String {
         .collect()
 }
 
+/// A paragraph's text (its runs concatenated).
+fn para_text(p: &docx_lower::ir::LoweredParagraph) -> String {
+    p.runs.iter().map(|r| r.text.as_str()).collect()
+}
+
+/// Align a cell's base paragraphs with its edited ones (a paragraph count
+/// change) by [`align_cell_paragraphs`]: a removed paragraph becomes a
+/// `DeleteCellParagraph`, an added one a `CloneCellParagraph` of the
+/// paragraph before it (or, at the cell's start, of the one after it).
+/// Answers the matched pairs, whose runs are compared as before.
+fn align_cell(
+    block: usize,
+    cell: usize,
+    bc: &docx_lower::ir::LoweredCell,
+    ec: &docx_lower::ir::LoweredCell,
+    structural: &mut Vec<StructuralEdit>,
+) -> Vec<(usize, usize)> {
+    let old: Vec<String> = bc.paragraphs.iter().map(para_text).collect();
+    let new: Vec<String> = ec.paragraphs.iter().map(para_text).collect();
+    let steps = align_cell_paragraphs(&old, &new);
+    let first_match = steps.iter().find_map(|s| match s {
+        Align::Match(b, _) => Some(*b),
+        _ => None,
+    });
+    let mut pairs = Vec::new();
+    let mut anchor: Option<usize> = None;
+    for step in steps {
+        match step {
+            Align::Match(b, e) => {
+                anchor = Some(b);
+                pairs.push((b, e));
+            }
+            Align::Del(b) => structural.push(StructuralEdit::DeleteCellParagraph {
+                block,
+                cell,
+                para: b,
+            }),
+            Align::Ins(e) => {
+                let (para, before) = match (anchor, first_match) {
+                    (Some(a), _) => (a, false),
+                    (None, Some(f)) => (f, true),
+                    (None, None) => continue, // a cell with no paragraph
+                };
+                structural.push(StructuralEdit::CloneCellParagraph {
+                    block,
+                    cell,
+                    para,
+                    before,
+                    text: new[e].clone(),
+                });
+            }
+        }
+    }
+    pairs
+}
+
+/// The alignment of a cell's paragraphs, by text ([`lcs_align`]), with one
+/// rule on top: the cell's LAST paragraph is never removed — Word requires a
+/// `<w:tc>` to end in a `<w:p>`, and what follows the last paragraph (a
+/// nested table, a bookmark end) is not known here. When the alignment
+/// would remove it, it takes the last edited paragraph instead, and the
+/// base paragraph that had matched that one (if any) is removed. The
+/// overlay and the differ both align through this, so they agree.
+pub(crate) fn align_cell_paragraphs(old: &[String], new: &[String]) -> Vec<Align> {
+    let steps = lcs_align(old, new);
+    let (n, m) = (old.len(), new.len());
+    if n == 0
+        || m == 0
+        || !steps
+            .iter()
+            .any(|s| matches!(s, Align::Del(b) if *b == n - 1))
+    {
+        return steps;
+    }
+    let mut out: Vec<Align> = Vec::with_capacity(steps.len());
+    for s in steps {
+        match s {
+            Align::Del(b) if b == n - 1 => {}
+            Align::Match(b, e) if e == m - 1 => out.push(Align::Del(b)),
+            Align::Ins(e) if e == m - 1 => {}
+            other => out.push(other),
+        }
+    }
+    // Every other step addresses an earlier base and edited paragraph, so
+    // the kept last paragraph pairs last.
+    out.push(Align::Match(n - 1, m - 1));
+    out
+}
+
 /// A row's identity for alignment: its cells' text.
 fn row_key(t: &docx_lower::ir::LoweredTable, row: &[usize]) -> String {
     row.iter()
@@ -345,7 +453,8 @@ fn row_key(t: &docx_lower::ir::LoweredTable, row: &[usize]) -> String {
 }
 
 /// One step of a block alignment.
-enum Align {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Align {
     Match(usize, usize),
     Del(usize),
     Ins(usize),
@@ -623,6 +732,40 @@ mod tests {
                 Align::Ins(y) => format!("+{y}"),
             })
             .collect()
+    }
+
+    fn align_cell(a: &[&str], b: &[&str]) -> Vec<String> {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        align_cell_paragraphs(&s(a), &s(b))
+            .into_iter()
+            .map(|step| match step {
+                Align::Match(x, y) => format!("={x}{y}"),
+                Align::Del(x) => format!("-{x}"),
+                Align::Ins(y) => format!("+{y}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_cell_keeps_its_last_paragraph() {
+        // A middle paragraph removed: it goes.
+        assert_eq!(
+            align_cell(&["a", "b", "c"], &["a", "c"]),
+            ["=00", "-1", "=21"]
+        );
+        // The last removed: the last paragraph takes the last text, and the
+        // one that held it goes.
+        assert_eq!(align_cell(&["a", "b"], &["a"]), ["-0", "=10"]);
+        assert_eq!(
+            align_cell(&["a", "b", "c"], &["a", "b"]),
+            ["=00", "-1", "=21"]
+        );
+        // Added paragraphs are insertions; the last is untouched.
+        assert_eq!(
+            align_cell(&["a", "c"], &["a", "b", "c"]),
+            ["=00", "+1", "=12"]
+        );
+        assert_eq!(align_cell(&["a"], &["a", "b"]), ["=00", "+1"]);
     }
 
     #[test]

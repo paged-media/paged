@@ -32,8 +32,49 @@ import type { WorkbookSession } from "./session";
 export const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
+/** The other SpreadsheetML kinds (sheet ADR 521): a macro-enabled workbook
+ *  (its VBA project kept, never run) and the two templates, which open as a
+ *  new workbook. */
+export const XLSX_FAMILY_EXTENSIONS = [".xlsx", ".xlsm", ".xltx", ".xltm"];
+export const XLSX_FAMILY_MIMES = [
+  XLSX_MIME,
+  "application/vnd.ms-excel.sheet.macroEnabled.12",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+  "application/vnd.ms-excel.template.macroEnabled.12",
+];
+/** The macro-enabled workbook's MIME type (the `.xlsm` exporter). */
+export const XLSM_MIME = "application/vnd.ms-excel.sheet.macroEnabled.12";
+
+/** OpenDocument spreadsheets (sheet ADR 521): read, converted in Rust. */
+export const ODS_EXTENSIONS = [".ods", ".ots"];
+export const ODS_MIMES = [
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.spreadsheet-template",
+];
+
+/** Is `name` an OpenDocument spreadsheet (by extension)? */
+export function isOpenDocument(name: string): boolean {
+  return /\.(ods|ots)$/i.test(name);
+}
+
 /** Delimited-text spreadsheets (Wave 4): extension → MIME. */
 export const DELIMITED_MIMES = ["text/csv", "text/tab-separated-values"];
+
+/** Every file the importers take, for a picker's `accept`. */
+export const SPREADSHEET_ACCEPT: readonly string[] = [
+  ...XLSX_FAMILY_EXTENSIONS,
+  ...XLSX_FAMILY_MIMES,
+  ...ODS_EXTENSIONS,
+  ...ODS_MIMES,
+  ".csv",
+  ".tsv",
+  ...DELIMITED_MIMES,
+];
+
+/** The extensions alone (an `<input type="file">`'s `accept`). */
+export const SPREADSHEET_EXTENSIONS = SPREADSHEET_ACCEPT.filter((a) =>
+  a.startsWith("."),
+).join(",");
 
 /** Is `name` a CSV/TSV file (by extension)? */
 export function isDelimited(name: string): boolean {
@@ -49,6 +90,8 @@ export async function importBytes(
 ): Promise<void> {
   if (isDelimited(name)) {
     await session.importCsv(new TextDecoder("utf-8").decode(bytes), name);
+  } else if (isOpenDocument(name)) {
+    await session.importOds(bytes, name);
   } else {
     await session.import(bytes, name);
   }
@@ -89,7 +132,7 @@ export async function pickAndImport(
     return;
   }
   const files = await host.shell.pickFile({
-    accept: [".xlsx", XLSX_MIME, ".csv", ".tsv", ...DELIMITED_MIMES],
+    accept: SPREADSHEET_ACCEPT,
     multiple: false,
   });
   const file = files[0];

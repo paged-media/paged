@@ -430,3 +430,30 @@ describe.skipIf(!built)(
     });
   },
 );
+
+describe.skipIf(!built)(
+  "Goal Seek from the grid [sheet.whatif.goalseek]",
+  () => {
+    it("finds the input that makes the formula reach the target; one undo step", async () => {
+      const s = await open([
+        [0, 0, "2"],
+        [0, 1, "=A1*A1"],
+      ]);
+      expect(s.canGoalSeek()).toBe(true);
+      expect(s.openDataCard({ kind: "goalSeek" })).toBe(true);
+      const r = s.goalSeek("B1", 49, "A1");
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.found).toBe(true);
+      expect(Math.abs(Number(input(s, 0, 0)) - 7)).toBeLessThan(0.01);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(input(s, 0, 0)).toBe("2");
+    });
+
+    it("refuses a target that is not a number, or a set cell without a formula", async () => {
+      const s = await open([[0, 0, "2"]]);
+      expect(s.goalSeek("B1", Number.NaN, "A1").ok).toBe(false);
+      expect(s.goalSeek("A1", 3, "A1").ok).toBe(false);
+    });
+  },
+);

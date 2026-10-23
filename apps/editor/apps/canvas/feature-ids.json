@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 391,
+    "command": 392,
     "keybinding": 88,
-    "menu": 285,
+    "menu": 286,
     "panel": 122,
     "tool": 72
   },
@@ -1087,6 +1087,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.formatCells",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.goalSeek",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2467,6 +2472,11 @@
     },
     {
       "id": "menu:Context/Format cells…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Goal Seek…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
