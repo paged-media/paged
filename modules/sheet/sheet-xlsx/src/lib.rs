@@ -314,6 +314,15 @@ impl XlsxDocument {
             .and_then(|p| parts::metadata::parse(p.bytes()).ok())
             .unwrap_or_default();
 
+        // Shared strings with formatted runs (W2.2): what a rich-text cell
+        // renders; an unreadable part degrades to plain text.
+        let rich_strings = shared_part
+            .as_ref()
+            .and_then(|name| container.part(name))
+            .and_then(|p| parts::shared_strings::rich_strings(p.bytes()).ok())
+            .unwrap_or_default();
+        let mut rich_cells: BTreeMap<(SheetId, u32, u32), Vec<sheet_core::RichRunVisual>> =
+            BTreeMap::new();
         let shared_strings = match &shared_part {
             Some(name) => match container.part(name) {
                 Some(p) => parts::shared_strings::parse(p.bytes())?,
@@ -473,6 +482,12 @@ impl XlsxDocument {
                     .unwrap_or(StyleId(0));
                 if let Some(ftext) = pc.formula {
                     formula_texts.insert((sid, pc.row, pc.col), ftext);
+                }
+                if let Some(rich) = pc.shared_index.and_then(|i| rich_strings.get(&i)) {
+                    rich_cells.insert(
+                        (sid, pc.row, pc.col),
+                        parts::style_model::rich_runs_visual(rich),
+                    );
                 }
                 cells.insert(
                     (pc.row, pc.col),
@@ -713,7 +728,7 @@ impl XlsxDocument {
         Ok(XlsxDocument {
             model,
             formula_texts,
-            visual_styles,
+            visual_styles: visual_styles.with_rich(rich_cells),
             dxfs,
             dxf_models,
             conditional_formats,

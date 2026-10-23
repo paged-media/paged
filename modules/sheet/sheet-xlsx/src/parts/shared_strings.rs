@@ -165,11 +165,17 @@ impl RichText {
 /// The `<si>` number `index` of a sharedStrings part as a [`RichText`]
 /// (phonetic runs left out). `None` when there is no such entry.
 pub fn rich_text_at(xml: &[u8], index: usize) -> Result<Option<RichText>, XlsxError> {
-    use crate::splice::{children_of, root_children};
+    use crate::splice::root_children;
     let (kids, _) = root_children(xml)?;
     let Some(si) = kids.iter().filter(|k| k.local == "si").nth(index) else {
         return Ok(None);
     };
+    rich_text_of(xml, si).map(Some)
+}
+
+/// The runs of one `<si>` span.
+fn rich_text_of(xml: &[u8], si: &crate::splice::Span) -> Result<RichText, XlsxError> {
+    use crate::splice::children_of;
     let text_of = |span: &crate::splice::Span| -> String {
         let all = parse(
             &[
@@ -208,7 +214,26 @@ pub fn rich_text_at(xml: &[u8], index: usize) -> Result<Option<RichText>, XlsxEr
             _ => {}
         }
     }
-    Ok(Some(out))
+    Ok(out)
+}
+
+/// Every shared string with formatted runs (a run carrying `<rPr>`), by
+/// index — one pass over the part (W2.2: what a rich-text cell renders).
+pub fn rich_strings(xml: &[u8]) -> Result<std::collections::BTreeMap<u32, RichText>, XlsxError> {
+    use crate::splice::root_children;
+    let (kids, _) = root_children(xml)?;
+    let mut out = std::collections::BTreeMap::new();
+    for (i, si) in kids.iter().filter(|k| k.local == "si").enumerate() {
+        let bytes = &xml[si.start..si.end];
+        if !bytes.windows(3).any(|w| w == b"rPr") {
+            continue;
+        }
+        let rich = rich_text_of(xml, si)?;
+        if rich.runs.iter().any(|r| r.rpr.is_some()) {
+            out.insert(i as u32, rich);
+        }
+    }
+    Ok(out)
 }
 
 /// `xml` with `si` appended as the last `<si>` and the root's `count` /
