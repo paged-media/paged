@@ -73,6 +73,82 @@ export interface CellProtection {
   sheetProtected: boolean;
 }
 
+/** One data-validation rule (ADR 517). Formulas carry `=`. */
+export interface ValidationRuleInfo {
+  index: number;
+  sqref: string;
+  type:
+    | "none"
+    | "whole"
+    | "decimal"
+    | "list"
+    | "date"
+    | "time"
+    | "textLength"
+    | "custom";
+  operator: string;
+  formula1?: string | null;
+  formula2?: string | null;
+  allowBlank: boolean;
+  inCellDropdown: boolean;
+  showInput: boolean;
+  promptTitle?: string | null;
+  prompt?: string | null;
+  showError: boolean;
+  errorStyle: "stop" | "warning" | "information";
+  errorTitle?: string | null;
+  error?: string | null;
+}
+
+/** A rule to author (absent fields: Excel's defaults, or kept on update). */
+export interface ValidationRuleArg {
+  type?: ValidationRuleInfo["type"] | "any";
+  operator?: string;
+  formula1?: string;
+  formula2?: string;
+  listItems?: string[];
+  allowBlank?: boolean;
+  inCellDropdown?: boolean;
+  showInput?: boolean;
+  promptTitle?: string;
+  prompt?: string;
+  showError?: boolean;
+  errorStyle?: "stop" | "warning" | "information";
+  errorTitle?: string;
+  error?: string;
+}
+
+/** Excel's validation alert. */
+export interface ValidationAlert {
+  style: "stop" | "warning" | "information";
+  title: string;
+  message: string;
+}
+
+export interface EntryCheck {
+  valid: boolean;
+  alert?: ValidationAlert | null;
+}
+
+/** A validated entry: applied, or the alert to show (a warning or
+ *  information alert applies when re-entered with `confirmed`). */
+export interface EnterResult {
+  applied: boolean;
+  alert?: ValidationAlert | null;
+  result?: ChangedCells | null;
+}
+
+export interface CellValidation {
+  rule: ValidationRuleInfo;
+  listItems?: string[] | null;
+}
+
+export interface InvalidCell {
+  row: number;
+  col: number;
+  rule: number;
+}
+
 /** The camelCase W2 facade (spread into `SheetEngine`). */
 export interface SheetEngineW2 {
   outline?(sheet: number): OutlineInfo;
@@ -112,6 +188,37 @@ export interface SheetEngineW2 {
   ): void;
   unprotectWorkbook?(password: string): void;
   cellProtection?(sheet: number, row: number, col: number): CellProtection;
+  listValidationRules?(sheet: number): ValidationRuleInfo[];
+  validationAt?(
+    sheet: number,
+    row: number,
+    col: number,
+  ): CellValidation | undefined;
+  checkEntry?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): EntryCheck;
+  enterCell?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed?: boolean,
+  ): EnterResult;
+  invalidCells?(sheet: number): InvalidCell[];
+  setValidation?(
+    sheet: number,
+    range: string,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  updateValidation?(
+    sheet: number,
+    index: number,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  clearValidation?(sheet: number, range: string): ValidationRuleInfo[];
 }
 
 /** The snake_case wasm methods behind it. */
@@ -155,6 +262,37 @@ export interface SheetWasmEngineW2 {
   ): void;
   unprotect_workbook?(password: string): void;
   cell_protection?(sheet: number, row: number, col: number): CellProtection;
+  list_validation_rules?(sheet: number): ValidationRuleInfo[];
+  validation_at?(
+    sheet: number,
+    row: number,
+    col: number,
+  ): CellValidation | undefined;
+  check_entry?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): EntryCheck;
+  enter_cell?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed: boolean,
+  ): EnterResult;
+  invalid_cells?(sheet: number): InvalidCell[];
+  set_validation?(
+    sheet: number,
+    range: string,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  update_validation?(
+    sheet: number,
+    index: number,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  clear_validation?(sheet: number, range: string): ValidationRuleInfo[];
 }
 
 type Need = <K extends keyof SheetWasmEngineW2>(
@@ -191,5 +329,22 @@ export function wrapW2(need: Need, tick: () => void): Required<SheetEngineW2> {
     protectWorkbook: read<void>("protect_workbook"),
     unprotectWorkbook: read<void>("unprotect_workbook"),
     cellProtection: read<CellProtection>("cell_protection"),
+    listValidationRules: read<ValidationRuleInfo[]>("list_validation_rules"),
+    validationAt: read<CellValidation | undefined>("validation_at"),
+    checkEntry: read<EntryCheck>("check_entry"),
+    enterCell: (sheet, row, col, input, confirmed) => {
+      tick();
+      return need("enter_cell")(
+        sheet,
+        row,
+        col,
+        input,
+        confirmed ?? false,
+      ) as EnterResult;
+    },
+    invalidCells: read<InvalidCell[]>("invalid_cells"),
+    setValidation: read<ValidationRuleInfo[]>("set_validation"),
+    updateValidation: read<ValidationRuleInfo[]>("update_validation"),
+    clearValidation: read<ValidationRuleInfo[]>("clear_validation"),
   };
 }

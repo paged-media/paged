@@ -84,6 +84,21 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Data validation, interpreted** (ADR 517). `enterCell` checks a typed entry against its
+  cell's rule: whole and decimal numbers, dates, times and text length against the operator and
+  operands (formulas, relative to the rule's first cell), lists (case-insensitive text, numbers by
+  value) from an inline list or a range, a name or a dynamic `OFFSET`/`INDIRECT` source, and
+  custom formulas evaluated with the entry in place; a blank passes where the rule allows it. A
+  `stop` alert refuses; a `warning` or `information` alert is returned unapplied until the
+  caller confirms; a rule with its error alert off never refuses. Only an entry is checked, as in
+  Excel (paste, fill, sort and undo are not). `validationAt` gives a cell's rule with its input
+  message and a list rule's dropdown items; `invalidCells` is Circle Invalid Data. Rules are
+  authored and edited (`setValidation`, `updateValidation`, `clearValidation`; the cells leave
+  older rules, Excel's length limits on messages apply) and written back into
+  `<dataValidations>`, keeping what each untouched rule held. A protected sheet refuses rule
+  edits. The editor's cell editor does not call `enterCell` yet, and the Workbook panel still
+  reports the rules as not enforced. The Excel 2010 `x14:dataValidation` copies in `extLst`
+  (cross-sheet lists written by Excel 2010) are kept but not read.
 - **Outline, hidden rows, columns and sheets, protection** (ADR 517). Rows and columns group
   and ungroup (up to seven levels), groups collapse and expand (a nested collapsed group stays
   collapsed when its parent expands), Excel's outline-level buttons, hide and unhide rows, columns
@@ -307,8 +322,8 @@ size? }` (no size clears it), each one workbook version and one undo step. Delet
   the bundle never sets.
 - **Exact decimal arithmetic:** a Cargo feature `sheet-js` does not enable
   ([ADR 501](adr/501-f64-numbers.md)).
-- **Interpreting pivot tables, data validation, external links or macros**
-  ([ADR 504](adr/504-publishing-first-scope.md)). External links are never followed; a formula
+- **Interpreting pivot tables, slicers or macros**
+  ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
 - **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
   refused.
