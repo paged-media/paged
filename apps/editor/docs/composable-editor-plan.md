@@ -584,6 +584,13 @@ targets, value, validity }`.
 
 ### C9 — Fields from XML tags
 
+**Done (protocol 76, engine [ADR 1002](../../../engine/core/docs/adr/1002-xml-tags-carry-template-fields.md)).**
+`paged_template::derive_fields`; the importer records where each tagged range stands; a tag
+that cannot be a field (a parent page, nothing tagged, a line or group, a story whose ranges are
+the fields) is reported with its reason. Run fields live in `DocumentPolicy::runs`, keyed by the
+placeholder that holds them, and are read and set through it (`templateFields`,
+`setTemplateFields`). Fixture: `paged_gen::fixtures::tagged_template_idml`.
+
 - **Files.** `paged-template/src/derive.rs`. The model's `xml_root`, `xml_elements` and
   `xml_tags` are the sources.
 - **Steps.**
@@ -604,6 +611,15 @@ targets, value, validity }`.
   a tagged image frame, a tagged range and a parent-page tag.
 
 ### C10 — Writing XML tags (decided: in this project)
+
+**Done (protocol 76, engine ADR 1002).** The seven operations (undone through the inverse-only
+`RestoreXmlStructure`), the writer in `idml-export/src/xml_structure.rs` (story ranges placed by
+the story writer through private-use markers), the blank document's `Root` tag, and Make field
+in the Template panel tagging the item in the same batch. `TagItem` retags an item tagged
+already; `SetXmlAttribute` also takes the item a tag is on. Not done: moving ranges through
+every text-changing operation (the text kernels and the field operations do), renaming or
+removing a tag definition when a field is renamed (the old definition stays), the optional
+corpus lane.
 
 Goal: a field made in paged is also an XML-tagged element in the exported IDML, so InDesign
 and other tag-based tools see a paged-made template as tagged. Today tags survive only
@@ -1046,6 +1062,12 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
 - D3's overlay draws all fields for the author, with problem markers from F3.
 
 ### F5 — Open as template
+
+**Done (engine half and the command).** `RequestDerivedTemplateFields` / `OpenAsTemplate`
+(one batch, author only); `paged.template.openAsTemplate` (File ▸ Open as template…) lists the
+derived fields and the skipped tags for confirmation; `paged-node template ingest <doc> -o
+<out>` runs the same messages. Not done: listing differences when re-deriving on a document
+that already has a policy (the new fields are merged into it).
 
 - **Steps.** A command `paged.template.openAsTemplate` (File menu) runs `derive_fields` (C9),
   shows the derived fields for confirmation, and writes the policy. On a document that already

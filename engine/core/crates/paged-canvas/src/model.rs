@@ -801,7 +801,10 @@ fn frame_mutation_error(e: paged_mutate::OperationError) -> crate::channel::Work
 pub(crate) enum Selectability {
     All,
     None,
-    ByItem(Box<paged_template::PolicyIndex>, paged_template::SessionPolicy),
+    ByItem(
+        Box<paged_template::PolicyIndex>,
+        paged_template::SessionPolicy,
+    ),
 }
 
 impl Selectability {
@@ -10067,13 +10070,34 @@ impl CanvasModel {
             scene: &paged_scene::Document,
             out: &mut Vec<crate::channel::XmlElementSummary>,
         ) {
+            // An element tagging a story keeps its attributes with the
+            // story's copy of it (engine ADR 1002); the back story's copy
+            // speaks for an element no story holds.
+            let story_copy = el.content.as_deref().and_then(|id| {
+                scene
+                    .stories
+                    .iter()
+                    .find(|s| s.self_id == id)
+                    .and_then(|s| {
+                        s.story
+                            .xml_elements
+                            .iter()
+                            .find(|e| e.self_id == el.self_id)
+                    })
+            });
+            let mut attributes = story_copy.map(|e| e.attributes.clone()).unwrap_or_default();
+            for (k, v) in &el.attributes {
+                if !attributes.iter().any(|(ok, _)| ok == k) {
+                    attributes.push((k.clone(), v.clone()));
+                }
+            }
             out.push(crate::channel::XmlElementSummary {
                 self_id: el.self_id.clone(),
                 tag: tag_name(&el.tag),
                 depth,
                 content: el.content.clone(),
                 story_id: story_id.map(str::to_string),
-                attributes: el.attributes.clone(),
+                attributes,
                 range: el.range.map(|r| [r.start, r.end]),
             });
             for child in &el.children {
