@@ -81,12 +81,14 @@ import {
   pageContent,
   placementContent,
   placementForContent,
+  pageBodyTracks,
   placementWindow,
   rangeFramePage,
   refreshWantsReplace,
   selectionBox,
   WINDOW_SLACK_PT,
   stampPlacedView,
+  viewToContain,
   recallShownContent,
   refreshBands,
   refreshLoweredTable,
@@ -4425,10 +4427,32 @@ export function createWorkbookSession(
         !placedInfo.view.lock &&
         lastGridWindow
       ) {
-        const topLeft = a1OfCell(
-          lastGridWindow.firstRow,
-          lastGridWindow.firstCol,
+        // What the grid showed stays on the page; the page window moves
+        // only as far as that needs (ADR 510).
+        // The grid's body tracks from the window's CURRENT origin (a scroll
+        // moves it at once; the painted scene can lag a frame), sized by
+        // the last scene's body counts.
+        const vp = lastGridScene?.viewport;
+        const bodyRows = vp ? vp.rows - (vp.frozenRows ?? 0) : 0;
+        const bodyCols = vp ? vp.cols - (vp.frozenCols ?? 0) : 0;
+        const win = lastGridWindow;
+        const gridRows = Array.from(
+          { length: Math.max(0, bodyRows) },
+          (_, i) => win.firstRow + i,
         );
+        const gridCols = Array.from(
+          { length: Math.max(0, bodyCols) },
+          (_, i) => win.firstCol + i,
+        );
+        const at = cellOfA1(placedInfo.view.topLeft);
+        const next =
+          placedInfo.content && at && vp
+            ? viewToContain(at, pageBodyTracks(placedInfo.content), {
+                rows: gridRows,
+                cols: gridCols,
+              })
+            : { row: lastGridWindow.firstRow, col: lastGridWindow.firstCol };
+        const topLeft = a1OfCell(next.row, next.col);
         if (topLeft !== placedInfo.view.topLeft) {
           loweredTables.set(lastFrameId, {
             ...placedInfo,
