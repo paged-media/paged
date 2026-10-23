@@ -1,0 +1,10 @@
+# FINV(probability,deg_freedom1,deg_freedom2) - legacy right tail.
+# id	formula	setup	expected
+fil-0	=FINV(0.01,6,4)	-	15.2068648611575
+fil-1	=FINV(0.5,1,1)	-	1
+fil-2	=FINV(0.05,10,20)	-	2.34787756699831
+fil-3	=FINV(0,4,5)	-	#NUM!
+fil-4	=FINV(1,4,5)	-	0
+fil-5	=FINV(0.5,0,5)	-	#NUM!
+fil-6	=FINV("x",4,5)	-	#VALUE!
+fil-7	=FINV(0.3,200,300)	-	1.06877599597613

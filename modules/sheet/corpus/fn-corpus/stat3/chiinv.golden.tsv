@@ -1,0 +1,10 @@
+# CHIINV(probability,deg_freedom) - legacy right tail.
+# id	formula	setup	expected
+cil-0	=CHIINV(0.050001,10)	-	18.3069734569611
+cil-1	=CHIINV(0.5,2)	-	1.38629436111989
+cil-2	=CHIINV(0.95,10)	-	3.94029913611906
+cil-3	=CHIINV(0,3)	-	#NUM!
+cil-4	=CHIINV(1,3)	-	0
+cil-5	=CHIINV(0.5,0)	-	#NUM!
+cil-6	=CHIINV("x",3)	-	#VALUE!
+cil-7	=CHIINV(0.001,1)	-	10.8275661706627

@@ -1,0 +1,9 @@
+# LOGNORMDIST(x,mean,standard_dev) - legacy cumulative.
+# id	formula	setup	expected
+ldl-0	=LOGNORMDIST(4,3.5,1.2)	-	0.0390835557068
+ldl-1	=LOGNORMDIST(1,0,1)	-	0.5
+ldl-2	=LOGNORMDIST(100,2,0.5)	-	0.999999905752751
+ldl-3	=LOGNORMDIST(0,0,1)	-	#NUM!
+ldl-4	=LOGNORMDIST(1,0,0)	-	#NUM!
+ldl-5	=LOGNORMDIST("x",0,1)	-	#VALUE!
+ldl-6	=LOGNORMDIST(0.01,0,1)	-	2.06064339597172E-06
