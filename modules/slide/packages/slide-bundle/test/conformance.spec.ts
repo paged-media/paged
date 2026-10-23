@@ -287,7 +287,12 @@ describe("File \u25b8 Open of a deck with embedded fonts", () => {
         .importersContributed()
         .find((i) => i.id === IMPORTER_ID)!;
       await importer.import({ name: "fonts-full.pptx", bytes, mimeType: "" });
-      expect(h.openedDocuments().map((d) => d.name)).toEqual(["fonts-full"]);
+      // The headless host opens the deck through its native-document door,
+      // as the editor does: the deck's pages are the document now.
+      expect(h.host.supports("document.openNative@1")).toBe(true);
+      expect(
+        (await h.host.document.collection("pages")).length,
+      ).toBeGreaterThan(0);
       const missing = (await h.host.document.collection<FontSummary>("fonts"))
         .filter((f) => f.isMissing)
         .map((f) => f.family);
