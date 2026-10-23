@@ -60,6 +60,8 @@ export {
   type FrameSizing,
   type FrameView,
   type TableRecord,
+  type ChainRecord,
+  type ChainTableRecord,
 } from "./binding";
 
 export {

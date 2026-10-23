@@ -75,8 +75,13 @@ import {
 } from "./engine";
 import {
   forgetShownContent,
+  adoptChain,
   lowerPaginatedToChain,
   lowerSelectionToFrame,
+  lowerAreasToFrames,
+  REFUSED_AREAS,
+  type AreaPlacement,
+  type LowerLaneOptions,
   a1OfCell,
   pageContent,
   placementContent,
@@ -106,6 +111,8 @@ import type { EnterResult } from "./engine-w2";
 import {
   chartPlacement,
   chartSizeOf,
+  elementsOutline,
+  followBox,
   lowerChartToFrame,
   placedChartCopies,
   type PlacedChart,
@@ -418,6 +425,15 @@ export interface WorkbookSession extends DataToolsApi {
   /** Lower the active sheet's selected range to a new page frame
    *  (the two-phase flow in lower.ts). Returns the created frame id. */
   lowerSelection(opts?: PlaceOptions): Promise<string | null>;
+  /** ADR 522 amendment — several ranges of the active sheet (a print area
+   *  of several areas) placed one table per range, in order, each under the
+   *  one before, as ONE document write and one undo step (area by area on a
+   *  host without in-batch handles). The frame ids in range order, or null
+   *  when any could not be placed. */
+  placeAreas(
+    ranges: readonly string[],
+    opts?: PlaceOptions,
+  ): Promise<string[] | null>;
   /** C-1 / S-02 — render the active sheet's grid INSIDE a frame as a live
    *  vector layer (`host.contribute.sceneLayer()`): gridlines + cell fills
    *  + cell values, clipped to the frame's content box by core. `frameId`
@@ -3347,7 +3363,7 @@ export function createWorkbookSession(
           if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
         }
         const charts: PlacedChart[] = [];
-        for (const placed of placedCharts) {
+        for (let placed of placedCharts) {
           if (
             placed.contentVersion === version ||
             placed.elementIds.length === 0
@@ -3355,6 +3371,9 @@ export function createWorkbookSession(
             charts.push(placed);
             continue;
           }
+          // ADR 522 amendment — redrawn where the chart stands now: moved
+          // (or scaled) on the page since it was drawn, its box goes along.
+          placed = await followChart(placed);
           let key: string;
           try {
             key = JSON.stringify(
@@ -3427,6 +3446,10 @@ export function createWorkbookSession(
     const sheets = engine.listSheets();
     let found = 0;
     let stale = false;
+    const chainHeads: {
+      frameId: string;
+      binding: NonNullable<ReturnType<typeof parseBinding>>;
+    }[] = [];
     for (const frameId of frames) {
       if (loweredTables.has(frameId)) continue;
       let binding: ReturnType<typeof parseBinding>;
@@ -3438,6 +3461,11 @@ export function createWorkbookSession(
           } as ElementId),
         );
       } catch {
+        continue;
+      }
+      if (binding?.data.chain) {
+        // ADR 522 amendment — the first frame of a paginated chain.
+        chainHeads.push({ frameId, binding });
         continue;
       }
       const rec = binding?.data.table;
@@ -3507,12 +3535,66 @@ export function createWorkbookSession(
       lastFrameId ??= frameId;
       found += 1;
     }
-    if (stale) {
+    const chainsFound = await rediscoverChains(chainHeads);
+    found += chainsFound.found;
+    if (stale || chainsFound.stale) {
       revision += 1;
       scheduleRefresh();
     }
     found += await rediscoverCharts();
     return found;
+  }
+
+  /** ADR 522 amendment — keep live the chains an earlier session paginated:
+   *  each first frame whose binding records a chain names the story, the
+   *  source and the tables it holds (`adoptChain`), and the chain is
+   *  subscribed as `paginateSelection` subscribes one — re-paginated on a
+   *  resize and on every refresh after an edit, its tables refreshed in
+   *  place. A chain this session already keeps is skipped. `stale` when a
+   *  chain's tables no longer show what the workbook paginates to (the
+   *  next refresh replaces them). */
+  async function rediscoverChains(
+    heads: readonly {
+      frameId: string;
+      binding: NonNullable<ReturnType<typeof parseBinding>>;
+    }[],
+  ): Promise<{ found: number; stale: boolean }> {
+    const engine = state.engine;
+    let found = 0;
+    let stale = false;
+    if (!engine) return { found, stale };
+    for (const { frameId, binding } of heads) {
+      const record = binding.data.chain;
+      if (!record) continue;
+      const sheet = engine
+        .listSheets()
+        .find((x) => x.name === binding.data.sheet);
+      if (!sheet) continue;
+      const storyId = await storyOfFrame(host, frameId);
+      if (!storyId || chains.has(storyId)) continue;
+      const range: string | readonly string[] =
+        record.areas && record.areas.length > 1
+          ? record.areas
+          : binding.data.range;
+      const from = await adoptChain(
+        host,
+        engine,
+        sheet.id,
+        range,
+        storyId,
+        record,
+      );
+      if (!from) continue;
+      const sub = subscribeChainReflow(host, engine, sheet.id, range, storyId, {
+        from,
+        repeatedHeaderRows: record.repeatHeaderRows,
+      });
+      chains.set(storyId, { sub, sheet: sheet.id, range });
+      chainHeaderRows.set(storyId, record.repeatHeaderRows);
+      if (from.tables.some((t) => t.stale)) stale = true;
+      found += 1;
+    }
+    return { found, stale };
   }
 
   /** Plan G4 — track the placed charts the page carries and this session
@@ -3583,6 +3665,8 @@ export function createWorkbookSession(
         groupId: copy.groupId ?? null,
         contentVersion: revision,
         geometryKey,
+        anchor: copy.anchor,
+        ...(at.art ? { art: at.art } : {}),
       });
       for (const id of ids) known.add(id);
       added += 1;
@@ -3590,47 +3674,173 @@ export function createWorkbookSession(
     return added;
   }
 
-  /** Where a found chart copy stands: its page (from its elements'
-   *  geometry) and its recorded box, else the page-space extent of its
-   *  elements. Null when no element has a page. */
+  /** Where a found chart copy stands (ADR 522 and its amendment): its page
+   *  and box, and where the element carrying its binding stands now (the
+   *  `art` a refresh follows). A copy whose binding recorded both its box
+   *  and its art is followed to where its art stands now, so a chart moved
+   *  in an earlier session is redrawn where it is; one that recorded only
+   *  its box stands at it; one placed before either was recorded gets its
+   *  box on discovery — the page-space outline of its elements — and from
+   *  then on behaves as a new one (its next redraw records both). Null
+   *  when no element is on a page. */
   async function chartCopyBox(copy: PlacedChartCopy): Promise<{
     pageId: PageId;
     bounds: [number, number, number, number];
+    art?: [number, number, number, number];
   } | null> {
-    let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+    const outline = await elementsOutline(host, copy.elementIds);
+    if (!outline) return null;
+    const anchor = copy.elementIds.some(
+      (id) => String(id.id) === String(copy.anchor.id),
+    )
+      ? await elementsOutline(host, [copy.anchor])
+      : null;
+    const art = anchor?.bounds;
+    const scale = copy.anchor.kind !== "textFrame";
+    const bounds =
+      copy.box && copy.art && art
+        ? (followBox(copy.box, copy.art, art, scale) ?? copy.box)
+        : (copy.box ?? outline.bounds);
+    return {
+      pageId: anchor?.pageId ?? outline.pageId,
+      bounds,
+      ...(art ? { art } : {}),
+    };
+  }
+
+  /** ADR 522 amendment — a tracked chart carried to where its art stands
+   *  now: the element carrying its binding is read, and when it has moved
+   *  (or been scaled) since the chart was drawn or last followed, the box
+   *  moves (and scales) with it. The chart as it was when nothing moved or
+   *  the read cannot say. */
+  async function followChart(placed: PlacedChart): Promise<PlacedChart> {
+    if (!placed.anchor || !placed.art) return placed;
+    const live = await elementsOutline(host, [placed.anchor]);
+    if (!live) return placed;
+    const bounds = followBox(
+      placed.bounds,
+      placed.art,
+      live.bounds,
+      placed.anchor.kind !== "textFrame",
+    );
+    if (!bounds && live.pageId === placed.pageId) return placed;
+    return {
+      ...placed,
+      pageId: live.pageId,
+      bounds: bounds ?? placed.bounds,
+      art: live.bounds,
+    };
+  }
+
+  /** What placing `range` as a frame takes (plan G4): the content it
+   *  shows, where it goes and how it is sized, and its view — the lowering
+   *  options `lowerSelectionToFrame` (or, for several areas,
+   *  `lowerAreasToFrames`) writes it with. Null when it cannot be lowered. */
+  async function preparePlacement(
+    engine: SheetEngine,
+    sheet: number,
+    range: string,
+    opts: PlaceOptions,
+  ): Promise<{ range: string; opts: LowerLaneOptions } | null> {
+    const kind = opts.sizing ?? "window";
+    const print = {
+      headings: opts.print?.headings ?? false,
+      gridlines: opts.print?.gridlines ?? false,
+    };
+    const topLeft = opts.view?.topLeft ?? rangeTopLeft(range);
+    // Wave 4 — land at the current selection, not a fixed page inset.
+    let placement;
+    let content: LoweredContent;
+    let shown = range;
+    let boxPt = kind === "fixed" ? opts.boxPt : undefined;
     try {
-      geom = await host.document.elementGeometry(copy.elementIds);
-    } catch {
+      if (kind === "fit") {
+        // The earlier behaviour: a fixed range, text-measured widths.
+        content = pageContent(engine, sheet, range);
+      } else {
+        // ADR 510 — a window frame shows the range's own tracks lowered as
+        // a frame page: the lowering every later refresh makes, so the
+        // first edit re-pours one cell, not the table.
+        const own = rangeFramePage(engine, sheet, range, print);
+        if (kind === "window" && topLeft === rangeTopLeft(range)) {
+          content = own;
+        } else {
+          // Plan G4 — a window that starts elsewhere, or a fixed box: the
+          // window of the sheet that fits the box from the view's cell.
+          const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+          boxPt ??= {
+            widthPt: sum(own.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
+            heightPt: sum(own.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
+          };
+          const win = placementWindow(engine, {
+            sheet,
+            range,
+            view: { topLeft, lock: false },
+            print,
+            sizing: "window",
+            boxPt,
+          });
+          if (!win) throw new Error("engine wasm predates get_frame_page");
+          content = win.content;
+          shown = win.range ?? range;
+        }
+      }
+      placement = await placementForContent(host, content);
+      // Plan G4 — the next area of a print area goes under the last one.
+      const under = opts.below ? await selectionBox(host) : null;
+      if (placement && under) {
+        const [t, l, b, r] = placement.bounds;
+        const top = under.bottom + PLACE_GAP_PT;
+        placement = {
+          pageId: under.pageId,
+          bounds: [top, under.left, top + (b - t), under.left + (r - l)] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        };
+      }
+      if (placement && kind === "fixed" && boxPt) {
+        const [t, l] = placement.bounds;
+        placement = {
+          ...placement,
+          bounds: [t, l, t + boxPt.heightPt, l + boxPt.widthPt] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        };
+      }
+    } catch (err) {
+      host.log.warn("lowerSelection: could not lower the range", err);
       return null;
     }
-    const pageId = geom.find((g) => g?.pageId)?.pageId;
-    if (!pageId) return null;
-    if (copy.box) return { pageId, bounds: copy.box };
-    let top = Infinity;
-    let left = Infinity;
-    let bottom = -Infinity;
-    let right = -Infinity;
-    for (const g of geom) {
-      if (!g?.bounds) continue;
-      const [t, l, b, r] = g.bounds;
-      const [a, bb, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-      for (const [x, y] of [
-        [l, t],
-        [r, t],
-        [r, b],
-        [l, b],
-      ] as const) {
-        const px = a * x + c * y + tx;
-        const py = bb * x + d * y + ty;
-        top = Math.min(top, py);
-        bottom = Math.max(bottom, py);
-        left = Math.min(left, px);
-        right = Math.max(right, px);
-      }
-    }
-    return Number.isFinite(top)
-      ? { pageId, bounds: [top, left, bottom, right] }
-      : null;
+    return {
+      range: shown,
+      opts: {
+        placement: placement ?? undefined,
+        // The placement's height is the workbook's rows; the lowering
+        // sizes it to the table the engine lays out — unless the caller
+        // fixed the box.
+        fitHeight: kind !== "fixed",
+        contentVersion: revision,
+        content,
+        // ADR 510 — the frame is a window onto the sheet (plan G4: with
+        // the caller's view, print options and box).
+        sizing: kind === "fit" ? "fit" : "window",
+        view: { topLeft, lock: opts.view?.lock ?? false },
+        print,
+        ...(boxPt ? { boxPt } : {}),
+        // S-04 — record the resolved native table so "new style from cell"
+        // can address its cells.
+        onLowered: (info) => {
+          lastLoweredTable = info;
+          loweredTables.set(info.frameId, info);
+        },
+      },
+    };
   }
 
   /** The placements belong to the workbook they were lowered from: a new
@@ -4106,107 +4316,62 @@ export function createWorkbookSession(
       }
       const engine = state.engine;
       const sheet = state.activeSheet;
-      const range = state.selectedRange;
-      const kind = opts.sizing ?? "window";
-      const print = {
-        headings: opts.print?.headings ?? false,
-        gridlines: opts.print?.gridlines ?? false,
-      };
-      const topLeft = opts.view?.topLeft ?? rangeTopLeft(range);
-      // Wave 4 — land at the current selection, not a fixed page inset.
-      let placement;
-      let content: LoweredContent;
-      let shown = range;
-      let boxPt = kind === "fixed" ? opts.boxPt : undefined;
-      try {
-        if (kind === "fit") {
-          // The earlier behaviour: a fixed range, text-measured widths.
-          content = pageContent(engine, sheet, range);
-        } else {
-          // ADR 510 — a window frame shows the range's own tracks lowered as
-          // a frame page: the lowering every later refresh makes, so the
-          // first edit re-pours one cell, not the table.
-          const own = rangeFramePage(engine, sheet, range, print);
-          if (kind === "window" && topLeft === rangeTopLeft(range)) {
-            content = own;
-          } else {
-            // Plan G4 — a window that starts elsewhere, or a fixed box: the
-            // window of the sheet that fits the box from the view's cell.
-            const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-            boxPt ??= {
-              widthPt: sum(own.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
-              heightPt: sum(own.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
-            };
-            const win = placementWindow(engine, {
-              sheet,
-              range,
-              view: { topLeft, lock: false },
-              print,
-              sizing: "window",
-              boxPt,
-            });
-            if (!win) throw new Error("engine wasm predates get_frame_page");
-            content = win.content;
-            shown = win.range ?? range;
-          }
-        }
-        placement = await placementForContent(host, content);
-        // Plan G4 — the next area of a print area goes under the last one.
-        const under = opts.below ? await selectionBox(host) : null;
-        if (placement && under) {
-          const [t, l, b, r] = placement.bounds;
-          const top = under.bottom + PLACE_GAP_PT;
-          placement = {
-            pageId: under.pageId,
-            bounds: [top, under.left, top + (b - t), under.left + (r - l)] as [
-              number,
-              number,
-              number,
-              number,
-            ],
-          };
-        }
-        if (placement && kind === "fixed" && boxPt) {
-          const [t, l] = placement.bounds;
-          placement = {
-            ...placement,
-            bounds: [t, l, t + boxPt.heightPt, l + boxPt.widthPt] as [
-              number,
-              number,
-              number,
-              number,
-            ],
-          };
-        }
-      } catch (err) {
-        host.log.warn("lowerSelection: could not lower the range", err);
-        return null;
-      }
+      const prepared = await preparePlacement(
+        engine,
+        sheet,
+        state.selectedRange,
+        opts,
+      );
+      if (!prepared) return null;
       const id = await ownWrite(() =>
-        lowerSelectionToFrame(host, engine, sheet, shown, {
-          placement: placement ?? undefined,
-          // The placement's height is the workbook's rows; the lowering
-          // sizes it to the table the engine lays out — unless the caller
-          // fixed the box.
-          fitHeight: kind !== "fixed",
-          contentVersion: revision,
-          content,
-          // ADR 510 — the frame is a window onto the sheet (plan G4: with
-          // the caller's view, print options and box).
-          sizing: kind === "fit" ? "fit" : "window",
-          view: { topLeft, lock: opts.view?.lock ?? false },
-          print,
-          ...(boxPt ? { boxPt } : {}),
-          // S-04 — record the resolved native table so "new style from cell"
-          // can address its cells.
-          onLowered: (info) => {
-            lastLoweredTable = info;
-            loweredTables.set(info.frameId, info);
-          },
-        }),
+        lowerSelectionToFrame(
+          host,
+          engine,
+          sheet,
+          prepared.range,
+          prepared.opts,
+        ),
       );
       if (id) lastFrameId = id; // remember the in-frame grid target (S-02)
       return id;
+    },
+
+    async placeAreas(ranges, opts = {}) {
+      const engine = state.engine;
+      const sheet = state.activeSheet;
+      if (!engine || sheet === null || ranges.length === 0) {
+        host.log.warn("placeAreas: no workbook / sheet / range");
+        return null;
+      }
+      const areas: AreaPlacement[] = [];
+      for (const range of ranges) {
+        const prepared = await preparePlacement(engine, sheet, range, {
+          ...opts,
+          below: false,
+        });
+        if (!prepared) return null;
+        areas.push({ range: prepared.range, opts: prepared.opts });
+      }
+      // ADR 522 amendment — one batch, one undo step for every area.
+      const placed = await ownWrite(() =>
+        lowerAreasToFrames(host, engine, sheet, areas, PLACE_GAP_PT),
+      );
+      if (placed !== REFUSED_AREAS) {
+        const ids = placed.filter((f): f is string => !!f);
+        if (ids.length !== ranges.length) return null;
+        lastFrameId = ids[ids.length - 1] ?? lastFrameId;
+        return ids;
+      }
+      // A host without in-batch handles: area by area, each under the one
+      // before (an undo step each).
+      const ids: string[] = [];
+      for (const [i, range] of ranges.entries()) {
+        api.setRange(range);
+        const id = await api.lowerSelection({ ...opts, below: i > 0 });
+        if (!id) return null;
+        ids.push(id);
+      }
+      return ids;
     },
 
     async showGridInFrame(frameId?: string) {
