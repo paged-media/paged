@@ -237,6 +237,9 @@ export const HOST_FEATURES: readonly string[] = [
   "document.hitTest@1",
   "document.elementGeometry@1",
   "document.elementProperties@1",
+  // Extensions ADR 336 — style properties and swatch display colours.
+  "document.styleProperties@1",
+  "document.swatchDisplay@1",
   "document.placeholders@1",
   "document.tree@1",
   // C-16 — the per-element parentage read. STATIC like `document.tree@1`
@@ -2612,6 +2615,52 @@ export function createBundleHost(
       } catch {
         return [];
       }
+    },
+    async styleProperties(collection, styleId) {
+      // Extensions ADR 336 — the typed read over `requestStyleProperties`.
+      requireDocRead("document.styleProperties");
+      try {
+        const reply = await getEditor().client.send({
+          kind: "requestStyleProperties",
+          payload: { collection, styleId },
+        });
+        return reply.kind === "styleProperties" ? reply.payload.result : null;
+      } catch {
+        return null;
+      }
+    },
+    async swatchDisplay(swatchIds) {
+      // Extensions ADR 336 — each swatch's display colour through
+      // `requestColorPreview` (the document's colour management).
+      requireDocRead("document.swatchDisplay");
+      const out: Array<{
+        id: string;
+        rgbHex: string;
+        model: string;
+        cmyk: [number, number, number, number] | null;
+        outOfGamut: boolean;
+      }> = [];
+      for (const id of swatchIds) {
+        try {
+          const reply = await getEditor().client.send({
+            kind: "requestColorPreview",
+            payload: { swatchId: id },
+          });
+          if (reply.kind !== "colorPreviewReply" || !reply.payload.result)
+            continue;
+          const r = reply.payload.result;
+          out.push({
+            id,
+            rgbHex: r.rgbHex,
+            model: r.model,
+            cmyk: r.cmyk ?? null,
+            outOfGamut: r.outOfGamut ?? false,
+          });
+        } catch {
+          // An unknown id or a channel failure leaves it out.
+        }
+      }
+      return out;
     },
     async elementProperties(id) {
       // B-19 — the typed read over `requestElementProperties` (the same

@@ -62,6 +62,7 @@ eslint-suppressions.json
 **/recorded-*/
 **/answers/
 **/__snapshots__/
+modules/sheet/sheet-chart/tests/snapshots/
 **/*.baselines.json
 **/*baseline*.json
 **/*.expected.json

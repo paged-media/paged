@@ -257,11 +257,35 @@ export interface ReplaceResult {
 export interface ChartInfo {
   index: number;
   hostSheet: number;
-  /** The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
-   *  `"pie"`, `"donut"`, `"scatter"`). */
+  /** The kind tag (`"column"`, `"stackedLine"`, `"waterfall"`, …;
+   *  `"unsupported"` for a chart Paged does not draw). */
   kind: string;
   title: string | null;
   seriesCount: number;
+  /** A 3-D chart drawn as its 2-D kind (W4). */
+  flattened3d?: boolean;
+  /** The element the kind came from when it is not its own. */
+  source?: string | null;
+  /** The chart is a chartsheet (its own tab). */
+  chartsheet?: boolean;
+  /** More than one plot (a combo chart). */
+  combo?: boolean;
+}
+
+/** A chartsheet: a sheet tab that is one chart. */
+export interface ChartsheetInfo {
+  sheet: number;
+  name: string;
+  chart: number | null;
+}
+
+/** One sparkline: its cell, kind and data range. */
+export interface SparklineInfo {
+  sheet: number;
+  row: number;
+  col: number;
+  kind: "line" | "column" | "winLoss";
+  data: string;
 }
 
 /** One registered function for the formula-bar autocomplete (S-04). The
@@ -444,7 +468,7 @@ export interface SheetEngine extends SheetEngineW2 {
    *  values COLUMN, `"rows"` one per ROW, re-reading the SAME cells the other
    *  way round (never a rewrite of the user's data). Returns the new chart
    *  index (same handle the geometry/lowering lanes take). Publishing-first:
-   *  authored charts are page-side only — never written back to xlsx. */
+   *  the chart is written into the xlsx on save. */
   addChart(
     sheet: number,
     values: string,
@@ -478,6 +502,19 @@ export interface SheetEngine extends SheetEngineW2 {
    *  live to recalc). The IR feeds BOTH the page paged.draw lowering and the
    *  grid view (one generator, two projections). */
   getChartGeometry(index: number, wPt: number, hPt: number): ChartGeometry;
+  /** W4 — the chartsheets (a tab that is one chart). */
+  listChartsheets?(): ChartsheetInfo[];
+  /** W4 — the sparklines of a sheet. */
+  listSparklines?(sheet: number): SparklineInfo[];
+  /** W4 — a sparkline's primitives in a `wPt × hPt` cell box (null when
+   *  the cell has none). */
+  sparklineGeometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    wPt: number,
+    hPt: number,
+  ): ChartGeometry["prims"] | null;
   /** Release the wasm-held model. */
   dispose(): void;
 
@@ -561,6 +598,11 @@ export interface SheetEngine extends SheetEngineW2 {
   ): { cells: number; styles: number };
   /** The full style of one cell. */
   getStyle?(sheet: number, row: number, col: number): CellStylePatch;
+  /** W2.2 — the cell visual model of one cell (colours as `ColorRefInfo`). */
+  getCellVisual?(sheet: number, row: number, col: number): CellVisualInfo;
+  /** W2.2 — the workbook's Excel named cell styles and the built-ins it can
+   *  add. */
+  namedStyles?(): NamedStyleInfo[];
   /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
    *  snapshot for `setStyleIds` (the in-session undo of a format change). */
   getStyleIds?(sheet: number, range: string): number[];
@@ -659,6 +701,13 @@ export interface SeriesSpec {
   values: string;
   categories?: string | null;
   color?: string | null;
+  /** The document swatch the fill names. */
+  colorSwatch?: string | null;
+  /** The series' plot kind (differs from the chart's in a combo). */
+  kind?: string;
+  secondary?: boolean;
+  xValues?: string | null;
+  sizes?: string | null;
 }
 
 /** One chart with the options the object model reads. */
@@ -673,6 +722,13 @@ export interface ChartSpec {
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string | null;
+  dataLabels?: boolean;
+  style?: number | null;
+  flattened3d?: boolean;
+  titleParagraphStyle?: string | null;
 }
 
 /** A chart patch: absent = unchanged, `null` clears a nullable field. A
@@ -686,11 +742,23 @@ export interface ChartPatch {
     categories: string;
     name: string;
     color: string;
+    colorSwatch?: string;
+    /** A combo: this series' kind tag (empty = the chart's). */
+    kind?: string;
+    secondary?: boolean;
+    xValues?: string;
+    sizes?: string;
   }[];
   categoryAxisTitle?: string | null;
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string;
+  dataLabels?: boolean;
+  style?: number | null;
+  titleParagraphStyle?: string | null;
 }
 
 /** A range argument resolved by the engine: its sheet, normalized A1, and
@@ -712,6 +780,79 @@ export interface ResolvedRange {
 export interface EdgeStyle {
   style: string;
   color?: string | null;
+  /** A document swatch the line colour references (W2.2). */
+  swatch?: DocSwatch | null;
+}
+
+/** A reference to a document swatch (sheet ADR 518): the swatch id, its
+ *  colour model and the sRGB an xlsx reader shows (what a save writes). */
+export interface DocSwatch {
+  id: string;
+  model: "rgb" | "cmyk" | "spot" | "lab";
+  fallbackRgb: string;
+}
+
+/** A gradient fill: `linear` at `degree`, or `path` from the inner
+ *  rectangle (fractions of the cell); stops `{position 0..1, color}`. */
+export interface GradientStyle {
+  kind?: "linear" | "path";
+  degree?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  stops: { position: number; color: string }[];
+}
+
+/** A colour of the cell visual model (`getCellVisual`): what the workbook
+ *  stores plus an optional document swatch. */
+export interface ColorRefInfo {
+  concrete:
+    | { kind: "rgb"; r: number; g: number; b: number }
+    | { kind: "theme"; index: number; tint: number }
+    | { kind: "indexed"; index: number }
+    | { kind: "auto" };
+  doc?: { id: string; model: string; fallbackRgb: [number, number, number] };
+}
+
+/** The cell visual model (`getCellVisual`, the serde shape of
+ *  `sheet_core::CellVisual`). */
+export interface CellVisualInfo {
+  font: {
+    font: {
+      name?: string | null;
+      size?: number | null;
+      bold: boolean;
+      italic: boolean;
+      underline: string;
+      strike: boolean;
+      vertAlign: string;
+      color?: ColorRefInfo | null;
+      scheme?: string | null;
+    };
+    docCharStyle?: string;
+    docParaStyle?: string;
+  };
+  fill: { kind: string; [k: string]: unknown };
+  border: Record<string, unknown>;
+  alignment: {
+    horizontal: string;
+    vertical: string;
+    wrap: boolean;
+    indent: number;
+    rotation: number;
+    shrink: boolean;
+  };
+  namedStyle?: string;
+  docCellStyle?: string;
+}
+
+/** One Excel named cell style (`namedStyles`). */
+export interface NamedStyleInfo {
+  name: string;
+  builtinId?: number | null;
+  /** The workbook carries it (else applying it adds Excel's built-in). */
+  present: boolean;
 }
 
 /** A partial cell style (`setStyle`): absent fields are left as each cell
@@ -740,6 +881,32 @@ export interface CellStylePatch {
   /** Format Cells ▸ Protection (sheet ADR 517). */
   locked?: boolean;
   formulaHidden?: boolean;
+  // ── W2.2 (sheet ADR 518) ──
+  /** A fill pattern (`solid`, `gray125`, `darkTrellis`, … `none`); `fill`
+   *  is its foreground, `fillBg` its background. */
+  pattern?: string;
+  fillBg?: string;
+  gradient?: GradientStyle | null;
+  borderDiagonal?: EdgeStyle;
+  diagonalUp?: boolean;
+  diagonalDown?: boolean;
+  indent?: number;
+  /** 0–180, 255 = stacked. */
+  rotation?: number;
+  shrink?: boolean;
+  strike?: boolean;
+  /** `baseline` / `superscript` / `subscript`. */
+  vertAlign?: string;
+  /** `none` / `single` / `double` / `singleAccounting` / `doubleAccounting`. */
+  underlineStyle?: string;
+  fillSwatch?: DocSwatch | null;
+  fillBgSwatch?: DocSwatch | null;
+  fontSwatch?: DocSwatch | null;
+  docCharStyle?: string;
+  docParaStyle?: string;
+  docCellStyle?: string;
+  /** An Excel named cell style by name (`Heading 1`, `Good`, …). */
+  namedStyle?: string;
 }
 
 /** A sheet's layout: explicit column widths (characters) and row heights
@@ -887,6 +1054,15 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
   list_comments(): CommentInfo[];
   list_functions(): FunctionInfo[];
   get_chart_geometry(index: number, w_pt: number, h_pt: number): ChartGeometry;
+  list_chartsheets?(): ChartsheetInfo[];
+  list_sparklines?(sheet: number): SparklineInfo[];
+  sparkline_geometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    w_pt: number,
+    h_pt: number,
+  ): ChartGeometry["prims"] | null;
   free(): void;
   // Wave 4 (optional: older artifacts / fakes lack them).
   get_range_page?(
@@ -945,6 +1121,8 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
     patch: CellStylePatch,
   ): { cells: number; styles: number };
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
+  get_cell_visual?(sheet: number, row: number, col: number): CellVisualInfo;
+  named_styles?(): NamedStyleInfo[];
   get_style_ids?(sheet: number, range: string): Uint32Array;
   set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
   merge?(sheet: number, range: string): { changed: CellChange[] };
@@ -1089,6 +1267,10 @@ export function wrapEngine(
     listFunctions: () => wasm.list_functions(),
     getChartGeometry: (index, wPt, hPt) =>
       wasm.get_chart_geometry(index, wPt, hPt),
+    listChartsheets: () => wasm.list_chartsheets?.() ?? [],
+    listSparklines: (sheet) => wasm.list_sparklines?.(sheet) ?? [],
+    sparklineGeometry: (sheet, row, col, wPt, hPt) =>
+      wasm.sparkline_geometry?.(sheet, row, col, wPt, hPt) ?? null,
     dispose: () => wasm.free(),
     getRangePage: (sheet, range, opts) =>
       need("get_range_page")(sheet, range, opts) as LoweredContent,
@@ -1148,6 +1330,9 @@ export function wrapEngine(
       },
     getStyle: (sheet, row, col) =>
       need("get_style")(sheet, row, col) as CellStylePatch,
+    getCellVisual: (sheet, row, col) =>
+      need("get_cell_visual")(sheet, row, col) as CellVisualInfo,
+    namedStyles: () => need("named_styles")() as NamedStyleInfo[],
     getStyleIds: (sheet, range) =>
       Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
     setStyleIds: (sheet, range, ids) =>

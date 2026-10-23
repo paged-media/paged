@@ -87,7 +87,10 @@ pub use paginate::{paginate, paginate_lowered, FrameBox, Page, PaginateOptions};
 pub mod style;
 /// The per-cell styler both the page lowering and the grid scene call.
 pub mod styler;
-pub use style::{BorderLine, BorderLines, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource};
+pub use style::{
+    resolve_delta, resolve_visual, BorderLine, BorderLines, FillGradient, FillGradientStop,
+    FillPattern, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource, INDENT_LEVEL_PT,
+};
 pub use styler::CellStyler;
 
 // ---- Conditional formatting → style overrides (T2 cond-fmt track; §10.4). ----
@@ -97,6 +100,7 @@ pub use styler::CellStyler;
 // dep — the xlsx side converts its parsed cf model into these mirror types).
 pub mod condfmt;
 // ---- Lowering over EXPLICIT tracks (ADR 510: the page side of a frame window). ----
+pub mod table_band;
 pub mod tracks;
 pub use condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, DataBar, ScaleStop, SheetCondFmt,
@@ -249,6 +253,48 @@ pub struct LoweredStyle {
     /// carries one. The `border_*` flags above stay the presence summary.
     #[serde(skip_serializing_if = "BorderLines::is_empty")]
     pub border_lines: BorderLines,
+    // ---- W2.2 (sheet ADR 518), each omitted on the wire when default. ----
+    /// The document swatch the fill names: the page uses it instead of a
+    /// minted content-addressed swatch (ADR 508 mints only without one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_swatch: Option<String>,
+    /// The document swatch the text colour names.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_swatch: Option<String>,
+    /// A pattern fill (not solid); `fill_rgb` holds its blend.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_pattern: Option<style::FillPattern>,
+    /// A gradient fill; `fill_rgb` holds its mean colour.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_gradient: Option<style::FillGradient>,
+    /// The indent in points.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indent_pt: Option<f64>,
+    /// `textRotation` (1–180, 255 = stacked).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<u32>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub shrink: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strike: bool,
+    /// `"superscript"` / `"subscript"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vert_align: Option<String>,
+    /// `"double"` / `"singleAccounting"` / `"doubleAccounting"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub underline_style: Option<String>,
+    /// `"fill"` / `"justify"` / `"centerContinuous"` / `"distributed"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h_align: Option<String>,
+    /// The Excel named cell style (not Normal).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub named_style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_char_style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_para_style: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub doc_cell_style: Option<String>,
 }
 
 impl LoweredStyle {
@@ -271,6 +317,21 @@ impl LoweredStyle {
             v_align: None,
             wrap: false,
             border_lines: BorderLines::default(),
+            fill_swatch: None,
+            text_swatch: None,
+            fill_pattern: None,
+            fill_gradient: None,
+            indent_pt: None,
+            rotation: None,
+            shrink: false,
+            strike: false,
+            vert_align: None,
+            underline_style: None,
+            h_align: None,
+            named_style: None,
+            doc_char_style: None,
+            doc_para_style: None,
+            doc_cell_style: None,
         }
     }
 }
@@ -547,7 +608,12 @@ pub fn lower_range_condfmt(
                     }
                     (d.text, d.align, key, d.fill.map(String::from))
                 }
-                None => (String::new(), Align::General, 0, None),
+                None => (
+                    String::new(),
+                    Align::General,
+                    styler.key_for_empty(r, c),
+                    None,
+                ),
             };
             cells.push(LoweredCell {
                 col: c - left,

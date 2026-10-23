@@ -1,4 +1,4 @@
-# ADR 336 — A follow-up write joins the edit's undo step
+# ADR 337 — A follow-up write joins the edit's undo step
 
 - **Status:** Accepted 2026-10-23.
 - **Scope:** `MutateOptions` and `DocumentSurface.mutate`'s second argument, and

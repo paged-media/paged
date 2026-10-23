@@ -1,0 +1,376 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Bar",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 120.6
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S1",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 127.25
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 133.2
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S2",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 139.85
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          21.9,
+          30.8
+        ],
+        [
+          21.9,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          64.071,
+          30.8
+        ],
+        [
+          64.071,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          106.243,
+          30.8
+        ],
+        [
+          106.243,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          148.414,
+          30.8
+        ],
+        [
+          148.414,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          190.586,
+          30.8
+        ],
+        [
+          190.586,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          232.757,
+          30.8
+        ],
+        [
+          232.757,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          274.929,
+          30.8
+        ],
+        [
+          274.929,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          317.1,
+          30.8
+        ],
+        [
+          317.1,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          21.9,
+          30.8
+        ],
+        [
+          21.9,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "0",
+      "sizePt": 9.0,
+      "x": 21.9,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "5",
+      "sizePt": 9.0,
+      "x": 64.071,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "10",
+      "sizePt": 9.0,
+      "x": 106.243,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "15",
+      "sizePt": 9.0,
+      "x": 148.414,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "20",
+      "sizePt": 9.0,
+      "x": 190.586,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "25",
+      "sizePt": 9.0,
+      "x": 232.757,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "30",
+      "sizePt": 9.0,
+      "x": 274.929,
+      "y": 231.3
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "35",
+      "sizePt": 9.0,
+      "x": 317.1,
+      "y": 231.3
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q1",
+      "sizePt": 9.0,
+      "x": 17.9,
+      "y": 200.725
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q2",
+      "sizePt": 9.0,
+      "x": 17.9,
+      "y": 153.075
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q3",
+      "sizePt": 9.0,
+      "x": 17.9,
+      "y": 105.425
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q4",
+      "sizePt": 9.0,
+      "x": 17.9,
+      "y": 57.775
+    },
+    {
+      "fill": "#4472C4",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 84.343,
+      "x": 21.9,
+      "y": 197.575
+    },
+    {
+      "fill": "#4472C4",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 168.686,
+      "x": 21.9,
+      "y": 149.925
+    },
+    {
+      "fill": "#4472C4",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 253.029,
+      "x": 21.9,
+      "y": 102.275
+    },
+    {
+      "fill": "#4472C4",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 210.857,
+      "x": 21.9,
+      "y": 54.625
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 126.514,
+      "x": 21.9,
+      "y": 183.961
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 42.171,
+      "x": 21.9,
+      "y": 136.311
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 101.211,
+      "x": 21.9,
+      "y": 88.661
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 13.614,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 151.817,
+      "x": 21.9,
+      "y": 41.011
+    }
+  ],
+  "widthPt": 360.0
+}

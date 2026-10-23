@@ -234,6 +234,35 @@ export interface FilterViewInfo {
   columns: { col: number; criterion: FilterCriterion }[];
 }
 
+/** One table, read whole (ADR 517). */
+export interface TableDetail {
+  name: string;
+  sheet: number;
+  range: string;
+  headerRow: boolean;
+  totalsRow: boolean;
+  columns: {
+    name: string;
+    calculatedFormula?: string | null;
+    totalsFunction?: string | null;
+    totalsFormula?: string | null;
+    totalsLabel?: string | null;
+  }[];
+  style?: string | null;
+  firstColumn: boolean;
+  lastColumn: boolean;
+  bandedRows: boolean;
+  bandedColumns: boolean;
+}
+
+export interface TableStyleArg {
+  style?: string;
+  firstColumn?: boolean;
+  lastColumn?: boolean;
+  bandedRows?: boolean;
+  bandedColumns?: boolean;
+}
+
 /** The camelCase W2 facade (spread into `SheetEngine`). */
 export interface SheetEngineW2 {
   outline?(sheet: number): OutlineInfo;
@@ -322,6 +351,31 @@ export interface SheetEngineW2 {
   deleteFilterView?(sheet: number, name: string): void;
   listFilterViews?(): FilterViewInfo[];
   setFilterViews?(views: FilterViewInfo[]): void;
+  listTableDetails?(): TableDetail[];
+  tableDetail?(name: string): TableDetail;
+  tableStyleNames?(): string[];
+  createTable?(
+    sheet: number,
+    range: string,
+    hasHeaders: boolean,
+    style?: string,
+    name?: string,
+  ): TableDetail;
+  resizeTable?(name: string, range: string): TableDetail;
+  renameTable?(name: string, newName: string): TableDetail;
+  setTableTotals?(name: string, show: boolean): TableDetail;
+  setTotalsFunction?(
+    name: string,
+    column: string,
+    fn: string,
+    text?: string,
+  ): TableDetail;
+  setCalculatedColumn?(
+    name: string,
+    column: string,
+    formula: string | null,
+  ): TableDetail;
+  setTableStyle?(name: string, arg: TableStyleArg): TableDetail;
 }
 
 /** The snake_case wasm methods behind it. */
@@ -414,6 +468,31 @@ export interface SheetWasmEngineW2 {
   delete_filter_view?(sheet: number, name: string): void;
   list_filter_views?(): FilterViewInfo[];
   set_filter_views?(views: FilterViewInfo[]): void;
+  list_table_details?(): TableDetail[];
+  table_detail?(name: string): TableDetail;
+  table_style_names?(): string[];
+  create_table?(
+    sheet: number,
+    range: string,
+    has_headers: boolean,
+    style: string,
+    name: string,
+  ): TableDetail;
+  resize_table?(name: string, range: string): TableDetail;
+  rename_table?(name: string, new_name: string): TableDetail;
+  set_table_totals?(name: string, show: boolean): TableDetail;
+  set_totals_function?(
+    name: string,
+    column: string,
+    fn: string,
+    text: string,
+  ): TableDetail;
+  set_calculated_column?(
+    name: string,
+    column: string,
+    formula: string,
+  ): TableDetail;
+  set_table_style?(name: string, arg: TableStyleArg): TableDetail;
 }
 
 type Need = <K extends keyof SheetWasmEngineW2>(
@@ -488,5 +567,39 @@ export function wrapW2(need: Need, tick: () => void): Required<SheetEngineW2> {
     deleteFilterView: read<void>("delete_filter_view"),
     listFilterViews: read<FilterViewInfo[]>("list_filter_views"),
     setFilterViews: read<void>("set_filter_views"),
+    listTableDetails: read<TableDetail[]>("list_table_details"),
+    tableDetail: read<TableDetail>("table_detail"),
+    tableStyleNames: read<string[]>("table_style_names"),
+    createTable: (sheet, range, hasHeaders, style, name) => {
+      tick();
+      return need("create_table")(
+        sheet,
+        range,
+        hasHeaders,
+        style ?? "",
+        name ?? "",
+      ) as TableDetail;
+    },
+    resizeTable: write<TableDetail>("resize_table"),
+    renameTable: write<TableDetail>("rename_table"),
+    setTableTotals: write<TableDetail>("set_table_totals"),
+    setTotalsFunction: (name, column, fn, text) => {
+      tick();
+      return need("set_totals_function")(
+        name,
+        column,
+        fn,
+        text ?? "",
+      ) as TableDetail;
+    },
+    setCalculatedColumn: (name, column, formula) => {
+      tick();
+      return need("set_calculated_column")(
+        name,
+        column,
+        formula ?? "",
+      ) as TableDetail;
+    },
+    setTableStyle: read<TableDetail>("set_table_style"),
   };
 }

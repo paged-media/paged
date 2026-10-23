@@ -54,6 +54,13 @@ pub const REL_DRAWING: &str = "/drawing";
 /// A drawing → chart-part relationship (`xl/charts/chartN.xml`, the DrawingML
 /// chart; ECMA-376 §21.2). One per `<c:chart>` graphic frame in the drawing.
 pub const REL_CHART: &str = "/chart";
+/// A drawing → chartEx-part relationship (`xl/charts/chartEx1.xml`, the
+/// Office 2016 chart types: waterfall, funnel, treemap, sunburst,
+/// histogram, pareto, box & whisker, region map). Its type ends
+/// `/2014/relationships/chartEx`, which `REL_CHART` does not match.
+pub const REL_CHART_EX: &str = "/chartEx";
+/// A workbook → chartsheet relationship (a sheet tab that is one chart).
+pub const REL_CHARTSHEET: &str = "/chartsheet";
 /// A worksheet → comments-part relationship (`xl/commentsN.xml`, the cell
 /// comments / notes list; ECMA-376 §18.7). The part stays opaque (round-trips
 /// byte-identical); we parse it read-only for the grid indicator + panel.

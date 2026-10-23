@@ -93,7 +93,7 @@ describe("document.onDidChange reports every committed change", () => {
       },
     });
     expect(seen).toEqual([
-      // The step it committed, which a follow-up write may amend (ADR 336).
+      // The step it committed, which a follow-up write may amend (ADR 337).
       { kind: "gestureCommitted", pageIds: ["p1", "p2"], appliedSeq: 7 },
     ]);
   });

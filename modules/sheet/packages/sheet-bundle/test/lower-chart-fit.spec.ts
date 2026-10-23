@@ -60,6 +60,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createWorkbookSession, type WorkbookSession } from "../src";
+import { CHART_SIZE_PT } from "../src/lower-chart";
 import {
   ENGINE_BUILT,
   WASM,
@@ -282,9 +283,12 @@ describe.skipIf(!ENGINE_BUILT)(
           l,
           `${key(g.id)} starts inside the chart`,
         ).toBeGreaterThanOrEqual(left - 40);
+        // The legend sits right of the plot (Excel's default position),
+        // so a legend label may end past the art: inside the chart's box.
         expect(r, `${key(g.id)} ends inside the chart`).toBeLessThanOrEqual(
-          right + 12,
+          Math.min(...geom.map((x) => x.bounds[1])) + CHART_SIZE_PT[0] + 0.5,
         );
+        expect(right).toBeGreaterThan(left);
         const storyId = (g as { storyId?: string | null }).storyId;
         expect(storyId).toBeTruthy();
         const chain = await host.document.frameChain(storyId!);
@@ -309,8 +313,8 @@ describe.skipIf(!ENGINE_BUILT)(
           }
         }
       }
-      // The text carries the chart's sizes (8 pt ticks, a 10 pt title), not
-      // the document's 12 pt.
+      // The text carries the chart's sizes (Excel's 9 pt ticks and 14 pt
+      // title), not the document's 12 pt.
       const stories = [...(await exportedIdmlParts(h))]
         .filter(([n]) => n.startsWith("Stories/"))
         .map(([, x]) => x);
@@ -318,14 +322,14 @@ describe.skipIf(!ENGINE_BUILT)(
         x.includes("<Content>Q1 Revenue</Content>"),
       );
       expect(title, "the title's story").toBeDefined();
-      expect(title).toMatch(/PointSize="10"/);
+      expect(title).toMatch(/PointSize="14"/);
       expect(title).toMatch(/Justification="CenterAlign"/);
       const tick = stories.find(
         (x) =>
           x.includes("<Content>Notebooks</Content>") && !x.includes("<Table"),
       );
       expect(tick, "a category label's story").toBeDefined();
-      expect(tick).toMatch(/PointSize="8"/);
+      expect(tick).toMatch(/PointSize="9"/);
     });
 
     it("a data change still redraws it: one group, nothing of the old chart left [sheet.chart.engine]", async () => {
@@ -337,7 +341,8 @@ describe.skipIf(!ENGINE_BUILT)(
           .join("\n");
       const art = await spreads();
       const before = nodes(await host.document.tree());
-      expect(session.editCell(0, 2, 1, "45")).toBe(true);
+      // A value that keeps the axis (0–35): the redraw has the same marks.
+      expect(session.editCell(0, 2, 1, "25")).toBe(true);
       await session.refreshPlacements();
       await settle();
       const after = nodes(await host.document.tree());
