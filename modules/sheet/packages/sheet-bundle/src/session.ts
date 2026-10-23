@@ -112,6 +112,21 @@ import {
 } from "./lower-chart";
 import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
 import {
+  availableStyleIds,
+  createDocStylesPlan,
+  defaultDocStyleEntries,
+  missingDocReferences,
+  readDocumentStyleLists,
+  type DocumentStyleLists,
+  type MissingReference,
+} from "./doc-styles";
+import type {
+  DocStyleMap,
+  DocStyleTarget,
+  NamedStyleUsage,
+} from "./engine-docstyles";
+import { readKnownSwatchIds } from "./swatch-mints";
+import {
   csvBytes,
   type CsvExportOptions,
   type FormulaDisplay,
@@ -145,6 +160,23 @@ export const REFRESH_DEBOUNCE_MS = 300;
 
 /** A session verb's outcome: done, or the reason it was not. */
 export type SessionResult = { ok: true } | { ok: false; message: string };
+
+/** Sheet ADR 524 — the workbook's document-style mapping as the panel
+ *  shows it. */
+export interface DocStylesInfo {
+  enabled: boolean;
+  entries: Record<string, DocStyleTarget>;
+  usage: NamedStyleUsage[];
+}
+
+/** How a document paragraph / character style looks (ADR 524 grid parity). */
+export interface DocStyleLook {
+  family?: string;
+  style?: string;
+  sizePt?: number;
+  /** `#rrggbb`, colour managed. */
+  color?: string;
+}
 
 /** One journaled FORMAT change (Wave 9): its two directions against the
  *  engine, captured from the engine's own reads around the change. */
@@ -217,6 +249,22 @@ const BASIC_PARAGRAPH_STYLES = [
   "ParagraphStyle/$ID/NormalParagraphStyle",
   "ParagraphStyle/$ID/[No paragraph style]",
 ];
+
+/** A style property entry's text (an unset entry reads as "" or null). */
+function styleEntryText(v: unknown): string | null {
+  const raw =
+    v && typeof v === "object" && "value" in v
+      ? (v as { value: unknown }).value
+      : null;
+  return raw === null || raw === undefined || raw === "" ? null : String(raw);
+}
+
+/** A style property entry's number, or null. */
+function styleEntryNum(v: unknown): number | null {
+  const t = styleEntryText(v);
+  const n = t === null ? NaN : Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 
 /** The regions (one bounding box per sheet) covering `cells`. */
 export function regionsOf(
@@ -522,6 +570,36 @@ export interface WorkbookSession extends DataToolsApi {
     style: string | null;
     sizePt: number | null;
   } | null>;
+  /** Sheet ADR 524 — how a mapped document style looks (resolved through
+   *  `basedOn`): face, size and the colour the document shows. Unreadable
+   *  ids are left out. Re-read when `documentStyleRevision` moves. */
+  documentStyleLooks(
+    ids: readonly { collection: "paragraph" | "character"; id: string }[],
+  ): Promise<Map<string, DocStyleLook>>;
+  /** Sheet ADR 524 — the workbook's "Use document styles" switch, its
+   *  mapping table and the named styles the cells use. Null without a
+   *  workbook (or an engine without the doors). */
+  docStyles(): DocStylesInfo | null;
+  /** The document's paragraph / character / cell styles and swatches, and
+   *  what the workbook names that the document lacks. Null when unread. */
+  documentStyleLists(): Promise<{
+    lists: DocumentStyleLists;
+    missing: MissingReference[];
+  } | null>;
+  /** Turn "Use document styles" on (pre-filling unmapped Excel styles whose
+   *  name matches a document paragraph style, and Normal → the basic
+   *  paragraph style) or off. One undo step. */
+  setDocStylesEnabled(on: boolean): Promise<SessionResult>;
+  /** Map one Excel named style (an empty target clears it). One undo
+   *  step. */
+  setDocStyleMapping(style: string, target: DocStyleTarget): SessionResult;
+  /** For every Excel named style the cells use without an entry: create a
+   *  document paragraph style with its face, size, weight and colour, and
+   *  map it. Turns the switch on. */
+  createDocStylesFromWorkbook(): Promise<SessionResult & { created?: number }>;
+  /** Point every workbook reference to document style / swatch `from` at
+   *  `to` (the cells and the mapping table). */
+  remapDocReference(from: string, to: string): Promise<SessionResult>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -3080,6 +3158,7 @@ export function createWorkbookSession(
     // grid re-reads the document's colours (debounced with the rest).
     docStyleRevision += 1;
     scheduleStyleNotice();
+    scheduleDocStyleSync();
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
     // ADR 510 (P6) — a window frame's box is its window: a resize shows
     // what fits now. The engine names the resized frame's content box; a
@@ -3158,6 +3237,105 @@ export function createWorkbookSession(
   }
   /** The last frame box seen per window frame (`rereadWindowBoxes`). */
   const resizedBoxes = new Map<string, string>();
+
+  // ── Sheet ADR 524 — document styles for Excel named styles ────────────
+
+  /** Tell the engine which document style ids exist, so a mapping naming
+   *  one the document lost falls back to the workbook's look. `known`
+   *  skips the read (`null` = unreadable: nothing changes); without it the
+   *  document is read only while the mapping is on. */
+  async function syncDocStyleAvailability(
+    known?: DocumentStyleLists | null,
+  ): Promise<void> {
+    const engine = state.engine;
+    if (!engine?.setDocumentStylesAvailable || !engine.docStyleMap) return;
+    if (known === undefined) {
+      try {
+        if (!engine.docStyleMap().enabled) return;
+      } catch {
+        return;
+      }
+    }
+    const lists =
+      known === undefined ? await readDocumentStyleLists(host) : known;
+    if (!lists || state.engine !== engine) return;
+    let changed = false;
+    try {
+      changed = engine.setDocumentStylesAvailable(availableStyleIds(lists));
+    } catch (err) {
+      host.log.debug("document styles: availability not set", err);
+      return;
+    }
+    if (changed) {
+      readCache.clear();
+      revision += 1;
+      scheduleRefresh();
+      emitter.emit();
+    }
+  }
+  let docStyleSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleDocStyleSync(): void {
+    if (docStyleSyncTimer !== null) clearTimeout(docStyleSyncTimer);
+    docStyleSyncTimer = setTimeout(() => {
+      docStyleSyncTimer = null;
+      void syncDocStyleAvailability();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** Run a change of the document-style mapping as ONE undo step (the map
+   *  before and after, put back whole). */
+  function journalDocMap(apply: (e: SheetEngine) => void): SessionResult {
+    return journalFormat(
+      (e) => {
+        if (!e.docStyleMap || !e.setDocStyleMap)
+          throw new Error("engine wasm predates the document-style doors");
+        const before = e.docStyleMap();
+        return () => {
+          const after = e.docStyleMap!();
+          return {
+            undo: (x) => x.setDocStyleMap!(before),
+            redo: (x) => x.setDocStyleMap!(after),
+          };
+        };
+      },
+      (e) => {
+        apply(e);
+      },
+    );
+  }
+
+  /** "Use document styles" on, its default mapping pre-filled. */
+  async function enableDocStyles(): Promise<SessionResult> {
+    const engine = state.engine;
+    if (!engine) return { ok: false, message: "no workbook open" };
+    const lists = await readDocumentStyleLists(host);
+    if (state.engine !== engine)
+      return { ok: false, message: "the workbook changed" };
+    const r = journalDocMap((e) => {
+      const map = e.docStyleMap!();
+      const add =
+        lists && e.namedStyleUsage
+          ? defaultDocStyleEntries(e.namedStyleUsage(), lists, map)
+          : {};
+      e.setDocStyleMap!({
+        enabled: true,
+        entries: { ...map.entries, ...add },
+      } satisfies DocStyleMap);
+    });
+    if (r.ok) await syncDocStyleAvailability(lists);
+    return r;
+  }
+
+  /** A workbook made in paged takes the document's styles from the start
+   *  (not an undo step of its own). */
+  async function adoptWithDocStyles(): Promise<void> {
+    if (!state.engine?.setDocStyleMap) return;
+    const r = await enableDocStyles();
+    if (r.ok) {
+      editJournal = [];
+      journalCursor = 0;
+    }
+  }
 
   /** P7 — the document style revision the grid follows. */
   let docStyleRevision = 0;
@@ -3794,6 +3972,8 @@ export function createWorkbookSession(
     // old one are moot (and must not overwrite the import below).
     cancelPendingPersist();
     if (persist) await enqueueWrite(bytes, name);
+    // ADR 524 — a mapping naming a style this document lacks falls back.
+    await syncDocStyleAvailability();
     emitter.emit();
     return true;
   }
@@ -4651,6 +4831,177 @@ export function createWorkbookSession(
         host.log.debug("documentTextDefault: style read failed", err);
         return null;
       }
+    },
+
+    async documentStyleLooks(ids) {
+      const out = new Map<string, DocStyleLook>();
+      if (!host.supports("document.styleProperties@1")) return out;
+      const colorOf = new Map<string, string>();
+      for (const { collection, id } of ids) {
+        try {
+          const props = await host.document.styleProperties(collection, id);
+          if (!props) continue;
+          const entry = (path: string) =>
+            props.entries.find((e) => e.path === path)?.value ?? null;
+          const look: DocStyleLook = {};
+          const family = styleEntryText(entry("characterFontFamily"));
+          const style = styleEntryText(entry("characterFontStyle"));
+          const size = styleEntryNum(entry("characterFontSize"));
+          if (family) look.family = family;
+          if (style) look.style = style;
+          if (size !== null) look.sizePt = size;
+          const swatch = styleEntryText(entry("characterFillColor"));
+          if (swatch) colorOf.set(id, swatch);
+          out.set(id, look);
+        } catch (err) {
+          host.log.debug(`documentStyleLooks: ${id} unreadable`, err);
+        }
+      }
+      if (colorOf.size > 0 && host.supports("document.swatchDisplay@1")) {
+        try {
+          const shown = new Map(
+            (
+              await host.document.swatchDisplay([...new Set(colorOf.values())])
+            ).map((x) => [x.id, x.rgbHex] as const),
+          );
+          for (const [id, sw] of colorOf) {
+            const hex = shown.get(sw);
+            const look = out.get(id);
+            if (hex && look) look.color = hex.startsWith("#") ? hex : `#${hex}`;
+          }
+        } catch (err) {
+          host.log.debug("documentStyleLooks: swatch read failed", err);
+        }
+      }
+      return out;
+    },
+
+    docStyles() {
+      const e = state.engine;
+      if (!e?.docStyleMap || !e.namedStyleUsage) return null;
+      const hit = readCache.get("docStyles") as DocStylesInfo | undefined;
+      if (hit) return hit;
+      try {
+        const map = e.docStyleMap();
+        const info: DocStylesInfo = {
+          enabled: map.enabled,
+          entries: map.entries,
+          usage: e.namedStyleUsage(),
+        };
+        readCache.set("docStyles", info);
+        return info;
+      } catch (err) {
+        host.log.debug("docStyles: engine read failed", err);
+        return null;
+      }
+    },
+
+    async documentStyleLists() {
+      const lists = await readDocumentStyleLists(host);
+      if (!lists) return null;
+      const e = state.engine;
+      let missing: MissingReference[] = [];
+      try {
+        if (e?.docReferences)
+          missing = missingDocReferences(e.docReferences(), lists);
+      } catch (err) {
+        host.log.debug("documentStyleLists: references unreadable", err);
+      }
+      await syncDocStyleAvailability(lists);
+      return { lists, missing };
+    },
+
+    async setDocStylesEnabled(on) {
+      if (on) return enableDocStyles();
+      return journalDocMap((e) => {
+        if (!e.setDocStylesEnabled)
+          throw new Error("engine wasm predates set_doc_styles_enabled");
+        e.setDocStylesEnabled(false);
+      });
+    },
+
+    setDocStyleMapping(style, target) {
+      const r = journalDocMap((e) => {
+        if (!e.setDocStyleMapping)
+          throw new Error("engine wasm predates set_doc_style_mapping");
+        e.setDocStyleMapping(style, target);
+      });
+      if (r.ok) scheduleDocStyleSync();
+      return r;
+    },
+
+    async createDocStylesFromWorkbook() {
+      const engine = state.engine;
+      if (!engine?.docStyleMap || !engine.namedStyleUsage)
+        return { ok: false as const, message: "no workbook open" };
+      const [lists, swatches] = await Promise.all([
+        readDocumentStyleLists(host),
+        readKnownSwatchIds(host),
+      ]);
+      if (!lists)
+        return {
+          ok: false as const,
+          message: "the document's styles could not be read",
+        };
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      const plan = createDocStylesPlan(
+        engine.namedStyleUsage(),
+        engine.docStyleMap(),
+        lists,
+        swatches,
+      );
+      const created = plan.ops.filter(
+        (op) => op.op === "createParagraphStyle",
+      ).length;
+      if (plan.ops.length > 0) {
+        const res = await ownWrite(() =>
+          host.document.mutate({ op: "batch", args: { ops: plan.ops } }),
+        );
+        if (!res.applied)
+          return {
+            ok: false as const,
+            message: "the document refused the new styles",
+          };
+        docStyleRevision += 1;
+      }
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      const r = journalDocMap((e) => {
+        const map = e.docStyleMap!();
+        e.setDocStyleMap!({
+          enabled: true,
+          entries: { ...map.entries, ...plan.entries },
+        });
+      });
+      await syncDocStyleAvailability(await readDocumentStyleLists(host));
+      return r.ok ? { ok: true as const, created } : r;
+    },
+
+    async remapDocReference(from, to) {
+      const engine = state.engine;
+      if (!engine?.remapDocReference)
+        return { ok: false as const, message: "no workbook open" };
+      const lists = await readDocumentStyleLists(host);
+      let model: string | null = null;
+      if (lists?.swatches.includes(to)) {
+        const ref = await api.documentSwatchRef(to);
+        model = ref?.model ?? null;
+      }
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      try {
+        engine.remapDocReference(from, to, model);
+      } catch (err) {
+        return {
+          ok: false as const,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+      markEdited();
+      await syncDocStyleAvailability(lists);
+      emitter.emit();
+      return { ok: true as const };
     },
 
     async documentFontFace(family, style) {
@@ -5711,6 +6062,7 @@ export function createWorkbookSession(
         return;
       }
       adoptWorkbook(engine, "Book1.xlsx");
+      await adoptWithDocStyles();
     },
 
     async importOds(bytes, name) {
@@ -5760,6 +6112,7 @@ export function createWorkbookSession(
         return;
       }
       adoptWorkbook(engine, `${base}.xlsx`);
+      await adoptWithDocStyles();
     },
 
     addSheet(name) {
