@@ -265,7 +265,10 @@ Capability note: two grants under `capabilities.document` —
 kept SEPARATE because `open` is far more powerful than reading. Restrict
 to first-party / trusted-publisher bundles. Always present: honest `null`
 / `[]` / reject with `supports("document.readNative@1"|"…openNative@1")`
-false when the host injects no `nativeDocument` backend. This is the
+false when the host injects no `nativeDocument` backend. The headless
+host (`createHeadlessHost`, and so `paged-node`) injects one over the
+engine: the reads through the part wire ops, `open` = direct load + the
+`documentLoaded` fan-out (`nativeDocument: false` leaves it out). This is the
 core-side door ADR-022 pairs with the IDML adapter leaving the engine —
 the plugin imports/exports, the host owns loading.
 

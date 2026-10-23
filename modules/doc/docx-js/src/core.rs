@@ -26,8 +26,8 @@
 
 use docx_core::DocxDocument;
 use docx_export::{
-    apply_edits, build_bindings, diff, overlay_story_content, CellRunEdit, DocxBindings, EditSet,
-    RunEdit, StoryContentIn, StructuralEdit,
+    apply_edits, build_bindings, diff, overlay_cells, overlay_story_content, CellContentIn,
+    CellRunEdit, DocxBindings, EditSet, RunEdit, StoryContentIn, StructuralEdit,
 };
 use docx_import::import_docx_with_package;
 use docx_lower::ir::{LoweredBlock, LoweredDoc};
@@ -256,10 +256,25 @@ impl DocSession {
         &self,
         content: &StoryContentIn,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
+        self.save_edited_from_content_and_cells(content, &[])
+    }
+
+    /// [`Self::save_edited_from_content`] with the native tables' cells read
+    /// back too (`cells`, the engine's cell `text`): their edits are patched
+    /// into the cells' `<w:t>`s (`overlay_cells`), and what the cell patcher
+    /// leaves joins the refusal ledger.
+    pub fn save_edited_from_content_and_cells(
+        &self,
+        content: &StoryContentIn,
+        cells: &[CellContentIn],
+    ) -> Result<(Vec<u8>, Vec<String>), String> {
         let baseline = self.lowered();
-        let edited = overlay_story_content(&baseline, content);
+        let mut edited = overlay_story_content(&baseline, content);
+        let mut skips = overlay_cells(&mut edited, cells);
         let edits = diff(&baseline, &edited, &self.bindings);
-        self.save_edited(&edits)
+        let (bytes, more) = self.save_edited(&edits)?;
+        skips.extend(more);
+        Ok((bytes, skips))
     }
 }
 
