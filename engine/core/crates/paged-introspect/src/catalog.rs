@@ -346,6 +346,21 @@ fn host_functions() -> Vec<HostFn> {
            "Define a custom text variable; returns textVariable:dTextVariablen<name>. Switch its value with paged.set(address, \"textVariableContents\", v) — every instance re-bakes."),
         f!("paged.deleteTextVariable", "(variableId)", "bool", "author",
            "Remove a text variable definition (refused while an instance is in the text)."),
+        // --- XML structure (engine ADR 1002) ---
+        f!("paged.createXmlTag", "(name, color?)", "bool", "author",
+           "Define an XML tag (color: a tag colour such as \"Red\")."),
+        f!("paged.deleteXmlTag", "(name)", "bool", "author",
+           "Remove an XML tag (refused while an element uses it)."),
+        f!("paged.tagItem", "(itemId, tag, elementId?)", "bool", "author",
+           "Tag a page item or a story with an XML tag (a text frame's element tags its story); the tag and the root are made when missing."),
+        f!("paged.untagItem", "(itemId)", "bool", "author",
+           "Remove the element tagging a page item or a story."),
+        f!("paged.tagRange", "(storyId, start, end, tag, elementId?)", "bool", "author",
+           "Tag the story characters [start, end) with an XML tag (an untagged story is tagged Story first)."),
+        f!("paged.untagRange", "(elementId)", "bool", "author",
+           "Remove the element tagging a text range; the ranges inside it stay tagged."),
+        f!("paged.setXmlAttribute", "(elementId, name, value?)", "bool", "author",
+           "Set an XML element's attribute; no value removes it. label, maxLength and required are a template field's metadata."),
         f!("paged.setFieldValue", "(storyId, offset, value?)", "bool", "write", "Update a placeholder field's cached display value (null ⇒ unresolved)."),
         f!("paged.replaceImageBytes", "(frameId, bytes?)", "bool", "write", "Commit inline image bytes (number[] of u8) on a graphic frame; null clears."),
         // --- tables ---
@@ -746,6 +761,8 @@ property_paths! {
         TextWrapInvert => "frameTextWrapInvert" : bool_().default_bool(false).idml(idml![attr(TextWrapPreference, Inverse)]),
         FrameFittingReferencePoint => "frameFittingReferencePoint" : enum_open(ANCHOR_POINTS).default_text("CenterAnchor").idml(idml![attr(FrameFittingOption, FittingAlignment)]),
         FrameAutoFit => "frameAutoFit" : bool_().default_bool(false).idml(idml![attr(FrameFittingOption, AutoFit)]),
+        // Engine ADR 1003 — the page of a placed PDF the frame shows.
+        FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1390,7 +1407,9 @@ mod tests {
         //
         // 241 -> 243: ADR 175 — a table row's start rule and its keep with
         // the next row, written through any cell of the row.
-        assert_eq!(cat.settable_paths.len(), 243, "settable path count drifted");
+        //
+        // 243 -> 244: ADR 1003 — the page of a placed PDF.
+        assert_eq!(cat.settable_paths.len(), 244, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

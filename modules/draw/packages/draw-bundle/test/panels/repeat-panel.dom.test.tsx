@@ -29,6 +29,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -103,7 +104,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       );
       expect(makes.every((b) => b.disabled)).toBe(true);
       expect(panel.get("[data-draw-repeat-note]").textContent).toBe(
-        REPEAT_PANEL_NOTE,
+        t(REPEAT_PANEL_NOTE),
       );
     });
 

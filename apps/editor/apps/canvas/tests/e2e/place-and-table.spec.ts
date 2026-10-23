@@ -144,7 +144,9 @@ const geometryOf = (page: Page, id: ElementId) =>
   );
 
 const placementArmed = (page: Page) =>
-  expect(page.locator("html[data-paged-placement='armed']")).toHaveCount(1, {
+  expect(
+    page.locator("[data-paged-editor][data-paged-placement='armed']"),
+  ).toHaveCount(1, {
     timeout: 10_000,
   });
 
@@ -278,7 +280,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
         }
         // Cancelled: Place answers nothing and arms nothing.
         await c.setFiles([]);
-        await expect(page.locator("html[data-paged-placement]")).toHaveCount(0);
+        await expect(
+          page.locator("[data-paged-editor][data-paged-placement]"),
+        ).toHaveCount(0);
       }
     } finally {
       collecting = false;
@@ -346,7 +350,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     // No cursor to aim: the selected frame is where it goes. (Asserted
     // before awaiting the command, which would otherwise wait on a click.)
     await page.waitForTimeout(500);
-    await expect(page.locator("html[data-paged-placement]")).toHaveCount(0);
+    await expect(
+      page.locator("[data-paged-editor][data-paged-placement]"),
+    ).toHaveCount(0);
     const outcome = await placed;
     expect(outcome.applied).toBe(true);
     expect(outcome.createdId?.id).toBe(frame.id);
@@ -405,7 +411,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     await (await chooser).setFiles(PSD);
 
     await page.waitForTimeout(500);
-    await expect(page.locator("html[data-paged-placement]")).toHaveCount(0);
+    await expect(
+      page.locator("[data-paged-editor][data-paged-placement]"),
+    ).toHaveCount(0);
     const outcome = await placed;
     expect(outcome.applied).toBe(true);
     expect(outcome.createdId?.id).toBe(frame.id);

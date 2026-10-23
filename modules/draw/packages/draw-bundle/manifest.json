@@ -147,6 +147,11 @@
       "media.paged.draw.command.releaseOpacityMask",
       "media.paged.draw.command.attachTextToPath",
       "media.paged.draw.command.detachTextFromPath",
+      "media.paged.draw.command.knife",
+      "media.paged.draw.command.scissorsAt",
+      "media.paged.draw.command.shapeBuild",
+      "media.paged.draw.command.widthProfile",
+      "media.paged.draw.command.updateLinkedRecipes",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
@@ -390,7 +395,7 @@
                 }
               },
               "title": "Fills",
-              "summary": "Extra fill layers, bottom → top; the LAST one bakes to the frame's fill. Order is list order.",
+              "summary": "Extra fill layers, bottom \u2192 top; the LAST one bakes to the frame's fill. Order is list order.",
               "default": []
             },
             {
@@ -435,7 +440,7 @@
                 }
               },
               "title": "Strokes",
-              "summary": "Extra stroke layers, bottom → top; the LAST one bakes to the frame's stroke. Order is list order.",
+              "summary": "Extra stroke layers, bottom \u2192 top; the LAST one bakes to the frame's stroke. Order is list order.",
               "default": []
             },
             {
@@ -476,7 +481,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The style's name — what a persisted reference selects by."
+              "summary": "The style's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "fills",
@@ -521,7 +526,7 @@
                 }
               },
               "title": "Fills",
-              "summary": "Fill layers, bottom → top.",
+              "summary": "Fill layers, bottom \u2192 top.",
               "default": []
             },
             {
@@ -566,7 +571,7 @@
                 }
               },
               "title": "Strokes",
-              "summary": "Stroke layers, bottom → top.",
+              "summary": "Stroke layers, bottom \u2192 top.",
               "default": []
             },
             {
@@ -658,7 +663,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The symbol's name — what a persisted reference selects by."
+              "summary": "The symbol's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "registration",
@@ -677,7 +682,7 @@
                 ]
               },
               "access": "readOnly",
-              "summary": "The registration point on the §16.1 nine-point grid (set at define)."
+              "summary": "The registration point on the \u00a716.1 nine-point grid (set at define)."
             },
             {
               "path": "origin",
@@ -746,7 +751,7 @@
                 }
               },
               "access": "readOnly",
-              "summary": "The instance's page items, in piece order — each one's own core properties are its overrides."
+              "summary": "The instance's page items, in piece order \u2014 each one's own core properties are its overrides."
             },
             {
               "path": "linked",
@@ -768,7 +773,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The recipe's name — what a persisted reference selects by."
+              "summary": "The recipe's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "layout",
@@ -898,7 +903,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The recipe's name — what a persisted reference selects by."
+              "summary": "The recipe's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "kind",
@@ -1100,7 +1105,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The recipe's name — what a persisted reference selects by."
+              "summary": "The recipe's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "spacing",
@@ -1257,7 +1262,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The recipe's name — what a persisted reference selects by."
+              "summary": "The recipe's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "inputs",
@@ -1311,7 +1316,7 @@
                 "kind": "text"
               },
               "title": "Name",
-              "summary": "The recipe's name — what a persisted reference selects by."
+              "summary": "The recipe's name \u2014 what a persisted reference selects by."
             },
             {
               "path": "distribute",
@@ -3134,6 +3139,126 @@
           }
         },
         {
+          "id": "media.paged.draw.command.knife",
+          "title": "Knife",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "page": {
+                "kind": "text"
+              },
+              "cut": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.scissorsAt",
+          "title": "Scissors at",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "point": {
+                "kind": "point"
+              },
+              "tolerance": {
+                "kind": "length"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.shapeBuild",
+          "title": "Shape build",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "path": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["keep", "remove"]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.widthProfile",
+          "title": "Width profile",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "widths": {
+                "kind": "list",
+                "of": {
+                  "kind": "length"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.updateLinkedRecipes",
+          "title": "Update linked recipes",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "all": {
+                "kind": "bool"
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "text"
+            }
+          }
+        },
+        {
           "id": "media.paged.draw.command.imageTrace",
           "title": "Image trace",
           "args": {
@@ -3201,6 +3326,24 @@
               }
             }
           }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.draw.paint",
+          "title": "Fill or stroke colour"
+        },
+        {
+          "kind": "media.paged.draw.graphicStyle",
+          "title": "Graphic style"
+        },
+        {
+          "kind": "media.paged.draw.textOnPath",
+          "title": "Text on a path"
+        },
+        {
+          "kind": "media.paged.draw.symbolChoice",
+          "title": "Symbol"
         }
       ]
     }

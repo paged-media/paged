@@ -54,6 +54,7 @@
 
 - id: sheet.fn.text.concat
   name: CONCAT
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 1, max: null }
   volatility: none
@@ -125,7 +126,7 @@
   range_aware: false
   rust: text::text
   status: implemented
-  provenance: ["ECMA-376 §18.17.7 (TEXT) — format codes via sheet-format"]
+  provenance: ["ECMA-376 §18.17.7 (TEXT) — format codes via sheet-format, read in the en dialect and rendered in the workbook locale (EvalCtx::locale, sheet ADR 516)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_text.rs::sheet_fn_text_text"]
     corpus: ["corpus/fn-corpus/text/text.golden.tsv"]

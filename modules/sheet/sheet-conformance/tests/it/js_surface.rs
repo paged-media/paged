@@ -179,10 +179,10 @@ fn sheet_grid_cell_input_reprint_round_trips() {
 fn sheet_js_set_cell_parse_error_is_boundary() {
     let mut s = SheetSession::new();
     assert!(s.set_cell(0, 0, 0, "=1+").is_err(), "syntax error -> Err");
-    assert!(
-        s.set_cell(0, 0, 0, "=NOTAFUNC(1)").is_err(),
-        "unknown function -> Err"
-    );
+    // An unknown function is a value (#NAME?), not a boundary error (W1.0).
+    s.set_cell(0, 0, 0, "=NOTAFUNC(1)")
+        .expect("unknown function commits");
+    assert_eq!(s.get_cell_display(0, 0, 0), "#NAME?");
 
     // #DIV/0! is a DISPLAY string, never a boundary error.
     let r = s
@@ -604,6 +604,27 @@ fn sheet_js_set_now_updates_clock() {
     let r2 = s.set_cell(0, 1, 0, "=NOW()").expect("enter NOW again");
     let a2 = r2.changed.iter().find(|c| c.row == 1).unwrap();
     assert!(!a2.display.is_empty());
+}
+
+// ── sheet.js.data_edge ──────────────────────────────────────────────────────
+
+/// `data_edge` moves as Excel's Ctrl+arrow does: through a run of filled
+/// cells to its end, across a gap to the next filled cell, else to the edge.
+#[test]
+fn sheet_js_data_edge_moves_like_ctrl_arrow() {
+    let mut s = SheetSession::new();
+    for r in 0..3 {
+        s.set_cell(0, r, 0, "1").unwrap(); // A1:A3
+    }
+    s.set_cell(0, 9, 0, "1").unwrap(); // A10
+    s.set_cell(0, 0, 4, "x").unwrap(); // E1
+    assert_eq!(s.data_edge(0, 0, 0, 1, 0).unwrap(), (2, 0)); // run end
+    assert_eq!(s.data_edge(0, 2, 0, 1, 0).unwrap(), (9, 0)); // next filled
+    assert_eq!(s.data_edge(0, 9, 0, 1, 0).unwrap(), (1_048_575, 0)); // edge
+    assert_eq!(s.data_edge(0, 9, 0, -1, 0).unwrap(), (2, 0));
+    assert_eq!(s.data_edge(0, 0, 0, 0, 1).unwrap(), (0, 4));
+    assert_eq!(s.data_edge(0, 0, 4, 0, -1).unwrap(), (0, 0));
+    assert_eq!(s.data_edge(0, 0, 0, -1, 0).unwrap(), (0, 0)); // already at the top
 }
 
 // ── sheet.js.range_stats ────────────────────────────────────────────────────
@@ -1133,4 +1154,89 @@ fn sheet_js_save_xlsx_future_function_prefixes() {
     assert_eq!(s2.get_cell_display(0, 0, 4), "10");
     assert_eq!(s2.get_cell_display(0, 1, 4), "20");
     assert_eq!(s2.get_cell_input(0, 1, 4), "=LET(x,A1,x*2)");
+}
+
+// ── sheet.grid.inframe / sheet.style.mapping (ADR 510, P2) ──────────────────
+
+/// Through the session: the live grid scene carries the workbook's real
+/// styles — the SAME table and keys `get_range_page` builds for the cells the
+/// window shows — a merged area with its anchor text, and the stored frozen
+/// row pinned above a scrolled body.
+#[test]
+fn sheet_grid_scene_styles_merges_freeze_via_js_surface() {
+    use sheet_js::core::StylePatchArg;
+    let mut s = SheetSession::new();
+    s.set_cell(0, 0, 0, "Region").unwrap();
+    s.set_cell(0, 0, 1, "Total").unwrap();
+    for r in 1..60 {
+        s.set_cell(0, r, 0, &format!("R{r}")).unwrap();
+        s.set_cell(0, r, 1, &(r * 10).to_string()).unwrap();
+    }
+    s.set_cell(0, 2, 2, "merged title").unwrap();
+    s.set_style(
+        0,
+        "A1:B1",
+        StylePatchArg {
+            bold: Some(true),
+            fill: Some("#FFCC00".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    s.set_style(
+        0,
+        "B3",
+        StylePatchArg {
+            wrap: Some(true),
+            v_align: Some("top".into()),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    s.merge(0, "C3:D4").unwrap();
+    s.set_freeze(0, 1, 0).unwrap();
+
+    let scene = s
+        .get_grid_scene(0, 0, 0, 200.0, 90.0, GridSceneOptions::default())
+        .unwrap();
+    assert_eq!(scene.viewport.frozen_rows, 1);
+    assert_eq!(scene.viewport.row_indices, vec![0, 1, 2, 3, 4, 5]);
+    let page = s
+        .get_range_page(0, "A1:D6", LowerOptions::default())
+        .unwrap();
+    assert_eq!(scene.styles, page.styles);
+    for cell in &scene.cells {
+        let pc = &page.rows[cell.row as usize].cells[cell.col as usize];
+        assert_eq!((cell.style_key, &cell.text), (pc.style_key, &pc.text));
+    }
+    let b3 = scene
+        .cells
+        .iter()
+        .find(|c| (c.row, c.col) == (2, 1))
+        .unwrap();
+    assert!(b3.wrap);
+    assert_eq!(b3.v_align.as_deref(), Some("top"));
+    let m = scene
+        .merges
+        .iter()
+        .find(|g| (g.row, g.col) == (2, 2))
+        .unwrap();
+    assert_eq!(
+        (m.text.as_str(), m.row_span, m.col_span),
+        ("merged title", 2, 2)
+    );
+
+    let scrolled = s
+        .get_grid_scene(0, 40, 0, 200.0, 90.0, GridSceneOptions::default())
+        .unwrap();
+    assert_eq!(&scrolled.viewport.row_indices[..3], &[0, 40, 41]);
+    assert_eq!(scrolled.viewport.first_row, 40);
+    let header = scrolled
+        .cells
+        .iter()
+        .find(|c| (c.row, c.col) == (0, 0))
+        .unwrap();
+    assert!(scrolled.styles[header.style_key as usize].bold);
+    let json = serde_json::to_string(&scrolled).unwrap();
+    assert!(json.contains("\"rowIndices\":[0,40,41"));
 }

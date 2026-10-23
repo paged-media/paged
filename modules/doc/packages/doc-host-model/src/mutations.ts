@@ -792,18 +792,166 @@ export function mergeSectionContents(
   return { selfId: contents[0]?.selfId, paragraphs };
 }
 
-/** Where a body run sits in the native story it was poured into: the
+/** Where each block of one story's blocks was poured: the index of the
+ *  native paragraph a paragraph block starts in, and for a native table the
+ *  index of the paragraph that hosts it and its ordinal among the story's
+ *  tables. `null` for a table poured as text (its `flow`). Pure.
+ *
+ *  It replays what the engine does with the pour: a text step's first
+ *  paragraph joins the story's last paragraph (the fresh story's one empty
+ *  paragraph, or a table's host), each following one starts a paragraph,
+ *  and a page/column break segment starts another; `insertTable` sets the
+ *  table in the last paragraph when that is empty, else in a new one at the
+ *  story's end — and the text after the table continues in that host. */
+export function nativePlaces(
+  blocks: readonly LoweredBlock[],
+): Array<{ paragraph: number; table?: number } | null> {
+  const out: Array<{ paragraph: number; table?: number } | null> = [];
+  let last = 0;
+  let lastEmpty = true;
+  let joins = true;
+  let tables = 0;
+  const empty = (p: LoweredParagraph) =>
+    p.runs.every((r) => r.text === "") && (p.images ?? []).length === 0;
+  const pour = (p: LoweredParagraph) => {
+    const at = joins ? last : last + 1;
+    joins = false;
+    last = at + (p.segments?.length ?? 0);
+    lastEmpty = empty(p);
+    return at;
+  };
+  for (const b of blocks) {
+    if (b.kind === "paragraph") {
+      out.push({ paragraph: pour(b) });
+    } else if (b.flow && b.flow.length > 0) {
+      for (const p of b.flow) pour(p);
+      out.push(null);
+    } else {
+      if (!lastEmpty) last += 1;
+      lastEmpty = false;
+      joins = true;
+      out.push({ paragraph: last, table: tables });
+      tables += 1;
+    }
+  }
+  return out;
+}
+
+/** The story group (index in {@link sectionBlocks} order) a block is in,
+ *  with the block's index inside it. */
+function groupOf(
+  ir: LoweredDoc,
+  block: number,
+): { story: number; group: LoweredBlock[]; index: number } | null {
+  const groups = sectionBlocks(ir);
+  let first = 0;
+  for (let story = 0; story < groups.length; story++) {
+    const group = groups[story];
+    if (block < first + group.length)
+      return { story, group, index: block - first };
+    first += group.length;
+  }
+  return null;
+}
+
+/** Where a body paragraph sits in the native story it was poured into: the
  *  story's index in {@link sectionBlocks} order, the index of the NATIVE
- *  paragraph its Word paragraph became (one per paragraph block and per
- *  break-split segment, one per table host paragraph — the pour's own count),
- *  and the text around it: what the paragraph must still read for the
- *  location to hold, the run's text, and the text before it in the
- *  paragraph. Pure. `null` for a block that is not a body paragraph, a run
- *  it does not have, or a paragraph a page/column break split (its runs span
- *  several native paragraphs). The caller turns `prefix` / `text` into the
- *  engine's text-op offsets against the LIVE story and checks
- *  `paragraphText` first, so a paragraph edited on the canvas since is
- *  refused rather than written over. */
+ *  paragraph its Word paragraph became ({@link nativePlaces}), and the text
+ *  it must still read for the location to hold. Pure. `null` for a block
+ *  that is not a body paragraph, or a paragraph a page/column break split
+ *  (it spans several native paragraphs). */
+export function bodyParagraphLocation(
+  ir: LoweredDoc,
+  block: number,
+): { story: number; paragraph: number; paragraphText: string } | null {
+  const target = ir.story.blocks[block];
+  if (!target || target.kind !== "paragraph") return null;
+  if ((target.segments ?? []).length > 0) return null;
+  const g = groupOf(ir, block);
+  const place = g ? nativePlaces(g.group)[g.index] : null;
+  if (!g || !place) return null;
+  return {
+    story: g.story,
+    paragraph: place.paragraph,
+    paragraphText: target.runs.map((r) => r.text).join(""),
+  };
+}
+
+/** Where a table block was poured: its story (in {@link sectionBlocks}
+ *  order), its ordinal among the native tables of that story (the order the
+ *  engine lists them in) and how many native tables the story holds. Pure.
+ *  `null` for a block that is not a table, or a table poured as text. */
+export function tableLocation(
+  ir: LoweredDoc,
+  block: number,
+): { story: number; table: number; tables: number } | null {
+  const target = ir.story.blocks[block];
+  if (!target || target.kind !== "table") return null;
+  const g = groupOf(ir, block);
+  if (!g) return null;
+  const places = nativePlaces(g.group);
+  const place = places[g.index];
+  if (!place || place.table === undefined) return null;
+  const tables = places.filter((p) => p?.table !== undefined).length;
+  return { story: g.story, table: place.table, tables };
+}
+
+/** Where a run of a table cell's paragraph sits in the cell it was poured
+ *  into: the table ({@link tableLocation}), the native cell (its row and
+ *  column), the cell's text as the pour wrote it (its paragraphs joined by
+ *  `\n`) and the run's text and the cell text before it. Pure. `null` for
+ *  a cell, paragraph or run the table does not have. The caller turns
+ *  `prefix` / `text` into the engine's cell-local text-op offsets and checks
+ *  `cellText` against the live cell first. */
+export function cellRunLocation(
+  ir: LoweredDoc,
+  block: number,
+  cell: number,
+  para: number,
+  run: number,
+): {
+  story: number;
+  table: number;
+  tables: number;
+  row: number;
+  col: number;
+  cellText: string;
+  prefix: string;
+  text: string;
+} | null {
+  const at = tableLocation(ir, block);
+  const target = ir.story.blocks[block];
+  if (!at || target?.kind !== "table") return null;
+  const c = target.cells[cell];
+  const p = c?.paragraphs[para];
+  if (!c || !p || run < 0 || run >= p.runs.length) return null;
+  const texts = c.paragraphs.map((x) => x.runs.map((r) => r.text).join(""));
+  return {
+    ...at,
+    row: c.row,
+    col: c.col,
+    cellText: texts.join("\n"),
+    prefix:
+      texts
+        .slice(0, para)
+        .map((t) => `${t}\n`)
+        .join("") +
+      p.runs
+        .slice(0, run)
+        .map((r) => r.text)
+        .join(""),
+    text: p.runs[run]!.text,
+  };
+}
+
+/** Where a body run sits in the native story it was poured into
+ *  ({@link bodyParagraphLocation}), with the run's text and the text before
+ *  it in the paragraph. Pure. `null` for a block that is not a body
+ *  paragraph, a run it does not have, or a paragraph a page/column break
+ *  split (its runs span several native paragraphs). The caller turns
+ *  `prefix` / `text` into the engine's text-op offsets against the LIVE
+ *  story and checks `paragraphText` first, so a paragraph edited on the
+ *  canvas since is refused rather than written over. */
 export function bodyRunLocation(
   ir: LoweredDoc,
   block: number,
@@ -823,30 +971,12 @@ export function bodyRunLocation(
     run >= target.runs.length
   )
     return null;
-  if ((target.segments ?? []).length > 0) return null;
-  const groups = sectionBlocks(ir);
-  let first = 0;
-  for (let story = 0; story < groups.length; story++) {
-    const group = groups[story];
-    if (block < first + group.length) {
-      const one = (p: LoweredParagraph) => 1 + (p.segments?.length ?? 0);
-      let paragraph = 0;
-      for (const b of group.slice(0, block - first)) {
-        if (b.kind === "paragraph") paragraph += one(b);
-        else if (b.flow && b.flow.length > 0)
-          paragraph += b.flow.reduce((n, p) => n + one(p), 0);
-        else paragraph += 1;
-      }
-      const texts = target.runs.map((r) => r.text);
-      return {
-        story,
-        paragraph,
-        paragraphText: texts.join(""),
-        prefix: texts.slice(0, run).join(""),
-        text: texts[run],
-      };
-    }
-    first += group.length;
-  }
-  return null;
+  const at = bodyParagraphLocation(ir, block);
+  if (!at) return null;
+  const texts = target.runs.map((r) => r.text);
+  return {
+    ...at,
+    prefix: texts.slice(0, run).join(""),
+    text: texts[run]!,
+  };
 }

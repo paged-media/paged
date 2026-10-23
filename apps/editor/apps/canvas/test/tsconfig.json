@@ -1,5 +1,9 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "types": ["bun", "vite/client"] },
-  "include": [".", "../../../../../tooling/js/bun-test-matchers.d.ts"]
+  "include": [
+    ".",
+    "../src/virtual-paged-modules.d.ts",
+    "../../../../../tooling/js/bun-test-matchers.d.ts"
+  ]
 }

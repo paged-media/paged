@@ -43,7 +43,10 @@
 // no React tree: OK discards, Cancel keeps. Asking nothing is never an
 // option.
 
+import { t } from "@paged-media/strings";
+import { REPLACE } from "./messages";
 import { cancelPendingPlacement } from "./pending-placement";
+import { scoped, type EditorScope } from "./editor-scope";
 
 /** The user's answer to the replace question. */
 export type ReplaceAnswer = "save" | "discard" | "cancel";
@@ -77,75 +80,105 @@ export interface DirtySource {
   documentMeta(): Promise<{ dirty: boolean }>;
 }
 
-let seq = 0;
-let surfaces = 0;
-let saver: (() => void | Promise<void>) | null = null;
-const queue: PendingReplace[] = [];
-const listeners = new Set<() => void>();
+/** One editor's question queue, prompt surfaces and save (plan task E1:
+ *  the replace question is about THIS editor's document). */
+interface GuardState {
+  seq: number;
+  surfaces: number;
+  saver: (() => void | Promise<void>) | null;
+  readonly queue: PendingReplace[];
+  readonly listeners: Set<() => void>;
+  readonly prompts: ReplacePrompts;
+}
 
-const notify = (): void => {
-  for (const l of [...listeners]) l();
+/** The question queue a prompt renders. */
+export interface ReplacePrompts {
+  subscribe(listener: () => void): () => void;
+  current(): PendingReplace | null;
+}
+
+const GUARD = scoped("replaceGuard", (): GuardState => {
+  const queue: PendingReplace[] = [];
+  const listeners = new Set<() => void>();
+  return {
+    seq: 0,
+    surfaces: 0,
+    saver: null,
+    queue,
+    listeners,
+    prompts: {
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      current: () => queue[0] ?? null,
+    },
+  };
+});
+
+const notify = (g: GuardState): void => {
+  for (const l of [...g.listeners]) l();
 };
 
-/** The question queue the prompt renders (one at a time, oldest first). */
-export const replacePrompts = {
-  subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  },
-  current(): PendingReplace | null {
-    return queue[0] ?? null;
-  },
-};
+/** The question queue `scope`'s prompt renders (one at a time, oldest
+ *  first). */
+export function replacePrompts(scope: EditorScope): ReplacePrompts {
+  return scope.get(GUARD).prompts;
+}
 
 /** A prompt that renders `replacePrompts` mounts itself here; while one is
  *  mounted the question is asked through it instead of `confirm`. Returns
  *  the detach. */
-export function attachReplacePromptSurface(): () => void {
-  surfaces += 1;
+export function attachReplacePromptSurface(scope: EditorScope): () => void {
+  const g = scope.get(GUARD);
+  g.surfaces += 1;
   let attached = true;
   return () => {
     if (!attached) return;
     attached = false;
-    surfaces -= 1;
+    g.surfaces -= 1;
     // A surface going away with questions open (an unmount mid-prompt)
     // answers them the safe way rather than leaving the opens hanging.
-    if (surfaces === 0) {
-      for (const p of [...queue]) p.answer("cancel");
+    if (g.surfaces === 0) {
+      for (const p of [...g.queue]) p.answer("cancel");
     }
   };
 }
 
-/** Register what the prompt's Save button runs (the app's save, the one
- *  Cmd+S runs). Without one the prompt offers Don't save and Cancel only.
- *  Returns the unregister. */
-export function setDocumentSaver(save: () => void | Promise<void>): () => void {
-  saver = save;
+/** Register what `scope`'s prompt Save button runs (the app's save, the
+ *  one Cmd+S runs). Without one the prompt offers Don't save and Cancel
+ *  only. Returns the unregister. */
+export function setDocumentSaver(
+  scope: EditorScope,
+  save: () => void | Promise<void>,
+): () => void {
+  const g = scope.get(GUARD);
+  g.saver = save;
   return () => {
-    if (saver === save) saver = null;
+    if (g.saver === save) g.saver = null;
   };
 }
 
-function ask(request: ReplaceRequest): Promise<ReplaceAnswer> {
+function ask(g: GuardState, request: ReplaceRequest): Promise<ReplaceAnswer> {
   return new Promise<ReplaceAnswer>((resolve) => {
-    const id = ++seq;
-    queue.push({
+    const id = ++g.seq;
+    g.queue.push({
       id,
       action: request.action,
       requester: request.requester ?? null,
       documentName: request.documentName ?? null,
-      canSave: saver !== null,
+      canSave: g.saver !== null,
       answer(answer) {
-        const idx = queue.findIndex((p) => p.id === id);
+        const idx = g.queue.findIndex((p) => p.id === id);
         if (idx === -1) return; // already settled
-        queue.splice(idx, 1);
+        g.queue.splice(idx, 1);
         resolve(answer);
-        notify();
+        notify(g);
       },
     });
-    notify();
+    notify(g);
   });
 }
 
@@ -157,11 +190,15 @@ const IS_MAC =
  *  save chord of THIS platform (F-05: it said Cmd+S everywhere). */
 export function replaceConfirmText(request: ReplaceRequest): string {
   const who = request.requester
-    ? `${request.requester} wants to open ${request.documentName ?? "a document"} in place of this document. `
+    ? t(REPLACE.requester, {
+        requester: request.requester,
+        document: request.documentName ?? t(REPLACE.aDocument),
+      })
     : "";
   return (
-    `This document has unsaved edits. ${who}${request.action} will discard them.\n\n` +
-    `Save with ${IS_MAC ? "⌘S" : "Ctrl+S"} first, or continue to discard.`
+    t(REPLACE.unsaved, { who, action: request.action }) +
+    "\n\n" +
+    t(REPLACE.saveFirst, { chord: IS_MAC ? "⌘S" : "Ctrl+S" })
   );
 }
 
@@ -172,16 +209,18 @@ export function replaceConfirmText(request: ReplaceRequest): string {
  * the document; the caller must then change nothing.
  */
 export async function confirmReplace(
+  scope: EditorScope,
   client: DirtySource,
   request: ReplaceRequest,
 ): Promise<boolean> {
+  const g = scope.get(GUARD);
   // A placement armed against the OUTGOING document must not resolve
   // into the incoming one. Clicking a menu already cancels it (a click
   // outside the canvas stands the placement down), but the keyboard
   // route — Cmd+N with an image loaded — reaches here with the placement
   // still armed, and the next canvas click would drop that image into a
   // document the user never chose it for.
-  cancelPendingPlacement();
+  cancelPendingPlacement(scope);
   let dirty = false;
   try {
     dirty = (await client.documentMeta()).dirty;
@@ -190,11 +229,11 @@ export async function confirmReplace(
     return true;
   }
   if (!dirty) return true;
-  if (surfaces === 0) return globalThis.confirm(replaceConfirmText(request));
-  const answer = await ask(request);
+  if (g.surfaces === 0) return globalThis.confirm(replaceConfirmText(request));
+  const answer = await ask(g, request);
   if (answer === "discard") return true;
   if (answer === "cancel") return false;
-  const save = saver;
+  const save = g.saver;
   if (!save) return false;
   try {
     await save();
@@ -211,10 +250,10 @@ export async function confirmReplace(
 /** `confirmReplace` for an editor-shaped caller (File ▸ New, File ▸ Open,
  *  the library, New from a brief): `what` is the action. */
 export function confirmDiscard(
-  editor: { client: DirtySource },
+  editor: { client: DirtySource; scope: EditorScope },
   what: string,
 ): Promise<boolean> {
-  return confirmReplace(editor.client, { action: what });
+  return confirmReplace(editor.scope, editor.client, { action: what });
 }
 
 /** The error a plugin open rejects with when the user keeps the document:

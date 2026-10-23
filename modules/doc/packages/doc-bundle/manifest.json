@@ -186,7 +186,7 @@
               },
               "access": "readOnly",
               "title": "Index",
-              "summary": "The block's position in the lowered story (images: their paragraph's)."
+              "summary": "The block's position in the lowered story (images: their paragraph's; a table cell's paragraph: its table's)."
             },
             {
               "path": "text",
@@ -194,9 +194,8 @@
                 "kind": "text",
                 "multiline": true
               },
-              "access": "derived",
               "title": "Text",
-              "summary": "A paragraph's text; a table's cells (tab between cells, newline between rows); empty for an image."
+              "summary": "A paragraph's text; a table's cells (tab between cells, newline between rows); empty for an image. Writable for a paragraph, in the body or in a table cell (`b<i>/c<k>/p<m>`, listed within its table): its first run takes the text and keeps its look, the other runs are emptied, in the .docx and the poured text in one undo step."
             },
             {
               "path": "paragraphStyle",
@@ -206,6 +205,41 @@
               "nullable": true,
               "access": "readOnly",
               "title": "Paragraph style"
+            },
+            {
+              "path": "headingLevel",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "nullable": true,
+              "access": "readOnly",
+              "title": "Heading level",
+              "summary": "1–9 for a paragraph in a heading style (by id or by name), else null."
+            },
+            {
+              "path": "bookmarks",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "access": "readOnly",
+              "title": "Bookmarks",
+              "summary": "The Word bookmarks that start in the paragraph, by name."
+            },
+            {
+              "path": "listItems",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "nullable": true,
+              "title": "List items",
+              "summary": "The texts of the Word list the paragraph is an item of (its contiguous paragraphs with the same w:numId); null for a paragraph that is not a list item. A write sets the items: the first take the new texts, the rest are removed, and items past the old count are copies of the last item (the same list and look)."
             },
             {
               "path": "runCount",
@@ -277,7 +311,7 @@
                 "kind": "text"
               },
               "title": "Text",
-              "summary": "The run's text. Writable for body paragraphs: save-back rewrites the run's w:t and the poured text changes in the same undo step; table-cell runs refuse."
+              "summary": "The run's text. Writable, in the body and in table cells: save-back rewrites the run's w:t and the poured text changes in the same undo step."
             },
             {
               "path": "characterStyle",
@@ -391,7 +425,7 @@
               },
               "access": "derived",
               "title": "Writable",
-              "summary": "False for a field in a table cell."
+              "summary": "False for a field whose poured place cannot be found (a paragraph a page or column break splits, a table poured as text)."
             },
             {
               "path": "runs",
@@ -519,6 +553,20 @@
               }
             }
           }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.doc.blockText",
+          "title": "Word paragraph text"
+        },
+        {
+          "kind": "media.paged.doc.mergeField",
+          "title": "Word merge field"
+        },
+        {
+          "kind": "media.paged.doc.listItems",
+          "title": "Word list items"
         }
       ]
     }

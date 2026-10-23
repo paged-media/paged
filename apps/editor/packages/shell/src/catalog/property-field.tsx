@@ -42,9 +42,11 @@ import { useEffect, useId, useState } from "react";
 import type { LeafProps } from "@paged-media/catalog";
 import type { CollectionName, Value } from "@paged-media/client";
 import { IconButton, LabelledBy, NamedAs } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 
 import { Input } from "../components/ui/input";
 import { useCollectionNames } from "./use-collection";
+import { LIST } from "./messages";
 import { useOptionalCanvasClient } from "../state/canvas-client-context";
 import {
   BoundsLeaf,
@@ -469,6 +471,7 @@ function ItemsField({
   label?: string;
   adornment: React.ReactNode;
 }) {
+  const strings = useStrings();
   const of: ShellValueType = type.kind === "list" ? type.of : { kind: "text" };
   const read =
     state.state === "value"
@@ -518,7 +521,7 @@ function ItemsField({
         </span>
         {can.add ? (
           <IconButton
-            label="Add an item"
+            label={strings.t(LIST.addItem)}
             className={iconButton}
             data-list-add=""
             onClick={() =>
@@ -544,7 +547,7 @@ function ItemsField({
           style={{ color: "var(--pg-muted-fg)" }}
           data-list-empty=""
         >
-          No items
+          {strings.t(LIST.noItems)}
         </span>
       ) : (
         shown.map(({ index, item }, pos) => {
@@ -567,7 +570,7 @@ function ItemsField({
                   {can.reorder ? (
                     <>
                       <IconButton
-                        label="Move up"
+                        label={strings.t(LIST.moveUp)}
                         className={iconButton}
                         data-list-move-up=""
                         disabled={above === null}
@@ -579,7 +582,7 @@ function ItemsField({
                         ↑
                       </IconButton>
                       <IconButton
-                        label="Move down"
+                        label={strings.t(LIST.moveDown)}
                         className={iconButton}
                         data-list-move-down=""
                         disabled={below === null}
@@ -594,7 +597,7 @@ function ItemsField({
                   ) : null}
                   {can.remove ? (
                     <IconButton
-                      label="Remove"
+                      label={strings.t(LIST.remove)}
                       className={iconButton}
                       data-list-remove=""
                       onClick={() => run({ edit: "remove", index })}
@@ -617,7 +620,7 @@ function ItemsField({
                   }
                 />
               ) : (
-                <NamedAs name={`${label ?? "Item"} ${index + 1}`}>
+                <NamedAs name={`${label ?? strings.t(LIST.item)} ${index + 1}`}>
                   <ValueControl
                     type={
                       collection &&

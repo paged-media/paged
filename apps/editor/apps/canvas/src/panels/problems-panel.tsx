@@ -34,18 +34,24 @@
 import { useSyncExternalStore } from "react";
 
 import {
-  cockpitActions,
+  useCockpitActions,
   useCollection,
   useRegistries,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 
-import {
-  getProblemsSnapshot,
-  subscribeProblems,
-  type ProblemEntry,
-} from "./problems-store";
+import { useProblems, type ProblemEntry } from "./problems-store";
 import { font, radius, space } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.problemsPanel", {
+  missingLink: "Missing link: {name}",
+  missingFont: "Missing font: {family}",
+  title: "Problems",
+  empty: "No problems detected.",
+  summary:
+    "{errors, plural, one {# error} other {# errors}}, {warnings, plural, one {# warning} other {# warnings}}",
+});
 
 const DOT: Record<ProblemEntry["severity"], string> = {
   error: "var(--status-error)",
@@ -84,6 +90,7 @@ function fileName(uri: string): string {
  * Publication health and the Links and Fonts panels count.
  */
 function useDocumentProblems(): ListedProblem[] {
+  const strings = useStrings();
   const links = useCollection<LinkSummary>("links") ?? [];
   const fonts = useCollection<FontSummary>("fonts") ?? [];
   const out: ListedProblem[] = [];
@@ -91,7 +98,7 @@ function useDocumentProblems(): ListedProblem[] {
     if (l.status !== "missing") continue;
     out.push({
       severity: "error",
-      message: `Missing link: ${fileName(l.uri)}`,
+      message: strings.t(M.missingLink, { name: fileName(l.uri) }),
       source: "links",
       bundleId: DOCUMENT_SOURCE,
       key: "links",
@@ -102,7 +109,7 @@ function useDocumentProblems(): ListedProblem[] {
     if (!f.isMissing) continue;
     out.push({
       severity: "error",
-      message: `Missing font: ${f.family}`,
+      message: strings.t(M.missingFont, { family: f.family }),
       source: "fonts",
       bundleId: DOCUMENT_SOURCE,
       key: "fonts",
@@ -113,10 +120,13 @@ function useDocumentProblems(): ListedProblem[] {
 }
 
 export function ProblemsPanel() {
+  const cockpitActions = useCockpitActions();
+  const strings = useStrings();
+  const store = useProblems();
   const reported = useSyncExternalStore(
-    subscribeProblems,
-    getProblemsSnapshot,
-    getProblemsSnapshot,
+    store.subscribe,
+    store.snapshot,
+    store.snapshot,
   );
   const documentProblems = useDocumentProblems();
   const problems: ListedProblem[] = [...documentProblems, ...reported];
@@ -144,13 +154,13 @@ export function ProblemsPanel() {
         color: "var(--pg-fg)",
       }}
     >
-      <div style={kicker}>Problems</div>
+      <div style={kicker}>{strings.t(M.title)}</div>
       {problems.length === 0 ? (
         <p
           data-problems-empty
           style={{ margin: 0, color: "var(--pg-muted-fg)" }}
         >
-          No problems detected.
+          {strings.t(M.empty)}
         </p>
       ) : (
         <>
@@ -163,8 +173,7 @@ export function ProblemsPanel() {
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {errors} error{errors === 1 ? "" : "s"}, {warnings} warning
-            {warnings === 1 ? "" : "s"}
+            {strings.t(M.summary, { errors, warnings })}
           </p>
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {problems.map((p, i) => (

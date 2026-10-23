@@ -3,7 +3,7 @@ $ paged-node template
 # stdout
 {
   "error": {
-    "message": "usage: paged-node template fields <doc> | fill <template> | check <template> <filled>",
+    "message": "usage: paged-node template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>",
     "exit": 2
   }
 }

@@ -7,3 +7,4 @@ mod anchor_offsets;
 mod names_and_aid_labels;
 mod roundtrip;
 mod tint_element;
+mod xml_ranges;

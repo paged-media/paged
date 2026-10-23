@@ -33,15 +33,13 @@
 //!    schema **anchor** (where they sit relative to `<sheetData>`), and
 //!    re-emit them in their schema position on write.
 //!
-//! ## Honest T0 granularity (recorded as a registry note)
+//! ## Granularity
 //!
-//! Capture is at the **worksheet-child** level only. Unknown attributes on
-//! `<worksheet>`/`<row>`/`<c>` and unknown elements *inside* `<sheetData>`
-//! survive a dirty re-encode ONLY via lazy-verbatim — i.e. they are dropped
-//! when that sheet is re-encoded. ECMA-376 §18.3.1.99 fixes the child order
-//! of `<worksheet>`; unknown children are almost always `extLst` (last) or
-//! extension namespaces, which the anchor model handles. Per-cell unknown
-//! attrs are vanishingly rare in real workbooks and out of T0 scope.
+//! Capture is at the **worksheet-child** level. Unknown attributes on
+//! `<row>`/`<c>` and unknown elements inside `<sheetData>` survive an edit
+//! because the save patches the part row by row (patch.rs, ADR 503
+//! amendment 2026-10-22) instead of regenerating it; each capture remembers
+//! its span so it is spliced back where it stood.
 
 /// Where a captured unknown `<worksheet>` child sits relative to the
 /// schema-fixed `<sheetData>` element (ECMA-376 §18.3.1.99 child order).
@@ -65,8 +63,12 @@ pub enum Anchor {
 #[derive(Debug, Clone)]
 pub struct CapturedSubtree {
     pub anchor: Anchor,
-    /// The raw XML bytes of the element, exactly as they appeared in source.
+    /// The raw XML bytes of the element. As read they are exactly the source
+    /// bytes; a structural edit (shift.rs) may rewrite them.
     pub bytes: Vec<u8>,
+    /// Where the element stood in the part as read (`start..end`), so a save
+    /// can patch the part in place; `None` for a child added since.
+    pub span: Option<(usize, usize)>,
 }
 
 /// All captured unknown subtrees for one worksheet, in document order within
@@ -78,7 +80,20 @@ pub struct CapturedSubtrees {
 
 impl CapturedSubtrees {
     pub fn push(&mut self, anchor: Anchor, bytes: Vec<u8>) {
-        self.items.push(CapturedSubtree { anchor, bytes });
+        self.items.push(CapturedSubtree {
+            anchor,
+            bytes,
+            span: None,
+        });
+    }
+
+    /// [`push`](Self::push) for a child read at `start..end` of its part.
+    pub fn push_at(&mut self, anchor: Anchor, bytes: Vec<u8>, start: usize, end: usize) {
+        self.items.push(CapturedSubtree {
+            anchor,
+            bytes,
+            span: Some((start, end)),
+        });
     }
 
     /// Captured children that re-emit *before* `<sheetData>`, in order.

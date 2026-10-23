@@ -97,18 +97,20 @@ export interface PanelBindingSurface {
   paths: ReadonlySet<PropertyPath>;
 }
 
+import { scoped, useScoped, type EditorScope } from "../state/editor-scope";
+
 interface Entry {
   panelId: string;
   collections: readonly CollectionName[];
   paths: readonly PropertyPath[];
 }
 
-/** MODULE-level on purpose, like `cockpitActions`: the edit-context
+/** In the editor's scope, like its cockpit actions: the edit-context
  *  controller reads this imperatively at the instant a context is entered
  *  and must not subscribe to it (a re-render there would re-run the enter
  *  effect). Entries are keyed by an opaque token so several hooks inside
  *  one panel — and several panels at once — coexist without refcounting. */
-const entries = new Map<symbol, Entry>();
+const ENTRIES = scoped("panelBindingSurface", () => new Map<symbol, Entry>());
 
 const PanelIdContext = createContext<string | null>(null);
 
@@ -137,6 +139,7 @@ export function useReportBindingSurface(
   paths: readonly PropertyPath[],
 ): void {
   const panelId = useContext(PanelIdContext);
+  const entries = useScoped(ENTRIES);
   // Content identity: the arrays are rebuilt every render by their
   // callers, so the effect keys off what is IN them, not the reference,
   // and records the arrays of the render it runs after.
@@ -149,7 +152,7 @@ export function useReportBindingSurface(
     return () => {
       entries.delete(token);
     };
-  }, [panelId, key]);
+  }, [entries, panelId, key]);
 }
 
 /** The union of everything the panel's mounted hooks reported. Empty when
@@ -157,7 +160,11 @@ export function useReportBindingSurface(
  *  active one (a hidden tab's panel stays mounted, but an <Activity> that
  *  hides it unmounts its effects, ADR 240) — which is why the caller must
  *  treat "empty" as "unknown", never as "serves nothing". */
-export function panelBindingSurface(panelId: string): PanelBindingSurface {
+export function panelBindingSurface(
+  scope: EditorScope,
+  panelId: string,
+): PanelBindingSurface {
+  const entries = scope.get(ENTRIES);
   const collections = new Set<CollectionName>();
   const paths = new Set<PropertyPath>();
   for (const entry of entries.values()) {
@@ -178,10 +185,11 @@ export function panelBindingSurface(panelId: string): PanelBindingSurface {
  * because it could not prove anything.
  */
 export function panelServedBy(
+  scope: EditorScope,
   panelId: string,
   providers: readonly DeclaredBindingSurface[],
 ): boolean {
-  const surface = panelBindingSurface(panelId);
+  const surface = panelBindingSurface(scope, panelId);
   if (surface.collections.size === 0 && surface.paths.size === 0) return false;
   for (const provider of providers) {
     for (const c of provider.collections ?? []) {
@@ -196,10 +204,10 @@ export function panelServedBy(
 
 /** Test/diagnostic seam — the shell's own e2e reads this through
  *  `window.__canvas`. Never read it for control flow. */
-export function panelBindingSurfaceSnapshot(): Record<
-  string,
-  { collections: string[]; paths: string[] }
-> {
+export function panelBindingSurfaceSnapshot(
+  scope: EditorScope,
+): Record<string, { collections: string[]; paths: string[] }> {
+  const entries = scope.get(ENTRIES);
   const out: Record<string, { collections: string[]; paths: string[] }> = {};
   for (const entry of entries.values()) {
     const bucket = (out[entry.panelId] ??= { collections: [], paths: [] });

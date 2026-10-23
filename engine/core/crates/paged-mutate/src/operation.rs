@@ -1573,6 +1573,16 @@ pub enum PropertyPath {
     DocumentFootnoteRuleOn,
     /// `ContinuingRuleOn`: `Value::Bool` (true).
     DocumentFootnoteContinuingRuleOn,
+
+    // ---- engine ADR 1003 — a placed PDF's page ---------------------
+    /// The page of a placed PDF the frame shows: `<PDF><PDFAttribute
+    /// PageNumber>`, 1-based. `Value::Length` carrying a whole number of
+    /// at least 1; `None` clears it (page 1). On a Rectangle, Oval or
+    /// Polygon that places a picture; a frame whose bytes are not a PDF
+    /// refuses it. The renderer shows page 1 for a page the PDF lacks.
+    /// Paint-only (`frame_style`): the frame's fit re-resolves against
+    /// the page's size on the next build.
+    FramePdfPage,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -1948,6 +1958,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteSpacer => "document.footnoteSpacer",
             PropertyPath::DocumentFootnoteRuleOn => "document.footnoteRuleOn",
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
+            PropertyPath::FramePdfPage => "frame.pdfPage",
         }
     }
 }
@@ -4653,6 +4664,69 @@ pub enum Operation {
     /// format, running-header style — are restored verbatim too).
     DeleteTextVariable {
         variable_id: String,
+    },
+    /// Engine ADR 1002 — define the XML tag `XMLTag/<name>` (`color`: its
+    /// `TagColor`, an enumeration such as `Red`). Refused when the tag
+    /// exists or the name is not an XML name. Inverse: `DeleteXmlTag`.
+    CreateXmlTag {
+        name: String,
+        #[serde(default)]
+        color: Option<String>,
+    },
+    /// Engine ADR 1002 — remove the definition of the XML tag `name`.
+    /// Refused while an element uses it. Inverse: `RestoreXmlStructure`.
+    DeleteXmlTag {
+        name: String,
+    },
+    /// Engine ADR 1002 — tag a page item, or a story, with `tag`: a new
+    /// element `self_id` under the structure's root. A text frame's element
+    /// tags its story (InDesign's own rule). The tag is defined, and the
+    /// root made (tagged `Root`), when missing. An item tagged already is
+    /// retagged: its element keeps its id, attributes and ranges. `self_id`
+    /// is minted by the caller layer. Inverse: `RestoreXmlStructure`.
+    TagItem {
+        item: String,
+        tag: String,
+        self_id: String,
+    },
+    /// Engine ADR 1002 — remove the element tagging a page item or a story
+    /// (a text frame's: its story's), with the elements tagging the story's
+    /// ranges. Inverse: `RestoreXmlStructure`.
+    UntagItem {
+        item: String,
+    },
+    /// Engine ADR 1002 — tag the story characters `[start, end)` with `tag`:
+    /// a new element `self_id` inside the innermost tagged range holding
+    /// them, taking in the tagged ranges they hold; one it would cut across
+    /// is refused. An untagged story is tagged `Story` first, as InDesign
+    /// does. Inverse: `RestoreXmlStructure`.
+    TagRange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        tag: String,
+        self_id: String,
+    },
+    /// Engine ADR 1002 — remove the element `element` tagging a text range;
+    /// the ranges it held stay tagged. Inverse: `RestoreXmlStructure`.
+    UntagRange {
+        element: String,
+    },
+    /// Engine ADR 1002 — set (`value: None`: remove) the attribute `name` of
+    /// the XML element `element` (its id, or the page item or story it
+    /// tags). Inverse: `RestoreXmlStructure`.
+    SetXmlAttribute {
+        element: String,
+        name: String,
+        #[serde(default)]
+        value: Option<String>,
+    },
+    /// Engine ADR 1002 — inverse-only: put the XML structure back as
+    /// captured (`state`, JSON: the tags, the root, the elements of the
+    /// stories named, and whether the structure was edited). Inverse:
+    /// another `RestoreXmlStructure`.
+    RestoreXmlStructure {
+        state: String,
     },
     /// W0.5 — inverse-only companion to `InsertSection`: remove the
     /// section by id. Inverse re-inserts it via `InsertSection` with

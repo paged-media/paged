@@ -1,3 +1,3 @@
 {
-  "setting:paged.library": "The flag is read only by startLibrary() in apps/canvas/src/main.tsx, the app's entry module: importing it boots the editor (createRoot at module scope, Vite ?worker imports), so no unit or component test can load the check. A test needs startLibrary (the localStorage read and the connectLibrary call) moved into an importable module, a product change this programme did not make; a Playwright test would need the library worker's OPFS store, which the CI lane has no fixture for."
+  "setting:paged.library": "The flag is read only by startLibrary() in apps/canvas/src/app/mount.tsx, which a unit test cannot import (Vite ?worker imports), so no unit or component test can load the check. A test needs startLibrary (the localStorage read and the connectLibrary call) moved into an importable module, a product change this programme did not make; a Playwright test would need the library worker's OPFS store, which the CI lane has no fixture for."
 }

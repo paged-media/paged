@@ -1,0 +1,17 @@
+# HEX2BIN(number,[places]).
+# id	formula	setup	expected
+hex2bin-0	=HEX2BIN("F",8)	-	00001111
+hex2bin-1	=HEX2BIN("B7")	-	10110111
+hex2bin-2	=HEX2BIN("FFFFFFFFFF")	-	1111111111
+hex2bin-3	=HEX2BIN("FFFFFFFE00")	-	1000000000
+hex2bin-4	=HEX2BIN("FFFFFFFDFF")	-	#NUM!
+hex2bin-5	=HEX2BIN("1FF")	-	111111111
+hex2bin-6	=HEX2BIN("200")	-	#NUM!
+hex2bin-7	=HEX2BIN("G")	-	#NUM!
+hex2bin-8	=HEX2BIN("f")	-	1111
+hex2bin-9	=HEX2BIN("F",3)	-	#NUM!
+hex2bin-10	=HEX2BIN("F",11)	-	#NUM!
+hex2bin-11	=HEX2BIN("")	-	0
+hex2bin-12	=HEX2BIN(11)	-	10001
+hex2bin-x0	=HEX2BIN(A1)	A1=#N/A	#N/A
+hex2bin-x1	=CONCAT(HEX2BIN({"A","B"}))	-	10101011

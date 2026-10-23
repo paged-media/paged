@@ -32,82 +32,132 @@ import {
   ObjectPropertyField,
 } from "@paged-media/shell";
 
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
 import { SchemaSections, type SectionSpec } from "./schema-sections";
+import { sectionsIn } from "./section-strings";
+
+const M = defineMessages("app.objectOptionsPanel", {
+  item: "Item",
+  name: "Name",
+  layer: "Layer",
+  objectStyle: "Object style",
+  cornerOptions: "Corner Options",
+  topLeft: "Top left",
+  tlSize: "TL size",
+  topRight: "Top right",
+  trSize: "TR size",
+  bottomLeft: "Bottom left",
+  blSize: "BL size",
+  bottomRight: "Bottom right",
+  brSize: "BR size",
+  strokeEndsAndDashes: "Stroke Ends and Dashes",
+  start: "Start",
+  end: "End",
+  dashes: "Dashes",
+  gradient: "Gradient",
+  fillAngle: "Fill angle",
+  fillLength: "Fill length",
+  feather: "Feather",
+  strokeAngle: "Stroke angle",
+  strokeLength: "Stroke length",
+  transform: "Transform",
+  matrix: "Matrix",
+  flipV: "Flip V",
+  image: "Image",
+  link: "Link",
+  content: "Content",
+  advanced: "Advanced",
+  path: "Path",
+  label: "Label",
+  objectOptions: "Object Options",
+  colour: "Colour",
+  opacity: "Opacity",
+  blend: "Blend",
+  appearance: "Appearance",
+  fills: "Fills",
+  strokes: "Strokes",
+  tint: "Tint",
+  weight: "Weight",
+});
+
+// Section titles and field labels are message keys (`sectionsIn`).
 
 const OBJECT_OPTION_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Item",
+    title: M.item,
     fields: [
-      { path: "itemName", label: "Name" },
-      { path: "itemLayer", label: "Layer", collection: "layers" },
+      { path: "itemName", label: M.name },
+      { path: "itemLayer", label: M.layer, collection: "layers" },
       {
         path: "appliedObjectStyle",
-        label: "Object style",
+        label: M.objectStyle,
         collection: "objectStyles",
       },
     ],
   },
   {
-    title: "Corner Options",
+    title: M.cornerOptions,
     fields: [
-      { path: "frameCornerOptionTopLeft", label: "Top left" },
-      { path: "frameCornerRadiusTopLeft", label: "TL size" },
-      { path: "frameCornerOptionTopRight", label: "Top right" },
-      { path: "frameCornerRadiusTopRight", label: "TR size" },
-      { path: "frameCornerOptionBottomLeft", label: "Bottom left" },
-      { path: "frameCornerRadiusBottomLeft", label: "BL size" },
-      { path: "frameCornerOptionBottomRight", label: "Bottom right" },
-      { path: "frameCornerRadiusBottomRight", label: "BR size" },
+      { path: "frameCornerOptionTopLeft", label: M.topLeft },
+      { path: "frameCornerRadiusTopLeft", label: M.tlSize },
+      { path: "frameCornerOptionTopRight", label: M.topRight },
+      { path: "frameCornerRadiusTopRight", label: M.trSize },
+      { path: "frameCornerOptionBottomLeft", label: M.bottomLeft },
+      { path: "frameCornerRadiusBottomLeft", label: M.blSize },
+      { path: "frameCornerOptionBottomRight", label: M.bottomRight },
+      { path: "frameCornerRadiusBottomRight", label: M.brSize },
     ],
   },
   {
-    title: "Stroke Ends and Dashes",
+    title: M.strokeEndsAndDashes,
     fields: [
-      { path: "frameStrokeStartArrowhead", label: "Start" },
-      { path: "frameStrokeEndArrowhead", label: "End" },
-      { path: "frameStrokeDashArray", label: "Dashes" },
+      { path: "frameStrokeStartArrowhead", label: M.start },
+      { path: "frameStrokeEndArrowhead", label: M.end },
+      { path: "frameStrokeDashArray", label: M.dashes },
     ],
   },
   {
-    title: "Gradient",
+    title: M.gradient,
     fields: [
-      { path: "frameGradientFillAngle", label: "Fill angle" },
-      { path: "frameGradientFillLength", label: "Fill length" },
-      { path: "frameGradientFeather", label: "Feather" },
-      { path: "frameGradientStrokeAngle", label: "Stroke angle" },
-      { path: "frameGradientStrokeLength", label: "Stroke length" },
+      { path: "frameGradientFillAngle", label: M.fillAngle },
+      { path: "frameGradientFillLength", label: M.fillLength },
+      { path: "frameGradientFeather", label: M.feather },
+      { path: "frameGradientStrokeAngle", label: M.strokeAngle },
+      { path: "frameGradientStrokeLength", label: M.strokeLength },
     ],
   },
   {
-    title: "Transform",
+    title: M.transform,
     fields: [
-      { path: "frameTransform", label: "Matrix" },
-      { path: "frameFlipV", label: "Flip V" },
+      { path: "frameTransform", label: M.matrix },
+      { path: "frameFlipV", label: M.flipV },
     ],
   },
   {
-    title: "Image",
+    title: M.image,
     fields: [
-      { path: "imageUri", label: "Link" },
-      { path: "imageContentTransform", label: "Content" },
+      { path: "imageUri", label: M.link },
+      { path: "imageContentTransform", label: M.content },
     ],
   },
   {
-    title: "Advanced",
+    title: M.advanced,
     fields: [
-      { path: "framePath", label: "Path" },
-      { path: "pluginMetadata", label: "Label" },
+      { path: "framePath", label: M.path },
+      { path: "pluginMetadata", label: M.label },
     ],
   },
 ];
 
 export function ObjectOptionsPanel() {
+  const strings = useStrings();
   return (
     <div data-object-options-panel="ready">
-      <CockpitPanelHeader title="Object Options" />
+      <CockpitPanelHeader title={strings.t(M.objectOptions)} />
       <SchemaSections
         schemaKind="frame"
-        sections={OBJECT_OPTION_SECTIONS}
+        sections={sectionsIn(strings, OBJECT_OPTION_SECTIONS)}
         testId="frame"
       />
       <AppearanceStacks />
@@ -122,26 +172,27 @@ const DRAW_APPEARANCE = "plugin:media.paged.draw/appearance";
 /** One appearance layer as the stack lists it (painted bottom → top, so
  *  the list reads top-first like a layers panel; edits still name value
  *  indices). */
-const STACK_FIELDS = (weight: boolean) => [
+const STACK_FIELDS = (strings: Strings, weight: boolean) => [
   {
     field: "color",
-    label: "Colour",
+    label: strings.t(M.colour),
     style: "collection" as const,
     props: { collectionName: "swatches" },
   },
   ...(weight
-    ? [{ field: "weight", label: "Weight" }]
-    : [{ field: "tint", label: "Tint" }]),
-  { field: "opacity", label: "Opacity" },
-  { field: "blendMode", label: "Blend" },
+    ? [{ field: "weight", label: strings.t(M.weight) }]
+    : [{ field: "tint", label: strings.t(M.tint) }]),
+  { field: "opacity", label: strings.t(M.opacity) },
+  { field: "blendMode", label: strings.t(M.blend) },
 ];
 
 /** The selected path's appearance stacks — LIST rows over paged.draw's
  *  object model, through the host's one PropertyField (§12.8): add,
  *  remove, reorder and edit a layer, each ONE batch = one undo step. */
 function AppearanceStacks() {
+  const strings = useStrings();
   return (
-    <CockpitSection title="Appearance" defaultOpen={false}>
+    <CockpitSection title={strings.t(M.appearance)} defaultOpen={false}>
       <div
         className="flex flex-col gap-1.5 pb-2"
         data-options-section="Appearance"
@@ -150,11 +201,11 @@ function AppearanceStacks() {
           address="selection"
           kind={DRAW_APPEARANCE}
           path="fills"
-          label="Fills"
+          label={strings.t(M.fills)}
           items={{
             reversed: true,
             itemLabel: "color",
-            fields: STACK_FIELDS(false),
+            fields: STACK_FIELDS(strings, false),
             newItem: {
               color: "Color/Black",
               tint: 100,
@@ -167,11 +218,11 @@ function AppearanceStacks() {
           address="selection"
           kind={DRAW_APPEARANCE}
           path="strokes"
-          label="Strokes"
+          label={strings.t(M.strokes)}
           items={{
             reversed: true,
             itemLabel: "color",
-            fields: STACK_FIELDS(true),
+            fields: STACK_FIELDS(strings, true),
             newItem: {
               color: "Color/Black",
               weight: 1,

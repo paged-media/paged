@@ -1,0 +1,17 @@
+$ paged template --help
+--- exit: 0
+--- stdout
+A template's fields: list them, fill them as a filler, check a submission changed only its fields
+
+Usage: paged template <COMMAND>
+
+Commands:
+  fields  The template's fields, their kinds and values
+  fill    Fill the fields as a filler and write the result (.paged, .idml, .pdf)
+  check   Is <filled> the template with only its fields changed? Exits 1 when not
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+--- stderr
+(empty)

@@ -30,6 +30,8 @@
 
 import { useState } from "react";
 
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
 import { ChoiceGroup, ChoiceRow } from "@paged-media/panel-kit";
 
 import {
@@ -39,6 +41,7 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  useEditorScope,
   printOutputFacts,
   useCanvasClient,
   useDocument,
@@ -62,6 +65,40 @@ import {
   type ExportTarget,
 } from "./export-targets";
 
+const M = defineMessages("app.cockpitExportViews", {
+  outputs: "Outputs",
+  pluginExports: "Plugin exports",
+  rangeNamesNoPage: `"{range}" names no page in this {count}-page document.`,
+  settings: "Settings",
+  dialogSettings:
+    "Standard, bleed, marks and image downsampling are set in the " +
+    "export dialog — one place, applied per run.",
+  exportTarget: "Export {target}",
+  resolution: "Resolution",
+  dpiScreen: "72 ppi (screen)",
+  dpiProof: "150 ppi (proof)",
+  dpiPrint: "300 ppi (print)",
+  format: "Format",
+  png: "PNG (lossless, alpha)",
+  jpeg: "JPEG (smaller, no alpha)",
+  quality: "Quality",
+  q60: "60% (smallest)",
+  q90: "90% (default)",
+  q100: "100% (largest)",
+  pages: "Pages",
+  allPages: "All",
+  currentPage: "Current page",
+  rangeOption: "Range…",
+  range: "Range",
+  rendering: "Rendering…",
+  exportPageImages: "Export page images",
+  exportedPng: "Exported {count, plural, one {# PNG} other {# PNGs}}.",
+  exportedJpeg: "Exported {count, plural, one {# JPEG} other {# JPEGs}}.",
+  exportFailed: "Export failed: {message}",
+  honestNote:
+    "{note}. This output lands with the multi-format publishing pipeline.",
+});
+
 // Re-export the model so existing importers (export-center-panel,
 // the specs) keep their import paths.
 export {
@@ -83,6 +120,8 @@ function readiness(
 /** Export mode — LEFT panel: outputs navigation (kit ExportNavPanel).
  *  Status dots reflect real per-target readiness. */
 export function OutputsPanel(_props: PanelProps) {
+  const scope = useEditorScope();
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const loaded = meta != null && meta.pageCount > 0;
   const facts = printOutputFacts(meta);
@@ -114,9 +153,9 @@ export function OutputsPanel(_props: PanelProps) {
         fontFamily: "var(--font-sans)",
       }}
     >
-      <CockpitPanelHeader title="Outputs" />
+      <CockpitPanelHeader title={strings.t(M.outputs)} />
       <div style={{ flex: 1, overflowY: "auto", padding: "2px 8px" }}>
-        <ChoiceGroup label="Outputs">
+        <ChoiceGroup label={strings.t(M.outputs)}>
           {EXPORT_TARGETS.map((t) => {
             const sel = selected === t.id;
             const r = readiness(t, loaded, facts);
@@ -133,7 +172,7 @@ export function OutputsPanel(_props: PanelProps) {
                 data-output-live={t.live ? "" : undefined}
                 data-selected={sel || undefined}
                 checked={sel}
-                onChoose={() => setSelectedExportTarget(t.id)}
+                onChoose={() => setSelectedExportTarget(scope, t.id)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -189,7 +228,7 @@ export function OutputsPanel(_props: PanelProps) {
                 fontSize: 10.5,
               }}
             >
-              Plugin exports
+              {strings.t(M.pluginExports)}
             </div>
             {pluginExporters.map((e) => {
               const phase = exportPhase?.id === e.id ? exportPhase.kind : null;
@@ -298,7 +337,10 @@ async function imageExportPhase(
       // thrown error and a silent zero-file "success".
       return {
         kind: "error",
-        message: `"${image.range}" names no page in this ${handle.pageIds.length}-page document.`,
+        message: t(M.rangeNamesNoPage, {
+          range: image.range,
+          count: handle.pageIds.length,
+        }),
       };
     }
     return { kind: "done", files };
@@ -314,6 +356,8 @@ async function imageExportPhase(
  *  ExportInspector). LIVE targets carry real inline settings + a real
  *  run action; HONEST targets carry the concept seam. */
 export function ExportInspectorPanel(_props: PanelProps) {
+  const scope = useEditorScope();
+  const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
   const { handle } = useDocument();
@@ -353,10 +397,9 @@ export function ExportInspectorPanel(_props: PanelProps) {
 
       {target.action === "dialog" && (
         <>
-          <CockpitSection title="Settings">
+          <CockpitSection title={strings.t(M.settings)}>
             <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
-              Standard, bleed, marks and image downsampling are set in the
-              export dialog — one place, applied per run.
+              {strings.t(M.dialogSettings)}
             </span>
           </CockpitSection>
           <div style={{ padding: 14 }}>
@@ -365,9 +408,10 @@ export function ExportInspectorPanel(_props: PanelProps) {
               primary
               disabled={!loaded}
               testId="export-inspector-run"
-              onClick={() => notifyExportPdfDialog("open")}
+              onClick={() => notifyExportPdfDialog(scope, "open")}
             >
-              <Icon name="ui-export" size={15} /> Export {target.title}
+              <Icon name="ui-export" size={15} />{" "}
+              {strings.t(M.exportTarget, { target: target.title })}
             </CockpitBtn>
           </div>
         </>
@@ -375,79 +419,81 @@ export function ExportInspectorPanel(_props: PanelProps) {
 
       {target.action === "image" && (
         <>
-          <CockpitSection title="Settings">
+          <CockpitSection title={strings.t(M.settings)}>
             <div
               data-export-image-settings
               style={{ display: "flex", flexDirection: "column", gap: 10 }}
             >
-              <SettingRow label="Resolution">
+              <SettingRow label={strings.t(M.resolution)}>
                 <select
                   data-export-image-dpi
                   value={String(image.dpi)}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       dpi: Number(e.target.value) as 72 | 150 | 300,
                     })
                   }
                 >
-                  <option value="72">72 ppi (screen)</option>
-                  <option value="150">150 ppi (proof)</option>
-                  <option value="300">300 ppi (print)</option>
+                  <option value="72">{strings.t(M.dpiScreen)}</option>
+                  <option value="150">{strings.t(M.dpiProof)}</option>
+                  <option value="300">{strings.t(M.dpiPrint)}</option>
                 </select>
               </SettingRow>
-              <SettingRow label="Format">
+              <SettingRow label={strings.t(M.format)}>
                 <select
                   data-export-image-format
                   value={image.format}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       format: e.target.value as "png" | "jpeg",
                     })
                   }
                 >
-                  <option value="png">PNG (lossless, alpha)</option>
-                  <option value="jpeg">JPEG (smaller, no alpha)</option>
+                  <option value="png">{strings.t(M.png)}</option>
+                  <option value="jpeg">{strings.t(M.jpeg)}</option>
                 </select>
               </SettingRow>
               {image.format === "jpeg" ? (
-                <SettingRow label="Quality">
+                <SettingRow label={strings.t(M.quality)}>
                   <select
                     data-export-image-quality
                     value={String(image.quality)}
                     disabled={!loaded}
                     onChange={(e) =>
-                      setImageSettings({ quality: Number(e.target.value) })
+                      setImageSettings(scope, {
+                        quality: Number(e.target.value),
+                      })
                     }
                   >
-                    <option value="0.6">60% (smallest)</option>
+                    <option value="0.6">{strings.t(M.q60)}</option>
                     <option value="0.8">80%</option>
-                    <option value="0.9">90% (default)</option>
-                    <option value="1">100% (largest)</option>
+                    <option value="0.9">{strings.t(M.q90)}</option>
+                    <option value="1">{strings.t(M.q100)}</option>
                   </select>
                 </SettingRow>
               ) : null}
-              <SettingRow label="Pages">
+              <SettingRow label={strings.t(M.pages)}>
                 <select
                   data-export-image-scope
                   value={image.scope}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       scope: e.target.value as "all" | "current" | "range",
                     })
                   }
                 >
                   <option value="all">
-                    All ({loaded ? meta.pageCount : 0})
+                    {strings.t(M.allPages)} ({loaded ? meta.pageCount : 0})
                   </option>
-                  <option value="current">Current page</option>
-                  <option value="range">Range…</option>
+                  <option value="current">{strings.t(M.currentPage)}</option>
+                  <option value="range">{strings.t(M.rangeOption)}</option>
                 </select>
               </SettingRow>
               {image.scope === "range" ? (
-                <SettingRow label="Range">
+                <SettingRow label={strings.t(M.range)}>
                   <input
                     data-export-image-range
                     type="text"
@@ -455,7 +501,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                     value={image.range}
                     disabled={!loaded}
                     onChange={(e) =>
-                      setImageSettings({ range: e.target.value })
+                      setImageSettings(scope, { range: e.target.value })
                     }
                   />
                 </SettingRow>
@@ -472,8 +518,8 @@ export function ExportInspectorPanel(_props: PanelProps) {
             >
               <Icon name="ui-export" size={15} />{" "}
               {imagePhase.kind === "running"
-                ? "Rendering…"
-                : "Export page images"}
+                ? strings.t(M.rendering)
+                : strings.t(M.exportPageImages)}
             </CockpitBtn>
             {imagePhase.kind === "done" && (
               <div
@@ -481,9 +527,10 @@ export function ExportInspectorPanel(_props: PanelProps) {
                 className="pg-ui-xs"
                 style={{ marginTop: 8, color: "var(--status-approved)" }}
               >
-                Exported {imagePhase.files}{" "}
-                {image.format === "jpeg" ? "JPEG" : "PNG"}
-                {imagePhase.files === 1 ? "" : "s"}.
+                {strings.t(
+                  image.format === "jpeg" ? M.exportedJpeg : M.exportedPng,
+                  { count: imagePhase.files },
+                )}
               </div>
             )}
             {imagePhase.kind === "error" && (
@@ -491,7 +538,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                 className="pg-ui-xs"
                 style={{ marginTop: 8, color: "var(--status-error)" }}
               >
-                Export failed: {imagePhase.message}
+                {strings.t(M.exportFailed, { message: imagePhase.message })}
               </div>
             )}
           </div>
@@ -499,10 +546,9 @@ export function ExportInspectorPanel(_props: PanelProps) {
       )}
 
       {!target.live && (
-        <CockpitSection title="Settings">
+        <CockpitSection title={strings.t(M.settings)}>
           <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
-            {target.note}. This output lands with the multi-format publishing
-            pipeline.
+            {strings.t(M.honestNote, { note: target.note })}
           </span>
         </CockpitSection>
       )}

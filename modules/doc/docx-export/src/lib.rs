@@ -230,6 +230,27 @@ pub fn apply_edits(
                 };
                 paras.entry(p).or_default().delete = true;
             }
+            StructuralEdit::CloneParagraph {
+                source,
+                after,
+                text,
+            } => {
+                let (Some(from), Some(at)) =
+                    (bindings.para_ord(*source), bindings.para_ord(*after))
+                else {
+                    skips.push(format!(
+                        "clone-paragraph skipped: block {source} or {after} is not a body paragraph"
+                    ));
+                    continue;
+                };
+                let src = pkg.require(main_part)?;
+                match splice::clone_paragraph(src, from, text) {
+                    Some(frag) => paras.entry(at).or_default().insert_after.push(frag),
+                    None => skips.push(format!(
+                        "clone-paragraph skipped: block {source} cannot be copied (it ends a section)"
+                    )),
+                }
+            }
             StructuralEdit::InsertParagraph {
                 block,
                 text,
@@ -266,7 +287,8 @@ pub fn apply_edits(
     // Table-cell run edits — their own `w:tbl`/`w:tr`/`w:tc`/`w:p` locator path.
     let mut cell_targets: Vec<ResolvedCellTarget> = Vec::new();
     for c in &edits.cells {
-        let Some((path, run_ord)) = bindings.resolve_cell(c.block, c.cell, c.para, c.run) else {
+        let Some((path, run_ord, wrapper)) = bindings.resolve_cell(c.block, c.cell, c.para, c.run)
+        else {
             skips.push(format!(
                 "cell edit skipped: block {} cell {} para {} run {} is not patchable",
                 c.block, c.cell, c.para, c.run
@@ -286,6 +308,7 @@ pub fn apply_edits(
             cell: path.cell,
             para: path.para,
             run_ord,
+            wrapper,
             new_text: c.new_text.clone(),
             new_rpr,
             label: format!(

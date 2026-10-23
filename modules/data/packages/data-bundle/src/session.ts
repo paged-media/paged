@@ -56,6 +56,8 @@ import {
   type DataEngineLike,
 } from "./engine";
 import { hostWasm } from "./bin-url";
+import { t as tr } from "@paged-media/strings";
+import { BINDINGS, SOURCES, STATUS } from "./messages";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
   DATA_PART_DIR,
@@ -87,6 +89,11 @@ import {
   withBase,
 } from "./doc-label";
 import { propertyMethods, type PropertyMethods } from "./property-session";
+import {
+  catalogueMethods,
+  emptyCatalogueState,
+  type CatalogueMethods,
+} from "./catalogue";
 import { objectsOf } from "./property-lane";
 import { readTextVariableFields, textVariablesOn } from "./text-variables";
 import { contentPatch, type PayloadJson } from "./labels";
@@ -527,9 +534,6 @@ export interface DataMergeExport {
  *  file has them) is delivered under for a merge; see `asWritten`. */
 export const AS_WRITTEN = "::as-written";
 
-export const NO_NEW_DOCUMENT_DOOR =
-  "this editor version cannot open a second document — merge into the current document instead";
-
 /** Whether the host wired a documents backend (D-26: `exportPaged` and
  *  `open`); without one both doors reject. */
 export function hasDocumentsDoors(host: BundleHost): boolean {
@@ -540,7 +544,8 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 }
 
 /** The session API the panels + commands drive. */
-export interface DataSourceSession extends ReviewSession, PropertyMethods {
+export interface DataSourceSession
+  extends ReviewSession, PropertyMethods, CatalogueMethods {
   getState(): SessionState;
   /** host.objects (ADR 323): the document ops of a definition change made
    *  with `{ labels: "defer" }` — the element labels the recipe asks for,
@@ -757,6 +762,9 @@ export interface DataSourceSession extends ReviewSession, PropertyMethods {
   /** §9 record-preview stepper: remember the record it shows for a query
    *  (`getState().preview`). */
   setPreviewPosition(queryId: string, record: number): void;
+  /** The data set `applyDataSet` last applied, or null (saved with the
+   *  session, so a reopened document knows it). */
+  appliedDataSet(): string | null;
   /** §9 field-mapping wizard: the engine's column → variable-binding suggestions
    *  for a query's ingested result. Requires the query's result to be ingested
    *  first (`refreshData`); returns `[]` honestly when no result is ingested or
@@ -1075,13 +1083,19 @@ export function createSession(
   // both (it starts from "— / —" only when nothing has run).
   const recordCounts = new Map<string, number>();
   const previewAt = new Map<string, number>();
+  /** The data set last applied to the document (saved with the session). */
+  let appliedSet: string | null = null;
+  // ADR 560: template fields bound to the data, and the catalogues made.
+  const catalogue = emptyCatalogueState();
   /** Keep how many records a query delivered (and a stepped-to record
    *  within them). */
   function keepRecordCount(queryId: string, n: number): number {
     if (n > 0) recordCounts.set(queryId, n);
     else recordCounts.delete(queryId);
     const at = previewAt.get(queryId);
-    if (at !== undefined && at >= n) previewAt.set(queryId, Math.max(0, n - 1));
+    // Nothing ingested yet (a reopened document before its refresh) says
+    // nothing about the saved record: only a real count clamps it.
+    if (at !== undefined && n > 0 && at >= n) previewAt.set(queryId, n - 1);
     return n;
   }
   /** Read (and keep) how many records the engine holds for a query; 0 before
@@ -1308,6 +1322,16 @@ export function createSession(
         ...(r.credentialRef ? { credentialRef: r.credentialRef } : {}),
       })),
       refresh: Object.fromEntries(refreshPolicies),
+      ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
+      ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(catalogue.fields.length > 0 || Object.keys(catalogue.runs).length > 0
+        ? {
+            catalogue: {
+              fields: catalogue.fields.map((f) => ({ ...f })),
+              runs: { ...catalogue.runs },
+            },
+          }
+        : {}),
     };
   }
 
@@ -1440,7 +1464,8 @@ export function createSession(
     options: SessionMergeOptions,
     fail: (message: string) => MergeResult,
   ): Promise<MergeResult> {
-    if (!hasDocumentsDoors(rawHost)) return fail(NO_NEW_DOCUMENT_DOOR);
+    if (!hasDocumentsDoors(rawHost))
+      return fail(tr(BINDINGS.noNewDocumentDoor));
     const docs = rawHost.documents;
     const pageId = options.pageId ?? (await startPage());
     if (!pageId) return fail("no template page");
@@ -1478,7 +1503,7 @@ export function createSession(
     if (!result.opened) {
       openedWaiters = [];
       state.status = "ready";
-      state.message = "Merge cancelled: the current document was kept.";
+      state.message = tr(STATUS.mergeCancelled);
       emit();
       return {
         ok: false,
@@ -2013,7 +2038,7 @@ export function createSession(
     await fetchRemote(name, false);
     if (r.status === "loaded" && r.contentKey !== before && before !== null) {
       await self.refreshData();
-      state.message = `Remote source "${name}" changed — data refreshed.`;
+      state.message = tr(STATUS.remoteChanged, { name });
     }
     emit();
   }
@@ -2043,7 +2068,7 @@ export function createSession(
     if (!consentedOriginsSafe().includes(r.origin)) {
       r.consent = "required";
       r.status = "inert";
-      r.message = `Origin ${r.origin} not consented — request consent first (no fetch performed).`;
+      r.message = tr(STATUS.notConsented, { origin: r.origin });
       state.message = r.message;
       return;
     }
@@ -2087,9 +2112,9 @@ export function createSession(
       r.message =
         r.contentKey === null
           ? "Loaded (engine wasm predates the invalidation key — rebuild scripts/build-wasm.sh)."
-          : `Loaded — content key ${r.contentKey}.`;
+          : tr(STATUS.remoteLoadedKey, { key: r.contentKey });
       state.status = "ready";
-      state.message = `Remote source "${name}" loaded.`;
+      state.message = tr(STATUS.remoteLoaded, { name });
       if (persist) markDirty();
     } catch (err) {
       r.status = "error";
@@ -2098,7 +2123,7 @@ export function createSession(
       // TypeError: say which wall it may be (editor ADR 218 — a deployment
       // lists the data origins its connect-src admits).
       if (err instanceof TypeError) {
-        r.message += ` — the editor's network policy may not admit ${r.origin}; consent alone does not open it`;
+        r.message += tr(STATUS.networkPolicy, { origin: r.origin });
       }
       report({
         level: "error",
@@ -2127,6 +2152,9 @@ export function createSession(
     queries.clear();
     recordCounts.clear();
     previewAt.clear();
+    appliedSet = null;
+    catalogue.fields.length = 0;
+    for (const k of Object.keys(catalogue.runs)) delete catalogue.runs[k];
     bindingKinds.clear();
     visibilityTargets.clear();
     imageTargets.clear();
@@ -2162,7 +2190,7 @@ export function createSession(
       void oldDuck?.close();
     }
     state.status = "idle";
-    state.message = "No data sources yet — import a CSV to begin.";
+    state.message = tr(STATUS.noSources);
     emit();
   }
 
@@ -2234,7 +2262,10 @@ export function createSession(
         // InDesign) are placed: Lower must not add a second one.
         await reconcilePlaced();
         state.status = "ready";
-        state.message = `Restored ${bindingIds.length} binding(s) from the document's labels — re-link ${relinkSources.length} data source(s).`;
+        state.message = tr(STATUS.restoredFromLabels, {
+          bindings: bindingIds.length,
+          sources: relinkSources.length,
+        });
         emit();
       }
       return;
@@ -2335,6 +2366,12 @@ export function createSession(
       if (!sourceNames.includes(d.source)) sourceNames.push(d.source);
     }
 
+    for (const [q, n] of Object.entries(saved.preview ?? {}))
+      previewAt.set(q, n);
+    appliedSet = saved.dataSet ?? null;
+    catalogue.fields.push(...(saved.catalogue?.fields ?? []));
+    Object.assign(catalogue.runs, saved.catalogue?.runs ?? {});
+
     for (const [name, p] of Object.entries(saved.refresh ?? {})) {
       const policy = readPolicy(p);
       if (policy.policy !== "manual") refreshPolicies.set(name, policy);
@@ -2409,7 +2446,10 @@ export function createSession(
     persistence.hash = await contentHash(splitBase(bytes).version);
     persistence.status = "saved";
     state.status = "ready";
-    state.message = `Restored ${bindingIds.length} binding(s) over ${sourceNames.length} source(s) from the document.`;
+    state.message = tr(STATUS.restored, {
+      bindings: bindingIds.length,
+      sources: sourceNames.length,
+    });
     emit();
     // Refresh policies: interval polling for consented remote sources, and
     // what the document asked to happen on open.
@@ -2535,6 +2575,20 @@ export function createSession(
         labelMutation(hash, labelKey(rawHost), labelRecipe ?? undefined),
       ];
     },
+    ...catalogueMethods({
+      host,
+      state: catalogue,
+      ensureEngine,
+      queryIds: () => Array.from(queries.keys()),
+      recordCount: (q) => self.recordCount(q),
+      refreshData: () => self.refreshData(),
+      checkExpression: (expr, q) => self.checkExpression(expr, q),
+      markDirty,
+      emit,
+      setMessage: (message) => {
+        state.message = message;
+      },
+    }),
     ...reviewMethods({
       host,
       ensureEngine,
@@ -2598,7 +2652,7 @@ export function createSession(
         importedCsv.set(name, csvText);
         pendingCsv.delete(name);
         state.status = "ready";
-        state.message = `Source "${name}" registered.`;
+        state.message = tr(STATUS.sourceRegistered, { name });
         markDirty();
       } catch (err) {
         // Keep the more specific engine-missing / duckdb-missing status the
@@ -2609,7 +2663,7 @@ export function createSession(
         ) {
           state.status = "error";
         }
-        state.message = `Import of "${name}" failed: ${errText(err)}`;
+        state.message = tr(STATUS.importFailed, { name, error: errText(err) });
         report({ level: "error", source: "import", message: state.message });
       }
     },
@@ -2623,7 +2677,7 @@ export function createSession(
         return invalid;
       }
       const origin = remoteOrigin(url);
-      if (!origin) return `not a valid URL: ${url}`;
+      if (!origin) return tr(SOURCES.notAUrl, { url });
       remoteSources.set(name, {
         name,
         url,
@@ -2633,7 +2687,7 @@ export function createSession(
         credentialRef: options?.credentialRef,
         consent: "required",
         status: "inert",
-        message: "Inert — allow this origin before anything is fetched.",
+        message: tr(SOURCES.remoteInertMessage),
         contentKey: null,
       });
       markDirty();
@@ -2724,9 +2778,13 @@ export function createSession(
         if (!sourceNames.includes(name)) sourceNames.push(name);
         state.status = "ready";
         state.message =
-          `Source "${name}" imported from ${fileName}` +
-          (out.sheet !== undefined ? ` (worksheet "${out.sheet}")` : "") +
-          ".";
+          out.sheet !== undefined
+            ? tr(STATUS.importedSheet, {
+                name,
+                file: fileName,
+                sheet: out.sheet,
+              })
+            : tr(STATUS.imported, { name, file: fileName });
         if (out.errorCells) {
           report({
             level: "warn",
@@ -3051,7 +3109,7 @@ export function createSession(
         markDirty();
         const names = await this.listDataSets();
         state.status = "ready";
-        state.message = `Captured data set "${name}" (record ${record + 1}).`;
+        state.message = tr(STATUS.captured, { name, record: record + 1 });
         return names;
       } catch (err) {
         state.status = "error";
@@ -3082,10 +3140,9 @@ export function createSession(
         const CAP = 64 * 1024;
         state.status = "ready";
         state.message =
-          `Captured ${names.length} data set(s) from "${queryId}".` +
+          tr(STATUS.capturedEvery, { count: names.length, query: queryId }) +
           (bytes > CAP * 0.8
-            ? ` WARNING: the captured data sets take ${bytes} of the ${CAP} bytes a ` +
-              "document can store for them — delete data sets or capture fewer records."
+            ? tr(STATUS.capturedTooLarge, { bytes, cap: CAP })
             : "");
         return names;
       } catch (err) {
@@ -3185,10 +3242,19 @@ export function createSession(
           };
         }
         state.status = "ready";
+        if (result.applied > 0) {
+          appliedSet = name;
+          markDirty();
+        }
         const skippedCount = Object.keys(result.skipped).length;
         state.message =
-          `Applied data set "${name}": ${result.applied} variable(s) in one undo step` +
-          (skippedCount > 0 ? `, ${skippedCount} skipped.` : ".");
+          skippedCount > 0
+            ? tr(STATUS.appliedDataSetSkipped, {
+                name,
+                applied: result.applied,
+                skipped: skippedCount,
+              })
+            : tr(STATUS.appliedDataSet, { name, applied: result.applied });
         return result;
       } catch (err) {
         state.status = "error";
@@ -3236,13 +3302,18 @@ export function createSession(
         markDirty();
         state.status = "ready";
         state.message =
-          `Imported "${report.setName}": ${report.variables} variable(s), ` +
-          `${report.dataSets} data set(s).` +
+          tr(STATUS.importedLibrary, {
+            name: report.setName,
+            variables: report.variables,
+            sets: report.dataSets,
+          }) +
           (report.unbound.length > 0
-            ? ` Not bound in this document (will be skipped): ${report.unbound.join(", ")}.`
+            ? tr(STATUS.libraryUnbound, { names: report.unbound.join(", ") })
             : "") +
           (report.graphOnly.length > 0
-            ? ` Graph-data variables are carried but never applied: ${report.graphOnly.join(", ")}.`
+            ? tr(STATUS.libraryGraphOnly, {
+                names: report.graphOnly.join(", "),
+              })
             : "");
         return report;
       } catch (err) {
@@ -3305,7 +3376,7 @@ export function createSession(
           }
         }
         state.status = "ready";
-        state.message = "Data refreshed from sources.";
+        state.message = tr(STATUS.refreshed);
       } catch (err) {
         state.status = state.status === "idle" ? "error" : state.status;
         state.message = err instanceof Error ? err.message : String(err);
@@ -3336,11 +3407,16 @@ export function createSession(
       try {
         const report =
           (e.refresh_change_report() as ChangeReport | null) ?? empty;
-        state.message =
-          `Change report: ${report.changed} changed, ${report.unchanged} unchanged` +
-          (report.added ? `, ${report.added} added` : "") +
-          (report.removed ? `, ${report.removed} removed` : "") +
-          ".";
+        state.message = tr(STATUS.changeReport, {
+          changed: report.changed,
+          unchanged: report.unchanged,
+          added: report.added
+            ? tr(STATUS.changeAdded, { count: report.added })
+            : "",
+          removed: report.removed
+            ? tr(STATUS.changeRemoved, { count: report.removed })
+            : "",
+        });
         return report;
       } catch (err) {
         host.log.warn(`refreshDiff: ${String(err)}`);
@@ -3370,7 +3446,11 @@ export function createSession(
               withVisibility: true,
             });
             state.status = "ready";
-            state.message = `Applied "${id}": ${r.applied} write(s) in ${r.undoSteps} undo step(s).`;
+            state.message = tr(STATUS.appliedProperty, {
+              id,
+              applied: r.applied,
+              steps: r.undoSteps,
+            });
           }
           return;
         }
@@ -3410,13 +3490,17 @@ export function createSession(
             markDirty();
           }
           state.status = res.ok ? "ready" : "error";
-          state.message = `Record flow "${id}": ${res.frames.length} frame(s) on ${res.pages.length} page(s).`;
+          state.message = tr(STATUS.recordFlowFrames, {
+            id,
+            frames: res.frames.length,
+            pages: res.pages.length,
+          });
           return;
         }
         if (bindingKinds.get(id) === "rule") {
           await this.applyRule(id);
           state.status = "ready";
-          state.message = `Applied rule "${id}".`;
+          state.message = tr(STATUS.appliedRule, { id });
           return;
         }
         // §9.7: a barcode is encoded + scaled to the bound frame's content box,
@@ -3457,7 +3541,7 @@ export function createSession(
             );
           }
           state.status = "ready";
-          state.message = `Resolved + lowered barcode "${id}".`;
+          state.message = tr(STATUS.loweredBarcode, { id });
           return;
         }
         const lowered = e.resolve_lowered(id) as { kind?: string } | null;
@@ -3541,7 +3625,7 @@ export function createSession(
           await commitLoweredVisibility(host, lowered as never, el, lowerCtx);
         }
         state.status = "ready";
-        state.message = `Resolved + lowered "${id}".`;
+        state.message = tr(STATUS.lowered, { id });
       } catch (err) {
         state.status = "error";
         state.message = err instanceof Error ? err.message : String(err);
@@ -3595,6 +3679,10 @@ export function createSession(
 
     setPreviewPosition(queryId, record) {
       previewAt.set(queryId, Math.max(0, Math.floor(record)));
+    },
+
+    appliedDataSet() {
+      return appliedSet;
     },
 
     async queryMappings(queryId) {
@@ -3707,7 +3795,7 @@ export function createSession(
             );
           }
           state.status = "ready";
-          state.message = `Preview: barcode "${bindingId}" against record ${record}.`;
+          state.message = tr(STATUS.previewBarcode, { id: bindingId, record });
           return;
         }
 
@@ -3722,7 +3810,7 @@ export function createSession(
         // insert a second table frame per step. Leave it to Lower.
         if (kind === "table") {
           state.status = "ready";
-          state.message = `Preview: table "${bindingId}" shows every record — nothing to step.`;
+          state.message = tr(STATUS.previewTable, { id: bindingId });
           return;
         }
         const lowered = resolveAt(bindingId) as { kind?: string } | null;
@@ -3802,7 +3890,7 @@ export function createSession(
           }
         }
         state.status = "ready";
-        state.message = `Preview: "${bindingId}" against record ${record}.`;
+        state.message = tr(STATUS.preview, { id: bindingId, record });
       } catch (err) {
         state.status = "error";
         state.message = err instanceof Error ? err.message : String(err);
@@ -3931,10 +4019,8 @@ export function createSession(
       const kept = [...resolved.values()].filter((r) => r === "kept").length;
       state.status = "ready";
       state.message =
-        `Refreshed ${written} field(s) from the live data.` +
-        (kept > 0
-          ? ` Left ${kept} pinned/overridden binding(s) unchanged.`
-          : "");
+        tr(STATUS.refreshedFields, { count: written }) +
+        (kept > 0 ? tr(STATUS.keptPinned, { count: kept }) : "");
       return written;
     },
 
@@ -4052,7 +4138,10 @@ export function createSession(
       try {
         const result = await host.network.requestConsent(origins, purpose);
         if (result.denied.length > 0) {
-          state.message = `Network consent: ${result.granted.length} granted, ${result.denied.length} denied.`;
+          state.message = tr(STATUS.consent, {
+            granted: result.granted.length,
+            denied: result.denied.length,
+          });
         }
         return [...host.network.consentedOrigins()];
       } catch (err) {
@@ -4290,7 +4379,12 @@ export function createSession(
           );
         }
       }
-      state.message = `Data Merge template: ${res.fields.length} field(s)${res.skipped.length ? `, ${res.skipped.length} skipped` : ""}.`;
+      state.message = res.skipped.length
+        ? tr(STATUS.templateExportSkipped, {
+            count: res.fields.length,
+            skipped: res.skipped.length,
+          })
+        : tr(STATUS.templateExport, { count: res.fields.length });
       emit();
       return {
         ok: true,
@@ -4370,7 +4464,7 @@ export function createSession(
           message: `merge: ${message}`,
         });
         state.status = "error";
-        state.message = `Merge failed: ${message}`;
+        state.message = tr(STATUS.mergeFailedWith, { reason: message });
         emit();
         return {
           ok: false,
@@ -4471,10 +4565,18 @@ export function createSession(
         });
       }
       state.status = result.ok ? "ready" : "error";
-      state.message = result.ok
-        ? `Merged ${result.records.length} record(s) onto ${result.pages.length} page(s)` +
-          (result.overset.length ? `, ${result.overset.length} overset.` : ".")
-        : "Merge failed.";
+      state.message = !result.ok
+        ? tr(STATUS.mergeFailed)
+        : result.overset.length
+          ? tr(STATUS.mergedOverset, {
+              records: result.records.length,
+              pages: result.pages.length,
+              overset: result.overset.length,
+            })
+          : tr(STATUS.merged, {
+              records: result.records.length,
+              pages: result.pages.length,
+            });
       emit();
       return result;
     },
@@ -4538,7 +4640,7 @@ export function createSession(
           }
         }
         state.status = "ready";
-        state.message = `Record flow "${id}": ${flow.total} record(s).`;
+        state.message = tr(STATUS.recordFlowRecords, { id, total: flow.total });
         emit();
         return { total: flow.total, blocks };
       } catch (err) {

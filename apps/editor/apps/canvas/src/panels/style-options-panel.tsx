@@ -47,7 +47,11 @@ import {
   CockpitPanelHeader,
   CockpitRow,
   PropertyField,
-  cockpitActions,
+  cockpitActionsOf,
+  createValueStore,
+  scoped,
+  useEditorScope,
+  type EditorScope,
   displayName,
   useCollection,
 } from "@paged-media/shell";
@@ -55,7 +59,10 @@ import { formatAddress } from "@paged-media/plugin-sdk";
 import { FieldSelect, Tab } from "@paged-media/panel-kit";
 import type { CollectionName } from "@paged-media/client";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { SchemaSections, type SectionSpec } from "./schema-sections";
+import { sectionsIn } from "./section-strings";
 
 export type StyleFamily =
   "paragraph" | "character" | "object" | "cell" | "table";
@@ -83,154 +90,276 @@ function familyTab(selected: boolean): CSSProperties {
   };
 }
 
+const M = defineMessages("app.styleOptionsPanel", {
+  paragraph: "Paragraph",
+  character: "Character",
+  object: "Object",
+  cell: "Cell",
+  table: "Table",
+  basicCharacterFormats: "Basic Character Formats",
+  fontFamily: "Font family",
+  fontStyle: "Font style",
+  size: "Size",
+  leading: "Leading",
+  kerning: "Kerning",
+  tracking: "Tracking",
+  case: "Case",
+  position: "Position",
+  underline: "Underline",
+  strikethrough: "Strikethrough",
+  ligatures: "Ligatures",
+  noBreak: "No break",
+  advancedCharacterFormats: "Advanced Character Formats",
+  baselineShift: "Baseline shift",
+  characterColor: "Character Color",
+  fill: "Fill",
+  general: "General",
+  nextStyle: "Next style",
+  indentsAndSpacing: "Indents and Spacing",
+  alignment: "Alignment",
+  balanceRaggedLines: "Balance ragged lines",
+  leftIndent: "Left indent",
+  rightIndent: "Right indent",
+  firstLine: "First line",
+  lastLine: "Last line",
+  spaceBefore: "Space before",
+  spaceAfter: "Space after",
+  tabs: "Tabs",
+  tabStops: "Tab stops",
+  keepOptions: "Keep Options",
+  keepWithNext: "Keep with next",
+  keepLines: "Keep lines",
+  allLines: "All lines",
+  firstLines: "First lines",
+  lastLines: "Last lines",
+  start: "Start",
+  hyphenation: "Hyphenation",
+  hyphenate: "Hyphenate",
+  zone: "Zone",
+  justification: "Justification",
+  autoLeading: "Auto leading",
+  singleWord: "Single word",
+  composer: "Composer",
+  spanColumns: "Span Columns",
+  layout: "Layout",
+  columns: "Columns",
+  insideGutter: "Inside gutter",
+  outsideGutter: "Outside gutter",
+  bulletsAndNumbering: "Bullets and Numbering",
+  listType: "List type",
+  bullet: "Bullet",
+  textAfter: "Text after",
+  bulletStyle: "Bullet style",
+  list: "List",
+  format: "Format",
+  number: "Number",
+  startAt: "Start at",
+  continue: "Continue",
+  numberStyle: "Number style",
+  tint: "Tint",
+  stroke: "Stroke",
+  weight: "Weight",
+  cornerOptions: "Corner Options",
+  shape: "Shape",
+  text: "Text",
+  align: "Align",
+  rotation: "Rotation",
+  strokes: "Strokes",
+  top: "Top",
+  topWeight: "Top weight",
+  bottom: "Bottom",
+  bottomWeight: "Bottom weight",
+  left: "Left",
+  leftWeight: "Left weight",
+  right: "Right",
+  rightWeight: "Right weight",
+  cellStyles: "Cell Styles",
+  headerRows: "Header rows",
+  bodyRows: "Body rows",
+  footerRows: "Footer rows",
+  leftColumn: "Left column",
+  rightColumn: "Right column",
+  tableBorder: "Table Border",
+  fills: "Fills",
+  alternating: "Alternating",
+  firstFill: "First fill",
+  firstRows: "First rows",
+  firstTint: "First tint",
+  nextFill: "Next fill",
+  nextRows: "Next rows",
+  nextTint: "Next tint",
+  panelTitle: "Style Options",
+  style: "Style",
+  name: "Name",
+  basedOn: "Based on",
+  noStyle: "[No style]",
+  emptyParagraph: "This document has no paragraph styles.",
+  emptyCharacter: "This document has no character styles.",
+  emptyObject: "This document has no object styles.",
+  emptyCell: "This document has no cell styles.",
+  emptyTable: "This document has no table styles.",
+  openOptions: "Style Options…",
+  options: "Options…",
+});
+
+/** A family's empty state, by family. */
+const EMPTY: Readonly<Record<StyleFamily, string>> = {
+  paragraph: M.emptyParagraph,
+  character: M.emptyCharacter,
+  object: M.emptyObject,
+  cell: M.emptyCell,
+  table: M.emptyTable,
+};
+
+// Titles and labels below are message keys (`sectionsIn` translates them).
 const FAMILIES: ReadonlyArray<{
   family: StyleFamily;
   title: string;
   collection: CollectionName;
 }> = [
-  { family: "paragraph", title: "Paragraph", collection: "paragraphStyles" },
-  { family: "character", title: "Character", collection: "characterStyles" },
-  { family: "object", title: "Object", collection: "objectStyles" },
-  { family: "cell", title: "Cell", collection: "cellStyles" },
-  { family: "table", title: "Table", collection: "tableStyles" },
+  { family: "paragraph", title: M.paragraph, collection: "paragraphStyles" },
+  { family: "character", title: M.character, collection: "characterStyles" },
+  { family: "object", title: M.object, collection: "objectStyles" },
+  { family: "cell", title: M.cell, collection: "cellStyles" },
+  { family: "table", title: M.table, collection: "tableStyles" },
 ];
 
 // ------------------------------------------------------------ layout
 
 const CHARACTER_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Basic Character Formats",
+    title: M.basicCharacterFormats,
     fields: [
-      { path: "characterFontFamily", label: "Font family" },
-      { path: "characterFontStyle", label: "Font style" },
-      { path: "characterFontSize", label: "Size" },
-      { path: "characterLeading", label: "Leading" },
-      { path: "characterKerningMethod", label: "Kerning" },
-      { path: "characterTracking", label: "Tracking" },
-      { path: "characterCase", label: "Case" },
-      { path: "characterPosition", label: "Position" },
-      { path: "characterUnderline", label: "Underline" },
-      { path: "characterStrikethru", label: "Strikethrough" },
-      { path: "characterLigatures", label: "Ligatures" },
-      { path: "characterNoBreak", label: "No break", hideUnreported: true },
+      { path: "characterFontFamily", label: M.fontFamily },
+      { path: "characterFontStyle", label: M.fontStyle },
+      { path: "characterFontSize", label: M.size },
+      { path: "characterLeading", label: M.leading },
+      { path: "characterKerningMethod", label: M.kerning },
+      { path: "characterTracking", label: M.tracking },
+      { path: "characterCase", label: M.case },
+      { path: "characterPosition", label: M.position },
+      { path: "characterUnderline", label: M.underline },
+      { path: "characterStrikethru", label: M.strikethrough },
+      { path: "characterLigatures", label: M.ligatures },
+      { path: "characterNoBreak", label: M.noBreak, hideUnreported: true },
     ],
   },
   {
-    title: "Advanced Character Formats",
-    fields: [{ path: "characterBaselineShift", label: "Baseline shift" }],
+    title: M.advancedCharacterFormats,
+    fields: [{ path: "characterBaselineShift", label: M.baselineShift }],
   },
   {
-    title: "Character Color",
+    title: M.characterColor,
     fields: [
-      { path: "characterFillColor", label: "Fill", collection: "swatches" },
+      { path: "characterFillColor", label: M.fill, collection: "swatches" },
     ],
   },
 ];
 
 const PARAGRAPH_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "General",
+    title: M.general,
     fields: [
       {
         path: "paragraphStyleNextStyle",
-        label: "Next style",
+        label: M.nextStyle,
         collection: "paragraphStyles",
       },
     ],
   },
   {
-    title: "Indents and Spacing",
+    title: M.indentsAndSpacing,
     fields: [
-      { path: "paragraphJustification", label: "Alignment" },
+      { path: "paragraphJustification", label: M.alignment },
       {
         path: "paragraphBalanceRaggedLines",
-        label: "Balance ragged lines",
+        label: M.balanceRaggedLines,
         hideUnreported: true,
       },
-      { path: "paragraphLeftIndent", label: "Left indent" },
-      { path: "paragraphRightIndent", label: "Right indent" },
-      { path: "paragraphFirstLineIndent", label: "First line" },
+      { path: "paragraphLeftIndent", label: M.leftIndent },
+      { path: "paragraphRightIndent", label: M.rightIndent },
+      { path: "paragraphFirstLineIndent", label: M.firstLine },
       {
         path: "paragraphLastLineIndent",
-        label: "Last line",
+        label: M.lastLine,
         hideUnreported: true,
       },
-      { path: "paragraphSpaceBefore", label: "Space before" },
-      { path: "paragraphSpaceAfter", label: "Space after" },
+      { path: "paragraphSpaceBefore", label: M.spaceBefore },
+      { path: "paragraphSpaceAfter", label: M.spaceAfter },
     ],
   },
   {
-    title: "Tabs",
-    fields: [{ path: "paragraphTabStops", label: "Tab stops" }],
+    title: M.tabs,
+    fields: [{ path: "paragraphTabStops", label: M.tabStops }],
   },
   {
-    title: "Keep Options",
+    title: M.keepOptions,
     fields: [
-      { path: "paragraphKeepWithNext", label: "Keep with next" },
-      { path: "paragraphKeepLinesTogether", label: "Keep lines" },
-      { path: "paragraphKeepAllLinesTogether", label: "All lines" },
-      { path: "paragraphKeepFirstLines", label: "First lines" },
-      { path: "paragraphKeepLastLines", label: "Last lines" },
-      { path: "paragraphStartParagraph", label: "Start" },
+      { path: "paragraphKeepWithNext", label: M.keepWithNext },
+      { path: "paragraphKeepLinesTogether", label: M.keepLines },
+      { path: "paragraphKeepAllLinesTogether", label: M.allLines },
+      { path: "paragraphKeepFirstLines", label: M.firstLines },
+      { path: "paragraphKeepLastLines", label: M.lastLines },
+      { path: "paragraphStartParagraph", label: M.start },
     ],
   },
   {
-    title: "Hyphenation",
+    title: M.hyphenation,
     fields: [
-      { path: "paragraphHyphenation", label: "Hyphenate" },
-      { path: "paragraphHyphenationZone", label: "Zone" },
+      { path: "paragraphHyphenation", label: M.hyphenate },
+      { path: "paragraphHyphenationZone", label: M.zone },
     ],
   },
   {
-    title: "Justification",
+    title: M.justification,
     fields: [
       {
         path: "paragraphAutoLeading",
-        label: "Auto leading",
+        label: M.autoLeading,
         hideUnreported: true,
       },
       {
         path: "paragraphSingleWordJustification",
-        label: "Single word",
+        label: M.singleWord,
         hideUnreported: true,
       },
-      { path: "paragraphComposer", label: "Composer" },
+      { path: "paragraphComposer", label: M.composer },
     ],
   },
   {
-    title: "Span Columns",
+    title: M.spanColumns,
     fields: [
-      { path: "paragraphSpanColumnType", label: "Layout" },
-      { path: "paragraphSpanSplitColumnCount", label: "Columns" },
-      { path: "paragraphSpanColumnMinSpaceBefore", label: "Space before" },
-      { path: "paragraphSpanColumnMinSpaceAfter", label: "Space after" },
-      { path: "paragraphSplitColumnInsideGutter", label: "Inside gutter" },
-      { path: "paragraphSplitColumnOutsideGutter", label: "Outside gutter" },
+      { path: "paragraphSpanColumnType", label: M.layout },
+      { path: "paragraphSpanSplitColumnCount", label: M.columns },
+      { path: "paragraphSpanColumnMinSpaceBefore", label: M.spaceBefore },
+      { path: "paragraphSpanColumnMinSpaceAfter", label: M.spaceAfter },
+      { path: "paragraphSplitColumnInsideGutter", label: M.insideGutter },
+      { path: "paragraphSplitColumnOutsideGutter", label: M.outsideGutter },
     ],
   },
   {
-    title: "Bullets and Numbering",
+    title: M.bulletsAndNumbering,
     fields: [
-      { path: "paragraphListType", label: "List type" },
-      { path: "paragraphBulletCharacter", label: "Bullet" },
-      { path: "paragraphBulletsTextAfter", label: "Text after" },
+      { path: "paragraphListType", label: M.listType },
+      { path: "paragraphBulletCharacter", label: M.bullet },
+      { path: "paragraphBulletsTextAfter", label: M.textAfter },
       {
         path: "paragraphBulletsCharacterStyle",
-        label: "Bullet style",
+        label: M.bulletStyle,
         collection: "characterStyles",
       },
       {
         path: "paragraphAppliedNumberingList",
-        label: "List",
+        label: M.list,
         collection: "numberingLists",
       },
-      { path: "paragraphNumberingFormat", label: "Format" },
-      { path: "paragraphNumberingExpression", label: "Number" },
-      { path: "paragraphNumberingStartAt", label: "Start at" },
-      { path: "paragraphNumberingContinue", label: "Continue" },
+      { path: "paragraphNumberingFormat", label: M.format },
+      { path: "paragraphNumberingExpression", label: M.number },
+      { path: "paragraphNumberingStartAt", label: M.startAt },
+      { path: "paragraphNumberingContinue", label: M.continue },
       {
         path: "paragraphNumberingCharacterStyle",
-        label: "Number style",
+        label: M.numberStyle,
         collection: "characterStyles",
       },
     ],
@@ -240,149 +369,149 @@ const PARAGRAPH_SECTIONS: readonly SectionSpec[] = [
 
 const OBJECT_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Fill",
+    title: M.fill,
     fields: [
-      { path: "frameFillColor", label: "Fill", collection: "swatches" },
-      { path: "frameFillTint", label: "Tint" },
+      { path: "frameFillColor", label: M.fill, collection: "swatches" },
+      { path: "frameFillTint", label: M.tint },
     ],
   },
   {
-    title: "Stroke",
+    title: M.stroke,
     fields: [
-      { path: "frameStrokeColor", label: "Stroke", collection: "swatches" },
-      { path: "frameStrokeWeight", label: "Weight" },
-      { path: "objectStyleStrokeTint", label: "Tint" },
+      { path: "frameStrokeColor", label: M.stroke, collection: "swatches" },
+      { path: "frameStrokeWeight", label: M.weight },
+      { path: "objectStyleStrokeTint", label: M.tint },
     ],
   },
   {
-    title: "Corner Options",
+    title: M.cornerOptions,
     fields: [
-      { path: "objectStyleCornerOption", label: "Shape" },
-      { path: "objectStyleCornerRadius", label: "Size" },
+      { path: "objectStyleCornerOption", label: M.shape },
+      { path: "objectStyleCornerRadius", label: M.size },
     ],
   },
 ];
 
 const CELL_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Text",
+    title: M.text,
     fields: [
-      { path: "cellVerticalJustification", label: "Align" },
-      { path: "cellStyleRotationAngle", label: "Rotation" },
+      { path: "cellVerticalJustification", label: M.align },
+      { path: "cellStyleRotationAngle", label: M.rotation },
     ],
   },
   {
-    title: "Fill",
+    title: M.fill,
     fields: [
-      { path: "cellFillColor", label: "Fill", collection: "swatches" },
-      { path: "cellFillTint", label: "Tint" },
+      { path: "cellFillColor", label: M.fill, collection: "swatches" },
+      { path: "cellFillTint", label: M.tint },
     ],
   },
   {
-    title: "Strokes",
+    title: M.strokes,
     fields: [
-      { path: "cellTopEdgeStrokeColor", label: "Top", collection: "swatches" },
-      { path: "cellTopEdgeStrokeWeight", label: "Top weight" },
+      { path: "cellTopEdgeStrokeColor", label: M.top, collection: "swatches" },
+      { path: "cellTopEdgeStrokeWeight", label: M.topWeight },
       {
         path: "cellBottomEdgeStrokeColor",
-        label: "Bottom",
+        label: M.bottom,
         collection: "swatches",
       },
-      { path: "cellBottomEdgeStrokeWeight", label: "Bottom weight" },
+      { path: "cellBottomEdgeStrokeWeight", label: M.bottomWeight },
       {
         path: "cellLeftEdgeStrokeColor",
-        label: "Left",
+        label: M.left,
         collection: "swatches",
       },
-      { path: "cellLeftEdgeStrokeWeight", label: "Left weight" },
+      { path: "cellLeftEdgeStrokeWeight", label: M.leftWeight },
       {
         path: "cellRightEdgeStrokeColor",
-        label: "Right",
+        label: M.right,
         collection: "swatches",
       },
-      { path: "cellRightEdgeStrokeWeight", label: "Right weight" },
+      { path: "cellRightEdgeStrokeWeight", label: M.rightWeight },
     ],
   },
 ];
 
 const TABLE_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Cell Styles",
+    title: M.cellStyles,
     fields: [
       {
         path: "tableStyleHeaderRegionCellStyle",
-        label: "Header rows",
+        label: M.headerRows,
         collection: "cellStyles",
       },
       {
         path: "tableStyleBodyRegionCellStyle",
-        label: "Body rows",
+        label: M.bodyRows,
         collection: "cellStyles",
       },
       {
         path: "tableStyleFooterRegionCellStyle",
-        label: "Footer rows",
+        label: M.footerRows,
         collection: "cellStyles",
       },
       {
         path: "tableStyleLeftColumnRegionCellStyle",
-        label: "Left column",
+        label: M.leftColumn,
         collection: "cellStyles",
       },
       {
         path: "tableStyleRightColumnRegionCellStyle",
-        label: "Right column",
+        label: M.rightColumn,
         collection: "cellStyles",
       },
     ],
   },
   {
-    title: "Table Border",
+    title: M.tableBorder,
     fields: [
       {
         path: "tableStyleTopBorderStrokeColor",
-        label: "Top",
+        label: M.top,
         collection: "swatches",
       },
-      { path: "tableStyleTopBorderStrokeWeight", label: "Top weight" },
+      { path: "tableStyleTopBorderStrokeWeight", label: M.topWeight },
       {
         path: "tableStyleBottomBorderStrokeColor",
-        label: "Bottom",
+        label: M.bottom,
         collection: "swatches",
       },
-      { path: "tableStyleBottomBorderStrokeWeight", label: "Bottom weight" },
+      { path: "tableStyleBottomBorderStrokeWeight", label: M.bottomWeight },
       {
         path: "tableStyleLeftBorderStrokeColor",
-        label: "Left",
+        label: M.left,
         collection: "swatches",
       },
-      { path: "tableStyleLeftBorderStrokeWeight", label: "Left weight" },
+      { path: "tableStyleLeftBorderStrokeWeight", label: M.leftWeight },
       {
         path: "tableStyleRightBorderStrokeColor",
-        label: "Right",
+        label: M.right,
         collection: "swatches",
       },
-      { path: "tableStyleRightBorderStrokeWeight", label: "Right weight" },
+      { path: "tableStyleRightBorderStrokeWeight", label: M.rightWeight },
     ],
   },
   {
-    title: "Fills",
+    title: M.fills,
     fields: [
-      { path: "tableStyleAlternatingFills", label: "Alternating" },
+      { path: "tableStyleAlternatingFills", label: M.alternating },
       {
         path: "tableStyleStartRowFillColor",
-        label: "First fill",
+        label: M.firstFill,
         collection: "swatches",
       },
-      { path: "tableStyleStartRowFillCount", label: "First rows" },
-      { path: "tableStyleStartRowFillTint", label: "First tint" },
+      { path: "tableStyleStartRowFillCount", label: M.firstRows },
+      { path: "tableStyleStartRowFillTint", label: M.firstTint },
       {
         path: "tableStyleEndRowFillColor",
-        label: "Next fill",
+        label: M.nextFill,
         collection: "swatches",
       },
-      { path: "tableStyleEndRowFillCount", label: "Next rows" },
-      { path: "tableStyleEndRowFillTint", label: "Next tint" },
+      { path: "tableStyleEndRowFillCount", label: M.nextRows },
+      { path: "tableStyleEndRowFillTint", label: M.nextTint },
     ],
   },
 ];
@@ -399,34 +528,31 @@ export const STYLE_SECTIONS: Readonly<
 
 // ------------------------------------------------------------ target
 
-/** The style the panel edits — shared so a style panel can open the
- *  options on ITS applied style. */
-let target: { family: StyleFamily; selfId: string | null } = {
-  family: "paragraph",
-  selfId: null,
-};
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const snapshot = () => target;
+/** The style the panel edits, per editor — shared so a style panel can
+ *  open the options on ITS applied style. */
+const TARGET = scoped("styleOptionsTarget", () =>
+  createValueStore<{ family: StyleFamily; selfId: string | null }>({
+    family: "paragraph",
+    selfId: null,
+  }),
+);
 
 export function setStyleOptionsTarget(
+  scope: EditorScope,
   family: StyleFamily,
   selfId: string | null,
 ): void {
-  target = { family, selfId };
-  for (const l of listeners) l();
+  scope.get(TARGET).set({ family, selfId });
 }
 
-/** "Style Options…": point the panel at a style and bring it up. */
+/** "Style Options…": point `scope`'s panel at a style and bring it up. */
 export function openStyleOptions(
+  scope: EditorScope,
   family: StyleFamily,
   selfId: string | null,
 ): void {
-  setStyleOptionsTarget(family, selfId);
-  cockpitActions.openPanel?.(STYLE_OPTIONS_PANEL);
+  setStyleOptionsTarget(scope, family, selfId);
+  cockpitActionsOf(scope).openPanel?.(STYLE_OPTIONS_PANEL);
 }
 
 /** The ADR 131 address of a style. */
@@ -443,7 +569,10 @@ interface StyleRow {
 // ------------------------------------------------------------- panel
 
 export function StyleOptionsPanel() {
-  const current = useSyncExternalStore(subscribe, snapshot);
+  const strings = useStrings();
+  const scope = useEditorScope();
+  const target = scope.get(TARGET);
+  const current = useSyncExternalStore(target.subscribe, target.get);
   const family = current.family;
   const spec = FAMILIES.find((f) => f.family === family)!;
   const styles = useCollection<StyleRow>(spec.collection);
@@ -474,7 +603,7 @@ export function StyleOptionsPanel() {
       data-style-family={family}
       data-style-target={address ?? ""}
     >
-      <CockpitPanelHeader title="Style Options" />
+      <CockpitPanelHeader title={strings.t(M.panelTitle)} />
       <div className="flex flex-wrap gap-1 px-3.5 pb-2" role="tablist">
         {FAMILIES.map((f) => (
           <Tab
@@ -482,14 +611,14 @@ export function StyleOptionsPanel() {
             selected={f.family === family}
             data-cockpit-action={`style-family-${f.family}`}
             style={familyTab(f.family === family)}
-            onClick={() => setStyleOptionsTarget(f.family, null)}
+            onClick={() => setStyleOptionsTarget(scope, f.family, null)}
           >
-            {f.title}
+            {strings.t(f.title)}
           </Tab>
         ))}
       </div>
       <div className="flex flex-col gap-1.5 px-3.5 pb-2">
-        <CockpitRow label="Style">
+        <CockpitRow label={strings.t(M.style)}>
           <FieldSelect
             data-style-options-select=""
             className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
@@ -507,16 +636,16 @@ export function StyleOptionsPanel() {
           <>
             <PropertyField
               path="name"
-              label="Name"
+              label={strings.t(M.name)}
               targets={targets}
               schemaKind={address}
             />
-            <CockpitRow label="Based on">
+            <CockpitRow label={strings.t(M.basedOn)}>
               <span
                 className="text-xs"
                 data-style-based-on={row?.basedOn ?? ""}
               >
-                {basedOn ? displayName(basedOn.name) : "[No style]"}
+                {basedOn ? displayName(basedOn.name) : strings.t(M.noStyle)}
               </span>
             </CockpitRow>
           </>
@@ -526,7 +655,7 @@ export function StyleOptionsPanel() {
             style={{ color: "var(--pg-muted-fg)" }}
             data-style-options-empty=""
           >
-            This document has no {spec.title.toLowerCase()} styles.
+            {strings.t(EMPTY[family])}
           </div>
         )}
       </div>
@@ -534,7 +663,7 @@ export function StyleOptionsPanel() {
         <SchemaSections
           key={address}
           targets={targets}
-          sections={STYLE_SECTIONS[family]}
+          sections={sectionsIn(strings, STYLE_SECTIONS[family])}
           family={family}
           testId={`style:${family}`}
         />
@@ -551,16 +680,18 @@ export function StyleOptionsButton({
   family: StyleFamily;
   selfId: string;
 }) {
+  const strings = useStrings();
+  const scope = useEditorScope();
   return (
     <button
       type="button"
       data-style-options-open={selfId}
-      title="Style Options…"
-      onClick={() => openStyleOptions(family, selfId)}
+      title={strings.t(M.openOptions)}
+      onClick={() => openStyleOptions(scope, family, selfId)}
       className="shrink-0 rounded-[4px] px-1.5 text-[10px] hover:bg-[var(--pg-muted)]"
       style={{ color: "var(--pg-muted-fg)" }}
     >
-      Options…
+      {strings.t(M.options)}
     </button>
   );
 }

@@ -181,7 +181,7 @@ impl Printer<'_> {
                 // anything else is parenthesized so `(...)(args)` re-parses.
                 let atomic = matches!(
                     **callee,
-                    Expr::Func(_, _) | Expr::Local(_) | Expr::Call(_, _)
+                    Expr::Func(_, _) | Expr::Local(_) | Expr::Call(_, _) | Expr::Name(_)
                 );
                 if !atomic {
                     out.push('(');
@@ -192,7 +192,61 @@ impl Printer<'_> {
                 }
                 self.call_args(args, out);
             }
+            Expr::Ref3D(r) => {
+                self.span_prefix(r.sheets, out);
+                out.push_str(&format_a1(
+                    r.cell.row,
+                    r.cell.col,
+                    r.cell.row_abs,
+                    r.cell.col_abs,
+                ));
+            }
+            Expr::Range3D(r) => {
+                self.span_prefix(r.sheets, out);
+                self.range_body(&r.range, out);
+            }
+            // Spelled as written: Excel keeps an unknown name's text. A
+            // function's bare name (an eta-reduced LAMBDA, W3) is stored
+            // `_xleta.NAME`.
+            Expr::UnknownName(name) => {
+                if self.ooxml && sheet_core::funcs::lookup_func(name).is_some() {
+                    out.push_str("_xleta.");
+                }
+                out.push_str(name);
+            }
+            Expr::UnknownFunc(name, args) => {
+                out.push_str(name);
+                self.call_args(args, out);
+            }
         }
+    }
+
+    /// The `First:Last!` prefix of a 3D reference, always printed (Excel
+    /// writes it even on the formula's own sheet), quoted as one token when
+    /// either name needs quoting (`'Jan 1:Mar 3'!`).
+    fn span_prefix(&self, span: sheet_core::ast::SheetSpan, out: &mut String) {
+        let (Some(a), Some(b)) = (
+            self.sheets.sheet_name(span.first),
+            self.sheets.sheet_name(span.last),
+        ) else {
+            out.push_str("#REF!");
+            return;
+        };
+        if needs_quoting(a) || needs_quoting(b) {
+            out.push('\'');
+            for ch in a.chars().chain(std::iter::once(':')).chain(b.chars()) {
+                if ch == '\'' {
+                    out.push('\'');
+                }
+                out.push(ch);
+            }
+            out.push('\'');
+        } else {
+            out.push_str(a);
+            out.push(':');
+            out.push_str(b);
+        }
+        out.push('!');
     }
 
     /// Print a structured (table) reference in the canonical Excel forms
@@ -343,6 +397,11 @@ impl Printer<'_> {
     fn range(&self, r: &RangeRef, out: &mut String) {
         // The sheet prefix applies to the whole range (printed once).
         self.sheet_prefix(r.start.sheet, out);
+        self.range_body(r, out);
+    }
+
+    /// A range without its sheet prefix.
+    fn range_body(&self, r: &RangeRef, out: &mut String) {
         // Whole columns `A:C` / whole rows `1:3` print in their own form.
         if r.is_whole_cols() {
             for (c, abs) in [(r.start.col, r.start.col_abs), (r.end.col, r.end.col_abs)] {
@@ -395,6 +454,17 @@ impl Printer<'_> {
                 self.expr(inner, out, Prec::PERCENT, Side::Left);
                 out.push('%');
             }
+            UnOp::ImplicitIntersect => {
+                if self.ooxml {
+                    // The storage form of `@` ([MS-XLSX] §2.2.2).
+                    out.push_str("_xlfn.SINGLE(");
+                    self.expr(inner, out, Prec::TOP, Side::Whole);
+                    out.push(')');
+                } else {
+                    out.push('@');
+                    self.expr(inner, out, Prec::UNARY, Side::Right);
+                }
+            }
         }
     }
 
@@ -425,11 +495,13 @@ impl Printer<'_> {
             // The storage dialect prefixes locals with `_xlpm.`.
             Expr::Local(name) => !self.ooxml && word(name),
             Expr::Name(nid) => self.sheets.defined_name(*nid).is_some_and(word),
+            Expr::UnknownName(name) => word(name),
             // A range on the left prints without parentheses, so it ends
             // where its right operand ends (an atom; anything else is
             // parenthesised there).
             Expr::Binary(BinOp::Range, _, r) => {
-                matches!(**r, Expr::Local(_) | Expr::Name(_)) && self.ends_in_word(r)
+                matches!(**r, Expr::Local(_) | Expr::Name(_) | Expr::UnknownName(_))
+                    && self.ends_in_word(r)
             }
             _ => false,
         }
@@ -565,6 +637,9 @@ fn expr_prec(e: &Expr) -> Prec {
         // atomic for re-parse purposes).
         Expr::Array(_) | Expr::StructuredRef(_) | Expr::SpillRef(_) => Prec::ATOM,
         Expr::Local(_) | Expr::Call(_, _) | Expr::Missing => Prec::ATOM,
+        Expr::Ref3D(_) | Expr::Range3D(_) | Expr::UnknownName(_) | Expr::UnknownFunc(_, _) => {
+            Prec::ATOM
+        }
         Expr::Unary(UnOp::Percent, _) => Prec::PERCENT,
         Expr::Unary(_, _) => Prec::UNARY,
         Expr::Binary(op, _, _) => binop_prec(*op),

@@ -1,0 +1,12 @@
+# MULTINOMIAL(number1,...).
+# id	formula	setup	expected
+mn-doc	=MULTINOMIAL(2,3,4)	-	1260
+mn-one	=MULTINOMIAL(5)	-	1
+mn-frac	=MULTINOMIAL(2.9,1.2)	-	3
+mn-neg	=MULTINOMIAL(-1,2)	-	#NUM!
+mn-range	=MULTINOMIAL(A1:A3)	A1=1;A2=2;A3=3	60
+mn-rangetext	=MULTINOMIAL(A1:A3)	A1=1;A2=text:x;A3=3	#VALUE!
+mn-text	=MULTINOMIAL("a",1)	-	#VALUE!
+mn-zero	=MULTINOMIAL(0,0)	-	1
+mn-big	=MULTINOMIAL(100,100)	-	#NUM!
+mn-array	=MULTINOMIAL({1,2,3})	-	60

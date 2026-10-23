@@ -35,8 +35,10 @@ import {
 } from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
 import { refusalText } from "@paged-media/panel-kit";
+import { t } from "@paged-media/strings";
 
 import type { DocEngine } from "./engine.js";
+import { DOC } from "./messages.js";
 import { applyStyleOpsReporting, pourSteps } from "./pour.js";
 
 /** What a standalone open produced: the section stories (save-back reads
@@ -114,10 +116,11 @@ export async function setGrowRules(
       : [
           {
             severity: "warning" as const,
-            message:
-              `This editor version cannot add pages as text grows: ` +
-              `${refused.length} of ${storyIds.length} Word section(s) stay on one page, ` +
-              `and text past it is overset. ${error == null ? "" : refusalText(error)}`,
+            message: t(DOC.cannotGrow, {
+              refused: refused.length,
+              total: storyIds.length,
+              reason: error == null ? "" : refusalText(error),
+            }),
           },
         ],
   );
@@ -176,9 +179,7 @@ export async function finishStandalone(
     host.diagnostics.set(COLUMNS_DIAGNOSTICS_KEY, [
       {
         severity: "warning" as const,
-        message:
-          "This editor version cannot change columns mid-page: " +
-          "each Word section that does opens a new page instead.",
+        message: t(DOC.cannotChangeColumns),
       },
     ]);
   } else {

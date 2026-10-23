@@ -145,10 +145,8 @@ fn sheet_fn_lambda_let_parse_and_storage_round_trip() {
     let (display, storage) = round_trip("LET(x,1,x+1)");
     assert_eq!(display, "LET(x,1,x+1)");
     assert_eq!(storage, "_xlfn.LET(_xlpm.x,1,_xlpm.x+1)");
-    // An unknown name outside a LET is still a parse error (the ruling).
-    let e = engine(&[]);
-    let mut e = e;
-    assert!(e.enter(0, 0, 0, "=x+1").is_err());
+    // A LET name outside its LET is an unknown name: #NAME? (W1.0).
+    assert_eq!(calc(&[], "=x+1"), CellValue::Error(CellError::Name));
 }
 
 // ---- LAMBDA ------------------------------------------------------------------
@@ -167,8 +165,8 @@ fn sheet_fn_lambda_lambda_calls_and_closures() {
 
 #[test]
 fn sheet_fn_lambda_lambda_error_rulings() {
-    // A lambda as a cell value: #CALC! grounded to #VALUE!.
-    assert_eq!(calc(&[], "=LAMBDA(x,x)"), er(CellError::Value));
+    // A lambda as a cell value: #CALC! (Excel-recorded).
+    assert_eq!(calc(&[], "=LAMBDA(x,x)"), er(CellError::Calc));
     // Wrong argument count.
     assert_eq!(calc(&[], "=LAMBDA(x,x)(1,2)"), er(CellError::Value));
     // Calling a value.

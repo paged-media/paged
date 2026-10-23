@@ -1,0 +1,12 @@
+# IMDIV.
+# id	formula	setup	expected
+imdiv-0	=IMDIV("-238+240i","10+24i")	-	5+12i
+imdiv-1	=IMDIV("1","i")	-	-i
+imdiv-2	=IMDIV("1+i","0")	-	#NUM!
+imdiv-3	=IMDIV("0","1+i")	-	0
+imdiv-4	=IMDIV("abc","1")	-	#NUM!
+imdiv-5	=IMDIV("1+i","1+j")	-	#NUM!
+imdiv-6	=IMDIV("1+2j","3+4j")	-	0.44+0.08j
+imdiv-7	=IMDIV("5",2)	-	2.5
+imdiv-8	=IMDIV("3+4i","3+4i")	-	1
+imdiv-x0	=IMDIV(A1,1)	A1=#N/A	#N/A

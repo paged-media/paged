@@ -25,12 +25,15 @@
 // callbacks (typically the setters from DocumentContext). It does
 // NOT depend on React; pass it the setters and it dispatches.
 
+import { t } from "@paged-media/strings";
+import { LOAD } from "./messages";
 import type { CanvasClient } from "@paged-media/client";
 import type { DocumentHandle, PageId } from "@paged-media/client";
 
 import type { DocumentEntry } from "@paged-media/repository";
 
 import type { LoadingState } from "./document-context";
+import { scoped, type EditorScope } from "./editor-scope";
 import { declareDocumentSource, sourceOfFile } from "./document-source";
 import {
   rememberOpenedFile,
@@ -56,14 +59,18 @@ export interface DocumentLoaderCallbacks {
    *  from the library), so it is not imported again. Absent: the file is
    *  new to the library and becomes a document in it. */
   libraryDocument?: DocumentEntry;
+  /** The editor the document opens in: its library document, its source
+   *  for the identity store, its newest load (plan task E1). */
+  scope: EditorScope;
 }
 
 /** The newest load (open or New). Every step after an await checks it, so
  *  a load another one superseded stops where it is: its handle, its page
  *  thumbnails, its "loaded N pages" status and its ready flag never land
- *  on the document that replaced it (SH-105, ADR 248). Module-scoped
- *  because the document state the callbacks write is one per editor. */
-let newestLoad = 0;
+ *  on the document that replaced it (SH-105, ADR 248). In the editor's
+ *  scope because the document state the callbacks write is one per
+ *  editor. */
+const LOADS = scoped("documentLoads", () => ({ newest: 0 }));
 
 /**
  * Drives the load → snapshot → ready sequence for one IDML file.
@@ -83,7 +90,8 @@ export async function loadDocumentFile(
   file: File,
   cb: DocumentLoaderCallbacks,
 ): Promise<void> {
-  const load = ++newestLoad;
+  const loads = cb.scope.get(LOADS);
+  const load = ++loads.newest;
   cb.setStatus(`loading ${file.name} (${file.size.toLocaleString()} bytes)…`);
   cb.setLoading({ name: file.name, bytes: file.size });
   cb.resetForNewDocument();
@@ -101,19 +109,21 @@ export async function loadDocumentFile(
   try {
     handle = await client.loadDocument(bytes, fontBytes);
   } catch (err) {
-    if (load !== newestLoad) return;
+    if (load !== loads.newest) return;
     cb.setLoading(null);
     cb.setStatus(`load failed: ${String(err)}`);
     return;
   }
-  if (load !== newestLoad) return;
+  if (load !== loads.newest) return;
 
-  if (cb.libraryDocument) setCurrentLibraryDocument(cb.libraryDocument);
-  else if (forLibrary) rememberOpenedFile(forLibrary, file.name);
+  if (cb.libraryDocument)
+    setCurrentLibraryDocument(cb.scope, cb.libraryDocument);
+  else if (forLibrary) rememberOpenedFile(cb.scope, forLibrary, file.name);
   // Editor ADR 264 — the source this document came from, which a grant
   // remembered for it is keyed by: the library document it is, the file
   // handle the picker attached to `file`, else nothing (transient).
   declareDocumentSource(
+    cb.scope,
     handle.docId,
     cb.libraryDocument
       ? { kind: "library", documentId: cb.libraryDocument.id }
@@ -147,7 +157,8 @@ export async function createBlankDocument(
   opts: BlankDocumentOptions,
   cb: DocumentLoaderCallbacks,
 ): Promise<DocumentHandle | null> {
-  const load = ++newestLoad;
+  const loads = cb.scope.get(LOADS);
+  const load = ++loads.newest;
   cb.setStatus("creating new document…");
   cb.setLoading({ name: "Untitled", bytes: 0 });
   cb.resetForNewDocument();
@@ -155,7 +166,7 @@ export async function createBlankDocument(
   // "Untitled document" fallback is the honest name.
   cb.setSourceName?.(null);
   // A blank document is no library document until its first save.
-  setCurrentLibraryDocument(null);
+  setCurrentLibraryDocument(cb.scope, null);
 
   const fontBytes = await fetchDefaultFont();
   if (!fontBytes) warnDefaultFontUnavailable(cb);
@@ -168,14 +179,14 @@ export async function createBlankDocument(
       fontBytes,
     );
   } catch (err) {
-    if (load !== newestLoad) return null;
+    if (load !== loads.newest) return null;
     cb.setLoading(null);
     cb.setStatus(`new document failed: ${String(err)}`);
     return null;
   }
-  if (load !== newestLoad) return null;
+  if (load !== loads.newest) return null;
 
-  declareDocumentSource(handle.docId, { kind: "transient" });
+  declareDocumentSource(cb.scope, handle.docId, { kind: "transient" });
   cb.setHandle(handle);
   cb.setLoading(null);
   cb.setStatus(`new ${handle.pageCount}-page document; snapshotting…`);
@@ -199,7 +210,7 @@ export async function createBlankDocument(
  */
 export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
   try {
-    const fontResp = await fetch("/fonts/Inter.ttf");
+    const fontResp = await fetch(defaultFontUrls.roman);
     if (fontResp.ok) {
       const bytes = new Uint8Array(await fontResp.arrayBuffer());
       // A static host answers a missing file with its SPA index.html and a
@@ -211,6 +222,24 @@ export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
     // fall through to undefined — the caller warns.
   }
   return undefined;
+}
+
+/**
+ * Where the default faces are served: the editor app's own `/fonts/`. An
+ * embedding build that ships them elsewhere (the `@paged-media/editor`
+ * package, beside its modules) says so once, before the first load.
+ */
+let defaultFontUrls = {
+  roman: "/fonts/Inter.ttf",
+  italic: "/fonts/Inter-Italic.ttf",
+};
+
+export function setDefaultFontUrls(urls: {
+  roman: string;
+  italic: string;
+}): void {
+  defaultFontUrls = { ...urls };
+  defaultItalic = null;
 }
 
 /** The family the editor's bundled default face (`/fonts/Inter.ttf`)
@@ -229,7 +258,7 @@ export async function fetchDefaultFontFaces(): Promise<
 > {
   defaultItalic ??= (async () => {
     try {
-      const resp = await fetch("/fonts/Inter-Italic.ttf");
+      const resp = await fetch(defaultFontUrls.italic);
       if (!resp.ok) return undefined;
       const bytes = new Uint8Array(await resp.arrayBuffer());
       return isFontFile(bytes) ? bytes : undefined;
@@ -260,9 +289,7 @@ function isFontFile(bytes: Uint8Array): boolean {
 /** U5/A7 — a missing default font is the "blank text" precondition;
  *  say so where the user can see it instead of failing silently. */
 function warnDefaultFontUnavailable(cb: DocumentLoaderCallbacks): void {
-  cb.pushWarning(
-    "default font unavailable — text in documents with missing fonts will not render",
-  );
+  cb.pushWarning(t(LOAD.fontUnavailable));
 }
 
 /** One page's thumbnail as an object URL (the caller revokes it). The
@@ -299,21 +326,22 @@ async function snapshotAllPages(
   cb: DocumentLoaderCallbacks,
   load: number,
 ): Promise<void> {
+  const loads = cb.scope.get(LOADS);
   for (const pageId of handle.pageIds) {
-    if (load !== newestLoad) return;
+    if (load !== loads.newest) return;
     try {
       const url = await requestPageThumbnail(client, pageId);
-      if (load !== newestLoad) {
+      if (load !== loads.newest) {
         URL.revokeObjectURL(url);
         return;
       }
       cb.addSnapshot(pageId, url);
     } catch (err) {
-      if (load !== newestLoad) return;
+      if (load !== loads.newest) return;
       cb.pushWarning(`snapshot ${pageId}: ${String(err)}`);
     }
   }
-  if (load !== newestLoad) return;
+  if (load !== loads.newest) return;
 
   cb.setStatus(
     `loaded ${handle.pageCount} page${handle.pageCount === 1 ? "" : "s"}`,

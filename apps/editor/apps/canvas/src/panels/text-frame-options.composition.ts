@@ -60,6 +60,29 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.textFrameOptionsComposition", {
+  off: "Off",
+  heightOnly: "Height only",
+  widthOnly: "Width only",
+  heightWidth: "Height & width",
+  proportional: "Proportional",
+  ascent: "Ascent",
+  capHeight: "Cap height",
+  xHeight: "x height",
+  emBoxHeight: "Em box height",
+  leading: "Leading",
+  fixed: "Fixed",
+  textFrameOptions: "Text Frame Options",
+  columns: "Columns",
+  gutter: "gutter",
+  balance: "Balance",
+  insetSpacing: "Inset spacing",
+  vertJustify: "Vert. justify",
+  autoSize: "Auto-size",
+  firstBaseline: "First baseline",
+});
 
 // IDML `<TextFramePreference VerticalJustification="...">` values.
 const VERTICAL_JUSTIFY = [
@@ -70,141 +93,147 @@ const VERTICAL_JUSTIFY = [
 ];
 
 // IDML `<TextFramePreference AutoSizingType="...">` values.
-const AUTO_SIZING = [
-  { value: "Off", label: "Off" },
-  { value: "HeightOnly", label: "Height only" },
-  { value: "WidthOnly", label: "Width only" },
-  { value: "HeightAndWidth", label: "Height & width" },
-  { value: "HeightAndWidthProportionally", label: "Proportional" },
+const autoSizing = (strings: Strings) => [
+  { value: "Off", label: strings.t(M.off) },
+  { value: "HeightOnly", label: strings.t(M.heightOnly) },
+  { value: "WidthOnly", label: strings.t(M.widthOnly) },
+  { value: "HeightAndWidth", label: strings.t(M.heightWidth) },
+  { value: "HeightAndWidthProportionally", label: strings.t(M.proportional) },
 ];
 
 // IDML `<TextFramePreference FirstBaselineOffset="...">` values.
-const FIRST_BASELINE = [
-  { value: "AscentOffset", label: "Ascent" },
-  { value: "CapHeight", label: "Cap height" },
-  { value: "XHeight", label: "x height" },
-  { value: "EmBoxHeight", label: "Em box height" },
-  { value: "LeadingOffset", label: "Leading" },
-  { value: "FixedHeight", label: "Fixed" },
+const firstBaseline = (strings: Strings) => [
+  { value: "AscentOffset", label: strings.t(M.ascent) },
+  { value: "CapHeight", label: strings.t(M.capHeight) },
+  { value: "XHeight", label: strings.t(M.xHeight) },
+  { value: "EmBoxHeight", label: strings.t(M.emBoxHeight) },
+  { value: "LeadingOffset", label: strings.t(M.leading) },
+  { value: "FixedHeight", label: strings.t(M.fixed) },
 ];
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const textFrameOptionsComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Text Frame Options", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_LAYOUT_SECTION,
-      props: { title: "Columns" },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_LAYOUT_CLUSTER,
-          props: { count: 2 },
-          bindings: {},
-          children: [
-            {
-              // LIVE column count (clamped ≥1 + rounded engine-side).
-              catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-              props: { icon: "ui-cols-2" },
-              bindings: {
-                value: {
-                  kind: "selectionProperty",
-                  scope: "element",
-                  path: "textFrameColumnCount",
+export function textFrameOptionsComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.textFrameOptions), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_LAYOUT_SECTION,
+        props: { title: strings.t(M.columns) },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_LAYOUT_CLUSTER,
+            props: { count: 2 },
+            bindings: {},
+            children: [
+              {
+                // LIVE column count (clamped ≥1 + rounded engine-side).
+                catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+                props: { icon: "ui-cols-2" },
+                bindings: {
+                  value: {
+                    kind: "selectionProperty",
+                    scope: "element",
+                    path: "textFrameColumnCount",
+                  },
                 },
               },
-            },
-            {
-              // LIVE column gutter (points).
-              catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-              props: { prefix: "gutter" },
-              bindings: {
-                value: {
-                  kind: "selectionProperty",
-                  scope: "element",
-                  path: "textFrameColumnGutter",
+              {
+                // LIVE column gutter (points).
+                catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+                props: { prefix: strings.t(M.gutter) },
+                bindings: {
+                  value: {
+                    kind: "selectionProperty",
+                    scope: "element",
+                    path: "textFrameColumnGutter",
+                  },
                 },
               },
-            },
-          ],
-        },
-        {
-          // LIVE balance flag.
-          catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-          props: { label: "Balance", labelPosition: "left" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "textFrameColumnBalance",
+            ],
+          },
+          {
+            // LIVE balance flag.
+            catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+            props: { label: strings.t(M.balance), labelPosition: "left" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "textFrameColumnBalance",
+              },
             },
           },
-        },
-      ],
-    },
-    {
-      catalogId: PAGED_LAYOUT_SECTION,
-      props: { title: "Inset spacing" },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_BOUNDS,
-          props: { layout: "row4" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "frameInsetSpacing",
+        ],
+      },
+      {
+        catalogId: PAGED_LAYOUT_SECTION,
+        props: { title: strings.t(M.insetSpacing) },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_BOUNDS,
+            props: { layout: "row4" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "frameInsetSpacing",
+              },
             },
           },
-        },
-      ],
-    },
-    {
-      // LIVE vertical justification (TextFrame-only → em-dash on
-      // other kinds). Glyph segments per the deep1 card.
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: { label: "Vert. justify", options: VERTICAL_JUSTIFY },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "textFrameVerticalJustification",
-        },
+        ],
       },
-    },
-    {
-      // LIVE auto-size rule.
-      catalogId: PAGED_INPUT_SELECT,
-      props: { label: "Auto-size", placeholder: "Off", options: AUTO_SIZING },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "textFrameAutoSizing",
+      {
+        // LIVE vertical justification (TextFrame-only → em-dash on
+        // other kinds). Glyph segments per the deep1 card.
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: { label: strings.t(M.vertJustify), options: VERTICAL_JUSTIFY },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "textFrameVerticalJustification",
+          },
         },
       },
-    },
-    {
-      // LIVE first-baseline offset.
-      catalogId: PAGED_INPUT_SELECT,
-      props: {
-        label: "First baseline",
-        placeholder: "Ascent",
-        options: FIRST_BASELINE,
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "textFrameFirstBaseline",
+      {
+        // LIVE auto-size rule.
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.autoSize),
+          placeholder: strings.t(M.off),
+          options: autoSizing(strings),
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "textFrameAutoSizing",
+          },
         },
       },
-    },
-  ],
-});
+      {
+        // LIVE first-baseline offset.
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.firstBaseline),
+          placeholder: strings.t(M.ascent),
+          options: firstBaseline(strings),
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "textFrameFirstBaseline",
+          },
+        },
+      },
+    ],
+  });
+}

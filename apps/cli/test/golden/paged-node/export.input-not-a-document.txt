@@ -3,7 +3,7 @@ $ paged-node export <TMP>/notes.txt -o <TMP>/x.pdf --no-plugins
 # stdout
 {
   "error": {
-    "message": "<TMP>/notes.txt: not a .paged or .idml document",
+    "message": "<TMP>/notes.txt: not a .paged or .idml document, and no loaded module imports .txt",
     "exit": 2
   }
 }

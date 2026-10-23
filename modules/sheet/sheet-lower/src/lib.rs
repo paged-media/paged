@@ -85,7 +85,10 @@ pub use paginate::{paginate, paginate_lowered, FrameBox, Page, PaginateOptions};
 // deduplicated `LoweredContent.styles` table + per-cell `style_key`. The SAME
 // resolver feeds the grid scene (cross-surface parity).
 pub mod style;
+/// The per-cell styler both the page lowering and the grid scene call.
+pub mod styler;
 pub use style::{BorderLine, BorderLines, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource};
+pub use styler::CellStyler;
 
 // ---- Conditional formatting → style overrides (T2 cond-fmt track; §10.4). ----
 //
@@ -401,119 +404,14 @@ pub fn lower_range_styled(
     opts: &ViewOptions,
     visual: &impl style::VisualStyleSource,
 ) -> LoweredContent {
-    let (top, left, bottom, right) = range.normalized();
-    let ws = model.sheet(sheet);
-
-    let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
-    let mut cache = FormatCache::default();
-    // The style resolver builds the deduped IR-v2 styles table as cells are
-    // walked (in row/col index order — deterministic).
-    let mut style_resolver = style::StyleResolver::new(visual);
-
-    // ---- Columns: range-relative index + width (pt). ----
-    let mut cols = Vec::with_capacity((right - left + 1) as usize);
-    let mut col_x: Vec<f64> = Vec::with_capacity((right - left + 2) as usize);
-    let mut x = 0.0_f64;
-    for c in left..=right {
-        col_x.push(x);
-        let chars = ws
-            .and_then(|w| w.col_widths.get(&c).copied())
-            .unwrap_or(DEFAULT_COL_CHARS);
-        let width_pt = chars * CHAR_TO_PT;
-        cols.push(LoweredCol {
-            index: c - left,
-            width_pt,
-        });
-        x += width_pt;
-    }
-    col_x.push(x); // trailing boundary
-    let total_width = x;
-
-    // ---- Rows: range-relative index + height (pt) + cells. ----
-    let mut rows = Vec::with_capacity((bottom - top + 1) as usize);
-    let mut row_y: Vec<f64> = Vec::with_capacity((bottom - top + 2) as usize);
-    let mut y = 0.0_f64;
-    for r in top..=bottom {
-        // Hidden rows (saved hidden, or hidden by a filter view) are not
-        // lowered; the surviving rows keep their range-relative `index`, so
-        // a consumer maps model rows exactly as before (Wave 7).
-        if ws.is_some_and(|w| w.row_hidden(r)) {
-            continue;
-        }
-        row_y.push(y);
-        let height_pt = ws
-            .and_then(|w| w.row_heights.get(&r).copied())
-            .unwrap_or(DEFAULT_ROW_PT);
-
-        // Cells cover the FULL range width positionally (empty => "").
-        let mut cells = Vec::with_capacity((right - left + 1) as usize);
-        for c in left..=right {
-            let (text, align, style_key) = match ws.and_then(|w| w.cell(r, c)) {
-                Some(cell) => {
-                    let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
-                    // Resolve the cell's StyleId to a deduped IR-v2 key. An
-                    // empty cell has nothing to style, so it stays key 0.
-                    (text, align, style_resolver.key_for(cell.style))
-                }
-                None => (String::new(), Align::General, 0),
-            };
-            cells.push(LoweredCell {
-                col: c - left,
-                text,
-                align,
-                style_key,
-            });
-        }
-
-        rows.push(LoweredRow {
-            index: r - top,
-            height_pt,
-            cells,
-        });
-        y += height_pt;
-    }
-    row_y.push(y); // trailing boundary
-    let total_height = y;
-
-    // ---- Grid rules (content-space, origin = range top-left). ----
-    let rules = if opts.include_grid_rules {
-        let h = row_y
-            .iter()
-            .map(|&at| Rule {
-                at,
-                from: 0.0,
-                to: total_width,
-            })
-            .collect();
-        let v = col_x
-            .iter()
-            .map(|&at| Rule {
-                at,
-                from: 0.0,
-                to: total_height,
-            })
-            .collect();
-        RuleSet { h, v }
-    } else {
-        RuleSet::default()
-    };
-
-    // ---- Merges: intersect the range, clip, re-base to range-relative. ----
-    let merges = lower_merges(ws, sheet, top, left, bottom, right);
-
-    LoweredContent {
-        cols,
-        rows,
-        rules,
-        merges,
-        // The deduped IR-v2 styles table the cells' `style_key`s index into.
-        // With `NoStyles` this is exactly `[LoweredStyle::default_key0()]`
-        // (the frozen-`lower_range` behaviour); a real source populates it.
-        styles: style_resolver.into_styles(),
-        // Data bars come only from the conditional-formatting lowering path
-        // (`lower_range_condfmt`); the styled path never draws them.
-        databars: Vec::new(),
-    }
+    lower_range_condfmt(
+        model,
+        sheet,
+        range,
+        opts,
+        visual,
+        &condfmt::SheetCondFmt::default(),
+    )
 }
 
 /// Lower a `(sheet, range, view options)` binding with CONDITIONAL FORMATTING
@@ -531,6 +429,9 @@ pub fn lower_range_styled(
 /// value + the range's value domain — never the calc engine (`sheet-lower` has
 /// no `sheet-calc` dep). `expression` rules that need a formula evaluator are
 /// DEFERRED (apply no override; documented in `condfmt`).
+///
+/// Styles go through [`styler::CellStyler`] — the same per-cell path the grid
+/// scene uses, so a cell's `style_key` and style are equal on both surfaces.
 pub fn lower_range_condfmt(
     model: &SheetModel,
     sheet: SheetId,
@@ -539,25 +440,14 @@ pub fn lower_range_condfmt(
     visual: &impl style::VisualStyleSource,
     cf: &condfmt::SheetCondFmt,
 ) -> LoweredContent {
-    // No conditional formatting → exactly the styled path (no extra work, no
-    // table churn). Keeps the common case identical to `lower_range_styled`.
-    if cf.is_empty() {
-        return lower_range_styled(model, sheet, range, opts, visual);
-    }
-
     let (top, left, bottom, right) = range.normalized();
     let ws = model.sheet(sheet);
 
     let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
     let mut cache = FormatCache::default();
-
-    // The cf-aware style table: deduped EFFECTIVE styles (base folded with cf).
-    let mut styles: Vec<LoweredStyle> = vec![LoweredStyle::default_key0()];
-    let mut dedup: std::collections::HashMap<StyleKeyless, u32> = std::collections::HashMap::new();
-    // The colour-scale domain is computed lazily per covering range, then cached
-    // (a range usually appears once, but a block with many cells re-queries it).
-    let mut domain_cache: std::collections::HashMap<condfmt::CfRange, Option<(f64, f64)>> =
-        std::collections::HashMap::new();
+    // The style table is built as cells are walked (row/col index order —
+    // deterministic), base style folded with cf.
+    let mut styler = styler::CellStyler::new(visual, cf, ws);
 
     // ---- Columns: range-relative index + width (pt). ----
     let mut cols = Vec::with_capacity((right - left + 1) as usize);
@@ -565,6 +455,11 @@ pub fn lower_range_condfmt(
     let mut x = 0.0_f64;
     for c in left..=right {
         col_x.push(x);
+        // A hidden column is not lowered (it keeps its boundary at zero
+        // width, so `col_x` stays indexed by range-relative column).
+        if ws.is_some_and(|w| w.col_hidden(c)) {
+            continue;
+        }
         let chars = ws
             .and_then(|w| w.col_widths.get(&c).copied())
             .unwrap_or(DEFAULT_COL_CHARS);
@@ -575,10 +470,10 @@ pub fn lower_range_condfmt(
         });
         x += width_pt;
     }
-    col_x.push(x);
+    col_x.push(x); // trailing boundary
     let total_width = x;
 
-    // ---- Rows: range-relative index + height (pt) + cells (cf-styled). ----
+    // ---- Rows: range-relative index + height (pt) + cells. ----
     // Data bars (spec §8.2 page-draw geometry lane) accumulate as we walk: a
     // numeric cell under a data-bar cf rule yields one proportional drawn rect
     // in content-space pt (col_x/row_y give the cell box). NOT a style fill.
@@ -598,30 +493,21 @@ pub fn lower_range_condfmt(
             .and_then(|w| w.row_heights.get(&r).copied())
             .unwrap_or(DEFAULT_ROW_PT);
 
+        // Cells cover the FULL range width positionally (empty => "").
         let mut cells = Vec::with_capacity((right - left + 1) as usize);
         for c in left..=right {
+            if ws.is_some_and(|w| w.col_hidden(c)) {
+                continue;
+            }
             let (text, align, style_key) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
                     let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
-                    let base = visual.visual(cell.style).unwrap_or_default();
-                    // Evaluate cf against the cell's CACHED value at its MODEL
-                    // (absolute) coordinates — cf ranges are sheet-relative.
-                    let effective = match condfmt::override_for(cf, r, c, &cell.value, &mut |rng| {
-                        cf_domain(ws, rng, &mut domain_cache)
-                    }) {
-                        Some(over) => condfmt::fold_override(&base, &over),
-                        None => base,
-                    };
-                    let key = intern_effective(&mut styles, &mut dedup, effective);
-
+                    // cf evaluates at the cell's MODEL (absolute) coordinates.
+                    let key = styler.key_for_cell(r, c, cell);
                     // Data-bar geometry (the page-draw lane): a separate pass
                     // from the style override — a cell can carry both a dxf
                     // style and a drawn bar (Excel layers them).
-                    if let Some((frac, rgb)) =
-                        condfmt::databar_for(cf, r, c, &cell.value, &mut |rng| {
-                            cf_domain(ws, rng, &mut domain_cache)
-                        })
-                    {
+                    if let Some((frac, rgb)) = styler.databar(r, c, cell) {
                         let cell_x = col_x[(c - left) as usize];
                         let cell_w = col_x[(c - left + 1) as usize] - cell_x;
                         databars.push(databar_rect(
@@ -654,9 +540,10 @@ pub fn lower_range_condfmt(
         });
         y += height_pt;
     }
-    row_y.push(y);
+    row_y.push(y); // trailing boundary
     let total_height = y;
 
+    // ---- Grid rules (content-space, origin = range top-left). ----
     let rules = if opts.include_grid_rules {
         let h = row_y
             .iter()
@@ -666,7 +553,9 @@ pub fn lower_range_condfmt(
                 to: total_width,
             })
             .collect();
-        let v = col_x
+        let mut xs = col_x.clone();
+        xs.dedup();
+        let v = xs
             .iter()
             .map(|&at| Rule {
                 at,
@@ -679,6 +568,7 @@ pub fn lower_range_condfmt(
         RuleSet::default()
     };
 
+    // ---- Merges: intersect the range, clip, re-base to range-relative. ----
     let merges = lower_merges(ws, sheet, top, left, bottom, right);
 
     LoweredContent {
@@ -686,7 +576,10 @@ pub fn lower_range_condfmt(
         rows,
         rules,
         merges,
-        styles,
+        // The deduped IR-v2 styles table the cells' `style_key`s index into.
+        // With `NoStyles` and no cf this is exactly
+        // `[LoweredStyle::default_key0()]` (the frozen-`lower_range` table).
+        styles: styler.into_styles(),
         databars,
     }
 }
@@ -722,107 +615,11 @@ fn databar_rect(
     }
 }
 
-/// The cf colour-scale domain `(min, max)` of a covering range: the min/max of
-/// the NUMERIC cell values in that range (model coordinates), memoized. `None`
-/// when the range holds no numeric cells (a degenerate scale paints nothing).
-fn cf_domain(
-    ws: Option<&sheet_core::Worksheet>,
-    rng: condfmt::CfRange,
-    cache: &mut std::collections::HashMap<condfmt::CfRange, Option<(f64, f64)>>,
-) -> Option<(f64, f64)> {
-    if let Some(&hit) = cache.get(&rng) {
-        return hit;
-    }
-    let (r0, c0, r1, c1) = rng;
-    let mut lo = f64::INFINITY;
-    let mut hi = f64::NEG_INFINITY;
-    if let Some(ws) = ws {
-        for r in r0..=r1 {
-            for c in c0..=c1 {
-                if let Some(&CellValue::Number(n)) = ws.cell(r, c).map(|cell| &cell.value) {
-                    lo = lo.min(n);
-                    hi = hi.max(n);
-                }
-            }
-        }
-    }
-    let out = if lo.is_finite() && hi.is_finite() {
-        Some((lo, hi))
-    } else {
-        None
-    };
-    cache.insert(rng, out);
-    out
-}
-
-/// Intern an EFFECTIVE [`VisualAttrs`] (base folded with cf) into the cf-aware
-/// styles table, deduping by visual content (key 0 stays the default). The
-/// dedup mirrors `style::StyleResolver` but keys on the effective attrs (not the
-/// `StyleId`), since cf makes the same `StyleId` resolve to different styles.
-fn intern_effective(
-    styles: &mut Vec<LoweredStyle>,
-    dedup: &mut std::collections::HashMap<StyleKeyless, u32>,
-    attrs: VisualAttrs,
-) -> u32 {
-    if attrs.is_default() {
-        return 0;
-    }
-    let lowered = attrs.into_lowered(0);
-    let dk = StyleKeyless::of(&lowered);
-    if let Some(&existing) = dedup.get(&dk) {
-        return existing;
-    }
-    let new_key = styles.len() as u32;
-    styles.push(LoweredStyle {
-        key: new_key,
-        ..lowered
-    });
-    dedup.insert(dk, new_key);
-    new_key
-}
-
-/// A [`LoweredStyle`] without its positional `key`, the dedup map key for the
-/// cf-aware table (mirrors the private `style::StyleKeyless`; re-declared here
-/// because that one is module-private and this path keys on effective attrs).
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct StyleKeyless {
-    bold: bool,
-    italic: bool,
-    font_size_bits: Option<u64>,
-    font_name: Option<String>,
-    fill_rgb: Option<String>,
-    text_rgb: Option<String>,
-    border_top: bool,
-    border_right: bool,
-    border_bottom: bool,
-    border_left: bool,
-    /// The Wave 6 facets (underline, vertical alignment, wrap, border
-    /// lines), keyed by their debug rendering (f64 weights have no `Hash`).
-    extra: String,
-}
-
-impl StyleKeyless {
-    fn of(s: &LoweredStyle) -> Self {
-        StyleKeyless {
-            bold: s.bold,
-            italic: s.italic,
-            font_size_bits: s.font_size_pt.map(f64::to_bits),
-            font_name: s.font_name.clone(),
-            fill_rgb: s.fill_rgb.clone(),
-            text_rgb: s.text_rgb.clone(),
-            border_top: s.border_top,
-            border_right: s.border_right,
-            border_bottom: s.border_bottom,
-            border_left: s.border_left,
-            extra: format!("{:?}", (s.underline, &s.v_align, s.wrap, &s.border_lines)),
-        }
-    }
-}
-
 /// Lower one cell to `(formatted text, resolved align)`. The text is the
 /// number-format render of the cell's CACHED value (spec §8.3 — never
-/// evaluated); the align is the Excel default resolution.
-fn lower_cell(
+/// evaluated); the align is the Excel default resolution. Public so the grid
+/// scene renders a cell's text through the very same function.
+pub fn lower_cell(
     model: &SheetModel,
     cell: &Cell,
     cache: &mut FormatCache,
@@ -887,7 +684,10 @@ fn lower_merges(
         while ir0 <= mr1.min(bottom) && ws.row_hidden(ir0) {
             ir0 += 1;
         }
-        let ic0 = mc0.max(left);
+        let mut ic0 = mc0.max(left);
+        while ic0 <= mc1.min(right) && ws.col_hidden(ic0) {
+            ic0 += 1;
+        }
         let ir1 = mr1.min(bottom);
         let ic1 = mc1.min(right);
         if ir0 > ir1 || ic0 > ic1 {
@@ -959,6 +759,42 @@ mod tests {
         assert_eq!(lc.rows[0].cells[0].col, 0);
         assert_eq!(lc.rows[0].cells[0].text, "");
         assert_eq!(lc.rows[0].cells[0].align, Align::General);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn hidden_columns_are_not_lowered__feat__sheet_lower_page() {
+        let (mut m, s) = model_with(&[(0, 0, text("a")), (0, 1, text("b")), (0, 2, text("c"))]);
+        let ws = m.sheet_mut(s).unwrap();
+        ws.col_meta.push(sheet_core::ColMeta {
+            min: 1,
+            max: 1,
+            hidden: true,
+            ..Default::default()
+        });
+        let lc = lower_range(
+            &m,
+            s,
+            CellRange {
+                r0: 0,
+                c0: 0,
+                r1: 0,
+                c1: 2,
+            },
+            &ViewOptions {
+                include_grid_rules: true,
+                ..ViewOptions::default()
+            },
+        );
+        let idx: Vec<u32> = lc.cols.iter().map(|c| c.index).collect();
+        assert_eq!(idx, vec![0, 2]);
+        let cells: Vec<(u32, &str)> = lc.rows[0]
+            .cells
+            .iter()
+            .map(|c| (c.col, c.text.as_str()))
+            .collect();
+        assert_eq!(cells, vec![(0, "a"), (2, "c")]);
+        assert_eq!(lc.rules.v.len(), 3, "one rule per visible boundary");
     }
 
     #[test]

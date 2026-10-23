@@ -22,6 +22,9 @@
 //
 //   plugin:media.paged.doc/docxDocument/<frame>
 //   plugin:media.paged.doc/block/<frame>/b<i>              paragraph or table
+//   plugin:media.paged.doc/block/<frame>/b<i>/c<k>/p<m>    a table cell's
+//                                                          paragraph (listed
+//                                                          within its table)
 //   plugin:media.paged.doc/block/<frame>/b<i>/i<k>         an inline picture
 //   plugin:media.paged.doc/run/<frame>/b<i>/r<j>           a body run
 //   plugin:media.paged.doc/run/<frame>/b<i>/c<k>/p<m>/r<j> a table-cell run
@@ -34,21 +37,28 @@
 // NAME (`mergeField[name="First Name"]`), never an id (ADR 559).
 //
 // The state is what the frame's label names (doc-state.ts): the .docx part
-// and the docLowered cache. A write (`run.text`, `mergeField.value`) is
-// one ObjectWrite, ONE undo step:
+// and the docLowered cache. A write (`run.text`, `mergeField.value`,
+// `block.text`, `block.listItems`) is one ObjectWrite, ONE undo step:
 //   · the engine (docx-js `save_object_edits`) patches the .docx — the run's
-//     `w:t` only; a merge field's RESULT runs, never its field code;
+//     `w:t` only; a merge field's RESULT runs, never its field code; a
+//     paragraph's text as its first run's, the others emptied (so the first
+//     run's look carries the text); a list's items removed whole or added as
+//     copies of its last item's paragraph (the same list, the same look);
 //   · the poured native text changes in the same batch (deleteRange +
-//     insertText at the run's place in its story, checked against the live
-//     paragraph first: a paragraph edited on the canvas since is refused,
-//     not written over);
+//     insertText at the run's place in its story — in a table cell, at its
+//     place in the cell — checked against the live paragraph or cell first:
+//     one edited on the canvas since is refused, not written over);
 //   · the new .docx and its lowering are content-addressed parts, and the
 //     label names them — undo reverts the label to the previous state.
 // No DOCX semantics here: which runs a field spans is the engine's answer,
 // where a run was poured is doc-host-model's.
 
 import type { LoweredDoc, LoweredParagraph } from "@paged-media/doc-host-model";
-import { bodyRunLocation } from "@paged-media/doc-host-model";
+import {
+  bodyParagraphLocation,
+  bodyRunLocation,
+  cellRunLocation,
+} from "@paged-media/doc-host-model";
 import type {
   Address,
   BundleHost,
@@ -70,8 +80,13 @@ import {
   parseAddress,
 } from "@paged-media/plugin-sdk";
 
+import { t } from "@paged-media/strings";
+
 import manifestJson from "../manifest.json" with { type: "json" };
 import { DocEngine } from "./engine.js";
+import { DOC } from "./messages.js";
+import { headingLevel, styleNameById } from "./panels/outline-model.js";
+import { docTemplateFields } from "./template-fields.js";
 import {
   discoverDocs,
   LABEL_KEY,
@@ -176,9 +191,10 @@ function parseId(address: Address, kind: KindName): DocId | null {
     docxDocument: () => segs.length === 0,
     block: (d) =>
       d.block !== undefined &&
-      d.cell === undefined &&
       d.run === undefined &&
-      d.field === undefined,
+      d.field === undefined &&
+      (d.cell === undefined) === (d.para === undefined) &&
+      (d.cell === undefined || d.image === undefined),
     run: (d) =>
       d.block !== undefined &&
       d.run !== undefined &&
@@ -265,6 +281,36 @@ function fieldsOf(p: LoweredParagraph): Map<number, number[]> {
 const textOfParagraph = (p: LoweredParagraph) =>
   p.runs.map((r) => r.text).join("");
 
+/** The blocks of the list `block` is an item of: the contiguous body
+ *  paragraphs that share its `w:numId`, first to last. `null` when the
+ *  block is not a list item. */
+export function listRange(
+  ir: LoweredDoc,
+  block: number,
+): { first: number; last: number } | null {
+  const numId = (b: LoweredDoc["story"]["blocks"][number] | undefined) =>
+    b?.kind === "paragraph" ? (b.list?.numId ?? null) : null;
+  const id = numId(ir.story.blocks[block]);
+  if (id === null) return null;
+  let first = block;
+  while (first > 0 && numId(ir.story.blocks[first - 1]) === id) first -= 1;
+  let last = block;
+  while (numId(ir.story.blocks[last + 1]) === id) last += 1;
+  return { first, last };
+}
+
+/** The items of the list `block` is in, as text; `null` when it is none. */
+function listItemsOf(ir: LoweredDoc, block: number): string[] | null {
+  const range = listRange(ir, block);
+  if (!range) return null;
+  const out: string[] = [];
+  for (let i = range.first; i <= range.last; i += 1) {
+    const b = ir.story.blocks[i]!;
+    if (b.kind === "paragraph") out.push(textOfParagraph(b));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------- writing
 
 class Rejected extends Error {}
@@ -273,13 +319,49 @@ class Rejected extends Error {}
 interface DocPlan {
   state: DocState;
   ir: LoweredDoc;
-  runs: Array<{ block: number; run: number; text: string }>;
-  mergeFields: Array<{ block: number; occurrence: number; value: string }>;
+  runs: Array<{
+    block: number;
+    cell?: number;
+    para?: number;
+    run: number;
+    text: string;
+  }>;
+  mergeFields: Array<{
+    block: number;
+    cell?: number;
+    para?: number;
+    occurrence: number;
+    value: string;
+  }>;
   /** Native text writes: one per edited run, by its lowered place. */
-  native: Array<{ block: number; run: number; text: string }>;
+  native: Array<{
+    block: number;
+    cell?: number;
+    para?: number;
+    run: number;
+    text: string;
+  }>;
+  /** Body paragraphs removed whole (a list's items taken away). */
+  deleteParagraphs: number[];
+  /** Paragraphs added: copies of `source` after `after`, in order. */
+  cloneParagraphs: Array<{ source: number; after: number; text: string }>;
+  /** The paragraphs this plan writes whole (text, list items), so one is
+   *  not written twice: a body block by its index, a cell paragraph as
+   *  `<block>/<cell>/<para>` ({@link paraKey}). */
+  written: Set<string>;
+  /** The paragraphs whose single runs or merge fields this plan writes. */
+  partial: Set<string>;
 }
 
 const utf8 = (s: string) => new TextEncoder().encode(s).length;
+
+/** A paragraph's key in a plan's `written` / `partial`. */
+const paraKey = (d: { block?: number; cell?: number; para?: number }) =>
+  d.cell === undefined ? `${d.block}` : `${d.block}/${d.cell}/${d.para}`;
+
+/** The cell part of a plan entry: present only for a table cell. */
+const cellPart = (d: DocId) =>
+  d.cell === undefined ? {} : { cell: d.cell, para: d.para };
 
 /** Plan and turn the per-document plans into ONE ObjectWrite. */
 async function commitPlans(
@@ -306,6 +388,8 @@ async function commitPlans(
         out = engine.saveObjectEdits({
           runs: plan.runs,
           mergeFields: plan.mergeFields,
+          deleteParagraphs: plan.deleteParagraphs,
+          cloneParagraphs: plan.cloneParagraphs,
         });
       } catch (err) {
         throw new Rejected(String(err instanceof Error ? err.message : err));
@@ -339,12 +423,12 @@ async function commitPlans(
       string,
       Array<{ runs: Array<{ text: string }> }>
     >();
-    for (const n of plan.native) {
-      const at = bodyRunLocation(plan.ir, n.block, n.run);
-      if (!at)
-        throw new Rejected(
-          `block ${n.block} run ${n.run} has no place in a story this document can write`,
-        );
+    /** The live paragraphs of the story `at` names, checked against the
+     *  lowering: a paragraph edited on the canvas since is refused. */
+    const live = async (
+      at: { story: number; paragraph: number; paragraphText: string },
+      block: number,
+    ) => {
       const storyId = stories[at.story];
       if (!storyId)
         throw new Rejected(
@@ -357,19 +441,139 @@ async function commitPlans(
         paras = c.paragraphs;
         contents.set(storyId, paras);
       }
-      const live = paras[at.paragraph];
-      if (!live || live.runs.map((r) => r.text).join("") !== at.paragraphText) {
+      const here = paras[at.paragraph];
+      if (!here || here.runs.map((r) => r.text).join("") !== at.paragraphText) {
         throw new Rejected(
-          `the paragraph of block ${n.block} was edited on the canvas since the document was last written; ` +
+          `the paragraph of block ${block} was edited on the canvas since the document was last written; ` +
             "export the document (save-back) before writing it through the object model",
         );
       }
       let start = 0;
       for (let k = 0; k < at.paragraph; k += 1)
         start += utf8(paras[k]!.runs.map((r) => r.text).join("")) + 1;
-      start += utf8(at.prefix);
+      return { storyId, start, end: start + utf8(at.paragraphText) };
+    };
+    const paragraphAt = (block: number) => {
+      const at = bodyParagraphLocation(plan.ir, block);
+      if (!at)
+        throw new Rejected(
+          `block ${block} has no place in a story this document can write`,
+        );
+      return at;
+    };
+    // A list's items taken away: from the end of the item before the first
+    // one to the end of the last, so the paragraph breaks go with them.
+    const removed = [...plan.deleteParagraphs].sort((x, y) => x - y);
+    const ranges: Array<[number, number]> = [];
+    for (const b of removed) {
+      const r = ranges.at(-1);
+      if (r && r[1] === b - 1) r[1] = b;
+      else ranges.push([b, b]);
+    }
+    for (const [from, to] of ranges) {
+      const before = paragraphAt(from - 1);
+      const last = paragraphAt(to);
+      if (before.story !== last.story)
+        throw new Rejected(
+          `the list ending at block ${to} spans two stories and cannot lose items`,
+        );
+      for (let b = from; b <= to; b += 1) await live(paragraphAt(b), b);
+      const a = await live(before, from - 1);
+      const z = await live(last, to);
+      edits.push({ story: a.storyId, start: a.end, end: z.end, text: "" });
+    }
+    // Items added: a paragraph break and the text of each, at the end of
+    // the item they follow (the new paragraphs take its properties).
+    const appended = new Map<number, string[]>();
+    for (const c of plan.cloneParagraphs)
+      appended.set(c.after, [...(appended.get(c.after) ?? []), c.text]);
+    for (const [after, texts] of appended) {
+      const z = await live(paragraphAt(after), after);
       edits.push({
-        story: storyId,
+        story: z.storyId,
+        start: z.end,
+        end: z.end,
+        text: texts.map((t) => `\n${t}`).join(""),
+      });
+    }
+    // A table cell's runs: the native table is the story's n-th, the cell
+    // its row and column; checked against the cell's live text.
+    const tables = new Map<string, string[]>();
+    const cells = new Map<
+      string,
+      { story: string; tableId: string; row: number; col: number }
+    >();
+    const liveCell = async (
+      at: NonNullable<ReturnType<typeof cellRunLocation>>,
+      block: number,
+    ) => {
+      const storyId = stories[at.story];
+      if (!storyId)
+        throw new Rejected(
+          "the document's label names no story to write (placed by an older version)",
+        );
+      if (!host.supports("objects@1"))
+        throw new Rejected("this host cannot read a table cell's text");
+      let ids = tables.get(storyId);
+      if (!ids) {
+        ids = (await host.objects.query(`story:${storyId} > table`)).map((a) =>
+          decodeURIComponent(a.replace(/^table:/, "")),
+        );
+        tables.set(storyId, ids);
+      }
+      const tableId = ids[at.table];
+      if (ids.length !== at.tables || !tableId)
+        throw new Rejected(
+          `the table of block ${block} cannot be found: the story's tables changed on the canvas since the document was last written`,
+        );
+      const key = `${tableId}/${at.row},${at.col}`;
+      if (!cells.has(key)) {
+        const read = await host.objects.get(`cell:${key}`, "text");
+        if (read.kind !== "value")
+          throw new Rejected(
+            `the cell of block ${block} cannot be read (${read.kind === "refused" ? read.reason : read.kind}); this engine cannot write a table cell`,
+          );
+        if (read.value !== at.cellText)
+          throw new Rejected(
+            `a cell of block ${block} was edited on the canvas since the document was last written; ` +
+              "export the document (save-back) before writing it through the object model",
+          );
+        cells.set(key, { story: storyId, tableId, row: at.row, col: at.col });
+      }
+      return cells.get(key)!;
+    };
+    const cellEdits: Array<{
+      cell: { story: string; tableId: string; row: number; col: number };
+      start: number;
+      end: number;
+      text: string;
+    }> = [];
+    for (const n of plan.native) {
+      if (n.cell !== undefined) {
+        const at = cellRunLocation(plan.ir, n.block, n.cell, n.para!, n.run);
+        if (!at)
+          throw new Rejected(
+            `block ${n.block} cell ${n.cell} has no place in a table this document can write`,
+          );
+        const cell = await liveCell(at, n.block);
+        const start = utf8(at.prefix);
+        cellEdits.push({
+          cell,
+          start,
+          end: start + utf8(at.text),
+          text: n.text,
+        });
+        continue;
+      }
+      const at = bodyRunLocation(plan.ir, n.block, n.run);
+      if (!at)
+        throw new Rejected(
+          `block ${n.block} run ${n.run} has no place in a story this document can write`,
+        );
+      const para = await live(at, n.block);
+      const start = para.start + utf8(at.prefix);
+      edits.push({
+        story: para.storyId,
         start,
         end: start + utf8(at.text),
         text: n.text,
@@ -389,6 +593,25 @@ async function commitPlans(
         mutations.push({
           op: "insertText",
           args: { storyId: e.story, offset: e.start, text: e.text },
+        } as MutationInput);
+    }
+    // The cells' edits, back to front within each cell (cell-local offsets).
+    cellEdits.sort((a, b) => b.start - a.start);
+    for (const e of cellEdits) {
+      const cell = {
+        tableId: e.cell.tableId,
+        row: e.cell.row,
+        col: e.cell.col,
+      };
+      if (e.end > e.start)
+        mutations.push({
+          op: "deleteRange",
+          args: { storyId: e.cell.story, start: e.start, end: e.end, cell },
+        } as MutationInput);
+      if (e.text.length > 0)
+        mutations.push({
+          op: "insertText",
+          args: { storyId: e.cell.story, offset: e.start, text: e.text, cell },
         } as MutationInput);
     }
     // 3. The new state's parts and the label naming them.
@@ -419,6 +642,97 @@ async function commitPlans(
   };
 }
 
+/** Plan a paragraph's whole text: the first run takes it, the others are
+ *  emptied (as a merge field's result runs are). */
+function planParagraphText(
+  p: DocPlan,
+  at: DocId,
+  text: string,
+  where: string,
+): void {
+  const block = at.block!;
+  const b = paragraphOf(p.ir, at);
+  if (!b) throw new Rejected(`${where}: only a paragraph's text is writable`);
+  if (text.includes("\n") || text.includes("\r"))
+    throw new Rejected(
+      `${where}: a paragraph's text is one paragraph and cannot hold a line break`,
+    );
+  if (b.runs.length === 0)
+    throw new Rejected(
+      `${where}: the paragraph is empty in the Word document, so it has no run to carry text`,
+    );
+  const key = paraKey(at);
+  if (p.written.has(key) || p.partial.has(key))
+    throw new Rejected(`${where}: block ${key} is written twice in one batch`);
+  p.written.add(key);
+  b.runs.forEach((_, run) => {
+    const t = run === 0 ? text : "";
+    p.runs.push({ block, ...cellPart(at), run, text: t });
+    p.native.push({ block, ...cellPart(at), run, text: t });
+  });
+}
+
+/** `block.text` (a paragraph's text) or `block.listItems` (the items of the
+ *  list the block is in: the first items take the new texts, the rest go,
+ *  and items past the old count are copies of the last item). */
+function planBlock(
+  p: DocPlan,
+  d: DocId,
+  address: string,
+  path: string,
+  value: unknown,
+): void {
+  if (d.image !== undefined)
+    throw new Rejected(`${address}: a picture has no text to write`);
+  const block = d.block!;
+  if (path === "text") {
+    planParagraphText(p, d, value as string, address);
+    return;
+  }
+  if (d.cell !== undefined)
+    throw new Rejected(`${address}: a table cell's paragraph is no list item`);
+  const range = listRange(p.ir, block);
+  if (!range) throw new Rejected(`${address}: the block is not a list item`);
+  const items = value as readonly string[];
+  if (!Array.isArray(items) || items.some((t) => typeof t !== "string"))
+    throw new Rejected(`${address}: a list's items are a list of texts`);
+  if (items.length === 0)
+    throw new Rejected(`${address}: a list keeps at least one item`);
+  const count = range.last - range.first + 1;
+  items.forEach((text, i) => {
+    if (i < count) {
+      const b = p.ir.story.blocks[range.first + i]!;
+      const old = b.kind === "paragraph" ? textOfParagraph(b) : "";
+      if (old !== text)
+        planParagraphText(
+          p,
+          { frame: d.frame, block: range.first + i },
+          text,
+          `${address} item ${i + 1}`,
+        );
+      return;
+    }
+    if (text.includes("\n") || text.includes("\r"))
+      throw new Rejected(
+        `${address} item ${i + 1}: an item is one paragraph and cannot hold a line break`,
+      );
+    p.cloneParagraphs.push({
+      source: range.last,
+      after: range.last,
+      text,
+    });
+  });
+  for (let i = items.length; i < count; i += 1) {
+    const key = `${range.first + i}`;
+    if (p.written.has(key) || p.partial.has(key))
+      throw new Rejected(
+        `${address}: block ${range.first + i} is written twice in one batch`,
+      );
+    p.written.add(key);
+    p.deleteParagraphs.push(range.first + i);
+  }
+}
+
 /** The PLUGIN-level planner (ADR 323): every write op of a batch on any of
  *  this bundle's kinds, grouped into ONE plan per document — run and merge
  *  field writes on the same document compose into one save-back and one
@@ -437,20 +751,22 @@ async function planDocOps(
         );
       const a = parseAddress(op.address);
       const kind = a && a.kind === "plugin" ? a.objectKind : "";
-      if (kind !== "run" && kind !== "mergeField") {
+      if (kind !== "run" && kind !== "mergeField" && kind !== "block") {
         throw new Rejected(
-          `${op.address}: a Word document is written through its runs and merge fields`,
+          `${op.address}: a Word document is written through its blocks, runs and merge fields`,
         );
       }
       const d = parseId(op.address, kind);
       if (!d) throw new Rejected(`${op.address} is not a ${kind} address`);
-      if (kind === "run" ? op.path !== "text" : op.path !== "value") {
+      const writable =
+        kind === "run"
+          ? op.path === "text"
+          : kind === "mergeField"
+            ? op.path === "value"
+            : op.path === "text" || op.path === "listItems";
+      if (!writable) {
         throw new Rejected(`${kind}.${op.path} is not writable`);
       }
-      if (d.cell !== undefined)
-        throw new Rejected(
-          `${op.address}: table-cell text is not writable through the object model yet`,
-        );
       let p = plans.get(d.frame);
       if (!p) {
         const state = states.find(
@@ -463,24 +779,59 @@ async function planDocOps(
         const ir = await readLowered(host, state);
         if (!ir)
           throw new Rejected(`${op.address}: the document's parts are missing`);
-        p = { state, ir, runs: [], mergeFields: [], native: [] };
+        p = {
+          state,
+          ir,
+          runs: [],
+          mergeFields: [],
+          native: [],
+          deleteParagraphs: [],
+          cloneParagraphs: [],
+          written: new Set(),
+          partial: new Set(),
+        };
         plans.set(d.frame, p);
+      }
+      if (kind === "block") {
+        planBlock(p, d, op.address, op.path, op.value);
+        continue;
       }
       const para = paragraphOf(p.ir, d);
       if (!para) throw new Rejected(`${op.address}: no such paragraph`);
+      if (p.written.has(paraKey(d)))
+        throw new Rejected(
+          `${op.address}: block ${paraKey(d)} is written twice in one batch`,
+        );
+      p.partial.add(paraKey(d));
       const value = op.value as string;
       if (kind === "run") {
         if (d.run! >= para.runs.length)
           throw new Rejected(`${op.address}: no such run`);
-        p.runs.push({ block: d.block!, run: d.run!, text: value });
-        p.native.push({ block: d.block!, run: d.run!, text: value });
+        p.runs.push({
+          block: d.block!,
+          ...cellPart(d),
+          run: d.run!,
+          text: value,
+        });
+        p.native.push({
+          block: d.block!,
+          ...cellPart(d),
+          run: d.run!,
+          text: value,
+        });
       } else {
         const runs = fieldsOf(para).get(d.field!);
         if (!runs) throw new Rejected(`${op.address}: no such merge field`);
-        p.mergeFields.push({ block: d.block!, occurrence: d.field!, value });
+        p.mergeFields.push({
+          block: d.block!,
+          ...cellPart(d),
+          occurrence: d.field!,
+          value,
+        });
         runs.forEach((r, k) =>
           p!.native.push({
             block: d.block!,
+            ...cellPart(d),
             run: r,
             text: k === 0 ? value : "",
           }),
@@ -517,7 +868,7 @@ function scopeOf(
 function documentKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "docxDocument",
-    title: "Word document",
+    title: t(DOC.kindDocument),
     schema: schemaOf("docxDocument"),
     content: {
       kind: "blob",
@@ -596,7 +947,7 @@ function documentKind(host: BundleHost): ObjectKindContribution {
 function blockKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "block",
-    title: "Word block",
+    title: t(DOC.kindBlock),
     schema: schemaOf("block"),
     hostOf: (address) => {
       const d = parseId(address, "block");
@@ -609,6 +960,19 @@ function blockKind(host: BundleHost): ObjectKindContribution {
         const frame = (s.frame as { id: string }).id;
         if (scoped && scoped.frame !== frame) continue;
         const ir = await readLowered(host, s);
+        // Within a table: its cells' paragraphs.
+        if (scoped?.block !== undefined) {
+          const t = ir?.story.blocks[scoped.block];
+          if (t?.kind === "table")
+            t.cells.forEach((c, k) =>
+              c.paragraphs.forEach((_, m) =>
+                out.push(
+                  docAddress("block", `${frame}/b${scoped.block}/c${k}/p${m}`),
+                ),
+              ),
+            );
+          continue;
+        }
         ir?.story.blocks.forEach((b, i) => {
           out.push(docAddress("block", `${frame}/b${i}`));
           if (b.kind === "paragraph")
@@ -627,22 +991,24 @@ function blockKind(host: BundleHost): ObjectKindContribution {
       const b = doc?.ir.story.blocks[d.block!];
       if (!doc || !b)
         return refuse("unknownAddress", `${address}: no such block`);
-      const image =
-        d.image !== undefined
-          ? b.kind === "paragraph"
-            ? b.images?.[d.image]
-            : undefined
-          : undefined;
+      // The paragraph the address names: a body paragraph, or a table
+      // cell's (whose `index` is its table's).
+      const para = d.cell !== undefined ? paragraphOf(doc.ir, d) : null;
+      if (d.cell !== undefined && !para)
+        return refuse("unknownAddress", `${address}: no such paragraph`);
+      const p = para ?? (b.kind === "paragraph" ? b : null);
+      const image = d.image !== undefined ? p?.images?.[d.image] : undefined;
       if (d.image !== undefined && !image)
         return refuse("unknownAddress", `${address}: no such picture`);
       switch (path) {
         case "kind":
-          return val(image ? "image" : b.kind);
+          return val(image ? "image" : p ? "paragraph" : b.kind);
         case "index":
           return val(d.block);
         case "text":
           if (image) return val("");
-          if (b.kind === "paragraph") return val(textOfParagraph(b));
+          if (p) return val(textOfParagraph(p));
+          if (b.kind !== "table") return val("");
           return val(
             Array.from({ length: b.rows }, (_, r) =>
               b.cells
@@ -652,15 +1018,27 @@ function blockKind(host: BundleHost): ObjectKindContribution {
             ).join("\n"),
           );
         case "paragraphStyle":
+          return val(!image && p ? (p.paraStyleId ?? null) : null);
+        case "headingLevel":
           return val(
-            !image && b.kind === "paragraph" ? (b.paraStyleId ?? null) : null,
+            !image && p
+              ? headingLevel(p.paraStyleId, styleNameById(doc.ir))
+              : null,
+          );
+        case "bookmarks":
+          return val(!image && p ? (p.bookmarks ?? []) : []);
+        case "listItems":
+          return val(
+            image || d.cell !== undefined
+              ? null
+              : listItemsOf(doc.ir, d.block!),
           );
         case "runCount":
-          return val(!image && b.kind === "paragraph" ? b.runs.length : 0);
+          return val(!image && p ? p.runs.length : 0);
         case "rows":
-          return val(!image && b.kind === "table" ? b.rows : null);
+          return val(!image && !p && b.kind === "table" ? b.rows : null);
         case "columns":
-          return val(!image && b.kind === "table" ? b.cols : null);
+          return val(!image && !p && b.kind === "table" ? b.cols : null);
         case "widthPt":
           return val(image ? image.widthPt : null);
         case "heightPt":
@@ -677,7 +1055,7 @@ function blockKind(host: BundleHost): ObjectKindContribution {
 function runKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "run",
-    title: "Word run",
+    title: t(DOC.kindRun),
     schema: schemaOf("run"),
     hostOf: (address) => {
       const d = parseId(address, "run");
@@ -716,7 +1094,16 @@ function runKind(host: BundleHost): ObjectKindContribution {
         case "mergeField":
           return val(r.mergeField?.name ?? null);
         case "block":
-          return val(docAddress("block", `${d.frame}/b${d.block}`));
+          return val(
+            docAddress(
+              "block",
+              [
+                d.frame,
+                `b${d.block}`,
+                ...(d.cell !== undefined ? [`c${d.cell}`, `p${d.para}`] : []),
+              ].join("/"),
+            ),
+          );
         default:
           return refuse("unknownPath", `run has no path "${path}"`);
       }
@@ -727,7 +1114,7 @@ function runKind(host: BundleHost): ObjectKindContribution {
 function mergeFieldKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "mergeField",
-    title: "Merge field",
+    title: t(DOC.kindMergeField),
     schema: schemaOf("mergeField"),
     hostOf: (address) => {
       const d = parseId(address, "mergeField");
@@ -775,13 +1162,29 @@ function mergeFieldKind(host: BundleHost): ObjectKindContribution {
           return val(f.mapped ?? false);
         case "writable":
           return val(
-            d.cell === undefined &&
-              bodyRunLocation(doc!.ir, d.block!, runs[0]!) !== null,
+            d.cell === undefined
+              ? bodyRunLocation(doc!.ir, d.block!, runs[0]!) !== null
+              : cellRunLocation(
+                  doc!.ir,
+                  d.block!,
+                  d.cell,
+                  d.para!,
+                  runs[0]!,
+                ) !== null,
           );
         case "runs":
           return val(runs.map((i) => docAddress("run", idText(d, `r${i}`))));
         case "block":
-          return val(docAddress("block", `${d.frame}/b${d.block}`));
+          return val(
+            docAddress(
+              "block",
+              [
+                d.frame,
+                `b${d.block}`,
+                ...(d.cell !== undefined ? [`c${d.cell}`, `p${d.para}`] : []),
+              ].join("/"),
+            ),
+          );
         case "document":
           return val(docAddress("docxDocument", d.frame));
         default:
@@ -872,7 +1275,7 @@ function typedCommands(
         }
         if (ops.length > 0) {
           const out = await ctx.objects.batch(ops, {
-            label: "Fill merge fields",
+            label: t(DOC.fillMergeFields),
           });
           if (!out.applied)
             throw new Error(
@@ -913,6 +1316,8 @@ export function createDocObjectModel(
       mergeFieldKind(host),
     ],
     commands: typedCommands(host, deps.place, deps.exportBytes),
+    // Editor plan G3a: a paragraph's text, a merge field, a list's items.
+    templateFields: docTemplateFields(host),
     batch: (ops) => planDocOps(host, ops),
   };
 }

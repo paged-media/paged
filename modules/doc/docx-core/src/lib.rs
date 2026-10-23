@@ -147,6 +147,12 @@ pub struct Paragraph {
     /// source path. `None` for body paragraphs.
     #[serde(default)]
     pub source_cell: Option<CellPath>,
+    /// The names of the bookmarks that start in this paragraph
+    /// (`w:bookmarkStart/@w:name`, a body-level start counting for the
+    /// paragraph after it), in document order. A template field names a
+    /// paragraph by one.
+    #[serde(default)]
+    pub bookmarks: Vec<String>,
 }
 
 /// A footnote or endnote (`w:footnote` / `w:endnote` in the notes part), keyed by
@@ -166,6 +172,10 @@ pub struct Note {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ListMarker {
     pub kind: ListKind,
+    /// The list instance (`w:numPr/w:numId`): paragraphs sharing it are one
+    /// list (a template's list field reads and writes them as items).
+    #[serde(default)]
+    pub num_id: i32,
     /// The zero-based indent level (`w:ilvl`).
     pub level: u8,
     /// For bullets: the glyph from `w:lvlText` (e.g. `"•"`).

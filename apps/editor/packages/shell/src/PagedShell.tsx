@@ -30,6 +30,20 @@
 // import from `apps/canvas/src/ui/` without dragging shell into
 // canvas internals.
 
+import { t, useStrings } from "@paged-media/strings";
+import { COMMANDS, LOAD } from "./state/messages";
+import {
+  debugHandlesEnabled,
+  debugHandlesOf,
+  setDebugHandle,
+} from "./state/debug-handles";
+import { EditorRoot } from "./state/editor-root";
+import {
+  createEditorScope,
+  EditorScopeProvider,
+  useEditorScope,
+  type EditorScope,
+} from "./state/editor-scope";
 import React, {
   useEffect,
   useEffectEvent,
@@ -119,7 +133,7 @@ import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
 import {
   CockpitStateProvider,
-  cockpitActions,
+  useCockpitActions,
   useOptionalCockpitState,
 } from "./cockpit/cockpit-state-context";
 import {
@@ -255,6 +269,20 @@ export interface PagedShellProps {
   /** The session's role and overrides, handed to the engine (engine ADR
    *  1001). Omitted = an editor, the engine's default. */
   sessionPolicy?: SessionPolicy;
+  /** The host keeps the role: a role change (Preview as filler, Author
+   *  template) goes here and comes back as `sessionPolicy`. */
+  onSessionRoleChange?: (role: SessionPolicy["role"]) => void;
+  /** The editor's own stores (plan task E1). The host passes one when it
+   *  reaches them from outside the tree; omitted, the shell makes its own. */
+  scope?: EditorScope;
+  /** The editor is the page: keys typed with nothing focused are its from
+   *  the start. Default true, a shell on its own page; an embedded editor
+   *  passes false and takes them once it is pointed at or focused
+   *  (state/editor-root.tsx). */
+  ownsPage?: boolean;
+  /** Ask before the page unloads with unsaved edits (`beforeunload`).
+   *  Default true; an embedding host decides for its own page. */
+  guardUnload?: boolean;
 }
 
 /**
@@ -280,61 +308,75 @@ export function PagedShell({
   canvasFurniture,
   features,
   sessionPolicy,
+  onSessionRoleChange,
+  scope,
+  ownsPage = true,
+  guardUnload = true,
   children,
 }: PropsWithChildren<PagedShellProps>) {
   const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
+  const [ownScope] = useState(createEditorScope);
   return (
-    <DebugErrorBoundary label="paged-shell">
-      <CanvasClientProvider client={client}>
-        <ChromeRegionsProvider value={chromeRegions}>
-          <SessionPolicyProvider policy={sessionPolicy ?? DEFAULT_SESSION}>
-            <ThemeProvider>
-              <CameraProvider>
-                <DocumentProvider>
-                  {/* ToolProvider above SelectionProvider: the selection
-                   *  context's `activeTool` facade reads the tool stack. */}
-                  <ToolProvider>
-                    <WorkflowModeProvider initialMode={initialMode}>
-                      <ScreenModeProvider>
-                        <ToolSettingsProvider>
-                          <FormattingAffectsProvider>
-                            <SelectionProvider>
-                              <ContentSelectionProvider>
-                                <OverlaySignalsProvider>
-                                  {/* W2.8 — guide creation/drag state, shared
+    <EditorScopeProvider scope={scope ?? ownScope}>
+      <DebugErrorBoundary label="paged-shell" scope={scope ?? ownScope}>
+        <CanvasClientProvider client={client}>
+          <ChromeRegionsProvider value={chromeRegions}>
+            <SessionPolicyProvider
+              policy={sessionPolicy ?? DEFAULT_SESSION}
+              {...(onSessionRoleChange
+                ? { onRoleChange: onSessionRoleChange }
+                : {})}
+            >
+              <ThemeProvider>
+                <EditorRoot ownsPage={ownsPage}>
+                  <CameraProvider>
+                    <DocumentProvider>
+                      {/* ToolProvider above SelectionProvider: the selection
+                       *  context's `activeTool` facade reads the tool stack. */}
+                      <ToolProvider>
+                        <WorkflowModeProvider initialMode={initialMode}>
+                          <ScreenModeProvider>
+                            <ToolSettingsProvider>
+                              <FormattingAffectsProvider>
+                                <SelectionProvider>
+                                  <ContentSelectionProvider>
+                                    <OverlaySignalsProvider>
+                                      {/* W2.8 — guide creation/drag state, shared
                                   by the ruler hit zones, the controller,
                                   and the guide overlay. */}
-                                  <GuideDragProvider>
-                                    {/* W2.9 — text-frame threading state
+                                      <GuideDragProvider>
+                                        {/* W2.9 — text-frame threading state
                                     (ports + loaded cursor + controller). */}
-                                    <ThreadingProvider>
-                                      {/* W3.A2 — table cell selection,
+                                        <ThreadingProvider>
+                                          {/* W3.A2 — table cell selection,
                                       shared by the canvas hit handler,
                                       the Table panel, and the cell
                                       overlay. */}
-                                      <TableSelectionProvider>
-                                        <InstrumentationProvider>
-                                          {/* W3.2 — the edit-context stack
+                                          <TableSelectionProvider>
+                                            <InstrumentationProvider>
+                                              {/* W3.2 — the edit-context stack
                                         (B-02/W-03): the active scoped-
                                         editing-mode stack + breadcrumb +
                                         write-scope. Above PagedEditor so
                                         chrome + canvas integration can
                                         read it. */}
-                                          <EditContextStackProvider>
-                                            {/* ADR 023 phase C — the binding-
+                                              <EditContextStackProvider>
+                                                {/* ADR 023 phase C — the binding-
                                         provider seam. Deliberately
                                         INSIDE the edit-context stack:
                                         a provider's lifetime is that
                                         stack's, and reading them in
                                         that order is the point. */}
-                                            <BindingProviderProvider
-                                              host={bindingProviders ?? null}
-                                            >
-                                              <ObjectModelProvider
-                                                host={objectModel ?? null}
-                                              >
-                                                <PagedEditorProvider>
-                                                  {/* Actions — the command recorder.
+                                                <BindingProviderProvider
+                                                  host={
+                                                    bindingProviders ?? null
+                                                  }
+                                                >
+                                                  <ObjectModelProvider
+                                                    host={objectModel ?? null}
+                                                  >
+                                                    <PagedEditorProvider>
+                                                      {/* Actions — the command recorder.
                                         INSIDE PagedEditorProvider (it
                                         needs the registries) and OUTSIDE
                                         ShellChrome, because the right
@@ -343,52 +385,57 @@ export function PagedShell({
                                         would stop recording the moment
                                         the user switched tabs to do the
                                         thing they were recording. */}
-                                                  <ActionsProvider>
-                                                    <SeedFeatures
-                                                      features={features}
-                                                    />
-                                                    <ShellChrome
-                                                      panels={panels}
-                                                      overlays={overlays}
-                                                      tools={tools}
-                                                      headerExtras={
-                                                        headerExtras
-                                                      }
-                                                      modes={modes}
-                                                      panelRail={panelRail}
-                                                      canvasComponent={
-                                                        canvasComponent
-                                                      }
-                                                      initialDocumentSizePt={
-                                                        initialDocumentSizePt
-                                                      }
-                                                    >
-                                                      {children}
-                                                    </ShellChrome>
-                                                  </ActionsProvider>
-                                                </PagedEditorProvider>
-                                              </ObjectModelProvider>
-                                            </BindingProviderProvider>
-                                          </EditContextStackProvider>
-                                        </InstrumentationProvider>
-                                      </TableSelectionProvider>
-                                    </ThreadingProvider>
-                                  </GuideDragProvider>
-                                </OverlaySignalsProvider>
-                              </ContentSelectionProvider>
-                            </SelectionProvider>
-                          </FormattingAffectsProvider>
-                        </ToolSettingsProvider>
-                      </ScreenModeProvider>
-                    </WorkflowModeProvider>
-                  </ToolProvider>
-                </DocumentProvider>
-              </CameraProvider>
-            </ThemeProvider>
-          </SessionPolicyProvider>
-        </ChromeRegionsProvider>
-      </CanvasClientProvider>
-    </DebugErrorBoundary>
+                                                      <ActionsProvider>
+                                                        <SeedFeatures
+                                                          features={features}
+                                                        />
+                                                        <ShellChrome
+                                                          panels={panels}
+                                                          overlays={overlays}
+                                                          tools={tools}
+                                                          headerExtras={
+                                                            headerExtras
+                                                          }
+                                                          modes={modes}
+                                                          panelRail={panelRail}
+                                                          canvasComponent={
+                                                            canvasComponent
+                                                          }
+                                                          initialDocumentSizePt={
+                                                            initialDocumentSizePt
+                                                          }
+                                                          guardUnload={
+                                                            guardUnload
+                                                          }
+                                                        >
+                                                          {children}
+                                                        </ShellChrome>
+                                                      </ActionsProvider>
+                                                    </PagedEditorProvider>
+                                                  </ObjectModelProvider>
+                                                </BindingProviderProvider>
+                                              </EditContextStackProvider>
+                                            </InstrumentationProvider>
+                                          </TableSelectionProvider>
+                                        </ThreadingProvider>
+                                      </GuideDragProvider>
+                                    </OverlaySignalsProvider>
+                                  </ContentSelectionProvider>
+                                </SelectionProvider>
+                              </FormattingAffectsProvider>
+                            </ToolSettingsProvider>
+                          </ScreenModeProvider>
+                        </WorkflowModeProvider>
+                      </ToolProvider>
+                    </DocumentProvider>
+                  </CameraProvider>
+                </EditorRoot>
+              </ThemeProvider>
+            </SessionPolicyProvider>
+          </ChromeRegionsProvider>
+        </CanvasClientProvider>
+      </DebugErrorBoundary>
+    </EditorScopeProvider>
   );
 }
 
@@ -461,6 +508,7 @@ function ShellChrome({
   panelRail,
   canvasComponent,
   initialDocumentSizePt,
+  guardUnload,
   children,
 }: PropsWithChildren<{
   panels: PanelContribution[];
@@ -471,7 +519,10 @@ function ShellChrome({
   panelRail?: PanelRailItem[];
   canvasComponent?: ComponentType<PanelProps>;
   initialDocumentSizePt?: readonly [number, number];
+  guardUnload: boolean;
 }>) {
+  const scope = useEditorScope();
+  const cockpitActions = useCockpitActions();
   const client = useCanvasClient();
   const chrome = useChromeRegions();
   const actionsRegion = chrome.region("actions-bar");
@@ -549,11 +600,12 @@ function ShellChrome({
       bootDocRef.current = false;
       setWarnings((prev) => [
         ...prev,
-        `Could not create the initial document: ${String(err)}`,
+        t(LOAD.initialFailed, { error: String(err) }),
       ]);
     });
   }, [initialDocumentSizePt, paged, handle, setStatus]);
   const sabSupported = supportsSharedArrayBuffer();
+  const strings = useStrings();
 
   // Editor-ops — the worker-message subscriber below needs the live
   // document handle (to refresh the page grid on page-structure
@@ -744,13 +796,13 @@ function ShellChrome({
     const disposables = [
       registries.commands.register({
         id: "paged.chrome.toggleAll",
-        title: "Toggle panels and tool rail",
+        title: t(COMMANDS.toggleAll),
         category: "View",
         handler: (paged) => onToggleAll(paged as PagedEditor),
       }),
       registries.commands.register({
         id: "paged.chrome.togglePanels",
-        title: "Toggle panels (keep tool rail)",
+        title: t(COMMANDS.togglePanels),
         category: "View",
         handler: (paged) => onTogglePanels(paged as PagedEditor),
       }),
@@ -881,7 +933,7 @@ function ShellChrome({
                     multiple: false,
                     types: [
                       {
-                        description: "Paged and IDML documents",
+                        description: t(COMMANDS.pickerDocuments),
                         accept: {
                           "application/x-paged+zip": [".paged"],
                           "application/vnd.adobe.indesign-idml-package": [
@@ -892,7 +944,7 @@ function ShellChrome({
                     ],
                   });
                   if (picked) {
-                    setOpenFileHandle(picked);
+                    setOpenFileHandle(scope, picked);
                     const file = await (
                       picked as unknown as { getFile(): Promise<File> }
                     ).getFile();
@@ -906,7 +958,7 @@ function ShellChrome({
                   // No handle and no throw: the platform answered with
                   // nothing. Treat it as a cancel rather than falling
                   // through to a second dialog.
-                  setOpenFileHandle(null);
+                  setOpenFileHandle(scope, null);
                   handled = true;
                   resolve(null);
                   return;
@@ -928,7 +980,7 @@ function ShellChrome({
                   // a filechooser that was never going to arrive.
                   const aborted =
                     err instanceof Error && err.name === "AbortError";
-                  setOpenFileHandle(null);
+                  setOpenFileHandle(scope, null);
                   if (aborted) {
                     resolve(null);
                     return;
@@ -968,7 +1020,7 @@ function ShellChrome({
                 // one: keeping it would make the next Save write this new
                 // document over the file the LAST one came from, silently
                 // and with no undo.
-                setOpenFileHandle(null);
+                setOpenFileHandle(scope, null);
                 resolve(files[0] ?? null);
               });
             })();
@@ -988,7 +1040,7 @@ function ShellChrome({
     );
     // ADR 221 — File ▸ New from a brief… (Claude builds the document).
     const newFromBrief = registries.commands.register(
-      buildNewFromBriefCommand(() => openAssistant({ view: "brief" })),
+      buildNewFromBriefCommand(() => openAssistant(scope, { view: "brief" })),
     );
     // Concept 2 — swatch-library import/export commands.
     const importAse = registries.commands.register(
@@ -1016,7 +1068,7 @@ function ShellChrome({
       exportAse.dispose();
       exportPdf.dispose();
     };
-  }, [registries]);
+  }, [registries, scope]);
 
   // Register the palette-toggle command + Cmd+K keybinding. The
   // command body (notifyPalette) is shell-internal; binding via
@@ -1069,26 +1121,19 @@ function ShellChrome({
     };
   }, [registries]);
 
-  // Dev hook. Playwright + ad-hoc browser scripts read
-  // `window.__canvas`. Re-published after every commit so it always
-  // reflects current state. Stripped from production builds via
-  // Vite's `import.meta.env.PROD` constant — typed loosely here so
-  // shell's tsconfig (which doesn't include Vite's ambient types)
-  // still passes.
-  const viteEnv = (
-    import.meta as unknown as { env?: { PROD?: boolean; MODE?: string } }
-  ).env;
-  const isProd = viteEnv?.PROD === true;
-  // The `demo` playground build (vite build --mode demo) is a production bundle
-  // that DELIBERATELY retains the automation handle so a script can drive the
-  // editor live. Everywhere else the handle stays dev-only.
-  const isDemoBuild = viteEnv?.MODE === "demo";
-  // Published after every commit (a layout effect, so before any input
-  // or script can read it): assigning it during render, as before, keeps
-  // the React Compiler from compiling this component (ADR 229).
+  // Dev hook. Playwright + ad-hoc browser scripts read `window.__canvas`,
+  // which the page entry publishes from this editor's debug handles
+  // (state/debug-handles.ts; never the shell itself, plan task E1).
+  // Refreshed after every commit so it always reflects current state.
+  // Dev and demo builds only: the `demo` playground build (vite build
+  // --mode demo) is a production bundle that DELIBERATELY retains the
+  // automation handle so a script can drive the editor live.
+  // After every commit (a layout effect, so before any input or script
+  // can read it): assigning it during render, as before, keeps the React
+  // Compiler from compiling this component (ADR 229).
   useLayoutEffect(() => {
-    if (!isProd || isDemoBuild) {
-      (globalThis as unknown as { __canvas?: unknown }).__canvas = {
+    if (debugHandlesEnabled()) {
+      setDebugHandle(scope, "canvas", {
         client,
         handle,
         ready: handle != null,
@@ -1146,22 +1191,18 @@ function ShellChrome({
         // ADR 323 — the shared object registry: `editor.get/set/query/
         // batch/schema` (demo automation) and specs read it here.
         objects: objectModel?.objects ?? null,
-      };
+      });
       // Demo/automation entry: run a demo script (paged.* + editor.* + demo.*)
       // against the live handle. Trusted first-party scripts only (see runner).
       // Exposed wherever the handle is — dev today; the `demo` playground build
       // (Phase 2) un-gates the same block in a production bundle.
-      (globalThis as unknown as { __demo?: unknown }).__demo = {
-        run: (source: string) =>
-          runDemoScriptWithHandle(
-            source,
-            (
-              globalThis as unknown as {
-                __canvas: Parameters<typeof runDemoScriptWithHandle>[1];
-              }
-            ).__canvas,
-          ),
-      };
+      const live = () =>
+        debugHandlesOf(scope).canvas as Parameters<
+          typeof runDemoScriptWithHandle
+        >[1];
+      setDebugHandle(scope, "demo", {
+        run: (source: string) => runDemoScriptWithHandle(source, live(), live),
+      });
     }
   });
 
@@ -1345,11 +1386,7 @@ function ShellChrome({
         !railHidden && <ContextToolbar paged={paged} />}
 
       {!sabSupported && (
-        <div style={warningStyle}>
-          Some features are running in a reduced mode. Reload the page; if it
-          persists, the page is not being served with the headers the editor
-          needs (cross-origin isolation).
-        </div>
+        <div style={warningStyle}>{strings.t(LOAD.reducedMode)}</div>
       )}
 
       {warnings.length > 0 && (
@@ -1435,8 +1472,10 @@ function ShellChrome({
   // legacy dockview layout keys survive while the flag is off.
   return cockpitActive ? (
     <CockpitStateProvider>
-      <UnsavedChangesGuard />
-      {!isProd && <DebugContextProbe targetRef={debugContextRef} />}
+      {guardUnload && <UnsavedChangesGuard />}
+      {debugHandlesEnabled() && (
+        <DebugContextProbe targetRef={debugContextRef} />
+      )}
       {shellBody}
     </CockpitStateProvider>
   ) : (
@@ -1568,7 +1607,7 @@ const MAX_VISIBLE_WARNINGS = 50;
  * visible diagnostic instead of unmounting the whole shell.
  */
 class DebugErrorBoundary extends React.Component<
-  React.PropsWithChildren<{ label: string }>,
+  React.PropsWithChildren<{ label: string; scope: EditorScope }>,
   { error: Error | null }
 > {
   state = { error: null as Error | null };
@@ -1578,8 +1617,11 @@ class DebugErrorBoundary extends React.Component<
   componentDidCatch(error: Error) {
     // eslint-disable-next-line no-console
     console.error(`[${this.props.label}] caught:`, error);
-    (globalThis as unknown as { __pagedCrash?: string }).__pagedCrash =
-      `[${this.props.label}] ${error.message}\n${error.stack ?? ""}`;
+    setDebugHandle(
+      this.props.scope,
+      "crash",
+      `[${this.props.label}] ${error.message}\n${error.stack ?? ""}`,
+    );
     // ADR 025 — record the crash. The console line and `__pagedCrash` are for
     // a developer watching live; this is for the person who hits it once and
     // exports a bundle. Neither the message nor the stack crosses: both
@@ -1621,8 +1663,10 @@ const shellStyle: React.CSSProperties = {
   color: "hsl(var(--paged-fg))",
   display: "flex",
   flexDirection: "column",
-  height: "100vh",
-  width: "100vw",
+  // The element the editor is mounted in decides its size (an embedding
+  // host's container, or the page's full-viewport #root).
+  height: "100%",
+  width: "100%",
 };
 
 const bodyRowStyle: React.CSSProperties = {

@@ -45,6 +45,7 @@ import {
   type PanelProps,
   type SelectionState,
   type TableCellSelection,
+  useEditorKeys,
 } from "@paged-media/shell";
 
 import type {
@@ -54,6 +55,11 @@ import type {
 } from "@paged-media/client";
 import { ViewportCanvas } from "../ui/ViewportCanvas";
 import { useGestureSpine } from "../ui/useGestureSpine";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.canvasPanel", {
+  empty: "Drop an IDML file here, or use File ▸ Open IDML…",
+});
 
 /** A cell's page-space AABB `[top, left, bottom, right]` from its
  *  engine geometry (bounds through the item transform). */
@@ -75,6 +81,8 @@ function cellAabb(item: {
 }
 
 export function CanvasPanel(_props: PanelProps) {
+  const keys = useEditorKeys();
+  const strings = useStrings();
   // Phase 2 — the gesture spine. `toolGesture` is non-null only while
   // the effective tool carries a handler (Rectangle, …); select/text
   // keep `null` and run ViewportCanvas's proven legacy pointer path.
@@ -277,9 +285,8 @@ export function CanvasPanel(_props: PanelProps) {
       e.preventDefault();
       climbOut();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [activeGroup, pathEditMode]);
+    return keys.listen("keydown", onKey);
+  }, [activeGroup, keys, pathEditMode]);
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onHit = useCallback(
@@ -525,7 +532,7 @@ export function CanvasPanel(_props: PanelProps) {
     return (
       <div style={emptyStyle}>
         <p style={{ fontSize: 14, color: "var(--pg-muted-fg)" }}>
-          Drop an IDML file here, or use File ▸ Open IDML…
+          {strings.t(M.empty)}
         </p>
       </div>
     );

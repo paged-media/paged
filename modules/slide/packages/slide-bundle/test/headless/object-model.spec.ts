@@ -41,6 +41,8 @@ import slideBundle from "../../src/index";
 import { slideEngine, type ImportReport } from "../../src/engine";
 import {
   DECK_ADDRESS,
+  DUPLICATE_SLIDE_COMMAND,
+  EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
   NEW_SLIDE_COMMAND,
   SLIDE_SCHEMA,
@@ -91,7 +93,7 @@ beforeEach(async () => {
 afterEach(() => h.dispose());
 
 describe("[plugin-slide.object-model] slides, layouts, placeholders through host.objects", () => {
-  it("declares four kinds and two typed commands", async () => {
+  it("declares four kinds and four typed commands", async () => {
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === "media.paged.slide")
       .map((k) => k.kind);
@@ -106,7 +108,12 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       .filter((c) => c.owner === "media.paged.slide")
       .map((c) => c.id)
       .sort();
-    expect(commands).toEqual([IMPORT_PPTX_COMMAND, NEW_SLIDE_COMMAND]);
+    expect(commands).toEqual([
+      DUPLICATE_SLIDE_COMMAND,
+      EXPORT_PPTX_COMMAND,
+      IMPORT_PPTX_COMMAND,
+      NEW_SLIDE_COMMAND,
+    ]);
   });
 
   it("the import command opens a slide per page; the deck answers from its label", async () => {
@@ -232,7 +239,10 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
       applied: false,
       code: "invalidValue",
     });
-    expect(await h.objects.set(slides[0]!, "index", 4)).toMatchObject({
+    expect(await h.objects.set(slides[0]!, "page", "page:x")).toMatchObject({
+      applied: false,
+    });
+    expect(await h.objects.set(slides[0]!, "index", 0)).toMatchObject({
       applied: false,
     });
     expect(
@@ -282,6 +292,84 @@ describe("[plugin-slide.object-model] slides, layouts, placeholders through host
     expect(await h.objects.query(`${P}/slide`)).toEqual(before);
     await h.host.document.redo();
     expect(await h.objects.query(`${P}/slide`)).toEqual([...before, out.slide]);
+  });
+
+  it("newSlide copies its layout's placeholders, emptied, as the Slides panel does", async () => {
+    covers("command:media.paged.slide.newSlide");
+    const layout = v(await h.objects.get(slides[1]!, "layout")) as string;
+    const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {
+      after: slides[1]!,
+      layout,
+    })) as { slide: string };
+    expect(v(await h.objects.get(out.slide, "layout"))).toBe(layout);
+    const own = await h.objects.query(`${out.slide} > ${P}/placeholder`);
+    const template = await h.objects.query(`${slides[1]!} > ${P}/placeholder`);
+    expect(own.length).toBe(template.length);
+    expect(own.length).toBeGreaterThan(0);
+    for (const a of own) {
+      const c = await h.objects.get(a, "content");
+      if (c.kind === "value") expect(c.value).toBe("");
+    }
+    // One undo step takes the whole slide away.
+    await h.host.document.undo();
+    expect(await h.objects.query(`${P}/slide`)).toEqual(slides);
+  });
+
+  it("slide.index moves a slide (one undo step); several moves in one batch compose", async () => {
+    expect(await h.objects.set(slides[0]!, "index", 3)).toMatchObject({
+      applied: true,
+      undoSteps: 1,
+    });
+    expect((await h.objects.query(`${P}/slide`)).slice(0, 3)).toEqual([
+      slides[1],
+      slides[2],
+      slides[0],
+    ]);
+    expect(v(await h.objects.get(slides[0]!, "index"))).toBe(3);
+    await h.host.document.undo();
+    expect(await h.objects.query(`${P}/slide`)).toEqual(slides);
+    // Past the end: last. Two moves in one batch: the second sees the first.
+    const out = await h.objects.batch([
+      { op: "set", address: slides[0]!, path: "index", value: 99 },
+      { op: "set", address: slides[1]!, path: "index", value: 1 },
+    ]);
+    expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+    const now = await h.objects.query(`${P}/slide`);
+    expect(now.at(-1)).toBe(slides[0]);
+    expect(now[0]).toBe(slides[1]);
+  });
+
+  it("duplicateSlide puts the copy right after its source, one undo step", async () => {
+    covers("command:media.paged.slide.duplicateSlide");
+    const out = (await h.objects.invoke(DUPLICATE_SLIDE_COMMAND, {
+      slide: slides[2]!,
+    })) as { slide: string };
+    const now = await h.objects.query(`${P}/slide`);
+    expect(now.length).toBe(slides.length + 1);
+    expect(now[3]).toBe(out.slide);
+    expect(v(await h.objects.get(out.slide, "notes"))).toBe(
+      v(await h.objects.get(slides[2]!, "notes")),
+    );
+    await h.host.document.undo();
+    expect(await h.objects.query(`${P}/slide`)).toEqual(slides);
+    await expect(
+      h.objects.invoke(DUPLICATE_SLIDE_COMMAND, { slide: `${P}/slide/nope` }),
+    ).rejects.toThrow(/unknownAddress/);
+  });
+
+  it("exportPptx (typed) writes the deck with the document's slides", async () => {
+    covers("command:media.paged.slide.exportPptx");
+    await h.objects.set(slides[1]!, "hidden", true);
+    const out = (await h.objects.invoke(EXPORT_PPTX_COMMAND, {})) as {
+      bytes: Uint8Array;
+      fileName: string;
+      diagnostics: string[];
+    };
+    expect(out.fileName).toMatch(/\.pptx$/);
+    expect(new TextDecoder().decode(out.bytes.subarray(0, 2))).toBe("PK");
+    const back = (await slideEngine()).importPptx(out.bytes, "again").report;
+    expect(back.slides.length).toBe(slides.length);
+    expect(back.slides[1]!.hidden).toBe(true);
   });
 
   it("labels are the persistence: a saved and reopened deck keeps its slide data", async () => {

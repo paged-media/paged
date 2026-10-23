@@ -128,7 +128,8 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   created and instanced in text, and one `set` switches every instance. A swatch is
   addressed by its id or its name. A `set` is always one undo step, colour settings and the
   other application state included. `null` clears a nullable row (text, enum or reference)
-  exactly as `""` does. A read tells a mixed value (`mixed: true`, a range whose runs
+  exactly as `""` does. A cell reads its `text` (its paragraphs joined by `\n`, the stream a
+  cell-addressed `insertText` writes), as a story does. A read tells a mixed value (`mixed: true`, a range whose runs
   disagree) from a refusal, which carries a code (`noSuchPath`, `notFound`, `badAddress`,
   `noDocument`). A frame's image content (`imageBytes`), its thread links
   (`nextTextFrame`, `previousTextFrame`), its opacity mask (`opacityMask`) and its path points
@@ -230,8 +231,8 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **Two mutation lanes.** Text edits have no `Operation` form; they use `TextOp` in
   `paged-canvas`. Undo keeps the newest 10,000 steps; a batch is one step at any size and in
   either lane.
-- **The command line sends 40 of the 71 message kinds.** The rest are listed with a reason
-  each in `crates/paged-cli/tests/it/cli_surface.rs`; half of them (15 of 31) need a pointer or a caret.
+- **The command line sends 42 of the 75 message kinds.** The rest are listed with a reason
+  each in `crates/paged-cli/tests/it/cli_surface.rs`; half of them (15 of 33) need a pointer or a caret.
 - **The Vello path is held to the CPU path, with known gaps.** `corpus/generated/parity-diff.sh`
   renders every generated fixture through both and budgets each in
   `corpus/generated/parity-thresholds.json` ([ADR 146](adr/146-the-gpu-lane-is-held-to-the-cpu-lane.md)).

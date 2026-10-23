@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // Cell references in a formula being typed (sheet ADR 510): where they are,
 // so the frame surface can colour them in the grid as Excel does, and
 // whether the caret sits where clicking a cell should insert one. Pure
@@ -47,7 +46,8 @@ export const REF_COLORS = [
   "#b8741a",
 ];
 
-const REF = /(\$?[A-Za-z]{1,3}\$?[0-9]{1,7})(?::(\$?[A-Za-z]{1,3}\$?[0-9]{1,7}))?/g;
+const REF =
+  /(\$?[A-Za-z]{1,3}\$?[0-9]{1,7})(?::(\$?[A-Za-z]{1,3}\$?[0-9]{1,7}))?/g;
 
 /** The plain A1 references of `formula` (no sheet-qualified ones, none
  *  inside string literals). Empty unless it starts with `=`. */
@@ -110,9 +110,16 @@ function letters(col: number): string {
 }
 
 /** The A1 text of a cell or a range. */
-export function a1Of(top: number, left: number, bottom = top, right = left): string {
+export function a1Of(
+  top: number,
+  left: number,
+  bottom = top,
+  right = left,
+): string {
   const a = `${letters(left)}${top + 1}`;
-  return top === bottom && left === right ? a : `${a}:${letters(right)}${bottom + 1}`;
+  return top === bottom && left === right
+    ? a
+    : `${a}:${letters(right)}${bottom + 1}`;
 }
 
 /** F4: cycle the reference ending at (or containing) `caret` through

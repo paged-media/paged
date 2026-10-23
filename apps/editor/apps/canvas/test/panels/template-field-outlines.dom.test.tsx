@@ -32,7 +32,7 @@ import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
 afterEach(unmountAll);
 
-function overlayAs(role: "filler" | "editor") {
+function overlayAs(role: "filler" | "editor" | "author") {
   const Render = templateFieldsContribution.render;
   return function Overlay(): ReactElement {
     // Every page of the document at the origin, as the viewport would
@@ -116,5 +116,47 @@ describe("template field outlines", () => {
     await makeFields(h);
     await h.settle();
     expect(h.root.querySelector("[data-template-field-outline]")).toBeNull();
+  });
+
+  test("an author sees which fields have a problem (plan F4)", async () => {
+    covers("panel:paged.template.form");
+    const h = await mountPanel(overlayAs("author"), {
+      id: "paged.template.form",
+      document: "blank",
+    });
+    await makeFields(h);
+    // A picture field on a text frame: the preflight's error.
+    await h
+      .mutate({
+        op: "insertTextFrame",
+        args: { pageId: h.handle!.pageIds[0], bounds: [400, 40, 460, 300] },
+      } as never)
+      .then((reply) =>
+        h.mutate({
+          op: "setPluginMetadata",
+          args: {
+            elementId: (reply as { payload: { createdId: unknown } }).payload
+              .createdId,
+            key: "x-paged:template",
+            value: JSON.stringify({
+              v: 1,
+              data: { field: { name: "logo", kind: "image" } },
+            }),
+          },
+        } as never),
+      );
+    await h.settle();
+    await h.settle();
+    const findings = await h.client.templateFindings();
+    expect(findings.map((f) => [f.code, f.field])).toContainEqual([
+      "imageNotReplaceable",
+      "logo",
+    ]);
+    expect(
+      h.root.querySelector('[data-template-field-problem="logo"]'),
+    ).not.toBeNull();
+    expect(
+      h.root.querySelector('[data-template-field-problem="headline"]'),
+    ).toBeNull();
   });
 });

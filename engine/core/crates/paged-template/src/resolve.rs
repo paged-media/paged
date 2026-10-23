@@ -41,6 +41,10 @@ use crate::policy::{
 pub struct PolicyIndex {
     document: Option<DocumentPolicy>,
     items: HashMap<String, ItemPolicy>,
+    /// What the run fields grant on the frames of the stories they stand
+    /// in, by frame `Self` (engine ADR 1002): filling a run is editing
+    /// its story's text.
+    run_grants: HashMap<String, PermSet>,
 }
 
 impl PolicyIndex {
@@ -80,7 +84,15 @@ impl PolicyIndex {
                 }
             }
         }
-        (PolicyIndex { document, items }, problems)
+        let run_grants = run_grants(doc, document.as_ref());
+        (
+            PolicyIndex {
+                document,
+                items,
+                run_grants,
+            },
+            problems,
+        )
     }
 
     /// Whether the document carries any template policy at all.
@@ -107,7 +119,18 @@ impl PolicyIndex {
             .document
             .iter()
             .flat_map(|d| d.variables.iter().map(|(id, f)| (id.as_str(), f)));
-        items.chain(variables)
+        let runs = self
+            .document
+            .iter()
+            .flat_map(|d| d.runs.iter().map(|(id, f)| (id.as_str(), f)));
+        items.chain(variables).chain(runs)
+    }
+
+    /// The run fields, by placeholder key.
+    pub fn run_fields(&self) -> impl Iterator<Item = (&str, &FieldDef)> {
+        self.document
+            .iter()
+            .flat_map(|d| d.runs.iter().map(|(id, f)| (id.as_str(), f)))
     }
 
     fn document_defaults(&self) -> PermSet {
@@ -125,11 +148,44 @@ impl PolicyIndex {
         let mut set = session.role.defaults().union(self.document_defaults());
         if let Some(policy) = self_id.and_then(|id| self.items.get(id)) {
             if let Some(field) = &policy.field {
-                set = set.union(field.kind.grants());
+                set = set.union(field.grants());
             }
+        }
+        if let Some(grants) = self_id.and_then(|id| self.run_grants.get(id)) {
+            set = set.union(*grants);
+        }
+        if let Some(policy) = self_id.and_then(|id| self.items.get(id)) {
             set = set
                 .union(PermSet::of(policy.allow.iter().copied()))
                 .minus(PermSet::of(policy.deny.iter().copied()));
+        }
+        session.apply_overrides(set)
+    }
+
+    /// Whether a field of the plugin `plugin` (`media.paged.sheet`) opens
+    /// part of its content: its kind is `<plugin>.<name>`.
+    pub fn module_has_field(&self, plugin: &str) -> bool {
+        self.fields().any(|(_, f)| {
+            f.module.as_ref().is_some_and(|m| {
+                m.kind
+                    .strip_prefix(plugin)
+                    .is_some_and(|r| r.starts_with('.'))
+            })
+        })
+    }
+
+    /// What `session` may do to the document- or page-level label the
+    /// plugin `plugin` keeps (`x-paged:<plugin>`): the document's grants,
+    /// and `document.metadata` when a field of that plugin is open, since
+    /// filling it writes the plugin's own state there (a sheet's workbook
+    /// version, a slide's hidden flag).
+    pub fn effective_for_module_label(&self, session: &SessionPolicy, plugin: &str) -> PermSet {
+        if let Some(set) = session.unbound() {
+            return set;
+        }
+        let mut set = session.role.defaults().union(self.document_defaults());
+        if self.module_has_field(plugin) {
+            set = set.with(crate::permission::Permission::DocumentMetadata);
         }
         session.apply_overrides(set)
     }
@@ -145,10 +201,49 @@ impl PolicyIndex {
             .as_ref()
             .and_then(|d| d.variables.get(variable_id))
         {
-            set = set.union(field.kind.grants());
+            set = set.union(field.grants());
         }
         session.apply_overrides(set)
     }
+}
+
+/// The story a run field stands in: the story holding the template
+/// placeholder, any placeholder, or the tagged range of the key.
+pub fn story_of_run<'a>(doc: &'a Document, key: &str) -> Option<&'a str> {
+    let has_placeholder = |s: &paged_model::Story| {
+        s.paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .any(|r| r.placeholder.as_ref().is_some_and(|p| p.key == key))
+    };
+    doc.stories
+        .iter()
+        .find(|s| has_placeholder(&s.story))
+        .or_else(|| {
+            doc.stories.iter().find(|s| {
+                s.story
+                    .xml_elements
+                    .iter()
+                    .any(|e| e.find(key).is_some_and(|e| e.range.is_some()))
+            })
+        })
+        .map(|s| s.self_id.as_str())
+}
+
+fn run_grants(doc: &Document, document: Option<&DocumentPolicy>) -> HashMap<String, PermSet> {
+    let mut out: HashMap<String, PermSet> = HashMap::new();
+    for (key, field) in document.iter().flat_map(|d| d.runs.iter()) {
+        let Some(story) = story_of_run(doc, key) else {
+            continue;
+        };
+        for frame in doc.frame_chain(story) {
+            if let Some(id) = &frame.self_id {
+                let set = out.entry(id.clone()).or_insert(PermSet::NONE);
+                *set = set.union(field.grants());
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -166,6 +261,7 @@ mod tests {
             group: None,
             required: false,
             constraints: Default::default(),
+            module: None,
         }
     }
 
@@ -192,6 +288,7 @@ mod tests {
                 ..Default::default()
             }),
             items,
+            run_grants: HashMap::new(),
         }
     }
 
@@ -275,5 +372,30 @@ mod tests {
                 serde_json::Value::String((*n).to_string())
             );
         }
+    }
+
+    #[test]
+    fn a_module_field_grants_its_label_and_what_its_module_declares() {
+        let raw = r#"{"v":1,"data":{"field":{"name":"price","kind":"module",
+            "module":{"kind":"media.paged.sheet.cell","grants":["text.edit","template.author"],
+            "def":{"ref":"Prices!B4"}}}}}"#;
+        let p: ItemPolicy = read_envelope(raw).unwrap();
+        let mut items = HashMap::new();
+        items.insert("sheet".to_string(), p.clone());
+        let ix = PolicyIndex {
+            document: None,
+            items,
+            run_grants: HashMap::new(),
+        };
+        let set = ix.effective(&session(Role::Filler), Some("sheet"));
+        assert!(set.has(P::Select) && set.has(P::DocumentMetadata) && set.has(P::TextEdit));
+        assert!(
+            !set.has(P::TemplateAuthor),
+            "a module cannot grant the template's own permission"
+        );
+        assert!(!set.has(P::ItemMove));
+        let module = p.field.unwrap().module.unwrap();
+        assert_eq!(module.kind, "media.paged.sheet.cell");
+        assert_eq!(module.def["ref"], "Prices!B4");
     }
 }

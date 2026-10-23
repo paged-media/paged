@@ -64,6 +64,13 @@ import type { ParagraphRuleSpec } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { paragraphComposition } from "./paragraph.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.paragraphPanel", {
+  rules: "Paragraph rules",
+  ruleAbove: "Rule above",
+  ruleBelow: "Rule below",
+});
 
 /** A rule with `on: false` is "present but off"; `null` — or, through
  *  host.objects, a spec whose every field is null — is "no rule at all".
@@ -183,22 +190,23 @@ function RuleRow({
 }
 
 export function ParagraphPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3 flex flex-col gap-[9px]" data-paragraph-panel="ready">
-        <CompositionRenderer composition={paragraphComposition} />
+        <CompositionRenderer composition={paragraphComposition(strings)} />
         <div
           className="-mx-3 border-t border-input px-3 pt-2"
           data-section="Paragraph rules"
         >
-          <div className="pg-label mb-1">Paragraph rules</div>
+          <div className="pg-label mb-1">{strings.t(M.rules)}</div>
           <RuleRow
-            name="Rule above"
+            name={strings.t(M.ruleAbove)}
             testId="rule-above"
             path="paragraphRuleAbove"
           />
           <RuleRow
-            name="Rule below"
+            name={strings.t(M.ruleBelow)}
             testId="rule-below"
             path="paragraphRuleBelow"
           />

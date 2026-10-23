@@ -22,7 +22,56 @@
 // substrate, and command palette per
 // the original architecture spec §17 (not published; see `docs/architecture.md`).
 
+// The shell's German (plan E10), registered with the shell.
+import "./translations";
+
+// Menu path segments and command categories in the editor's locale.
+export { categoryLabel, menuLabel } from "./chrome/messages";
+
 // ── State contexts ─────────────────────────────────────────────
+// One editor's own stores (plan task E1).
+export {
+  createEditorScope,
+  createEmitter,
+  createValueStore,
+  detachedEditorScope,
+  EditorScopeProvider,
+  scoped,
+  scopeOf,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+  type Emitter,
+  type ScopedKey,
+  type ValueStore,
+} from "./state/editor-scope";
+export {
+  editorStorage,
+  memoryStorage,
+  noStorage,
+  pageStorage,
+  setEditorStorage,
+  useEditorStorage,
+  type StorageAdapter,
+} from "./state/storage";
+export {
+  EditorRoot,
+  editorRootOf,
+  listenForEditorKeys,
+  ownsEvent,
+  queryEditor,
+  useEditorKeys,
+  useEditorRoot,
+  usePortalContainer,
+  type EditorKeys,
+} from "./state/editor-root";
+export {
+  debugHandlesEnabled,
+  debugHandlesOf,
+  setDebugHandle,
+  type DebugHandles,
+} from "./state/debug-handles";
+
 export {
   CanvasClientProvider,
   useCanvasClient,
@@ -345,6 +394,8 @@ export {
   buildNewDocumentCommand,
   buildNewFromBriefCommand,
   openFile,
+  openDocumentFile,
+  mintBlankDocument,
   dropFile,
   dropPlaces,
   PLACE_DROPPED_COMMAND,
@@ -410,6 +461,7 @@ export {
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
+  setDefaultFontUrls,
   DEFAULT_FONT_FAMILY,
   type DocumentLoaderCallbacks,
 } from "./state/document-loader";
@@ -430,11 +482,14 @@ export {
   CockpitStateProvider,
   PanelHost,
   RightDock,
-  cockpitActions,
+  cockpitActionsOf,
+  useCockpitActions,
+  type CockpitActions,
   groupSpreads,
   isIdLikeLabel,
   navigateToPages,
   setCockpitPageNavigator,
+  usePageNavigation,
   useCockpitState,
   useOptionalCockpitState,
   type CockpitLayoutProps,
@@ -446,7 +501,13 @@ export {
 
 // ── Chrome ─────────────────────────────────────────────────────
 export { CommandPalette } from "./chrome/CommandPalette";
-export { MenuBar, CORE_MENUS, nativeKey, prettyKey } from "./chrome/MenuBar";
+export {
+  MenuBar,
+  CONTEXT_MENU_ROOT,
+  CORE_MENUS,
+  nativeKey,
+  prettyKey,
+} from "./chrome/MenuBar";
 
 // ── Icons (Concept 1 — shared tool + panel glyph resolver) ─────
 export {
@@ -640,12 +701,10 @@ export {
   type AssistantKind,
 } from "./components/cockpit/ai-assistant";
 export {
-  dismissAssistantRun,
-  getAssistantState,
+  assistantSession,
   openAssistant,
   setAssistantOpener,
-  startAssistantRun,
-  subscribeAssistant,
+  type AssistantSession,
   type AssistantRun,
   type AssistantState,
   type AssistantView,
@@ -670,6 +729,7 @@ export {
 } from "./ai/editor-ai";
 export {
   AI_UNAVAILABLE_TEXT,
+  aiUnavailableText,
   getAiAvailability,
   probeAiService,
   resetAiAvailability,
@@ -907,7 +967,11 @@ export {
   type ResolvedProfile,
   type ResolvedRegion,
 } from "./profile";
-export { SessionPolicyProvider, useSessionRole } from "./state/session-role";
+export {
+  SessionPolicyProvider,
+  useSessionRole,
+  useSetSessionRole,
+} from "./state/session-role";
 export {
   ChromeRegionsProvider,
   chromeRegionsOf,

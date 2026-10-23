@@ -26,6 +26,11 @@ What this repository ships and what it does not, read from the code at commit `6
   fill colour, vector shapes with fill, stroke and stroke width, and placed images.
 - **Open a PDF as page images.** When the editable path fails, each page is rendered at
   150 dpi and opened as one full-page image.
+- **A template field for a placed PDF's page.** `media.paged.pdf.page` (`{ frame?, allowed? }`)
+  lets a filler choose which page of a placed PDF a frame shows: a number from 1 to the PDF's
+  page count, or a choice of the pages the definition allows. It reads and writes the frame's
+  `framePdfPage` row (engine ADR 1003) through `host.objects`, one undo step, and grants
+  `image.replace` on the field's item.
 
 ## Pending release: core protocol 71
 

@@ -140,6 +140,11 @@ import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
 import { mapBacking } from "./testing.js";
+import {
+  englishStrings,
+  stringsSurface,
+  type StringsBacking,
+} from "./strings.js";
 
 /** The reply envelope `client.mutate` resolves with. */
 type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
@@ -213,6 +218,7 @@ export const HOST_FEATURES: readonly string[] = [
   // (core addresses always route; a private registry serves core + this
   // bundle's own kinds when the host injects no shared one).
   "contribute.objectModel@1",
+  "contribute.objectModel.templateFields@1",
   "objects@1",
   "contribute.importer@1",
   "contribute.exporter@1",
@@ -1204,6 +1210,10 @@ export interface CreateBundleHostOptions {
    *  absent, the host builds a PRIVATE registry (core + this bundle's own
    *  kinds) and `supports("objects.shared@1")` is false. */
   objects?: ObjectRegistry;
+  /** Host-provided WORDS (extensions ADR 333): the editor's catalogue in its
+   *  language. When absent, `host.strings` answers each bundle's English and
+   *  `supports("strings@1")` is false. */
+  strings?: StringsBacking;
   /** Console sink override.
    *
    *  Originally a test hook, and now ALSO the production capture point: the
@@ -2155,6 +2165,13 @@ export function createBundleHost(
           decl?.commands?.some((x) => x.id === c.id) ?? false,
           "contribute.objectModel",
           `contributes.objectModel.commands[] must include "${c.id}"`,
+        );
+      }
+      for (const f of model.templateFields ?? []) {
+        requireDeclared(
+          decl?.templateFields?.some((x) => x.kind === f.kind) ?? false,
+          "contribute.objectModel",
+          `contributes.objectModel.templateFields[] must include "${f.kind}"`,
         );
       }
       const handle = objectRegistry.register({
@@ -4725,14 +4742,30 @@ export function createBundleHost(
       }
       return objectRegistry.invoke(command, args);
     },
+    templateFieldKinds: () => objectRegistry.templateFieldKinds(),
+    readTemplateField(field) {
+      requireDocRead("objects.readTemplateField");
+      return objectRegistry.readTemplateField(field);
+    },
+    async writeTemplateField(field, value) {
+      const denied = deniedWrite("objects.writeTemplateField");
+      if (denied) return { ok: false, problem: denied.reason ?? "denied" };
+      return objectRegistry.writeTemplateField(field, value);
+    },
     onDidChange(listener, filter) {
       return store.add(objectRegistry.onDidChange(listener, filter));
     },
   };
   if (options?.objects) featureSet.add("objects.shared@1");
+  if (options?.strings) featureSet.add("strings@1");
+  const strings = stringsSurface(
+    manifest,
+    options?.strings ?? englishStrings(),
+  );
 
   const host: BundleHost = {
     manifest,
+    strings,
     log,
     contribute,
     document,

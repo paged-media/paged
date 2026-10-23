@@ -23,17 +23,21 @@
 // mount it disabled (honest seam) until that lands; the component
 // is already write-capable via `onChange` for that day.
 
-/** The cells' names, row-major. */
+import { useStrings } from "@paged-media/strings";
+
+import { REFERENCE_POINT as M } from "../messages";
+
+/** The cells' names (message keys), row-major. */
 const CELL_NAMES = [
-  "Top left",
-  "Top",
-  "Top right",
-  "Left",
-  "Center",
-  "Right",
-  "Bottom left",
-  "Bottom",
-  "Bottom right",
+  M.topLeft,
+  M.top,
+  M.topRight,
+  M.left,
+  M.center,
+  M.right,
+  M.bottomLeft,
+  M.bottom,
+  M.bottomRight,
 ] as const;
 
 /** Cell indices run row-major: 0 = top-left … 8 = bottom-right. */
@@ -46,11 +50,12 @@ export function ReferencePointGrid({
   onChange?: (index: number) => void;
   disabled?: boolean;
 }) {
+  const strings = useStrings();
   const inert = disabled || onChange == null;
   return (
     <div
       role="radiogroup"
-      aria-label="Reference point"
+      aria-label={strings.t(M.label)}
       data-reference-point
       data-seam={inert ? "true" : undefined}
       style={{
@@ -73,7 +78,7 @@ export function ReferencePointGrid({
             type="button"
             role="radio"
             aria-checked={on}
-            aria-label={CELL_NAMES[i]}
+            aria-label={strings.t(CELL_NAMES[i]!)}
             disabled={inert}
             data-reference-cell={i}
             onClick={() => onChange?.(i)}

@@ -40,7 +40,7 @@ import {
 } from "@paged-media/test-kit";
 import { dumpDiff, elementKey } from "@paged-media/test-kit/headless";
 
-import { addressOfElement } from "../../src/object-model";
+import { editorObjectsOf } from "../../src/object-model";
 import { createHeadlessEditor, type HeadlessEditor } from "./harness";
 
 let ed: HeadlessEditor | null = null;
@@ -479,6 +479,7 @@ describe("Align (paged.align.objects)", () => {
     covers("command:paged.align.objects");
     const e = await targets();
     const before = await e.dump();
+    const { addressOfElement } = editorObjectsOf(e.editor.scope);
     const frame = addressOfElement(T.frame.id as never);
     const locked = addressOfElement(T.locked.id as never);
     const second = addressOfElement(T.path.id as never);

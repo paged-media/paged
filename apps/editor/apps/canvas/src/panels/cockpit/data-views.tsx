@@ -31,10 +31,28 @@ import {
   StatusPill,
   type PanelProps,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitDataViews", {
+  title: "Data suite (preview)",
+  source: "Source",
+  notConnected: "not connected",
+  sourceBody:
+    "Connect a structured source (PIM, CSV, API). Records and their fields " +
+    "list here, ready to map onto layout slots.",
+  recordsSoon: "Records & fields coming soon",
+  recordsBody:
+    "The record list and field chips land with the data-publishing engine.",
+  previewSoon: "Generated layout preview coming soon",
+  previewBody:
+    "Connect a source and map fields — generated, repeatable pages preview " +
+    "here with per-record status.",
+});
 
 /** Data mode — LEFT panel: source + records + fields (kit
  *  DataSourcePanel). */
 export function DataSourcePanel(_props: PanelProps) {
+  const strings = useStrings();
   return (
     <div
       data-data-source-panel
@@ -45,18 +63,19 @@ export function DataSourcePanel(_props: PanelProps) {
         fontFamily: "var(--font-sans)",
       }}
     >
-      <CockpitPanelHeader title="Data suite (preview)" />
+      <CockpitPanelHeader title={strings.t(M.title)} />
       <CockpitSection
-        title="Source"
-        right={<StatusPill tone="draft">not connected</StatusPill>}
+        title={strings.t(M.source)}
+        right={
+          <StatusPill tone="draft">{strings.t(M.notConnected)}</StatusPill>
+        }
       >
         <span className="pg-ui-xs" style={{ lineHeight: 1.45 }}>
-          Connect a structured source (PIM, CSV, API). Records and their fields
-          list here, ready to map onto layout slots.
+          {strings.t(M.sourceBody)}
         </span>
       </CockpitSection>
-      <ComingSoon icon="ui-database" title="Records & fields coming soon">
-        The record list and field chips land with the data-publishing engine.
+      <ComingSoon icon="ui-database" title={strings.t(M.recordsSoon)}>
+        {strings.t(M.recordsBody)}
       </ComingSoon>
     </div>
   );
@@ -65,6 +84,7 @@ export function DataSourcePanel(_props: PanelProps) {
 /** Data mode — CANVAS main: the generated product-card grid (kit
  *  DataGrid). */
 export function DataGridPanel(_props: PanelProps) {
+  const strings = useStrings();
   return (
     <div
       data-data-grid-panel
@@ -76,9 +96,8 @@ export function DataGridPanel(_props: PanelProps) {
         overflowY: "auto",
       }}
     >
-      <ComingSoon icon="ui-bolt" title="Generated layout preview coming soon">
-        Connect a source and map fields — generated, repeatable pages preview
-        here with per-record status.
+      <ComingSoon icon="ui-bolt" title={strings.t(M.previewSoon)}>
+        {strings.t(M.previewBody)}
       </ComingSoon>
     </div>
   );

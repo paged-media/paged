@@ -220,6 +220,13 @@ const COMMANDS = [
   "media.paged.draw.command.reflectHorizontal",
   "media.paged.draw.command.reflectVertical",
   "media.paged.draw.command.transformAgain",
+  // G4 — the tool-only cuts as commands, the width profile as data, and
+  // the update of the recipes a changed source feeds.
+  "media.paged.draw.command.knife",
+  "media.paged.draw.command.scissorsAt",
+  "media.paged.draw.command.shapeBuild",
+  "media.paged.draw.command.widthProfile",
+  "media.paged.draw.command.updateLinkedRecipes",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
@@ -591,7 +598,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(20);
     expect(PANELS).toHaveLength(10);
-    expect(COMMANDS).toHaveLength(107);
+    expect(COMMANDS).toHaveLength(112);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

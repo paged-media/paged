@@ -110,10 +110,30 @@ import {
 } from "./select-same";
 import { applyDashArray, MAX_DASH_PAIRS } from "./dash";
 import { applyReflect } from "./transform";
+import { applyWidthProfile, WIDTH_PROFILE_COMMAND_ID } from "./width-profile";
 import { supportsPathOps } from "./path-ops";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages, t } from "@paged-media/strings";
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
+
+/** The section titles and the "…" commands' title, read in the editor's locale. */
+const M = defineMessages("draw.pathOptions", {
+  offset: "Offset path",
+  simplify: "Simplify",
+  outlineStroke: "Outline stroke",
+  dash: "Stroke dashes",
+  reflect: "Reflect",
+  arc: "Insert arc",
+  spiral: "Insert spiral",
+  rectGrid: "Insert rectangular grid",
+  polarGrid: "Insert polar grid",
+  selectSameWeight: "Select same stroke weight",
+  widthProfile: "Width profile",
+  command: "Path options: {section}…",
+  offsetJoinNote:
+    "This engine bevels every outward corner whatever join is chosen — the join and the miter limit are sent with the offset and remembered, and take effect on engine 0.65 or later.",
+});
 
 export const PATH_OPTIONS_COMMAND_CATEGORY = "Path";
 
@@ -129,21 +149,24 @@ export const PATH_OPTION_SECTIONS = [
   "rectGrid",
   "polarGrid",
   "selectSameWeight",
+  "widthProfile",
 ] as const;
 
 export type PathOptionSection = (typeof PATH_OPTION_SECTIONS)[number];
 
+/** Each section's title, as a message key (`t()` reads it). */
 export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
-  offset: "Offset path",
-  simplify: "Simplify",
-  outlineStroke: "Outline stroke",
-  dash: "Stroke dashes",
-  reflect: "Reflect",
-  arc: "Insert arc",
-  spiral: "Insert spiral",
-  rectGrid: "Insert rectangular grid",
-  polarGrid: "Insert polar grid",
-  selectSameWeight: "Select same stroke weight",
+  offset: M.offset,
+  simplify: M.simplify,
+  outlineStroke: M.outlineStroke,
+  dash: M.dash,
+  reflect: M.reflect,
+  arc: M.arc,
+  spiral: M.spiral,
+  rectGrid: M.rectGrid,
+  polarGrid: M.polarGrid,
+  selectSameWeight: M.selectSameWeight,
+  widthProfile: M.widthProfile,
 };
 
 /** The sections whose Apply acts on the SELECTION (the inserts need
@@ -155,6 +178,7 @@ export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
   "dash",
   "reflect",
   "selectSameWeight",
+  "widthProfile",
 ]);
 
 /** Select same stroke weight — the one SELECTION verb here. Its
@@ -202,10 +226,7 @@ export interface OffsetOptions {
  *  Illustrator — and the same release added `duplicateElements`, which is
  *  how the panel tells the two apart (one vocabulary probe, shared with
  *  Reflect ▸ Copy). */
-export const OFFSET_JOIN_NOTE =
-  "This engine bevels every outward corner whatever join is chosen — " +
-  "the join and the miter limit are sent with the offset and remembered, " +
-  "and take effect on engine 0.65 or later.";
+export const OFFSET_JOIN_NOTE = M.offsetJoinNote;
 
 export interface SimplifyOptions {
   /** pt — the largest deviation a removed anchor may introduce. */
@@ -249,6 +270,17 @@ export interface ReflectOptions {
   copy: boolean;
 }
 
+/** WIDTH PROFILE — a three-stop variable width (start, middle, end; full
+ *  stroke widths in pt, spread evenly along the path by arc length) that
+ *  replaces each selected open path with its outline: the Width tool's
+ *  bake, typed (`commands/width-profile.ts`; the typed command takes any
+ *  number of stops). */
+export interface WidthProfileOptions {
+  start: number;
+  middle: number;
+  end: number;
+}
+
 export interface PathOptions {
   offset: OffsetOptions;
   simplify: SimplifyOptions;
@@ -260,6 +292,7 @@ export interface PathOptions {
   rectGrid: RectGridParams;
   polarGrid: PolarGridParams;
   selectSameWeight: SelectSameWeightOptions;
+  widthProfile: WidthProfileOptions;
 }
 
 /** What every section holds before anything is typed — each value the
@@ -295,6 +328,8 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
   polarGrid: POLAR_GRID_PARAM_DEFAULTS,
   selectSameWeight: { tolerance: 0.5 },
+  // A stroke that swells to 6 pt in the middle and tapers at both ends.
+  widthProfile: { start: 1, middle: 6, end: 1 },
 };
 
 // --------------------------------------------------------- sanitising
@@ -377,7 +412,27 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
         ),
       ),
     },
+    widthProfile: widthProfileOptionsFrom(loose(r?.widthProfile)),
   };
+}
+
+/** A stored / typed width profile, sanitised: each width a finite
+ *  number ≥ 0, anything unreadable its default. */
+function widthProfileOptionsFrom(raw: Loose): WidthProfileOptions {
+  const d = PATH_OPTIONS_DEFAULTS.widthProfile;
+  return {
+    start: Math.max(0, num(raw?.start, d.start)),
+    middle: Math.max(0, num(raw?.middle, d.middle)),
+    end: Math.max(0, num(raw?.end, d.end)),
+  };
+}
+
+/** The `widthProfile` command's payload for a section's values. Pure. */
+export function widthProfilePayloadOf(o: WidthProfileOptions): {
+  widths: number[];
+} {
+  const clean = widthProfileOptionsFrom(o as unknown as Loose);
+  return { widths: [clean.start, clean.middle, clean.end] };
 }
 
 // -------------------------------------------------------------- dashes
@@ -532,7 +587,7 @@ export function lastUsedPayload(
   host: BundleHost,
   section: Exclude<
     PathOptionSection,
-    "outlineStroke" | "selectSameWeight" | "dash" | "reflect"
+    "outlineStroke" | "selectSameWeight" | "dash" | "reflect" | "widthProfile"
   >,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
@@ -597,6 +652,9 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "selectSameWeight":
       await applySelectSameStrokeWeight(host, all.selectSameWeight.tolerance);
       return;
+    case "widthProfile":
+      await applyWidthProfile(host, widthProfilePayloadOf(all.widthProfile));
+      return;
   }
 }
 
@@ -647,6 +705,12 @@ async function applyLastUsed(
       await applySelectSameStrokeWeight(
         host,
         lastUsedPathOptions(host).selectSameWeight.tolerance,
+      );
+      return;
+    case "widthProfile":
+      await applyWidthProfile(
+        host,
+        widthProfilePayloadOf(lastUsedPathOptions(host).widthProfile),
       );
       return;
   }
@@ -706,7 +770,11 @@ export function showPathOptions(
 
 const C = "media.paged.draw.command";
 
-/** The "…" command of each section — what the menu rows point at. */
+/** The "…" command of each section — what the menu rows point at. The
+ *  Width profile section has none of its own: its command, run BARE (no
+ *  payload — a menu row, the palette), raises the section, and run with a
+ *  profile applies it (`commands/width-profile.ts`), so no untyped
+ *  command is added for it. */
 export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   offset: `${C}.offsetPathOptions`,
   simplify: `${C}.simplifyPathOptions`,
@@ -718,10 +786,16 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   rectGrid: `${C}.insertRectGridOptions`,
   polarGrid: `${C}.insertPolarGridOptions`,
   selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
+  widthProfile: WIDTH_PROFILE_COMMAND_ID,
 };
 
+/** The sections whose "…" command this module registers. */
+const RAISER_SECTIONS = PATH_OPTION_SECTIONS.filter(
+  (s) => s !== "widthProfile",
+);
+
 /** The contributed command ids, in registration order. */
-export const PATH_OPTIONS_COMMAND_IDS = PATH_OPTION_SECTIONS.map(
+export const PATH_OPTIONS_COMMAND_IDS = RAISER_SECTIONS.map(
   (s) => PATH_OPTIONS_COMMANDS[s],
 );
 
@@ -734,7 +808,7 @@ export async function openPathOptions(
   if (showPathOptions(host, section)) return;
   host.log.info(
     `${PATH_OPTIONS_COMMANDS[section]}: this host cannot raise a panel ` +
-      `(${OPEN_PANEL_FEATURE}) — applying "${PATH_OPTION_SECTION_TITLES[section]}" ` +
+      `(${OPEN_PANEL_FEATURE}) — applying "${t(PATH_OPTION_SECTION_TITLES[section])}" ` +
       "with its last used values instead",
   );
   await applyLastUsed(host, section);
@@ -742,10 +816,10 @@ export async function openPathOptions(
 
 /** Register the "…" commands, one per section. */
 export function contributePathOptionsCommands(host: BundleHost): Disposable {
-  const disposers = PATH_OPTION_SECTIONS.map((section) =>
+  const disposers = RAISER_SECTIONS.map((section) =>
     registerCommand(host, {
       id: PATH_OPTIONS_COMMANDS[section],
-      title: `Path options: ${PATH_OPTION_SECTION_TITLES[section]}…`,
+      title: t(M.command, { section: t(PATH_OPTION_SECTION_TITLES[section]) }),
       category: PATH_OPTIONS_COMMAND_CATEGORY,
       handler: () => openPathOptions(host, section),
     }),

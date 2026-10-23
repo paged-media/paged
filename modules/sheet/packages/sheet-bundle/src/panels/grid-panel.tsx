@@ -50,6 +50,7 @@ import {
   radius,
   space,
 } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import {
@@ -68,6 +69,7 @@ import {
 } from "../../../sheet-host-model/src";
 
 import type { FindMatch } from "../engine";
+import { GRID as M } from "../messages";
 import {
   columnLabel,
   type SessionNotice,
@@ -192,6 +194,7 @@ export function makeGridPanel(
     // The session as a render value (react-live, editor ADR 229): a new
     // view after every change, so what is read from it is read again.
     const live = useLive(session, onDidChangeOf);
+    const { t } = useStrings();
 
     // Scroll origin (the window's top-left cell). The engine windows from
     // here; scrolling re-requests a new window (virtualization in Rust).
@@ -263,7 +266,7 @@ export function makeGridPanel(
         hit
           ? `${columnLabel(hit.col)}${hit.row + 1}`
           : findText
-            ? "No match"
+            ? t(M.noMatch)
             : null,
       );
     };
@@ -271,7 +274,7 @@ export function makeGridPanel(
       if (!findText) return;
       const found = session.findAll(findText, findOpts, "sheet");
       setHits(found);
-      setFindMsg(`${found.length} match${found.length === 1 ? "" : "es"}.`);
+      setFindMsg(t(M.matches, { count: found.length }));
     };
     const onReplaceAll = () => {
       if (!findText) return;
@@ -280,8 +283,11 @@ export function makeGridPanel(
       setFindMsg(
         "error" in res
           ? res.error
-          : `Replaced ${res.occurrences} occurrence${res.occurrences === 1 ? "" : "s"} in ${res.replacedCells} cell${res.replacedCells === 1 ? "" : "s"}` +
-              (res.skipped > 0 ? ` (${res.skipped} skipped).` : "."),
+          : t(res.skipped > 0 ? M.replacedSkipped : M.replaced, {
+              occurrences: res.occurrences,
+              cells: res.replacedCells,
+              skipped: res.skipped,
+            }),
       );
     };
 
@@ -497,10 +503,10 @@ export function makeGridPanel(
         setFillDrag(null);
         if (fillDrag.target) {
           const r = session.fillSelectionTo(fillDrag.target, true);
-          if (!r.ok) showError(`Can't fill: ${r.message}.`);
+          if (!r.ok) showError(t(M.cantFill, { reason: r.message }));
         }
       }
-    }, [fillDrag]);
+    }, [fillDrag, t]);
 
     // A click with no press before it (keyboard-less harnesses) still selects.
     // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
@@ -598,7 +604,7 @@ export function makeGridPanel(
           editor.col,
           editor.value,
         );
-        if (!ok) showError("The cell edit was not saved.");
+        if (!ok) showError(t(M.editNotSaved));
         setEditor(null);
         if (then) {
           session.handleGridKey({
@@ -608,7 +614,7 @@ export function makeGridPanel(
           surfaceRef.current?.focus();
         }
       },
-      [editor, st.activeSheet],
+      [editor, st.activeSheet, t],
     );
 
     // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
@@ -637,11 +643,11 @@ export function makeGridPanel(
           data-sheet-panel="grid"
           style={{ padding: space[3] }}
         >
-          <div style={kicker}>Grid</div>
+          <div style={kicker}>{t(M.kicker)}</div>
           <p data-grid-empty style={{ ...note, marginTop: 0 }}>
             {st.bootError
-              ? `The spreadsheet engine could not start: ${st.bootError}.`
-              : "Open or create a workbook to edit it here."}
+              ? t(M.bootError, { error: st.bootError })
+              : t(M.empty)}
           </p>
           {!st.bootError && (
             <button
@@ -650,7 +656,7 @@ export function makeGridPanel(
               onClick={() => void session.newWorkbook()}
               style={{ ...scrollBtn, marginTop: space[2] }}
             >
-              New blank workbook
+              {t(M.newWorkbook)}
             </button>
           )}
         </div>
@@ -679,7 +685,7 @@ export function makeGridPanel(
           gap: space[2],
         }}
       >
-        <div style={kicker}>Grid</div>
+        <div style={kicker}>{t(M.kicker)}</div>
 
         {/* Formula bar (S-04) — bound to the selected cell; autocompletes
             engine-registry function names. Disabled until a cell is selected. */}
@@ -695,9 +701,7 @@ export function makeGridPanel(
             type="text"
             value={fbValue}
             disabled={fbRow === null || fbCol === null}
-            placeholder={
-              fbRow === null ? "Select a cell to edit its formula" : "="
-            }
+            placeholder={fbRow === null ? t(M.formulaPlaceholder) : "="}
             onChange={onFormulaChange}
             onKeyDown={onFormulaKey}
             onSelect={(e) =>
@@ -761,8 +765,8 @@ export function makeGridPanel(
             data-sheet-find-needle
             type="text"
             value={findText}
-            placeholder="Find in sheet"
-            aria-label="Find in sheet"
+            placeholder={t(M.findPlaceholder)}
+            aria-label={t(M.findPlaceholder)}
             onChange={(e) => {
               setFindText(e.target.value);
               setFindStatus(null);
@@ -782,41 +786,31 @@ export function makeGridPanel(
             type="button"
             data-find-prev
             disabled={!findText}
-            title={
-              findText
-                ? "Previous match (Shift+Enter)"
-                : "Type something to find first"
-            }
+            title={findText ? t(M.prevTitle) : t(M.typeFirst)}
             onClick={() => runFind(true)}
             style={scrollBtn}
           >
-            Prev
+            {t(M.prev)}
           </button>
           <button
             type="button"
             data-find-next
             disabled={!findText}
-            title={
-              findText ? "Next match (Enter)" : "Type something to find first"
-            }
+            title={findText ? t(M.nextTitle) : t(M.typeFirst)}
             onClick={() => runFind(false)}
             style={scrollBtn}
           >
-            Next
+            {t(M.next)}
           </button>
           <button
             type="button"
             data-sheet-find
             disabled={!findText}
-            title={
-              findText
-                ? "List every match in this sheet"
-                : "Type something to find first"
-            }
+            title={findText ? t(M.findAllTitle) : t(M.typeFirst)}
             onClick={onFindAll}
             style={scrollBtn}
           >
-            Find all
+            {t(M.findAll)}
           </button>
           {findStatus && (
             <span
@@ -832,7 +826,7 @@ export function makeGridPanel(
           )}
         </div>
         <Disclosure
-          summary="Replace and options"
+          summary={t(M.replaceOptions)}
           data-sheet-replace-section
           style={{ font: `12px ${font.sans}` }}
           summaryStyle={{ color: color.mutedFg }}
@@ -850,23 +844,19 @@ export function makeGridPanel(
               type="text"
               value={replacement}
               onChange={(e) => setReplacement(e.target.value)}
-              placeholder="Replace with"
-              aria-label="Replace with"
+              placeholder={t(M.replaceWith)}
+              aria-label={t(M.replaceWith)}
               style={{ ...formulaInput, flex: "1 1 120px", minWidth: 0 }}
             />
             <button
               type="button"
               data-sheet-replace-all
               disabled={!findText}
-              title={
-                findText
-                  ? "Replace every match in this sheet"
-                  : "Type something to find first"
-              }
+              title={findText ? t(M.replaceAllTitle) : t(M.typeFirst)}
               onClick={onReplaceAll}
               style={scrollBtn}
             >
-              Replace all
+              {t(M.replaceAll)}
             </button>
           </div>
           <div
@@ -879,16 +869,21 @@ export function makeGridPanel(
           >
             {(
               [
-                ["data-sheet-find-case", "Match case", matchCase, setMatchCase],
+                [
+                  "data-sheet-find-case",
+                  t(M.matchCase),
+                  matchCase,
+                  setMatchCase,
+                ],
                 [
                   "data-sheet-find-entire",
-                  "Entire cell",
+                  t(M.entireCell),
                   entireCell,
                   setEntireCell,
                 ],
                 [
                   "data-sheet-find-formulas",
-                  "In formulas",
+                  t(M.inFormulas),
                   inFormulas,
                   setInFormulas,
                 ],
@@ -986,8 +981,8 @@ export function makeGridPanel(
           <button
             type="button"
             data-grid-scroll="up"
-            aria-label="Scroll up one row"
-            title="Scroll up one row"
+            aria-label={t(M.scrollUp)}
+            title={t(M.scrollUp)}
             onClick={() => setFirstRow((r) => Math.max(0, r - 1))}
             style={scrollBtn}
           >
@@ -996,8 +991,8 @@ export function makeGridPanel(
           <button
             type="button"
             data-grid-scroll="down"
-            aria-label="Scroll down one row"
-            title="Scroll down one row"
+            aria-label={t(M.scrollDown)}
+            title={t(M.scrollDown)}
             onClick={() => setFirstRow((r) => r + 1)}
             style={scrollBtn}
           >
@@ -1006,8 +1001,8 @@ export function makeGridPanel(
           <button
             type="button"
             data-grid-scroll="left"
-            aria-label="Scroll left one column"
-            title="Scroll left one column"
+            aria-label={t(M.scrollLeft)}
+            title={t(M.scrollLeft)}
             onClick={() => setFirstCol((c) => Math.max(0, c - 1))}
             style={scrollBtn}
           >
@@ -1016,8 +1011,8 @@ export function makeGridPanel(
           <button
             type="button"
             data-grid-scroll="right"
-            aria-label="Scroll right one column"
-            title="Scroll right one column"
+            aria-label={t(M.scrollRight)}
+            title={t(M.scrollRight)}
             onClick={() => setFirstCol((c) => c + 1)}
             style={scrollBtn}
           >
@@ -1040,27 +1035,21 @@ export function makeGridPanel(
             type="button"
             data-grid-copy
             disabled={!sel}
-            title={
-              sel ? "Copy the selected cells" : "Select cells to copy first"
-            }
+            title={sel ? t(M.copyTitle) : t(M.copyFirst)}
             onClick={() => void session.copySelection()}
             style={{ ...scrollBtn, marginLeft: space[2] }}
           >
-            Copy
+            {t(M.copy)}
           </button>
           <button
             type="button"
             data-grid-paste
             disabled={!sel}
-            title={
-              sel
-                ? "Paste at the selected cell"
-                : "Select a cell to paste at first"
-            }
+            title={sel ? t(M.pasteTitle) : t(M.pasteFirst)}
             onClick={() => void session.pasteAtSelection()}
             style={scrollBtn}
           >
-            Paste
+            {t(M.paste)}
           </button>
         </div>
 
@@ -1149,14 +1138,9 @@ export function makeGridPanel(
         {/* S-01/S-02 honesty: this is the interim panel grid, not the
             in-frame sheets-mode surface (still SDK-blocked). */}
         <p data-grid-honesty style={{ ...note, marginTop: 0 }}>
-          Click a cell to select it and type to edit; the same grid edits inside
-          a placed sheet frame.
+          {t(M.honesty)}
         </p>
-        <About style={{ marginTop: 0 }}>
-          Drag or Shift+click to select a range. F2 edits the cell, Enter or Tab
-          commits and moves, Delete clears. Drag the corner handle to fill.
-          Double-click a placed sheet frame on the page to edit it there.
-        </About>
+        <About style={{ marginTop: 0 }}>{t(M.about)}</About>
       </div>
     );
   }

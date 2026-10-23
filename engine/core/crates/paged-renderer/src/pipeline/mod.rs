@@ -70,6 +70,9 @@ mod ruby;
 /// string that drift apart is exactly the bug C-26 was: the renderer
 /// caching an embedded payload under a name no reader could produce.
 pub use images::inline_image_cache_key;
+/// The page count of a placed PDF's bytes (`None`: not a PDF), what the
+/// object model's derived `pdfPageCount` answers (engine ADR 1003).
+pub use placed_pdf::page_count as placed_pdf_page_count;
 mod links;
 mod metrics;
 mod nested_styles;

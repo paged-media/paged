@@ -21,6 +21,8 @@
 // picker and (3h+) the Cmd+K palette both resolve through this
 // contribution so there's a single load path.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS, LOAD, REPLACE } from "../messages";
 import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
 import { importReplaceAllowed, setPendingImportSource } from "../import-source";
@@ -31,6 +33,7 @@ export { confirmDiscard };
 import type { DocumentHandle } from "@paged-media/client";
 import type { ImporterContribution } from "../../registries";
 import type { PagedEditor } from "../paged-editor";
+import type { EditorScope } from "../editor-scope";
 import type { CommandContribution } from "../../registries";
 
 export const PAGED_FILE_OPEN_IDML = "paged.file.openIdml";
@@ -54,11 +57,11 @@ export function buildNewDocumentCommand(options: {
 }): CommandContribution {
   return {
     id: PAGED_FILE_NEW,
-    title: "New document",
+    title: t(COMMANDS.newDocument),
     category: "File",
     handler: async (paged) => {
       const editor = paged as PagedEditor;
-      if (!(await confirmDiscard(editor, "Creating a new document"))) return;
+      if (!(await confirmDiscard(editor, t(REPLACE.creatingNew)))) return;
       await mintBlankDocument(
         editor,
         options.defaultSizePt ?? LETTER_PT,
@@ -110,6 +113,7 @@ export async function mintBlankDocument(
         });
       },
       resetForNewDocument: editor.document.resetForNewDocument,
+      scope: editor.scope,
       pushWarning: sinks.pushWarning,
     },
   );
@@ -133,7 +137,7 @@ export function buildOpenIdmlCommand(options: {
     // the importer registry, so this door opens every registered format
     // (.idml, .svg, .xlsx, images, .docx, …). Command id keeps the historic
     // name for test/config stability.
-    title: "Open…",
+    title: t(COMMANDS.open),
     category: "File",
     handler: async (paged) => {
       const file = await options.pickFile();
@@ -174,7 +178,7 @@ export async function openFile(
   }
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
-    const outcome = await runImporter(importer, file, sinks);
+    const outcome = await runImporter(editor.scope, importer, file, sinks);
     // An importer that only ADDS content (a workbook's range, …) and found
     // nothing open left the canvas empty: give it a document and run it
     // again, told the document is new so it places its content there
@@ -184,7 +188,9 @@ export async function openFile(
       const handle = await mintBlankDocument(editor, LETTER_PT, sinks);
       if (!handle) return;
       await liveEditorWith(editor, handle);
-      await runImporter(importer, file, sinks, { newDocument: true });
+      await runImporter(editor.scope, importer, file, sinks, {
+        newDocument: true,
+      });
     }
     return;
   }
@@ -193,7 +199,25 @@ export async function openFile(
   // gesture the user may abandon anyway, and a plugin importer does
   // not necessarily replace the document — paged.sheet's .xlsx adds
   // a frame. This branch is the one that always replaces.
-  if (!(await confirmDiscard(editor, `Opening ${file.name}`))) return;
+  if (!(await confirmDiscard(editor, t(REPLACE.opening, { name: file.name }))))
+    return;
+  await openDocumentFile(editor, file, sinks);
+}
+
+/**
+ * Replace the open document with `file` through the one IDML / `.paged`
+ * load path, without asking: the half of Open after its question. An
+ * embedding host's `load` (docs/composable-editor.md §8.2) replaces the
+ * document on purpose, so it does not ask its user.
+ */
+export async function openDocumentFile(
+  editor: PagedEditor,
+  file: File,
+  sinks: {
+    setStatus: (s: string) => void;
+    pushWarning: (w: string) => void;
+  },
+): Promise<void> {
   await loadDocumentFile(editor.client, file, {
     setHandle: editor.document.setHandle,
     setSourceName: editor.document.setSourceName,
@@ -209,6 +233,7 @@ export async function openFile(
     },
     resetForNewDocument: editor.document.resetForNewDocument,
     pushWarning: sinks.pushWarning,
+    scope: editor.scope,
   });
 }
 
@@ -281,6 +306,7 @@ function hasDocument(editor: PagedEditor): boolean {
  *  to whatever is open (`added`), failed, or the user kept the open
  *  document at the replace question (`declined`). */
 async function runImporter(
+  scope: EditorScope,
   importer: ImporterContribution,
   file: File,
   sinks: {
@@ -295,7 +321,7 @@ async function runImporter(
     // U14 — park the file name for the open orchestration: an
     // importer that OPENS a document does so through
     // `nativeDocument.open(bytes)`, which carries no name.
-    setPendingImportSource(file.name);
+    setPendingImportSource(scope, file.name);
     await importer.import({
       name: file.name,
       bytes,
@@ -305,7 +331,7 @@ async function runImporter(
     sinks.setStatus(`imported ${file.name}`);
     // The open orchestration marks the session when the importer replaced
     // (or first opened) the document.
-    return importReplaceAllowed() ? "opened" : "added";
+    return importReplaceAllowed(scope) ? "opened" : "added";
   } catch (err) {
     if (isReplaceDeclined(err)) {
       // The user kept the open document at the replace question: an
@@ -314,12 +340,15 @@ async function runImporter(
       return "declined";
     }
     sinks.pushWarning(
-      `import of ${file.name} via ${importer.title} failed: ` +
-        (err instanceof Error ? err.message : String(err)),
+      t(LOAD.importFailed, {
+        name: file.name,
+        importer: importer.title,
+        error: err instanceof Error ? err.message : String(err),
+      }),
     );
     return "failed";
   } finally {
-    setPendingImportSource(null);
+    setPendingImportSource(scope, null);
   }
 }
 
@@ -391,7 +420,7 @@ export function buildNewFromBriefCommand(
 ): CommandContribution {
   return {
     id: PAGED_FILE_NEW_FROM_BRIEF,
-    title: "New document from a brief…",
+    title: t(COMMANDS.newFromBrief),
     category: "File",
     when: () => getAiAvailability() !== "unavailable",
     handler: () => {

@@ -51,7 +51,9 @@ import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
+import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
+import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
 
 const EDITOR = fileURLToPath(new URL("../../../../../", import.meta.url));
@@ -87,7 +89,8 @@ const SITES: Record<string, number> = {
   "packages/shell/src/actions/actions-context.tsx": 3,
   "packages/shell/src/bundles/loader.ts": 1,
   "packages/shell/src/bundles/sample-bundle.worker.ts": 1,
-  "apps/canvas/src/main.tsx": 1,
+  // The app tables, and the host actions as commands (hostCommands).
+  "apps/canvas/src/app/mount.tsx": 2,
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": 1,
   "apps/canvas/src/panels/schema-tree-demo-panel.tsx": 2,
   "apps/canvas/src/panels/layers-panel.tsx": 1,
@@ -126,7 +129,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.actions.play",
   ],
   "packages/shell/src/bundles/sample-bundle.worker.ts": ["paged.sample.hello"],
-  "apps/canvas/src/main.tsx": [AI_ASK_COMMAND, ALIGN_COMMAND],
+  "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND, ALIGN_COMMAND],
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": [
     "paged.demo.applySwatchStroke",
   ],
@@ -157,7 +160,10 @@ function tableIds(): string[] {
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
     ...GLOBAL_LIGHT_COMMANDS,
+    ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
+    // Registered only when an embedding host supplies the action.
+    ...hostCommands({ submit: noop, close: noop, back: noop }),
   ].map((c) => c.id);
 }
 
@@ -195,7 +201,7 @@ describe("the host command inventory", () => {
           ),
         ].some((m) => m[2] === id && src.includes(`id: ${m[1]}`));
         const viaImport =
-          file === "apps/canvas/src/main.tsx" &&
+          file === "apps/canvas/src/app/mount.tsx" &&
           ((id === AI_ASK_COMMAND && src.includes("id: AI_ASK_COMMAND")) ||
             (id === ALIGN_COMMAND && src.includes("id: ALIGN_COMMAND")));
         const viaBuilder =
@@ -214,7 +220,7 @@ describe("the host command inventory", () => {
   });
 
   test("main.tsx registers exactly the tables this inventory builds", () => {
-    const src = readFileSync(at("apps/canvas/src/main.tsx"), "utf8");
+    const src = readFileSync(at("apps/canvas/src/app/mount.tsx"), "utf8");
     const start = src.indexOf("const cmdDisposables = [");
     const block = src.slice(
       start,
@@ -232,6 +238,7 @@ describe("the host command inventory", () => {
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
+      "OPEN_AS_TEMPLATE_COMMANDS",
       "SELECT_ALL_COMMAND",
       "buildCoreCommandEntries()",
     ]);

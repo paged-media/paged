@@ -27,6 +27,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
+import { createEditorScope, type EditorScope } from "@paged-media/shell";
+
 import { memoryStorage, type MemoryStorage } from "./memory-storage";
 
 type ExportTargets =
@@ -44,18 +46,27 @@ const DEFAULTS = {
 };
 
 let loads = 0;
-/** Evaluate the module afresh over `storage`: what a page load does. */
-async function load(storage: MemoryStorage): Promise<ExportTargets> {
+/** Evaluate the module afresh over `storage`, with a new editor's scope:
+ *  what a page load does. */
+async function load(
+  storage: MemoryStorage,
+): Promise<ExportTargets & { scope: EditorScope }> {
   stubGlobal("localStorage", storage);
   loads++;
-  return import(`../../../src/panels/cockpit/export-targets.ts?load=${loads}`);
+  const mod = (await import(
+    `../../../src/panels/cockpit/export-targets.ts?load=${loads}`
+  )) as ExportTargets;
+  return { ...mod, scope: createEditorScope() };
 }
 
-/** The settings the module holds now. `setImageSettings({})` writes the
+/** The settings the editor holds now. `setImageSettings({})` writes the
  *  current value through unchanged, which is the one reader that needs
  *  no React. */
-function current(mod: ExportTargets, storage: MemoryStorage): ImageSettings {
-  mod.setImageSettings({});
+function current(
+  mod: ExportTargets & { scope: EditorScope },
+  storage: MemoryStorage,
+): ImageSettings {
+  mod.setImageSettings(mod.scope, {});
   return JSON.parse(storage.getItem(KEY)!) as ImageSettings;
 }
 
@@ -87,7 +98,7 @@ describe("setting paged.export.image.v1", () => {
     covers("setting:paged.export.image.v1");
     const ls = memoryStorage();
     const first = await load(ls);
-    first.setImageSettings({ dpi: 300, format: "jpeg" });
+    first.setImageSettings(first.scope, { dpi: 300, format: "jpeg" });
     expect(JSON.parse(ls.getItem(KEY)!)).toEqual({
       ...DEFAULTS,
       dpi: 300,

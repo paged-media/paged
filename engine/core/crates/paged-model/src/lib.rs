@@ -1695,6 +1695,68 @@ impl ClippingPathSettings {
     }
 }
 
+/// `<PDFAttribute>` of a placed `<PDF>`: the page a frame shows and the
+/// box of it the frame crops to (engine ADR 1003). Stored as IDML spells
+/// it, so an unchanged import writes back the same attributes.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PlacedPdf {
+    /// `PageNumber`, 1-based. `None` when the attribute is absent, which
+    /// InDesign reads as page 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_number: Option<u32>,
+    /// `PDFCrop`: `CropContent`, `CropArt`, `CropPDF`, `CropTrim`,
+    /// `CropBleed`, `CropMedia`, `CropContentAllLayers` or
+    /// `CropContentVisibleLayers`. `None` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<String>,
+}
+
+impl PlacedPdf {
+    /// The page shown, 0-based (page 1 when unset or written as 0).
+    pub fn page_index(&self) -> usize {
+        self.page_number.map_or(0, |n| n.saturating_sub(1) as usize)
+    }
+
+    /// The box of the page the frame shows, by `PDFCrop`.
+    pub fn crop_box(&self) -> PdfCropBox {
+        PdfCropBox::from_idml(self.crop.as_deref())
+    }
+}
+
+/// The page box a placed PDF is cropped to, read from `PDFCrop`.
+///
+/// InDesign's three content crops (`CropContent` — "Bounding Box" — and
+/// its two layer-visibility variants) are the extent of the page's
+/// marks, which the PDF states only as its art box; they read as
+/// [`PdfCropBox::Art`], whose default is the crop box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdfCropBox {
+    /// `CropPDF` (and an absent or unknown value): the crop box.
+    Crop,
+    /// `CropArt` and the content crops: the art box.
+    Art,
+    /// `CropTrim`: the trim box.
+    Trim,
+    /// `CropBleed`: the bleed box.
+    Bleed,
+    /// `CropMedia`: the media box.
+    Media,
+}
+
+impl PdfCropBox {
+    pub fn from_idml(s: Option<&str>) -> Self {
+        match s {
+            Some("CropMedia") => Self::Media,
+            Some("CropTrim") => Self::Trim,
+            Some("CropBleed") => Self::Bleed,
+            Some(
+                "CropArt" | "CropContent" | "CropContentAllLayers" | "CropContentVisibleLayers",
+            ) => Self::Art,
+            _ => Self::Crop,
+        }
+    }
+}
+
 /// Vector-only frame (no story). Mirrors `TextFrame` minus the
 /// `parent_story` field; shares the same paint / stroke handling
 /// downstream.
@@ -1744,6 +1806,12 @@ pub struct Rectangle {
     /// shared "unrasterizable" flag so diagnostics can still name the
     /// format the document actually used.
     pub has_inline_eps: bool,
+    /// The nested `<PDF>`'s `<PDFAttribute>`: which page of a placed PDF
+    /// the frame shows and the box it is cropped to (engine ADR 1003).
+    /// `None` when the frame places no `<PDF>` or the element carries no
+    /// `<PDFAttribute>`: page 1, the PDF's crop box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` attribute on the nested `<Image>` element.
     /// Maps the image's natural-pixel coordinate space (origin at the
     /// top-left of the source pixmap, with 1px ≈ 1pt at 72 ppi) into
@@ -1974,6 +2042,7 @@ impl Rectangle {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,
@@ -2351,6 +2420,9 @@ pub struct Oval {
     pub has_inline_pdf: bool,
     /// [`Rectangle::has_inline_eps`].
     pub has_inline_eps: bool,
+    /// See [`Rectangle::placed_pdf`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` from the nested `<Image>`. Mirrors
     /// [`Rectangle::image_item_transform`] (P-16).
     pub image_item_transform: Option<[f32; 6]>,
@@ -2447,6 +2519,7 @@ impl Oval {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,
@@ -2997,6 +3070,9 @@ pub struct Polygon {
     pub has_inline_pdf: bool,
     /// [`Rectangle::has_inline_eps`].
     pub has_inline_eps: bool,
+    /// See [`Rectangle::placed_pdf`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` attribute on the nested `<Image>` element.
     /// See [`Rectangle::image_item_transform`].
     pub image_item_transform: Option<[f32; 6]>,
@@ -3120,6 +3196,7 @@ impl Polygon {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,
@@ -8536,6 +8613,177 @@ pub struct XmlElement {
     pub attributes: Vec<(String, String)>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<XmlElement>,
+    /// For an element that tags a text range: where the range stands, in
+    /// story characters (the contiguous count `StoryRange`, `InsertText`
+    /// and `DeleteRange` use), read while the story's text is (engine ADR
+    /// 1002). Text edits keep it true; `None` for an element that tags a
+    /// story or a page item, or that stands outside the story's body text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<XmlRange>,
+}
+
+/// Where a tagged text range stands in its story: `[start, end)` in story
+/// characters (engine ADR 1002).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct XmlRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl XmlRange {
+    /// Moves the range through a replacement of `removed` characters at
+    /// `at` by `inserted` new ones (an insertion when `removed` is 0, a
+    /// deletion when `inserted` is 0). Text typed at a range's end joins
+    /// it, text typed at its start does not; an empty range takes what is
+    /// typed into it. Text replaced inside the range stays inside.
+    pub fn shifted(self, at: u32, removed: u32, inserted: u32) -> XmlRange {
+        let end_of_removed = at.saturating_add(removed);
+        let delta = |p: u32| p - removed + inserted;
+        let empty = self.start == self.end;
+        let start = if self.start < at || (self.start == at && (empty || removed > 0)) {
+            self.start
+        } else if self.start >= end_of_removed {
+            delta(self.start)
+        } else {
+            at
+        };
+        let end = if self.end < at || (self.end == at && removed > 0) {
+            self.end
+        } else if self.end >= end_of_removed {
+            delta(self.end)
+        } else {
+            at + inserted
+        };
+        XmlRange {
+            start,
+            end: end.max(start),
+        }
+    }
+}
+
+impl XmlElement {
+    /// This element and every element below it, depth first.
+    pub fn walk(&self) -> Vec<&XmlElement> {
+        let mut out = vec![self];
+        for child in &self.children {
+            out.extend(child.walk());
+        }
+        out
+    }
+
+    /// The element `self_id` in this tree.
+    pub fn find(&self, self_id: &str) -> Option<&XmlElement> {
+        if self.self_id == self_id {
+            return Some(self);
+        }
+        self.children.iter().find_map(|c| c.find(self_id))
+    }
+
+    /// The element `self_id` in this tree, mutably.
+    pub fn find_mut(&mut self, self_id: &str) -> Option<&mut XmlElement> {
+        if self.self_id == self_id {
+            return Some(self);
+        }
+        self.children.iter_mut().find_map(|c| c.find_mut(self_id))
+    }
+
+    /// Applies `f` to the range of every element in this tree that has one.
+    pub fn for_each_range(&mut self, f: &mut impl FnMut(&str, &mut XmlRange)) {
+        if let Some(range) = self.range.as_mut() {
+            f(&self.self_id, range);
+        }
+        for child in &mut self.children {
+            child.for_each_range(f);
+        }
+    }
+
+    /// The tag's name: `MarkupTag` without its `XMLTag/` prefix.
+    pub fn tag_name(&self) -> &str {
+        self.tag.strip_prefix("XMLTag/").unwrap_or(&self.tag)
+    }
+
+    /// The value of the attribute `name`.
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// The placeholder plugin of a template's text-run fields: a tagged range
+/// opened as a template becomes a placeholder run of this plugin whose key
+/// is the element's `Self` (engine ADR 1002).
+pub const TEMPLATE_PLACEHOLDER_PLUGIN: &str = "media.paged.template";
+
+impl Story {
+    /// Moves every tagged range of the story through a replacement of
+    /// `removed` characters at `at` by `inserted` (see [`XmlRange::shifted`]),
+    /// then lets each template placeholder define the range of the element
+    /// it stands for: the run is the field, so its bounds are the range's.
+    pub fn shift_xml_ranges(&mut self, at: u32, removed: u32, inserted: u32) {
+        if self.xml_elements.is_empty() {
+            return;
+        }
+        for top in &mut self.xml_elements {
+            top.for_each_range(&mut |_, r| *r = r.shifted(at, removed, inserted));
+        }
+        self.sync_placeholder_ranges();
+    }
+
+    /// The span of each template placeholder run, by its key.
+    pub fn template_placeholder_spans(&self) -> Vec<(String, XmlRange)> {
+        let mut out = Vec::new();
+        let mut at = 0u32;
+        for para in &self.paragraphs {
+            for run in &para.runs {
+                let n = run.text.chars().count() as u32;
+                if let Some(p) = run
+                    .placeholder
+                    .as_ref()
+                    .filter(|p| p.plugin == TEMPLATE_PLACEHOLDER_PLUGIN)
+                {
+                    out.push((
+                        p.key.clone(),
+                        XmlRange {
+                            start: at,
+                            end: at + n,
+                        },
+                    ));
+                }
+                at += n;
+            }
+        }
+        out
+    }
+
+    /// Sets the range of each element a template placeholder stands for to
+    /// the placeholder's span.
+    pub fn sync_placeholder_ranges(&mut self) {
+        if self.xml_elements.is_empty() {
+            return;
+        }
+        let spans = self.template_placeholder_spans();
+        if spans.is_empty() {
+            return;
+        }
+        for top in &mut self.xml_elements {
+            top.for_each_range(&mut |id, r| {
+                if let Some((_, span)) = spans.iter().find(|(k, _)| k == id) {
+                    *r = *span;
+                }
+            });
+        }
+    }
+
+    /// The story's text in its contiguous character space.
+    pub fn flat_text(&self) -> String {
+        self.paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .map(|r| r.text.as_str())
+            .collect()
+    }
 }
 
 /// An `<Endnote Self EndnoteTextRange>` reference in a story (ADR 170).
@@ -8830,6 +9078,11 @@ pub struct DesignMap {
     /// here; the story's own [`Story::xml_elements`] carries them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xml_root: Option<XmlElement>,
+    /// The XML structure was changed in paged (engine ADR 1002): the
+    /// exporter writes `XML/` and the story elements from the model rather
+    /// than copying the source package's parts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub xml_structure_edited: bool,
 }
 
 /// Private-use Unicode codepoint placed inline by the story parser

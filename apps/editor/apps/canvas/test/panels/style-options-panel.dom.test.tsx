@@ -24,19 +24,15 @@
 // picker choose the target. The style panels open it through
 // "Style Options…" (asserted in their own files).
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
-import {
-  StyleOptionsPanel,
-  setStyleOptionsTarget,
-} from "../../src/panels/style-options-panel";
+import { StyleOptionsPanel } from "../../src/panels/style-options-panel";
 import { richScene, type RichScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 import { optionLabels, rowsByName } from "./support/styles";
 
-// The target is the panel's module state (the style panels set it).
-beforeEach(() => setStyleOptionsTarget("paragraph", null));
+// The target is the editor's (each mount's scope starts on paragraph).
 afterEach(unmountAll);
 
 type H = PanelHarness<RichScene>;

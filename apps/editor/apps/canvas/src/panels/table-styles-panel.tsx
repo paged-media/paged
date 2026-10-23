@@ -24,14 +24,32 @@
 // surface lands (engine gap 8).
 
 import { Icon, displayName, useCollection } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import type { TableStyleSummary } from "@paged-media/client";
 
 import { StyleOptionsButton } from "./style-options-panel";
 import { CoreCommandButton } from "../core-command-dialog";
 
-const PARTS = ["Header", "Body", "Alt", "Border"];
+const M = defineMessages("app.tableStylesPanel", {
+  loading: "Loading table styles…",
+  newStyleButton: "New table style…",
+  newStyle: "New table style",
+  empty: "No table styles.",
+  applied: "Applied",
+  appliedStyle: "Applied style",
+  delete: "Delete",
+  hint: "Apply a table style from the Table panel (select a cell first).",
+  header: "Header",
+  body: "Body",
+  alt: "Alt",
+  border: "Border",
+  footerNotes: "Footer · notes",
+});
+
+const PARTS = [M.header, M.body, M.alt, M.border];
 
 export function TableStylesPanel() {
+  const strings = useStrings();
   const items = useCollection<TableStyleSummary>("tableStyles");
   if (items === null) {
     return (
@@ -39,7 +57,7 @@ export function TableStylesPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-table-styles-panel="loading"
       >
-        Loading table styles…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -50,25 +68,25 @@ export function TableStylesPanel() {
       <div className="mb-2 flex gap-[5px]" data-table-style-actions="">
         <CoreCommandButton
           op="createTableStyle"
-          label="New table style…"
+          label={strings.t(M.newStyleButton)}
           testId="table-style-new"
           prefill={{
             selfId: `TableStyle/u${Date.now().toString(36)}`,
-            name: "New table style",
+            name: strings.t(M.newStyle),
           }}
         />
       </div>
       {items.length === 0 ? (
         <div className="text-xs text-muted-foreground" data-empty-table-styles>
-          No table styles.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <>
-          <div className="pg-label mb-2">Applied</div>
+          <div className="pg-label mb-2">{strings.t(M.applied)}</div>
           <span className="relative mb-3 inline-flex w-full">
             <select
               disabled
-              aria-label="Applied style"
+              aria-label={strings.t(M.appliedStyle)}
               data-apply-select
               data-collection="tableStyles"
               className="h-[30px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12.5px] opacity-55"
@@ -96,7 +114,7 @@ export function TableStylesPanel() {
                 color: "var(--pg-muted-fg)",
               }}
             >
-              Header
+              {strings.t(M.header)}
             </div>
             {items.map((s, i) => (
               <div
@@ -116,7 +134,7 @@ export function TableStylesPanel() {
                 <StyleOptionsButton family="table" selfId={s.selfId} />
                 <CoreCommandButton
                   op="deleteTableStyle"
-                  label="Delete"
+                  label={strings.t(M.delete)}
                   testId="table-style-delete"
                   args={{ styleId: `style:table/${s.selfId}` }}
                 />
@@ -129,7 +147,7 @@ export function TableStylesPanel() {
                 color: "var(--pg-muted-fg)",
               }}
             >
-              Footer · notes
+              {strings.t(M.footerNotes)}
             </div>
           </div>
           <div className="flex gap-[6px]">
@@ -139,7 +157,7 @@ export function TableStylesPanel() {
                 className="rounded-[5px] border border-input px-[7px] py-[3px] text-[10px]"
                 style={{ color: "var(--pg-muted-fg)" }}
               >
-                {p}
+                {strings.t(p)}
               </span>
             ))}
           </div>
@@ -147,7 +165,7 @@ export function TableStylesPanel() {
             className="mt-2 text-[10.5px] italic"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            Apply a table style from the Table panel (select a cell first).
+            {strings.t(M.hint)}
           </div>
         </>
       )}

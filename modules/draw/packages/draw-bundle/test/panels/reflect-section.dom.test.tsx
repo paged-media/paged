@@ -32,12 +32,14 @@ import {
   it,
 } from "bun:test";
 import { waitFor } from "@paged-media/test-kit";
+import { t } from "@paged-media/strings";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   drawBundle,
+  DUPLICATE_ENGINE,
   forgetLastTransform,
   lastSelectionTransform,
   makePathOptionsPanel,
@@ -93,7 +95,7 @@ describe("the Reflect section — rendered against the engine", () => {
     const panel = await mountPanel(h, makePathOptionsPanel);
     await panel.click(HEADER);
     expect(panel.get("[data-draw-pathopts-reflect-note]").textContent).toBe(
-      REFLECT_SECTION_NOTE,
+      t(REFLECT_SECTION_NOTE),
     );
     expect(panel.disabled(APPLY)).toBe(true);
     await drive(() => h.host.selection.set([TRI]), panel.work);
@@ -131,7 +133,10 @@ describe("the Reflect section — rendered against the engine", () => {
     );
     expect(panel.count("[data-draw-pathopts-reflect-copy-note]")).toBe(0);
     // The note an older engine is shown names the version, not an op.
-    expect(REFLECT_COPY_UNAVAILABLE_NOTE).toMatch(/0\.65/);
-    expect(REFLECT_COPY_UNAVAILABLE_NOTE).not.toMatch(/duplicateElements/);
+    const copyNote = t(REFLECT_COPY_UNAVAILABLE_NOTE, {
+      version: DUPLICATE_ENGINE,
+    });
+    expect(copyNote).toMatch(/0\.65/);
+    expect(copyNote).not.toMatch(/duplicateElements/);
   });
 });

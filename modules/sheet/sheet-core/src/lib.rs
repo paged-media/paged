@@ -28,7 +28,8 @@
 //!
 //! These types, the AST, and the registry YAML schema are **frozen**.
 //! Changes go through the orchestrator as **versioned amendments**, never
-//! drive-by edits (repo constitution, CLAUDE.md §"Interface freeze"). The
+//! drive-by edits (repo constitution, CLAUDE.md §"Interface freeze"); the
+//! latest is W1.0 (2026-10-22, docs/adr/513-calc-model-amendment.md). The
 //! function table is **registry-driven**: it is generated at build time
 //! from `registry/functions/*.yaml` (`build.rs`), so an unregistered
 //! function has no [`ast::FuncId`] and is uncallable by construction.
@@ -58,7 +59,8 @@ pub use refs::{
 pub use cell::{Cell, FormulaId, StyleId};
 
 pub use ast::{
-    BinOp, Expr, Formula, FuncId, LitValue, NameId, OrderedF64, StructuredRef, TableArea, UnOp,
+    BinOp, Expr, Formula, FuncId, LitValue, NameId, OrderedF64, Range3D, Ref3D, SheetSpan,
+    StructuredRef, TableArea, UnOp,
 };
 
 pub use names::{NameDef, NameScope, NameTable, NameTarget};
@@ -69,10 +71,12 @@ pub use table::Table;
 
 pub use filter::{ColumnFilter, FilterCriterion, FilterView};
 
-pub use calc_settings::{CalcSettings, DateSystem, Locale};
+pub use calc_settings::{CalcMode, CalcSettings, DateSystem, Locale};
 
 pub use intern::Interner;
 
 pub use preserved::PreservedParts;
 
-pub use model::{SheetModel, UsedRange, Worksheet, EXTERNAL_SHEET_BASE};
+pub use model::{
+    ColMeta, RowMeta, SheetModel, SheetState, UsedRange, Worksheet, EXTERNAL_SHEET_BASE,
+};

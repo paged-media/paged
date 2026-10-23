@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// Eighty-one entries: seventy under the Draw menu (folded into Plugins ▸
+// Eighty-three entries: seventy-five under the Draw menu (folded into Plugins ▸
 // Draw, and shown as a context menu while artwork is selected), four
 // insert verbs filed under Insert (Arc…, Spiral…, Rectangular grid…, Polar
 // grid…) and four under the host's Edit ▸ Select same.
@@ -347,6 +347,22 @@ test.describe.serial("plugin menus — paged.draw", () => {
       live,
       "Draw/Stroke/Dashes…",
       "media.paged.draw.command.strokeDashOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Draw/Stroke/Width profile… — raises Path Options, where the profile is set", async () => {
+    covers("menu:Draw/Stroke/Width profile…");
+    await expectGreyedAndInert(bare, "Draw/Stroke/Width profile…");
+    const out = await clickEntry(
+      live,
+      "Draw/Stroke/Width profile…",
+      "media.paged.draw.command.widthProfile",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
@@ -1266,6 +1282,18 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
     expect(out.shell).toEqual([]);
     expect(out.after, "the selection holds no opacity mask").toBe(out.before);
+  });
+
+  test("Draw/Update linked recipes — runs updateLinkedRecipes; the selection feeds no recipe, so it changes nothing", async () => {
+    covers("menu:Draw/Update linked recipes");
+    await expectGreyedAndInert(bare, "Draw/Update linked recipes");
+    const out = await clickEntry(
+      live,
+      "Draw/Update linked recipes",
+      "media.paged.draw.command.updateLinkedRecipes",
+    );
+    expect(out.shell).toEqual([]);
+    expect(out.after, "the selection feeds no recipe").toBe(out.before);
   });
 
   test("Object/Insert arc… — Insert ▸ Arc… raises Path Options, where the arc is set up", async () => {

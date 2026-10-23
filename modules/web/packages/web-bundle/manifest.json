@@ -192,6 +192,27 @@
               "access": "derived",
               "title": "CSS variables",
               "summary": "The custom properties the css lane declares."
+            },
+            {
+              "path": "diagnostics",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "severity": {
+                      "kind": "enum",
+                      "members": ["error", "warning", "info"]
+                    },
+                    "message": {
+                      "kind": "text"
+                    }
+                  }
+                }
+              },
+              "access": "derived",
+              "title": "Diagnostics",
+              "summary": "What the source panel lints: the template pass over the bound values, the HTML policy and balance scan and the named-flow lint."
             }
           ]
         },
@@ -343,6 +364,77 @@
               "frame": {
                 "kind": "ref",
                 "to": "frame"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.web.command.importHtml",
+          "title": "Import HTML as a web frame",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "html": {
+                "kind": "text",
+                "multiline": true
+              },
+              "css": {
+                "kind": "text",
+                "multiline": true,
+                "optional": true
+              },
+              "page": {
+                "kind": "ref",
+                "to": "page"
+              },
+              "bounds": {
+                "kind": "bounds"
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "webFrame": {
+                "kind": "ref",
+                "to": "plugin:media.paged.web/webFrame"
+              },
+              "frame": {
+                "kind": "ref",
+                "to": "frame"
+              },
+              "removed": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.web.command.makeWebFrame",
+          "title": "Make web frame",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "frame": {
+                "kind": "ref",
+                "to": "frame"
+              },
+              "template": {
+                "kind": "enum",
+                "members": ["empty", "title-block", "card", "two-column"],
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "webFrame": {
+                "kind": "ref",
+                "to": "plugin:media.paged.web/webFrame"
               }
             }
           }
@@ -534,6 +626,20 @@
               }
             }
           }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.web.value",
+          "title": "Web value"
+        },
+        {
+          "kind": "media.paged.web.source",
+          "title": "Web source"
+        },
+        {
+          "kind": "media.paged.web.cssVar",
+          "title": "Web CSS variable"
         }
       ]
     }

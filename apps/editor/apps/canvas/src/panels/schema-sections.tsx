@@ -48,6 +48,11 @@ import {
   type ShellPropertySchema,
 } from "@paged-media/shell";
 import type { CollectionName } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.schemaSections", {
+  more: "More",
+});
 
 export interface FieldSpec {
   path: string;
@@ -133,6 +138,7 @@ export function SchemaSections({
   family?: string;
   testId?: string;
 }) {
+  const strings = useStrings();
   const schemaKind = targets?.[0] ?? kindProp;
   const rows = useSchemaRows(schemaKind ?? null);
   const more = targets ? unlaidRows(rows, sections, family) : [];
@@ -165,7 +171,7 @@ export function SchemaSections({
         </CockpitSection>
       ))}
       {more.length > 0 && (
-        <CockpitSection title="More" defaultOpen={false}>
+        <CockpitSection title={strings.t(M.more)} defaultOpen={false}>
           <div
             className="flex flex-col gap-1.5 pb-2"
             data-options-section="More"

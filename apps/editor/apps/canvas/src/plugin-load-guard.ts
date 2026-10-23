@@ -37,6 +37,11 @@
 // Subpath, not the barrel: this module needs one function, and the barrel
 // drags in the SAB primitives with it.
 import { errorIdent } from "@paged-media/client/journal";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.pluginLoadGuard", {
+  failedToActivate: "{id} failed to activate: {error}",
+});
 
 /** The shape `loadBundle` returns, restated locally so this module does not
  *  depend on the plugin contract (its unit test runs without it). */
@@ -131,7 +136,10 @@ export function createGuardedLoader<
       deps.publishProblem(pluginId, "activation", [
         {
           severity: "error",
-          message: `${pluginId} failed to activate: ${String(err)}`,
+          message: t(M.failedToActivate, {
+            id: pluginId,
+            error: String(err),
+          }),
           source: "loadBundle",
         },
       ]);

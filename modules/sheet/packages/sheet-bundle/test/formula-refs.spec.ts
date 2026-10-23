@@ -22,7 +22,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { a1Of, cycleAbsolute, formulaRefs, refInsertable } from "../src/surface/formula-refs";
+import {
+  a1Of,
+  cycleAbsolute,
+  formulaRefs,
+  refInsertable,
+} from "../src/surface/formula-refs";
 
 describe("formula references", () => {
   it("finds plain references and ranges, not strings, names or sheet-qualified ones", () => {

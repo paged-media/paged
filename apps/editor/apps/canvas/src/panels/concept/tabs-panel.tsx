@@ -46,6 +46,30 @@ import type { TabStopSpec, Value } from "@paged-media/client";
 
 import { tabsComposition } from "../tabs.composition";
 import { appCatalogRegistry } from "../catalog-registry";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.conceptTabsPanel", {
+  left: "Left",
+  center: "Center",
+  right: "Right",
+  decimal: "Decimal",
+  ruler: "Tab ruler",
+  placeCaret: "Place a text caret to edit tab stops.",
+  empty: "No tab stops. Add one to begin.",
+  stopAlignment: "stop {index} alignment",
+  moveUp: "Move up",
+  moveStopUp: "move stop {index} up",
+  moveDown: "Move down",
+  moveStopDown: "move stop {index} down",
+  deleteStop: "Delete stop",
+  deleteStopLabel: "delete stop {index}",
+  stopPosition: "stop {index} position",
+  leader: "Leader",
+  stopLeader: "stop {index} leader",
+  alignOn: "Align on",
+  stopAlignChar: "stop {index} align character",
+  add: "Add tab stop",
+});
 
 const STOP_BINDING = {
   stops: {
@@ -56,10 +80,10 @@ const STOP_BINDING = {
 };
 
 const ALIGNMENTS: Array<{ value: string; label: string }> = [
-  { value: "LeftAlign", label: "Left" },
-  { value: "CenterAlign", label: "Center" },
-  { value: "RightAlign", label: "Right" },
-  { value: "CharacterAlign", label: "Decimal" },
+  { value: "LeftAlign", label: M.left },
+  { value: "CenterAlign", label: M.center },
+  { value: "RightAlign", label: M.right },
+  { value: "CharacterAlign", label: M.decimal },
 ];
 
 /** Pull the live `TabStopSpec[]` out of a `Value::TabStops`. */
@@ -73,11 +97,12 @@ function unwrapStops(v: Value | null): TabStopSpec[] {
 const RULER_MAX = 432; // 6 in at 72 pt/in — enough for body columns.
 
 function StopRuler({ stops }: { stops: TabStopSpec[] }) {
+  const strings = useStrings();
   return (
     <div
       data-tabs-ruler
       className="relative h-[30px] overflow-hidden rounded-[6px] border border-input bg-background"
-      title="Tab ruler"
+      title={strings.t(M.ruler)}
     >
       {Array.from({ length: 19 }, (_, i) => (
         <span
@@ -111,6 +136,7 @@ function StopRuler({ stops }: { stops: TabStopSpec[] }) {
 }
 
 export function TabsPanel() {
+  const strings = useStrings();
   const { stops: binding } = useBindings(STOP_BINDING);
   const live = unwrapStops(binding.value);
   const disabled = binding.onCommit == null;
@@ -166,14 +192,12 @@ export function TabsPanel() {
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="flex flex-col gap-2 p-3" data-tabs-panel="ready">
-        <CompositionRenderer composition={tabsComposition} />
+        <CompositionRenderer composition={tabsComposition(strings)} />
         <StopRuler stops={draft} />
 
         {draft.length === 0 && (
           <div className="text-xs italic text-muted-foreground" data-tabs-empty>
-            {disabled
-              ? "Place a text caret to edit tab stops."
-              : "No tab stops. Add one to begin."}
+            {disabled ? strings.t(M.placeCaret) : strings.t(M.empty)}
           </div>
         )}
 
@@ -189,21 +213,21 @@ export function TabsPanel() {
                 <KitSelect
                   value={stop.alignment ?? "LeftAlign"}
                   disabled={disabled}
-                  aria-label={`stop ${i} alignment`}
+                  aria-label={strings.t(M.stopAlignment, { index: i })}
                   data-tab-alignment={i}
                   onChange={(e) => patch(i, { alignment: e.target.value })}
                 >
                   {ALIGNMENTS.map((a) => (
                     <option key={a.value} value={a.value}>
-                      {a.label}
+                      {strings.t(a.label)}
                     </option>
                   ))}
                 </KitSelect>
                 <button
                   type="button"
                   disabled={disabled || i === 0}
-                  title="Move up"
-                  aria-label={`move stop ${i} up`}
+                  title={strings.t(M.moveUp)}
+                  aria-label={strings.t(M.moveStopUp, { index: i })}
                   onClick={() => moveStop(i, -1)}
                   className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] border border-input bg-background text-muted-foreground disabled:opacity-40"
                 >
@@ -217,8 +241,8 @@ export function TabsPanel() {
                 <button
                   type="button"
                   disabled={disabled || i === draft.length - 1}
-                  title="Move down"
-                  aria-label={`move stop ${i} down`}
+                  title={strings.t(M.moveDown)}
+                  aria-label={strings.t(M.moveStopDown, { index: i })}
                   onClick={() => moveStop(i, 1)}
                   className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] border border-input bg-background text-muted-foreground disabled:opacity-40"
                 >
@@ -227,8 +251,8 @@ export function TabsPanel() {
                 <button
                   type="button"
                   disabled={disabled}
-                  title="Delete stop"
-                  aria-label={`delete stop ${i}`}
+                  title={strings.t(M.deleteStop)}
+                  aria-label={strings.t(M.deleteStopLabel, { index: i })}
                   data-tab-remove={i}
                   onClick={() => removeStop(i)}
                   className="flex h-[28px] w-[28px] items-center justify-center rounded-[6px] border border-input bg-background text-muted-foreground disabled:opacity-40"
@@ -244,7 +268,7 @@ export function TabsPanel() {
                   suffix="pt"
                   icon="ui-size"
                   disabled={disabled}
-                  aria-label={`stop ${i} position`}
+                  aria-label={strings.t(M.stopPosition, { index: i })}
                   onChange={() => {}}
                   onCommit={(next) => patch(i, { position: next })}
                 />
@@ -252,9 +276,9 @@ export function TabsPanel() {
                   data-tab-leader={i}
                   defaultValue={stop.leader ?? ""}
                   key={`leader-${stop.leader ?? ""}`}
-                  placeholder="Leader"
+                  placeholder={strings.t(M.leader)}
                   disabled={disabled}
-                  aria-label={`stop ${i} leader`}
+                  aria-label={strings.t(M.stopLeader, { index: i })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter")
                       (e.target as HTMLInputElement).blur();
@@ -270,9 +294,9 @@ export function TabsPanel() {
                   data-tab-align-char={i}
                   defaultValue={stop.alignmentCharacter ?? "."}
                   key={`alignchar-${stop.alignmentCharacter ?? "."}`}
-                  placeholder="Align on"
+                  placeholder={strings.t(M.alignOn)}
                   disabled={disabled}
-                  aria-label={`stop ${i} align character`}
+                  aria-label={strings.t(M.stopAlignChar, { index: i })}
                   onKeyDown={(e) => {
                     if (e.key === "Enter")
                       (e.target as HTMLInputElement).blur();
@@ -295,7 +319,7 @@ export function TabsPanel() {
           onClick={addStop}
           className="h-[28px] self-start rounded-[6px] border border-input bg-background px-3 text-xs text-foreground disabled:opacity-55"
         >
-          Add tab stop
+          {strings.t(M.add)}
         </button>
       </div>
     </CatalogRegistryProvider>

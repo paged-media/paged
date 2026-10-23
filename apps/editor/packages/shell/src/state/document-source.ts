@@ -38,6 +38,8 @@
 // After a load succeeds the loader tells the sink (the app's identity store)
 // which engine `docId` came from which source.
 
+import { scoped, type EditorScope } from "./editor-scope";
+
 /** The parts of a `FileSystemFileHandle` the identity needs. */
 export interface IdentifiableFileHandle {
   readonly name: string;
@@ -68,8 +70,13 @@ export interface DocumentSourceSink {
   ): void;
 }
 
+// Keyed by the `File` object itself: whoever holds the file holds its
+// source, whichever editor it is handed to.
 const sources = new WeakMap<File, DocumentSource>();
-let sink: DocumentSourceSink | null = null;
+/** The identity store of each editor (plan task E1). */
+const SINK = scoped("documentSourceSink", () => ({
+  current: null as DocumentSourceSink | null,
+}));
 
 /** Mark `file` as read from `handle` (the open picker). Returns `file`. */
 export function attachFileSource(
@@ -90,18 +97,22 @@ export function sourceOfFile(file: File): DocumentSource {
   return sources.get(file) ?? { kind: "transient" };
 }
 
-/** The app's identity store (one per editor); `null` detaches it. */
-export function setDocumentSourceSink(next: DocumentSourceSink | null): void {
-  sink = next;
+/** `scope`'s identity store (one per editor); `null` detaches it. */
+export function setDocumentSourceSink(
+  scope: EditorScope,
+  next: DocumentSourceSink | null,
+): void {
+  scope.get(SINK).current = next;
 }
 
-/** Tell the sink where `docId` came from. Never throws. */
+/** Tell `scope`'s sink where `docId` came from. Never throws. */
 export function declareDocumentSource(
+  scope: EditorScope,
   docId: string,
   source: DocumentSource,
 ): void {
   try {
-    sink?.declare(docId, source);
+    scope.get(SINK).current?.declare(docId, source);
   } catch (err) {
     console.warn("document identity: could not record the source:", err);
   }
@@ -109,11 +120,12 @@ export function declareDocumentSource(
 
 /** Tell the sink the open document was saved into `handle`. Never throws. */
 export function noteFileWritten(
+  scope: EditorScope,
   handle: IdentifiableFileHandle,
   file: { lastModified: number; size: number },
 ): void {
   try {
-    sink?.written(handle, file);
+    scope.get(SINK).current?.written(handle, file);
   } catch (err) {
     console.warn("document identity: could not record the save:", err);
   }

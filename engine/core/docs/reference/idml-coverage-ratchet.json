@@ -8,9 +8,9 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 133526,
+      "covered": 133534,
       "total": 633952,
-      "value": 0.210625
+      "value": 0.210637
     },
     "impactImport": {
       "covered": 26564,
@@ -18,9 +18,9 @@
       "value": 0.485924
     },
     "weightedExport": {
-      "covered": 92130,
+      "covered": 95012,
       "total": 633952,
-      "value": 0.145326
+      "value": 0.149873
     },
     "misplacedReads": 30,
     "unseenReads": 405,
@@ -106,6 +106,8 @@
     "MasterSpreads|Oval@StrokeWeight|attr",
     "MasterSpreads|Oval@Visible|attr",
     "MasterSpreads|PDF@ItemTransform|attr",
+    "MasterSpreads|PDFAttribute@PDFCrop|attr",
+    "MasterSpreads|PDFAttribute@PageNumber|attr",
     "MasterSpreads|Page@AppliedMaster|attr",
     "MasterSpreads|Page@GeometricBounds|attr",
     "MasterSpreads|Page@ItemTransform|attr",
@@ -778,6 +780,8 @@
     "Spreads|Oval@TopRightCornerRadius|attr",
     "Spreads|Oval@Visible|attr",
     "Spreads|PDF@ItemTransform|attr",
+    "Spreads|PDFAttribute@PDFCrop|attr",
+    "Spreads|PDFAttribute@PageNumber|attr",
     "Spreads|Page@AppliedMaster|attr",
     "Spreads|Page@GeometricBounds|attr",
     "Spreads|Page@ItemTransform|attr",
@@ -1330,6 +1334,8 @@
     "MasterSpreads|Oval@StrokeWeight|attr",
     "MasterSpreads|Oval@Visible|attr",
     "MasterSpreads|PDF@ItemTransform|attr",
+    "MasterSpreads|PDFAttribute@PDFCrop|attr",
+    "MasterSpreads|PDFAttribute@PageNumber|attr",
     "MasterSpreads|Page@AppliedMaster|attr",
     "MasterSpreads|Page@GeometricBounds|attr",
     "MasterSpreads|Page@ItemTransform|attr",
@@ -1793,6 +1799,8 @@
     "Spreads|Oval@TopRightCornerRadius|attr",
     "Spreads|Oval@Visible|attr",
     "Spreads|PDF@ItemTransform|attr",
+    "Spreads|PDFAttribute@PDFCrop|attr",
+    "Spreads|PDFAttribute@PageNumber|attr",
     "Spreads|Page@AppliedMaster|attr",
     "Spreads|Page@GeometricBounds|attr",
     "Spreads|Page@ItemTransform|attr",
@@ -2076,6 +2084,16 @@
     "Stories|TextVariableInstance@AssociatedTextVariable|attr",
     "Stories|TextVariableInstance@ResultText|attr",
     "Stories|idPkg:Story@DOMVersion|attr",
+    "XML|CharacterStyleRange@AppliedCharacterStyle|attr",
+    "XML|ParagraphStyleRange@AppliedParagraphStyle|attr",
+    "XML|XMLElement@MarkupTag|attr",
+    "XML|XMLElement@Self|attr",
+    "XML|XMLTag@Name|attr",
+    "XML|XMLTag@Self|attr",
+    "XML|XmlStory@Self|attr",
+    "XML|XmlStory@UserText|attr",
+    "XML|idPkg:BackingStory@DOMVersion|attr",
+    "XML|idPkg:Tags@DOMVersion|attr",
     "designmap|Bookmark@Destination|attr",
     "designmap|Bookmark@Name|attr",
     "designmap|Bookmark@Self|attr",

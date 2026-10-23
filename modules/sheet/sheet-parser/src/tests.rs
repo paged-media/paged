@@ -204,20 +204,21 @@ fn an_error_literal_ends_where_its_code_ends__feat__sheet_parser_dialect() {
     );
     let f = p(&fuzz);
     assert_eq!(p(&pr(&f)).root, f.root);
-    // Excel's newer codes are recognised as error literals, and refused as
-    // ones this engine's values cannot hold (as before, but now saying so
-    // and spanning only the code); unknown codes are still errors.
+    // Excel 365's codes the values hold since the W1.0 amendment are error
+    // literals like the classic ones.
     for code in [
-        "#GETTING_DATA",
         "#CALC!",
         "#FIELD!",
         "#BLOCKED!",
         "#CONNECT!",
         "#BUSY!",
         "#UNKNOWN!",
-        "#EXTERNAL!",
-        "#PYTHON!",
     ] {
+        assert_eq!(roundtrip(&format!("{code}/2")), format!("{code}/2"));
+    }
+    // The codes the values cannot hold are recognised as error literals and
+    // refused, spanning only the code; unknown codes are still errors.
+    for code in ["#GETTING_DATA", "#EXTERNAL!", "#PYTHON!"] {
         let err = parse(&format!("{code}/2"), &Ctx::new()).expect_err(code);
         assert!(
             err.message.contains("not supported"),
@@ -335,16 +336,30 @@ fn func_calls_and_nesting() {
     assert_eq!(roundtrip("PI()"), "PI()");
 }
 
+// W1.0 amendment (amends ADR 509): an unknown function or name parses to a
+// node that evaluates to #NAME? and prints as written, as Excel keeps it.
 #[test]
-fn func_unknown_is_parse_error() {
-    let err = parse("NOTAFUNC(1)", &Ctx::new()).unwrap_err();
-    assert!(err.message.contains("unknown function"), "{}", err.message);
+fn func_unknown_is_a_name_error_node__feat__sheet_calc_model() {
+    let f = p("NOTAFUNC(1,A1)+1");
+    match &f.root {
+        Expr::Binary(BinOp::Add, a, _) => match &**a {
+            Expr::UnknownFunc(name, args) => {
+                assert_eq!(name.as_str(), "NOTAFUNC");
+                assert_eq!(args.len(), 2);
+            }
+            other => panic!("{other:?}"),
+        },
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(roundtrip("NotAFunc(1,A1)+1"), "NotAFunc(1,A1)+1");
+    // Still a syntax error when the call itself is malformed.
+    assert!(parse("NOTAFUNC(1", &Ctx::new()).is_err());
 }
 
 #[test]
-fn name_unknown_is_parse_error() {
-    let err = parse("Bogus", &Ctx::new()).unwrap_err();
-    assert!(err.message.contains("unknown name"), "{}", err.message);
+fn name_unknown_is_a_name_error_node__feat__sheet_calc_model() {
+    assert_eq!(p("Bogus").root, Expr::UnknownName("Bogus".into()));
+    assert_eq!(roundtrip("Bogus*2"), "Bogus*2");
 }
 
 // ---- Union / intersection ----
@@ -932,9 +947,15 @@ fn whole_columns_and_rows_parse_and_print__feat__sheet_parser_dialect() {
     // Not bands: ordinary ranges, names, a column followed by a row.
     assert_eq!(roundtrip("SUM(A1:B2)"), "SUM(A1:B2)");
     assert_eq!(roundtrip("SUM(Tax)"), "SUM(_NAME0)");
-    assert!(parse("SUM(A:B2)", &Ctx::new()).is_err());
+    // `A` is no band here: an unknown name (#NAME?) joined to B2 (W1.0).
+    assert!(matches!(
+        &p("SUM(A:B2)").root,
+        Expr::Func(_, args) if matches!(&args[0], Expr::Binary(BinOp::Range, a, _)
+            if matches!(&**a, Expr::UnknownName(_)))
+    ));
     assert!(parse("SUM(1:A)", &Ctx::new()).is_err());
-    assert!(parse("SUM(A:XFE)", &Ctx::new()).is_err());
+    // Past the last column: two unknown names, not a band.
+    assert!(!matches!(&p("SUM(A:XFE)").root, Expr::Func(_, a) if matches!(a[0], Expr::Range(_))));
     // Past the last row it is no band, so `:` would join two numbers.
     assert!(parse("SUM(1:1048577)", &Ctx::new()).is_err());
 }
@@ -1127,6 +1148,36 @@ mod prop {
             (0i32..1000).prop_map(|n| Expr::Lit(LitValue::Number(OrderedF64::new(n as f64)))),
             any::<bool>().prop_map(|b| Expr::Lit(LitValue::Bool(b))),
             "[a-z ]{0,6}".prop_map(|s| Expr::Lit(LitValue::Text(s.into()))),
+            // W1.0 amendment: 3D references over the context's five sheets,
+            // and names nothing defines.
+            (0u16..5, 0u16..5, arb_cellref()).prop_map(|(a, b, c)| {
+                let sheets = sheet_core::ast::SheetSpan {
+                    first: a.min(b),
+                    last: a.max(b),
+                };
+                Expr::Ref3D(sheet_core::ast::Ref3D {
+                    sheets,
+                    cell: sheet_core::CellRef {
+                        sheet: sheets.first,
+                        ..c
+                    },
+                })
+            }),
+            (0u16..5, 0u16..5, arb_cellref(), arb_cellref()).prop_map(|(a, b, c, d)| {
+                let sheets = sheet_core::ast::SheetSpan {
+                    first: a.min(b),
+                    last: a.max(b),
+                };
+                let at = |x: sheet_core::CellRef| sheet_core::CellRef {
+                    sheet: sheets.first,
+                    ..x
+                };
+                Expr::Range3D(sheet_core::ast::Range3D {
+                    sheets,
+                    range: crate::refs::range(at(c), at(d)).normalized(),
+                })
+            }),
+            "zz_[a-z]{1,4}".prop_map(|s| Expr::UnknownName(s.into())),
         ];
         leaf.prop_recursive(5, 96, 4, |inner| {
             prop_oneof![
@@ -1150,6 +1201,11 @@ mod prop {
                 inner
                     .clone()
                     .prop_map(|a| Expr::Unary(UnOp::Percent, Box::new(a))),
+                inner
+                    .clone()
+                    .prop_map(|a| Expr::Unary(UnOp::ImplicitIntersect, Box::new(a))),
+                proptest::collection::vec(inner.clone(), 0..=2)
+                    .prop_map(|args| Expr::UnknownFunc("ZZ_FN".into(), args)),
                 // A function call (SUM is variadic, 1..=3 args here).
                 proptest::collection::vec(inner.clone(), 1..=3).prop_map(|args| {
                     Expr::Func(sheet_core::funcs::lookup_func("SUM").unwrap(), args)
@@ -1313,4 +1369,106 @@ mod prop {
             prop_assert_eq!(printed, reprinted);
         }
     }
+}
+
+// ---- W1.0 amendment: `@`, 3D references, named LAMBDA calls ----
+
+#[test]
+fn implicit_intersection_parses_prints_and_stores__feat__sheet_calc_model() {
+    let f = p("@A1:A3*2");
+    match &f.root {
+        Expr::Binary(BinOp::Mul, a, _) => {
+            assert!(matches!(&**a, Expr::Unary(UnOp::ImplicitIntersect, inner)
+                if matches!(&**inner, Expr::Range(_))));
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(roundtrip("@A1:A3*2"), "@A1:A3*2");
+    assert_eq!(roundtrip("@(A1:A3)"), "@A1:A3");
+    assert_eq!(roundtrip("@SEQUENCE(3)"), "@SEQUENCE(3)");
+    assert_eq!(
+        print_ooxml(&p("@A1:A3*2"), 0, &Ctx::new()),
+        "_xlfn.SINGLE(A1:A3)*2"
+    );
+    // The storage form reads back as the operator.
+    let back = p(&strip_storage_prefixes("_xlfn.SINGLE(A1:A3)*2"));
+    assert_eq!(back.root, f.root);
+}
+
+#[test]
+fn three_d_references_parse_and_print__feat__sheet_calc_model() {
+    use sheet_core::ast::{Range3D, Ref3D, SheetSpan};
+    let f = p("SUM(Sheet1:Data!B2:C3)");
+    let Expr::Func(_, args) = &f.root else {
+        panic!("{:?}", f.root)
+    };
+    match &args[0] {
+        Expr::Range3D(Range3D { sheets, range }) => {
+            assert_eq!(*sheets, SheetSpan { first: 0, last: 4 });
+            assert_eq!((range.start.row, range.start.col), (1, 1));
+            assert_eq!((range.end.row, range.end.col), (2, 2));
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(
+        roundtrip("SUM(Sheet1:Data!B2:C3)"),
+        "SUM(Sheet1:Data!B2:C3)"
+    );
+    // A span written backwards is ordered; a cell; quoted names.
+    assert!(matches!(
+        p("Data:Sheet1!$A$1").root,
+        Expr::Ref3D(Ref3D {
+            sheets: SheetSpan { first: 0, last: 4 },
+            ..
+        })
+    ));
+    assert_eq!(roundtrip("Data:Sheet1!$A$1"), "Sheet1:Data!$A$1");
+    assert_eq!(
+        roundtrip("SUM('Sheet 2:Data'!A1)"),
+        "SUM('Sheet 2:Data'!A1)"
+    );
+    assert_eq!(roundtrip("SUM(Sheet1:Data!A:B)"), "SUM(Sheet1:Data!A:B)");
+    // The span's own sheet still prints its prefix.
+    assert_eq!(roundtrip("Sheet1:Sheet1!A1"), "Sheet1:Sheet1!A1");
+    // An unknown end is an unknown sheet.
+    assert!(parse("SUM(Sheet1:Nope!A1)", &Ctx::new()).is_err());
+    // Extraction sees one box per sheet of the span.
+    let refs = extract_refs(&p("SUM('Sheet1:Sheet 2'!A1:A2)+'Sheet1:O''Brien'!B1"));
+    assert_eq!(refs.ranges.len(), 2);
+    assert_eq!(refs.cells.len(), 3);
+}
+
+#[test]
+fn a_defined_name_called_is_a_lambda_call__feat__sheet_calc_model() {
+    let f = p("Tax(2,3)");
+    match &f.root {
+        Expr::Call(callee, args) => {
+            assert_eq!(**callee, Expr::Name(NameId(0)));
+            assert_eq!(args.len(), 2);
+        }
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(roundtrip("Tax(2,3)"), "_NAME0(2,3)");
+}
+
+#[allow(non_snake_case)]
+#[test]
+fn eta_reduced_function_names_round_trip__feat__sheet_fn_lookup_array() {
+    // A function's bare name as a value (GROUPBY's aggregation) prints
+    // `_xleta.SUM` in the file and reads back as the bare name (W3).
+    let f = p("GROUPBY(A2:A7,C2:C7,SUM)");
+    assert_eq!(
+        print_ooxml(&f, 0, &Ctx::new()),
+        "_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)"
+    );
+    assert_eq!(
+        roundtrip("GROUPBY(A2:A7,C2:C7,SUM)"),
+        "GROUPBY(A2:A7,C2:C7,SUM)"
+    );
+    let back = p(&strip_storage_prefixes(
+        "_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)",
+    ));
+    assert_eq!(back.root, f.root);
+    // An unknown name that is no function keeps its spelling.
+    assert_eq!(print_ooxml(&p("Bogus+1"), 0, &Ctx::new()), "Bogus+1");
 }

@@ -2,7 +2,23 @@
 // (bit-exact, no resampling). The Move tool's drag uses the same doors.
 
 import { EdgePolicy, VacateMode, type ImageSession } from "../../session";
+import { defineMessages, t } from "@paged-media/strings";
+
 import { note, row, sectionTitle } from "./styles";
+
+const M = defineMessages("image.move", {
+  title: "Move",
+  selectedPixels: "Selected pixels",
+  activeLayer: "Active layer",
+  nudge: "Click: 1 px · Shift-click: 10 px",
+  offsetWrap: "Offset (wrap around)",
+  halfImage: "Half the image",
+  note:
+    "Whole-pixel moves are exact. With a selection the selected pixels move " +
+    "and leave transparency behind; without one the active layer moves. " +
+    "“Half the image” is Filter ▸ Other ▸ Offset with wrap — the seam " +
+    "check for a repeating tile.",
+});
 
 const STEPS: Array<[label: string, dx: number, dy: number]> = [
   ["←", -1, 0],
@@ -33,16 +49,16 @@ export function MoveSection({
   };
   return (
     <>
-      <div style={sectionTitle}>Move</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
-        <span>{hasSelection ? "Selected pixels" : "Active layer"}</span>
+        <span>{t(hasSelection ? M.selectedPixels : M.activeLayer)}</span>
         <span>
           {STEPS.map(([label, dx, dy]) => (
             <button
               key={label}
               type="button"
               data-image-nudge={label}
-              title="Click: 1 px · Shift-click: 10 px"
+              title={t(M.nudge)}
               disabled={disabled || !gpu}
               onClick={(e) => void nudge(dx, dy, e.shiftKey)}
             >
@@ -52,7 +68,7 @@ export function MoveSection({
         </span>
       </div>
       <div style={row}>
-        <span>Offset (wrap around)</span>
+        <span>{t(M.offsetWrap)}</span>
         <button
           type="button"
           data-image-offset-wrap
@@ -65,15 +81,10 @@ export function MoveSection({
             )
           }
         >
-          Half the image
+          {t(M.halfImage)}
         </button>
       </div>
-      <div style={note}>
-        Whole-pixel moves are exact. With a selection the selected pixels move
-        and leave transparency behind; without one the active layer moves.
-        &quot;Half the image&quot; is Filter ▸ Other ▸ Offset with wrap — the
-        seam check for a repeating tile.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

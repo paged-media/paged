@@ -1,0 +1,30 @@
+# IMAGINARY.
+# id	formula	setup	expected
+imaginary-0	=IMAGINARY("3+4i")	-	4
+imaginary-1	=IMAGINARY("3-4i")	-	-4
+imaginary-2	=IMAGINARY("-2.5+0.5j")	-	0.5
+imaginary-3	=IMAGINARY("i")	-	1
+imaginary-4	=IMAGINARY("-i")	-	-1
+imaginary-5	=IMAGINARY("5")	-	0
+imaginary-6	=IMAGINARY("0")	-	0
+imaginary-7	=IMAGINARY("4j")	-	4
+imaginary-8	=IMAGINARY("1E2+1E-3i")	-	0.001
+imaginary-9	=IMAGINARY("0.5-i")	-	-1
+imaginary-10	=IMAGINARY("abc")	-	#NUM!
+imaginary-11	=IMAGINARY("3+i")	-	1
+imaginary-12	=IMAGINARY("3-j")	-	-1
+imaginary-13	=IMAGINARY(7)	-	0
+imaginary-14	=IMAGINARY("i5")	-	#NUM!
+imaginary-15	=IMAGINARY(" 3+4i")	-	4
+imaginary-16	=IMAGINARY("3 +4i")	-	4
+imaginary-17	=IMAGINARY("3+4ij")	-	#NUM!
+imaginary-18	=IMAGINARY("3.+4.i")	-	4
+imaginary-19	=IMAGINARY(".5i")	-	0.5
+imaginary-20	=IMAGINARY("1e+2i")	-	100
+imaginary-21	=IMAGINARY("1E2")	-	0
+imaginary-22	=IMAGINARY("--3")	-	#NUM!
+imaginary-23	=IMAGINARY("+-3i")	-	#NUM!
+imaginary-24	=IMAGINARY("3+4i ")	-	4
+imaginary-25	=IMAGINARY("INF")	-	#NUM!
+imaginary-x0	=IMAGINARY(A1)	A1=#N/A	#N/A
+imaginary-x1	=SUM(IMAGINARY({"3+4i","5j"}))	-	9

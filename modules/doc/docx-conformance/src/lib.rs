@@ -1581,6 +1581,67 @@ pub fn list_docx() -> Vec<u8> {
     ])
 }
 
+/// A letter template: a heading, a bookmarked paragraph (`intro`, started
+/// inside it) and one bookmarked between paragraphs (`closing`, counting for
+/// the paragraph after it), a merge field, and a bullet list of three items
+/// (`numId` 1, the second item's run bold) between plain paragraphs. The
+/// template field kinds (`blockText`, `mergeField`, `listItems`) address it.
+pub fn template_docx() -> Vec<u8> {
+    let content_types = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+</Types>"#;
+    let doc_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+</Relationships>"#;
+    let numbering = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:abstractNum w:abstractNumId="0">
+    <w:lvl w:ilvl="0"><w:numFmt w:val="bullet"/><w:lvlText w:val="&#8226;"/></w:lvl>
+  </w:abstractNum>
+  <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"#;
+    let document = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Quarterly letter</w:t></w:r></w:p>
+    <w:p>
+      <w:r><w:t xml:space="preserve">Dear </w:t></w:r>
+      <w:fldSimple w:instr=" MERGEFIELD Name "><w:r><w:t>«Name»</w:t></w:r></w:fldSimple>
+      <w:r><w:t>,</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:bookmarkStart w:id="0" w:name="intro"/>
+      <w:r><w:t xml:space="preserve">Thank you for </w:t></w:r>
+      <w:r><w:rPr><w:i/></w:rPr><w:t>your order</w:t></w:r>
+      <w:bookmarkEnd w:id="0"/>
+      <w:r><w:t>.</w:t></w:r>
+    </w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Apples</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Pears</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Plums</w:t></w:r></w:p>
+    <w:bookmarkStart w:id="1" w:name="closing"/>
+    <w:p><w:r><w:t>Kind regards</w:t></w:r></w:p>
+    <w:bookmarkEnd w:id="1"/>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
+  </w:body>
+</w:document>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", content_types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/_rels/document.xml.rels", doc_rels.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("word/styles.xml", STYLES.as_bytes()),
+        ("word/numbering.xml", numbering.as_bytes()),
+    ])
+}
+
 /// A document with a 2-column table exercising `gridSpan` (a spanning header) and
 /// `vMerge` (a vertically merged cell).
 pub fn table_docx() -> Vec<u8> {
@@ -1776,6 +1837,46 @@ pub fn merge_field_docx() -> Vec<u8> {
       <w:fldSimple w:instr=" MERGEFIELD OrderNo \f &quot;.&quot; \m "><w:r><w:t>«OrderNo»</w:t></w:r></w:fldSimple>
     </w:p>
     <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>
+  </w:body>
+</w:document>"#;
+    zip_parts(&[
+        ("[Content_Types].xml", content_types.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+    ])
+}
+
+/// A price list: a heading, a 3 x 2 table whose cells hold a bookmarked
+/// paragraph of two runs, a paragraph in a style, two paragraphs in one cell
+/// and a `MERGEFIELD Name` after text, and a body paragraph after the table
+/// with the same merge field.
+pub fn cell_fields_docx() -> Vec<u8> {
+    let content_types = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#;
+    let document = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>Price list</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblGrid><w:gridCol w:w="4680"/><w:gridCol w:w="4680"/></w:tblGrid>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Item</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Price</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:bookmarkStart w:id="0" w:name="first-item"/><w:r><w:t>App</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>les</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>1.20</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Line one</w:t></w:r></w:p><w:p><w:r><w:t>Line two</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t xml:space="preserve">For </w:t></w:r><w:fldSimple w:instr=" MERGEFIELD Name "><w:r><w:t>«Name»</w:t></w:r></w:fldSimple></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t xml:space="preserve">Dear </w:t></w:r><w:fldSimple w:instr=" MERGEFIELD Name "><w:r><w:t>«Name»</w:t></w:r></w:fldSimple></w:p>
   </w:body>
 </w:document>"#;
     zip_parts(&[

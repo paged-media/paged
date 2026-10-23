@@ -34,6 +34,19 @@ import {
   type ListRowBadge,
 } from "@paged-media/shell";
 import type { LinkSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.linksPanel", {
+  loading: "Loading links…",
+  updateLink: "Update link — awaiting engine support",
+  relinkHistory: "Relink history — awaiting engine support",
+  goToLink: "Go to link — awaiting engine support",
+  empty: "No image links in this document.",
+  filter: "Filter links",
+  missing: "missing",
+  notDrawn: "not drawn",
+  lowRes: "lo-res",
+});
 
 /** Low-res convention — placed images whose effective PPI falls below
  *  this get the `lo-res` badge. The print floor is 300 ppi; 150 is the
@@ -41,6 +54,7 @@ import type { LinkSummary } from "@paged-media/client";
 const LOW_RES_PPI = 150;
 
 export function LinksPanel() {
+  const strings = useStrings();
   const links = useCollection<LinkSummary>("links");
   if (links === null) {
     return (
@@ -48,35 +62,26 @@ export function LinksPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-links-panel="loading"
       >
-        Loading links…
+        {strings.t(M.loading)}
       </div>
     );
   }
   return (
     <div data-links-panel="ready">
       <PanelToolbar>
-        <ToolbarBtn
-          icon="ui-return"
-          label="Update link — awaiting engine support"
-        />
-        <ToolbarBtn
-          icon="ui-history"
-          label="Relink history — awaiting engine support"
-        />
-        <ToolbarBtn
-          icon="ui-target"
-          label="Go to link — awaiting engine support"
-        />
+        <ToolbarBtn icon="ui-return" label={strings.t(M.updateLink)} />
+        <ToolbarBtn icon="ui-history" label={strings.t(M.relinkHistory)} />
+        <ToolbarBtn icon="ui-target" label={strings.t(M.goToLink)} />
       </PanelToolbar>
       {links.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-links>
-          No image links in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-link-list>
           <ListRows
             search={links.length > 8}
-            searchPlaceholder="Filter links"
+            searchPlaceholder={strings.t(M.filter)}
             rows={links.map((link) => {
               // The displayed name strips path prefixes for
               // legibility — full URI lives in searchText.
@@ -109,11 +114,11 @@ export function LinksPanel() {
               // A single trailing badge — missing wins over not drawn,
               // which wins over lo-res.
               const badge: ListRowBadge | undefined = missing
-                ? { label: "missing", tone: "error" }
+                ? { label: strings.t(M.missing), tone: "error" }
                 : undecoded
-                  ? { label: "not drawn", tone: "warn" }
+                  ? { label: strings.t(M.notDrawn), tone: "warn" }
                   : lowRes
-                    ? { label: "lo-res", tone: "warn" }
+                    ? { label: strings.t(M.lowRes), tone: "warn" }
                     : undefined;
               return {
                 key: link.hostSelfId,

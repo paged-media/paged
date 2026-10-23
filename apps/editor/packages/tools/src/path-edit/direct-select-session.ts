@@ -50,12 +50,14 @@ import type {
   PathAnchorsResult,
   WorkerToMain,
 } from "@paged-media/client";
-import type {
-  PathEditHit,
-  PathEditPointer,
-  PathEditRelease,
-  PathEditSession,
-  PathEditView,
+import {
+  detachedEditorScope,
+  type EditorScope,
+  type PathEditHit,
+  type PathEditPointer,
+  type PathEditRelease,
+  type PathEditSession,
+  type PathEditView,
 } from "@paged-media/shell";
 
 import {
@@ -149,6 +151,9 @@ export interface DirectSelectSessionOptions {
    *  grid, not only this path's other anchors. `null` from it (an engine
    *  before v67) keeps the local snap. */
   snapEngine?: (query: EngineSnapQuery) => Promise<EngineSnapResult | null>;
+  /** The editor's scope: its View ▸ Snap to points. Absent: the scope of
+   *  a session outside an editor (snapping on). */
+  scope?: EditorScope;
 }
 
 /** The engine's own sentence for a refused mutation, or null when it
@@ -298,7 +303,14 @@ export class DirectSelectSession implements PathEditSession {
    *  Snap to points off all bypass it. */
   private snapped(pointer: PathEditPointer): readonly [number, number] {
     const g = this.grab;
-    if (!g || !snappingOn(pointer.modifiers)) return pointer.point;
+    if (
+      !g ||
+      !snappingOn(
+        this.options.scope ?? detachedEditorScope(),
+        pointer.modifiers,
+      )
+    )
+      return pointer.point;
     const at: [number, number] = [
       g.start[0] + pointer.point[0] - g.down[0],
       g.start[1] + pointer.point[1] - g.down[1],

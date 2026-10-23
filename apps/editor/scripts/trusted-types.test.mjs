@@ -15,9 +15,13 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const canvas = resolve(here, "..", "apps", "canvas");
-const { REPORT_PATH, TRUSTED_TYPES_POLICY, allowedScriptUrl } = await import(
-  resolve(canvas, "src", "boot", "trusted-types.ts")
-);
+const {
+  REPORT_PATH,
+  TRUSTED_TYPES_POLICY,
+  TRUSTED_TYPES_POLICY_NAMES,
+  allowedScriptUrl,
+  installDefaultPolicy,
+} = await import(resolve(canvas, "src", "boot", "trusted-types.ts"));
 
 test("the policy requires Trusted Types for script and reports to the report route", () => {
   assert.equal(
@@ -29,7 +33,10 @@ test("the policy requires Trusted Types for script and reports to the report rou
 
 test("public/_headers ships the module's policy, enforced, as a policy of its own", () => {
   const headers = readFileSync(resolve(canvas, "public", "_headers"), "utf8");
-  const policies = headers
+  // The site-wide block (`/*`); embed.html's own block follows it.
+  const [site, embed = ""] = headers.split(/^\/embed\.html$/m);
+  assert.match(embed, /Content-Security-Policy: frame-ancestors 'self'/);
+  const policies = site
     .split("\n")
     .filter((l) => /^\s*Content-Security-Policy:/.test(l))
     .map((l) => l.replace(/^\s*Content-Security-Policy:\s*/, ""));
@@ -65,4 +72,69 @@ test("the default policy admits the editor's own script URLs only", () => {
   ]) {
     assert.equal(allowedScriptUrl(bad, base), false, bad);
   }
+});
+
+/** Run `fn` with `globalThis.trustedTypes` set to `tt`. */
+function withTrustedTypes(tt, fn) {
+  const had = Object.getOwnPropertyDescriptor(globalThis, "trustedTypes");
+  globalThis.trustedTypes = tt;
+  try {
+    fn();
+  } finally {
+    if (had) Object.defineProperty(globalThis, "trustedTypes", had);
+    else delete globalThis.trustedTypes;
+  }
+}
+
+test("the default policy is installed once per page, and a host's stays (E1)", () => {
+  const created = [];
+  const tt = {
+    defaultPolicy: undefined,
+    createPolicy(name, rules) {
+      created.push(name);
+      this.defaultPolicy = rules;
+      return rules;
+    },
+  };
+  withTrustedTypes(tt, () => {
+    installDefaultPolicy(() => false);
+    installDefaultPolicy(() => false); // a second editor on the page
+  });
+  assert.deepEqual(created, ["default"]);
+
+  const host = { defaultPolicy: {}, createPolicy: () => assert.fail() };
+  withTrustedTypes(host, () => installDefaultPolicy(() => false));
+});
+
+test("a host that does not allow the default policy does not stop the mount", () => {
+  const warn = console.warn;
+  let warned = 0;
+  console.warn = () => void warned++;
+  try {
+    withTrustedTypes(
+      {
+        createPolicy() {
+          throw new TypeError("Policy default disallowed.");
+        },
+      },
+      () => installDefaultPolicy(() => false),
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(warned, 1);
+});
+
+test("the policy names a host must allow are the ones the editor creates", () => {
+  const sources = [
+    "packages/ui/src/code/CodeEditor.tsx",
+    "packages/shell/src/icons/plugin-glyph.tsx",
+    "packages/shell/src/demo/runner.ts",
+    "../../modules/sheet/packages/sheet-bundle/src/panels/grid-panel.tsx",
+    "../../modules/web/packages/web-bundle/src/panels/web-source-panel.tsx",
+  ]
+    .map((p) => readFileSync(resolve(here, "..", p), "utf8"))
+    .join("\n");
+  for (const name of TRUSTED_TYPES_POLICY_NAMES.filter((n) => n !== "default"))
+    assert.ok(sources.includes(`"${name}"`), name);
 });

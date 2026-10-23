@@ -28,7 +28,7 @@ import { describe, expect, test } from "bun:test";
 import type { ComponentType } from "react";
 
 import type { CollectionName } from "@paged-media/client";
-import { cockpitActions } from "@paged-media/shell";
+import { cockpitActionsOf } from "@paged-media/shell";
 
 import { CoreCommandDialog } from "../../../src/core-command-dialog";
 import { StyleOptionsPanel } from "../../../src/panels/style-options-panel";
@@ -199,10 +199,13 @@ export function tableStyleSuite(c: TableStyleCase): void {
         component: StyleOptionsPanel,
       });
       await h.click(row(h, style)!.querySelector("[data-style-options-open]")!);
-      expect(cockpitActions.activeTab?.()).toBe("paged.style-options");
+      expect(cockpitActionsOf(h.scope).activeTab?.()).toBe(
+        "paged.style-options",
+      );
       const options = await mountPanel(StyleOptionsPanel, {
         id: "paged.style-options",
         scene: richScene,
+        scope: h.scope,
       });
       const panel = options.root.querySelector("[data-style-options-panel]");
       expect(panel?.getAttribute("data-style-family")).toBe(c.family);

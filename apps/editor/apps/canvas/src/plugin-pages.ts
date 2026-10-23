@@ -20,11 +20,12 @@
 // v70 — the editor half of the plugin page doors (`host.viewport.goToPage`,
 // `activePage`, `onDidChangeActivePage`; plugin-sdk `PagesBackend`). The
 // camera and the page layout live in the React tree, the plugin hosts are
-// built once outside it, so this module is the hand-off: the canvas
-// publishes the active page and registers how to go to one; the backend
-// reads both.
+// built once outside it, so this is the hand-off: the canvas publishes the
+// active page and registers how to go to one; the backend reads both. One
+// per editor (plan task E1), kept in its scope.
 
 import type { Camera } from "@paged-media/client";
+import { scoped, type EditorScope } from "@paged-media/shell";
 
 import { fitCamera, layoutPages } from "./ui/layout";
 
@@ -34,26 +35,73 @@ type GoTo = (
   fit: "page" | "width",
 ) => boolean | Promise<boolean>;
 
-let active: string | null = null;
-let goTo: GoTo | null = null;
-const listeners = new Set<Listener>();
+type Reveal = (range: TextRange, select: boolean) => Promise<boolean>;
 
-/** The canvas reports the page the user is on; listeners hear changes only. */
-export function publishActivePage(pageId: string | null): void {
-  if (pageId === active) return;
-  active = pageId;
-  for (const l of [...listeners]) {
-    try {
-      l(pageId);
-    } catch {
-      // One plugin's listener must not stop the others.
-    }
-  }
+/** One editor's page and text doors. */
+export interface PageDoors {
+  /** The canvas reports the page the user is on; listeners hear changes
+   *  only. */
+  publishActivePage(pageId: string | null): void;
+  /** The canvas registers how it moves the camera to a page (null: none). */
+  setPageGoTo(fn: GoTo | null): void;
+  /** The canvas registers how it reveals a text range (null: none). */
+  setTextReveal(fn: Reveal | null): void;
+  /** The backend every plugin host gets (plugin-sdk `PagesBackend`). */
+  readonly pages: {
+    goToPage(pageId: string, fit: "page" | "width"): boolean | Promise<boolean>;
+    activePage(): string | null;
+    onDidChangeActivePage(listener: Listener): () => void;
+  };
+  /** The backend every plugin host gets (plugin-sdk `TextRevealBackend`). */
+  readonly text: {
+    revealText(range: TextRange, select: boolean): Promise<boolean> | boolean;
+  };
 }
 
-/** The canvas registers how it moves the camera to a page (null: none). */
-export function setPageGoTo(fn: GoTo | null): void {
-  goTo = fn;
+export function createPageDoors(): PageDoors {
+  let active: string | null = null;
+  let goTo: GoTo | null = null;
+  let reveal: Reveal | null = null;
+  const listeners = new Set<Listener>();
+  return {
+    publishActivePage(pageId) {
+      if (pageId === active) return;
+      active = pageId;
+      for (const l of [...listeners]) {
+        try {
+          l(pageId);
+        } catch {
+          // One plugin's listener must not stop the others.
+        }
+      }
+    },
+    setPageGoTo(fn) {
+      goTo = fn;
+    },
+    setTextReveal(fn) {
+      reveal = fn;
+    },
+    pages: {
+      goToPage: (pageId, fit) => (goTo ? goTo(pageId, fit) : false),
+      activePage: () => active,
+      onDidChangeActivePage(listener) {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+    text: {
+      revealText: (range, select) => (reveal ? reveal(range, select) : false),
+    },
+  };
+}
+
+/** `scope`'s page doors. */
+export const PAGE_DOORS = scoped("pageDoors", () => createPageDoors());
+
+export function pageDoorsOf(scope: EditorScope): PageDoors {
+  return scope.get(PAGE_DOORS);
 }
 
 /** The camera that shows page `index` of `pageSizesPt`: the whole page,
@@ -79,49 +127,15 @@ export function cameraForPage(
   };
 }
 
-/** The backend every plugin host gets (plugin-sdk `PagesBackend`). */
-export const pagesBackend = {
-  goToPage(pageId: string, fit: "page" | "width"): boolean | Promise<boolean> {
-    return goTo ? goTo(pageId, fit) : false;
-  },
-  activePage(): string | null {
-    return active;
-  },
-  onDidChangeActivePage(listener: Listener): () => void {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  },
-};
-
-// ── `host.viewport.revealText` (plugin-sdk `TextRevealBackend`) ─────────
-//
-// Same hand-off: the canvas registers how it takes the user to a range of
-// text (camera onto the range, optionally select it); the backend every
-// plugin host gets calls it.
+// `host.viewport.revealText` (plugin-sdk `TextRevealBackend`): the same
+// hand-off. The canvas registers how it takes the user to a range of text
+// (camera onto the range, optionally select it); the backend calls it.
 
 export interface TextRange {
   storyId: string;
   start: number;
   end: number;
 }
-
-type Reveal = (range: TextRange, select: boolean) => Promise<boolean>;
-
-let reveal: Reveal | null = null;
-
-/** The canvas registers how it reveals a text range (null: none). */
-export function setTextReveal(fn: Reveal | null): void {
-  reveal = fn;
-}
-
-/** The backend every plugin host gets (plugin-sdk `TextRevealBackend`). */
-export const textRevealBackend = {
-  revealText(range: TextRange, select: boolean): Promise<boolean> | boolean {
-    return reveal ? reveal(range, select) : false;
-  },
-};
 
 /** The camera, at `scale`, that centres page-local point (`xPt`, `yPt`) of
  *  page `index` in the viewport. */

@@ -32,6 +32,7 @@ import type {
   SceneLayerSurface,
   TabularClipboard,
 } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
 import {
   gridSceneToSceneLayer,
   hitCell,
@@ -85,6 +86,7 @@ import {
   type ChainSubscription,
   type LoweredTableInfo,
 } from "./lower";
+import { NOTICES } from "./messages";
 import {
   chartPlacement,
   chartSizeOf,
@@ -390,10 +392,17 @@ export interface WorkbookSession {
   /** The open in-frame cell edit: its cell, its text and how it began
    *  (`"enter"`: typing replaced the value, arrows commit and move;
    *  `"edit"`: F2 or a click into the text, arrows move the caret). */
+  /** Ctrl+X: copy the selection and empty it when its paste lands. */
+  cutSelection(): void;
   /** Status-bar statistics of the selection (Sum, Average, Count), or null
    *  without a selection or an engine that cannot say. */
   selectionStats(): RangeStats | null;
-  cellEditState(): { row: number; col: number; text: string; mode: "enter" | "edit" } | null;
+  cellEditState(): {
+    row: number;
+    col: number;
+    text: string;
+    mode: "enter" | "edit";
+  } | null;
   /** Open an edit on the active cell: with `text` it replaces the value
    *  (typing), with `null` it starts from the cell's input (F2). */
   beginCellEdit(text: string | null, mode: "enter" | "edit"): boolean;
@@ -971,6 +980,8 @@ export function createWorkbookSession(
   };
 
   let sceneSurface: SceneLayerSurface | null = null;
+  // Ctrl+X: the cut range, cleared when its paste lands (Excel moves it).
+  let cutPending: GridSelection | null = null;
   // Extensions ADR 334 — the mounted frame surface's sink and cell area;
   // while set, the grid goes there instead of the scene layer.
   let surfaceSink: ((scene: GridScene) => void) | null = null;
@@ -1930,6 +1941,153 @@ export function createWorkbookSession(
         return api.undoCellEdit();
       case "redo":
         return api.redoCellEdit();
+      case "jump": {
+        if (!m || !state.engine?.dataEdge || state.activeSheet === null)
+          return false;
+        const from = a.extend ? m.focus : m.active;
+        let target: [number, number];
+        try {
+          target = state.engine.dataEdge(
+            state.activeSheet,
+            from.row,
+            from.col,
+            a.dRow,
+            a.dCol,
+          );
+        } catch (err) {
+          host.log.debug("jump: engine refused", err);
+          return false;
+        }
+        const cell = { row: target[0], col: target[1] };
+        applyModel(a.extend ? extendTo(m, cell) : collapsed(cell));
+        return true;
+      }
+      case "lastCell": {
+        const info = api.sheets().find((x) => x.id === state.activeSheet);
+        if (!info) return false;
+        applyModel(
+          collapsed({
+            row: Math.max(0, info.rows - 1),
+            col: Math.max(0, info.cols - 1),
+          }),
+        );
+        return true;
+      }
+      case "selectRow":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: m.active.row, col: 0 },
+          focus: { row: m.active.row, col: 16_383 },
+          active: m.active,
+        });
+        return true;
+      case "selectColumn":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: 0, col: m.active.col },
+          focus: { row: 1_048_575, col: m.active.col },
+          active: m.active,
+        });
+        return true;
+      case "insertNow": {
+        // ISO text, which typed entry reads as a date / a time in every
+        // locale; the cell stays in edit mode, as in Excel.
+        const now = new Date(Date.now());
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const text =
+          a.what === "date"
+            ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+            : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        if (cellEdit) return api.setCellEditText(cellEdit.text + text);
+        return api.beginCellEdit(text, "enter");
+      }
+      case "commitFill": {
+        if (!cellEdit) return false;
+        const sel = state.gridSelection;
+        const engine = state.engine;
+        const sheet = state.activeSheet;
+        if (
+          !sel ||
+          !engine ||
+          sheet === null ||
+          (sel.rows === 1 && sel.cols === 1)
+        ) {
+          commitEdit();
+          return true;
+        }
+        const text = cellEdit.text;
+        cellEdit = null;
+        const targets: CellEditRecord[] = [];
+        const rows = Math.min(sel.rows, 10_000);
+        const cols = Math.min(sel.cols, 256);
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++)
+            targets.push({
+              sheet,
+              row: sel.anchorRow + r,
+              col: sel.anchorCol + c,
+              prevInput: "",
+              nextInput: text,
+            });
+        const { written, journaled } = writeTargets(
+          engine,
+          targets,
+          "commitFill",
+        );
+        if (journaled) journalBatch(written);
+        else markEdited();
+        emitter.emit({ kind: "edit" });
+        emitter.emit({ kind: "cells", regions: regionsOf(written) });
+        void submitInFrameGrid();
+        return true;
+      }
+      case "cut":
+        cutPending = state.gridSelection ? { ...state.gridSelection } : null;
+        void api.copySelection().then((r) => {
+          if (!r.ok) {
+            cutPending = null;
+            host.log.warn(`cut: ${r.message}`);
+          }
+        });
+        return true;
+      case "toggleStyle": {
+        const st = api.styleAtTarget();
+        const r = api.setStyle({ [a.style]: !st?.[a.style] });
+        if (!r.ok) host.log.warn(`${a.style}: ${r.message}`);
+        return true;
+      }
+      case "formatCells":
+        void host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+        return true;
+      case "calculate": {
+        try {
+          state.engine?.calculateNow?.();
+        } catch (err) {
+          host.log.warn("calculate: engine refused", err);
+        }
+        emitter.emit();
+        void submitInFrameGrid();
+        return true;
+      }
+      case "pageAcross": {
+        if (!m) return false;
+        const cols =
+          lastGridScene && lastGridWindow
+            ? fullyVisible(
+                lastGridScene,
+                lastGridWindow.wPt,
+                lastGridWindow.hPt,
+              ).cols
+            : 8;
+        if (lastGridWindow) {
+          lastGridWindow = {
+            ...lastGridWindow,
+            firstCol: Math.max(0, lastGridWindow.firstCol + a.dir * cols),
+          };
+        }
+        applyModel(moveBy(m, 0, a.dir * cols, a.extend));
+        return true;
+      }
       case "none":
         return false;
     }
@@ -2763,6 +2921,8 @@ export function createWorkbookSession(
     };
     try {
       state.engine.loadXlsx(bytes);
+      // CELL("filename") reads the workbook's name (sheet ADR 516).
+      state.engine.setDocumentName?.(name);
       loadEpoch += 1;
       state.fileName = name;
       state.gridSelection = null;
@@ -3174,6 +3334,10 @@ export function createWorkbookSession(
       cancelEdit();
     },
 
+    cutSelection() {
+      runGridAction({ kind: "cut" });
+    },
+
     selectionStats() {
       const t = formatTarget();
       if (!t || !state.engine?.rangeStats) return null;
@@ -3561,6 +3725,32 @@ export function createWorkbookSession(
       );
       if (edits.length === 0) {
         return { ok: false as const, message: "the paste wrote no cells" };
+      }
+      // A cut moves: the source cells outside the paste are emptied in the
+      // same undo step.
+      if (cutPending) {
+        const src = cutPending;
+        cutPending = null;
+        const inPaste = (r: number, c: number) =>
+          r >= area.anchorRow &&
+          r < area.anchorRow + area.rows &&
+          c >= area.anchorCol &&
+          c < area.anchorCol + area.cols;
+        const clears: CellEditRecord[] = [];
+        for (let r = src.anchorRow; r < src.anchorRow + src.rows; r++)
+          for (let c = src.anchorCol; c < src.anchorCol + src.cols; c++)
+            if (!inPaste(r, c))
+              clears.push({
+                sheet,
+                row: r,
+                col: c,
+                prevInput: "",
+                nextInput: "",
+              });
+        if (clears.length > 0) {
+          const cleared = writeTargets(engine, clears, "cut");
+          edits.push(...cleared.written);
+        }
       }
       if (journaled)
         journalBatch(edits); // one grouped Cmd-Z undoes the whole paste
@@ -4743,20 +4933,34 @@ export function createWorkbookSession(
     lastNotice = { text, tone, seq: (lastNotice?.seq ?? 0) + 1 };
     for (const l of [...noticeListeners]) l(lastNotice);
   };
-  const cellCount = (rows: number, cols: number) =>
-    `${rows} × ${cols} cell${rows * cols === 1 ? "" : "s"}`;
   const copyImpl = api.copySelection;
   const pasteImpl = api.pasteAtSelection;
   api.copySelection = async () => {
     const r = await copyImpl.call(api);
-    if (r.ok) postNotice(`Copied ${cellCount(r.rows, r.cols)}.`, "ok");
-    else postNotice(`Can't copy: ${r.message}.`, "error");
+    if (r.ok)
+      postNotice(
+        t(NOTICES.copied, {
+          rows: r.rows,
+          cols: r.cols,
+          cells: r.rows * r.cols,
+        }),
+        "ok",
+      );
+    else postNotice(t(NOTICES.cantCopy, { reason: r.message }), "error");
     return r;
   };
   api.pasteAtSelection = async () => {
     const r = await pasteImpl.call(api);
-    if (r.ok) postNotice(`Pasted ${cellCount(r.rows, r.cols)}.`, "ok");
-    else postNotice(`Can't paste: ${r.message}.`, "error");
+    if (r.ok)
+      postNotice(
+        t(NOTICES.pasted, {
+          rows: r.rows,
+          cols: r.cols,
+          cells: r.rows * r.cols,
+        }),
+        "ok",
+      );
+    else postNotice(t(NOTICES.cantPaste, { reason: r.message }), "error");
     return r;
   };
   return api;

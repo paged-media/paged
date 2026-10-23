@@ -42,6 +42,7 @@ flo_curves = "0.8"
 
 [dev-dependencies]
 idml-import = { path = "../idml-import" }
+paged-gen = { path = "../paged-gen" }
 paged-renderer = { path = "../paged-renderer" }
 paged-compose = { path = "../paged-compose" }
 bytes = { workspace = true }

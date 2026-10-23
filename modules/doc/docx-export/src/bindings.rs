@@ -169,25 +169,26 @@ impl DocxBindings {
         }
     }
 
-    /// Resolve a TABLE-CELL run to its `(CellPath, run_ord)` source address, or
-    /// `None` when the target is non-patchable (not a table, out of range, or a
-    /// hyperlink/field run).
+    /// Resolve a TABLE-CELL run to its `(CellPath, run_ord, wrapper)` source
+    /// address — `wrapper` set when the run sits inside a hyperlink or
+    /// `w:fldSimple` of the cell paragraph, `run_ord` then counting the runs
+    /// inside it — or `None` when the target is non-patchable (not a table,
+    /// out of range, or a run without stable provenance).
     pub fn resolve_cell(
         &self,
         block: usize,
         cell: usize,
         para: usize,
         run: usize,
-    ) -> Option<(CellPath, u32)> {
+    ) -> Option<(CellPath, u32, Option<Wrapper>)> {
         let BlockBinding::Table { cells, .. } = self.blocks.get(block)? else {
             return None;
         };
         let cp = cells.get(cell)?.paragraphs.get(para)?;
         match cp.runs.get(run)? {
-            RunBinding::Direct { run_ord } => Some((cp.path, *run_ord)),
-            // A wrapped run inside a table cell needs both locator paths at once;
-            // not addressed in the current increment.
-            RunBinding::Wrapped { .. } | RunBinding::NonPatchable => None,
+            RunBinding::Direct { run_ord } => Some((cp.path, *run_ord, None)),
+            RunBinding::Wrapped { wrapper, run_ord } => Some((cp.path, *run_ord, Some(*wrapper))),
+            RunBinding::NonPatchable => None,
         }
     }
 }

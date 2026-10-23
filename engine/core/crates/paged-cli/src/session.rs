@@ -147,6 +147,15 @@ enum Request {
         name: String,
         path: String,
     },
+    /// Fill template fields (editor plan F7, engine ADR 1001): the session
+    /// takes `role` (`filler` by default) and applies `values` as one batch,
+    /// checked against the template's policy. A value that does not fit its
+    /// field answers `problems`; the engine's refusal answers `error`.
+    Template {
+        values: Vec<paged_canvas::template::TemplateFieldValue>,
+        #[serde(default)]
+        role: Option<paged_template::Role>,
+    },
     RunScript {
         source: String,
     },
@@ -423,6 +432,30 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
                 "name": name,
                 "appliesTo": "the next load / new-blank",
             }))
+        }
+        Request::Template { values, role } => {
+            let policy = paged_template::SessionPolicy {
+                role: role.unwrap_or(paged_template::Role::Filler),
+                overrides: vec![],
+            };
+            expect_reply!(
+                live.session.send(MainToWorkerKind::SetSessionPolicy { policy })?,
+                WorkerToMainKind::SessionPolicyApplied { .. } => (),
+                "template"
+            )?;
+            match live
+                .session
+                .send(MainToWorkerKind::SetTemplateFields { values })?
+            {
+                WorkerToMainKind::MutationApplied { .. } => Ok(json!({ "ok": true })),
+                WorkerToMainKind::TemplateFieldsRefused { problems } => {
+                    Ok(json!({ "ok": false, "problems": problems }))
+                }
+                WorkerToMainKind::MutationFailed { error } => {
+                    Ok(json!({ "ok": false, "error": error }))
+                }
+                other => Err(anyhow!("template: unexpected reply {other:?}")),
+            }
         }
         Request::RunScript { source } => {
             // Every write inside `source` funnels through the `paged.*`

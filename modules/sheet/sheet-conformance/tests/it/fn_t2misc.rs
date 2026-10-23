@@ -148,8 +148,12 @@ fn sheet_fn_t2misc_aggregate_stat_selectors() {
     assert_eq!(call("AGGREGATE", &[num(11.0), num(0.0), view()]), n(4.0));
     assert_eq!(call("AGGREGATE", &[num(8.0), num(0.0), view()]), n(2.0));
     // 7=STDEV.S, 10=VAR.S need n-1; a single point -> #DIV/0!.
+    let one = [n(5.0)];
     assert_eq!(
-        call("AGGREGATE", &[num(10.0), num(0.0), num(5.0)]),
+        call(
+            "AGGREGATE",
+            &[num(10.0), num(0.0), Arg::Range(row_view(&one))]
+        ),
         e(CellError::Div0)
     );
 }
@@ -184,7 +188,7 @@ fn sheet_fn_t2misc_aggregate_option6_ignores_errors() {
 
 #[test]
 fn sheet_fn_t2misc_aggregate_unsupported_function_num() {
-    // 12-19 are deferred in T2; 0 / 20 are invalid. All -> #VALUE!.
+    // 0 / 20 are invalid; 12–19 over a value (not a reference, no k) too.
     for fnum in [0.0, 12.0, 14.0, 19.0, 20.0] {
         assert_eq!(
             call("AGGREGATE", &[num(fnum), num(0.0), num(5.0)]),
@@ -196,7 +200,8 @@ fn sheet_fn_t2misc_aggregate_unsupported_function_num() {
 
 #[test]
 fn sheet_fn_t2misc_aggregate_unsupported_options() {
-    // Hidden-row options need metadata a pure kernel cannot see -> #VALUE!.
+    // A value where the reference form wants a reference is #VALUE! (the
+    // hidden-row options themselves are applied by the evaluator, W3).
     for opt in [1.0, 2.0, 3.0, 5.0, 7.0, 8.0] {
         assert_eq!(
             call("AGGREGATE", &[num(9.0), num(opt), num(5.0)]),
@@ -208,11 +213,11 @@ fn sheet_fn_t2misc_aggregate_unsupported_options() {
 
 #[test]
 fn sheet_fn_t2misc_aggregate_coercion_and_arity() {
-    // function_num/options coerce from numeric text; scalar refs coerce too.
-    // AGGREGATE("9","0",TRUE,"3") = SUM(1,3) = 4.
+    // The reference form takes references: values are #VALUE!
+    // (Excel-recorded: AGGREGATE(9,5,5)); the selectors coerce from text.
     assert_eq!(
         call("AGGREGATE", &[txt("9"), txt("0"), boolean(true), txt("3")]),
-        n(4.0)
+        e(CellError::Value)
     );
     // min arity is 3 -> two args is #VALUE! (the generated guard).
     assert_eq!(

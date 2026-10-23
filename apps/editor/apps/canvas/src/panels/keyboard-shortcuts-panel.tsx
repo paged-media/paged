@@ -57,59 +57,79 @@ import {
   useRegistryView,
   type PanelProps,
 } from "@paged-media/shell";
+import {
+  createStrings,
+  defineMessages,
+  useStrings,
+} from "@paged-media/strings";
 
 export const KEYBOARD_SHORTCUTS_PANEL_ID = "paged.keyboard-shortcuts";
+
+const M = defineMessages("app.keyboardShortcutsPanel", {
+  title: "Keyboard shortcuts",
+  general: "General",
+  notInRegistry: "Not in the registry",
+  adHocNote:
+    "These are bound with their own listeners rather than through the " +
+    "keybinding registry, so they are listed from a maintained table. Undo " +
+    "and the caret keys live here.",
+  hold: "{key} (hold)",
+  space: "Space",
+  undo: "Undo",
+  redo: "Redo",
+  pan: "Pan — spring-loaded Hand",
+  zoom: "Zoom — spring-loaded",
+  directSelection: "Direct Selection — spring-loaded",
+  enterPathEdit: "Enter path-edit mode",
+  nudgeAnchors: "Nudge the selected anchors, in path-edit mode (⇧ ×10)",
+  removeAnchors: "Remove the selected anchors, in path-edit mode",
+  leaveContext: "Leave an edit context, or cancel a gesture",
+  moveCaret: "Move the caret (with ⇧ to extend)",
+});
+
+/** The English words, for the rows' data attributes (stable across
+ *  locales). */
+const ENGLISH = createStrings();
 
 /** The bindings that bypass the KeybindingRegistry entirely.
  *
  *  Hand-maintained, and that is a liability worth naming: nothing fails
  *  when one of these is renamed. It is still far better than omitting
  *  them, because a user reading a shortcuts panel reasonably concludes
- *  that what is absent is unbound — and Cmd+Z is not unbound. */
-const AD_HOC: { key: string; what: string; where: string }[] = [
-  { key: prettyKey("cmd+z"), what: "Undo", where: "useTextEditing" },
-  { key: prettyKey("cmd+shift+z"), what: "Redo", where: "useTextEditing" },
+ *  that what is absent is unbound — and Cmd+Z is not unbound. `what` is
+ *  a message key; `hold` marks a key held down. */
+const AD_HOC: { key: string; hold?: boolean; what: string; where: string }[] = [
+  { key: prettyKey("cmd+z"), what: M.undo, where: "useTextEditing" },
+  { key: prettyKey("cmd+shift+z"), what: M.redo, where: "useTextEditing" },
   {
-    key: "Space (hold)",
-    what: "Pan — spring-loaded Hand",
+    key: "Space",
+    hold: true,
+    what: M.pan,
     where: "use-spring-loaded-tools",
   },
   {
-    key: `${prettyKey("cmd+space")} (hold)`,
-    what: "Zoom — spring-loaded",
+    key: prettyKey("cmd+space"),
+    hold: true,
+    what: M.zoom,
     where: "use-spring-loaded-tools",
   },
   {
-    key: `${prettyKey("cmd+x").startsWith("⌘") ? "⌘" : "Ctrl"} (hold)`,
-    what: "Direct Selection — spring-loaded",
+    key: prettyKey("cmd+x").startsWith("⌘") ? "⌘" : "Ctrl",
+    hold: true,
+    what: M.directSelection,
     where: "use-spring-loaded-tools",
   },
-  { key: "Enter", what: "Enter path-edit mode", where: "usePathEditMode" },
-  {
-    key: "← → ↑ ↓",
-    what: "Nudge the selected anchors, in path-edit mode (⇧ ×10)",
-    where: "usePathEditMode",
-  },
-  {
-    key: "⌫ / Delete",
-    what: "Remove the selected anchors, in path-edit mode",
-    where: "usePathEditMode",
-  },
-  {
-    key: "Esc",
-    what: "Leave an edit context, or cancel a gesture",
-    where: "edit-context-controller",
-  },
-  {
-    key: "← → ↑ ↓",
-    what: "Move the caret (with ⇧ to extend)",
-    where: "useTextEditing",
-  },
+  { key: "Enter", what: M.enterPathEdit, where: "usePathEditMode" },
+  { key: "← → ↑ ↓", what: M.nudgeAnchors, where: "usePathEditMode" },
+  { key: "⌫ / Delete", what: M.removeAnchors, where: "usePathEditMode" },
+  { key: "Esc", what: M.leaveContext, where: "edit-context-controller" },
+  { key: "← → ↑ ↓", what: M.moveCaret, where: "useTextEditing" },
 ];
 
 export function KeyboardShortcutsPanel(_props: PanelProps) {
   // Views of the registries (ADR 229): the table follows what bundles
   // register after it first rendered.
+  const strings = useStrings();
   const registries = useRegistries();
   const keybindings = useRegistryView(registries.keybindings);
   const commands = useRegistryView(registries.commands);
@@ -161,10 +181,13 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
 
   return (
     <div data-keyboard-shortcuts-panel="ready">
-      <CockpitPanelHeader title="Keyboard shortcuts" />
+      <CockpitPanelHeader title={strings.t(M.title)} />
       <div data-shortcut-rows>
         {sections.map(([category, list]) => (
-          <CockpitSection key={category} title={`${category} (${list.length})`}>
+          <CockpitSection
+            key={category}
+            title={`${category === "General" ? strings.t(M.general) : category} (${list.length})`}
+          >
             <div data-shortcut-group={category}>
               {list.map((r) => (
                 <div
@@ -188,20 +211,20 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
           </CockpitSection>
         ))}
       </div>
-      <CockpitSection title={`Not in the registry (${AD_HOC.length})`}>
+      <CockpitSection
+        title={`${strings.t(M.notInRegistry)} (${AD_HOC.length})`}
+      >
         <div
           className="pg-ui-xs"
           style={{ padding: "0 14px 6px", opacity: 0.7 }}
           data-shortcut-adhoc-note
         >
-          These are bound with their own listeners rather than through the
-          keybinding registry, so they are listed from a maintained table. Undo
-          and the caret keys live here.
+          {strings.t(M.adHocNote)}
         </div>
         {AD_HOC.map((r) => (
           <div
             key={r.key + r.what}
-            data-shortcut-adhoc={r.what}
+            data-shortcut-adhoc={ENGLISH.t(r.what)}
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -210,9 +233,13 @@ export function KeyboardShortcutsPanel(_props: PanelProps) {
               fontSize: 12,
             }}
           >
-            <span>{r.what}</span>
+            <span>{strings.t(r.what)}</span>
             <span className="pg-mono-meta" style={{ opacity: 0.75 }}>
-              {r.key}
+              {r.hold
+                ? strings.t(M.hold, {
+                    key: r.key === "Space" ? strings.t(M.space) : r.key,
+                  })
+                : r.key}
             </span>
           </div>
         ))}

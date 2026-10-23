@@ -47,7 +47,7 @@ import {
   SLIDE_SCHEMA,
 } from "../src/object-model";
 import { SLIDE_PANEL_FIELDS } from "../src/panel-fields";
-import { SLIDE_PANELS } from "../src/panels";
+import { slidePanels } from "../src/panels";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -71,7 +71,7 @@ const v = (x: ObjectValue): unknown => (x.kind === "value" ? x.value : x);
 
 describe("[plugin-slide.object-model] slide panels are property rows", () => {
   it("every panel validates against the manifest schemas", () => {
-    for (const schema of SLIDE_PANELS) {
+    for (const schema of slidePanels()) {
       expect(
         validatePanelSchema(schema, {
           pluginId: manifest.id,
@@ -84,7 +84,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
 
   it("every SLIDE_PANEL_FIELDS path is a property row of its panel, in order", () => {
     for (const list of SLIDE_PANEL_FIELDS) {
-      const schema = SLIDE_PANELS.find((s) => s.id === list.panel)!;
+      const schema = slidePanels().find((s) => s.id === list.panel)!;
       const rows = propertyRowsOf(schema).map((r) => r.field);
       expect(rows.map((r) => r.path)).toEqual([...list.fields]);
       for (const r of rows) expect(r.kind).toBe(list.kind);
@@ -108,7 +108,7 @@ describe("[plugin-slide.object-model] slide panels are property rows", () => {
     // The schema panels and the Slides sorter (the Notes panel shares the
     // notes schema panel's id).
     expect([...manifest.contributes.panels].sort()).toEqual(
-      [...SLIDE_PANELS.map((s) => s.id), SLIDES_PANEL_ID].sort(),
+      [...slidePanels().map((s) => s.id), SLIDES_PANEL_ID].sort(),
     );
   });
 });
@@ -132,7 +132,11 @@ describe("[plugin-slide.object-model] property rows, headless", () => {
         .schemaPanelsContributed()
         .map((c) => c.id)
         .sort(),
-    ).toEqual(SLIDE_PANELS.map((s) => s.id).sort());
+    ).toEqual(
+      slidePanels()
+        .map((s) => s.id)
+        .sort(),
+    );
   });
 
   it("a selected placeholder frame resolves its slide and itself; a slide set is ONE undo step", async () => {

@@ -33,6 +33,98 @@
  */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
+import { defineMessages } from "@paged-media/strings";
+
+/** The menu segments this bundle creates, for the shell's `menuLabel`:
+ *  a path is an identity and stays English (the host's Object and Edit
+ *  menus among them); the shell shows each segment in the editor's
+ *  language. */
+defineMessages("menu", {
+  Draw: "Draw",
+  Path: "Path",
+  "Outline stroke": "Outline stroke",
+  "Outline stroke options…": "Outline stroke options…",
+  "Offset path…": "Offset path…",
+  "Simplify…": "Simplify…",
+  "Join endpoints": "Join endpoints",
+  "Average endpoints": "Average endpoints",
+  "Close path": "Close path",
+  "Reverse path direction": "Reverse path direction",
+  Transform: "Transform",
+  "Reflect horizontally": "Reflect horizontally",
+  "Reflect vertically": "Reflect vertically",
+  "Reflect…": "Reflect…",
+  "Transform again": "Transform again",
+  Stroke: "Stroke",
+  "Dashes…": "Dashes…",
+  "Width profile…": "Width profile…",
+  "Update linked recipes": "Update linked recipes",
+  Pathfinder: "Pathfinder",
+  Unite: "Unite",
+  Subtract: "Subtract",
+  Intersect: "Intersect",
+  Exclude: "Exclude",
+  Divide: "Divide",
+  Trim: "Trim",
+  Merge: "Merge",
+  Crop: "Crop",
+  Outline: "Outline",
+  "Minus back": "Minus back",
+  "Compound path": "Compound path",
+  Make: "Make",
+  Release: "Release",
+  Corners: "Corners",
+  Rounded: "Rounded",
+  "Inverse rounded": "Inverse rounded",
+  Bevel: "Bevel",
+  Fancy: "Fancy",
+  None: "None",
+  Repeat: "Repeat",
+  Radial: "Radial",
+  Grid: "Grid",
+  Mirror: "Mirror",
+  Update: "Update",
+  Expand: "Expand",
+  Pattern: "Pattern",
+  "Make from selection": "Make from selection",
+  "Edit tile field": "Edit tile field",
+  Appearance: "Appearance",
+  "Add fill": "Add fill",
+  "Add stroke": "Add stroke",
+  Bake: "Bake",
+  Clear: "Clear",
+  "Graphic style": "Graphic style",
+  "Save from selection": "Save from selection",
+  Apply: "Apply",
+  Redefine: "Redefine",
+  "Break link": "Break link",
+  Symbol: "Symbol",
+  "Define from selection": "Define from selection",
+  "Place instance": "Place instance",
+  "Reset transform": "Reset transform",
+  "Live paint": "Live paint",
+  Regenerate: "Regenerate",
+  Blend: "Blend",
+  "Replace spine": "Replace spine",
+  "Reverse spine": "Reverse spine",
+  "Reverse front to back": "Reverse front to back",
+  "Objects on path": "Objects on path",
+  "Type on path": "Type on path",
+  Attach: "Attach",
+  Detach: "Detach",
+  Type: "Type",
+  "Create outlines": "Create outlines",
+  "Opacity mask": "Opacity mask",
+  "Insert arc…": "Insert arc…",
+  "Insert spiral…": "Insert spiral…",
+  "Insert rectangular grid…": "Insert rectangular grid…",
+  "Insert polar grid…": "Insert polar grid…",
+  "Select same": "Select same",
+  Fill: "Fill",
+  "Stroke weight": "Stroke weight",
+  "Stroke weight within…": "Stroke weight within…",
+  "Image trace…": "Image trace…",
+});
 
 const C = "media.paged.draw.command";
 
@@ -76,6 +168,9 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    section: up to three dash/gap pairs, read back for the selection).
   //    An ellipsis, so it RAISES the panel at that section. ──
   ["Draw/Stroke/Dashes…", "strokeDashOptions", "stroke"],
+  //    The width profile (the Width tool's bake, typed): run bare, the
+  //    command raises the panel's Width profile section.
+  ["Draw/Stroke/Width profile…", "widthProfile", "stroke"],
 
   // ── Pathfinder — the ten boolean ops, in Illustrator's own order so
   //    the muscle memory transfers. ──
@@ -168,6 +263,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // ── Masks ──
   ["Draw/Opacity mask/Make", "makeOpacityMask", "mask"],
   ["Draw/Opacity mask/Release", "releaseOpacityMask", "mask"],
+
+  // ── Every recipe the selection is a source of (pattern, repeat, blend,
+  //    objects on a path, live paint), rebuilt in one go. ──
+  ["Draw/Update linked recipes", "updateLinkedRecipes", "recipes"],
 
   // ── Insert — these MERGE into the host's existing Object menu rather
   //    than living under Draw, because they mint a new page item and

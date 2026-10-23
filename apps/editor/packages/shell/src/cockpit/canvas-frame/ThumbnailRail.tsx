@@ -28,6 +28,8 @@
 // thumbnails as they come near the strip's view (one observer on a
 // Fragment ref).
 
+import { useStrings } from "@paged-media/strings";
+import { COCKPIT, PAGES } from "../messages";
 import { Fragment, ViewTransition, useState } from "react";
 
 import { Icon } from "../../icons";
@@ -35,7 +37,7 @@ import { useDocument } from "../../state/document-context";
 import { useCollection } from "../../catalog/use-collection";
 import type { SpreadSummary } from "@paged-media/client";
 import { groupSpreads } from "../spread-grouping";
-import { navigateToPages } from "../cockpit-navigation";
+import { usePageNavigation } from "../cockpit-navigation";
 import { IconButton } from "@paged-media/panel-kit";
 import { useNearViewport } from "../../state/live";
 import {
@@ -43,8 +45,12 @@ import {
   directionOf,
   transitionWith,
 } from "../../view-transitions";
+import { queryEditor, useEditorRoot } from "../../state/editor-root";
 
 export function ThumbnailRail() {
+  const root = useEditorRoot();
+  const navigateToPages = usePageNavigation();
+  const strings = useStrings();
   const { handle, snapshots } = useDocument();
   const spreads = useCollection<SpreadSummary>("spreads");
   const [selected, setSelected] = useState<string | null>(null);
@@ -53,7 +59,7 @@ export function ThumbnailRail() {
   const entries = handle ? groupSpreads(handle.pageIds, spreads) : [];
 
   const scrollBy = (dir: -1 | 1) => {
-    const el = document.querySelector<HTMLElement>("[data-thumbnail-strip]");
+    const el = queryEditor<HTMLElement>(root, "[data-thumbnail-strip]");
     el?.scrollBy({ left: dir * 260, behavior: "smooth" });
   };
 
@@ -73,7 +79,7 @@ export function ThumbnailRail() {
     >
       <RailArrow
         name="ui-chevron-left"
-        label="Scroll pages left"
+        label={strings.t(COCKPIT.scrollPagesLeft)}
         onClick={() => scrollBy(-1)}
       />
       <div
@@ -91,7 +97,7 @@ export function ThumbnailRail() {
       >
         {entries.length === 0 ? (
           <span className="pg-ui-xs" style={{ opacity: 0.6 }}>
-            Open a document to navigate its spreads.
+            {strings.t(COCKPIT.noSpreads)}
           </span>
         ) : (
           <Fragment ref={observeNear}>
@@ -192,7 +198,7 @@ export function ThumbnailRail() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {e.name === "Cover" ? "Cover" : e.range}
+                    {e.name === strings.t(PAGES.cover) ? e.name : e.range}
                   </span>
                 </button>
               );
@@ -202,7 +208,7 @@ export function ThumbnailRail() {
       </div>
       <RailArrow
         name="ui-chevron-right"
-        label="Scroll pages right"
+        label={strings.t(COCKPIT.scrollPagesRight)}
         onClick={() => scrollBy(1)}
       />
     </div>

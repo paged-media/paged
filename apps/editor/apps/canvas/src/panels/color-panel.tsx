@@ -48,7 +48,7 @@ import { useEffect, useState } from "react";
 import {
   CatalogRegistryProvider,
   CompositionRenderer,
-  cockpitActions,
+  useCockpitActions,
   useCanvasClient,
   useObjectBindings,
   useDocumentMeta,
@@ -58,6 +58,13 @@ import type { ColorPreview, SwatchSpec, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { colorComposition } from "./color.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.colorPanel", {
+  noSelection: "No selection — Apply sets the document default fill.",
+  openColorWheel: "Open color wheel",
+  newSwatch: "New swatch",
+});
 
 const FILL_BINDING = {
   value: { scope: "element" as const, path: "frameFillColor" },
@@ -71,6 +78,8 @@ function unwrapColorRef(v: Value | null): string | null {
 }
 
 export function ColorPanel() {
+  const cockpitActions = useCockpitActions();
+  const strings = useStrings();
   const client = useCanvasClient();
   const resolved = useObjectBindings(FILL_BINDING);
   const meta = useDocumentMeta();
@@ -141,7 +150,7 @@ export function ColorPanel() {
     void client
       .mutate({
         op: "createSwatch",
-        args: { spec: { ...spec, name: spec.name ?? "New swatch" } },
+        args: { spec: { ...spec, name: spec.name ?? strings.t(M.newSwatch) } },
       })
       .catch(() => {});
   };
@@ -188,10 +197,10 @@ export function ColorPanel() {
             style={{ color: "var(--pg-muted-fg)" }}
             data-doc-default-hint
           >
-            No selection — Apply sets the document default fill.
+            {strings.t(M.noSelection)}
           </div>
         ) : null}
-        <CompositionRenderer composition={colorComposition} />
+        <CompositionRenderer composition={colorComposition(strings)} />
         {/* Concept 2 — the mixer (expert child; hybrid pattern). */}
         <div className="border-t border-input pt-3">
           <ColorMixer
@@ -209,7 +218,7 @@ export function ColorPanel() {
           onClick={() => cockpitActions.openPanel?.("paged.color-wheel")}
           className="text-xs text-left text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
         >
-          Open color wheel
+          {strings.t(M.openColorWheel)}
         </button>
         {preview ? (
           <div

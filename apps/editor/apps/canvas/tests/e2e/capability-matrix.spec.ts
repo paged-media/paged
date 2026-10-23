@@ -692,8 +692,132 @@ interface Probe {
   undo?: number;
 }
 
+/** Engine ADR 1002 — tagging is the template author's write: the probe
+ *  takes the author role (which may do everything an editor may). */
+async function asAuthor(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { setSessionPolicy: (p: unknown) => Promise<unknown> };
+        };
+      }
+    ).__canvas;
+    await c.client.setSessionPolicy({ role: "author", overrides: [] });
+  });
+}
+
+/** The XML structure ops (protocol 76), on the `text` fixture. */
+const XML_PROBES: Probe[] = [
+  {
+    op: "createXmlTag",
+    build: async () => ({
+      op: "createXmlTag",
+      args: { name: "ProbeCreate", color: "Red" },
+    }),
+  },
+  {
+    op: "deleteXmlTag",
+    build: async ({ page }) => {
+      const made = await tryMutate(page, {
+        op: "createXmlTag",
+        args: { name: "ProbeDelete" },
+      });
+      return made.ok
+        ? { op: "deleteXmlTag", args: { name: "ProbeDelete" } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "tagItem",
+    build: async ({ page, fx }) => {
+      await asAuthor(page);
+      return fx.firstTextFrame
+        ? { op: "tagItem", args: { item: fx.firstTextFrame.id, tag: "Probe" } }
+        : null;
+    },
+  },
+  {
+    op: "untagItem",
+    build: async ({ page, fx }) => {
+      await asAuthor(page);
+      if (!fx.firstTextFrame) return null;
+      const made = await tryMutate(page, {
+        op: "tagItem",
+        args: { item: fx.firstTextFrame.id, tag: "Probe" },
+      });
+      return made.ok
+        ? { op: "untagItem", args: { item: fx.firstTextFrame.id } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "tagRange",
+    build: async ({ page, fx }) => {
+      await asAuthor(page);
+      return fx.firstStory && fx.firstStory.characterCount > 1
+        ? {
+            op: "tagRange",
+            args: {
+              storyId: fx.firstStory.selfId,
+              start: 0,
+              end: 1,
+              tag: "Probe",
+            },
+          }
+        : null;
+    },
+  },
+  {
+    op: "untagRange",
+    build: async ({ page, fx }) => {
+      await asAuthor(page);
+      if (!fx.firstStory || fx.firstStory.characterCount < 2) return null;
+      const made = await tryMutate(page, {
+        op: "tagRange",
+        args: {
+          storyId: fx.firstStory.selfId,
+          start: 0,
+          end: 1,
+          tag: "Probe",
+          selfId: "dxProbeRange",
+        },
+      });
+      return made.ok
+        ? { op: "untagRange", args: { element: "dxProbeRange" } }
+        : null;
+    },
+    setupUndo: 1,
+  },
+  {
+    op: "setXmlAttribute",
+    build: async ({ page, fx }) => {
+      await asAuthor(page);
+      if (!fx.firstTextFrame) return null;
+      const made = await tryMutate(page, {
+        op: "tagItem",
+        args: { item: fx.firstTextFrame.id, tag: "Probe" },
+      });
+      return made.ok
+        ? {
+            op: "setXmlAttribute",
+            args: {
+              element: fx.firstTextFrame.id,
+              name: "label",
+              value: "Probe",
+            },
+          }
+        : null;
+    },
+    setupUndo: 1,
+  },
+];
+
 // ── probes on the `text` fixture ────────────────────────────────
 const TEXT_PROBES: Probe[] = [
+  ...XML_PROBES,
   {
     op: "insertText",
     build: async ({ fx }) =>

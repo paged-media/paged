@@ -36,11 +36,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
-import {
-  addressOfElement,
-  objectModelEditor,
-  objectRegistry,
-} from "./object-model";
+import { useEditorObjects, type EditorObjects } from "./object-model";
 import {
   chrome,
   color,
@@ -49,7 +45,34 @@ import {
   refusalText,
   status,
 } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import {
+  createValueStore,
+  FocusScope,
+  scoped,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+} from "@paged-media/shell";
+import { defineMessages, t as tr, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.coreCommandDialog", {
+  notNumber: `"{value}" is not a number`,
+  notPoint: `"{value}" is not a point (x, y)`,
+  notJson: `"{value}" is not JSON`,
+  required: "{name} is required",
+  runCommand: "Run command",
+  pick: "Pick a core command. Its arguments are generated from its schema.",
+  command: "Command",
+  cancel: "Cancel",
+  run: "Run",
+  address: "{to} address",
+  addresses: "{to} addresses",
+  commaSeparated: "{kind}, comma-separated",
+  jsonList: "JSON list",
+  jsonShape: "{shape} (JSON)",
+  record: "record",
+  notSet: "(not set)",
+});
 
 type Args = Record<string, unknown>;
 
@@ -83,39 +106,38 @@ interface Pending {
   onDone?: (result: unknown) => void;
 }
 
-let pending: Pending | null = null;
-let seq = 0;
-const listeners = new Set<() => void>();
-const emit = () => {
-  for (const l of listeners) l();
-};
+/** The form's question, per editor (null: closed). */
+const DIALOG = scoped("coreCommandDialog", () => ({
+  seq: 0,
+  pending: createValueStore<Pending | null>(null),
+}));
 
-/** Open the form on a typed core command (`op` without the `core.`
+/** Open `scope`'s form on a typed core command (`op` without the `core.`
  *  prefix), or on the command picker when `op` is null. */
 export function openCoreCommand(
+  scope: EditorScope,
   op: string | null,
   prefill: Args = {},
   opts: { title?: string; onDone?: (result: unknown) => void } = {},
 ): void {
-  pending = { seq: ++seq, op, prefill, title: opts.title, onDone: opts.onDone };
-  emit();
+  const dialog = scope.get(DIALOG);
+  dialog.pending.set({
+    seq: ++dialog.seq,
+    op,
+    prefill,
+    title: opts.title,
+    onDone: opts.onDone,
+  });
 }
-
-function close(): void {
-  pending = null;
-  emit();
-}
-
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const current = () => pending;
 
 /** Run a typed core command directly (a panel button whose args are all
  *  known): ONE invoke = one undo step. Throws the refusal. */
-export function invokeCoreCommand(op: string, args: Args): Promise<unknown> {
-  return objectRegistry.invoke(`${CORE_COMMAND_PREFIX}${op}`, args);
+export function invokeCoreCommand(
+  objects: Pick<EditorObjects["registry"], "invoke">,
+  op: string,
+  args: Args,
+): Promise<unknown> {
+  return objects.invoke(`${CORE_COMMAND_PREFIX}${op}`, args);
 }
 
 // ------------------------------------------------------------ context
@@ -125,8 +147,8 @@ interface Ctx {
   caret: { storyId: string; start: number; end: number } | null;
 }
 
-function liveContext(): Ctx {
-  const editor = objectModelEditor() as unknown as {
+function liveContext(objects: EditorObjects): Ctx {
+  const editor = objects.editor() as unknown as {
     selection?: { elementSelection?: unknown[] };
     contentSelection?: {
       contentSelection?: Ctx["caret"];
@@ -136,7 +158,7 @@ function liveContext(): Ctx {
   const items: string[] = [];
   for (const id of editor?.selection?.elementSelection ?? []) {
     try {
-      items.push(addressOfElement(id as never));
+      items.push(objects.addressOfElement(id as never));
     } catch {
       /* an id the grammar cannot spell: not prefilled */
     }
@@ -200,7 +222,7 @@ export function fromText(
       const n = Number(s);
       return Number.isFinite(n)
         ? { ok: true, value: n }
-        : { ok: false, reason: `"${s}" is not a number` };
+        : { ok: false, reason: tr(M.notNumber, { value: s }) };
     }
     case "bool":
       return { ok: true, value: s === "true" };
@@ -208,7 +230,7 @@ export function fromText(
       const p = s.split(/[\s,]+/).map(Number);
       return p.length === 2 && p.every(Number.isFinite)
         ? { ok: true, value: p }
-        : { ok: false, reason: `"${s}" is not a point (x, y)` };
+        : { ok: false, reason: tr(M.notPoint, { value: s }) };
     }
     case "list": {
       if (t.of && !isOpaque(t.of) && !s.startsWith("[")) {
@@ -238,7 +260,7 @@ export function fromText(
     // An opaque record also takes a bare word (`pageNumber`).
     return /^[A-Za-z][A-Za-z0-9]*$/.test(s)
       ? { ok: true, value: s }
-      : { ok: false, reason: `"${s}" is not JSON` };
+      : { ok: false, reason: tr(M.notJson, { value: s }) };
   }
 }
 
@@ -262,11 +284,17 @@ const queryKindOf = (to: string): string => (to === "item" ? "frame" : to);
 // -------------------------------------------------------------- dialog
 
 export function CoreCommandDialog() {
-  const p = useSyncExternalStore(subscribe, current, current);
+  const { pending } = useScoped(DIALOG);
+  const p = useSyncExternalStore(pending.subscribe, pending.get, pending.get);
   return p ? <CommandForm key={p.seq} pending={p} /> : null;
 }
 
 function CommandForm({ pending: p }: { pending: Pending }) {
+  const strings = useStrings();
+  const { pending: dialog } = useScoped(DIALOG);
+  const objects = useEditorObjects();
+  const objectRegistry = objects.registry;
+  const close = () => dialog.set(null);
   const [commands, setCommands] = useState<CommandInfo[] | null>(null);
   const [op, setOp] = useState<string | null>(p.op);
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -287,7 +315,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [objectRegistry]);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const info = useMemo(
@@ -310,7 +338,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     if (!info) return;
     const seedFields = Object.fromEntries(fields);
     const seed = {
-      ...contextPrefill(seedFields, liveContext()),
+      ...contextPrefill(seedFields, liveContext(objects)),
       ...(op === p.op ? p.prefill : {}),
     };
     setTexts(
@@ -349,11 +377,11 @@ function CommandForm({ pending: p }: { pending: Pending }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") dialog.set(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [dialog]);
 
   const run = async (): Promise<void> => {
     if (!op || !info) return;
@@ -366,7 +394,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
       }
       if (r.value === undefined) {
         if (!t.optional) {
-          setError(`${name} is required`);
+          setError(strings.t(M.required, { name }));
           return;
         }
         continue;
@@ -376,7 +404,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     setBusy(true);
     setError(null);
     const failed = await attempt(async () => {
-      const result = await invokeCoreCommand(op, args);
+      const result = await invokeCoreCommand(objectRegistry, op, args);
       p.onDone?.(result);
       close();
     });
@@ -407,7 +435,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
             id="core-command-title"
             style={{ margin: "0 0 4px", fontSize: 15 }}
           >
-            {p.title ?? info?.title ?? "Run command"}
+            {p.title ?? info?.title ?? strings.t(M.runCommand)}
           </h2>
           <p
             style={{
@@ -422,12 +450,12 @@ function CommandForm({ pending: p }: { pending: Pending }) {
                 {op}
               </code>
             ) : (
-              "Pick a core command. Its arguments are generated from its schema."
+              strings.t(M.pick)
             )}
           </p>
           {p.op === null && (
             <label style={labelStyle}>
-              Command
+              {strings.t(M.command)}
               <select
                 data-core-command-picker=""
                 value={op ?? ""}
@@ -483,7 +511,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
               onClick={close}
               style={btn(false)}
             >
-              Cancel
+              {strings.t(M.cancel)}
             </button>
             <button
               type="button"
@@ -492,7 +520,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
               onClick={() => void run()}
               style={btn(true, !info || busy)}
             >
-              Run
+              {strings.t(M.run)}
             </button>
           </div>
         </FocusScope>
@@ -514,17 +542,23 @@ function ArgField({
   options?: string[];
   onChange(v: string): void;
 }) {
+  const strings = useStrings();
   const hint =
     t.kind === "ref"
-      ? `${t.to} address`
+      ? strings.t(M.address, { to: t.to ?? "" })
       : t.kind === "point"
         ? "x, y (pt)"
         : t.kind === "list"
           ? t.of && !isOpaque(t.of)
-            ? `${t.of.kind === "ref" ? `${t.of.to} addresses` : t.of.kind}, comma-separated`
-            : "JSON list"
+            ? strings.t(M.commaSeparated, {
+                kind:
+                  t.of.kind === "ref"
+                    ? strings.t(M.addresses, { to: t.of.to ?? "" })
+                    : t.of.kind,
+              })
+            : strings.t(M.jsonList)
           : isOpaque(t)
-            ? `${t.shape ?? "record"} (JSON)`
+            ? strings.t(M.jsonShape, { shape: t.shape ?? strings.t(M.record) })
             : t.kind;
   const listId = options?.length ? `core-command-${name}-options` : undefined;
   let control;
@@ -538,7 +572,7 @@ function ArgField({
         onChange={(e) => onChange(e.target.value)}
         style={input}
       >
-        <option value="">{t.optional ? "(not set)" : "—"}</option>
+        <option value="">{t.optional ? strings.t(M.notSet) : "—"}</option>
         {members.map((m) => (
           <option key={m} value={m}>
             {m}
@@ -670,14 +704,19 @@ export function CoreCommandButton({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scope = useEditorScope();
+  const objects = useEditorObjects();
   const click = async (): Promise<void> => {
     if (!args) {
-      openCoreCommand(op, prefill ?? {}, { title: title ?? label, onDone });
+      openCoreCommand(scope, op, prefill ?? {}, {
+        title: title ?? label,
+        onDone,
+      });
       return;
     }
     setBusy(true);
     const failed = await attempt(async () => {
-      const r = await invokeCoreCommand(op, args);
+      const r = await invokeCoreCommand(objects.registry, op, args);
       setError(null);
       onDone?.(r);
     });

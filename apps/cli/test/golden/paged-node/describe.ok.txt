@@ -44,7 +44,7 @@ $ paged-node describe --no-plugins
     "merge <template>",
     "plugins [doc]",
     "describe [doc]",
-    "template fields <doc> | fill <template> | check <template> <filled>",
+    "template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>",
     "mcp "
   ]
 }

@@ -23,6 +23,8 @@
 // in the one AI Assistant panel, and survives the panel being hidden.
 // The run executes here, not in a component.
 
+import { t } from "@paged-media/strings";
+import { AI } from "./messages";
 import type { CanvasClient } from "@paged-media/client";
 
 import {
@@ -32,6 +34,7 @@ import {
   undoBackTo,
   undoTop,
 } from "./editor-ai";
+import { scoped, type EditorScope } from "../state/editor-scope";
 
 export type AssistantView = "ask" | "brief";
 
@@ -69,69 +72,6 @@ export interface AssistantState {
   run: AssistantRun;
 }
 
-let state: AssistantState = {
-  view: "ask",
-  draft: "",
-  autoRun: false,
-  run: { phase: "idle" },
-};
-const listeners = new Set<() => void>();
-let opener: (() => void) | null = null;
-
-function set(next: Partial<AssistantState>): void {
-  state = { ...state, ...next };
-  for (const l of listeners) l();
-}
-
-export function getAssistantState(): AssistantState {
-  return state;
-}
-
-export function subscribeAssistant(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-/** The app tells the store how to show the AI Assistant panel. */
-export function setAssistantOpener(open: (() => void) | null): void {
-  opener = open;
-}
-
-/** Show the panel, optionally switching view or pre-filling the request. */
-export function openAssistant(
-  options: { view?: AssistantView; draft?: string; autoRun?: boolean } = {},
-): void {
-  set({
-    ...(options.view ? { view: options.view } : {}),
-    ...(options.draft !== undefined ? { draft: options.draft } : {}),
-    autoRun: options.autoRun === true,
-  });
-  opener?.();
-}
-
-export function setAssistantView(view: AssistantView): void {
-  set({ view });
-}
-
-export function setAssistantDraft(draft: string): void {
-  set({ draft });
-}
-
-/** Take the pending auto-run request, if any (clears it). */
-export function takeAssistantAutoRun(): string | null {
-  if (!state.autoRun) return null;
-  set({ autoRun: false });
-  return state.draft;
-}
-
-export function dismissAssistantRun(): void {
-  if (state.run.phase !== "running") set({ run: { phase: "idle" } });
-}
-
-export function stopAssistantRun(): void {
-  if (state.run.phase === "running") state.run.controller.abort();
-}
-
 /** The first comment line of a script names the step, else a generic one. */
 function stepLabel(source: string, n: number): string {
   const first =
@@ -140,7 +80,7 @@ function stepLabel(source: string, n: number): string {
       .map((l) => l.trim())
       .find((l) => l.length > 0) ?? "";
   const comment = /^\/\/\s*(.+)$/.exec(first)?.[1];
-  return comment ? comment.slice(0, 90) : `Step ${n}: changing the document`;
+  return comment ? comment.slice(0, 90) : t(AI.stepGeneric, { n });
 }
 
 export interface StartRunOptions {
@@ -151,105 +91,214 @@ export interface StartRunOptions {
   prepare?: () => Promise<boolean>;
 }
 
-/** Start a run. Returns immediately; progress lands in the store. */
-export function startAssistantRun(options: StartRunOptions): void {
-  if (state.run.phase === "running") return;
-  const controller = new AbortController();
-  const steps: AssistantStep[] = [];
-  const push = (step: AssistantStep) => {
-    steps.push(step);
-    if (state.run.phase === "running")
-      set({ run: { ...state.run, steps: [...steps] } });
-  };
-  set({
-    run: { phase: "running", prompt: options.prompt, steps: [], controller },
+/** One editor's assistant session. */
+export type AssistantSession = ReturnType<typeof createAssistantSession>;
+
+function createAssistantSession() {
+  let state: AssistantState = {
+    view: "ask",
     draft: "",
-  });
-  void (async () => {
-    try {
-      if (options.prepare && !(await options.prepare())) {
-        set({ run: { phase: "idle" } });
-        return;
-      }
-      const before = await undoTop(options.client);
-      let scripts = 0;
-      const result = await runEditorAgent(options.client, {
-        mode: options.mode,
-        prompt: options.prompt,
-        signal: controller.signal,
-        onEvent: (e) => {
-          if (e.type === "script")
-            push({ label: stepLabel(e.source, ++scripts), state: "info" });
-          else if (e.type === "scriptResult") {
-            const last = steps[steps.length - 1];
-            if (last) last.state = e.run.error ? "failed" : "ok";
-            if (e.run.error)
-              push({
-                label: `Retrying: ${e.run.error.split("\n")[0]!.slice(0, 80)}`,
-                state: "info",
-              });
-            if (e.overset && e.overset.length > 0)
-              push({
-                label: `${e.overset.length} ${e.overset.length === 1 ? "story is" : "stories are"} overset`,
-                state: "info",
-              });
-            if (state.run.phase === "running")
-              set({ run: { ...state.run, steps: [...steps] } });
-          } else if (e.type === "render")
-            push({ label: `Checked the look of page ${e.page}`, state: "ok" });
-        },
-      });
-      const after = await undoTop(options.client);
-      if (result.outcome === "refused") {
+    autoRun: false,
+    run: { phase: "idle" },
+  };
+  const listeners = new Set<() => void>();
+  let opener: (() => void) | null = null;
+
+  function set(next: Partial<AssistantState>): void {
+    state = { ...state, ...next };
+    for (const l of listeners) l();
+  }
+
+  function getAssistantState(): AssistantState {
+    return state;
+  }
+
+  function subscribeAssistant(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  /** The app tells the store how to show the AI Assistant panel. */
+  function setAssistantOpener(open: (() => void) | null): void {
+    opener = open;
+  }
+
+  /** Show the panel, optionally switching view or pre-filling the request. */
+  function openAssistant(
+    options: { view?: AssistantView; draft?: string; autoRun?: boolean } = {},
+  ): void {
+    set({
+      ...(options.view ? { view: options.view } : {}),
+      ...(options.draft !== undefined ? { draft: options.draft } : {}),
+      autoRun: options.autoRun === true,
+    });
+    opener?.();
+  }
+
+  function setAssistantView(view: AssistantView): void {
+    set({ view });
+  }
+
+  function setAssistantDraft(draft: string): void {
+    set({ draft });
+  }
+
+  /** Take the pending auto-run request, if any (clears it). */
+  function takeAssistantAutoRun(): string | null {
+    if (!state.autoRun) return null;
+    set({ autoRun: false });
+    return state.draft;
+  }
+
+  function dismissAssistantRun(): void {
+    if (state.run.phase !== "running") set({ run: { phase: "idle" } });
+  }
+
+  function stopAssistantRun(): void {
+    if (state.run.phase === "running") state.run.controller.abort();
+  }
+
+  /** Start a run. Returns immediately; progress lands in the store. */
+  function startAssistantRun(options: StartRunOptions): void {
+    if (state.run.phase === "running") return;
+    const controller = new AbortController();
+    const steps: AssistantStep[] = [];
+    const push = (step: AssistantStep) => {
+      steps.push(step);
+      if (state.run.phase === "running")
+        set({ run: { ...state.run, steps: [...steps] } });
+    };
+    set({
+      run: { phase: "running", prompt: options.prompt, steps: [], controller },
+      draft: "",
+    });
+    void (async () => {
+      try {
+        if (options.prepare && !(await options.prepare())) {
+          set({ run: { phase: "idle" } });
+          return;
+        }
+        const before = await undoTop(options.client);
+        let scripts = 0;
+        const result = await runEditorAgent(options.client, {
+          mode: options.mode,
+          prompt: options.prompt,
+          signal: controller.signal,
+          onEvent: (e) => {
+            if (e.type === "script")
+              push({ label: stepLabel(e.source, ++scripts), state: "info" });
+            else if (e.type === "scriptResult") {
+              const last = steps[steps.length - 1];
+              if (last) last.state = e.run.error ? "failed" : "ok";
+              if (e.run.error)
+                push({
+                  label: t(AI.retrying, {
+                    error: e.run.error.split("\n")[0]!.slice(0, 80),
+                  }),
+                  state: "info",
+                });
+              if (e.overset && e.overset.length > 0)
+                push({
+                  label: t(AI.overset, { count: e.overset.length }),
+                  state: "info",
+                });
+              if (state.run.phase === "running")
+                set({ run: { ...state.run, steps: [...steps] } });
+            } else if (e.type === "render")
+              push({ label: t(AI.checkedPage, { page: e.page }), state: "ok" });
+          },
+        });
+        const after = await undoTop(options.client);
+        if (result.outcome === "refused") {
+          set({
+            run: {
+              phase: "error",
+              prompt: options.prompt,
+              steps,
+              message: t(AI.declined),
+            },
+          });
+          return;
+        }
+        set({
+          run: {
+            phase: "done",
+            prompt: options.prompt,
+            steps,
+            summary: plainSummary(result.summary) || "Done.",
+            stopped: result.outcome !== "done",
+            before,
+            after,
+            changed: after !== before,
+          },
+        });
+      } catch (err) {
         set({
           run: {
             phase: "error",
             prompt: options.prompt,
             steps,
-            message: "Claude declined this request.",
+            message: describeAiError(err),
           },
         });
-        return;
       }
-      set({
-        run: {
-          phase: "done",
-          prompt: options.prompt,
-          steps,
-          summary: plainSummary(result.summary) || "Done.",
-          stopped: result.outcome !== "done",
-          before,
-          after,
-          changed: after !== before,
-        },
-      });
-    } catch (err) {
-      set({
-        run: {
-          phase: "error",
-          prompt: options.prompt,
-          steps,
-          message: describeAiError(err),
-        },
-      });
-    }
-  })();
+    })();
+  }
+
+  /** Undo exactly the last run's steps — refused after a later edit. */
+  async function undoAssistantRun(client: CanvasClient): Promise<void> {
+    const run = state.run;
+    if (run.phase !== "done") return;
+    const ok = await undoBackTo(client, run.before, run.after);
+    set({
+      run: ok
+        ? { phase: "idle" }
+        : {
+            phase: "error",
+            prompt: run.prompt,
+            steps: run.steps,
+            message: t(AI.notUndone),
+          },
+    });
+  }
+
+  return {
+    getAssistantState,
+    subscribeAssistant,
+    setAssistantOpener,
+    openAssistant,
+    setAssistantView,
+    setAssistantDraft,
+    takeAssistantAutoRun,
+    dismissAssistantRun,
+    stopAssistantRun,
+    startAssistantRun,
+    undoAssistantRun,
+  };
 }
 
-/** Undo exactly the last run's steps — refused after a later edit. */
-export async function undoAssistantRun(client: CanvasClient): Promise<void> {
-  const run = state.run;
-  if (run.phase !== "done") return;
-  const ok = await undoBackTo(client, run.before, run.after);
-  set({
-    run: ok
-      ? { phase: "idle" }
-      : {
-          phase: "error",
-          prompt: run.prompt,
-          steps: run.steps,
-          message:
-            "The document changed after Claude's edit, so it was not undone. Use Edit ▸ Undo instead.",
-        },
-  });
+/** Per editor (plan task E1): each editor's AI Assistant runs on its own
+ *  document. */
+const SESSION = scoped("assistantSession", () => createAssistantSession());
+
+/** `scope`'s assistant session. */
+export function assistantSession(scope: EditorScope): AssistantSession {
+  return scope.get(SESSION);
+}
+
+/** Show `scope`'s panel, optionally switching view or pre-filling the
+ *  request. */
+export function openAssistant(
+  scope: EditorScope,
+  options: { view?: AssistantView; draft?: string; autoRun?: boolean } = {},
+): void {
+  assistantSession(scope).openAssistant(options);
+}
+
+/** The app tells `scope`'s store how to show the AI Assistant panel. */
+export function setAssistantOpener(
+  scope: EditorScope,
+  open: (() => void) | null,
+): void {
+  assistantSession(scope).setAssistantOpener(open);
 }

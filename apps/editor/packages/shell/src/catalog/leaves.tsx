@@ -58,8 +58,11 @@ import {
   NumberInput,
 } from "@paged-media/ui";
 
+import { useStrings } from "@paged-media/strings";
+
 import { Icon } from "../icons";
 import { useCollection } from "./use-collection";
+import { LIST } from "./messages";
 
 // ---------------------------------------------------------------- helpers
 
@@ -462,10 +465,16 @@ function unwrapBoundsValue(
  *  `layout: "row4"` is the kit's compact 4-across grid with 8.5px
  *  labels below. `null` renders the same grid with em-dash cells. */
 export function BoundsLeaf({ value, onCommit, props }: LeafProps) {
+  const strings = useStrings();
   const labels = (
     Array.isArray(props.labels)
       ? (props.labels as [string, string, string, string])
-      : ["T", "L", "B", "R"]
+      : [
+          strings.t(LIST.boundsTop),
+          strings.t(LIST.boundsLeft),
+          strings.t(LIST.boundsBottom),
+          strings.t(LIST.boundsRight),
+        ]
   ) as [string, string, string, string];
   const layout = props.layout === "row4" ? "row4" : "grid2";
   const seam = isSeam(props);
@@ -568,6 +577,7 @@ function unwrapIdValue(v: Value | null): {
  * the em-dash sentinel selected.
  */
 export function CollectionSelectLeaf({ value, onCommit, props }: LeafProps) {
+  const strings = useStrings();
   const collectionName =
     typeof props.collectionName === "string"
       ? (props.collectionName as CollectionName)
@@ -627,7 +637,7 @@ export function CollectionSelectLeaf({ value, onCommit, props }: LeafProps) {
             —
           </option>
         )}
-        <option value="">[None]</option>
+        <option value="">{strings.t(LIST.none)}</option>
         {items.map((row) => (
           <option key={row.selfId} value={row.selfId}>
             {displayName(row.name ?? row.label ?? row.selfId)}
@@ -1137,6 +1147,7 @@ function parseListRename(
  * costs no rows at all.
  */
 export function ListLeaf({ props }: LeafProps) {
+  const strings = useStrings();
   const collectionName =
     typeof props.collectionName === "string" && !Array.isArray(props.items)
       ? (props.collectionName as CollectionName)
@@ -1200,7 +1211,7 @@ export function ListLeaf({ props }: LeafProps) {
             style={{ color: "var(--pg-muted-fg)", fontStyle: "italic" }}
             data-list-empty
           >
-            No entries
+            {strings.t(LIST.noEntries)}
           </div>
         )}
         {visible.map((row, i) => {
@@ -1292,7 +1303,9 @@ export function ListLeaf({ props }: LeafProps) {
                   data-expanded={expandable ? String(expanded) : undefined}
                   aria-label={
                     expandable
-                      ? `${expanded ? "Collapse" : "Expand"}: ${label}`
+                      ? strings.t(expanded ? LIST.collapse : LIST.expand, {
+                          label,
+                        })
                       : undefined
                   }
                   // A leaf's twisty is an invisible spacer: out of the
@@ -1446,8 +1459,11 @@ export function ListLeaf({ props }: LeafProps) {
             onClick={() => setShown((n) => n + LIST_ROW_PAGE)}
           >
             <span className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>
-              Show {Math.min(LIST_ROW_PAGE, items.length - visible.length)} more
-              ({visible.length} of {items.length})
+              {strings.t(LIST.showMore, {
+                count: Math.min(LIST_ROW_PAGE, items.length - visible.length),
+                shown: visible.length,
+                total: items.length,
+              })}
             </span>
           </button>
         )}

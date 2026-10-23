@@ -43,13 +43,16 @@ const asked: Array<{ op: string | null; prefill: Record<string, unknown> }> =
 const dialog = await import("../../src/core-command-dialog");
 mock.module("../../src/core-command-dialog", () => ({
   ...dialog,
-  openCoreCommand: (op: string | null, prefill: Record<string, unknown> = {}) =>
-    void asked.push({ op, prefill }),
+  openCoreCommand: (
+    _scope: unknown,
+    op: string | null,
+    prefill: Record<string, unknown> = {},
+  ) => void asked.push({ op, prefill }),
 }));
 const { contextPrefill, newMasterPrefill } = dialog;
 const { createHeadlessEditor } = await import("./harness");
 const { CORE_COMMAND_ENTRIES } = await import("../../src/core-command-entries");
-const { addressOfElement } = await import("../../src/object-model");
+const { editorObjectsOf } = await import("../../src/object-model");
 const { STRUCTURE, structureIdml } =
   await import("../../test/panels/support/structure");
 
@@ -112,7 +115,9 @@ async function throughDoor(
   const fields = (CORE_WIRE_OPS[op]?.args.fields ?? {}) as never;
   const caret = e.state.contentSelection.contentSelection;
   const ctx = {
-    items: e.state.selection.elementSelection.map((id) => addressOfElement(id)),
+    items: e.state.selection.elementSelection.map((id) =>
+      editorObjectsOf(e.editor.scope).addressOfElement(id),
+    ),
     caret: caret
       ? { storyId: caret.storyId, start: caret.start, end: caret.end }
       : null,

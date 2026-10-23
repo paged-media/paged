@@ -50,6 +50,12 @@ pub struct SheetModel {
     /// edited: they exist so a formula over another workbook evaluates from
     /// the values Excel cached (the no-network ruling).
     pub external_sheets: Vec<Worksheet>,
+    /// The document's name as the host knows it (a file name such as
+    /// `Budget.xlsx`), for `CELL("filename")` and the workbook part of a
+    /// `CELL("address")` on another sheet. `None` — an unsaved workbook —
+    /// gives `""`, as in Excel. W3 versioned amendment (sheet ADR 516);
+    /// never written to the file.
+    pub document_name: Option<CompactString>,
 }
 
 /// The first [`SheetId`] of [`SheetModel::external_sheets`].
@@ -72,6 +78,7 @@ impl SheetModel {
             calc: CalcSettings::default(),
             preserved: PreservedParts::default(),
             external_sheets: Vec::new(),
+            document_name: None,
         }
     }
 
@@ -187,6 +194,100 @@ pub struct Worksheet {
     /// whatever its root (`H1:H6*2`). They are written back as dynamic
     /// arrays.
     pub dynamic_arrays: std::collections::BTreeSet<(u32, u32)>,
+    /// Row attributes beyond height and hidden (W1.4 amendment, additive):
+    /// the row style, outline level, collapsed and thick-border flags a
+    /// `<row>` carries. Only rows with something to say have an entry. The
+    /// custom height stays in [`row_heights`](Self::row_heights) and the
+    /// hidden flag in [`hidden_rows`](Self::hidden_rows).
+    pub row_meta: BTreeMap<u32, RowMeta>,
+    /// Column attributes beyond width (W1.4 amendment, additive), as the
+    /// workbook's `<col>` ranges: style, hidden, outline level, collapsed,
+    /// best-fit and custom-width flags. The width per column stays in
+    /// [`col_widths`](Self::col_widths) (the per-column view every reader
+    /// already uses); the two together are a `<col>` record.
+    pub col_meta: Vec<ColMeta>,
+    /// Whether the sheet tab is shown (W1.4 amendment, additive): the
+    /// workbook's `<sheet state=…>`.
+    pub state: SheetState,
+}
+
+/// The attributes of one `<row>` beyond height and hidden (ECMA-376
+/// §18.3.1.73). `Default` is a row with nothing to say.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RowMeta {
+    /// The row style (`s=`, a cellXfs index), applied to the row's empty
+    /// cells when [`custom_format`](Self::custom_format) is set.
+    pub style: u32,
+    pub custom_format: bool,
+    /// Outline (grouping) level, 0–7.
+    pub outline_level: u8,
+    pub collapsed: bool,
+    pub thick_top: bool,
+    pub thick_bot: bool,
+}
+
+/// One `<col>` range's attributes beyond width (ECMA-376 §18.3.1.13):
+/// columns `min..=max`, 0-based inclusive.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ColMeta {
+    pub min: u32,
+    pub max: u32,
+    /// The column style (`style=`, a cellXfs index).
+    pub style: u32,
+    pub hidden: bool,
+    /// Outline (grouping) level, 0–7.
+    pub outline_level: u8,
+    pub collapsed: bool,
+    pub best_fit: bool,
+    pub custom_width: bool,
+    pub phonetic: bool,
+}
+
+impl ColMeta {
+    /// True when the record says nothing beyond its range.
+    pub fn is_plain(&self) -> bool {
+        ColMeta {
+            min: self.min,
+            max: self.max,
+            ..ColMeta::default()
+        } == *self
+    }
+}
+
+/// A sheet tab's visibility (ECMA-376 §18.18.68 `ST_SheetState`).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum SheetState {
+    #[default]
+    Visible,
+    /// Hidden; the user can unhide it.
+    Hidden,
+    /// Hidden; only code can unhide it.
+    VeryHidden,
+}
+
+impl SheetState {
+    /// The `state=` attribute value (`None` for the default, visible).
+    pub fn as_xml(self) -> Option<&'static str> {
+        match self {
+            SheetState::Visible => None,
+            SheetState::Hidden => Some("hidden"),
+            SheetState::VeryHidden => Some("veryHidden"),
+        }
+    }
+
+    /// Parse a `state=` value; anything unknown is visible.
+    pub fn from_xml(v: &str) -> SheetState {
+        match v {
+            "hidden" => SheetState::Hidden,
+            "veryHidden" => SheetState::VeryHidden,
+            _ => SheetState::Visible,
+        }
+    }
+
+    /// The wire name (`"visible"`, `"hidden"`, `"veryHidden"`).
+    pub fn as_str(self) -> &'static str {
+        self.as_xml().unwrap_or("visible")
+    }
 }
 
 impl Worksheet {
@@ -194,6 +295,14 @@ impl Worksheet {
     /// a filter view. The page lowering skips hidden rows.
     pub fn row_hidden(&self, row: u32) -> bool {
         self.hidden_rows.contains(&row) || self.filtered_rows.contains(&row)
+    }
+
+    /// Whether column `col` is hidden (`<col hidden="1">`). The page lowering
+    /// and the grid skip hidden columns.
+    pub fn col_hidden(&self, col: u32) -> bool {
+        self.col_meta
+            .iter()
+            .any(|m| m.hidden && m.min <= col && col <= m.max)
     }
 
     pub fn cell(&self, row: u32, col: u32) -> Option<&Cell> {

@@ -1,0 +1,9 @@
+# SUMX2PY2(array_x,array_y).
+# id	formula	setup	expected
+a-doc	=SUMX2PY2({2,3,9,1,8,7,5},{6,5,11,7,5,4,4})	-	521
+a-range	=SUMX2PY2(A1:A3,B1:B3)	A1=1;A2=2;A3=3;B1=4;B2=5;B3=6	91
+a-skip	=SUMX2PY2(A1:A3,B1:B3)	A1=1;A2=TRUE;A3=3;B1=4;B2=5;B3=6	62
+a-mismatch	=SUMX2PY2({1,2},{1;2})	-	10
+a-scalar	=SUMX2PY2(3,2)	-	13
+a-err	=SUMX2PY2(A1:A2,B1:B2)	A1=1;A2=2;B1=#REF!;B2=5	#REF!
+a-2d	=SUMX2PY2({1,2;3,4},{1,1;1,1})	-	34

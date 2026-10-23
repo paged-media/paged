@@ -93,6 +93,18 @@ export interface LoweredParagraph {
    *  with the segment's style (it carries the break-before rule). Absent for
    *  an unsplit paragraph. */
   segments?: LoweredSegment[];
+  /** The Word bookmarks that start in this paragraph, by name (what a
+   *  template field anchors to). Absent when none. */
+  bookmarks?: string[];
+  /** The Word list this paragraph is an item of (`w:numId`) and its level.
+   *  Absent when it is not a list item. */
+  list?: LoweredListRef;
+}
+
+/** A list paragraph's list identity. */
+export interface LoweredListRef {
+  numId: number;
+  level: number;
 }
 
 /** The second or later part of a Word paragraph split by a break. */

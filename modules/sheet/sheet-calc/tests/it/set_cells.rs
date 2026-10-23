@@ -18,7 +18,8 @@
 
 //! The batch door (`Engine::set_cells`) leaves the workbook exactly as the
 //! same inputs entered one by one (`Engine::enter`) would — values, errors,
-//! cycles — with one recalc instead of one per input.
+//! cycles (the cycle set; a cycle member's value is its history's, ADR 514) —
+//! with one recalc instead of one per input.
 
 // Test names end in `__feat__<cockpit id>` — the cockpit link (CLAUDE.md).
 #![allow(non_snake_case)]
@@ -94,6 +95,13 @@ proptest! {
             .map(|(r, c, s)| (0u16, *r, *c, many.parse_input(0, s).unwrap()))
             .collect();
         many.set_cells(parsed);
-        prop_assert_eq!(grid(&one), grid(&many));
+        // With a cycle, its members keep their LAST value — which depends on
+        // the order the edits came in, as in Excel (sheet ADR 514): the two
+        // agree on the cycle itself; values only where there is none.
+        let (c1, c2) = (one.recalc_all().circular, many.recalc_all().circular);
+        prop_assert_eq!(&c1, &c2);
+        if c1.is_empty() {
+            prop_assert_eq!(grid(&one), grid(&many));
+        }
     }
 }

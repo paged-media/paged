@@ -90,27 +90,59 @@ import {
   useActionFeedback,
 } from "@paged-media/panel-kit";
 import { PanelIntro } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.appearancePanel", {
+  summary:
+    "Stack extra fills and strokes on the selected object, then bake the stack so every layer renders.",
+  bakeNote:
+    "Until you bake, only the front-most fill and stroke render: an object has one fill and one stroke of its own, and the layers below are saved with the file but not drawn. Bake turns the stack into a group of paths, one per layer, so every layer renders on the canvas, in a PDF export and in an IDML save, each with its own tint, opacity and blend mode. The object then becomes a group; editing the stack rebuilds the group's paths, and an IDML save places the group above the page's other items. You do not need to release before saving. Release turns the group back into a single object that keeps the front-most layer as its own fill and stroke.",
+  layerBaked: "Baked: this layer is a path in the group and renders",
+  layerFront: "Front-most layer: this one renders",
+  layerSaved: "Saved with the file but not drawn until you bake",
+  tagBaked: "baked",
+  tagBakes: "bakes",
+  moveFront: "Move toward the front",
+  up: "Up",
+  moveBack: "Move toward the back",
+  down: "Down",
+  removeLayer: "Remove this layer",
+  remove: "Remove",
+  heading: "Appearance",
+  addFill: "Add a fill layer (starts from the object's own fill)",
+  selectFirst: "Select an object first",
+  plusFill: "+ Fill",
+  addStroke: "Add a stroke layer (starts from the object's own stroke)",
+  plusStroke: "+ Stroke",
+  nothingToClear: "There are no extra layers to clear",
+  clearAll: "Clear every extra layer",
+  clear: "Clear",
+  alreadyBaked: "Already baked",
+  addLayerFirst: "Add a fill or stroke layer first",
+  bakeHint:
+    "Turn the stack into a group of paths, one per layer, so every layer renders",
+  bake: "Bake",
+  onlyBakedRelease: "Only a baked stack can be released",
+  releaseHint: "Turn the baked group back into a single object",
+  release: "Release",
+  selectToSee: "Select an object to see its appearance stack.",
+  showingFirst:
+    "Showing the first of {count} selected objects; edits apply to all of them.",
+  fills: "Fills",
+  noFills: "No extra fill layers — the frame's own fill is what renders.",
+  strokes: "Strokes",
+  noStrokes: "No extra stroke layers — the frame's own stroke is what renders.",
+  title: "Appearance",
+});
 
 export const APPEARANCE_PANEL_ID = "media.paged.draw.panel.appearance";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const APPEARANCE_SUMMARY =
-  "Stack extra fills and strokes on the selected object, then bake the " +
-  "stack so every layer renders.";
+export const APPEARANCE_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording
  *  (a limit that can be edited away silently is not a guarantee). */
-export const APPEARANCE_BAKE_NOTE =
-  "Until you bake, only the front-most fill and stroke render: an object " +
-  "has one fill and one stroke of its own, and the layers below are saved " +
-  "with the file but not drawn. Bake turns the stack into a group of " +
-  "paths, one per layer, so every layer renders on the canvas, in a PDF " +
-  "export and in an IDML save, each with its own tint, opacity and blend " +
-  "mode. The object then becomes a group; editing the stack rebuilds the " +
-  "group's paths, and an IDML save places the group above the page's " +
-  "other items. You do not need to release before saving. Release turns " +
-  "the group back into a single object that keeps the front-most layer " +
-  "as its own fill and stroke.";
+export const APPEARANCE_BAKE_NOTE = M.bakeNote;
 
 const EMPTY: AppearanceStack = { fills: [], strokes: [] };
 
@@ -184,6 +216,7 @@ export function makeAppearancePanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [target, setTarget] = React.useState<ElementId | null>(null);
     const [extra, setExtra] = React.useState(0);
     const [stack, setStack] = React.useState<AppearanceStack>(EMPTY);
@@ -274,21 +307,23 @@ export function makeAppearancePanel(host: BundleHost): {
                 }}
                 title={
                   baked
-                    ? "Baked: this layer is a path in the group and renders"
+                    ? s.t(M.layerBaked)
                     : top
-                      ? "Front-most layer: this one renders"
-                      : "Saved with the file but not drawn until you bake"
+                      ? s.t(M.layerFront)
+                      : s.t(M.layerSaved)
                 }
               >
                 {appearanceRowLabel(kind, layer)}
               </span>
               {real && (
-                <span style={bakeTagStyle}>{baked ? "baked" : "bakes"}</span>
+                <span style={bakeTagStyle}>
+                  {baked ? s.t(M.tagBaked) : s.t(M.tagBakes)}
+                </span>
               )}
               <button
                 type="button"
                 style={iconBtn}
-                title="Move toward the front"
+                title={s.t(M.moveFront)}
                 disabled={position === 0}
                 data-draw-appearance-up
                 onClick={() =>
@@ -297,12 +332,12 @@ export function makeAppearancePanel(host: BundleHost): {
                   )
                 }
               >
-                Up
+                {s.t(M.up)}
               </button>
               <button
                 type="button"
                 style={iconBtn}
-                title="Move toward the back"
+                title={s.t(M.moveBack)}
                 disabled={index === 0}
                 data-draw-appearance-down
                 onClick={() =>
@@ -311,12 +346,12 @@ export function makeAppearancePanel(host: BundleHost): {
                   )
                 }
               >
-                Down
+                {s.t(M.down)}
               </button>
               <button
                 type="button"
                 style={iconBtn}
-                title="Remove this layer"
+                title={s.t(M.removeLayer)}
                 data-draw-appearance-remove
                 onClick={() =>
                   edit(APPEARANCE_REMOVE_LAYER_COMMAND_ID, (s) =>
@@ -324,7 +359,7 @@ export function makeAppearancePanel(host: BundleHost): {
                   )
                 }
               >
-                Remove
+                {s.t(M.remove)}
               </button>
             </div>
           );
@@ -340,22 +375,18 @@ export function makeAppearancePanel(host: BundleHost): {
         data-draw-appearance-baked={baked ? "true" : "false"}
       >
         <PanelIntro
-          summary={APPEARANCE_SUMMARY}
+          summary={s.t(APPEARANCE_SUMMARY)}
           attr="data-draw-appearance-intro"
         />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Appearance ({total})
+            {s.t(M.heading)} ({total})
           </span>
           <span style={{ display: "flex", gap: 4 }}>
             <button
               type="button"
               style={iconBtn}
-              title={
-                target
-                  ? "Add a fill layer (starts from the object's own fill)"
-                  : "Select an object first"
-              }
+              title={target ? s.t(M.addFill) : s.t(M.selectFirst)}
               data-draw-appearance-add-fill
               disabled={!target}
               onClick={() =>
@@ -368,16 +399,12 @@ export function makeAppearancePanel(host: BundleHost): {
                 )
               }
             >
-              + Fill
+              {s.t(M.plusFill)}
             </button>
             <button
               type="button"
               style={iconBtn}
-              title={
-                target
-                  ? "Add a stroke layer (starts from the object's own stroke)"
-                  : "Select an object first"
-              }
+              title={target ? s.t(M.addStroke) : s.t(M.selectFirst)}
               data-draw-appearance-add-stroke
               disabled={!target}
               onClick={() =>
@@ -390,17 +417,17 @@ export function makeAppearancePanel(host: BundleHost): {
                 )
               }
             >
-              + Stroke
+              {s.t(M.plusStroke)}
             </button>
             <button
               type="button"
               style={iconBtn}
               title={
                 !target
-                  ? "Select an object first"
+                  ? s.t(M.selectFirst)
                   : total === 0
-                    ? "There are no extra layers to clear"
-                    : "Clear every extra layer"
+                    ? s.t(M.nothingToClear)
+                    : s.t(M.clearAll)
               }
               data-draw-appearance-clear
               disabled={!target || total === 0}
@@ -414,7 +441,7 @@ export function makeAppearancePanel(host: BundleHost): {
                 )
               }
             >
-              Clear
+              {s.t(M.clear)}
             </button>
           </span>
         </div>
@@ -425,12 +452,12 @@ export function makeAppearancePanel(host: BundleHost): {
             style={iconBtn}
             title={
               !target
-                ? "Select an object first"
+                ? s.t(M.selectFirst)
                 : baked
-                  ? "Already baked"
+                  ? s.t(M.alreadyBaked)
                   : total === 0
-                    ? "Add a fill or stroke layer first"
-                    : "Turn the stack into a group of paths, one per layer, so every layer renders"
+                    ? s.t(M.addLayerFirst)
+                    : s.t(M.bakeHint)
             }
             data-draw-appearance-bake
             disabled={!target || baked || total === 0}
@@ -440,17 +467,17 @@ export function makeAppearancePanel(host: BundleHost): {
               )
             }
           >
-            Bake
+            {s.t(M.bake)}
           </button>
           <button
             type="button"
             style={iconBtn}
             title={
               !target
-                ? "Select an object first"
+                ? s.t(M.selectFirst)
                 : !baked
-                  ? "Only a baked stack can be released"
-                  : "Turn the baked group back into a single object"
+                  ? s.t(M.onlyBakedRelease)
+                  : s.t(M.releaseHint)
             }
             data-draw-appearance-release
             disabled={!target || !baked}
@@ -460,7 +487,7 @@ export function makeAppearancePanel(host: BundleHost): {
               )
             }
           >
-            Release
+            {s.t(M.release)}
           </button>
         </div>
 
@@ -468,7 +495,7 @@ export function makeAppearancePanel(host: BundleHost): {
 
         {!target && (
           <div style={{ opacity: 0.6, font: `12px ${font.sans}` }}>
-            Select an object to see its appearance stack.
+            {s.t(M.selectToSee)}
           </div>
         )}
 
@@ -481,11 +508,10 @@ export function makeAppearancePanel(host: BundleHost): {
                   font: `11px ${font.sans}`,
                 }}
               >
-                Showing the first of {extra + 1} selected objects; edits apply
-                to all of them.
+                {s.t(M.showingFirst, { count: extra + 1 })}
               </div>
             )}
-            <div style={sectionStyle}>Fills</div>
+            <div style={sectionStyle}>{s.t(M.fills)}</div>
             {stack.fills.length === 0 ? (
               <div
                 style={{
@@ -493,12 +519,12 @@ export function makeAppearancePanel(host: BundleHost): {
                   font: `12px ${font.sans}`,
                 }}
               >
-                No extra fill layers — the frame's own fill is what renders.
+                {s.t(M.noFills)}
               </div>
             ) : (
               rows("fill")
             )}
-            <div style={sectionStyle}>Strokes</div>
+            <div style={sectionStyle}>{s.t(M.strokes)}</div>
             {stack.strokes.length === 0 ? (
               <div
                 style={{
@@ -506,7 +532,7 @@ export function makeAppearancePanel(host: BundleHost): {
                   font: `12px ${font.sans}`,
                 }}
               >
-                No extra stroke layers — the frame's own stroke is what renders.
+                {s.t(M.noStrokes)}
               </div>
             ) : (
               rows("stroke")
@@ -514,12 +540,14 @@ export function makeAppearancePanel(host: BundleHost): {
           </>
         )}
 
-        <About attr="data-draw-appearance-note">{APPEARANCE_BAKE_NOTE}</About>
+        <About attr="data-draw-appearance-note">
+          {s.t(APPEARANCE_BAKE_NOTE)}
+        </About>
       </div>
     );
   };
   return {
-    title: "Appearance",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

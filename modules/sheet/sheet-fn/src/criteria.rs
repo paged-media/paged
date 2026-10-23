@@ -198,7 +198,7 @@ pub fn matches(c: &Criteria, candidate: &CellValue) -> bool {
                         candidate,
                         CellValue::Number(_) | CellValue::Bool(_) | CellValue::Empty
                     ) {
-                        return n == *rhs;
+                        return coerce::eq15(n, *rhs);
                     }
                 }
             }
@@ -222,6 +222,11 @@ pub fn matches(c: &Criteria, candidate: &CellValue) -> bool {
 }
 
 fn apply_num_op(op: Op, a: f64, b: f64) -> bool {
+    // Numbers equal at 15 significant digits are equal for every comparison
+    // (Excel-recorded: COUNTIF of 0.1+0.2 against 0.3 counts it).
+    if coerce::eq15(a, b) {
+        return matches!(op, Op::Eq | Op::Le | Op::Ge);
+    }
     match op {
         Op::Eq => a == b,
         Op::Ne => a != b,

@@ -46,8 +46,11 @@ import {
   useOptionalTool,
   useOverlaySignals,
   useSelection,
+  setDebugHandle,
+  useEditorScope,
   type MarqueeRectPageLocal,
   type SelectionState,
+  useEditorKeys,
 } from "@paged-media/shell";
 
 import type { CanvasClient } from "@paged-media/client";
@@ -197,6 +200,8 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 const WHEEL_LINE_PX = 16;
 
 export function ViewportCanvas(props: ViewportCanvasProps) {
+  const keys = useEditorKeys();
+  const scope = useEditorScope();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Set once we've transferred to the worker — guards against re-transfer (illegal). */
@@ -454,13 +459,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // Dev/test hook (B-08 spec). Headless Chromium can't synthesize a
     // physical-stylus pressure, so the Playwright spec asserts the
     // PLUMBING: it reads the last tool pointer the canvas built and
-    // checks the new fields are present + typed. Stripped from prod
-    // builds; mirrors the `window.__canvas` convention.
-    if (!import.meta.env.PROD) {
-      (
-        globalThis as unknown as { __canvasPointer?: CanvasPointerEvent }
-      ).__canvasPointer = built;
-    }
+    // checks the new fields are present + typed. Dev builds only; the
+    // page entry publishes it as `__canvasPointer`, as it does `__canvas`.
+    if (!import.meta.env.PROD) setDebugHandle(scope, "pointer", built);
     return built;
   };
 
@@ -1402,9 +1403,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   });
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => onEscapeKey(e);
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+    return keys.listen("keydown", onKeyDown, undefined, document);
+  }, [keys]);
 
   // INV-8 — a window blur (Cmd/Alt-Tab away, devtools focus) while a
   // drag is in flight must abort it. Without this the gesture stays

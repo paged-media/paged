@@ -4348,6 +4348,233 @@
           ]
         },
         {
+          "description": "v76 (engine ADR 1002) — define the XML tag `name` (`color`: its tag\ncolour, an enumeration such as `Red`). Routes to\n`Operation::CreateXmlTag`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "createXmlTag"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — remove the XML tag `name`; refused while an element uses it.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "deleteXmlTag"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — tag a page item or a story (a text frame's element tags its\nstory) with `tag`, defined when missing; a tagged item is retagged.\n`selfId` names a new element; the engine mints one when absent.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "tagItem"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "type": "string"
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "selfId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "item",
+                "tag"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — remove the element tagging a page item or a story.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "untagItem"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "item"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — tag the story characters `[start, end)` (the `StoryRange`\ncount) with `tag`. `selfId` as for `TagItem`.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "tagRange"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "tag": {
+                  "type": "string"
+                },
+                "selfId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "storyId",
+                "start",
+                "end",
+                "tag"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — remove the element `element` tagging a text range.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "untagRange"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "element": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "element"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "v76 — set (`value` absent: remove) an XML element's attribute;\n`element` is its id, or the page item or story it tags.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setXmlAttribute"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "element": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "element",
+                "name"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
           "description": "W0.5 — \"show only this set\": activate one `<ConditionSet>`.",
           "type": "object",
           "properties": {
@@ -7161,6 +7388,11 @@
           "description": "`ContinuingRuleOn`: `Value::Bool` (true).",
           "type": "string",
           "const": "documentFootnoteContinuingRuleOn"
+        },
+        {
+          "description": "The page of a placed PDF the frame shows: `<PDF><PDFAttribute\nPageNumber>`, 1-based. `Value::Length` carrying a whole number of\nat least 1; `None` clears it (page 1). On a Rectangle, Oval or\nPolygon that places a picture; a frame whose bytes are not a PDF\nrefuses it. The renderer shows page 1 for a page the PDF lacks.\nPaint-only (`frame_style`): the frame's fit re-resolves against\nthe page's size on the next build.",
+          "type": "string",
+          "const": "framePdfPage"
         }
       ]
     },

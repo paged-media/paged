@@ -161,6 +161,13 @@ import {
 } from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.compoundPath", {
+  make: "Path: Make compound path",
+  release: "Path: Release compound path",
+});
 export const COMPOUND_PATH_COMMAND_CATEGORY = "Path";
 
 export const MAKE_COMPOUND_PATH_COMMAND_ID =
@@ -828,13 +835,13 @@ export function contributeCompoundPathCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: MAKE_COMPOUND_PATH_COMMAND_ID,
-      title: "Path: Make compound path",
+      title: M.make,
       category: COMPOUND_PATH_COMMAND_CATEGORY,
       handler: () => applyMakeCompoundPath(host).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_COMPOUND_PATH_COMMAND_ID,
-      title: "Path: Release compound path",
+      title: M.release,
       category: COMPOUND_PATH_COMMAND_CATEGORY,
       handler: () => applyReleaseCompoundPath(host).then(() => undefined),
     }),

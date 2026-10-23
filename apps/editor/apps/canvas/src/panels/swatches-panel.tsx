@@ -85,10 +85,31 @@ import { appCatalogRegistry } from "./catalog-registry";
 import { swatchesComposition } from "./swatches.composition";
 import { SwatchRow } from "./swatch-row";
 import { BUNDLED_LIBRARIES } from "../assets/libraries";
+import { defineMessages, useStrings } from "@paged-media/strings";
+import { usePortalContainer } from "@paged-media/shell";
+
+const M = defineMessages("app.swatchesPanel", {
+  newSwatchName: "New swatch",
+  swatches: "Swatches",
+  newSwatch: "New swatch",
+  cannotCreate: "The active content type does not own new document swatches",
+  addNew: "+ New",
+  empty: "No swatches.",
+  libraries: "Bundled swatch libraries",
+  cannotImport:
+    "The active content type does not own the document swatch library",
+  librariesButton: "Libraries ▾",
+  filter: "Filter libraries…",
+  loading: "Loading… ",
+  more: "…{count} more — refine the filter.",
+  attribution:
+    "HLC Colour Atlas & OCSC © freieFarbe e.V., CC BY-ND 4.0 — originals shipped unmodified, see NOTICE.",
+});
 
 export const SWATCHES_PANEL_ID = "paged.swatches";
 
 function SwatchCollection() {
+  const strings = useStrings();
   // The ONE declaration the ADR turns on, twice: two CORE collection
   // names and nothing else. The active plugin edit context may answer
   // either instead of the engine, and this panel never learns which.
@@ -151,7 +172,7 @@ function SwatchCollection() {
         op: "createSwatch",
         args: {
           spec: {
-            name: "New swatch",
+            name: strings.t(M.newSwatchName),
             space: "CMYK",
             value: [0, 0, 0, 100],
             model: "Process",
@@ -255,7 +276,7 @@ function SwatchCollection() {
           className="text-xs uppercase tracking-wide text-muted-foreground"
           data-swatches-source
         >
-          {ownerNote ?? "Swatches"}
+          {ownerNote ?? strings.t(M.swatches)}
         </span>
         <div className="flex items-center gap-1">
           <LibrariesMenu enabled={canImportLibrary} />
@@ -265,13 +286,11 @@ function SwatchCollection() {
             data-action="add-swatch"
             disabled={!canCreate}
             title={
-              canCreate
-                ? "New swatch"
-                : "The active content type does not own new document swatches"
+              canCreate ? strings.t(M.newSwatch) : strings.t(M.cannotCreate)
             }
             onClick={onAdd}
           >
-            + New
+            {strings.t(M.addNew)}
           </button>
         </div>
       </div>
@@ -280,7 +299,7 @@ function SwatchCollection() {
           className="px-1 text-xs text-muted-foreground"
           data-swatches="empty"
         >
-          No swatches.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <>
@@ -317,6 +336,8 @@ function SwatchCollection() {
 // into the document while the panel is showing a plugin's palette would
 // be the same lie, just louder.
 function LibrariesMenu({ enabled }: { enabled: boolean }) {
+  const portalContainer = usePortalContainer();
+  const strings = useStrings();
   const client = useCanvasClient();
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
   const [filter, setFilter] = useState("");
@@ -359,14 +380,10 @@ function LibrariesMenu({ enabled }: { enabled: boolean }) {
         className="px-2 py-0.5 rounded hover:bg-muted/60 text-xs disabled:opacity-40"
         data-action="open-libraries"
         disabled={!enabled}
-        title={
-          enabled
-            ? "Bundled swatch libraries"
-            : "The active content type does not own the document swatch library"
-        }
+        title={enabled ? strings.t(M.libraries) : strings.t(M.cannotImport)}
         onClick={open}
       >
-        Libraries ▾
+        {strings.t(M.librariesButton)}
       </button>
       {at &&
         createPortal(
@@ -396,7 +413,7 @@ function LibrariesMenu({ enabled }: { enabled: boolean }) {
             >
               <input
                 autoFocus
-                placeholder="Filter libraries…"
+                placeholder={strings.t(M.filter)}
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 className="w-full border border-input rounded px-1.5 py-0.5 mb-1 text-xs"
@@ -412,35 +429,35 @@ function LibrariesMenu({ enabled }: { enabled: boolean }) {
                   className="block w-full text-left px-1.5 py-1 rounded hover:bg-muted/60 truncate"
                   title={lib.attribution}
                 >
-                  {busy === lib.id ? "Loading… " : ""}
+                  {busy === lib.id ? strings.t(M.loading) : ""}
                   {lib.title}
                 </button>
               ))}
               {list.length > 50 && (
                 <div className="px-1.5 py-1 text-muted-foreground">
-                  …{list.length - 50} more — refine the filter.
+                  {strings.t(M.more, { count: list.length - 50 })}
                 </div>
               )}
               <div
                 className="border-t border-input mt-1 pt-1 text-[10px] text-muted-foreground"
                 data-hlc-attribution
               >
-                HLC Colour Atlas &amp; OCSC © freieFarbe e.V., CC BY-ND 4.0 —
-                originals shipped unmodified, see NOTICE.
+                {strings.t(M.attribution)}
               </div>
             </div>
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </>
   );
 }
 
 export function SwatchesPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-swatches-panel="ready">
-        <CompositionRenderer composition={swatchesComposition} />
+        <CompositionRenderer composition={swatchesComposition(strings)} />
         <SwatchCollection />
       </div>
     </CatalogRegistryProvider>

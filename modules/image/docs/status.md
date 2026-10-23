@@ -70,6 +70,43 @@ landed. How the parts fit is in
   and "Save the adjusted file" hands it to the host's save door; three exporters offer the
   same formats. "Serve image tiles to the renderer" claims the frame's image resource.
 
+## Object model, commands and template fields
+
+Every image frame's layer stack is addressable through `host.objects` (kinds `image`,
+`layer`, `mask`, `adjustment`, `smartObject`; `glue/src/object-model/`), headless and
+without a GPU: a stack whose composite is not the identity is stored `pending` and the
+frame keeps its previous image until a GPU realm re-composites it.
+
+- **Canvas operations on a named image.** The image kind's `transform` (a quarter turn or a
+  flip), `crop` and `canvasSize` rows rotate, flip, crop and resize the canvas of every
+  layer and mask at once, in one undo step (`object-model/canvas-ops.ts`; pixels move,
+  none is computed). The typed `rotateCw`, `rotateCcw`, `rotate180`, `flipHorizontal` and
+  `flipVertical` take an optional `image`; `cropImage` and `canvasSize` are new. A stack
+  holding a smart object is refused (its source re-renders on the GPU).
+- **A typed `applyAdjustment`** `{ image, name?, params }` adds one adjustment layer with
+  the given parameters, named, in one undo step.
+- **Interactive twins refuse headless.** A typed twin that acts on the image open in the
+  editor fails with `unmapped:` when none is open, instead of doing nothing.
+
+A template can open three parts of an edited image to a filler (extensions ADR 335;
+`glue/src/object-model/template-fields.ts`). A field is the frame's `x-paged:template`
+label; each kind grants `image.replace` (a write that leaves a one-layer composite places
+the baked image), beside the module's own label on the frame.
+
+| Kind                                 | Definition                    | Value                                         |
+| ------------------------------------ | ----------------------------- | --------------------------------------------- |
+| `media.paged.image.picture`          | `{ layer?, frame? }`          | `{ name, bytes }`; reads `{ name, pending }`  |
+| `media.paged.image.adjustmentPreset` | `{ allowed, layer?, frame? }` | a preset's name (`allowed: [{ name, rows }]`) |
+| `media.paged.image.layerVisibility`  | `{ layer, frame? }`           | a boolean                                     |
+
+- `layer` is a layer's name; without it a picture field takes the bottom pixel layer. The
+  picture replaces that layer's pixels as is, centred, so the adjustment layers above
+  stay.
+- A preset field keeps one adjustment layer (`layer`, default "Preset"): the first write
+  creates it, later writes set every parameter to the preset's value or its default.
+- The picture's read reports `pending`, so a form or `paged template fields` can say the
+  frame still shows the previous composite.
+
 ## Limits of what is shipped
 
 - **A GPU is required.** No kernel has a CPU path. Without WebGPU, adjustments, filters,

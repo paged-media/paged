@@ -4,6 +4,7 @@
 
 - id: sheet.fn.text.textjoin
   name: TEXTJOIN
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 3, max: null }
   volatility: none
@@ -69,6 +70,7 @@
 
 - id: sheet.fn.text.unichar
   name: UNICHAR
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 1, max: 1 }
   volatility: none
@@ -82,6 +84,7 @@
 
 - id: sheet.fn.text.unicode
   name: UNICODE
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 1, max: 1 }
   volatility: none
@@ -121,6 +124,7 @@
 
 - id: sheet.fn.text.numbervalue
   name: NUMBERVALUE
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 1, max: 3 }
   volatility: none
@@ -173,19 +177,21 @@
 
 - id: sheet.fn.text.textbefore
   name: TEXTBEFORE
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 2, max: 6 }
   volatility: none
   range_aware: false
   rust: text2::textbefore
   status: implemented
-  provenance: ["Microsoft TEXTBEFORE (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
+  provenance: ["Microsoft TEXTBEFORE (public docs) — text, delimiter, [instance], [match_mode], [match_end] (the text's end, or start counting back, is a delimiter), [if_not_found]"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textbefore"]
-    corpus: ["corpus/fn-corpus/text2/textbefore.golden.tsv"]
+    corpus: ["corpus/fn-corpus/text2/textbefore.golden.tsv", "corpus/fn-corpus/fix3/textbefore3.golden.tsv"]
 
 - id: sheet.fn.text.textafter
   name: TEXTAFTER
+  xlfn_prefix: "_xlfn."
   family: text
   arity: { min: 2, max: 6 }
   volatility: none
@@ -195,4 +201,4 @@
   provenance: ["Microsoft TEXTAFTER (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textafter"]
-    corpus: ["corpus/fn-corpus/text2/textafter.golden.tsv"]
+    corpus: ["corpus/fn-corpus/text2/textafter.golden.tsv", "corpus/fn-corpus/fix3/textbefore3.golden.tsv"]

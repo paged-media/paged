@@ -17,6 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { t } from "@paged-media/strings";
+import { SCREEN_MODE } from "./messages";
 import {
   createContext,
   useCallback,
@@ -37,11 +39,37 @@ export type ScreenMode =
 
 export const SCREEN_MODES: ReadonlyArray<{ mode: ScreenMode; label: string }> =
   [
-    { mode: "normal", label: "Normal" },
-    { mode: "preview", label: "Preview" },
-    { mode: "bleed", label: "Bleed" },
-    { mode: "slug", label: "Slug" },
-    { mode: "presentation", label: "Presentation" },
+    // The label is read where it shows, so it follows the editor's locale.
+    {
+      mode: "normal",
+      get label() {
+        return t(SCREEN_MODE.normal);
+      },
+    },
+    {
+      mode: "preview",
+      get label() {
+        return t(SCREEN_MODE.preview);
+      },
+    },
+    {
+      mode: "bleed",
+      get label() {
+        return t(SCREEN_MODE.bleed);
+      },
+    },
+    {
+      mode: "slug",
+      get label() {
+        return t(SCREEN_MODE.slug);
+      },
+    },
+    {
+      mode: "presentation",
+      get label() {
+        return t(SCREEN_MODE.presentation);
+      },
+    },
   ];
 
 interface ScreenModeValue {

@@ -133,12 +133,18 @@ import {
   type Affine,
 } from "@paged-media/draw-geometry";
 
+import { defineMessages, t } from "@paged-media/strings";
 import { mintedLeaves, mutateMinting } from "../commands/minted";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
 } from "../commands/batch-handles";
+
+const M = defineMessages("draw.svg", {
+  importerTitle: "SVG (Scalable Vector Graphics)",
+  exporterTitle: "SVG (selection)",
+});
 
 export const SVG_IMPORTER_ID = "media.paged.draw.importer.svg";
 export const SVG_EXPORTER_ID = "media.paged.draw.exporter.svg";
@@ -728,7 +734,7 @@ export function contributeSvgIo(host: BundleHost): Disposable {
     disposers.push(
       host.contribute.importer({
         id: SVG_IMPORTER_ID,
-        title: "SVG (Scalable Vector Graphics)",
+        title: t(M.importerTitle),
         extensions: [".svg"],
         mimeTypes: [SVG_MIME],
         // File ▸ Open has no use for the inserted ids, so it takes the
@@ -745,7 +751,7 @@ export function contributeSvgIo(host: BundleHost): Disposable {
     disposers.push(
       host.contribute.exporter({
         id: SVG_EXPORTER_ID,
-        title: "SVG (selection)",
+        title: t(M.exporterTitle),
         extension: ".svg",
         mimeType: SVG_MIME,
         export: () => exportSvg(host),

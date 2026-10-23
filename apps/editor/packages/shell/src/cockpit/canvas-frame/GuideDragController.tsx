@@ -69,6 +69,7 @@ import {
   type OptimisticGuide,
 } from "../../state/guide-drag-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
+import { queryEditor, useEditorRoot } from "../../state/editor-root";
 
 /** Whole-pt snap (GD spec: release snaps to whole pt). */
 function snapPt(v: number): number {
@@ -148,6 +149,7 @@ function overRulerAt(clientX: number, clientY: number): boolean {
 }
 
 export function GuideDragController() {
+  const root = useEditorRoot();
   const client = useCanvasClient();
   const { camera } = useCamera();
   const { handle } = useDocument();
@@ -224,7 +226,7 @@ export function GuideDragController() {
    *  cockpit tags the wrapper `data-paged-viewport`. */
   const clientToDoc = useEffectEvent(
     (clientX: number, clientY: number): [number, number] | null => {
-      const wrap = document.querySelector("[data-paged-viewport]");
+      const wrap = queryEditor(root, "[data-paged-viewport]");
       if (!wrap) return null;
       const r = wrap.getBoundingClientRect();
       if (camera.scale <= 0) return null;

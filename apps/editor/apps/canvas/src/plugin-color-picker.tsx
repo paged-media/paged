@@ -35,6 +35,11 @@ import {
   useColorCompute,
   type MixerValue,
 } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.pluginColorPicker", {
+  colour: "Colour",
+});
 
 export interface HostColorPickerProps {
   /** `#rrggbb` (sRGB). */
@@ -55,6 +60,7 @@ function toMixer(hex: string): MixerValue {
 
 export function HostColorPicker(props: HostColorPickerProps) {
   const { value, onChange, onCommit, disabled, ariaLabel } = props;
+  const strings = useStrings();
   // The mixer's canonical state. RGB edits map to hex directly; an edit
   // in another space (CMYK, Lab) is answered by the engine's colour
   // management, so its hex arrives asynchronously through the compute.
@@ -98,7 +104,7 @@ export function HostColorPicker(props: HostColorPickerProps) {
   return (
     <div
       role="group"
-      aria-label={ariaLabel ?? "Colour"}
+      aria-label={ariaLabel ?? strings.t(M.colour)}
       aria-disabled={disabled || undefined}
       data-host-color-picker
       style={disabled ? { opacity: 0.5, pointerEvents: "none" } : undefined}

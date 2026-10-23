@@ -33,6 +33,7 @@ pub mod package;
 pub mod xml;
 
 pub mod builders;
+pub mod fixtures;
 pub mod samples;
 
 pub use package::{write_idml, Sample};

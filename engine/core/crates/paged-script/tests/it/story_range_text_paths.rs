@@ -221,7 +221,8 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 239: ADR 153 added the line setting and no-break.
         // 241: ADR 158 added the list level and its restart flag.
         // 243: ADR 175 added a row's start rule and its keep with next.
-        243,
+        // 244: ADR 1003 added the page of a placed PDF.
+        244,
         "the advertised roster changed; move the count with the decision"
     );
 }

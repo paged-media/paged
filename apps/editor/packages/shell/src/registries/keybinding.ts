@@ -392,6 +392,9 @@ export function createKeybindingRegistry(
   commands: CommandRegistry,
   getState?: () => unknown,
   features?: Pick<FeatureStore, "allows">,
+  /** Whether a key event is this editor's (plan task E1: the editor's
+   *  root, `state/editor-root.tsx`). Absent: every key on the page. */
+  owns?: (event: KeyboardEvent) => boolean,
 ): KeybindingRegistry & Disposable {
   const offered = (b: KeybindingContribution) =>
     commands.offered?.(b.command) !== false &&
@@ -403,6 +406,7 @@ export function createKeybindingRegistry(
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (owns && !owns(event)) return;
     // Skip when the focused widget consumes this key itself, so typing
     // (and editing, and menu navigation) doesn't trigger commands. The
     // canvas's content-selection model lives on its own layer and isn't

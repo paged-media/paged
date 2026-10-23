@@ -16,13 +16,15 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The slide bundle's two typed commands, UNIT: the bundle on the in-process
+// The slide bundle's typed commands, UNIT: the bundle on the in-process
 // host over a recording fake editor (no engine; the slide wasm is real).
 // newSlide: the one mutation it emits for a deck, where it puts the page,
 // what it answers, and when it refuses (not a deck, an unknown slide, a
 // refused insert) without touching the document. importPptx: what reaches
 // the door that opens the document, the deck label it writes after, and the
-// refusal on a host that cannot open one. The same commands on the real
+// refusal on a host that cannot open one. duplicateSlide: the one batch it
+// emits; exportPptx: its refusal for a document that came from no deck.
+// The same commands on the real
 // engine: test/headless/object-model.spec.ts.
 
 import { readFileSync } from "node:fs";
@@ -48,6 +50,8 @@ import {
 
 import slideBundle from "../src/index";
 import {
+  DUPLICATE_SLIDE_COMMAND,
+  EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
   LABEL_KEY,
   NEW_SLIDE_COMMAND,
@@ -199,6 +203,83 @@ describe("media.paged.slide.newSlide (unit)", () => {
       /failed: insertPage was refused/,
     );
     expect(b.fake.undoDepth()).toBe(0);
+    b.dispose();
+  });
+});
+
+/** A deck of two slides; a batch (the duplicate) mints `p3`. */
+function deckThatCopies() {
+  return boot({
+    documentMeta: { pluginMetadata: [DECK_LABEL] } as never,
+    collections: { pages: [page("p1", 1), page("p2", 2)] },
+    reply: (m: MainToWorkerKind) =>
+      m.kind === "mutate" && m.payload.op === "batch"
+        ? ({
+            kind: "mutationApplied",
+            payload: {
+              clientSeq: 0,
+              appliedSeq: 1,
+              pageIds: ["p1", "p3", "p2"],
+              cacheStats: {
+                hits: 0,
+                misses: 0,
+                len: 0,
+                capacity: 0,
+                rebuildMs: 0,
+              },
+              createdPages: ["p3"],
+            },
+          } as unknown as WorkerToMain)
+        : undefined,
+  });
+}
+
+describe("media.paged.slide.duplicateSlide (unit)", () => {
+  it("copies the slide right after itself in one batch and answers the copy", async () => {
+    covers("command:media.paged.slide.duplicateSlide");
+    const b = deckThatCopies();
+    const out = (await b.host.objects.invoke(DUPLICATE_SLIDE_COMMAND, {
+      slide: "plugin:media.paged.slide/slide/p1",
+    })) as { slide: string };
+    expect(b.fake.mutations()).toEqual([
+      {
+        op: "batch",
+        args: {
+          ops: [
+            { op: "duplicatePage", args: { page: "p1" } },
+            { op: "bindCreated", args: { handle: "copy" } },
+            { op: "movePage", args: { page: "$h:copy", after: "p1" } },
+          ],
+        },
+      },
+    ]);
+    expect(out.slide).toBe("plugin:media.paged.slide/slide/p3");
+    b.dispose();
+  });
+
+  it("refuses a slide that is not in the deck, and changes nothing", async () => {
+    covers("command:media.paged.slide.duplicateSlide");
+    const b = deckThatCopies();
+    await expect(
+      b.host.objects.invoke(DUPLICATE_SLIDE_COMMAND, {
+        slide: "plugin:media.paged.slide/slide/nope",
+      }),
+    ).rejects.toThrow(/unknownAddress: no slide/);
+    expect(b.fake.mutations()).toEqual([]);
+    b.dispose();
+  });
+});
+
+describe("media.paged.slide.exportPptx (unit)", () => {
+  it("refuses a document that was not opened from a deck, and changes nothing", async () => {
+    covers("command:media.paged.slide.exportPptx");
+    const b = deck();
+    await expect(
+      b.host.objects.invoke(EXPORT_PPTX_COMMAND, {}),
+    ).rejects.toThrow(
+      /failed: this document was not opened from a PowerPoint deck/,
+    );
+    expect(b.fake.mutations()).toEqual([]);
     b.dispose();
   });
 });

@@ -1,0 +1,14 @@
+# HEX2OCT(number,[places]).
+# id	formula	setup	expected
+hex2oct-0	=HEX2OCT("F",3)	-	017
+hex2oct-1	=HEX2OCT("3B4E")	-	35516
+hex2oct-2	=HEX2OCT("FFFFFFFF00")	-	7777777400
+hex2oct-3	=HEX2OCT("FFE0000000")	-	4000000000
+hex2oct-4	=HEX2OCT("FFDFFFFFFF")	-	#NUM!
+hex2oct-5	=HEX2OCT("1FFFFFFF")	-	3777777777
+hex2oct-6	=HEX2OCT("20000000")	-	#NUM!
+hex2oct-7	=HEX2OCT("F",1)	-	#NUM!
+hex2oct-8	=HEX2OCT("F",11)	-	#NUM!
+hex2oct-9	=HEX2OCT("Z")	-	#NUM!
+hex2oct-x0	=HEX2OCT(A1)	A1=#N/A	#N/A
+hex2oct-x1	=CONCAT(HEX2OCT({"8","9"}))	-	1011

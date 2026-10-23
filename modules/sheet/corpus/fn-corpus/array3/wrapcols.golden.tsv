@@ -1,0 +1,10 @@
+# WRAPCOLS(vector, wrap_count, [pad_with]).
+# id	formula	setup	expected
+wc-0	=ARRAYTOTEXT(WRAPCOLS({1,2,3,4,5},2),1)	-	{1,3,5;2,4,#N/A}
+wc-1	=ARRAYTOTEXT(WRAPCOLS({1,2,3,4,5},2,0),1)	-	{1,3,5;2,4,0}
+wc-2	=ARRAYTOTEXT(WRAPCOLS({1;2;3;4},3),1)	-	{1,4;2,#N/A;3,#N/A}
+wc-3	=ARRAYTOTEXT(WRAPCOLS({1,2,3},5),1)	-	{1;2;3}
+wc-4	=WRAPCOLS({1,2;3,4},2)	-	#VALUE!
+wc-5	=WRAPCOLS({1,2,3},0)	-	#NUM!
+wc-6	=ARRAYTOTEXT(WRAPCOLS(A1:D1,3,""),1)	A1=1;B1=2;D1=4	{1,4;2,"";,""}
+wc-7	=ARRAYTOTEXT(WRAPCOLS({1,2,3},2,NA()),1)	-	{1,3;2,#N/A}

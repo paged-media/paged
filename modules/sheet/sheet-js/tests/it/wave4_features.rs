@@ -202,14 +202,14 @@ fn calc_pr_iteration_is_honoured_and_round_trips__feat__sheet_calc_iterative() {
     );
 }
 
-/// Without `<calcPr iterate>` the same cycle is the circular ruling
-/// (`#REF!`); switching iteration on is written back into `<calcPr>`, other
+/// Without `<calcPr iterate>` the same cycle is not calculated (its members
+/// keep their value, 0 here — sheet ADR 514); switching iteration on is written back into `<calcPr>`, other
 /// attributes kept, and a reload honours it.
 #[test]
 fn calc_pr_toggle_writes_back__feat__sheet_calc_iterative() {
     let bytes = package(r#"<calcPr calcId="191029"/>"#, CYCLE);
     let mut s = SheetSession::load_xlsx(&bytes).unwrap();
-    assert_eq!(s.get_cell_display(0, 0, 0), "#REF!");
+    assert_eq!(s.get_cell_display(0, 0, 0), "0");
     s.set_iterative(true, 100, 0.0001);
     assert!(s.metadata().dirty, "a settings change is a pending save");
     let saved = s.save_xlsx().unwrap();
@@ -370,18 +370,34 @@ fn delete_cols_and_rows__feat__sheet_calc_rewrite_structural_door() {
 }
 
 /// A sheet carrying preserved, cell-addressed content (data validations)
-/// REFUSES a structural edit and is left untouched.
+/// takes a structural edit: the rules move with their cells (W1.2; before,
+/// the edit was refused).
 #[test]
-fn structural_edit_refuses_preserved_addresses__feat__sheet_calc_rewrite_structural_door() {
-    let mut s = SheetSession::load_xlsx(&fixture("12-datavalidation.xlsx")).unwrap();
+fn structural_edit_shifts_preserved_addresses__feat__sheet_calc_rewrite_structural_door() {
+    let src = fixture("12-datavalidation.xlsx");
+    let mut s = SheetSession::load_xlsx(&src).unwrap();
     let before: Vec<String> = (0..6).map(|r| s.get_cell_display(0, r, 0)).collect();
-    let err = s
-        .structural_edit(0, StructuralEdit::InsertRows, 0, 1)
-        .unwrap_err();
-    assert!(err.to_string().contains("dataValidations"), "{err}");
-    let after: Vec<String> = (0..6).map(|r| s.get_cell_display(0, r, 0)).collect();
+    s.structural_edit(0, StructuralEdit::InsertRows, 0, 1)
+        .unwrap();
+    let after: Vec<String> = (1..7).map(|r| s.get_cell_display(0, r, 0)).collect();
     assert_eq!(before, after);
-    assert!(!s.metadata().dirty);
+    let out = s.save_xlsx().unwrap();
+    let sqrefs = |bytes: &[u8]| -> Vec<String> {
+        let x = part_text(bytes, "xl/worksheets/sheet1.xml");
+        x.match_indices("sqref=\"")
+            .map(|(i, _)| {
+                let rest = &x[i + 7..];
+                rest[..rest.find('"').unwrap()].to_string()
+            })
+            .collect()
+    };
+    let was = sqrefs(&src);
+    let now = sqrefs(&out);
+    assert!(!was.is_empty());
+    assert_eq!(was.len(), now.len());
+    for (a, b) in was.iter().zip(&now) {
+        assert_ne!(a, b, "every validation range moved down one row");
+    }
 }
 
 // ── 8. CSV / TSV import ──────────────────────────────────────────────────

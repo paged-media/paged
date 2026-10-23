@@ -321,8 +321,10 @@ function compiledChunksCheck(files) {
       for (const [file] of compiled) {
         const info = this.getModuleInfo(file);
         if (!info) continue; // compiled, then tree-shaken away
+        // An installed copy, or the bare specifier when React is external
+        // (a package whose React is the host's, @paged-media/editor).
         const dep = info.importedIds.find((id) =>
-          /[/\\]react[/\\](?:cjs[/\\])?compiler-runtime(?:\.[cm]?js)?(?:$|\?)/.test(
+          /(?:^|[/\\])react[/\\](?:cjs[/\\])?compiler-runtime(?:\.[cm]?js)?(?:$|\?)/.test(
             id,
           ),
         );
@@ -341,8 +343,12 @@ function compiledChunksCheck(files) {
         modules.push(file);
       }
       const chunks = Object.values(bundle).filter((c) => c.type === "chunk");
+      // External: no chunk holds it, each compiled chunk imports it itself.
+      const external = runtime === "react/compiler-runtime";
       const holder = runtime
-        ? chunks.find((c) => c.moduleIds.includes(runtime))
+        ? external
+          ? { fileName: runtime }
+          : chunks.find((c) => c.moduleIds.includes(runtime))
         : null;
       if (modules.length === 0) {
         problems.push(
@@ -358,6 +364,7 @@ function compiledChunksCheck(files) {
         while (stack.length > 0) {
           const c = stack.pop();
           if (c === holder) return true;
+          if (external && c.imports.includes(runtime)) return true;
           if (seen.has(c.fileName)) continue;
           seen.add(c.fileName);
           for (const name of c.imports) {

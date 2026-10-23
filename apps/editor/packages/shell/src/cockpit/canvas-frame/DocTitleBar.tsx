@@ -22,6 +22,8 @@
 // outside Design. All real: documentName + dirty from the worker's
 // DocumentMeta, the badge from the mode registry.
 
+import { useStrings } from "@paged-media/strings";
+import { COCKPIT } from "../messages";
 import { useDocumentMeta } from "../../catalog/use-collection";
 import { useDocument } from "../../state/document-context";
 import { useWorkflowMode } from "../../state/workflow-mode-context";
@@ -29,6 +31,7 @@ import { useRegistries } from "../../state/registries-context";
 import { useRegistryView } from "../../state/live";
 
 export function DocTitleBar() {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   // U14 — most generated/corpus IDMLs carry no meta documentName; the
   // loaded FILE's name (extension stripped, set by the loader) is the
@@ -64,12 +67,12 @@ export function DocTitleBar() {
         }}
       >
         {loaded
-          ? meta.documentName || sourceName || "Untitled document"
-          : "No document"}
+          ? meta.documentName || sourceName || strings.t(COCKPIT.untitled)
+          : strings.t(COCKPIT.noDocument)}
       </span>
       {loaded && meta.dirty && (
         <span style={{ fontSize: 11.5, color: "var(--pg-muted-fg)" }}>
-          Edited
+          {strings.t(COCKPIT.edited)}
         </span>
       )}
       {/* No badge in Design, and none where there is only one mode: an

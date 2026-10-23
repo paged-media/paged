@@ -26,7 +26,10 @@ import type {
   ElementId,
 } from "@paged-media/plugin-api";
 
+import { t } from "@paged-media/strings";
+
 import { DocEngine } from "./engine.js";
+import { DOC, OUTLINE } from "./messages.js";
 import { contributeMenu } from "./menu";
 import { createDocStore, paragraphRange } from "./panels/outline-model.js";
 import {
@@ -44,7 +47,7 @@ import {
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
 import {
-  DOC_PROPERTIES_PANEL,
+  docPropertiesPanel,
   PROPERTIES_PANEL_ID,
   publishPropertyLists,
 } from "./panels/properties-panel.js";
@@ -215,7 +218,10 @@ export function activate(host: BundleHost): BundleHandle {
     bytes: Uint8Array;
     fileName: string;
   } | null> {
-    if (!last) return null;
+    // A document opened from a saved file (or in another session) has no
+    // import record here: its persisted state is the label on its frame,
+    // as the typed exportDocx reads it.
+    if (!last) return exportPersisted();
     const verbatim = { bytes: last.source, fileName: last.fileName };
     // The persisted state wins: object-model writes advance the label's .docx.
     const frame = last.frameId ? (last.frameId as { id: string }).id : null;
@@ -281,13 +287,35 @@ export function activate(host: BundleHost): BundleHandle {
     }
   }
 
+  /** The export of the open document's Word document from its persisted
+   *  state alone: the first placed document (a standalone-opened one is
+   *  the only one). Null when the document holds none. */
+  async function exportPersisted(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null> {
+    const [state] = await discoverDocs(host);
+    if (!state) return null;
+    const fileName = state.data.fileName ?? "document.docx";
+    try {
+      const bytes = await exportState(state);
+      return bytes ? { bytes, fileName } : null;
+    } catch (err) {
+      host.log.warn(
+        `paged.doc: edited save-back failed, exporting the stored document: ${String(err)}`,
+      );
+      const stored = await readDocBytes(host, state);
+      return stored ? { bytes: stored, fileName } : null;
+    }
+  }
+
   // Pick a .docx and place it (shared by the command + the panel button).
   // A refusal or a failed read reaches the panel inline: `host.log` is never
   // shown to the user.
   async function pickAndIngest(): Promise<void> {
     if (!host.supports("shell.pickFile@1")) {
       host.log.warn("paged.doc: this host cannot pick files");
-      docStore.setNotice({ severity: "warning", message: NO_PICKER_REASON });
+      docStore.setNotice({ severity: "warning", message: t(NO_PICKER_REASON) });
       host.shell.openPanel(PANEL_ID);
       return;
     }
@@ -300,7 +328,7 @@ export function activate(host: BundleHost): BundleHandle {
       host.log.warn(`paged.doc: could not insert ${file.name}: ${String(err)}`);
       docStore.setNotice({
         severity: "error",
-        message: `${file.name} could not be read as a Word document.`,
+        message: t(OUTLINE.cannotRead, { name: file.name }),
       });
       host.shell.openPanel(PANEL_ID);
     }
@@ -348,7 +376,7 @@ export function activate(host: BundleHost): BundleHandle {
   disposers.push(
     host.contribute.command({
       id: "media.paged.doc.command.placeDoc",
-      title: INSERT_LABEL,
+      title: t(INSERT_LABEL),
       handler: () => void pickAndIngest(),
     }).dispose,
   );
@@ -358,7 +386,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.importer({
         id: "media.paged.doc.importer.docx",
-        title: "Word document (.docx)",
+        title: t(DOC.importer),
         extensions: [".docx", ".dotx"],
         mimeTypes: [DOCX_MIME],
         import: async ({ name, bytes }) => {
@@ -373,7 +401,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.exporter({
         id: "media.paged.doc.exporter.docx",
-        title: "Word document (.docx)",
+        title: t(DOC.importer),
         extension: ".docx",
         mimeType: DOCX_MIME,
         export: () => exportDocx(),
@@ -439,13 +467,14 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
   if (objectModel && host.supports("contribute.schemaPanel@1")) {
+    const schema = docPropertiesPanel();
     disposers.push(
       host.contribute.schemaPanel({
         id: PROPERTIES_PANEL_ID,
-        title: DOC_PROPERTIES_PANEL.title,
-        icon: DOC_PROPERTIES_PANEL.icon,
+        title: schema.title,
+        icon: schema.icon,
         defaultDock: "right",
-        schema: DOC_PROPERTIES_PANEL,
+        schema,
       }).dispose,
     );
     const lists = publishPropertyLists(host);

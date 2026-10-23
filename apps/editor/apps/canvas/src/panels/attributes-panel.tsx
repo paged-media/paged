@@ -48,8 +48,23 @@ import {
 } from "@paged-media/shell";
 import type { Value } from "@paged-media/client";
 
-import { addressOfElement } from "../object-model";
+import { useAddressOfElement } from "../object-model";
 import { refusalText, status } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.attributesPanel", {
+  visible: "Visible",
+  locked: "Locked",
+  nonprinting: "Nonprinting",
+  overprint: "Overprint",
+  overprintFill: "Overprint fill",
+  overprintStroke: "Overprint stroke",
+  gapColor: "Gap color",
+  labels: "Labels",
+  noLabels: "No labels on this object.",
+  onlyPagedLabels: "Only x-paged: labels are written here",
+  addLabel: "Add label",
+});
 
 // ADR 323 — every pill is an object-model field: reads/writes through
 // `host.objects` (one batch over a multi-selection = one undo step),
@@ -70,6 +85,7 @@ function unwrapBool(v: Value | null): boolean | null {
 
 function CheckRow({
   field,
+  row,
   label,
   on,
   mixed,
@@ -78,6 +94,8 @@ function CheckRow({
   onToggle,
 }: {
   field: ObjectField;
+  /** The row's name for tests (English); `label` is what it shows. */
+  row: string;
   label: string;
   on: boolean;
   mixed?: boolean;
@@ -89,7 +107,7 @@ function CheckRow({
     <ObjectFieldFrame field={field}>
       <label
         className="flex items-center justify-between py-[6px]"
-        data-check-row={label}
+        data-check-row={row}
         data-seam={seam ? "true" : undefined}
       >
         <span className="text-xs" style={{ color: "var(--pg-fg)" }}>
@@ -107,6 +125,7 @@ function CheckRow({
 }
 
 export function AttributesPanel() {
+  const strings = useStrings();
   const resolved = useObjectBindings(BINDINGS);
   const vis = resolved.visible;
   const visChecked = unwrapBool(vis.value);
@@ -126,7 +145,8 @@ export function AttributesPanel() {
           → the em-dash sentinel. */}
       <CheckRow
         field={vis}
-        label="Visible"
+        row="Visible"
+        label={strings.t(M.visible)}
         on={visChecked === true}
         mixed={visChecked === null}
         disabled={vis.onCommit == null}
@@ -136,7 +156,8 @@ export function AttributesPanel() {
       />
       <CheckRow
         field={lock}
-        label="Locked"
+        row="Locked"
+        label={strings.t(M.locked)}
         on={lockChecked === true}
         mixed={lockChecked === null}
         disabled={lock.onCommit == null}
@@ -146,7 +167,8 @@ export function AttributesPanel() {
       />
       <CheckRow
         field={np}
-        label="Nonprinting"
+        row="Nonprinting"
+        label={strings.t(M.nonprinting)}
         on={checked === true}
         mixed={checked === null}
         disabled={np.onCommit == null}
@@ -155,10 +177,11 @@ export function AttributesPanel() {
         }}
       />
       <div className="-mx-3 mt-2 border-t border-input px-3 pt-2">
-        <div className="pg-label mb-1">Overprint</div>
+        <div className="pg-label mb-1">{strings.t(M.overprint)}</div>
         <CheckRow
           field={opFill}
-          label="Overprint fill"
+          row="Overprint fill"
+          label={strings.t(M.overprintFill)}
           on={opFillChecked === true}
           mixed={opFillChecked === null}
           disabled={opFill.onCommit == null}
@@ -168,7 +191,8 @@ export function AttributesPanel() {
         />
         <CheckRow
           field={opStroke}
-          label="Overprint stroke"
+          row="Overprint stroke"
+          label={strings.t(M.overprintStroke)}
           on={opStrokeChecked === true}
           mixed={opStrokeChecked === null}
           disabled={opStroke.onCommit == null}
@@ -183,7 +207,7 @@ export function AttributesPanel() {
       <div className="mt-1">
         <PropertyField
           path="frameStrokeGapColor"
-          label="Gap color"
+          label={strings.t(M.gapColor)}
           scope="element"
         />
       </div>
@@ -206,13 +230,15 @@ const LABEL_NS = "x-paged:";
  * step, "Bind to data…").
  */
 function LabelsSection() {
+  const addressOfElement = useAddressOfElement();
+  const strings = useStrings();
   const { elementSelection } = useSelection();
   const model = useObjectModel();
   const first = elementSelection.length === 1 ? elementSelection[0] : null;
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that may compare it (ADR 229)
   const address = useMemo(
     () => (first ? addressOfElement(first) : null),
-    [first],
+    [addressOfElement, first],
   );
   const targets = address ? [address] : [];
   const map = useObjectField({
@@ -247,14 +273,14 @@ function LabelsSection() {
       data-section="Labels"
       data-labels-target={address}
     >
-      <div className="pg-label mb-1">Labels</div>
+      <div className="pg-label mb-1">{strings.t(M.labels)}</div>
       {labels.length === 0 ? (
         <div
           className="pb-1 text-xs"
           style={{ color: "var(--pg-muted-fg)" }}
           data-labels-empty=""
         >
-          No labels on this object.
+          {strings.t(M.noLabels)}
         </div>
       ) : (
         <div className="flex flex-col gap-1.5 pb-1" data-labels-list="">
@@ -273,7 +299,7 @@ function LabelsSection() {
                 key={key}
                 className="text-xs"
                 data-label-readonly={key}
-                title="Only x-paged: labels are written here"
+                title={strings.t(M.onlyPagedLabels)}
               >
                 <span className="font-mono">{key}</span>
               </div>
@@ -296,7 +322,7 @@ function LabelsSection() {
           onClick={() => void add()}
           className="h-[26px] rounded-[6px] border border-input px-2 text-[11px]"
         >
-          Add label
+          {strings.t(M.addLabel)}
         </button>
       </div>
       {error && (

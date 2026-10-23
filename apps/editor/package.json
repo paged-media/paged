@@ -30,7 +30,9 @@
     "test:quarantine": "bun test --timeout 30000 ./scripts/quarantine-guard.test.mjs && bun scripts/quarantine-guard.mjs --list",
     "test:profile-presets": "bun scripts/profile-presets-guard.mjs",
     "test:client-catalog": "bun scripts/client-api-catalog.mjs --check",
-    "test:feature-ids": "bun scripts/feature-ids.mjs --check"
+    "test:feature-ids": "bun scripts/feature-ids.mjs --check",
+    "test:instance-guard": "bun scripts/instance-guard.mjs",
+    "test:theme-tokens": "bun scripts/theme-tokens.mjs --check"
   },
   "devDependencies": {
     "@babel/parser": "7.29.8"

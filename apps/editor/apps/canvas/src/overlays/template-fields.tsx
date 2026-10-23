@@ -31,6 +31,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import type {
   ElementGeometryItem,
   TemplateFieldSummary,
+  TemplateFinding,
 } from "@paged-media/client";
 import {
   applyAffine,
@@ -41,6 +42,14 @@ import {
   type OverlayContribution,
   type OverlayProps,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+import { PREFLIGHT, findingText } from "../panels/template/messages";
+
+const M = defineMessages("app.overlaysTemplateFields", {
+  replaceLabel: "Replace {label}",
+  replace: "Replace…",
+});
 
 const IMAGE_TYPES = [
   ".jpg",
@@ -55,8 +64,11 @@ const IMAGE_TYPES = [
 
 function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
   const role = useSessionRole();
+  const strings = useStrings();
   const client = useCanvasClient();
   const rows = useCollection<TemplateFieldSummary>("templateFields");
+  // Plan F4: an author sees which fields have a problem (F3's preflight).
+  const findings = useCollection<TemplateFinding>("templateFindings");
   const [geometry, setGeometry] = useState<readonly ElementGeometryItem[]>([]);
   const shown = role === "author" || role === "filler";
   const ids = (rows ?? []).flatMap((r) => (r.elementId ? [r.elementId] : []));
@@ -117,17 +129,48 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
     const points = corners.map(([x, y]) => `${pr.x + x},${pr.y + y}`).join(" ");
     const [lx, ly] = corners[0]!;
     const label = row.field.label ?? row.field.name;
+    const problems =
+      role === "author"
+        ? (findings ?? []).filter((f) => f.item === row.targetId)
+        : [];
+    const [rx, ry] = corners[1]!;
     out.push(
       <g key={row.field.name} data-template-field-outline={row.field.name}>
         <polygon
           points={points}
           fill="none"
-          style={{ stroke: "var(--pg-primary)" }}
+          style={{
+            stroke: problems.length
+              ? "var(--status-error, #d92d20)"
+              : "var(--pg-primary)",
+          }}
           strokeWidth={1.25}
           strokeDasharray="5 3"
           vectorEffect="non-scaling-stroke"
           pointerEvents="none"
         />
+        {problems.length ? (
+          <g
+            data-template-field-problem={row.field.name}
+            transform={`translate(${pr.x + rx} ${pr.y + ry}) scale(${k})`}
+          >
+            <title>
+              {strings.t(PREFLIGHT.marker, {
+                message: problems.map((f) => findingText(strings, f)).join(" "),
+              })}
+            </title>
+            <circle r={8} style={{ fill: "var(--status-error, #d92d20)" }} />
+            <text
+              y={4}
+              textAnchor="middle"
+              fontSize={11}
+              fontWeight={700}
+              style={{ fill: "white", fontFamily: "var(--font-sans)" }}
+            >
+              !
+            </text>
+          </g>
+        ) : null}
         <g transform={`translate(${pr.x + lx} ${pr.y + ly}) scale(${k})`}>
           <text
             x={2}
@@ -146,7 +189,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
             <g
               data-template-field-replace={row.field.name}
               role="button"
-              aria-label={`Replace ${label}`}
+              aria-label={strings.t(M.replaceLabel, { label })}
               tabIndex={0}
               pointerEvents="all"
               style={{ cursor: "pointer" }}
@@ -173,7 +216,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
                   fontFamily: "var(--font-sans)",
                 }}
               >
-                Replace…
+                {strings.t(M.replace)}
               </text>
             </g>
           ) : null}

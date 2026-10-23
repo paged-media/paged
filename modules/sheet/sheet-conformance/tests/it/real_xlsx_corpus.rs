@@ -353,3 +353,170 @@ fn legacy_xls_is_refused_rather_than_half_read() {
         &wrongly_opened[..wrongly_opened.len().min(5)]
     );
 }
+
+/// Every workbook Excel wrote (authored + converted) takes a row insert and
+/// a column delete on each of its first sheets without refusing (W1.2),
+/// apart from pivots (ADR 504); the result reopens. And editing one cell
+/// changes only that cell's row and the `<dimension>` of the sheet part (W1.4).
+/// The refusals are REPORTED by reason; anything but a pivot fails the lane.
+#[test]
+#[ignore = "corpus: xlsx"]
+fn excel_workbooks_take_structural_edits_and_one_cell_edits() {
+    use sheet_js::core::{SheetSession, StructuralEdit};
+    let mut files = Vec::new();
+    for src in ["authored", "poi-converted"] {
+        if let Some(f) = source_files(src) {
+            files.extend(f);
+        }
+    }
+    if files.is_empty() {
+        return;
+    }
+    let mut edits = 0usize;
+    let mut refusals: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut unexpected: Vec<String> = Vec::new();
+    let mut one_cell = 0usize;
+    for path in &files {
+        let bytes = std::fs::read(path).unwrap();
+        let Ok(probe) = SheetSession::load_xlsx(&bytes) else {
+            continue;
+        };
+        let sheets = probe.list_sheets().len().min(3) as u16;
+        for sheet in 0..sheets {
+            for kind in [StructuralEdit::InsertRows, StructuralEdit::DeleteCols] {
+                let mut s = SheetSession::load_xlsx(&bytes).unwrap();
+                edits += 1;
+                match s.structural_edit(sheet, kind, 1, 1) {
+                    Ok(_) => {
+                        let out = s
+                            .save_xlsx()
+                            .unwrap_or_else(|e| panic!("{}: save after edit: {e}", path.display()));
+                        if let Err(e) = SheetSession::load_xlsx(&out) {
+                            unexpected.push(format!("{}: reopen: {e}", path.display()));
+                        }
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        // The one honest refusal is a pivot (ADR 504).
+                        let reason = if msg.contains("pivot") {
+                            "pivot".to_string()
+                        } else {
+                            unexpected.push(format!("{} sheet {sheet}: {msg}", path.display()));
+                            msg.split(": ")
+                                .nth(1)
+                                .unwrap_or(&msg)
+                                .chars()
+                                .take(80)
+                                .collect()
+                        };
+                        *refusals.entry(reason).or_default() += 1;
+                    }
+                }
+            }
+        }
+        // Edit one cell below the first sheet's used range.
+        let mut s = SheetSession::load_xlsx(&bytes).unwrap();
+        let row = s.model().sheets[0].used_range().map_or(0, |u| u.row1 + 2);
+        if s.set_cell(0, row, 0, "edit-one-cell").is_err() {
+            continue;
+        }
+        let out = s.save_xlsx().unwrap();
+        let name = s.doc_part_name(0).unwrap();
+        let read = |b: &[u8]| -> String {
+            let mut z = zip::ZipArchive::new(std::io::Cursor::new(b)).unwrap();
+            let mut f = z.by_name(&name).unwrap();
+            let mut v = Vec::new();
+            std::io::Read::read_to_end(&mut f, &mut v).unwrap();
+            String::from_utf8_lossy(&v).into_owned()
+        };
+        let strip = |x: String| -> String {
+            let open = format!(r#"<row r="{}""#, row + 1);
+            let x = match x.find(&open) {
+                Some(i) => {
+                    let gt = i + x[i..].find('>').unwrap();
+                    let end = if x.as_bytes()[gt - 1] == b'/' {
+                        gt + 1
+                    } else {
+                        x[i..].find("</row>").map(|e| i + e + 6).unwrap_or(x.len())
+                    };
+                    format!("{}{}", &x[..i], &x[end..])
+                }
+                None => x,
+            };
+            let x = match x.find("<dimension") {
+                Some(a) => {
+                    let b = a + x[a..].find("/>").unwrap() + 2;
+                    format!("{}{}", &x[..a], &x[b..])
+                }
+                None => x,
+            };
+            let x = x
+                .replace("<sheetData></sheetData>", "<sheetData/>")
+                .replace("<v/>", "<v></v>")
+                .replace("<v xml:space=\"preserve\">", "<v>");
+            // Cached values may legitimately change: the edit recalculates
+            // (volatile functions, the last bits of a recomputed float).
+            let mut out = String::with_capacity(x.len());
+            let mut rest = x.as_str();
+            while let Some(i) = rest.find("<v>") {
+                out.push_str(&rest[..i + 3]);
+                let tail = &rest[i + 3..];
+                let end = tail.find("</v>").unwrap_or(tail.len());
+                rest = &tail[end..];
+            }
+            out.push_str(rest);
+            // …and with them a cell's value type (`t`): a cell the engine
+            // computes differently from Excel is a calculation finding, not a
+            // save loss.
+            let mut x = String::with_capacity(out.len());
+            let mut rest = out.as_str();
+            while let Some(i) = rest.find(" t=\"") {
+                x.push_str(&rest[..i]);
+                let tail = &rest[i + 4..];
+                rest = &tail[tail.find('"').map_or(tail.len(), |e| e + 1)..];
+            }
+            x.push_str(rest);
+            x
+        };
+        let (a, b) = (strip(read(&out)), strip(read(&bytes)));
+        // Calculation findings, not save losses: the cells differ because
+        // the engine computes them differently (recorded in docs/status.md).
+        const CALC_FINDINGS: &[(&str, &str)] = &[
+            (
+                "MatrixFormulaEvalTestData.xls.xlsx",
+                "the members of a legacy array formula are not kept as cells",
+            ),
+            (
+                "testRVA.xls.xlsx",
+                "a pre-dynamic-array MMULT is written back as a dynamic array",
+            ),
+        ];
+        let file = path.file_name().unwrap().to_string_lossy().into_owned();
+        if let Some((_, why)) = CALC_FINDINGS.iter().find(|(f, _)| *f == file) {
+            println!("{file}: known calculation finding ({why})");
+            continue;
+        }
+        if a == b {
+            one_cell += 1;
+        } else {
+            let at = a
+                .bytes()
+                .zip(b.bytes())
+                .position(|(x, y)| x != y)
+                .unwrap_or(a.len().min(b.len()));
+            let ctx = |s: &str| {
+                s[at.saturating_sub(80).min(s.len())..(at + 120).min(s.len())].to_string()
+            };
+            unexpected.push(format!(
+                "{}: editing one cell changed other rows:\n  now {}\n  was {}",
+                path.display(),
+                ctx(&a),
+                ctx(&b)
+            ));
+        }
+    }
+    println!(
+        "structural edits: {edits} tried, refusals by reason: {refusals:?}; one-cell edits clean: {one_cell}"
+    );
+    assert!(unexpected.is_empty(), "{unexpected:#?}");
+}
