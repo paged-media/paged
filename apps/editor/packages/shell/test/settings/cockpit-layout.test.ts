@@ -32,6 +32,7 @@ import {
 } from "../../src/cockpit/cockpit-persistence";
 import { setChromeStorageScope } from "../../src/state/chrome-storage-scope";
 import { createEditorScope } from "../../src/state/editor-scope";
+import { setEditorStorage } from "../../src/state/storage";
 import { memoryStorage, type MemoryStorage } from "./memory-storage";
 
 const KEY = "paged.cockpit.v1";
@@ -57,6 +58,8 @@ beforeEach(() => {
   ls = memoryStorage();
   scope = createEditorScope();
   installWindow(() => ls);
+  // The editor keeps its settings where its host says (state/storage.ts).
+  setEditorStorage(scope, ls);
 });
 afterEach(async () => {
   // Let a debounced write from the test land before the next one starts.
@@ -165,8 +168,14 @@ describe("setting paged.cockpit.v1", () => {
 
   test("blocked storage: load is empty and a save stays in memory without throwing", async () => {
     covers("setting:paged.cockpit.v1");
-    installWindow(() => {
+    const blocked = () => {
       throw new Error("SecurityError");
+    };
+    setEditorStorage(scope, {
+      getItem: blocked,
+      setItem: blocked,
+      removeItem: blocked,
+      keys: blocked,
     });
     expect(loadCockpitStore(scope)).toEqual({});
     const state = { rightTabs: ["a"], activeTab: "a" };

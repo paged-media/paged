@@ -33,7 +33,11 @@ import type {
   TemplateFieldValue,
 } from "@paged-media/client";
 import {
+  memoryStorage,
   mintBlankDocument,
+  noStorage,
+  pageStorage,
+  type StorageAdapter,
   openDocumentFile,
   type EditorProfile,
   type FeatureStore,
@@ -70,6 +74,26 @@ export interface EditorConfig {
    * `@paged-media/editor` package fills it from its dependency (PM-0013).
    */
   engineWasm?: string;
+  /**
+   * Where the editor keeps its settings (theme, workflow mode, dock tabs,
+   * palette recents, export options, remembered grants): `"memory"` (the
+   * default) for this editor's lifetime only, so an embedded editor never
+   * reads or writes the host's origin storage unasked; `"local"` the
+   * page's `localStorage`, under the editor's own keys; `"none"` nothing
+   * kept; or the host's own store (Web Storage's getItem / setItem /
+   * removeItem).
+   */
+  storage?: "local" | "memory" | "none" | EditorStorage;
+}
+
+/** A host's settings store for the editor (`EditorConfig.storage`). */
+export type EditorStorage = StorageAdapter;
+
+function storageOf(choice: EditorConfig["storage"]): StorageAdapter {
+  if (choice === "local") return pageStorage();
+  if (choice === "none") return noStorage();
+  if (choice === undefined || choice === "memory") return memoryStorage();
+  return choice;
 }
 
 export type EditorEvent =
@@ -170,6 +194,7 @@ export async function createEditor(
     strings,
     onShell: (shell) => resolveShell(shell),
     ...(config.engineWasm ? { engineWasm: config.engineWasm } : {}),
+    storage: storageOf(config.storage),
   });
   const shell = await shellReady;
   await mounted.instance.services.boot.settled();

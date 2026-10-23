@@ -23,6 +23,7 @@
 export {
   createEditor,
   type EditorConfig,
+  type EditorStorage,
   type EditorEvent,
   type EditorHandle,
   type FieldValue,

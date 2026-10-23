@@ -46,6 +46,15 @@ export {
   type ValueStore,
 } from "./state/editor-scope";
 export {
+  editorStorage,
+  memoryStorage,
+  noStorage,
+  pageStorage,
+  setEditorStorage,
+  useEditorStorage,
+  type StorageAdapter,
+} from "./state/storage";
+export {
   EditorRoot,
   editorRootOf,
   listenForEditorKeys,

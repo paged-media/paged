@@ -198,7 +198,10 @@ import { ObjectPropertyField, ObjectPropertyFrame } from "@paged-media/shell";
 import {
   cockpitActionsOf,
   createEditorScope,
+  memoryStorage,
+  setEditorStorage,
   type EditorScope,
+  type StorageAdapter,
 } from "@paged-media/shell";
 import { assertCrossOriginIsolated } from "../boot/cross-origin-isolation-check";
 import {
@@ -1689,6 +1692,12 @@ export interface MountOptions {
    *  Default false: the page is the host's, and so is that question. The
    *  page entry asks. */
   guardUnload?: boolean;
+  /** Where the editor keeps its settings (theme, workflow mode, dock tabs,
+   *  palette recents, export options, remembered grants): an adapter with
+   *  Web Storage's getItem / setItem / removeItem, `localStorage` itself
+   *  for the page entry. Default: memory, for this editor's lifetime, so
+   *  an embedded editor never touches its host's origin storage unasked. */
+  storage?: StorageAdapter;
 }
 
 export function createEditorInstance(
@@ -1711,6 +1720,7 @@ export function createEditorInstance(
   // `paged.cockpit.v1` is keyed BY MODE ID — unscoped, solo and the
   // ordinary editor would overwrite each other's right-dock tabs.
   setChromeStorageScope(scope, profile.storageScope);
+  setEditorStorage(scope, options.storage ?? memoryStorage());
   // ALLOW-LIST: a profile names what it SHOWS, so a host panel added later
   // is absent from a preset until someone puts it there deliberately
   // (`scripts/profile-presets-guard.mjs` catches a renamed id).
