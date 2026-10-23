@@ -823,7 +823,7 @@ pub struct RoleRef {
     pub rgb: Option<u32>,
     pub swatch: Option<String>,
     /// The swatch's colour model (`rgb`, `cmyk`, `spot`, `lab`; sheet ADR
-    /// 524) — `rgb` when the record names none.
+    /// 525) — `rgb` when the record names none.
     pub model: Option<String>,
     pub paragraph: Option<String>,
     pub character: Option<String>,
@@ -934,7 +934,7 @@ pub fn concrete_rgb(c: &ColorRef) -> Option<u32> {
 
 /// The chart's own series palette recorded in the paged extension
 /// (`<pg:palette group="…"><pg:swatch ref="id|model|RRGGBB"/>…`, sheet ADR
-/// 524), if any.
+/// 525), if any.
 pub fn read_paged_palette(root: &El) -> Option<sheet_chart::style::SeriesPalette> {
     let ext = root
         .child(Ns::C, "extLst")

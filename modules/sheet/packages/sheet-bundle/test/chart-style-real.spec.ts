@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Sheet ADR 524 — document chart styles on the real engine and the real
+// Sheet ADR 525 — document chart styles on the real engine and the real
 // document: a chart's roles and series take the document's swatches (with
 // their colour model), styles and colour groups through the object model;
 // the workbook default reaches every chart and survives a save; a placed

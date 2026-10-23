@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Document chart styles (sheet ADR 524): the roles of a chart bound to the
+//! Document chart styles (sheet ADR 525): the roles of a chart bound to the
 //! layout document's swatches, paragraph and character styles and colour
 //! groups — per chart, and as a workbook default every chart follows where
 //! it does not say otherwise.

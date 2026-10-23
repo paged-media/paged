@@ -143,6 +143,7 @@ describe("workbook panel layout", () => {
       "names",
       "sort",
       "cell-style",
+      "doc-styles",
       "charts",
       "chartStyle",
       "functions",

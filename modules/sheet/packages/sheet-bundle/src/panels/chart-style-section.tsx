@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Sheet ADR 524 — the "Chart style" section of the Workbook panel: a
+// Sheet ADR 525 — the "Chart style" section of the Workbook panel: a
 // chart's roles (or the workbook default's) bound to the layout document's
 // swatches, paragraph and character styles and colour groups. Every write
 // goes through the object model (`host.objects`): one undo step, the chart

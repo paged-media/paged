@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Sheet ADR 524 — the document chart style, bundle side: what the layout
+// Sheet ADR 525 — the document chart style, bundle side: what the layout
 // document offers a chart (swatches with their display colour, paragraph
 // and character styles, colour groups), and the translation of the object
 // model's id-only values (`{ swatch: "Color/Brand" }`, a colour group id)

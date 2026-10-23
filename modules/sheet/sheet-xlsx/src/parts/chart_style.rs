@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The workbook's document chart style (sheet ADR 524) in `workbook.xml`:
+//! The workbook's document chart style (sheet ADR 525) in `workbook.xml`:
 //! one paged extension at the end of the workbook's `<extLst>`, read at
 //! open and spliced in place when it changes — the rest of the part stays
 //! byte-identical (ADR 503).

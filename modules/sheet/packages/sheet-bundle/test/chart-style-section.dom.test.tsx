@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Sheet ADR 524 — the Workbook panel's Chart style section (happy-dom):
+// Sheet ADR 525 — the Workbook panel's Chart style section (happy-dom):
 // role rows list the document's swatches (with their display colour),
 // paragraph and character styles and colour groups; a pick writes ids
 // through the object model; the workbook default shows where a chart does

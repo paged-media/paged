@@ -64,10 +64,11 @@ import {
   SPREADSHEET_EXTENSIONS,
 } from "../import-xlsx";
 import { columnLabel, type WorkbookSession } from "../session";
-import { CHART_STYLE, COMMANDS, WORKBOOK as M } from "../messages";
+import { CHART_STYLE, COMMANDS, DOC_STYLES, WORKBOOK as M } from "../messages";
 import { ChartStyleSection } from "./chart-style-section";
 import { FormatSection, NamesSection, tokenLabel } from "./format-section";
 import { PROPERTIES_PANEL_ID } from "./properties-panel";
+import { DocStylesSection } from "./doc-styles-section";
 
 const GRID_PANEL_ID = "media.paged.sheet.panel.grid";
 
@@ -817,6 +818,13 @@ export function makeWorkbookPanel(
               </p>
             </Section>
 
+            {/* Sheet ADR 524 — the document's styles for the workbook's
+             *  Excel named styles: the switch, the mapping table, "Create
+             *  document styles from workbook" and the missing references. */}
+            <Section id="doc-styles" title={t(DOC_STYLES.section)}>
+              <DocStylesSection session={live} />
+            </Section>
+
             {/* CHART AUTHORING — the chart engine was import-only. Authored
              *  charts render + place through the SAME generator as parsed
              *  ones, and are written into the xlsx on save (a generated
@@ -951,7 +959,7 @@ export function makeWorkbookPanel(
               })()}
             </Section>
 
-            {/* CHART STYLE (sheet ADR 524) — the charts' roles bound to the
+            {/* CHART STYLE (sheet ADR 525) — the charts' roles bound to the
              *  document's swatches, styles and colour groups. */}
             {st.engine ? (
               <Section id="chartStyle" title={t(CHART_STYLE.title)}>

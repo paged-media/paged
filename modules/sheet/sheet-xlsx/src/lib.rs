@@ -47,6 +47,7 @@
 
 pub mod chart_write;
 pub mod defined_names;
+pub mod doc_style_map;
 pub mod error;
 pub mod kind;
 #[cfg(feature = "ods")]
@@ -167,7 +168,7 @@ pub struct XlsxDocument {
     /// workbook has a theme part.
     pub chart_theme: Option<[u32; 12]>,
 
-    /// The workbook's document chart style (sheet ADR 524): the role
+    /// The workbook's document chart style (sheet ADR 525): the role
     /// references and series palette every chart follows where it does not
     /// override them, read from the paged extension of `workbook.xml` and
     /// spliced back by [`set_chart_style`](Self::set_chart_style).
@@ -934,7 +935,7 @@ impl XlsxDocument {
         self.container.dirty = true;
     }
 
-    /// Set the workbook's document chart style (sheet ADR 524): the paged
+    /// Set the workbook's document chart style (sheet ADR 525): the paged
     /// extension of `workbook.xml` is spliced in place (taken out for an
     /// empty style), every other byte of the part kept. Setting the style it
     /// already has changes nothing.
