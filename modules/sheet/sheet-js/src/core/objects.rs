@@ -113,7 +113,7 @@ pub struct SeriesArg {
     pub color: String,
     /// The document swatch the fill names: `{id, model, fallbackRgb}` or a
     /// bare id (`Color/…`).
-    pub color_swatch: Option<SwatchIn>,
+    pub color_swatch: SwatchIn,
     /// This series' kind tag in a combo (empty = the chart's kind).
     pub kind: String,
     pub secondary: bool,
@@ -423,7 +423,7 @@ impl SheetSession {
                     s.name = non_empty(&a.name).map(Into::into);
                     let mut fill = non_empty(&a.color).and_then(|c| ColorRef::from_hex(&c));
                     match &a.color_swatch {
-                        Some(SwatchIn::Id(sw)) if !sw.trim().is_empty() => {
+                        SwatchIn::Id(sw) if !sw.trim().is_empty() => {
                             // A swatch named without a colour paints automatic
                             // until the document resolves it.
                             let base = fill.unwrap_or_else(ColorRef::auto);
@@ -432,7 +432,7 @@ impl SheetSession {
                                 base.with_doc(sheet_chart::model::doc_swatch(sw.trim(), fallback)),
                             );
                         }
-                        Some(r @ SwatchIn::Ref(_)) => {
+                        r @ SwatchIn::Ref(_) => {
                             if let Some(d) = r.to_ref()? {
                                 fill = Some(sheet_chart::style::swatch_color(&d));
                             }

@@ -51,6 +51,18 @@ pub enum SwatchIn {
     Id(String),
 }
 
+impl Default for SwatchIn {
+    fn default() -> SwatchIn {
+        SwatchIn::Id(String::new())
+    }
+}
+
+impl From<&str> for SwatchIn {
+    fn from(id: &str) -> SwatchIn {
+        SwatchIn::Id(id.to_string())
+    }
+}
+
 impl SwatchIn {
     pub(crate) fn to_ref(&self) -> Result<Option<DocSwatchRef>, SessionError> {
         match self {
