@@ -167,6 +167,11 @@ pub struct VisualStyles {
     named: Vec<NamedCellStyle>,
     palette: ColorPalette,
     default_font: FontSpec,
+    /// The workbook's document-style mapping (sheet ADR 524), already folded
+    /// into `by_style`.
+    doc_map: sheet_lower::DocStyleMap,
+    /// The document style ids the mapping may name (`None` = unknown).
+    doc_available: Option<std::collections::BTreeSet<String>>,
     /// Rich-text cells: `(sheet, row, col)` → the runs of its shared string.
     rich: BTreeMap<(sheet_core::SheetId, u32, u32), Vec<RichRunVisual>>,
 }
@@ -186,6 +191,21 @@ impl VisualStyles {
     /// The Excel named cell styles (`cellStyles`), in document order.
     pub fn named_styles(&self) -> &[NamedCellStyle] {
         &self.named
+    }
+
+    /// The workbook's document-style mapping (sheet ADR 524).
+    pub fn doc_map(&self) -> &sheet_lower::DocStyleMap {
+        &self.doc_map
+    }
+
+    /// Carry the document-style availability over from an earlier table.
+    pub(crate) fn set_doc_available(&mut self, ids: Option<std::collections::BTreeSet<String>>) {
+        self.doc_available = ids;
+    }
+
+    /// The document style ids the mapping was resolved against.
+    pub fn doc_available(&self) -> Option<&std::collections::BTreeSet<String>> {
+        self.doc_available.as_ref()
     }
 
     /// The palette (theme + indexed colours) every colour resolves against.
@@ -302,6 +322,18 @@ pub fn parse_with_colors(
     styles: &mut StyleTable,
     colors: &ColorContext,
 ) -> Result<ParsedStyles, XlsxError> {
+    parse_with_context(xml, styles, colors, None)
+}
+
+/// [`parse_with_colors`] knowing which document style ids exist
+/// (`available`, `None` = unknown): the document-style mapping (sheet ADR
+/// 521) leaves out the ids the document lacks.
+pub fn parse_with_context(
+    xml: &[u8],
+    styles: &mut StyleTable,
+    colors: &ColorContext,
+    available: Option<&std::collections::BTreeSet<String>>,
+) -> Result<ParsedStyles, XlsxError> {
     let sheet = StyleSheet::parse(xml)?;
 
     let mut workbook_locale: Option<sheet_core::Locale> = None;
@@ -323,7 +355,31 @@ pub fn parse_with_colors(
         named: sheet.named_styles(),
         palette: palette.clone(),
         default_font: default_font.clone(),
+        doc_map: sheet.doc_map.clone(),
+        doc_available: available.cloned(),
         ..VisualStyles::default()
+    };
+    // Each named style's own resolved look (what a cell inherits from it),
+    // for the document-style mapping (sheet ADR 524). `Normal` by builtin id
+    // or by name.
+    let inherited: BTreeMap<String, sheet_lower::VisualAttrs> = if sheet.doc_map.is_inert() {
+        BTreeMap::new()
+    } else {
+        visual
+            .named
+            .iter()
+            .map(|n| {
+                let key = if n.builtin_id == Some(0) {
+                    sheet_lower::docmap::NORMAL.to_string()
+                } else {
+                    n.name.clone()
+                };
+                (
+                    key,
+                    sheet_lower::resolve_visual(&n.visual, &palette, &default_font),
+                )
+            })
+            .collect()
     };
     for (i, xf) in sheet.cell_xfs.iter().enumerate() {
         let code = sheet.num_fmt_code(xf.num_fmt_id);
@@ -345,7 +401,12 @@ pub fn parse_with_colors(
         };
         xf_to_style.push(id);
         let model = sheet.cell_visual(i, &palette);
-        let resolved = sheet_lower::resolve_visual(&model, &palette, &default_font);
+        let mut resolved = sheet_lower::resolve_visual(&model, &palette, &default_font);
+        if !sheet.doc_map.is_inert() {
+            let name = model.named_style.as_deref();
+            let inh = inherited.get(name.unwrap_or(sheet_lower::docmap::NORMAL));
+            sheet_lower::apply_doc_map(&mut resolved, name, inh, &sheet.doc_map, available);
+        }
         visual.by_style.insert(id.0, resolved);
         visual.models.insert(id.0, model);
     }
