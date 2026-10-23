@@ -678,7 +678,8 @@ export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
   listTables?(): TableInfo[];
   /** ADR 323 — every chart with its series ranges and options. */
   chartSpecs?(): ChartSpec[];
-  /** ADR 323 — patch one chart (validated whole; page-side only). */
+  /** ADR 323 — patch one chart (validated whole; spliced into its part
+   *  on save, sheet ADR 519). */
   updateChart?(index: number, patch: ChartPatch): void;
   /** Sheet ADR 524 — the workbook's document chart style. */
   chartStyle?(): ChartStyle;

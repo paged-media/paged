@@ -21,6 +21,7 @@
 //! parser (bytes -> a parsed struct); the writer re-encodes from the model.
 
 pub mod autofilter;
+pub mod cf_model;
 pub mod chart;
 pub mod chart_style;
 pub mod comments;

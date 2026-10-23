@@ -49,6 +49,7 @@ use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, Vi
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
 use sheet_xlsx::XlsxDocument;
 
+mod cf;
 mod chart_style;
 mod charts;
 pub mod csv;
@@ -457,6 +458,9 @@ pub struct SheetSession {
     removed_charts: BTreeSet<u32>,
     /// Named filter views (criteria saved beside the workbook, ADR 517).
     filter_views: Vec<filter::FilterViewInfo>,
+    /// Conditional-format evaluation caches per sheet (W2.4), dropped on
+    /// every engine write.
+    cf_caches: cf::CfCaches,
     /// The language formulas are shown and typed in (sheet ADR 521); the
     /// reference style is the workbook's own (`<calcPr refMode>`).
     formula_lang: sheet_parser::dialect::FormulaLang,
@@ -633,6 +637,16 @@ fn spill_areas(engine: &Engine) -> std::collections::BTreeMap<(SheetId, u32, u32
                 .region_of(cell_ref(si, r, c))
                 .map(|rect| (rect.row1 - rect.row0 + 1, rect.col1 - rect.col0 + 1))
                 .unwrap_or((1, 1));
+            // Excel refuses a dynamic array inside a table (a calculated
+            // column is a plain formula per row): a one-cell result there is
+            // written as a plain formula (sheet ADR 517).
+            let in_table = ws.tables.iter().any(|t| {
+                let n = t.range.normalized();
+                n.start.row <= r && r <= n.end.row && n.start.col <= c && c <= n.end.col
+            });
+            if in_table && area == (1, 1) {
+                continue;
+            }
             out.insert((si, r, c), area);
         }
     }
@@ -696,6 +710,8 @@ impl SheetSession {
 
     /// Mutable twin of [`SheetSession::engine`].
     fn engine_mut(&mut self) -> &mut Engine {
+        // Any write may change what a conditional format sees.
+        self.cf_caches.clear();
         self.engine
             .as_mut()
             .expect("engine present outside save_xlsx")
@@ -727,6 +743,7 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            cf_caches: cf::CfCaches::default(),
             formula_lang: Default::default(),
         }
     }
@@ -862,14 +879,25 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            cf_caches: cf::CfCaches::default(),
             formula_lang: Default::default(),
         };
+        // A chart slot a save left empty (a deleted chart) stays deleted, so
+        // every other chart keeps its index (ADR 519).
+        session.removed_charts = session
+            .doc
+            .charts
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.removed)
+            .map(|(i, _)| i as u32)
+            .collect();
         // A template opens as a new workbook (sheet ADR 521), unsaved.
         session.structure_changed = template;
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
-        // Data tables are calculated with the workbook (ADR 517).
-        session.data_tables_after_write()?;
+        // Data tables keep the values the file cached until the first write
+        // (ADR 517): a zero-edit save stays byte-identical.
         Ok(session)
     }
 
@@ -905,7 +933,10 @@ impl SheetSession {
                         // xlsx formula text carries NO leading '=' — print bare,
                         // in the OOXML storage dialect (`_xlfn.` prefixes etc.)
                         // so Excel does not open a newer function as #NAME?.
-                        let text = print_ooxml(formula, sheet, &names);
+                        // `[@Col]` names its table in the file (sheet ADR 517).
+                        let qualified = tables::qualify_this_row(model, sheet, row, col, formula);
+                        let text =
+                            print_ooxml(qualified.as_ref().unwrap_or(formula), sheet, &names);
                         self.doc.formula_texts.insert((sheet, row, col), text);
                     }
                 }
@@ -933,6 +964,12 @@ impl SheetSession {
         // Every spilling formula is written as Excel writes a dynamic array:
         // an array formula over its spill area, flagged dynamic. Without the
         // flag the area's cached values would reload as cells blocking it.
+        // Charts authored, edited or deleted in the session are written
+        // into the package (ADR 519): generated, spliced or removed.
+        self.doc
+            .write_charts(model, &self.removed_charts)
+            .map_err(|e| SessionError(e.to_string()))?;
+
         let spills = spill_areas(engine);
         let bytes = self
             .doc
@@ -1989,13 +2026,15 @@ impl SheetSession {
         // the repeated header band keeps its formatting on every frame.
         let model = self.engine().model();
         let cf = self.doc.lowered_conditional_formats(sheet);
-        Ok(sheet_lower::lower_range_condfmt(
+        let eval = self.eval_cf(sheet);
+        Ok(sheet_lower::lower_range_cf(
             model,
             sheet,
             cell_range,
             &ViewOptions::default(),
             &self.doc.visual_styles,
             &cf,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         ))
     }
 
@@ -2056,7 +2095,8 @@ impl SheetSession {
         let cf = self.doc.lowered_conditional_formats(sheet);
 
         let model = self.engine().model();
-        let mut scene = sheet_grid::grid_scene_styled(
+        let eval = self.eval_cf(sheet);
+        let mut scene = sheet_grid::grid_scene_cf(
             model,
             sheet,
             &spec,
@@ -2064,6 +2104,7 @@ impl SheetSession {
             &comment_cells,
             &cf,
             &self.doc.visual_styles,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         );
 
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —

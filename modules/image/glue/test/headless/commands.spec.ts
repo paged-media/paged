@@ -406,6 +406,26 @@ describe("the layer stack: interactive and typed", () => {
     k.dispose();
   });
 
+  it("filterRegion: typed only, the region's pixels filtered on the CPU twins in one undo step", async () => {
+    covers("command:media.paged.image.command.filterRegion");
+    const k = await ingested();
+    // [top, left, bottom, right]: the red columns 0–1, both rows.
+    expect(
+      await k.h.objects.invoke(`${C}.filterRegion`, {
+        layer: L1,
+        params: { "invert.enabled": true },
+        region: [0, 0, 2, 2],
+      }),
+    ).toMatchObject({ applied: true, undoSteps: 1 });
+    const shown = await k.framePixels();
+    expect(at(shown, 0, 0)).toEqual([55, 255, 255, 255]);
+    expect(at(shown, 1, 1)).toEqual([55, 255, 255, 255]);
+    expect(at(shown, 2, 0)).toEqual([...BLUE]);
+    await k.h.host.document.undo();
+    expect(at(await k.framePixels(), 0, 0)).toEqual([...RED]);
+    k.dispose();
+  });
+
   it("bakeAdjustToLayer: GPU-only past identity, and the document is untouched", async () => {
     covers("command:media.paged.image.command.bakeAdjustToLayer");
     const k = await ingested();
