@@ -84,7 +84,6 @@ import {
   pageBodyTracks,
   placementWindow,
   rangeFramePage,
-  refreshWantsReplace,
   selectionBox,
   WINDOW_SLACK_PT,
   stampPlacedView,
@@ -3490,14 +3489,10 @@ export function createWorkbookSession(
             const bands = unverified.has(frameId)
               ? await refreshBands(host, info, info.content)
               : { header: info.headerRows ?? 0, footer: 0 };
-            // A scroll that re-pours most of a window frame writes a new
-            // table instead (fewer ops, and no host band to keep).
-            const rewrite =
-              moved &&
-              info.sizing === "window" &&
-              !(bands?.header ?? 0) &&
-              refreshWantsReplace(info, next);
-            if (bands && !rewrite) {
+            // A scroll re-pours in place too, in ONE batch: a new table would
+            // take two document steps (the table, then its cells), and one
+            // Undo of the leave must put the page back whole.
+            if (bands) {
               const banded = { ...info, headerRows: bands.header || undefined };
               const updated = await ownWrite(() =>
                 refreshLoweredTable(host, banded, next, version, name),
@@ -4473,6 +4468,18 @@ export function createWorkbookSession(
       };
       if (!inFrameActive) sessionFloor = journalCursor; // the modal boundary
       inFrameActive = true;
+      // Excel always has an active cell: entered without one (the keyboard,
+      // a frame entered for the first time), the grid starts on its view's
+      // top-left cell so the keys work at once.
+      if (!state.gridSelection) {
+        applyGridSelection(
+          lastGridWindow.firstRow,
+          lastGridWindow.firstCol,
+          1,
+          1,
+        );
+        emitter.emit();
+      }
       const ok = await submitInFrameGrid();
       if (!ok) host.log.warn("showGridInFrame: grid windowing failed");
       return ok;
