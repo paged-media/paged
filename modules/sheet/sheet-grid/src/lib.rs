@@ -100,6 +100,38 @@ pub struct GridScene {
     /// The merged areas intersecting the window, one rect per pane they
     /// show in (a merge crossing the frozen split yields one per side).
     pub merges: Vec<GridMerge>,
+    /// The sparklines of the VISIBLE cells (`x14:sparklineGroups`, sheet
+    /// ADR 519): each cell's viewport-local box and the sparkline's
+    /// primitives in that box's own pt space. Empty unless the caller
+    /// supplies them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sparklines: Vec<GridSparkline>,
+}
+
+/// One sparkline drawn in a grid viewport: its cell, the cell's box in
+/// viewport-local pt, and the chart primitives (sheet-chart's IR) placed in
+/// the box (origin its top-left).
+#[derive(serde::Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GridSparkline {
+    pub row: u32,
+    pub col: u32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub prims: Vec<sheet_chart::Primitive>,
+}
+
+impl GridViewport {
+    /// The viewport-local box `(x, y, w, h)` of a displayed cell.
+    pub fn cell_box(&self, row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
+        let ri = self.row_indices.iter().position(|r| *r == row)?;
+        let ci = self.col_indices.iter().position(|c| *c == col)?;
+        let (x0, x1) = (*self.x_offsets.get(ci)?, *self.x_offsets.get(ci + 1)?);
+        let (y0, y1) = (*self.y_offsets.get(ri)?, *self.y_offsets.get(ri + 1)?);
+        Some((x0, y0, x1 - x0, y1 - y0))
+    }
 }
 
 /// One conditional-formatting DATA BAR drawn in a grid viewport (spec §8.2 — the
@@ -990,6 +1022,7 @@ pub fn grid_scene_styled(
         freeze,
         comments,
         databars,
+        sparklines: Vec::new(),
         merges,
     }
 }

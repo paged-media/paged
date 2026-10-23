@@ -306,7 +306,9 @@ each published canary added is under [Releases](#releases).
   equation, fitted as LINEST fits), error bars, logarithmic, reversed and date axes, axis
   crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
   Colour and text roles carry document swatch and style references, which the page uses.
-  Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
+  Sparklines (line, column, win/loss) are read and drawn in the grid (the frame surface and the
+  scene layer), not yet on the page; a chartsheet is a tab kind (the workbook panel labels it,
+  its chart is listed, drawn and written back like any chart); 172 of 172 corpus charts
   render with their real kind. Charts are written back into the xlsx: an edited chart is
   spliced into its part, an authored one generated (with its drawing anchor, relationships and,
   for the Office 2016 kinds, the style parts Excel needs), a deleted one removed; every chart
