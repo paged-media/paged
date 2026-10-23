@@ -162,8 +162,23 @@ each published canary added is under [Releases](#releases).
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
   painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
-  like hidden rows. Still open: a merged area clipped by the page window does not carry its anchor's
-  text onto the page.
+  like hidden rows.
+- **The page side of the window (ADR 510 amendment).** `get_frame_page` (TS `getFramePage`)
+  lowers the window a frame shows into the page table: `frame_window` for the frame's spec, then
+  `lower_tracks` over its rows and columns (`get_tracks_page` / `getTracksPage` takes explicit
+  tracks). Widths and heights are the sheet's own pt sizes, not measured; rows and columns keep
+  their sheet index; the frozen rows become the table's header rows (`headerRows`, so they repeat
+  on continuation frames). Printed headings add a heading row (A, B, C…) and column (1, 2, 3…),
+  boxed, taken off the box first; printed gridlines are an option. A merge clipped by the window
+  carries its anchor's text and style on its shown corner (on the page and in the grid). A
+  property test holds the page (without headings) to the grid scene of the same window, track by
+  track: indices, sizes, styles table, cells, merges, gridlines and data bars. The in-place
+  refresh (`tableRefreshOps`) aligns columns by their index as rows are aligned, so a scroll by k
+  columns is k column deletes and k inserts and only the new cells are re-poured (perf budget:
+  6 column ops for a 3-column scroll); header-band changes use `insertHeaderRow` /
+  `removeHeaderRow`; `replace` asks for a fresh table when more than 60 % of the cells would be
+  re-poured. The session does not call the page door on leave yet (the exit flow is the next
+  step).
 - **Number formats as a cell shows them** (W2.1). A section's colour (`[Red]`, the other seven
   names and `[Color1]`–`[Color56]`, read through the workbook's own palette when it overrides
   the default) colours the number on the page table and in the live grid alike; a conditional

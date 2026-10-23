@@ -44,8 +44,10 @@ import {
 
 import type {
   ChartGeometry,
+  FramePageSpec,
   FrameWindow,
   FrameWindowSpec,
+  TracksSpec,
   GridScene,
   LoweredContent,
   Page,
@@ -490,6 +492,16 @@ export interface SheetEngine extends SheetEngineW2 {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  /** The PAGE table of a sheet frame (ADR 510, render on leave): the frame
+   *  window for `spec` lowered over its tracks with the workbook's styles
+   *  and conditional formats. Without `printHeadings` it is exactly the
+   *  window the live grid shows for the same spec (same tracks, pt sizes,
+   *  styles); rows/cols carry SHEET indices, the frozen rows become
+   *  `headerRows`. */
+  getFramePage?(sheet: number, spec: FramePageSpec): LoweredContent;
+  /** Lower EXPLICIT tracks for the page (sheet indices, display order) —
+   *  `getFramePage` without the window step. */
+  getTracksPage?(sheet: number, spec: TracksSpec): LoweredContent;
   /** Re-evaluate volatile cells (NOW/TODAY/RAND) against the host clock
    *  (the facade reads the clock itself). */
   recalcVolatile?(): { changed: CellChange[] };
@@ -879,6 +891,8 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  get_frame_page?(sheet: number, spec: FramePageSpec): LoweredContent;
+  get_tracks_page?(sheet: number, spec: TracksSpec): LoweredContent;
   set_clock?(unix_ms: number, tz_offset_min: number): number;
   recalc_volatile?(): { changed: CellChange[] };
   calc_settings?(): CalcSettingsInfo;
@@ -1074,6 +1088,10 @@ export function wrapEngine(
     dispose: () => wasm.free(),
     getRangePage: (sheet, range, opts) =>
       need("get_range_page")(sheet, range, opts) as LoweredContent,
+    getFramePage: (sheet, spec) =>
+      need("get_frame_page")(sheet, spec) as LoweredContent,
+    getTracksPage: (sheet, spec) =>
+      need("get_tracks_page")(sheet, spec) as LoweredContent,
     recalcVolatile: () => {
       tick();
       return need("recalc_volatile")() as { changed: CellChange[] };
