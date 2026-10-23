@@ -246,6 +246,8 @@ export type GridKeyAction =
   /** Alt+Down: the active cell's dropdown (a validation list, a filter
    *  menu). */
   | { kind: "dropdown" }
+  /** Alt+Shift+Right / Alt+Shift+Left: group / ungroup the selection. */
+  | { kind: "group"; on: boolean }
   /** Alt+PageDown / Alt+PageUp: a screen to the right / left. */
   | { kind: "pageAcross"; dir: 1 | -1; extend: boolean }
   | { kind: "none" };
@@ -344,6 +346,8 @@ export function gridKeyAction(
     return { kind: "none" };
   }
   if (e.altKey && key === "ArrowDown" && !shift) return { kind: "dropdown" };
+  if (e.altKey && shift && (key === "ArrowRight" || key === "ArrowLeft"))
+    return { kind: "group", on: key === "ArrowRight" };
   if (key in ARROWS) {
     const [dRow, dCol] = ARROWS[key];
     return { kind: "move", dRow, dCol, extend: shift };

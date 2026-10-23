@@ -671,14 +671,29 @@ pub fn tdist(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
     })())
 }
 
+/// `1 − p` for `½ ≤ p < 1`, read as the decimal the argument was written as.
+/// The subtraction is exact, so it carries the binary error of `p`'s decimal
+/// (`1 − 0.9` is `0.09999999999999998`, not `0.1`); within that error the
+/// 15-digit decimal is taken. The t inverses are then odd to the last bit on
+/// every platform's `libm` (Excel-recorded: `=SUM(T.INV({0.1,0.9},4))` is 0).
+fn complement(p: f64) -> f64 {
+    let q = 1.0 - p;
+    let r = coerce::round15(q);
+    if (r - q).abs() <= f64::EPSILON / 2.0 {
+        r
+    } else {
+        q
+    }
+}
+
 /// The `t` with upper tail `q`, `0 < q < 1` (a `q` above ½ gives a negative
-/// `t`; `1 − q` is formed only there, where it is exact).
+/// `t`; `1 − q` is formed only there, by [`complement`]).
 fn t_upper_inv(q: f64, df: f64) -> f64 {
     if q == 0.5 {
         return 0.0;
     }
     if q > 0.5 {
-        return -t_upper_inv(1.0 - q, df);
+        return -t_upper_inv(complement(q), df);
     }
     // P(|T| > t) = I_{df/(df+t²)}(df/2, 1/2) = 2q; t = √(df (1 − z) / z).
     let (z, y) = invert_beta(df / 2.0, 0.5, 2.0 * q, 1.0 - 2.0 * q);
@@ -697,7 +712,7 @@ pub fn t_inv(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
         Ok(if p < 0.5 {
             -t_upper_inv(p, df)
         } else {
-            t_upper_inv(1.0 - p, df)
+            t_upper_inv(complement(p), df)
         })
     })())
 }

@@ -2025,6 +2025,55 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 517 — hide rows or columns in the grid.
+      id: C("hideSelection"),
+      title: "Hide rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.hideSelection(true);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — unhide rows or columns in the grid.
+      id: C("unhideSelection"),
+      title: "Unhide rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.hideSelection(false);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — group rows or columns in the grid.
+      id: C("groupSelection"),
+      title: "Group rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.groupSelection(true);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — ungroup rows or columns in the grid.
+      id: C("ungroupSelection"),
+      title: "Ungroup rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.groupSelection(false);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — goal seek in the grid.
+      id: C("goalSeek"),
+      title: "Goal Seek",
+      args: struct({}),
+      async handler() {
+        session.openDataCard({ kind: "goalSeek" });
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),
