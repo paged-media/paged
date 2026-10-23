@@ -27,6 +27,7 @@
   "sheet.command.pasteSpecial": "Inhalte einfügen…",
   "sheet.command.dataValidation": "Datenüberprüfung…",
   "sheet.command.circleInvalid": "Ungültige Daten einkreisen",
+  "sheet.command.toggleFilter": "Filtern",
   "sheet.command.copySelection": "Tabellenauswahl kopieren",
   "sheet.command.defaultStyleName": "Zellenformat",
   "sheet.command.deleteColumns": "Spalten löschen",

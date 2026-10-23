@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 386,
+    "command": 387,
     "keybinding": 88,
-    "menu": 280,
+    "menu": 281,
     "panel": 122,
     "tool": 72
   },
@@ -1197,6 +1197,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.styleFromCell",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.toggleFilter",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2432,6 +2437,11 @@
     },
     {
       "id": "menu:Context/Delete rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Filter",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
