@@ -80,6 +80,7 @@ fn line(l: &(String, Option<String>)) -> BorderLine {
         weight_pt: BorderLine::weight_of(&l.0),
         style: l.0.clone(),
         rgb: l.1.clone(),
+        swatch: None,
     }
 }
 
@@ -222,7 +223,7 @@ impl TableBand {
 /// wins, what it leaves default shows the table's.
 pub fn under(table: &VisualAttrs, own: &VisualAttrs) -> VisualAttrs {
     let mut out = own.clone();
-    if out.fill_rgb.is_none() {
+    if out.fill_rgb.is_none() && out.fill_pattern.is_none() && out.fill_gradient.is_none() {
         out.fill_rgb = table.fill_rgb.clone();
     }
     if out.text_rgb.is_none() {
