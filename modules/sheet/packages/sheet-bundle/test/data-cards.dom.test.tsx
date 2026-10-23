@@ -10,7 +10,11 @@ import type { FrameSurfaceProps } from "@paged-media/plugin-api";
 
 import type { GridScene } from "../../sheet-host-model/src";
 import type { DataToolsApi, EntryAlert } from "../src/data-tools";
-import type { ValidationRuleArg } from "../src/engine-w2";
+import type {
+  FilterColumnValues,
+  FilterCriterion,
+  ValidationRuleArg,
+} from "../src/engine-w2";
 import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
@@ -318,5 +322,135 @@ describe("cell dropdown and input message [sheet.validation.list]", () => {
       fireEvent.input(editor);
     });
     expect(editor.value).toBe("");
+  });
+});
+
+const fruit: FilterColumnValues = {
+  kind: "text",
+  items: [
+    { text: "apple", count: 2, selected: true },
+    { text: "pear", count: 1, selected: true },
+  ],
+  dates: [],
+  blanks: 1,
+  blanksSelected: true,
+  fillColors: [],
+  fontColors: [],
+  criterion: null,
+};
+
+function filterSession() {
+  let open: { kind: "filter"; col: number } | null = null;
+  const applied: [number, FilterCriterion | null][] = [];
+  const sorted: unknown[] = [];
+  const fake = fakeSession({
+    filterButtons: () => ({ row: 0, left: 0, right: 1, filtered: [1] }),
+    dataCard: () => open,
+    openDataCard: (c) => {
+      open = c as typeof open;
+      fake.changed();
+      return true;
+    },
+    closeDataCard: () => {
+      open = null;
+      fake.changed();
+    },
+    filterValues: () => fruit,
+    applyFilter: (col, criterion) => {
+      applied.push([col, criterion]);
+      open = null;
+      fake.changed();
+      return { ok: true };
+    },
+    sortFilterColumn: (col, key) => {
+      sorted.push([col, key]);
+      open = null;
+      fake.changed();
+      return { ok: true };
+    },
+  });
+  return { ...fake, applied, sorted };
+}
+
+describe("AutoFilter buttons and menu [sheet.filter.dropdown]", () => {
+  it("draws a button on each header cell; a filtered column shows the funnel", () => {
+    const { session } = filterSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
+    const buttons = r.getAllByTestId("sheet-filter-button");
+    expect(buttons.map((b) => b.getAttribute("data-col"))).toEqual(["0", "1"]);
+    expect(buttons[1]!.getAttribute("aria-label")).toContain("Filtered");
+  });
+
+  it("a header button opens the menu under the bar; unticking filters by value", () => {
+    const fake = filterSession();
+    const surface = makeSheetFrameSurface(fake.session);
+    const grid = render(createElement(surface.render, props()));
+    const bar = render(createElement(surface.bar, props()));
+    act(() => {
+      fireEvent.click(grid.getAllByTestId("sheet-filter-button")[0]!);
+    });
+    const menu = bar.getByTestId("sheet-filter-menu");
+    expect(menu.textContent).toContain("Sort A to Z");
+    const items = bar.getAllByTestId("sheet-filter-item");
+    expect(items).toHaveLength(2);
+    fireEvent.click(items[0]!); // untick apple
+    fireEvent.click(bar.getByTestId("sheet-filter-ok"));
+    expect(fake.applied).toEqual([
+      [0, { kind: "values", values: ["pear"], blanks: true }],
+    ]);
+  });
+
+  it("everything ticked clears the column; search narrows the list", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 0 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.change(bar.getByTestId("sheet-filter-search"), {
+      target: { value: "pe" },
+    });
+    expect(bar.getAllByTestId("sheet-filter-item")).toHaveLength(1);
+    fireEvent.change(bar.getByTestId("sheet-filter-search"), {
+      target: { value: "" },
+    });
+    fireEvent.click(bar.getByTestId("sheet-filter-ok"));
+    expect(fake.applied).toEqual([[0, null]]);
+  });
+
+  it("Text Filters ▸ Begins with… writes Excel's wildcard condition", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 0 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.click(bar.getByTestId("sheet-filter-conditions"));
+    fireEvent.click(bar.getByText("Begins with…"));
+    fireEvent.change(bar.getByTestId("sheet-filter-value1"), {
+      target: { value: "ap" },
+    });
+    fireEvent.click(bar.getByTestId("sheet-filter-custom-ok"));
+    expect(fake.applied).toEqual([
+      [
+        0,
+        {
+          kind: "custom",
+          and: true,
+          conditions: [{ op: "equal", val: "ap*" }],
+        },
+      ],
+    ]);
+  });
+
+  it("the menu's sort hands the column to the session", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 1 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.click(bar.getByTestId("sheet-filter-sort-desc"));
+    expect(fake.sorted).toEqual([[1, { descending: true }]]);
+    expect(bar.queryByTestId("sheet-filter-menu")).toBeNull();
   });
 });
