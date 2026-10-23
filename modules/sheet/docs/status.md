@@ -19,7 +19,7 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 389 registered functions: 371 evaluated, and 18 that need a network, a cube
+- **Calculation.** 519 registered functions: 501 evaluated, and 18 that need a network, a cube
   connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
   `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
   keep the value the workbook cached (else `#BLOCKED!` / `#CONNECT!`). Among them `LET`, `LAMBDA` and its
@@ -36,7 +36,13 @@ each published canary added is under [Releases](#releases).
   eta-reduced aggregations such as `SUM`, stored `_xleta.SUM`; the trim-reference operators `.:`
   `:.` are not parsed yet); AGGREGATE's full set (functions 12–19, every option) and SUBTOTAL
   101–111 over hidden rows, ROMAN's five forms, TREND over several regressors, TEXTBEFORE/TEXTAFTER
-  `match_end`, INDIRECT with R1C1 addresses, and TEXT in the workbook's locale; dynamic arrays that spill and nest; Excel tables with structured references;
+  `match_end`, INDIRECT with R1C1 addresses, and TEXT, FIXED and DOLLAR in the workbook's locale;
+  the statistical functions in full (the `A` aggregates, every distribution and its inverse,
+  the tests, moments and covariance, GROWTH/LOGEST, FORECAST.ETS and its companions) with
+  Excel's legacy compatibility names and their legacy arguments, over own numerics (ln Γ, the
+  incomplete gamma and beta functions, Loader's densities, ADR 516); all 55 financial functions,
+  the bond family on one coupon schedule, the odd first and last periods and the French
+  depreciation included; dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
@@ -44,10 +50,11 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 5,156 of 5,222 function
-  cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling.
-  Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
-  cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
+  locales. Expected values are recorded from Excel and replayed in CI: 5,754 of 5,902 function
+  cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling (the
+  coverage per category is in the table below).
+  Recalculating real workbooks reproduces Excel's saved value in 95.9% of comparable formula
+  cells (57,672 of 60,121 over 201 workbooks): shared formulas, defined names of every kind,
   structured references (including `[#Headers],[#Data]` and `[#Data],[#Totals]`), whole-column
   and whole-row references, omitted arguments, legacy array formulas and element-wise array
   arguments evaluate as Excel does. A number literal beyond the double-precision range is a
@@ -84,6 +91,17 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **What-if** (ADR 517). Data tables (`<f t="dataTable">`, one variable in a column or a row,
+  two variables) are evaluated: on load and after every write in automatic calculation (not in
+  "automatic except tables" or manual, where `calculateDataTables` does it), each result cell
+  substitutes its row and column values into the input cells, reads the formula, and the inputs
+  are put back; the save keeps each table's `<f>`. `goalSeek` sets a constant so a formula reaches
+  a target (secant, then bisection over a bracket; at most 100 iterations, within 0.001), keeps
+  the found value as an entry and returns the old input. Recorded from Excel 16, which built the
+  data tables and ran the seeks itself (`oracle/excel/whatif.applescript`,
+  `recorded/whatif.excel.xlsx`): every table result agrees on load and after an input edit, and
+  every seek lands within 0.1% of Excel's value. Data tables cannot be authored yet, and a row or
+  column insert does not move a data table's `ref`/`r1`/`r2`.
 - **Tables, editable** (ADR 517). `createTable` makes a range a table (its part, the worksheet
   relationship, the content type and `<tablePart>`; blank and repeated headers made unique as
   Excel makes them; without headers the data moves down under a `Column1…` row), `resizeTable`
@@ -218,7 +236,18 @@ each published canary added is under [Releases](#releases).
   definition), and sets document swatches and character / paragraph / cell styles; an xlsx save
   writes the concrete colours and keeps the references in the style record's own `extLst`,
   restored on re-import only while the concrete colour is unchanged. `get_cell_visual` and
-  `named_styles` read the model. The lowered styles carry the new facets beside the colours.
+  `named_styles` read the model. Both surfaces draw it from the same lowered style: the grid
+  paints the 18 patterns, gradients, diagonals, rotated and stacked text, indent, shrink-to-fit,
+  strike-through, super- and subscript, double underlines and rich-text runs (each run in its
+  own font); the page table names a document swatch instead of minting one, applies the
+  document character and cell styles as they are and bases its paragraph styles on the
+  document paragraph style, sets strike-through and super/subscript, applies each rich-text
+  run's character style over its range, turns rotated cells by a rotation cell style (the
+  table's quarter turns: 45–135° turn, smaller angles stay upright), stacks text one character
+  per line, and draws diagonals as page lines. Not on the page: a pattern shows as the blend of
+  its colours and a gradient as its mean colour, dashed and double borders as solid lines of
+  their weight, shrink-to-fit and the double underlines (the table model has no such
+  properties).
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -366,6 +395,32 @@ ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the 
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
+
+### Function coverage
+
+Registered and evaluated functions per registry family, and the Excel-recorded cases of the
+families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated excludes the
+18 `cached_only` rows (network, cube, native library, pivot table).
+
+| Family                                     | Registered | Evaluated | Recorded cases agreeing                                                                                                                               |
+| ------------------------------------------ | ---------: | --------: | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Statistical (with the compatibility names) |        138 |       138 | stat 235/235, stat3 1,110/1,160 (50 listed: FORECAST.ETS 46, four precision edges)                                                                    |
+| Financial                                  |         55 |        55 | fin 88/93, fin2 974/1,008 (34 listed: iterative yields, long odd first period, ACCRINT and odd last periods on the actual basis over several periods) |
+| Math and trigonometry                      |         74 |        74 | math, math2, math3: 522/522                                                                                                                           |
+| Engineering                                |         54 |        54 | 1,304/1,304                                                                                                                                           |
+| Text                                       |         50 |        50 | text, text2, text3: 431/469                                                                                                                           |
+| Date and time                              |         25 |        25 | 171/171                                                                                                                                               |
+| Lookup and reference                       |         23 |        23 | 89/89                                                                                                                                                 |
+| Information                                |         21 |        21 | 140/158                                                                                                                                               |
+| Dynamic arrays                             |         16 |        16 | 186/186                                                                                                                                               |
+| Database                                   |         12 |        12 | 61/61                                                                                                                                                 |
+| Logical                                    |         11 |        11 | 86/86                                                                                                                                                 |
+| Aggregates                                 |          9 |         9 | 50/50                                                                                                                                                 |
+| LAMBDA helpers                             |          8 |         8 | 21/21                                                                                                                                                 |
+| Other (T2)                                 |          5 |         5 | 44/44                                                                                                                                                 |
+| Cross-family fixes and reference forms     |          — |         — | fix3 161/164, refs 81/81                                                                                                                              |
+| External (network, cube, add-in, pivot)    |         18 |         0 | keep the cached value                                                                                                                                 |
+| **Total**                                  |    **519** |   **501** | **5,754/5,902**                                                                                                                                       |
 
 ## Limits of what is shipped
 

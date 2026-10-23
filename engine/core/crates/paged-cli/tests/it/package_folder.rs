@@ -19,7 +19,8 @@
 //! `paged package` — through the binary, asserting on the FOLDER it
 //! leaves behind: the document re-pointed at `Links/`, the linked file
 //! that exists copied there, the one that does not reported missing,
-//! the used family's faces in `Document fonts/`, and the two text files.
+//! the used family's faces in `Document fonts/`, and the two text files;
+//! and the document as `.paged`, carrying the module content IDML cannot.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -124,4 +125,91 @@ fn package_refuses_a_folder_that_holds_files() {
         .expect("run paged package");
     assert!(!run.status.success());
     assert_eq!(std::fs::read(work.join("keep.txt")).unwrap(), b"x");
+}
+
+#[test]
+fn package_keeps_module_content_in_the_paged_document() {
+    let work = dir("module");
+    let src = work.join("plain.paged");
+    let run = Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["export", "--format", "paged", "-o"])
+        .arg(&src)
+        .arg(repo().join("corpus/generated/images.idml"))
+        .output()
+        .expect("run paged export");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    // One module part, as a module's save writes it.
+    const PART: &str = "paged/media.example.module/o1/spec.json";
+    let spec = work.join("spec.json");
+    std::fs::write(&spec, br#"{"cells":1}"#).unwrap();
+    let doc = work.join("module.paged");
+    let run = Command::new(env!("CARGO_BIN_EXE_paged"))
+        .args(["parts", "write"])
+        .arg(&src)
+        .arg(PART)
+        .arg(&spec)
+        .arg(format!("--save={}", doc.display()))
+        .output()
+        .expect("run paged parts write");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+
+    let package = |out: &PathBuf, extra: &[&str]| {
+        let run = Command::new(env!("CARGO_BIN_EXE_paged"))
+            .arg("package")
+            .arg(&doc)
+            .arg("-o")
+            .arg(out)
+            .args(extra)
+            .arg("--json")
+            .output()
+            .expect("run paged package");
+        assert!(
+            run.status.success(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        serde_json::from_slice::<serde_json::Value>(&run.stdout).expect("report json")
+    };
+
+    let out = work.join("pkg");
+    let report = package(&out, &[]);
+    assert_eq!(report["moduleParts"], serde_json::json!([PART]));
+    assert!(report["paged"].as_str().unwrap().ends_with("module.paged"));
+    let mut zip = zip::ZipArchive::new(std::fs::File::open(out.join("module.paged")).unwrap())
+        .expect("a .paged is a zip");
+    let mut part = String::new();
+    zip.by_name(PART)
+        .expect("the part rides the .paged")
+        .read_to_string(&mut part)
+        .unwrap();
+    assert_eq!(part, r#"{"cells":1}"#);
+    let idml = zip::ZipArchive::new(std::fs::File::open(out.join("module.idml")).unwrap()).unwrap();
+    assert!(
+        idml.index_for_name(PART).is_none(),
+        "the IDML carries no module part"
+    );
+    let text = std::fs::read_to_string(out.join("module Report.txt")).unwrap();
+    assert!(
+        text.contains("Module content: 1 part(s), in module.paged (IDML does not carry them)"),
+        "{text}"
+    );
+    assert!(text.contains("Paged document: module.paged"), "{text}");
+
+    let bare = work.join("bare");
+    let report = package(&bare, &["--no-paged"]);
+    assert!(report["paged"].is_null());
+    assert!(!bare.join("module.paged").exists());
+    let text = std::fs::read_to_string(bare.join("module Report.txt")).unwrap();
+    assert!(
+        text.contains("Module content not carried by IDML: 1 part(s) (left out: --no-paged)"),
+        "{text}"
+    );
 }

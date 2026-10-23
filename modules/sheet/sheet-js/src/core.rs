@@ -61,6 +61,7 @@ pub mod protect;
 pub mod sort;
 pub mod tables;
 pub mod validation;
+pub mod whatif;
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
@@ -860,6 +861,8 @@ impl SheetSession {
             .collect();
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
+        // Data tables are calculated with the workbook (ADR 517).
+        session.data_tables_after_write()?;
         Ok(session)
     }
 
@@ -981,6 +984,19 @@ impl SheetSession {
         self.edited.insert((sheet, row, col));
         // A header cell renames its table column (sheet ADR 517).
         self.table_sync_headers(&[(sheet, row, col)])?;
+        // Data tables follow the inputs they read (sheet ADR 517).
+        let table_cells = self.data_tables_after_write()?;
+        if !table_cells.is_empty() {
+            result
+                .changed
+                .extend(table_cells.iter().map(|&(s, r, c)| CellRef {
+                    sheet: s,
+                    row: r,
+                    col: c,
+                    row_abs: false,
+                    col_abs: false,
+                }));
+        }
 
         // Build the changed list with each cell's formatted display.
         let engine = self.engine();
@@ -1108,8 +1124,10 @@ impl SheetSession {
         self.edited.extend(written.iter().copied());
         let header_check: Vec<(u16, u32, u32)> = written.iter().copied().collect();
         self.table_sync_headers(&header_check)?;
+        let table_cells = self.data_tables_after_write()?;
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
+        changed.extend(table_cells);
         Ok(SetCellsResult {
             changed_count: changed.len() as u32,
             circular: res

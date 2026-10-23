@@ -220,25 +220,30 @@ fn main() {
     }
     out.push_str("];\n\n");
 
-    // lookup_func: case-insensitive (query is uppercased), match over UPPER names.
+    // lookup_func: case-insensitive (query is uppercased), a binary search
+    // over the UPPER names sorted bytewise (a generated `match` over every
+    // name cost the wasm ~20 KB of string compares; W3 size work).
+    let mut sorted: Vec<(&str, usize)> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.name.as_str(), i))
+        .collect();
+    sorted.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
+    out.push_str("/// Every registered name (UPPER) with its `FuncId`, sorted bytewise.\n");
+    writeln!(out, "static LOOKUP: [(&str, u16); {}] = [", sorted.len()).unwrap();
+    for (name, i) in &sorted {
+        writeln!(out, "    ({name:?}, {i}),").unwrap();
+    }
+    out.push_str("];\n\n");
     out.push_str(
         "/// Case-insensitive name → `FuncId`. Returns `None` for any\n\
          /// unregistered name (uncallable by construction).\n\
          pub fn lookup_func(name: &str) -> Option<crate::ast::FuncId> {\n\
          \x20   let upper = name.to_ascii_uppercase();\n\
-         \x20   match upper.as_str() {\n",
-    );
-    for (i, r) in rows.iter().enumerate() {
-        writeln!(
-            out,
-            "        {:?} => Some(crate::ast::FuncId({})),",
-            r.name, i
-        )
-        .unwrap();
-    }
-    out.push_str(
-        "        _ => None,\n\
-         \x20   }\n\
+         \x20   LOOKUP\n\
+         \x20       .binary_search_by(|(n, _)| n.as_bytes().cmp(upper.as_bytes()))\n\
+         \x20       .ok()\n\
+         \x20       .map(|k| crate::ast::FuncId(LOOKUP[k].1))\n\
          }\n\n",
     );
 

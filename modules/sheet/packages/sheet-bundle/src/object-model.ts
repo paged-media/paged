@@ -1980,6 +1980,43 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 510 — paste special: opens its options on the sheet bar.
+      id: C("pasteSpecial"),
+      title: "Paste special",
+      args: struct({}),
+      async handler() {
+        session.openPasteSpecial();
+      },
+    },
+    {
+      // Sheet ADR 517 — data validation in the grid.
+      id: C("dataValidation"),
+      title: "Data validation",
+      args: struct({}),
+      async handler() {
+        session.openDataCard({ kind: "validation" });
+      },
+    },
+    {
+      // Sheet ADR 517 — circle invalid data in the grid.
+      id: C("circleInvalid"),
+      title: "Circle invalid data",
+      args: struct({}),
+      async handler() {
+        session.toggleInvalidCircles();
+      },
+    },
+    {
+      // Sheet ADR 517 — toggle filter in the grid.
+      id: C("toggleFilter"),
+      title: "Toggle filter",
+      args: struct({}),
+      async handler() {
+        const r = session.toggleAutofilter();
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),
