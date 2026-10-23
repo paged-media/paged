@@ -194,6 +194,13 @@ export interface CellRegion {
 
 const OTHER_CHANGE: SessionChange = { kind: "other" };
 
+/** The IDML styles un-styled story text falls back to: the basic
+ *  paragraph style, else the root "no paragraph style". */
+const BASIC_PARAGRAPH_STYLES = [
+  "ParagraphStyle/$ID/NormalParagraphStyle",
+  "ParagraphStyle/$ID/[No paragraph style]",
+];
+
 /** The regions (one bounding box per sheet) covering `cells`. */
 export function regionsOf(
   cells: readonly { sheet: number; row: number; col: number }[],
@@ -443,6 +450,14 @@ export interface WorkbookSession {
     family: string,
     style?: string,
   ): Promise<{ bytes: Uint8Array; family: string; style?: string } | null>;
+  /** The face and size text takes on the page when a cell names none: the
+   *  document's basic paragraph style (P7 — the grid draws un-styled cells
+   *  in it, as the placed table prints them). Null when unreadable. */
+  documentTextDefault(): Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -3794,6 +3809,47 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    async documentTextDefault() {
+      if (!host.supports("document.styleProperties@1")) return null;
+      try {
+        let props: Awaited<ReturnType<typeof host.document.styleProperties>> =
+          null;
+        for (const id of BASIC_PARAGRAPH_STYLES) {
+          props = await host.document.styleProperties("paragraph", id);
+          if (props) break;
+        }
+        if (!props) return null;
+        const entries = props.entries;
+        const entry = (path: string) =>
+          entries.find((e) => e.path === path)?.value ?? null;
+        // An unset entry reads as "" (text) or null (length): absent.
+        const text = (v: unknown) => {
+          const raw =
+            v && typeof v === "object" && "value" in v
+              ? (v as { value: unknown }).value
+              : null;
+          return raw === null || raw === undefined || raw === ""
+            ? null
+            : String(raw);
+        };
+        const num = (v: unknown) => {
+          const t = text(v);
+          const n = t === null ? NaN : Number(t);
+          return Number.isFinite(n) ? n : null;
+        };
+        const family = text(entry("characterFontFamily"));
+        if (!family) return null;
+        return {
+          family,
+          style: text(entry("characterFontStyle")),
+          sizePt: num(entry("characterFontSize")),
+        };
+      } catch (err) {
+        host.log.debug("documentTextDefault: style read failed", err);
+        return null;
+      }
     },
 
     async documentFontFace(family, style) {

@@ -75,6 +75,7 @@ export type FrameSurfaceSession = Pick<
   | "frameView"
   | "setFrameSheet"
   | "documentFontFace"
+  | "documentTextDefault"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -228,12 +229,50 @@ function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
   };
 }
 
+/** The document's default text face per session (asked once). */
+const textDefaults = new WeakMap<
+  FrameSurfaceSession,
+  Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>
+>();
+
+/** The face and size the page gives text that names none (the document's
+ *  basic paragraph style), or null until known / when unreadable. */
+function useDocumentTextDefault(
+  session: FrameSurfaceSession,
+): { family: string; style: string | null; sizePt: number | null } | null {
+  const [value, setValue] = useState<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    let pending = textDefaults.get(session);
+    if (!pending) {
+      pending = session.documentTextDefault().catch(() => null);
+      textDefaults.set(session, pending);
+    }
+    void pending.then((d) => {
+      if (live) setValue(d);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session]);
+  return value;
+}
+
 /** Load the document's faces for the families `scene` names into the
  *  page's font set; answers a counter that moves whenever one arrived, so
  *  the grid repaints in it. */
 function useDocumentFaces(
   session: FrameSurfaceSession,
   scene: GridScene | null,
+  defaultFamily: string | null,
 ): number {
   const [loaded, setLoaded] = useState(0);
   useEffect(() => {
@@ -246,8 +285,14 @@ function useDocumentFaces(
       requestedFaces.set(session, asked);
     }
     let live = true;
-    for (const st of scene.styles) {
-      const family = st.fontName;
+    const wanted = [
+      ...scene.styles,
+      ...(defaultFamily
+        ? [{ fontName: defaultFamily, bold: false, italic: false }]
+        : []),
+    ];
+    for (const st of wanted) {
+      const family = st.fontName ?? defaultFamily;
       if (!family) continue;
       const face = faceOfStyle(st);
       const key = `${family}|${face.name}`;
@@ -274,7 +319,7 @@ function useDocumentFaces(
     return () => {
       live = false;
     };
-  }, [session, scene]);
+  }, [session, scene, defaultFamily]);
   return loaded;
 }
 
@@ -287,7 +332,12 @@ function SheetFrameSurfaceView({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [scene, setScene] = useState<GridScene | null>(null);
-  const facesLoaded = useDocumentFaces(session, scene);
+  const textDefault = useDocumentTextDefault(session);
+  const facesLoaded = useDocumentFaces(
+    session,
+    scene,
+    textDefault?.family ?? null,
+  );
   const edit = useSessionView(session, () => session.cellEditState());
   const [completion, setCompletion] = useState<{
     items: FunctionEntry[];
@@ -372,6 +422,15 @@ function SheetFrameSurfaceView({
     if (!ctx) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     paintGridScene(ctx, scene, {
+      // P7 — un-styled cells in the face the page prints them in.
+      ...(textDefault
+        ? {
+            grid: {
+              fontFamily: `"${textDefault.family}", sans-serif`,
+              ...(textDefault.sizePt ? { fontSizePt: textDefault.sizePt } : {}),
+            },
+          }
+        : {}),
       headings: true,
       rowHeadingWidthPt: headW,
       widthPt: props.widthPt,
@@ -436,6 +495,7 @@ function SheetFrameSurfaceView({
     edit?.text,
     resizeGhost,
     facesLoaded,
+    textDefault,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────

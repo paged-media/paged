@@ -152,6 +152,11 @@ function fakeSession(shown: GridScene = scene) {
     ],
     state: () =>
       ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    documentTextDefault: async () => ({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    }),
     documentFontFace: async (family, style) => {
       calls.push(["face", family, style]);
       return null;
@@ -379,6 +384,8 @@ describe("sheet frame surface", () => {
         await Promise.resolve();
       });
       expect(calls).toContainEqual(["face", "Minion Pro", "Bold"]);
+      // The document's default face is asked for too (un-styled cells).
+      expect(calls).toContainEqual(["face", "Minion Pro", "Regular"]);
     } finally {
       if (!hadFontFace) delete g.FontFace;
       if (!hadFonts) delete doc.fonts;
