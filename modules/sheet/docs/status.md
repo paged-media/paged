@@ -84,6 +84,22 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Sort and AutoFilter** (ADR 517). `sortRangeBy` is Excel's Sort dialog: up to 64 levels, each
+  by value (ascending, descending, a custom list), cell colour or font colour (on top or on
+  bottom), case-sensitive or not, top to bottom or left to right; stable, blanks last, formats move
+  with their rows, formulas are re-addressed; the sort is written as `<sortState>` (inside the
+  `<autoFilter>` when the range lies in it) so Excel's dialog reopens with the same levels. The
+  AutoFilter engine evaluates every criterion Excel writes — value lists with date groups and
+  blanks, one or two custom conditions with wildcards, top/bottom n or n%, dynamic filters
+  (above/below average, today … year to date, `Q1`–`Q4`, `M1`–`M12`, against the host clock), cell
+  and font colour as shown (conditional formatting included) — and writes it as `<filterColumn>`;
+  the rows it hides are saved hidden, as Excel saves them, and clearing it shows exactly those.
+  `filterColumnValues` is the dropdown's data (distinct shown values with counts and ticks over
+  the rows the other columns keep, the date tree, blanks, the colours present, the current
+  criterion); `filterState`, `reapplyFilter`, `clearFilterCriteria`, `removeAutofilter`. Named
+  filter views are saved and applied by name and kept beside the workbook in the `.paged` part
+  (`filter-views.json`, `writeFilterViewsPart`); the active one is the `<autoFilter>`. No UI calls
+  these doors yet; the bundle does not yet persist the named views on its own.
 - **Data validation, interpreted** (ADR 517). `enterCell` checks a typed entry against its
   cell's rule: whole and decimal numbers, dates, times and text length against the operator and
   operands (formulas, relative to the rule's first cell), lists (case-insensitive text, numbers by
@@ -325,8 +341,9 @@ size? }` (no size clears it), each one workbook version and one undo step. Delet
   theme part and the workbook palette; conditional-format colour-scale stops still use the
   default Office theme.
 - **One workbook** is stored at a time; importing another replaces it.
-- **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
-  panel calls them yet.
+- **Icon criteria.** Sorting by a conditional-format icon is refused and an icon filter keeps
+  every row (`filterState` reports it as not applied): the styler does not compute icon sets yet.
+  Tables' own AutoFilters are read and kept; the filter doors work on the sheet's AutoFilter.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).

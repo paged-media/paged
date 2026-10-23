@@ -69,3 +69,34 @@ export async function readWorkbookPart(
   const name = nameBytes ? new TextDecoder().decode(nameBytes) : DEFAULT_NAME;
   return { bytes, name };
 }
+
+/** The named filter views (sheet ADR 517) — criteria saved beside the
+ *  workbook, not inside the xlsx (Excel has no named sheet filter views).
+ *  The engine lists them (`listFilterViews`) and restores them
+ *  (`setFilterViews`); this is their part. */
+const FILTER_VIEWS_PART = "filter-views.json";
+
+/** Write the named filter views (no container writer ⇒ no-op). */
+export async function writeFilterViewsPart(
+  host: PartsHost,
+  views: readonly unknown[],
+): Promise<void> {
+  if (!host.supports("storage.parts@1")) return;
+  await host.parts.write(
+    FILTER_VIEWS_PART,
+    new TextEncoder().encode(JSON.stringify(views)),
+  );
+}
+
+/** Read the named filter views, `[]` when absent or unreadable. */
+export async function readFilterViewsPart(host: PartsHost): Promise<unknown[]> {
+  if (!host.supports("storage.parts@1")) return [];
+  try {
+    const bytes = await host.parts.read(FILTER_VIEWS_PART);
+    if (!bytes) return [];
+    const v: unknown = JSON.parse(new TextDecoder().decode(bytes));
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
