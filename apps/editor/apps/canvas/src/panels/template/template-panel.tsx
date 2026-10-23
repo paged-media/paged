@@ -30,6 +30,7 @@ import type {
   ElementId,
   Role,
   TemplateFieldSummary,
+  TemplateFinding,
 } from "@paged-media/client";
 import type { TemplateFieldKindInfo } from "@paged-media/plugin-api";
 import {
@@ -47,6 +48,9 @@ import {
   useSessionRole,
   useSetSessionRole,
 } from "@paged-media/shell";
+import { useStrings } from "@paged-media/strings";
+
+import { PANEL, PREFLIGHT, findingText } from "./messages";
 
 const KEY = "x-paged:template";
 
@@ -54,22 +58,22 @@ type Kind = "text" | "image" | "visibility" | "module";
 
 /** What an author may let a filler do to an item beyond its field. */
 const EXTRA: readonly [string, string][] = [
-  ["text.style", "Format the text"],
-  ["image.crop", "Move and scale the picture in its frame"],
-  ["item.move", "Move"],
-  ["item.resize", "Resize"],
-  ["item.rotate", "Rotate"],
-  ["item.delete", "Delete"],
-  ["item.visibility", "Show or hide"],
-  ["appearance.fill", "Change the fill"],
-  ["appearance.stroke", "Change the stroke"],
+  ["text.style", PANEL.allowFormat],
+  ["image.crop", PANEL.allowCrop],
+  ["item.move", PANEL.allowMove],
+  ["item.resize", PANEL.allowResize],
+  ["item.rotate", PANEL.allowRotate],
+  ["item.delete", PANEL.allowDelete],
+  ["item.visibility", PANEL.allowShowHide],
+  ["appearance.fill", PANEL.allowFill],
+  ["appearance.stroke", PANEL.allowStroke],
 ];
 
 /** What a filler may do everywhere (the document's defaults). */
 const DOCUMENT: readonly [string, string][] = [
-  ["select", "Select any item"],
-  ["document.pages", "Add and remove pages"],
-  ["document.add-item", "Add new items"],
+  ["select", PANEL.everywhereSelect],
+  ["document.pages", PANEL.everywherePages],
+  ["document.add-item", PANEL.everywhereAdd],
 ];
 
 interface ItemPolicy {
@@ -168,6 +172,7 @@ function useLabel(address: string | null, version: unknown): unknown {
 }
 
 function RoleBar({ role }: { role: Role }): ReactElement {
+  const strings = useStrings();
   const setRole = useSetSessionRole();
   const switchTo = (next: Role, label: string, attr: string) => (
     <button
@@ -181,10 +186,10 @@ function RoleBar({ role }: { role: Role }): ReactElement {
   );
   const line =
     role === "author"
-      ? "You are authoring this template."
+      ? strings.t(PANEL.lineAuthor)
       : role === "filler"
-        ? "You see the template as the person filling it in."
-        : "Take up authoring to make fields and set what a filler may do.";
+        ? strings.t(PANEL.lineFiller)
+        : strings.t(PANEL.lineEditor);
   return (
     <div style={{ display: "grid", gap: space[2] }}>
       <div style={{ fontSize: 11.5 }} data-template-role-line={role}>
@@ -192,16 +197,16 @@ function RoleBar({ role }: { role: Role }): ReactElement {
       </div>
       <div style={{ display: "flex", gap: space[2], flexWrap: "wrap" }}>
         {role === "author"
-          ? switchTo("filler", "Preview as filler", "preview")
+          ? switchTo("filler", strings.t(PANEL.previewAsFiller), "preview")
           : null}
         {role === "filler"
-          ? switchTo("author", "Back to authoring", "author")
+          ? switchTo("author", strings.t(PANEL.backToAuthoring), "author")
           : null}
         {role === "editor"
-          ? switchTo("author", "Author template", "author")
+          ? switchTo("author", strings.t(PANEL.authorTemplate), "author")
           : null}
         {role === "author"
-          ? switchTo("editor", "Stop authoring", "editor")
+          ? switchTo("editor", strings.t(PANEL.stopAuthoring), "editor")
           : null}
       </div>
     </div>
@@ -219,6 +224,7 @@ function FieldEditor({
   kinds: readonly TemplateFieldKindInfo[];
   onDone(message: string | null): void;
 }): ReactElement {
+  const strings = useStrings();
   const client = useCanvasClient();
   const field = policy?.field;
   const [name, setName] = useState(
@@ -254,10 +260,9 @@ function FieldEditor({
 
   const save = async () => {
     const trimmed = name.trim();
-    if (!trimmed) return onDone("A field needs a name.");
+    if (!trimmed) return onDone(strings.t(PANEL.needsName));
     const parsedDef = kind === "module" ? parseJson(def || "{}") : null;
-    if (parsedDef === undefined)
-      return onDone("The module definition is not JSON.");
+    if (parsedDef === undefined) return onDone(strings.t(PANEL.badDefinition));
     const info = kinds.find((k) => k.kind === moduleKind);
     const next: ItemPolicy = {
       field: {
@@ -349,30 +354,32 @@ function FieldEditor({
 
   return (
     <div data-template-editor style={{ display: "grid", gap: space[2] }}>
-      {row("Name", text(name, setName, "name"))}
-      {row("Label", text(label, setLabel, "label"))}
+      {row(strings.t(PANEL.name), text(name, setName, "name"))}
+      {row(strings.t(PANEL.label), text(label, setLabel, "label"))}
       {row(
-        "Kind",
+        strings.t(PANEL.kind),
         <select
           data-template-edit="kind"
           value={kind}
           onChange={(e) => setKind(e.currentTarget.value as Kind)}
         >
-          <option value="text">Text</option>
-          <option value="image">Picture</option>
-          <option value="visibility">Shown or hidden</option>
-          {kinds.length ? <option value="module">Module content</option> : null}
+          <option value="text">{strings.t(PANEL.kindText)}</option>
+          <option value="image">{strings.t(PANEL.kindPicture)}</option>
+          <option value="visibility">{strings.t(PANEL.kindVisibility)}</option>
+          {kinds.length ? (
+            <option value="module">{strings.t(PANEL.kindModule)}</option>
+          ) : null}
         </select>,
       )}
       {kind === "text"
         ? row(
-            "Longest text",
+            strings.t(PANEL.longestText),
             text(maxLength, setMaxLength, "maxLength", "number"),
           )
         : null}
       {kind === "module"
         ? row(
-            "Module field",
+            strings.t(PANEL.moduleField),
             <select
               data-template-edit="module"
               value={moduleKind}
@@ -387,10 +394,10 @@ function FieldEditor({
           )
         : null}
       {kind === "module"
-        ? row("Definition (JSON)", text(def, setDef, "def"))
+        ? row(strings.t(PANEL.definition), text(def, setDef, "def"))
         : null}
-      {row("Group", text(group, setGroup, "group"))}
-      {row("Help", text(help, setHelp, "help"))}
+      {row(strings.t(PANEL.group), text(group, setGroup, "group"))}
+      {row(strings.t(PANEL.help), text(help, setHelp, "help"))}
       <label style={{ fontSize: 11.5 }}>
         <input
           type="checkbox"
@@ -398,11 +405,11 @@ function FieldEditor({
           checked={required}
           onChange={(e) => setRequired(e.currentTarget.checked)}
         />{" "}
-        Required
+        {strings.t(PANEL.required)}
       </label>
       <fieldset style={{ border: 0, padding: 0, display: "grid", gap: 2 }}>
         <legend style={{ fontSize: 11.5, fontWeight: 600 }}>
-          A filler may also
+          {strings.t(PANEL.fillerMayAlso)}
         </legend>
         {EXTRA.map(([perm, title]) => (
           <label key={perm} style={{ fontSize: 11.5 }}>
@@ -418,13 +425,13 @@ function FieldEditor({
                 )
               }
             />{" "}
-            {title}
+            {strings.t(title)}
           </label>
         ))}
       </fieldset>
       <div style={{ display: "flex", gap: space[2] }}>
         <button type="button" data-template-save onClick={() => void save()}>
-          {field ? "Save field" : "Make field"}
+          {field ? strings.t(PANEL.saveField) : strings.t(PANEL.makeField)}
         </button>
         {policy ? (
           <button
@@ -432,7 +439,7 @@ function FieldEditor({
             data-template-remove
             onClick={() => void remove()}
           >
-            Remove field
+            {strings.t(PANEL.removeField)}
           </button>
         ) : null}
       </div>
@@ -441,6 +448,7 @@ function FieldEditor({
 }
 
 function DocumentDefaults({ version }: { version: unknown }): ReactElement {
+  const strings = useStrings();
   const client = useCanvasClient();
   const raw = useLabel("doc", version);
   const current = parse<{ defaults?: string[]; order?: string[] }>(raw) ?? {};
@@ -459,7 +467,7 @@ function DocumentDefaults({ version }: { version: unknown }): ReactElement {
   };
   return (
     <section style={{ display: "grid", gap: space[1] }}>
-      <h3 style={{ margin: 0, fontSize: 12 }}>Everywhere, a filler may</h3>
+      <h3 style={{ margin: 0, fontSize: 12 }}>{strings.t(PANEL.everywhere)}</h3>
       {DOCUMENT.map(([perm, title]) => (
         <label key={perm} style={{ fontSize: 11.5 }}>
           <input
@@ -468,7 +476,7 @@ function DocumentDefaults({ version }: { version: unknown }): ReactElement {
             checked={(current.defaults ?? []).includes(perm)}
             onChange={(e) => void toggle(perm, e.currentTarget.checked)}
           />{" "}
-          {title}
+          {strings.t(title)}
         </label>
       ))}
       <StatusLine tone="error" attr="data-template-default-problem">
@@ -478,8 +486,45 @@ function DocumentDefaults({ version }: { version: unknown }): ReactElement {
   );
 }
 
+/** What is wrong with the template before anyone fills it (plan F3). */
+function Problems(): ReactElement | null {
+  const strings = useStrings();
+  const findings = useCollection<TemplateFinding>("templateFindings");
+  if (findings === null) return null;
+  return (
+    <section data-template-problems style={{ display: "grid", gap: space[1] }}>
+      <h3 style={{ margin: 0, fontSize: 12 }}>
+        {strings.t(PREFLIGHT.heading)}
+      </h3>
+      {findings.length === 0 ? (
+        <div style={{ color: "var(--pg-muted-fg)", fontSize: 11.5 }}>
+          {strings.t(PREFLIGHT.none)}
+        </div>
+      ) : (
+        <ul style={{ margin: 0, paddingLeft: space[3], fontSize: 11.5 }}>
+          {findings.map((f, i) => (
+            <li
+              key={`${f.code}:${f.item ?? ""}:${i}`}
+              data-template-problem-code={f.code}
+              style={{
+                color:
+                  f.severity === "error"
+                    ? "var(--status-error, #d92d20)"
+                    : "var(--status-warn, #b54708)",
+              }}
+            >
+              {findingText(strings, f)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** The Template panel. */
 export function TemplatePanel(): ReactElement {
+  const strings = useStrings();
   const role = useSessionRole();
   const rows = useCollection<TemplateFieldSummary>("templateFields") ?? [];
   const { elementSelection } = useSelection();
@@ -510,13 +555,13 @@ export function TemplatePanel(): ReactElement {
     >
       <RoleBar role={role} />
       <section style={{ display: "grid", gap: space[1] }}>
-        <h3 style={{ margin: 0, fontSize: 12 }}>Fields</h3>
+        <h3 style={{ margin: 0, fontSize: 12 }}>{strings.t(PANEL.fields)}</h3>
         {rows.length === 0 ? (
           <div
             data-template-fields-empty
             style={{ color: "var(--pg-muted-fg)", fontSize: 11.5 }}
           >
-            No fields yet. Select an item and make it a field.
+            {strings.t(PANEL.noFields)}
           </div>
         ) : (
           <ul style={{ margin: 0, paddingLeft: space[3], fontSize: 11.5 }}>
@@ -533,9 +578,11 @@ export function TemplatePanel(): ReactElement {
       </section>
       {role === "author" ? (
         <section style={{ display: "grid", gap: space[2] }}>
-          <h3 style={{ margin: 0, fontSize: 12 }}>Selected item</h3>
+          <h3 style={{ margin: 0, fontSize: 12 }}>
+            {strings.t(PANEL.selectedItem)}
+          </h3>
           {selected ? (
-            <NamedAs name="Field">
+            <NamedAs name={strings.t(PANEL.field)}>
               <FieldEditor
                 key={`${selected.kind}:${selected.id}:${policy ? "f" : "n"}`}
                 id={selected}
@@ -546,7 +593,7 @@ export function TemplatePanel(): ReactElement {
             </NamedAs>
           ) : (
             <div style={{ color: "var(--pg-muted-fg)", fontSize: 11.5 }}>
-              Select one item to make it a field.
+              {strings.t(PANEL.selectOne)}
             </div>
           )}
           <StatusLine tone="error" attr="data-template-problem">
@@ -554,6 +601,7 @@ export function TemplatePanel(): ReactElement {
           </StatusLine>
         </section>
       ) : null}
+      {role === "author" ? <Problems /> : null}
       {role === "author" ? <DocumentDefaults version={rows} /> : null}
     </div>
   );

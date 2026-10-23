@@ -998,6 +998,12 @@ export interface HitResult {
 export type SelectionMode = "replace" | "add" | "toggle";
 
 /**
+ * How much a finding matters: an error makes the template unfit to hand
+ * to a filler; a warning is worth a look.
+ */
+export type FindingSeverity = "error" | "warning";
+
+/**
  * Inspector P1 — one node in the scene tree. Children are nested
  * (Spread → Page → Group? → frame leaf). `kind` is a short label
  * the panel renders (\"Spread\", \"Page\", \"TextFrame\", \"Group\", …).
@@ -1313,6 +1319,31 @@ export interface SnapPointQuery {
      * path still being drawn. Targets as points and as alignment lines.
      */
     extraPoints?: [number, number][];
+}
+
+/**
+ * One preflight finding.
+ */
+export interface TemplateFinding {
+    /**
+     * `policyUnreadable`, `fieldUnnamed`, `fieldDuplicate`,
+     * `imageNotReplaceable`, `textHasNoStory`, `requiredHidden`,
+     * `fieldOnParentPage`, `linkMissing`.
+     */
+    code: string;
+    severity: FindingSeverity;
+    /**
+     * The field\'s name, when the finding is about one.
+     */
+    field?: string;
+    /**
+     * The item\'s `Self` id, when the finding is about one.
+     */
+    item?: string;
+    /**
+     * The finding in English.
+     */
+    message: string;
 }
 
 /**
@@ -1746,7 +1777,7 @@ export interface SwatchSummary {
  * `serde_json::Value::Array` for unimplemented entries, surfacing
  * a runtime warning rather than a panic.
  */
-export type CollectionName = "swatches" | "gradients" | "colorGroups" | "paragraphStyles" | "characterStyles" | "objectStyles" | "cellStyles" | "tableStyles" | "layers" | "spreads" | "pages" | "masterPages" | "links" | "articles" | "hyperlinks" | "bookmarks" | "crossReferences" | "conditions" | "conditionSets" | "fonts" | "indexTopics" | "footnotes" | "endnotes" | "notes" | "xmlTags" | "templateFields" | "xmlElements" | "trackedChanges" | "inks" | "sections" | "stories" | "numberingLists" | "inkCoverage";
+export type CollectionName = "swatches" | "gradients" | "colorGroups" | "paragraphStyles" | "characterStyles" | "objectStyles" | "cellStyles" | "tableStyles" | "layers" | "spreads" | "pages" | "masterPages" | "links" | "articles" | "hyperlinks" | "bookmarks" | "crossReferences" | "conditions" | "conditionSets" | "fonts" | "indexTopics" | "footnotes" | "endnotes" | "notes" | "xmlTags" | "templateFields" | "templateFindings" | "xmlElements" | "trackedChanges" | "inks" | "sections" | "stories" | "numberingLists" | "inkCoverage";
 
 /**
  * SDK Phase 5 (D1) — singleton document-level state. Per
