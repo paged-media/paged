@@ -193,6 +193,7 @@ describe("sheet_plugin_bundle_activate", () => {
       "media.paged.sheet.command.unhideSelection",
       "media.paged.sheet.command.groupSelection",
       "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek",
     ]);
   });
 

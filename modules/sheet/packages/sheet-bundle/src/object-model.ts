@@ -2065,6 +2065,15 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 517 — goal seek in the grid.
+      id: C("goalSeek"),
+      title: "Goal Seek",
+      args: struct({}),
+      async handler() {
+        session.openDataCard({ kind: "goalSeek" });
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),

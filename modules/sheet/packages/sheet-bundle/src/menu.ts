@@ -61,6 +61,7 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Unhide", "unhideSelection", "outline"],
   ["Context/Group", "groupSelection", "outline"],
   ["Context/Ungroup", "ungroupSelection", "outline"],
+  ["Context/Goal Seek…", "goalSeek", "data"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

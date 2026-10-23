@@ -69,6 +69,7 @@ export const COMMANDS = defineMessages("sheet.command", {
   unhideSelection: "Unhide",
   groupSelection: "Group",
   ungroupSelection: "Ungroup",
+  goalSeek: "Goal Seek…",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
   defaultStyleName: "Cell style",
