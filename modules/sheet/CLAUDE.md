@@ -39,8 +39,8 @@ engine, and **XLSX round-trip** (preservation-safe both directions). The
 page surface **lowers to a native `<Table>`** (S-03 / `sheet.lower.page`),
 UNSTYLED: the page calls `getRangeLowered` (the NoStyles door), not
 `getRangeStyled`. **Multi-frame pagination** (S-05) is built in the engine
-and exported as `lowerPaginatedToChain` / `subscribeChainReflow`, but NO
-command or panel calls it — a user cannot reach it.
+and exported as `lowerPaginatedToChain` / `subscribeChainReflow`; the
+palette's Paginate and the typed `place { chain }` reach it.
 The **in-frame grid renders + edits via K-1** (`sheet.grid.inframe`):
 `host.contribute.sceneLayer` paints the windowed grid (C-1 vector v0.39.0
 
@@ -125,10 +125,12 @@ Rules for every code change in this repo:
   serial 60, 15-significant-digit display — each adopted defect is an
   explicit registry ruling with provenance. Oracle disagreements get
   recorded rulings.
-- **PUBLISHING-FIRST SCOPE (§1, permanent).** Pivot tables, data
-  validation, what-if, external links, VBA execution are NEVER
-  interpreted — they round-trip preserved. This is a product decision,
-  not a deferral; don't "helpfully" implement them.
+- **PUBLISHING-FIRST SCOPE (§1, amended by ADR 517).** Pivot tables,
+  slicers, GETPIVOTDATA, VBA execution, Scenario Manager and Solver are
+  NEVER interpreted — they round-trip preserved. This is a product
+  decision, not a deferral; don't "helpfully" implement them. Data
+  validation, data tables and Goal Seek, external links (from their cached
+  values, never followed), outline and protection ARE interpreted (ADR 517).
 - **A MINT INSIDE A BATCH IS NOT IDEMPOTENT, however idempotent it
   looks.** paged.sheet mints document swatches at deterministic,
   content-addressed ids, so re-running a lowering asks for ids the
@@ -158,7 +160,7 @@ Rules for every code change in this repo:
 - **Reserved seams stay honest.** The page-lowering (S-03), in-frame
   grid + K-1 modal edit session (S-02/C-1/K-1), importer registration
   (S-06/S-11), OPFS + container-part persistence (S-08), and the data-provider
-  consumer (S-15) SHIP. Pagination (S-05) is BUILT but has no command.
+  consumer (S-15) SHIP. Pagination (S-05) ships (palette Paginate, typed `place`).
   DONE in the RFI, no longer gaps: per-cell fill/borders and
   `appliedCellStyle` on a `tableCell` ElementId (S-04 — core applies
   them, probe-verified), owned-content interception (S-09, editor-side),
@@ -185,7 +187,8 @@ Rules for every code change in this repo:
   calling convention (`Arg`/`EvalCtx`), and the registry YAML schema are
   FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
   amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`
-  and `EvalCtx::locale`, ADR 516.)
+  and `EvalCtx::locale`, ADR 516; the filter criteria `DateGroups`/`Custom`/`Dynamic`/
+  `Color`/`Icon`, ADR 517; the cell visual model `sheet_core::visual`, ADR 518.)
 
 ## Two-registry split
 

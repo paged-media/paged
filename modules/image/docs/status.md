@@ -85,6 +85,23 @@ frame keeps its previous image until a GPU realm re-composites it.
   holding a smart object is refused (its source re-renders on the GPU).
 - **A typed `applyAdjustment`** `{ image, name?, params }` adds one adjustment layer with
   the given parameters, named, in one undo step.
+- **A filter on a region.** The typed `filterRegion`
+  `{ layer, params, region?, mask?, selection? }` runs the adjustment chain (blur, sharpen, hue, invert, exposure, levels, curves and the other
+  adjustment-layer paths in `params`) on a pixel layer inside `region` (top, left, bottom and
+  right in image pixels; the whole canvas without one), destructively, in one undo step; it
+  is the layer kind's `filter` row. On the GPU where the realm has a device; headless (the
+  Node CLI, the SDK's host) on the shipped CPU twins of the same nineteen kernels
+  ([ADR 465](adr/465-cpu-twins-for-region-filters.md)), each within its kernel's tolerance of
+  the reference, the two paths within one 8-bit level of each other. Adjustment layers, smart
+  objects, locked and 16-bit layers are refused, and so is a filter that changes nothing.
+  A selection is data headless: `mask` takes `polygons` (`[x, y]` image pixels, unioned,
+  anti-aliased), `alpha` (one coverage byte per canvas pixel, or an image of the canvas size
+  whose luminance times alpha is the coverage; `paged-node invoke` reads it from a file as
+  `"@path"`) and `feather` (σ px), rasterised in Rust and clipped to `region`; partial
+  coverage blends filtered and original pixels, the same mask on the GPU and the CPU path.
+  `selection: true` filters within the editor's live selection of that frame (intersected
+  with any `mask`); without one (headless, another image open, nothing selected) it is
+  refused with the reason. A mask that covers no pixel is refused.
 - **Interactive twins refuse headless.** A typed twin that acts on the image open in the
   editor fails with `unmapped:` when none is open, instead of doing nothing.
 
@@ -109,9 +126,10 @@ the baked image), beside the module's own label on the frame.
 
 ## Limits of what is shipped
 
-- **A GPU is required.** No kernel has a CPU path. Without WebGPU, adjustments, filters,
-  generator fills, painting, resize and the composite of more than one layer return an
-  error; decode, the identity composite, selection and histograms still work.
+- **A GPU is required.** Only the region filter has a CPU path (ADR 465). Without WebGPU,
+  the adjustment preview and Apply, the gallery and generator filters, painting, resize and
+  the composite of more than one layer return an error; decode, the identity composite,
+  selection, histograms and `filterRegion` still work.
 - **The preview on the page** is one scene-layer image, cleared when the frame leaves the
   selection and on Reset. It goes through the scene layer's image doors (`submitImage`,
   `submitImageTiles`), so a brush sample sends only the rectangle it changed. Edits reach

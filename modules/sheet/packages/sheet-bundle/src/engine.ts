@@ -36,16 +36,36 @@
 
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
+import {
+  wrapW2,
+  type SheetEngineW2,
+  type SheetWasmEngineW2,
+} from "./engine-w2";
+
 import type {
   ChartGeometry,
+  FramePageSpec,
   FrameWindow,
   FrameWindowSpec,
+  TracksSpec,
   GridScene,
   LoweredContent,
   Page,
 } from "../../sheet-host-model/src";
 
 // ------------------------------------------------------------ facade
+
+/** Status-bar statistics of a range (`SheetEngine.rangeStats`). */
+export interface RangeStats {
+  count: number;
+  numbers: number;
+  sum: number;
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  sumDisplay: string;
+  averageDisplay: string;
+}
 
 /** One worksheet's identity + dimensions. `rows`/`cols` are the used
  *  extent (the engine computes it) so the panel can default the range
@@ -93,12 +113,10 @@ export interface FreezeInfo {
   cols: number;
 }
 
-/** One worksheet's DATA-VALIDATION inventory (spec §1.1/§11/T∞ — PRESERVE-
- *  ONLY). Data validation round-trips preserved but is NEVER enforced,
- *  evaluated, or rendered as a runtime dropdown; this inventory exists ONLY so
- *  the panel can SHOW that the workbook carries validations Paged preserves but
- *  does not enforce. `count` is the headline number; `kinds` the distinct
- *  validation types present (display only). */
+/** One worksheet's DATA-VALIDATION inventory: `count` is the headline
+ *  number; `kinds` the distinct validation types present. The rules
+ *  themselves, their enforcement on entry (`enterCell`), list items and
+ *  authoring are the ADR 517 doors in `engine-w2.ts`. */
 export interface DataValidationInfo {
   sheet: number;
   count: number;
@@ -239,11 +257,35 @@ export interface ReplaceResult {
 export interface ChartInfo {
   index: number;
   hostSheet: number;
-  /** The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
-   *  `"pie"`, `"donut"`, `"scatter"`). */
+  /** The kind tag (`"column"`, `"stackedLine"`, `"waterfall"`, …;
+   *  `"unsupported"` for a chart Paged does not draw). */
   kind: string;
   title: string | null;
   seriesCount: number;
+  /** A 3-D chart drawn as its 2-D kind (W4). */
+  flattened3d?: boolean;
+  /** The element the kind came from when it is not its own. */
+  source?: string | null;
+  /** The chart is a chartsheet (its own tab). */
+  chartsheet?: boolean;
+  /** More than one plot (a combo chart). */
+  combo?: boolean;
+}
+
+/** A chartsheet: a sheet tab that is one chart. */
+export interface ChartsheetInfo {
+  sheet: number;
+  name: string;
+  chart: number | null;
+}
+
+/** One sparkline: its cell, kind and data range. */
+export interface SparklineInfo {
+  sheet: number;
+  row: number;
+  col: number;
+  kind: "line" | "column" | "winLoss";
+  data: string;
 }
 
 /** One registered function for the formula-bar autocomplete (S-04). The
@@ -259,7 +301,7 @@ export interface FunctionInfo {
 
 /** The stable engine contract the bundle codes against. Every method is
  *  a forward to the wasm surface; the facade only renames + shapes. */
-export interface SheetEngine {
+export interface SheetEngine extends SheetEngineW2 {
   /** Parse XLSX bytes into the in-memory model (preservation-first; the
    *  bytes round-trip on save — spec §10). */
   loadXlsx(bytes: Uint8Array): void;
@@ -387,6 +429,19 @@ export interface SheetEngine {
    *  order with their pt sizes, decided in Rust for the live grid and the
    *  page lowering alike. */
   getFrameWindow(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  /** Status-bar statistics of a range (sheet ADR 510): value and number
+   *  counts, the numbers' sum/average/min/max, sum and average as text in
+   *  the first number's format. Optional: an older wasm lacks it. */
+  rangeStats?(sheet: number, range: string): RangeStats;
+  /** Where Ctrl+arrow lands from a cell, as Excel moves (optional: an
+   *  older wasm lacks it). */
+  dataEdge?(
+    sheet: number,
+    row: number,
+    col: number,
+    dRow: number,
+    dCol: number,
+  ): [number, number];
   /** Record the sheets-mode selection rectangle in the engine model so the
    *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
    *  state, the panel only requests it). `setGridSelection` forwards to
@@ -413,7 +468,7 @@ export interface SheetEngine {
    *  values COLUMN, `"rows"` one per ROW, re-reading the SAME cells the other
    *  way round (never a rewrite of the user's data). Returns the new chart
    *  index (same handle the geometry/lowering lanes take). Publishing-first:
-   *  authored charts are page-side only — never written back to xlsx. */
+   *  the chart is written into the xlsx on save. */
   addChart(
     sheet: number,
     values: string,
@@ -447,6 +502,19 @@ export interface SheetEngine {
    *  live to recalc). The IR feeds BOTH the page paged.draw lowering and the
    *  grid view (one generator, two projections). */
   getChartGeometry(index: number, wPt: number, hPt: number): ChartGeometry;
+  /** W4 — the chartsheets (a tab that is one chart). */
+  listChartsheets?(): ChartsheetInfo[];
+  /** W4 — the sparklines of a sheet. */
+  listSparklines?(sheet: number): SparklineInfo[];
+  /** W4 — a sparkline's primitives in a `wPt × hPt` cell box (null when
+   *  the cell has none). */
+  sparklineGeometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    wPt: number,
+    hPt: number,
+  ): ChartGeometry["prims"] | null;
   /** Release the wasm-held model. */
   dispose(): void;
 
@@ -461,6 +529,16 @@ export interface SheetEngine {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  /** The PAGE table of a sheet frame (ADR 510, render on leave): the frame
+   *  window for `spec` lowered over its tracks with the workbook's styles
+   *  and conditional formats. Without `printHeadings` it is exactly the
+   *  window the live grid shows for the same spec (same tracks, pt sizes,
+   *  styles); rows/cols carry SHEET indices, the frozen rows become
+   *  `headerRows`. */
+  getFramePage?(sheet: number, spec: FramePageSpec): LoweredContent;
+  /** Lower EXPLICIT tracks for the page (sheet indices, display order) —
+   *  `getFramePage` without the window step. */
+  getTracksPage?(sheet: number, spec: TracksSpec): LoweredContent;
   /** Re-evaluate volatile cells (NOW/TODAY/RAND) against the host clock
    *  (the facade reads the clock itself). */
   recalcVolatile?(): { changed: CellChange[] };
@@ -520,6 +598,11 @@ export interface SheetEngine {
   ): { cells: number; styles: number };
   /** The full style of one cell. */
   getStyle?(sheet: number, row: number, col: number): CellStylePatch;
+  /** W2.2 — the cell visual model of one cell (colours as `ColorRefInfo`). */
+  getCellVisual?(sheet: number, row: number, col: number): CellVisualInfo;
+  /** W2.2 — the workbook's Excel named cell styles and the built-ins it can
+   *  add. */
+  namedStyles?(): NamedStyleInfo[];
   /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
    *  snapshot for `setStyleIds` (the in-session undo of a format change). */
   getStyleIds?(sheet: number, range: string): number[];
@@ -592,6 +675,9 @@ export interface SheetEngine {
   chartSpecs?(): ChartSpec[];
   /** ADR 323 — patch one chart (validated whole; page-side only). */
   updateChart?(index: number, patch: ChartPatch): void;
+  /** Plan G4 — delete one chart (its slot stays: the other charts keep
+   *  their indices; page-side only, like `addChart`). */
+  deleteChart?(index: number): void;
 }
 
 /** One computed cell value (no number format applied). */
@@ -615,6 +701,13 @@ export interface SeriesSpec {
   values: string;
   categories?: string | null;
   color?: string | null;
+  /** The document swatch the fill names. */
+  colorSwatch?: string | null;
+  /** The series' plot kind (differs from the chart's in a combo). */
+  kind?: string;
+  secondary?: boolean;
+  xValues?: string | null;
+  sizes?: string | null;
 }
 
 /** One chart with the options the object model reads. */
@@ -629,6 +722,13 @@ export interface ChartSpec {
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string | null;
+  dataLabels?: boolean;
+  style?: number | null;
+  flattened3d?: boolean;
+  titleParagraphStyle?: string | null;
 }
 
 /** A chart patch: absent = unchanged, `null` clears a nullable field. A
@@ -642,11 +742,23 @@ export interface ChartPatch {
     categories: string;
     name: string;
     color: string;
+    colorSwatch?: string;
+    /** A combo: this series' kind tag (empty = the chart's). */
+    kind?: string;
+    secondary?: boolean;
+    xValues?: string;
+    sizes?: string;
   }[];
   categoryAxisTitle?: string | null;
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string;
+  dataLabels?: boolean;
+  style?: number | null;
+  titleParagraphStyle?: string | null;
 }
 
 /** A range argument resolved by the engine: its sheet, normalized A1, and
@@ -668,6 +780,79 @@ export interface ResolvedRange {
 export interface EdgeStyle {
   style: string;
   color?: string | null;
+  /** A document swatch the line colour references (W2.2). */
+  swatch?: DocSwatch | null;
+}
+
+/** A reference to a document swatch (sheet ADR 518): the swatch id, its
+ *  colour model and the sRGB an xlsx reader shows (what a save writes). */
+export interface DocSwatch {
+  id: string;
+  model: "rgb" | "cmyk" | "spot" | "lab";
+  fallbackRgb: string;
+}
+
+/** A gradient fill: `linear` at `degree`, or `path` from the inner
+ *  rectangle (fractions of the cell); stops `{position 0..1, color}`. */
+export interface GradientStyle {
+  kind?: "linear" | "path";
+  degree?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  stops: { position: number; color: string }[];
+}
+
+/** A colour of the cell visual model (`getCellVisual`): what the workbook
+ *  stores plus an optional document swatch. */
+export interface ColorRefInfo {
+  concrete:
+    | { kind: "rgb"; r: number; g: number; b: number }
+    | { kind: "theme"; index: number; tint: number }
+    | { kind: "indexed"; index: number }
+    | { kind: "auto" };
+  doc?: { id: string; model: string; fallbackRgb: [number, number, number] };
+}
+
+/** The cell visual model (`getCellVisual`, the serde shape of
+ *  `sheet_core::CellVisual`). */
+export interface CellVisualInfo {
+  font: {
+    font: {
+      name?: string | null;
+      size?: number | null;
+      bold: boolean;
+      italic: boolean;
+      underline: string;
+      strike: boolean;
+      vertAlign: string;
+      color?: ColorRefInfo | null;
+      scheme?: string | null;
+    };
+    docCharStyle?: string;
+    docParaStyle?: string;
+  };
+  fill: { kind: string; [k: string]: unknown };
+  border: Record<string, unknown>;
+  alignment: {
+    horizontal: string;
+    vertical: string;
+    wrap: boolean;
+    indent: number;
+    rotation: number;
+    shrink: boolean;
+  };
+  namedStyle?: string;
+  docCellStyle?: string;
+}
+
+/** One Excel named cell style (`namedStyles`). */
+export interface NamedStyleInfo {
+  name: string;
+  builtinId?: number | null;
+  /** The workbook carries it (else applying it adds Excel's built-in). */
+  present: boolean;
 }
 
 /** A partial cell style (`setStyle`): absent fields are left as each cell
@@ -693,6 +878,35 @@ export interface CellStylePatch {
   wrap?: boolean;
   /** Excel's quote prefix (the text was typed after a leading `'`). */
   quotePrefix?: boolean;
+  /** Format Cells ▸ Protection (sheet ADR 517). */
+  locked?: boolean;
+  formulaHidden?: boolean;
+  // ── W2.2 (sheet ADR 518) ──
+  /** A fill pattern (`solid`, `gray125`, `darkTrellis`, … `none`); `fill`
+   *  is its foreground, `fillBg` its background. */
+  pattern?: string;
+  fillBg?: string;
+  gradient?: GradientStyle | null;
+  borderDiagonal?: EdgeStyle;
+  diagonalUp?: boolean;
+  diagonalDown?: boolean;
+  indent?: number;
+  /** 0–180, 255 = stacked. */
+  rotation?: number;
+  shrink?: boolean;
+  strike?: boolean;
+  /** `baseline` / `superscript` / `subscript`. */
+  vertAlign?: string;
+  /** `none` / `single` / `double` / `singleAccounting` / `doubleAccounting`. */
+  underlineStyle?: string;
+  fillSwatch?: DocSwatch | null;
+  fillBgSwatch?: DocSwatch | null;
+  fontSwatch?: DocSwatch | null;
+  docCharStyle?: string;
+  docParaStyle?: string;
+  docCellStyle?: string;
+  /** An Excel named cell style by name (`Heading 1`, `Good`, …). */
+  namedStyle?: string;
 }
 
 /** A sheet's layout: explicit column widths (characters) and row heights
@@ -753,7 +967,7 @@ export const SYSTEM_CLOCK: HostClock = {
 /** The snake_case wasm-bindgen surface (sheet-js). A structural subset —
  *  only the members the bundle drives. The artifact lands in Phase 2;
  *  this shape is the contract the facade maps over. */
-export interface SheetWasmEngine {
+export interface SheetWasmEngine extends SheetWasmEngineW2 {
   load_xlsx(bytes: Uint8Array): void;
   save_xlsx(): Uint8Array;
   set_cell(
@@ -809,6 +1023,14 @@ export interface SheetWasmEngine {
     opts?: GridSceneOptions,
   ): GridScene;
   get_frame_window(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  range_stats?(sheet: number, range: string): RangeStats;
+  data_edge?(
+    sheet: number,
+    row: number,
+    col: number,
+    d_row: number,
+    d_col: number,
+  ): Uint32Array | number[];
   set_grid_selection(
     sheet: number,
     anchor_row: number,
@@ -832,6 +1054,15 @@ export interface SheetWasmEngine {
   list_comments(): CommentInfo[];
   list_functions(): FunctionInfo[];
   get_chart_geometry(index: number, w_pt: number, h_pt: number): ChartGeometry;
+  list_chartsheets?(): ChartsheetInfo[];
+  list_sparklines?(sheet: number): SparklineInfo[];
+  sparkline_geometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    w_pt: number,
+    h_pt: number,
+  ): ChartGeometry["prims"] | null;
   free(): void;
   // Wave 4 (optional: older artifacts / fakes lack them).
   get_range_page?(
@@ -839,6 +1070,8 @@ export interface SheetWasmEngine {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  get_frame_page?(sheet: number, spec: FramePageSpec): LoweredContent;
+  get_tracks_page?(sheet: number, spec: TracksSpec): LoweredContent;
   set_clock?(unix_ms: number, tz_offset_min: number): number;
   recalc_volatile?(): { changed: CellChange[] };
   calc_settings?(): CalcSettingsInfo;
@@ -888,6 +1121,8 @@ export interface SheetWasmEngine {
     patch: CellStylePatch,
   ): { cells: number; styles: number };
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
+  get_cell_visual?(sheet: number, row: number, col: number): CellVisualInfo;
+  named_styles?(): NamedStyleInfo[];
   get_style_ids?(sheet: number, range: string): Uint32Array;
   set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
   merge?(sheet: number, range: string): { changed: CellChange[] };
@@ -919,6 +1154,7 @@ export interface SheetWasmEngine {
   list_tables?(): TableInfo[];
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
+  delete_chart?(index: number): void;
 }
 
 /** The module shape the wasm-bindgen `--target web` glue exports. */
@@ -996,6 +1232,26 @@ export function wrapEngine(
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
       wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
     getFrameWindow: (sheet, spec) => wasm.get_frame_window(sheet, spec),
+    ...(wasm.data_edge
+      ? {
+          dataEdge: (
+            sheet: number,
+            row: number,
+            col: number,
+            dRow: number,
+            dCol: number,
+          ) => {
+            const r = wasm.data_edge!(sheet, row, col, dRow, dCol);
+            return [r[0]!, r[1]!] as [number, number];
+          },
+        }
+      : {}),
+    ...(wasm.range_stats
+      ? {
+          rangeStats: (sheet: number, range: string) =>
+            wasm.range_stats!(sheet, range),
+        }
+      : {}),
     setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
       wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
     listSheets: () => wasm.list_sheets(),
@@ -1011,9 +1267,17 @@ export function wrapEngine(
     listFunctions: () => wasm.list_functions(),
     getChartGeometry: (index, wPt, hPt) =>
       wasm.get_chart_geometry(index, wPt, hPt),
+    listChartsheets: () => wasm.list_chartsheets?.() ?? [],
+    listSparklines: (sheet) => wasm.list_sparklines?.(sheet) ?? [],
+    sparklineGeometry: (sheet, row, col, wPt, hPt) =>
+      wasm.sparkline_geometry?.(sheet, row, col, wPt, hPt) ?? null,
     dispose: () => wasm.free(),
     getRangePage: (sheet, range, opts) =>
       need("get_range_page")(sheet, range, opts) as LoweredContent,
+    getFramePage: (sheet, spec) =>
+      need("get_frame_page")(sheet, spec) as LoweredContent,
+    getTracksPage: (sheet, spec) =>
+      need("get_tracks_page")(sheet, spec) as LoweredContent,
     recalcVolatile: () => {
       tick();
       return need("recalc_volatile")() as { changed: CellChange[] };
@@ -1066,6 +1330,9 @@ export function wrapEngine(
       },
     getStyle: (sheet, row, col) =>
       need("get_style")(sheet, row, col) as CellStylePatch,
+    getCellVisual: (sheet, row, col) =>
+      need("get_cell_visual")(sheet, row, col) as CellVisualInfo,
+    namedStyles: () => need("named_styles")() as NamedStyleInfo[],
     getStyleIds: (sheet, range) =>
       Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
     setStyleIds: (sheet, range, ids) =>
@@ -1113,6 +1380,12 @@ export function wrapEngine(
     updateChart: (index, patch) => {
       need("update_chart")(index, patch);
     },
+    deleteChart: (index) => {
+      need("delete_chart")(index);
+    },
+    // Sheet ADR 517 — outline, protection, tables, sort/filter, validation,
+    // what-if (src/engine-w2.ts).
+    ...wrapW2(need as Parameters<typeof wrapW2>[0], tick),
   };
   return guardTraps(facade);
 }

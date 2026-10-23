@@ -16,8 +16,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The Rust half of the kernel DSL (test-only; `feature = "reference"`,
-//! enabled solely by image-conformance). Every helper here has the
+//! The Rust half of the kernel DSL: test-only under `feature =
+//! "reference"` (enabled solely by image-conformance), and the pixel
+//! type of the shipped CPU twins under `feature = "cpu"` (ADR 465).
+//! Every helper here has the
 //! exact semantics of its WGSL counterpart — `abi::WGSL_PRELUDE` and
 //! the WGSL builtin set — so a `kernel_family!` body means the same
 //! thing in both languages. f32, no fast-math, fixed evaluation order:

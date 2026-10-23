@@ -149,9 +149,12 @@ pub fn render_number(x: f64, section: &Section, force_minus: bool, loc: &LocaleD
     for t in &section.tokens {
         match t {
             Token::Literal(s) => out.push_str(s),
-            // Repeat-fill char (`*x`): T0 emits it ONCE (no column width;
-            // ruling `sheet.format.padding`).
-            Token::Fill(c) => out.push(*c),
+            // Repeat-fill char (`*x`): marked, emitted once (ruling
+            // `sheet.format.padding`; `format_value_display` reports it).
+            Token::Fill(c) => {
+                out.push(crate::sections::FILL_MARK);
+                out.push(*c);
+            }
             Token::Percent => out.push('%'),
             Token::DecimalPoint => {
                 seen_decimal = true;
@@ -632,7 +635,10 @@ fn render_fraction(
     for t in &section.tokens {
         match t {
             Token::Literal(s) => out.push_str(s),
-            Token::Fill(c) => out.push(*c),
+            Token::Fill(c) => {
+                out.push(crate::sections::FILL_MARK);
+                out.push(*c);
+            }
             Token::DigitZero | Token::DigitHash | Token::DigitSpace => {
                 if !int_written {
                     out.push_str(&int_rendered);
@@ -665,22 +671,37 @@ fn render_fraction(
     out
 }
 
-/// Best `n/d` approximation of `0 <= frac < 1` with `1 <= d <= max_den`,
-/// minimizing `|frac - n/d|`, preferring the smaller denominator on ties.
+/// The `n/d` a fraction format shows for `0 <= frac < 1` with
+/// `1 <= d <= max_den` (ruling `sheet.format.fractions`).
 fn best_fraction(frac: f64, max_den: u32) -> (u32, u32) {
     if frac == 0.0 {
         return (0, 1);
     }
+    // The last continued-fraction CONVERGENT whose denominator fits — not the
+    // best rational approximation: Excel 16 shows 3.14159 under `# ??/??` as
+    // `3  1/7` (22/7), although 14/99 is closer (recorded, display lane).
+    let (mut h0, mut h1) = (0u64, 1u64); // numerators h(-2), h(-1)
+    let (mut k0, mut k1) = (1u64, 0u64); // denominators k(-2), k(-1)
     let mut best = (0u32, 1u32);
-    let mut best_err = f64::INFINITY;
-    for d in 1..=max_den {
-        let n = (frac * d as f64).round() as u32;
-        let err = (frac - n as f64 / d as f64).abs();
-        // Strictly-less keeps the FIRST (smallest) d on ties.
-        if err < best_err - 1e-12 {
-            best_err = err;
-            best = (n, d);
+    let mut x = frac;
+    for _ in 0..64 {
+        let a = x.floor();
+        if a > u32::MAX as f64 {
+            break;
         }
+        let a = a as u64;
+        let h = a * h1 + h0;
+        let k = a * k1 + k0;
+        if k > max_den as u64 {
+            break;
+        }
+        best = (h as u32, k as u32);
+        (h0, h1, k0, k1) = (h1, h, k1, k);
+        let rem = x - a as f64;
+        if rem.abs() < 1e-12 || ((h as f64 / k as f64) - frac).abs() < 1e-12 {
+            break;
+        }
+        x = 1.0 / rem;
     }
     best
 }

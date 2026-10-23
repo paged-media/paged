@@ -29,8 +29,9 @@
 //! These types, the AST, and the registry YAML schema are **frozen**.
 //! Changes go through the orchestrator as **versioned amendments**, never
 //! drive-by edits (repo constitution, CLAUDE.md §"Interface freeze"); the
-//! latest is W1.0 (2026-10-22, docs/adr/513-calc-model-amendment.md). The
-//! function table is **registry-driven**: it is generated at build time
+//! latest are the filter criteria of 2026-10-23 (docs/adr/517-interactive-
+//! workbook-features.md) and W1.0 (2026-10-22, docs/adr/513-calc-model-
+//! amendment.md). The function table is **registry-driven**: it is generated at build time
 //! from `registry/functions/*.yaml` (`build.rs`), so an unregistered
 //! function has no [`ast::FuncId`] and is uncallable by construction.
 
@@ -47,6 +48,7 @@ pub mod refs;
 pub mod style;
 pub mod table;
 pub mod value;
+pub mod visual;
 
 // ---- Crate-root re-exports of the key public types (spec §5). ----
 
@@ -69,7 +71,14 @@ pub use style::{Align, CellStyle, NumFmtId, StyleTable};
 
 pub use table::Table;
 
-pub use filter::{ColumnFilter, FilterCriterion, FilterView};
+pub use visual::{
+    BorderEdge, BorderStyle, CellAlignment, CellBorder, CellFill, CellVisual, ColorRef,
+    ConcreteColor, DifferentialFormat, DocColorModel, DocSwatchRef, FontDelta, FontSpec,
+    GradientKind, GradientStop, HAlign, NamedCellStyle, PatternKind, RichRunVisual, TextStyleRef,
+    UnderlineKind, VAlign, VertAlign,
+};
+
+pub use filter::{ColumnFilter, CustomCondition, DateGroup, FilterCriterion, FilterOp, FilterView};
 
 pub use calc_settings::{CalcMode, CalcSettings, DateSystem, Locale};
 

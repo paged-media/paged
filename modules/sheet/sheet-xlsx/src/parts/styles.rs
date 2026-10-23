@@ -59,9 +59,12 @@
 
 use crate::error::XlsxError;
 use crate::opc::attr;
+use crate::parts::style_model::StyleSheet;
 use crate::parts::theme::{apply_tint, ThemePalette};
 use sheet_core::style::{CellStyle, StyleTable};
+use sheet_core::visual::{CellVisual, DifferentialFormat, FontSpec, HAlign, NamedCellStyle};
 use sheet_core::StyleId;
+use sheet_format::ColorPalette;
 use std::collections::BTreeMap;
 
 /// The standard built-in number formats (ECMA-376 §18.8.30, Table). Ids not
@@ -145,50 +148,23 @@ pub fn theme_color(idx: u32) -> Option<&'static str> {
     })
 }
 
-/// One cell's interpreted visual style (spec §8.3). All fields are
-/// already-resolved, host-ready: colours are `#RRGGBB`, sizes are points.
-/// `None`/`false` mean "no explicit attribute" — the document default wins.
-/// This mirrors `sheet_lower::LoweredStyle` field-for-field (minus the wire
-/// `key`) so the lowering maps one to the other trivially.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct VisualStyle {
-    pub bold: bool,
-    pub italic: bool,
-    pub font_size_pt: Option<f64>,
-    pub font_name: Option<String>,
-    pub fill_rgb: Option<String>,
-    pub text_rgb: Option<String>,
-    pub border_top: bool,
-    pub border_right: bool,
-    pub border_bottom: bool,
-    pub border_left: bool,
-    /// Underlined text (Wave 6).
-    pub underline: bool,
-    /// `<alignment vertical>` (`top` / `center` / `bottom`), `None` = default.
-    pub v_align: Option<String>,
-    /// `<alignment wrapText="1">`.
-    pub wrap: bool,
-    /// Per-edge border lines (style, weight, colour) behind the presence
-    /// flags.
-    pub border_lines: sheet_lower::BorderLines,
-}
+/// One cell's resolved visual style — the lowering's flat
+/// [`sheet_lower::VisualAttrs`] (one type, so a loaded style and a lowered
+/// one cannot drift). Colours are `#RRGGBB` (beside their document swatch
+/// ids), sizes points; `None`/`false` = no explicit attribute.
+pub type VisualStyle = sheet_lower::VisualAttrs;
 
-impl VisualStyle {
-    /// True if this style carries NO visual override (every field default) —
-    /// the lowering folds these onto the default style key 0.
-    pub fn is_default(&self) -> bool {
-        *self == VisualStyle::default()
-    }
-}
-
-/// The visual style side table (M1 style-map track): a cell's resolved
-/// [`StyleId`] -> its [`VisualStyle`]. Returned alongside the `StyleTable`
-/// (NOT folded into the frozen `CellStyle`); the lowering reads it to build
-/// the IR-v2 styles table. A `StyleId` absent from the map (or mapping to a
-/// default `VisualStyle`) carries no visual styling.
+/// The visual style side table: a cell's resolved [`StyleId`] → its
+/// [`VisualStyle`], plus the unresolved model behind it ([`CellVisual`],
+/// W2.2), the Excel named cell styles and the palette colours resolve
+/// against.
 #[derive(Clone, Debug, Default)]
 pub struct VisualStyles {
     by_style: BTreeMap<u32, VisualStyle>,
+    models: BTreeMap<u32, CellVisual>,
+    named: Vec<NamedCellStyle>,
+    palette: ColorPalette,
+    default_font: FontSpec,
 }
 
 impl VisualStyles {
@@ -197,60 +173,49 @@ impl VisualStyles {
         self.by_style.get(&id.0).filter(|v| !v.is_default())
     }
 
-    /// Record a style id -> visual style (skips pure-default entries so
-    /// `get` stays a "has visual styling?" test).
-    fn insert(&mut self, id: StyleId, vs: VisualStyle) {
-        if !vs.is_default() {
-            self.by_style.insert(id.0, vs);
-        }
+    /// The unresolved visual model of a style (`None` for an id the style
+    /// sheet does not carry).
+    pub fn model(&self, id: StyleId) -> Option<&CellVisual> {
+        self.models.get(&id.0)
+    }
+
+    /// The Excel named cell styles (`cellStyles`), in document order.
+    pub fn named_styles(&self) -> &[NamedCellStyle] {
+        &self.named
+    }
+
+    /// The palette (theme + indexed colours) every colour resolves against.
+    pub fn palette(&self) -> &ColorPalette {
+        &self.palette
+    }
+
+    /// The workbook's base font (`<fonts>` entry 0).
+    pub fn default_font(&self) -> &FontSpec {
+        &self.default_font
     }
 
     /// True if NO cell carries visual styling (e.g. an unstyled workbook).
     pub fn is_empty(&self) -> bool {
-        self.by_style.is_empty()
-    }
-}
-
-/// One [`VisualStyle`] → the dialect-neutral `sheet_lower::VisualAttrs` (the
-/// resolver's input). Field-for-field; this is the only place the two mirror
-/// types meet (see the crate `Cargo.toml` note on the `sheet-lower` dep).
-impl VisualStyle {
-    /// Public alias of [`to_attrs`](Self::to_attrs) for callers that resolve a
-    /// `<dxf>` override into the lowering's [`sheet_lower::VisualAttrs`] (the
-    /// conditional-formatting bridge, `conditional_format::to_lower`).
-    pub fn to_lower_attrs(&self) -> sheet_lower::VisualAttrs {
-        self.to_attrs()
-    }
-
-    fn to_attrs(&self) -> sheet_lower::VisualAttrs {
-        sheet_lower::VisualAttrs {
-            bold: self.bold,
-            italic: self.italic,
-            font_size_pt: self.font_size_pt,
-            font_name: self.font_name.clone(),
-            fill_rgb: self.fill_rgb.clone(),
-            text_rgb: self.text_rgb.clone(),
-            border_top: self.border_top,
-            border_right: self.border_right,
-            border_bottom: self.border_bottom,
-            border_left: self.border_left,
-            underline: self.underline,
-            v_align: self.v_align.clone(),
-            wrap: self.wrap,
-            border_lines: self.border_lines.clone(),
-        }
+        self.by_style.values().all(VisualStyle::is_default)
     }
 }
 
 /// Make [`VisualStyles`] a [`sheet_lower::VisualStyleSource`] so the page
-/// lowering (`lower_range_styled`) and the grid scene (`grid_scene_styled`)
-/// resolve the parsed visual styles through ONE trait — a cell's `StyleId`
-/// yields an IDENTICAL `LoweredStyle` on both surfaces (spec §8.3
-/// cross-surface parity). A `StyleId` with no visual styling resolves to
-/// `None` (folds onto the default key 0).
+/// lowering and the grid scene resolve the parsed styles through ONE trait —
+/// a cell's `StyleId` yields an IDENTICAL `LoweredStyle` on both surfaces.
 impl sheet_lower::VisualStyleSource for VisualStyles {
     fn visual(&self, id: StyleId) -> Option<sheet_lower::VisualAttrs> {
-        self.get(id).map(VisualStyle::to_attrs)
+        self.get(id).cloned()
+    }
+
+    fn format_color_rgb(&self, color: sheet_format::FormatColor) -> String {
+        match self.palette.indexed.get(color.palette_index() as usize) {
+            Some(Some(rgb)) => sheet_format::resolve::hex(*rgb),
+            _ => {
+                let (r, g, b) = color.default_rgb();
+                format!("#{r:02X}{g:02X}{b:02X}")
+            }
+        }
     }
 }
 
@@ -258,54 +223,36 @@ impl sheet_lower::VisualStyleSource for VisualStyles {
 pub struct ParsedStyles {
     /// `StyleId` per `cellXfs` index N (so `s="N"` -> styles[N]).
     pub xf_to_style: Vec<StyleId>,
-    /// The interpreted visual model (M1 style-map track), keyed by the
-    /// resolved `StyleId`. Empty for an unstyled workbook.
+    /// The visual side table (resolved + model), keyed by `StyleId`.
     pub visual: VisualStyles,
-    /// The differential-format table (`<dxfs>`, ECMA-376 §18.8.15), indexed
-    /// by `dxfId` (the index a `cfRule dxfId=` references; M2 conditional-
-    /// formatting track, spec §10.4). Each entry is the OVERRIDE a matched
-    /// conditional-format rule applies on top of the cell's base style —
-    /// bold/italic + an explicit font/fill colour. Empty when the workbook
-    /// has no conditional formatting (or no `<dxfs>`).
+    /// The differential formats (`<dxfs>`) resolved, indexed by `dxfId`.
     pub dxfs: Vec<VisualStyle>,
+    /// The differential formats as the model holds them (W2.2): what a
+    /// conditional format changes, number format included.
+    pub dxf_models: Vec<DifferentialFormat>,
     /// A workbook display locale DERIVED from the styles' custom number-format
-    /// codes (ruling `sheet.format.locale.locale-from-workbook`). OOXML carries
-    /// no document-level locale element, so the only RELIABLE in-file signal is
-    /// a `[$<symbol>-<LCID>]` token on a custom `numFmt` (an authoring app emits
-    /// `[$-407]` for a German number format). The FIRST custom format code that
-    /// declares a non-en locale wins; `None` when no code carries one — the
-    /// caller then keeps the default [`sheet_core::Locale::EnUs`] (the honest
-    /// fallback: most xlsx do NOT carry a clear document locale; it is set via
-    /// the model/host, not auto-detected). Never overrides a non-en hint with en.
+    /// codes (ruling `sheet.format.locale.locale-from-workbook`): the first
+    /// custom code whose `[$…-LCID]` token names a non-en locale.
     pub workbook_locale: Option<sheet_core::Locale>,
 }
 
 /// Parse `styles.xml`, interning each `cellXfs` entry into `styles` AND
-/// building the [`VisualStyles`] side table from the font/fill/border
-/// sub-tables.
+/// building the [`VisualStyles`] side table.
 pub fn parse(xml: &[u8], styles: &mut StyleTable) -> Result<ParsedStyles, XlsxError> {
     parse_with_colors(xml, styles, &ColorContext::new(xml, None))
 }
 
 /// [`parse`] with the workbook's colour context (its theme part's scheme and
-/// the styles' `<indexedColors>`): what the loader and a style edit use, so
-/// the visual side table carries the document's real colours.
+/// the styles' `<indexedColors>`).
 pub fn parse_with_colors(
     xml: &[u8],
     styles: &mut StyleTable,
     colors: &ColorContext,
 ) -> Result<ParsedStyles, XlsxError> {
-    let parsed = parse_raw(xml, colors)?;
+    let sheet = StyleSheet::parse(xml)?;
 
-    // Derive the workbook display locale from the FIRST custom numFmt code that
-    // carries a `[$…-LCID]` token resolving to a non-en locale (ruling
-    // `sheet.format.locale.locale-from-workbook`). `compile` is the single
-    // source of the `[$…-LCID]` grammar (no re-implementation here). Scan in a
-    // stable order (the BTreeMap iterates by numFmtId) so the choice is
-    // deterministic. en-US is NOT recorded as a hint (it is the default; a bare
-    // `[$-409]` should not "lock" the workbook to en over a later de code).
     let mut workbook_locale: Option<sheet_core::Locale> = None;
-    for code in parsed.custom_fmts.values() {
+    for code in sheet.num_fmts.values() {
         if let Ok(compiled) = sheet_format::compile(code) {
             if let Some(loc) = compiled.locale {
                 if loc != sheet_core::Locale::EnUs {
@@ -316,28 +263,27 @@ pub fn parse_with_colors(
         }
     }
 
-    let mut xf_to_style = Vec::with_capacity(parsed.xfs.len());
-    let mut visual = VisualStyles::default();
-    for (i, xf) in parsed.xfs.iter().enumerate() {
-        // Custom code wins (ids >= 164 are always custom); else built-in.
-        let code: String = parsed
-            .custom_fmts
-            .get(&xf.num_fmt_id)
-            .cloned()
-            .or_else(|| builtin_num_fmt(xf.num_fmt_id).map(str::to_owned))
-            .unwrap_or_else(|| "General".to_owned());
+    let palette = sheet.palette(colors.theme_rgbs());
+    let default_font = sheet.fonts.first().cloned().unwrap_or_default();
+    let mut xf_to_style = Vec::with_capacity(sheet.cell_xfs.len());
+    let mut visual = VisualStyles {
+        named: sheet.named_styles(),
+        palette: palette.clone(),
+        default_font: default_font.clone(),
+        ..VisualStyles::default()
+    };
+    for (i, xf) in sheet.cell_xfs.iter().enumerate() {
+        let code = sheet.num_fmt_code(xf.num_fmt_id);
         let num_fmt = styles.intern_num_fmt(&code);
         let style = CellStyle {
             num_fmt,
             font: xf.font_id,
             fill: xf.fill_id,
             border: xf.border_id,
-            align: model_align(xf.h_align.as_deref()),
+            align: model_align(xf.alignment.horizontal),
         };
-        // POSITIONAL ids (Wave 6): `StyleId == cellXfs index`, so two `<xf>`
-        // records the frozen `CellStyle` cannot tell apart keep their own ids
-        // and the writer's `s=` index stays the one the cell was read with.
-        // xf 0 is the workbook default and takes the seeded id 0.
+        // POSITIONAL ids (Wave 6): `StyleId == cellXfs index`; xf 0 takes
+        // the seeded id 0.
         let id = if i == 0 {
             styles.replace_style(StyleId(0), style);
             StyleId(0)
@@ -345,198 +291,37 @@ pub fn parse_with_colors(
             styles.push_style(style)
         };
         xf_to_style.push(id);
-
-        // The visual interpretation for this xf, resolved through the
-        // sub-tables. `applyFont`/`applyFill`/`applyBorder` (when present and
-        // "0") suppress the corresponding facet — Excel's "this xf does NOT
-        // override the font/fill/border" flag (ECMA-376 §18.8.45).
-        let vs = visual_of(&parsed, xf);
-        visual.insert(id, vs);
+        let model = sheet.cell_visual(i, &palette);
+        let resolved = sheet_lower::resolve_visual(&model, &palette, &default_font);
+        visual.by_style.insert(id.0, resolved);
+        visual.models.insert(id.0, model);
     }
 
-    // The differential-format (`<dxfs>`) table for conditional formatting. A
-    // `<dxf>` is NOT a base style: each facet PRESENT is an override (no
-    // `apply*` flags, no default-font folding — `<dxf>` only ever carries the
-    // attributes the rule changes). Resolved into the same host-ready
-    // `VisualStyle` shape so the lowering layers it on the base style.
-    let dxfs = parsed.dxfs.iter().map(dxf_visual).collect();
+    let dxfs = sheet
+        .dxfs
+        .iter()
+        .map(|d| sheet_lower::resolve_delta(d, &palette))
+        .collect();
 
     Ok(ParsedStyles {
         xf_to_style,
         visual,
         dxfs,
+        dxf_models: sheet.dxfs,
         workbook_locale,
     })
 }
 
-/// Build a [`VisualStyle`] OVERRIDE from one parsed `<dxf>`. Unlike a base
-/// `cellXfs` entry, every facet PRESENT in the `<dxf>` is an override the rule
-/// applies (a `<dxf>` carries only the changed attributes); there is no
-/// default-font folding or `apply*` suppression (ECMA-376 §18.8.14, `dxf`).
-fn dxf_visual(d: &DxfRec) -> VisualStyle {
-    VisualStyle {
-        bold: d.font.as_ref().map(|f| f.bold).unwrap_or(false),
-        italic: d.font.as_ref().map(|f| f.italic).unwrap_or(false),
-        // A `<dxf>` font rarely restates size/name (it overrides emphasis +
-        // colour); carry them when present so an explicit size/name applies.
-        font_size_pt: d.font.as_ref().and_then(|f| f.size_pt),
-        font_name: d.font.as_ref().and_then(|f| f.name.clone()),
-        fill_rgb: d.fill.as_ref().and_then(|f| f.fg_rgb.clone()),
-        text_rgb: d.font.as_ref().and_then(|f| f.color.clone()),
-        border_top: d.border.as_ref().map(|b| b.top).unwrap_or(false),
-        border_right: d.border.as_ref().map(|b| b.right).unwrap_or(false),
-        border_bottom: d.border.as_ref().map(|b| b.bottom).unwrap_or(false),
-        border_left: d.border.as_ref().map(|b| b.left).unwrap_or(false),
-        underline: d.font.as_ref().map(|f| f.underline).unwrap_or(false),
-        ..VisualStyle::default()
-    }
-}
-
-/// Build a [`VisualStyle`] for one `cellXfs` entry by resolving its
-/// font/fill/border ids against the parsed sub-tables, honouring the
-/// `apply*` suppression flags.
-///
-/// ## The default-font ruling (spec §8.3 — constrained local overrides)
-///
-/// Font index 0 in the `<fonts>` table is the WORKBOOK DEFAULT font (the
-/// document base; ECMA-376 §18.8.23). Its size + name are the document
-/// default, NOT a per-cell override — capturing them on every cell would
-/// "silently splatter ten thousand local overrides" (spec §8.3), exactly
-/// what the publishing principle forbids. So we only record a cell's font
-/// SIZE/NAME when it DIFFERS from the default font; bold/italic and an
-/// explicit text colour are always overrides (the default font is
-/// non-bold, non-italic, and carries no explicit colour by convention).
-fn visual_of(parsed: &RawStyles, xf: &XfRow) -> VisualStyle {
-    let mut vs = VisualStyle::default();
-    let default_font = parsed.fonts.first();
-
-    // Font (bold/italic/size/name/colour). `applyFont="0"` suppresses it.
-    if xf.apply_font.unwrap_or(true) {
-        if let Some(f) = parsed.fonts.get(xf.font_id as usize) {
-            vs.bold = f.bold;
-            vs.italic = f.italic;
-            // Size/name only when they differ from the document default font
-            // (otherwise they are the default, not an override).
-            if f.size_pt != default_font.and_then(|d| d.size_pt) {
-                vs.font_size_pt = f.size_pt;
-            }
-            if f.name != default_font.and_then(|d| d.name.clone()) {
-                vs.font_name = f.name.clone();
-            }
-            vs.text_rgb = f.color.clone();
-            vs.underline = f.underline;
-        }
-    }
-
-    // Fill (the solid pattern foreground colour). `applyFill="0"` suppresses.
-    if xf.apply_fill.unwrap_or(true) {
-        if let Some(fill) = parsed.fills.get(xf.fill_id as usize) {
-            vs.fill_rgb = fill.fg_rgb.clone();
-        }
-    }
-
-    // Border (per-edge presence). `applyBorder="0"` suppresses.
-    if xf.apply_border.unwrap_or(true) {
-        if let Some(b) = parsed.borders.get(xf.border_id as usize) {
-            vs.border_top = b.top;
-            vs.border_right = b.right;
-            vs.border_bottom = b.bottom;
-            vs.border_left = b.left;
-            vs.border_lines = b.lines.clone();
-        }
-    }
-
-    // Alignment (Wave 6): vertical placement and wrap. The horizontal
-    // alignment rides the frozen `CellStyle::align`.
-    vs.v_align = xf
-        .v_align
-        .clone()
-        .filter(|v| matches!(v.as_str(), "top" | "center"));
-    vs.wrap = xf.wrap;
-
-    vs
-}
-
-/// The frozen model's horizontal alignment of an `<alignment horizontal>`
-/// value (`centerContinuous` reads as centred; `justify`/`distributed` as
-/// left — the model has no justified slot; `fill`/`general` as general).
-fn model_align(h: Option<&str>) -> sheet_core::Align {
+/// The frozen model's horizontal alignment (`centerContinuous` reads as
+/// centred; `justify`/`distributed` as left; `fill`/`general` as general —
+/// the full value rides the visual model's `h_align`).
+fn model_align(h: HAlign) -> sheet_core::Align {
     match h {
-        Some("left") | Some("justify") | Some("distributed") => sheet_core::Align::Left,
-        Some("center") | Some("centerContinuous") => sheet_core::Align::Center,
-        Some("right") => sheet_core::Align::Right,
-        _ => sheet_core::Align::General,
+        HAlign::Left | HAlign::Justify | HAlign::Distributed => sheet_core::Align::Left,
+        HAlign::Center | HAlign::CenterContinuous => sheet_core::Align::Center,
+        HAlign::Right => sheet_core::Align::Right,
+        HAlign::General | HAlign::Fill => sheet_core::Align::General,
     }
-}
-
-/// The raw, index-keyed sub-tables parsed from `styles.xml` before the xf
-/// fold. Kept private — `parse` is the public door.
-struct RawStyles {
-    custom_fmts: BTreeMap<u32, String>,
-    fonts: Vec<FontRec>,
-    fills: Vec<FillRec>,
-    borders: Vec<BorderRec>,
-    xfs: Vec<XfRow>,
-    /// The `<dxfs>` differential formats, in `dxfId` order (M2 cond-fmt).
-    dxfs: Vec<DxfRec>,
-}
-
-/// One `<dxf>` (a differential format, ECMA-376 §18.8.14): the font/fill/
-/// border facets a conditional-format rule overrides. Each child is optional;
-/// only the present facets are overrides. The fill colour comes from
-/// `<patternFill><bgColor>` (the dxf convention), unlike a `cellXfs` solid
-/// fill which uses `<fgColor>` — both are accepted here (bgColor wins).
-#[derive(Default)]
-struct DxfRec {
-    font: Option<FontRec>,
-    fill: Option<FillRec>,
-    border: Option<BorderRec>,
-}
-
-/// One `<font>`: emphasis, point size, name, and resolved colour.
-#[derive(Default)]
-struct FontRec {
-    bold: bool,
-    italic: bool,
-    size_pt: Option<f64>,
-    name: Option<String>,
-    color: Option<String>,
-    underline: bool,
-}
-
-/// One `<fill>`: the solid pattern foreground colour resolved to `#RRGGBB`
-/// (only `patternType="solid"` contributes a background; `none`/`gray125`
-/// are layout placeholders, not a real fill).
-#[derive(Default)]
-struct FillRec {
-    fg_rgb: Option<String>,
-}
-
-/// One `<border>`: per-edge presence (any non-empty `style` attribute marks
-/// the edge present — T0 models presence, not the stroke weight/dash).
-#[derive(Default)]
-struct BorderRec {
-    top: bool,
-    right: bool,
-    bottom: bool,
-    left: bool,
-    /// The edges' line style + colour (Wave 6).
-    lines: sheet_lower::BorderLines,
-}
-
-struct XfRow {
-    num_fmt_id: u32,
-    font_id: u32,
-    fill_id: u32,
-    border_id: u32,
-    /// `applyFont`/`applyFill`/`applyBorder` (`Some(false)` = suppressed).
-    apply_font: Option<bool>,
-    apply_fill: Option<bool>,
-    apply_border: Option<bool>,
-    /// `<alignment>` (Wave 6): horizontal / vertical / wrapText.
-    h_align: Option<String>,
-    v_align: Option<String>,
-    wrap: bool,
 }
 
 /// What a colour reference resolves against: the workbook theme's scheme
@@ -562,6 +347,20 @@ pub(crate) struct ColorAttrs {
 }
 
 impl ColorContext {
+    /// The theme's twelve colours in spreadsheet index order (`None` where
+    /// the theme part has none — the resolver falls back to the Office
+    /// theme).
+    pub fn theme_rgbs(&self) -> Vec<Option<(u8, u8, u8)>> {
+        (0..12)
+            .map(|t| {
+                self.theme
+                    .as_ref()
+                    .and_then(|p| p.color(t))
+                    .and_then(crate::parts::style_model::rgb_bytes)
+            })
+            .collect()
+    }
+
     /// The context of a styles part (`styles_xml`'s `<indexedColors>`) under
     /// a theme (`None` = the package has no readable theme part).
     pub fn new(styles_xml: &[u8], theme: Option<ThemePalette>) -> ColorContext {
@@ -629,21 +428,6 @@ fn scan_indexed_colors(xml: &[u8]) -> Vec<Option<String>> {
     out
 }
 
-/// Resolve a colour element (`rgb`/`indexed`/`theme`/`tint`/`auto`) against
-/// the workbook's [`ColorContext`]. See the module docs for the rulings.
-fn resolve_color(
-    e: &quick_xml::events::BytesStart<'_>,
-    ctx: &ColorContext,
-) -> Result<Option<String>, XlsxError> {
-    Ok(ctx.resolve(&ColorAttrs {
-        auto: attr(e, b"auto")?,
-        rgb: attr(e, b"rgb")?,
-        indexed: attr(e, b"indexed")?,
-        theme: attr(e, b"theme")?,
-        tint: attr(e, b"tint")?,
-    }))
-}
-
 /// Normalize an xlsx `rgb` attribute (`AARRGGBB` or `RRGGBB`) to `#RRGGBB`.
 /// Drops the leading alpha byte; returns `None` if not a valid hex colour.
 fn normalize_rgb(rgb: &str) -> Option<String> {
@@ -658,375 +442,6 @@ fn normalize_rgb(rgb: &str) -> Option<String> {
     } else {
         None
     }
-}
-
-/// The pure XML walk: bytes -> [`RawStyles`]. Streamed with quick-xml so a
-/// nested `<patternFill><fgColor/></patternFill>` and the empty-tag
-/// `<b/>`/`<i/>` forms are both handled.
-fn parse_raw(xml: &[u8], colors: &ColorContext) -> Result<RawStyles, XlsxError> {
-    use quick_xml::events::Event;
-    let mut reader = quick_xml::Reader::from_reader(xml);
-    reader.config_mut().trim_text(false);
-    let mut buf = Vec::new();
-
-    let mut custom_fmts: BTreeMap<u32, String> = BTreeMap::new();
-    let mut fonts: Vec<FontRec> = Vec::new();
-    let mut fills: Vec<FillRec> = Vec::new();
-    let mut borders: Vec<BorderRec> = Vec::new();
-    let mut xfs: Vec<XfRow> = Vec::new();
-    let mut dxfs: Vec<DxfRec> = Vec::new();
-
-    // Section flags. `<xf>` appears in both `<cellXfs>` and `<cellStyleXfs>`;
-    // we only model the former. `<color>` appears inside fonts AND borders, so
-    // we track which sub-table we are inside to route it correctly. `<font>`/
-    // `<fill>`/`<border>` ALSO appear inside `<dxfs>` -> `<dxf>`; `in_dxfs`
-    // routes a completed record into the current dxf instead of the global
-    // table (M2 conditional-formatting track).
-    let mut in_cell_xfs = false;
-    let mut in_fonts = false;
-    let mut in_fills = false;
-    let mut in_borders = false;
-    let mut in_dxfs = false;
-    // The dxf currently being built (Some inside a `<dxf>`).
-    let mut cur_dxf: Option<DxfRec> = None;
-    // The font/fill/border currently being built (None when between records).
-    let mut cur_font: Option<FontRec> = None;
-    let mut cur_fill: Option<FillRec> = None;
-    let mut cur_border: Option<BorderRec> = None;
-    // Inside a `<fill>`, only a `solid` patternFill contributes a colour.
-    let mut fill_is_solid = false;
-    // The border edge currently open (`<left style="thin"><color/></left>`),
-    // so its `<color>` child lands on that edge.
-    let mut cur_edge: Option<Edge> = None;
-
-    loop {
-        match reader.read_event_into(&mut buf)? {
-            Event::Start(e) => {
-                let local = e.local_name();
-                match local.as_ref() {
-                    b"numFmt" => read_num_fmt(&e, &mut custom_fmts)?,
-                    b"fonts" => in_fonts = true,
-                    b"fills" => in_fills = true,
-                    b"borders" => in_borders = true,
-                    b"cellXfs" => in_cell_xfs = true,
-                    b"dxfs" => in_dxfs = true,
-                    b"dxf" if in_dxfs => cur_dxf = Some(DxfRec::default()),
-                    // A `<dxf>` child font/fill/border starts a fresh record
-                    // (routed into `cur_dxf` on its End). Inside a dxf, a fill
-                    // with NO patternType still carries a colour via <bgColor>
-                    // (the dxf convention), so default `fill_is_solid` true.
-                    b"font" if in_fonts || cur_dxf.is_some() => cur_font = Some(FontRec::default()),
-                    b"fill" if in_fills || cur_dxf.is_some() => {
-                        cur_fill = Some(FillRec::default());
-                        fill_is_solid = !in_fills; // dxf fills colour without "solid"
-                    }
-                    b"border" if in_borders || cur_dxf.is_some() => {
-                        cur_border = Some(BorderRec::default())
-                    }
-                    b"patternFill" if cur_fill.is_some() => {
-                        // A dxf patternFill MAY omit patternType but still set a
-                        // bgColor; keep "solid-or-dxf" truthy so the colour is read.
-                        let solid = attr(&e, b"patternType")?.as_deref() == Some("solid");
-                        fill_is_solid = solid || cur_dxf.is_some();
-                    }
-                    // `<color>` with children is rare but legal; treat as empty.
-                    b"color" if cur_font.is_some() => {
-                        if let Some(f) = cur_font.as_mut() {
-                            f.color = resolve_color(&e, colors)?;
-                        }
-                    }
-                    b"xf" if in_cell_xfs => xfs.push(read_xf(&e)?),
-                    // A border edge WITH children (`<left style="thin"><color
-                    // indexed="64"/></left>` — the form Excel writes).
-                    b"top" | b"right" | b"bottom" | b"left" if cur_border.is_some() => {
-                        let edge = Edge::of(local.as_ref());
-                        set_border_edge(&mut cur_border, &e, edge)?;
-                        cur_edge = Some(edge);
-                    }
-                    b"color" if cur_edge.is_some() => {
-                        set_edge_color(&mut cur_border, cur_edge, &e, colors)?
-                    }
-                    b"alignment" if in_cell_xfs => read_alignment(&e, xfs.last_mut())?,
-                    b"u" if cur_font.is_some() => set_underline(&mut cur_font, &e)?,
-                    _ => {}
-                }
-            }
-            Event::Empty(e) => {
-                let local = e.local_name();
-                match local.as_ref() {
-                    b"numFmt" => read_num_fmt(&e, &mut custom_fmts)?,
-                    // Font facets (empty-tag forms: <b/> <i/> <sz/> <name/>).
-                    b"b" if cur_font.is_some() => set_font_flag(&mut cur_font, &e, true, false)?,
-                    b"i" if cur_font.is_some() => set_font_flag(&mut cur_font, &e, false, true)?,
-                    b"sz" if cur_font.is_some() => {
-                        if let Some(f) = cur_font.as_mut() {
-                            f.size_pt = attr(&e, b"val")?.and_then(|s| s.parse::<f64>().ok());
-                        }
-                    }
-                    b"name" if cur_font.is_some() => {
-                        if let Some(f) = cur_font.as_mut() {
-                            f.name = attr(&e, b"val")?;
-                        }
-                    }
-                    b"color" if cur_font.is_some() => {
-                        if let Some(f) = cur_font.as_mut() {
-                            f.color = resolve_color(&e, colors)?;
-                        }
-                    }
-                    // Fill: an empty solid patternFill has no fgColor child.
-                    b"patternFill" if cur_fill.is_some() => {
-                        let solid = attr(&e, b"patternType")?.as_deref() == Some("solid");
-                        fill_is_solid = solid || cur_dxf.is_some();
-                    }
-                    b"fgColor" if cur_fill.is_some() && fill_is_solid => {
-                        if let Some(fill) = cur_fill.as_mut() {
-                            fill.fg_rgb = resolve_color(&e, colors)?;
-                        }
-                    }
-                    // A dxf solid fill carries its colour in <bgColor> (the
-                    // dxf convention; ECMA-376 §18.8.20). Only read it inside a
-                    // dxf and only if a fgColor has not already set the colour.
-                    b"bgColor" if cur_fill.is_some() && cur_dxf.is_some() => {
-                        if let Some(fill) = cur_fill.as_mut() {
-                            if fill.fg_rgb.is_none() {
-                                fill.fg_rgb = resolve_color(&e, colors)?;
-                            }
-                        }
-                    }
-                    // Border edges (empty-tag forms: <top/> <left/> with an
-                    // optional style attr; presence = a non-empty `style`).
-                    b"top" if cur_border.is_some() => {
-                        set_border_edge(&mut cur_border, &e, Edge::Top)?
-                    }
-                    b"right" if cur_border.is_some() => {
-                        set_border_edge(&mut cur_border, &e, Edge::Right)?
-                    }
-                    b"bottom" if cur_border.is_some() => {
-                        set_border_edge(&mut cur_border, &e, Edge::Bottom)?
-                    }
-                    b"left" if cur_border.is_some() => {
-                        set_border_edge(&mut cur_border, &e, Edge::Left)?
-                    }
-                    b"xf" if in_cell_xfs => xfs.push(read_xf(&e)?),
-                    b"color" if cur_edge.is_some() => {
-                        set_edge_color(&mut cur_border, cur_edge, &e, colors)?
-                    }
-                    b"alignment" if in_cell_xfs => read_alignment(&e, xfs.last_mut())?,
-                    b"u" if cur_font.is_some() => set_underline(&mut cur_font, &e)?,
-                    _ => {}
-                }
-            }
-            Event::End(e) => match e.local_name().as_ref() {
-                b"top" | b"right" | b"bottom" | b"left" => cur_edge = None,
-                b"fonts" => in_fonts = false,
-                b"fills" => in_fills = false,
-                b"borders" => in_borders = false,
-                b"cellXfs" => in_cell_xfs = false,
-                b"dxfs" => in_dxfs = false,
-                b"dxf" => {
-                    if let Some(d) = cur_dxf.take() {
-                        dxfs.push(d);
-                    }
-                }
-                // A completed font/fill/border routes into the current dxf when
-                // inside one, else into the global sub-table.
-                b"font" => {
-                    if let Some(f) = cur_font.take() {
-                        match cur_dxf.as_mut() {
-                            Some(d) => d.font = Some(f),
-                            None => fonts.push(f),
-                        }
-                    }
-                }
-                b"fill" => {
-                    if let Some(f) = cur_fill.take() {
-                        match cur_dxf.as_mut() {
-                            Some(d) => d.fill = Some(f),
-                            None => fills.push(f),
-                        }
-                    }
-                }
-                b"border" => {
-                    if let Some(b) = cur_border.take() {
-                        match cur_dxf.as_mut() {
-                            Some(d) => d.border = Some(b),
-                            None => borders.push(b),
-                        }
-                    }
-                }
-                _ => {}
-            },
-            Event::Eof => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-
-    Ok(RawStyles {
-        custom_fmts,
-        fonts,
-        fills,
-        borders,
-        xfs,
-        dxfs,
-    })
-}
-
-/// Which border edge a `<top>`/`<right>`/`<bottom>`/`<left>` element sets.
-#[derive(Copy, Clone)]
-enum Edge {
-    Top,
-    Right,
-    Bottom,
-    Left,
-}
-
-impl Edge {
-    fn of(local: &[u8]) -> Edge {
-        match local {
-            b"top" => Edge::Top,
-            b"right" => Edge::Right,
-            b"bottom" => Edge::Bottom,
-            _ => Edge::Left,
-        }
-    }
-}
-
-/// The open edge's line slot.
-fn edge_line(b: &mut BorderRec, edge: Edge) -> &mut Option<sheet_lower::BorderLine> {
-    match edge {
-        Edge::Top => &mut b.lines.top,
-        Edge::Right => &mut b.lines.right,
-        Edge::Bottom => &mut b.lines.bottom,
-        Edge::Left => &mut b.lines.left,
-    }
-}
-
-/// A `<color>` inside an open border edge colours that edge's line.
-fn set_edge_color(
-    cur: &mut Option<BorderRec>,
-    edge: Option<Edge>,
-    e: &quick_xml::events::BytesStart<'_>,
-    colors: &ColorContext,
-) -> Result<(), XlsxError> {
-    let rgb = resolve_color(e, colors)?;
-    if let (Some(b), Some(edge)) = (cur.as_mut(), edge) {
-        if let Some(line) = edge_line(b, edge).as_mut() {
-            line.rgb = rgb;
-        }
-    }
-    Ok(())
-}
-
-/// `<u/>` / `<u val="double"/>` underline the font; `val="none"` does not.
-fn set_underline(
-    cur: &mut Option<FontRec>,
-    e: &quick_xml::events::BytesStart<'_>,
-) -> Result<(), XlsxError> {
-    let on = attr(e, b"val")?.is_none_or(|v| v != "none");
-    if let Some(f) = cur.as_mut() {
-        f.underline = on;
-    }
-    Ok(())
-}
-
-/// `<alignment horizontal vertical wrapText>` of the `<xf>` being read.
-fn read_alignment(
-    e: &quick_xml::events::BytesStart<'_>,
-    xf: Option<&mut XfRow>,
-) -> Result<(), XlsxError> {
-    if let Some(xf) = xf {
-        xf.h_align = attr(e, b"horizontal")?;
-        xf.v_align = attr(e, b"vertical")?;
-        xf.wrap = attr(e, b"wrapText")?.is_some_and(|v| v == "1" || v == "true");
-    }
-    Ok(())
-}
-
-/// Mark a border edge present if it carries a non-empty `style` attribute
-/// (e.g. `style="thin"`). An empty `<top/>` (no style) is "no border".
-fn set_border_edge(
-    cur: &mut Option<BorderRec>,
-    e: &quick_xml::events::BytesStart<'_>,
-    edge: Edge,
-) -> Result<(), XlsxError> {
-    let style = attr(e, b"style")?.filter(|s| !s.is_empty() && s != "none");
-    let present = style.is_some();
-    if let Some(b) = cur.as_mut() {
-        *edge_line(b, edge) = style.map(|st| sheet_lower::BorderLine {
-            weight_pt: sheet_lower::BorderLine::weight_of(&st),
-            style: st,
-            rgb: None,
-        });
-        match edge {
-            Edge::Top => b.top = present,
-            Edge::Right => b.right = present,
-            Edge::Bottom => b.bottom = present,
-            Edge::Left => b.left = present,
-        }
-    }
-    Ok(())
-}
-
-/// Mark bold/italic on the current font (the `<b/>`/`<i/>` flag elements;
-/// a `val="0"` explicitly turns the flag OFF, ECMA-376 boolean convention).
-fn set_font_flag(
-    cur: &mut Option<FontRec>,
-    e: &quick_xml::events::BytesStart<'_>,
-    sets_bold: bool,
-    sets_italic: bool,
-) -> Result<(), XlsxError> {
-    // Absent `val` means true; `val="0"`/`"false"` means false.
-    let on = match attr(e, b"val")? {
-        None => true,
-        Some(v) => !matches!(v.as_str(), "0" | "false"),
-    };
-    if let Some(f) = cur.as_mut() {
-        if sets_bold {
-            f.bold = on;
-        }
-        if sets_italic {
-            f.italic = on;
-        }
-    }
-    Ok(())
-}
-
-/// Read a `<numFmt numFmtId formatCode>` into the custom-format map.
-fn read_num_fmt(
-    e: &quick_xml::events::BytesStart<'_>,
-    custom_fmts: &mut BTreeMap<u32, String>,
-) -> Result<(), XlsxError> {
-    let id = attr(e, b"numFmtId")?.and_then(|s| s.parse::<u32>().ok());
-    let code = attr(e, b"formatCode")?;
-    if let (Some(id), Some(code)) = (id, code) {
-        custom_fmts.insert(id, code);
-    }
-    Ok(())
-}
-
-/// Read one `<xf>` (in `<cellXfs>`): the sub-table ids + the `apply*` flags.
-fn read_xf(e: &quick_xml::events::BytesStart<'_>) -> Result<XfRow, XlsxError> {
-    let u32_attr = |key: &[u8]| -> Result<u32, XlsxError> {
-        Ok(attr(e, key)?
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(0))
-    };
-    let bool_attr = |key: &[u8]| -> Result<Option<bool>, XlsxError> {
-        Ok(attr(e, key)?.map(|v| !matches!(v.as_str(), "0" | "false")))
-    };
-    Ok(XfRow {
-        num_fmt_id: u32_attr(b"numFmtId")?,
-        font_id: u32_attr(b"fontId")?,
-        fill_id: u32_attr(b"fillId")?,
-        border_id: u32_attr(b"borderId")?,
-        apply_font: bool_attr(b"applyFont")?,
-        apply_fill: bool_attr(b"applyFill")?,
-        apply_border: bool_attr(b"applyBorder")?,
-        h_align: None,
-        v_align: None,
-        wrap: false,
-    })
 }
 
 #[cfg(test)]
@@ -1044,6 +459,44 @@ mod tests {
         // locale/currency ids have no canonical code in T0
         assert_eq!(builtin_num_fmt(5), None);
         assert_eq!(builtin_num_fmt(164), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn format_colors_read_the_workbook_palette__feat__sheet_format_engine() {
+        use sheet_lower::VisualStyleSource;
+        // Slot 10 ([Red] = [Color3]) and slot 19 ([Color12]) overridden.
+        let mut pal = String::new();
+        for i in 0..64 {
+            let rgb = match i {
+                10 => "FF112233",
+                19 => "FFAABBCC",
+                _ => "FF000000",
+            };
+            pal.push_str(&format!(r#"<rgbColor rgb="{rgb}"/>"#));
+        }
+        let xml = format!(
+            r#"<styleSheet><colors><indexedColors>{pal}</indexedColors></colors>
+<cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellXfs></styleSheet>"#
+        );
+        let mut table = StyleTable::new();
+        let ctx = ColorContext::new(xml.as_bytes(), None);
+        let parsed = parse_with_colors(xml.as_bytes(), &mut table, &ctx).unwrap();
+        let v = &parsed.visual;
+        assert_eq!(
+            v.format_color_rgb(sheet_format::FormatColor::Red),
+            "#112233"
+        );
+        assert_eq!(
+            v.format_color_rgb(sheet_format::FormatColor::Indexed(12)),
+            "#AABBCC"
+        );
+        // Without an override the default palette answers.
+        let plain = VisualStyles::default();
+        assert_eq!(
+            plain.format_color_rgb(sheet_format::FormatColor::Blue),
+            "#0000FF"
+        );
     }
 
     #[test]

@@ -1,0 +1,141 @@
+{
+  "widthPt": 360.0,
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 20.0,
+      "s": "Donut",
+      "sizePt": 14.0,
+      "anchor": "middle",
+      "role": "title"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 120.6,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#4472C4",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 127.25,
+      "s": "S1",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 133.20000000000002,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#ED7D31",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 139.85000000000002,
+      "s": "S2",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 71.484,
+      "startDeg": 0.0,
+      "endDeg": 42.35294117647059,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "innerR": 47.65599999999999
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 71.484,
+      "startDeg": 42.35294117647059,
+      "endDeg": 127.05882352941177,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "innerR": 47.65599999999999
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 71.484,
+      "startDeg": 127.05882352941177,
+      "endDeg": 254.11764705882354,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "innerR": 47.65599999999999
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 71.484,
+      "startDeg": 254.11764705882354,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "innerR": 47.65599999999999
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 95.312,
+      "startDeg": 0.0,
+      "endDeg": 108.0,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "innerR": 71.484
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 95.312,
+      "startDeg": 108.0,
+      "endDeg": 144.0,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "innerR": 71.484
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 95.312,
+      "startDeg": 144.0,
+      "endDeg": 230.39999999999998,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "innerR": 71.484
+    },
+    {
+      "kind": "wedge",
+      "cx": 163.55,
+      "cy": 130.4,
+      "r": 95.312,
+      "startDeg": 230.39999999999998,
+      "endDeg": 360.0,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "innerR": 71.484
+    }
+  ]
+}

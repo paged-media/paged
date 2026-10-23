@@ -35,7 +35,7 @@
 //! - **How a cell looks** — every populated cell goes through
 //!   [`sheet_lower::CellStyler`], the same per-cell resolver the page
 //!   lowering uses (base visual style + conditional formatting folded on
-//!   top), and its text through [`sheet_lower::lower_cell`]. A cell's
+//!   top), and its text through [`sheet_lower::lower_cell_display`]. A cell's
 //!   `style_key` and style equal what the page lowering gives the same cell
 //!   when it lowers the same window.
 //! - **Merges** — merged areas intersecting the window become
@@ -60,7 +60,7 @@ use sheet_lower::{CellStyler, LoweredStyle, NoStyles, Rule, RuleSet, VisualStyle
 
 // Re-use the page-lowering geometry rulings so a column is the same width on
 // both surfaces (spec §8.2 — character-unit columns, point rows).
-use sheet_lower::{CHAR_TO_PT, DATABAR_INSET_PT, DEFAULT_COL_CHARS, DEFAULT_ROW_PT};
+use sheet_lower::{DATABAR_INSET_PT, DEFAULT_ROW_PT};
 
 // ---- The grid scene IR (wire shape; serde camelCase). ----
 
@@ -224,6 +224,10 @@ pub struct GridCell {
     /// Omitted when the immediate neighbour is occupied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overflow_to: Option<u32>,
+    /// The number format's repeat-fill character; `text` then holds a TAB
+    /// where it stands (see `sheet_lower::LoweredCell::fill`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 /// One merged area as shown in a viewport pane. `row` / `col` /
@@ -251,6 +255,9 @@ pub struct GridMerge {
     pub wrap: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub v_align: Option<String>,
+    /// The anchor's repeat-fill character (see [`GridCell::fill`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 /// A selection rectangle, anchored at `(anchor_row, anchor_col)` and
@@ -689,7 +696,8 @@ pub fn grid_scene_styled(
     let mut meta: Vec<(usize, usize, bool)> = Vec::new();
     let mut databars: Vec<GridDataBar> = Vec::new();
     // merge index -> (text, align, style key) of its anchor, once seen.
-    let mut anchors: std::collections::HashMap<usize, (String, Align, u32)> =
+    #[allow(clippy::type_complexity)]
+    let mut anchors: std::collections::HashMap<usize, (String, Align, u32, Option<String>)> =
         std::collections::HashMap::new();
     if let Some(ws) = ws {
         for (dr, &r) in win.rows.iter().enumerate() {
@@ -699,7 +707,8 @@ pub fn grid_scene_styled(
                     let Some(dc) = col_pos(c) else {
                         continue; // a hidden column inside the pane's span
                     };
-                    let key = styler.key_for_cell(r, c, cell);
+                    let d = sheet_lower::lower_cell_display(model, cell, &mut cache, &ctx);
+                    let key = styler.key_for_display(r, c, cell, d.color);
                     if let Some((frac, rgb)) = styler.databar(r, c, cell) {
                         let cell_x = x_offsets[dc];
                         let cell_w = x_offsets[dc + 1] - cell_x;
@@ -719,14 +728,14 @@ pub fn grid_scene_styled(
                             fill: format!("#{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2),
                         });
                     }
-                    let (text, align) = sheet_lower::lower_cell(model, cell, &mut cache, &ctx);
+                    let (text, align, fill) = (d.text, d.align, d.fill.map(String::from));
                     let covering = frags_by_row[dr]
                         .iter()
                         .map(|&fi| frags[fi])
                         .find(|f| dc >= f.dc0 && dc < f.dc1);
                     if let Some(f) = covering {
                         if (r, c) == (f.area.0, f.area.1) {
-                            anchors.insert(f.merge, (text, align, key));
+                            anchors.insert(f.merge, (text, align, key, fill));
                         }
                         continue;
                     }
@@ -743,6 +752,39 @@ pub fn grid_scene_styled(
                         wrap: false,
                         v_align: None,
                         overflow_to: None,
+                        fill,
+                    });
+                }
+            }
+        }
+        // Empty cells inside a table carry its style (Excel bands them).
+        for band in &cf.tables {
+            for (dr, &r) in win.rows.iter().enumerate() {
+                for (dc, &c) in win.cols.iter().enumerate() {
+                    if !band.covers(r, c) || ws.cell(r, c).is_some() {
+                        continue;
+                    }
+                    if frags_by_row[dr]
+                        .iter()
+                        .any(|&fi| dc >= frags[fi].dc0 && dc < frags[fi].dc1)
+                    {
+                        continue;
+                    }
+                    let key = styler.key_for_empty(r, c);
+                    if key == 0 {
+                        continue;
+                    }
+                    meta.push((dr, dc, false));
+                    cells.push(GridCell {
+                        row: r,
+                        col: c,
+                        text: String::new(),
+                        align: Align::General,
+                        style_key: key,
+                        wrap: false,
+                        v_align: None,
+                        overflow_to: None,
+                        fill: None,
                     });
                 }
             }
@@ -755,11 +797,11 @@ pub fn grid_scene_styled(
             }
             let entry = match ws.cell(f.area.0, f.area.1) {
                 Some(cell) => {
-                    let key = styler.key_for_cell(f.area.0, f.area.1, cell);
-                    let (text, align) = sheet_lower::lower_cell(model, cell, &mut cache, &ctx);
-                    (text, align, key)
+                    let d = sheet_lower::lower_cell_display(model, cell, &mut cache, &ctx);
+                    let key = styler.key_for_display(f.area.0, f.area.1, cell, d.color);
+                    (d.text, d.align, key, d.fill.map(String::from))
                 }
-                None => (String::new(), Align::General, 0),
+                None => (String::new(), Align::General, 0, None),
             };
             anchors.insert(f.merge, entry);
         }
@@ -792,7 +834,7 @@ pub fn grid_scene_styled(
         for i in start..end {
             let (_, dc, is_text) = meta[i];
             let cell = &cells[i];
-            if !is_text || cell.wrap || cell.text.is_empty() {
+            if !is_text || cell.wrap || cell.text.is_empty() || cell.fill.is_some() {
                 continue;
             }
             let (seg_lo, seg_hi) = if dc < fc { (0, fc) } else { (fc, n_cols) };
@@ -822,11 +864,11 @@ pub fn grid_scene_styled(
     let merges: Vec<GridMerge> = frags
         .iter()
         .map(|f| {
-            let (text, align, key) =
+            let (text, align, key, fill) =
                 anchors
                     .get(&f.merge)
                     .cloned()
-                    .unwrap_or((String::new(), Align::General, 0));
+                    .unwrap_or((String::new(), Align::General, 0, None));
             let s = style_of(key);
             GridMerge {
                 row: f.area.0,
@@ -842,6 +884,7 @@ pub fn grid_scene_styled(
                 style_key: key,
                 wrap: s.wrap,
                 v_align: s.v_align.clone(),
+                fill,
             }
         })
         .collect();
@@ -958,20 +1001,94 @@ fn push_broken_rule(
     }
 }
 
-/// Column width in pt: explicit `col_widths` (xlsx chars × `CHAR_TO_PT`) or
-/// the xlsx default. Mirrors the page lowering so a column matches on both
-/// surfaces.
+/// Column width in pt — the page lowering's own rule
+/// ([`sheet_lower::col_width_pt`]), so a column matches on both surfaces.
 fn col_width_pt(ws: Option<&sheet_core::Worksheet>, col: u32) -> f64 {
-    let chars = ws
-        .and_then(|w| w.col_widths.get(&col).copied())
-        .unwrap_or(DEFAULT_COL_CHARS);
-    chars * CHAR_TO_PT
+    sheet_lower::col_width_pt(ws, col)
 }
 
-/// Row height in pt: explicit `row_heights` (already pt) or the default.
+/// Row height in pt — the page lowering's own rule.
 fn row_height_pt(ws: Option<&sheet_core::Worksheet>, row: u32) -> f64 {
-    ws.and_then(|w| w.row_heights.get(&row).copied())
-        .unwrap_or(DEFAULT_ROW_PT)
+    sheet_lower::row_height_pt(ws, row)
+}
+
+// ---- The page side of the window (ADR 510, render on leave). ----
+
+/// What the page table of a frame prints besides the cells.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub struct PagePrint {
+    /// The heading row (A, B, C, …) and heading column (1, 2, 3, …).
+    pub headings: bool,
+    /// Gridlines at every track boundary.
+    pub gridlines: bool,
+}
+
+/// The page table of a sheet frame: [`frame_window`] for `spec`, lowered by
+/// [`sheet_lower::lower_tracks_styled`] with the workbook's styles and
+/// conditional formats. Without printed headings the window is the one the
+/// live grid shows for the same `spec` (the grid takes its heading strips
+/// off the box before asking); with them, the heading row and column are
+/// taken off `spec`'s box first, so the printed table still fits the frame.
+/// The frozen rows become the table's header rows.
+pub fn frame_page(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    print: PagePrint,
+    cf: &SheetCondFmt,
+    visual: &impl VisualStyleSource,
+) -> sheet_lower::LoweredContent {
+    let win = frame_page_window(model, sheet, spec, print.headings);
+    let opts = sheet_lower::TrackOptions {
+        print_headings: print.headings,
+        print_gridlines: print.gridlines,
+        header_rows: win.frozen_rows,
+        frozen_cols: win.frozen_cols,
+    };
+    sheet_lower::lower_tracks_styled(model, sheet, &win.rows, &win.cols, &opts, visual, cf)
+}
+
+/// The window a frame's page table shows: `spec`'s box, less the printed
+/// heading row and column when `headings` is set. The heading column's
+/// width depends on the largest row number shown, so the window is asked
+/// again (at most twice more) until that width is stable.
+pub fn frame_page_window(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    headings: bool,
+) -> FrameWindow {
+    if !headings {
+        return frame_window(model, sheet, spec);
+    }
+    let mut heading_w = sheet_lower::heading_col_width_pt(spec.top_row + 1);
+    let mut win = FrameWindow {
+        rows: Vec::new(),
+        cols: Vec::new(),
+        row_heights_pt: Vec::new(),
+        col_widths_pt: Vec::new(),
+        frozen_rows: 0,
+        frozen_cols: 0,
+        width_pt: 0.0,
+        height_pt: 0.0,
+        partial_row: None,
+        partial_col: None,
+    };
+    for _ in 0..3 {
+        let inner = FrameWindowSpec {
+            width_pt: (spec.width_pt - heading_w).max(0.0),
+            height_pt: (spec.height_pt - DEFAULT_ROW_PT).max(0.0),
+            ..*spec
+        };
+        win = frame_window(model, sheet, &inner);
+        let need =
+            sheet_lower::heading_col_width_pt(win.rows.iter().map(|r| r + 1).max().unwrap_or(1));
+        if need <= heading_w {
+            break;
+        }
+        heading_w = need;
+    }
+    win
 }
 
 #[cfg(test)]
@@ -1276,6 +1393,7 @@ mod tests {
     /// uses. Geometry is viewport-local + inside the cell box.
     fn databar_cf(range: (u32, u32, u32, u32), rgb: (u8, u8, u8)) -> SheetCondFmt {
         SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![range],
                 rules: vec![condfmt::CfRule {
@@ -1578,6 +1696,7 @@ mod tests {
                         style: "thin".into(),
                         weight_pt: 0.75,
                         rgb: Some("#000000".into()),
+                        swatch: None,
                     }),
                     ..Default::default()
                 },
@@ -1744,6 +1863,7 @@ mod tests {
             ws.hidden_rows.insert(4);
         }
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(0, 2, 11, 2)],
                 rules: vec![condfmt::CfRule {
@@ -1952,6 +2072,7 @@ mod tests {
         }
         // A cf block far away forces the per-cell (uncached) style path.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(900_000, 0, 900_000, 0)],
                 rules: vec![],

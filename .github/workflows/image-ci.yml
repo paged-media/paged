@@ -194,15 +194,27 @@ jobs:
             exit 1
           fi
 
-      # Guard 2 (§6 GPU-only): the shipped wasm must prove by construction
-      # that no scalar reference / proptest code is reachable — those are
-      # TEST-ONLY (image-conformance dev-dep). Their presence in image-js's
-      # wasm32 tree would mean reference kernels could ship.
+      # Guard 2 (§6 GPU-only; ADR 465): the shipped wasm must prove by
+      # construction that no scalar reference / proptest code is reachable
+      # — those are TEST-ONLY (image-conformance dev-dep). Their presence in
+      # image-js's wasm32 tree would mean reference kernels could ship. The
+      # CPU twins of ADR 465 ship through image-kernels' `cpu` feature.
       - name: guard — image-js wasm tree excludes test-only deps
         run: |
           if cargo tree -p image-js --target wasm32-unknown-unknown \
                | grep -E 'image-conformance|proptest'; then
             echo "::error::image-js wasm32 tree reaches image-conformance/proptest (TEST-ONLY)"
+            exit 1
+          fi
+
+      # Guard 2b (ADR 465): image-js ships the CPU twins of the adjustment
+      # chain (image-kernels feature `cpu`); the scalar REFERENCES stay
+      # test-only, so nothing in its wasm32 tree turns on `reference`.
+      - name: guard — image-js wasm tree excludes the reference feature
+        run: |
+          if cargo tree -p image-js --target wasm32-unknown-unknown -e normal,features \
+               | grep -F 'image-kernels feature "reference"'; then
+            echo "::error::image-js wasm32 tree enables image-kernels/reference (TEST-ONLY)"
             exit 1
           fi
 

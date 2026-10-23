@@ -27,8 +27,9 @@
 //   range       `range/<sheet>!<A1:B2>`    values (2-D), inputs, formula fill,
 //                                          display, the same style rows
 //   namedRange  `namedRange/<name>` or `namedRange/<sheet>!<name>`
-//   table       `table/<name>`             read-only (the xlsx table part
-//                                          re-emits verbatim, spec §10.2)
+//   table       `table/<name>`             name, range (resize), totals row,
+//                                          style and its switches (ADR 517);
+//                                          created over a range
 //   chart       `chart/<index>`            kind, title, legend, series ranges,
 //                                          axis titles and bounds
 //
@@ -74,6 +75,7 @@ import type {
   ObjectModelHandle,
   ObjectOp,
   ObjectValue,
+  Mutation,
   ObjectWrite,
   PartChange,
   PropertySchema,
@@ -96,6 +98,11 @@ import type {
   SheetEngine,
   StructuralEditKind,
 } from "./engine";
+import {
+  chartRemovalOps,
+  placedChartsOnPage,
+  type ChartElements,
+} from "./lower-chart";
 import type { CellRegion, ObjectBridge, WorkbookSession } from "./session";
 
 export const PLUGIN_ID = manifest.id;
@@ -124,14 +131,33 @@ const WORKBOOK_ID = "main";
 export const CHART_KINDS = [
   "column",
   "stackedColumn",
+  "percentStackedColumn",
   "bar",
   "stackedBar",
+  "percentStackedBar",
   "line",
+  "stackedLine",
+  "percentStackedLine",
   "area",
+  "stackedArea",
+  "percentStackedArea",
   "scatter",
+  "bubble",
   "pie",
   "donut",
+  "pieOfPie",
+  "barOfPie",
   "radar",
+  "filledRadar",
+  "stock",
+  "surface",
+  "waterfall",
+  "funnel",
+  "treemap",
+  "sunburst",
+  "histogram",
+  "pareto",
+  "boxWhisker",
 ] as const;
 const H_ALIGNS = [
   "general",
@@ -293,13 +319,20 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
     }),
   ],
   table: [
-    ro("name", text, { title: "Name" }),
+    rw("name", text, { title: "Name" }),
     ro("sheet", text, { title: "Sheet" }),
-    ro("range", text, { title: "Range" }),
+    rw("range", text, {
+      title: "Range",
+      summary: "Resizing keeps the header row where it is.",
+    }),
     ro("columns", { kind: "list", of: text }, { title: "Columns" }),
     ro("headerRow", bool, { title: "Header row" }),
-    ro("totalsRow", bool, { title: "Totals row" }),
-    ro("style", text, { title: "Table style", nullable: true }),
+    rw("totalsRow", bool, { title: "Totals row" }),
+    rw("style", text, { title: "Table style", nullable: true }),
+    rw("bandedRows", bool, { title: "Banded rows" }),
+    rw("bandedColumns", bool, { title: "Banded columns" }),
+    rw("firstColumn", bool, { title: "First column" }),
+    rw("lastColumn", bool, { title: "Last column" }),
     derived(
       "totals",
       { kind: "list", of: text },
@@ -436,7 +469,7 @@ const refusedValue = (
 // --------------------------------------------------------- the version
 
 interface ChartOp {
-  op: "add" | "update";
+  op: "add" | "update" | "delete";
   index?: number;
   sheet?: number;
   values?: string;
@@ -739,6 +772,13 @@ export function contributeObjectModel(
               return value(t.totalsRow);
             case "style":
               return value(t.styleName ?? null);
+            case "bandedRows":
+            case "bandedColumns":
+            case "firstColumn":
+            case "lastColumn": {
+              const d = engine.tableDetail?.(t.name);
+              return value(d ? d[path] : false);
+            }
             case "totals":
             case "rowCount": {
               const r = engine.resolveRange!(t.sheet, t.range);
@@ -1062,10 +1102,60 @@ export function contributeObjectModel(
         }
         break;
       }
-      case "table":
-        throw new Refuse(
-          "tables are read-only: the xlsx table part re-emits verbatim (spec §10.2)",
+      case "table": {
+        const lower = id.toLowerCase();
+        const t = (engine.listTables?.() ?? []).find(
+          (x) => x.name.toLowerCase() === lower,
         );
+        if (!t) throw new Refuse(`no table "${id}"`);
+        const region = (e: SheetEngine, p: Pending) => {
+          const d = e.tableDetail?.(path === "name" ? String(v) : t.name);
+          if (d && e.resolveRange) {
+            p.regions.push(regionOf(e.resolveRange(d.sheet, d.range)));
+          }
+        };
+        const need = <K extends keyof SheetEngine>(e: SheetEngine, k: K) => {
+          const f = e[k];
+          if (typeof f !== "function")
+            throw new Refuse(`engine wasm predates ${String(k)}`);
+          return f as NonNullable<SheetEngine[K]>;
+        };
+        switch (path) {
+          case "name":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "renameTable")(t.name, String(v));
+              region(e, p);
+            };
+          case "range":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "resizeTable")(t.name, String(v));
+              region(e, p);
+            };
+          case "totalsRow":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "setTableTotals")(t.name, Boolean(v));
+              region(e, p);
+            };
+          case "style":
+          case "bandedRows":
+          case "bandedColumns":
+          case "firstColumn":
+          case "lastColumn": {
+            const arg =
+              path === "style"
+                ? { style: v === null ? "" : String(v) }
+                : { [path]: Boolean(v) };
+            return (e, p) => {
+              need(e, "setTableStyle")(t.name, arg);
+              region(e, p);
+            };
+          }
+        }
+        throw new Refuse(`table has no writable path "${path}"`);
+      }
       case "chart": {
         const c = chartOf(engine, id);
         const patch: ChartPatch = {};
@@ -1158,6 +1248,23 @@ export function contributeObjectModel(
           }
         };
       }
+      case "table": {
+        const sheetName = String(props.sheet ?? "");
+        const range = String(props.range ?? "");
+        if (!range) throw new Refuse("a table needs a range");
+        const sheet = sheetName ? sheetIdByName(engine, sheetName) : 0;
+        const hasHeaders = props.headerRow !== false;
+        const style = props.style ? String(props.style) : undefined;
+        const name = props.name ? String(props.name) : undefined;
+        return (e, p) => {
+          if (!e.createTable)
+            throw new Refuse("engine wasm predates create_table");
+          flushCells(e, p);
+          const d = e.createTable(sheet, range, hasHeaders, style, name);
+          if (e.resolveRange)
+            p.regions.push(regionOf(e.resolveRange(d.sheet, d.range)));
+        };
+      }
     }
     throw new Refuse(
       `${kind} objects are not created through the object model`,
@@ -1183,6 +1290,19 @@ export function contributeObjectModel(
       case "namedRange": {
         const n = namedRangeOf(engine, id);
         return (e) => e.deleteName!(n.scope ?? 0, n.name, n.scope ?? null);
+      }
+      case "chart": {
+        // Plan G4: the chart goes from the workbook (its slot stays, so the
+        // other charts keep their indices) and the journal, so a stored
+        // version replays the delete; its placed copies go in the same
+        // document write (`chartPageRemovals`).
+        const c = chartOf(engine, id);
+        return (e) => {
+          if (!e.deleteChart)
+            throw new Refuse("engine wasm predates delete_chart");
+          e.deleteChart(c.index);
+          chartOps.push({ op: "delete", index: c.index });
+        };
       }
       case "cell":
       case "range": {
@@ -1331,21 +1451,61 @@ export function contributeObjectModel(
     return raw as SheetKind;
   }
 
+  /** Plan G4 — the mutations that take chart `index`'s placed copies off
+   *  the page: what the scene tree shows bound to it (earlier sessions'
+   *  placements too) and what this session placed, each once. */
+  async function chartPageRemovals(index: number): Promise<ChartElements[]> {
+    const tracked = bridge.takeChartPlacements(index);
+    const found: ChartElements[] = await placedChartsOnPage(host, index);
+    const ids = (c: ChartElements) => c.elementIds.map((x) => String(x.id));
+    for (const t of tracked) {
+      if (t.elementIds.length === 0) continue;
+      const mine = new Set(ids(t));
+      const seen = found.some(
+        (f) =>
+          (f.groupId !== null && f.groupId === t.groupId) ||
+          ids(f).some((x) => mine.has(x)),
+      );
+      if (!seen) found.push(t);
+    }
+    return found;
+  }
+
   /** The PLUGIN-level planner (SDK 0.2.43): every op of a batch, across all
    *  seven kinds, in batch order — one engine pass, one saved version, one
    *  doc-hosted `state` write. */
   async function batchWrite(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    const deletedCharts: number[] = [];
     const r = await write((engine) =>
       ops.map((op) => {
         const kind = kindOf(op);
         if (op.op === "set")
           return planSet(engine, kind, op.address, op.path, op.value);
         if (op.op === "create") return planCreate(engine, kind, op.props ?? {});
-        if (op.op === "delete") return planDelete(engine, kind, op.address);
+        if (op.op === "delete") {
+          if (kind === "chart")
+            deletedCharts.push(
+              chartOf(engine, idOf(op.address, kind) ?? "").index,
+            );
+          return planDelete(engine, kind, op.address);
+        }
         throw new Refuse(`"${op.op}" is not a write`);
       }),
     );
     if (!r.ok) return { kind: "rejected", reason: r.reason };
+    const mutations: Mutation[] = [];
+    for (const index of deletedCharts)
+      for (const c of await chartPageRemovals(index))
+        mutations.push(...chartRemovalOps(c));
+    if (mutations.length > 0)
+      return {
+        kind: "both",
+        mutations: mutations as never,
+        parts: r.parts,
+        host: "doc",
+        labelKey: VERSION_SUB_KEY,
+        labelValue: JSON.stringify(r.hash),
+      };
     return {
       kind: "state",
       parts: r.parts,
@@ -1361,6 +1521,7 @@ export function contributeObjectModel(
    *  bundle's own doors (the parts, then the label as ONE mutation). */
   async function commandWrite(
     apply: (engine: SheetEngine, p: Pending) => void,
+    pageOps?: () => Promise<readonly Mutation[]>,
   ): Promise<void> {
     const r = await write(() => [apply]);
     if (!r.ok) throw new Error(r.reason);
@@ -1369,9 +1530,24 @@ export function contributeObjectModel(
     // step: an empty one would make the next undo take back nothing
     // (finding SHT-2).
     if (!r.changed) return;
-    const outcome = await host.document.mutate(
-      (await labelMutation(r.hash)) as never,
-    );
+    const label = await labelMutation(r.hash);
+    // Page changes that belong to the write (a deleted chart's placed
+    // copies) ride the label's mutation: one document undo step.
+    const page = (await pageOps?.()) ?? [];
+    let outcome =
+      page.length > 0
+        ? await host.document.mutate({
+            op: "batch",
+            args: { ops: [...page, label] },
+          } as never)
+        : await host.document.mutate(label as never);
+    if (page.length > 0 && !(outcome as { applied?: boolean }).applied) {
+      host.log.warn(
+        "object model: the page part of the write was refused — the workbook changed, the page did not",
+        outcome,
+      );
+      outcome = await host.document.mutate(label as never);
+    }
     if (!(outcome as { applied?: boolean }).applied) {
       host.log.warn(
         "object model: the version label was refused — the change is not an undo step",
@@ -1411,6 +1587,7 @@ export function contributeObjectModel(
             op.title ?? "",
           );
         else if (op.op === "update") engine.updateChart?.(op.index!, op.patch!);
+        else if (op.op === "delete") engine.deleteChart?.(op.index!);
       } catch (err) {
         host.log.warn("object model: a chart op did not replay", err);
       }
@@ -1519,7 +1696,8 @@ export function contributeObjectModel(
   }
 
   const changeSub = session.onDidChange((c) => {
-    if (c.kind === "selection" || published.size === 0) return;
+    if (c.kind === "selection" || c.kind === "edit" || published.size === 0)
+      return;
     const revision = revisionNow();
     for (const p of published.values()) {
       if (p.revision === revision) continue;
@@ -1678,6 +1856,34 @@ export function contributeObjectModel(
       },
     },
     {
+      // Plan G4 — the chart, its journal entry and every placed copy, one
+      // workbook version and one document undo step.
+      id: C("deleteChart"),
+      title: "Delete a chart",
+      args: struct({ chart: int }),
+      result: int,
+      async handler(_ctx, a) {
+        await session.ensureRestored();
+        const index = (a as { chart: number }).chart;
+        let removed = 0;
+        await commandWrite(
+          (engine) => {
+            const c = chartOf(engine, String(index));
+            if (!engine.deleteChart)
+              throw new Error("engine wasm predates delete_chart");
+            engine.deleteChart(c.index);
+            chartOps.push({ op: "delete", index: c.index });
+          },
+          async () => {
+            const copies = await chartPageRemovals(index);
+            removed = copies.length;
+            return copies.flatMap((c) => chartRemovalOps(c));
+          },
+        );
+        return removed;
+      },
+    },
+    {
       id: C("sheetFromDataset"),
       title: "Sheet from dataset",
       args: struct({ providerId: text, live: dflt(bool, true) }),
@@ -1747,6 +1953,24 @@ export function contributeObjectModel(
     structural("deleteColumns", "Delete columns", "deleteCols"),
     fill("fillDown", "Fill down", true),
     fill("fillRight", "Fill right", false),
+    {
+      // Sheet ADR 510 — Excel's cut on the grid's selection.
+      id: C("cutSelection"),
+      title: "Cut sheet selection",
+      args: struct({}),
+      async handler() {
+        session.cutSelection();
+      },
+    },
+    {
+      // Sheet ADR 510 — Ctrl+1: the cell format panel.
+      id: C("formatCells"),
+      title: "Format cells",
+      args: struct({}),
+      async handler() {
+        await host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+      },
+    },
     {
       id: C("clearCells"),
       title: "Clear cells",

@@ -294,6 +294,7 @@ impl SheetSession {
             }
             plan
         };
+        self.guard_cells(plan.iter().map(|(r, c, _, _)| (sheet, *r, *c)))?;
 
         // ── formats first (Excel's fill carries them), where a target's
         //    style differs — a style-id swap, no recalc.
@@ -422,7 +423,7 @@ fn fill_shape_error(src: &str, dst: &str) -> SessionError {
 }
 
 /// Whether a number in format `code` reads as a date/time.
-fn is_date_format(cache: &mut FormatCache, code: &str, n: f64) -> bool {
+pub(crate) fn is_date_format(cache: &mut FormatCache, code: &str, n: f64) -> bool {
     cache
         .get(code)
         .map(|f| f.select_numeric(n).0.kind == SectionKind::DateTime)

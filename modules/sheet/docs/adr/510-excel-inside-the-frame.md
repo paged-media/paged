@@ -61,3 +61,68 @@ leaves, the window that fits the frame is written into the page as a native tabl
   frozen ones first) and `firstRow`/`firstCol` the first body track; a consumer finds a cell's
   position through the index arrays, never by subtracting `firstRow`. Merged areas are drawn
   from the anchor cell, also when the anchor is scrolled out of the window.
+
+## Amendment (2026-10-23): the page side of the window
+
+When the user leaves a frame, the window it shows is written into the page as a native table
+that looks as the grid did.
+
+- **One lowering over explicit tracks.** `sheet_lower::lower_tracks` lowers the rows and
+  columns it is given, in display order: frozen tracks first, gaps allowed. A frame's page is
+  `sheet_grid::frame_page` = `frame_window` + `lower_tracks` (wasm `get_frame_page`,
+  `get_tracks_page`; TS `getFramePage`, `getTracksPage`). Widths and heights are the sheet's own
+  pt sizes (`sheet_lower::col_width_pt` / `row_height_pt`, which the grid uses too); text
+  measurement stays only for `sizing: "fit"` frames.
+- **Sheet indices on the page.** A frame page's rows, columns, cells, merges and data bars carry
+  sheet indices (a range lowering keeps its range-relative ones). The printed heading row and
+  column carry `HEADING_INDEX` (`u32::MAX`). A refresh aligns tracks by these indices.
+- **Print options.** Printed headings add a heading row (A, B, C…) and a heading column
+  (1, 2, 3…) as Excel prints them, boxed, without fill; their strips are taken off the frame's
+  box before the window is asked, so the printed table still fits. Printed gridlines are an
+  option (off unless the binding's `print.gridlines` is set), broken across merged areas as in
+  the grid.
+- **Frozen rows are header rows.** The frozen rows shown, plus the printed heading row, are the
+  table's header rows (`headerRows`, passed to `insertTable`), so they repeat on continuation
+  frames.
+- **Merges per pane, anchor on the corner.** A merged area becomes one span per pane (frozen
+  band and body), as in the grid; a span whose anchor is clipped away starts at its first shown
+  cell, and that cell carries the anchor's text, alignment and style.
+- **Same window, same cells.** For random sheets with hidden tracks, merges, conditional
+  formats and frozen splits, the page without headings equals the grid scene of the same spec
+  track by track (`sheet-grid/tests/parity.rs`).
+- **Refresh in place.** `tableRefreshOps` aligns columns by index (as it aligns rows), so a
+  horizontal scroll by k columns costs k deletes and k inserts and re-pours only the new cells;
+  the header band grows and shrinks at its top (`insertHeaderRow` / `removeHeaderRow`); when more
+  than 60 % of the cells would be re-poured it answers `replace`, and the caller writes a new
+  table instead.
+
+## Amendment (2026-10-23): render on leave in the session
+
+- **New placements are windows.** Placing a range writes a `sizing: "window"` frame whose view
+  starts at the range's top-left. Its first table is the range's tracks lowered as a frame page
+  (`getTracksPage`), the same shape every later refresh produces, so the first edit re-pours one
+  cell. The window's box is the range's own size in sheet tracks (plus half a point of slack);
+  the frame itself is fitted to the table the engine lays out.
+- **Widths.** A window frame keeps the sheet's column widths and widens a column only where its
+  text would wrap (a table cell cannot let text spill into the next cell as Excel does); the
+  frame widens with it.
+- **No gridlines means no lines.** A frame page without gridlines is marked `noGridlines`, and
+  the table writes every cell edge as no line instead of leaving it to the document's default
+  stroke (which drew a border and made rows taller than the frame was fitted to).
+- **Leaving.** The view moves to the grid's top-left cell unless the view is locked; a refresh
+  then runs even when no cell changed. A view change that leaves the cells as they were
+  re-stamps the binding alone. A scroll that would re-pour most of the table writes a new table
+  (`replace`); an edit never does.
+- **Lock.** `session.setFrameViewLock` / the bar's lock button pin the window where it stands;
+  the binding records the lock with the next page write. Reopened documents read view, print
+  options and sizing from the binding and the box from the frame's geometry.
+- **Resize (P6).** A window frame's box is its window: a resize the engine reports (`reflow`)
+  shows what fits now; a gesture that resized without naming the frame re-reads the window
+  frames' geometry.
+- **Chains (P6).** A window frame whose story is linked to more frames becomes one window over
+  all of them: the head owns the view, and the window takes the head's columns and the rows that
+  fill each frame in turn as the engine splits the one native table (whole rows per frame, the
+  frozen rows repeated as header rows on each continuation). Entering a continuation frame starts
+  its grid at the rows it holds; scrolling there and leaving scrolls the chain. Links are read
+  (debounced) after document changes; unlinking returns to a single frame.
+- **Several frames** may each show their own window of one sheet: each carries its own binding.

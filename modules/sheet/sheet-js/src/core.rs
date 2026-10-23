@@ -43,25 +43,31 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use sheet_calc::{Engine, EngineConfig};
-use sheet_chart::{generate as generate_chart, ChartGeometry, PlotData};
-use sheet_core::{parse_a1, CellRef, CellValue, DateSystem, RangeRef, SheetId, SheetModel};
+use sheet_core::{parse_a1, CellRef, CellValue, DateSystem, SheetId, SheetModel};
 use sheet_format::{FormatCache, FormatCtx};
 use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, ViewOptions};
-use sheet_parser::{
-    parse, print, print_ooxml, rewrite_fill, strip_storage_prefixes, ParseCtx, SheetNames,
-};
-use sheet_xlsx::{XlsxChart, XlsxDocument};
+use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
+use sheet_xlsx::XlsxDocument;
 
+mod charts;
 pub mod csv;
 mod fill;
+pub mod filter;
 mod format;
 mod objects;
 mod ops;
+pub mod outline;
+pub mod protect;
+pub mod sort;
+pub mod tables;
+pub mod validation;
+pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
-    EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
+    DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
+    ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };
 pub use objects::{ChartPatch, ChartSpec, RawValue, SeriesArg, SeriesSpec, TableInfo};
-pub use ops::{CalcSettingsInfo, StructuralEdit};
+pub use ops::{CalcSettingsInfo, FramePageSpec, StructuralEdit, TracksSpec};
 
 // ─────────────────────────────────────────── serde wire structs (camelCase)
 
@@ -307,22 +313,6 @@ pub struct DataValidationInfo {
     pub kinds: Vec<String>,
 }
 
-/// One chart in the workbook (M2 charts track, spec §8.4) for the panel's
-/// chart list. `index` is the position in the engine's parsed-chart vector (the
-/// handle [`SheetSession::get_chart_geometry`] takes); `hostSheet` is the model
-/// sheet the chart is anchored to; `kind`/`title`/`seriesCount` summarize it.
-#[derive(serde::Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartInfo {
-    pub index: u32,
-    pub host_sheet: u16,
-    /// The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
-    /// `"pie"`, `"donut"`, `"scatter"`) — the geometry generator's tag space.
-    pub kind: &'static str,
-    pub title: Option<String>,
-    pub series_count: u32,
-}
-
 /// One registered function for the formula-bar autocomplete (S-04 formula
 /// bar). The list is the ENGINE's registry-generated name table (spec §7:
 /// the function table is codegen'd from `registry/functions/*.yaml`; the
@@ -364,6 +354,23 @@ pub struct Metadata {
 pub struct LowerOptions {
     pub include_grid_rules: Option<bool>,
     pub header_rows: Option<u32>,
+}
+
+/// The status-bar statistics of a range (see `SheetSession::range_stats`).
+#[derive(serde::Serialize, Debug, Default, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeStats {
+    /// Cells holding any value.
+    pub count: u32,
+    /// Cells holding a number.
+    pub numbers: u32,
+    pub sum: f64,
+    pub average: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    /// Sum and average in the first numeric cell's number format.
+    pub sum_display: String,
+    pub average_display: String,
 }
 
 /// Grid-scene options forwarded verbatim from the TS `GridSceneOptions` (serde
@@ -435,6 +442,15 @@ pub struct SheetSession {
     /// A workbook-structure change (sheet added/renamed/deleted, calc
     /// settings) is pending a save.
     structure_changed: bool,
+    /// Bumped for every new password salt (sheet ADR 517).
+    salt_counter: u64,
+    /// Charts deleted by [`SheetSession::delete_chart`]: their slots stay so
+    /// every other chart keeps its index (placements, journals and template
+    /// fields name charts by index), but they are no longer listed, drawn or
+    /// patched. A load starts with none.
+    removed_charts: BTreeSet<u32>,
+    /// Named filter views (criteria saved beside the workbook, ADR 517).
+    filter_views: Vec<filter::FilterViewInfo>,
 }
 
 /// The T0 cap on cells materialized by a single [`SheetSession::get_range_lowered`]
@@ -699,6 +715,9 @@ impl SheetSession {
             selection: None,
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
+            salt_counter: 0,
+            removed_charts: BTreeSet::new(),
+            filter_views: Vec::new(),
         }
     }
 
@@ -816,7 +835,7 @@ impl SheetSession {
         read_unmarked_spill_caches(&mut engine, &file_spills, config.now_serial);
         engine.set_calc_mode(mode);
 
-        Ok(SheetSession {
+        let mut session = SheetSession {
             engine: Some(engine),
             config,
             doc,
@@ -825,7 +844,13 @@ impl SheetSession {
             selection: None,
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
-        })
+            salt_counter: 0,
+            removed_charts: BTreeSet::new(),
+            filter_views: Vec::new(),
+        };
+        // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
+        session.init_file_filters();
+        Ok(session)
     }
 
     /// Print every EDITED cell's AST back into `formula_texts` (formula cells)
@@ -917,6 +942,8 @@ impl SheetSession {
             )));
         }
 
+        // A locked cell on a protected sheet refuses (sheet ADR 517).
+        self.guard_cells([(sheet, row, col)])?;
         // Typed entry (ruling `sheet.edit.typed-entry`): the value Excel
         // would store plus the format the text implies, applied as ONE edit.
         let typed = self
@@ -936,6 +963,8 @@ impl SheetSession {
 
         // Record the entered cell as edited (for save re-printing).
         self.edited.insert((sheet, row, col));
+        // A header cell renames its table column (sheet ADR 517).
+        self.table_sync_headers(&[(sheet, row, col)])?;
 
         // Build the changed list with each cell's formatted display.
         let engine = self.engine();
@@ -991,8 +1020,15 @@ impl SheetSession {
     /// the same cell wins). Returns the slim [`SetCellsResult`] with each
     /// input's prior input for the caller's undo journal.
     pub fn set_cells(&mut self, inputs: &[CellInput]) -> Result<SetCellsResult, SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if let Some(c) = inputs.iter().find(|c| (c.sheet as usize) >= sheet_count) {
+            return Err(SessionError(format!(
+                "sheet id {} out of range ({sheet_count} sheets)",
+                c.sheet
+            )));
+        }
+        self.guard_cells(inputs.iter().map(|c| (c.sheet, c.row, c.col)))?;
         let engine = self.engine();
-        let sheet_count = engine.model().sheets.len();
         let mut parsed = Vec::with_capacity(inputs.len());
         let mut typed_pending = Vec::new();
         for c in inputs {
@@ -1054,6 +1090,8 @@ impl SheetSession {
             res.changed.extend(more.changed);
         }
         self.edited.extend(written.iter().copied());
+        let header_check: Vec<(u16, u32, u32)> = written.iter().copied().collect();
+        self.table_sync_headers(&header_check)?;
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
         Ok(SetCellsResult {
@@ -1172,210 +1210,35 @@ impl SheetSession {
         ascending: bool,
         has_header: bool,
     ) -> Result<SortResult, SessionError> {
-        let (sheet, cell_range) = self.resolve_range(sheet, range)?;
-
-        let (top, bottom) = (
-            cell_range.r0.min(cell_range.r1),
-            cell_range.r0.max(cell_range.r1),
-        );
-        let (left, right) = (
-            cell_range.c0.min(cell_range.c1),
-            cell_range.c0.max(cell_range.c1),
-        );
-        let width = (right - left + 1) as u64;
-        if (key_col as u64) >= width {
-            return Err(SessionError(format!(
-                "key column {key_col} out of range (the range has {width} columns)"
-            )));
-        }
-        // The same T0 materialization cap as lowering (finding-1 discipline):
-        // the sort snapshots every movable cell's input.
-        let area = width * (bottom - top + 1) as u64;
-        if area > T0_LOWER_CELL_CAP {
-            return Err(SessionError(format!(
-                "range exceeds the T0 lowering cap ({T0_LOWER_CELL_CAP} cells)"
-            )));
-        }
-
-        let first_data = if has_header { top + 1 } else { top };
-        if first_data >= bottom {
-            return Ok(SortResult::default()); // 0 or 1 movable rows — no-op
-        }
-
-        // ── boundary scan: refuse formulas / spill-owned cells (never
-        //    silently corrupt references — see the doc comment).
-        {
-            let engine = self.engine();
-            let model = engine.model();
-            let spills = engine.spills();
-            if model.sheet(sheet).is_some() {
-                for row in first_data..=bottom {
-                    for col in left..=right {
-                        let cref = CellRef {
-                            sheet,
-                            row,
-                            col,
-                            row_abs: false,
-                            col_abs: false,
-                        };
-                        if spills.owner_of(cref).is_some() {
-                            return Err(SessionError(format!(
-                                "sort over a spilled region not supported (spilled cell at {} — edit the anchor formula)",
-                                a1_of(row, col)
-                            )));
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── snapshot every movable row: the key VALUE (typed compare) + the
-        //    re-enterable inputs (the move payload) + each formula's AST (so
-        //    it can be re-addressed for its destination row).
-        type Snapshot = (
-            CellValue,
-            Vec<String>,
-            Vec<Option<sheet_core::ast::Formula>>,
-        );
-        let rows_snap: Vec<Snapshot> = {
-            let model = self.engine().model();
-            (first_data..=bottom)
-                .map(|row| {
-                    let key = model
-                        .sheet(sheet)
-                        .and_then(|ws| ws.cell(row, left + key_col))
-                        .map(|c| c.value.clone())
-                        .unwrap_or(CellValue::Empty);
-                    let inputs = (left..=right)
-                        .map(|col| cell_input_text(model, sheet, row, col))
-                        .collect();
-                    let formulas = (left..=right)
-                        .map(|col| {
-                            model
-                                .sheet(sheet)
-                                .and_then(|ws| ws.cell(row, col))
-                                .and_then(|c| c.formula)
-                                .and_then(|fid| model.formula(fid))
-                                .cloned()
-                        })
-                        .collect();
-                    (key, inputs, formulas)
-                })
-                .collect()
-        };
-
-        // ── stable order (Vec::sort_by is stable; blanks sink either way).
-        let mut order: Vec<usize> = (0..rows_snap.len()).collect();
-        order.sort_by(|&a, &b| sort_key_cmp(&rows_snap[a].0, &rows_snap[b].0, ascending));
-
-        // ── the destination input of every cell: a value moves verbatim, a
-        //    formula is re-addressed for its new row (`rewrite_fill`), then
-        //    printed. Validate every rewritten formula BEFORE applying any.
-        let next_inputs: Vec<Vec<String>> = {
-            let model = self.engine().model();
-            let names = ModelSheetNames { model };
-            let ctx = ModelParseCtx {
-                model,
-                current: sheet,
-            };
-            let mut out = Vec::with_capacity(order.len());
-            for (i, &src) in order.iter().enumerate() {
-                let drow = i as i64 - src as i64;
-                let mut row_inputs = Vec::with_capacity(rows_snap[src].1.len());
-                for (j, input) in rows_snap[src].1.iter().enumerate() {
-                    match &rows_snap[src].2[j] {
-                        Some(f) if drow != 0 => {
-                            let text = print(&rewrite_fill(f, drow, 0), sheet, &names);
-                            if let Err(e) = parse(&text, &ctx) {
-                                return Err(SessionError(format!(
-                                    "sort cannot move the formula at {} ({e})",
-                                    a1_of(first_data + src as u32, left + j as u32)
-                                )));
-                            }
-                            row_inputs.push(format!("={text}"));
-                        }
-                        _ => row_inputs.push(input.clone()),
-                    }
-                }
-                out.push(row_inputs);
-            }
-            out
-        };
-
-        // ── apply through the batch entry lane (graph/dirty/spill bookkeeping
-        //    intact; external dependents recalc ONCE for the whole sort, not
-        //    once per moved cell). Every input is parsed before anything is
-        //    written, so a failure leaves the range untouched.
-        let mut edits: Vec<CellEdit> = Vec::new();
-        let mut batch = Vec::new();
-        let mut changed_set: BTreeSet<(u16, u32, u32)> = BTreeSet::new();
-        let mut circular_set: BTreeSet<(u16, u32, u32)> = BTreeSet::new();
-        for i in 0..order.len() {
-            let dst_row = first_data + i as u32;
-            for (j, col) in (left..=right).enumerate() {
-                let next = &next_inputs[i][j];
-                let prev = &rows_snap[i].1[j];
-                if next == prev {
-                    continue;
-                }
-                // Inputs are engine-printed (`get_cell_input` round-trips by
-                // construction), so a parse error here is a bug — surface it
-                // as a boundary error rather than half-apply silently.
-                let input = self.engine().parse_input(sheet, next).map_err(|e| {
-                    SessionError(format!(
-                        "sort re-entry failed at {}: {e}",
-                        a1_of(dst_row, col)
-                    ))
-                })?;
-                batch.push((sheet, dst_row, col, input));
-                edits.push(CellEdit {
-                    sheet,
-                    row: dst_row,
-                    col,
-                    prev_input: prev.clone(),
-                    next_input: next.clone(),
-                });
-                changed_set.insert((sheet, dst_row, col));
-            }
-        }
-        if !batch.is_empty() {
-            let res = self.engine_mut().set_cells(batch);
-            for c in &res.changed {
-                changed_set.insert((c.sheet, c.row, c.col));
-            }
-            for c in &res.circular {
-                circular_set.insert((c.sheet, c.row, c.col));
-            }
-            for e in &edits {
-                self.edited.insert((e.sheet, e.row, e.col));
-            }
-        }
-
-        let (changed, circular) = self.collect_changes(&changed_set, &circular_set);
-        Ok(SortResult {
-            styles: None,
-            changed,
-            circular,
-            edits,
-        })
+        self.sort_range_by(
+            sheet,
+            range,
+            sort::SortSpec {
+                keys: vec![sort::SortKeyArg {
+                    index: key_col,
+                    descending: !ascending,
+                    ..Default::default()
+                }],
+                has_header,
+                ..Default::default()
+            },
+        )
     }
 
-    /// Set (or replace) one column criterion of the sheet's Paged FILTER VIEW
-    /// over `range` (header row first) and return the rows it now hides
-    /// (Wave 7, `sheet.edit.filter.view`). `col` is 0-based relative to the
-    /// range; `kind` is:
-    /// - `"equals"` — keep rows whose DISPLAYED text equals `value`
+    /// Set (or replace) one column criterion of the sheet's AutoFilter over
+    /// `range` (header row first) and return the rows it now hides — the
+    /// short form of [`set_filter_column`](Self::set_filter_column). `col`
+    /// is 0-based relative to the range; `kind` is:
+    /// - `"equals"` — keep rows whose SHOWN text equals `value`
     ///   (case-insensitive; an empty `value` keeps blanks);
-    /// - `"contains"` — displayed text contains `value` (case-insensitive);
+    /// - `"contains"` — shown text contains `value` (case-insensitive);
     /// - `"top"` / `"bottom"` — the `value` largest / smallest numbers (ties
     ///   kept; non-numbers hidden).
     ///
     /// Like Excel, a filter applies when it is set (an edit afterwards does
-    /// not re-filter). It is a VIEW: the page lowering skips the hidden rows,
-    /// but nothing is written into the xlsx and the workbook is not dirtied.
-    /// A view over a different range replaces the previous Paged view; the
-    /// workbook's own `<autoFilter>` (and the rows it saved hidden) are
-    /// untouched.
+    /// not re-filter). The filter is the sheet's `<autoFilter>` (sheet ADR
+    /// 517): the rows it hides are hidden in the saved file, as Excel stores
+    /// them, and a filter over another range replaces it.
     pub fn set_filter(
         &mut self,
         sheet: u16,
@@ -1384,26 +1247,20 @@ impl SheetSession {
         kind: &str,
         value: &str,
     ) -> Result<FilterResult, SessionError> {
-        self.validate_sheet(sheet)?;
-        let cr = parse_range(range)?;
-        let (top, bottom) = (cr.r0.min(cr.r1), cr.r0.max(cr.r1));
-        let (left, right) = (cr.c0.min(cr.c1), cr.c0.max(cr.c1));
-        if col > right - left {
-            return Err(SessionError(format!(
-                "filter column {col} out of range (the range has {} columns)",
-                right - left + 1
-            )));
-        }
+        use filter::CriterionArg;
         let criterion = match kind {
-            "equals" => sheet_core::FilterCriterion::Values {
+            "equals" => CriterionArg::Values {
                 values: if value.is_empty() {
                     Vec::new()
                 } else {
-                    vec![value.into()]
+                    vec![value.to_string()]
                 },
                 blanks: value.is_empty(),
+                dates: Vec::new(),
             },
-            "contains" => sheet_core::FilterCriterion::Contains(value.into()),
+            "contains" => CriterionArg::Contains {
+                text: value.to_string(),
+            },
             "top" | "bottom" => {
                 let n: f64 = value.trim().parse().map_err(|_| {
                     SessionError(format!("filter {kind}: {value:?} is not a number"))
@@ -1411,8 +1268,8 @@ impl SheetSession {
                 if n < 1.0 {
                     return Err(SessionError(format!("filter {kind}: n must be at least 1")));
                 }
-                sheet_core::FilterCriterion::Top {
-                    n: n.trunc(),
+                CriterionArg::Top {
+                    n,
                     percent: false,
                     top: kind == "top",
                 }
@@ -1423,165 +1280,12 @@ impl SheetSession {
                 )))
             }
         };
-        let frange = RangeRef {
-            start: CellRef {
-                sheet,
-                row: top,
-                col: left,
-                row_abs: false,
-                col_abs: false,
-            },
-            end: CellRef {
-                sheet,
-                row: bottom,
-                col: right,
-                row_abs: false,
-                col_abs: false,
-            },
-        };
-        let mut filters = self
-            .engine()
-            .model()
-            .sheet(sheet)
-            .map(|ws| ws.filters.clone())
-            .unwrap_or_default();
-        // One Paged view per sheet: keep the file's views, replace a Paged
-        // view over another range, extend the one over this range.
-        filters.retain(|f| f.from_file || f.range == frange);
-        match filters.iter_mut().find(|f| !f.from_file) {
-            Some(view) => {
-                view.columns.retain(|c| c.col != col);
-                view.columns
-                    .push(sheet_core::ColumnFilter { col, criterion });
-            }
-            None => filters.push(sheet_core::FilterView {
-                range: frange,
-                columns: vec![sheet_core::ColumnFilter { col, criterion }],
-                from_file: false,
-            }),
-        }
-        self.apply_filter_views(sheet, filters)
+        self.set_filter_column(sheet, range, col, Some(criterion))
     }
 
-    /// Remove the sheet's Paged filter view (every row it hid is shown
-    /// again). The workbook's own `<autoFilter>` and saved-hidden rows stay.
+    /// Remove the sheet's AutoFilter (every row it hid is shown again).
     pub fn clear_filter(&mut self, sheet: u16) -> Result<FilterResult, SessionError> {
-        self.validate_sheet(sheet)?;
-        let mut filters = self
-            .engine()
-            .model()
-            .sheet(sheet)
-            .map(|ws| ws.filters.clone())
-            .unwrap_or_default();
-        filters.retain(|f| f.from_file);
-        self.apply_filter_views(sheet, filters)
-    }
-
-    /// Evaluate every Paged view's criteria over its data rows (the range
-    /// minus its header row) and store the views + the rows they hide.
-    fn apply_filter_views(
-        &mut self,
-        sheet: u16,
-        filters: Vec<sheet_core::FilterView>,
-    ) -> Result<FilterResult, SessionError> {
-        let mut hidden: BTreeSet<u32> = BTreeSet::new();
-        for view in filters.iter().filter(|f| !f.from_file) {
-            let r = view.range.normalized();
-            let first = r.start.row + 1;
-            for c in &view.columns {
-                let abs_col = r.start.col + c.col;
-                let rows: Vec<u32> = (first..=r.end.row).collect();
-                let keep = self.filter_keep(sheet, &rows, abs_col, &c.criterion);
-                for (row, k) in rows.iter().zip(keep) {
-                    if !k {
-                        hidden.insert(*row);
-                    }
-                }
-            }
-        }
-        let hidden_rows: Vec<u32> = hidden.iter().copied().collect();
-        if !self.engine_mut().set_filter_view(sheet, filters, hidden) {
-            return Err(SessionError(format!("unknown sheet {sheet}")));
-        }
-        let result = self.engine_mut().recalc_visibility();
-        let changed = self.changes_of(&result).changed;
-        Ok(FilterResult {
-            hidden_rows,
-            changed,
-        })
-    }
-
-    /// Which of `rows` satisfy `criterion` in column `col`.
-    fn filter_keep(
-        &self,
-        sheet: u16,
-        rows: &[u32],
-        col: u32,
-        criterion: &sheet_core::FilterCriterion,
-    ) -> Vec<bool> {
-        use sheet_core::FilterCriterion as C;
-        match criterion {
-            C::Values { values, blanks } => rows
-                .iter()
-                .map(|&r| {
-                    let text = self.get_cell_display(sheet, r, col);
-                    if text.is_empty() {
-                        *blanks
-                    } else {
-                        let t = text.to_lowercase();
-                        values.iter().any(|v| v.to_lowercase() == t)
-                    }
-                })
-                .collect(),
-            C::Contains(needle) => {
-                let n = needle.to_lowercase();
-                rows.iter()
-                    .map(|&r| {
-                        self.get_cell_display(sheet, r, col)
-                            .to_lowercase()
-                            .contains(n.as_str())
-                    })
-                    .collect()
-            }
-            C::Top { n, percent, top } => {
-                let model = self.engine().model();
-                let nums: Vec<Option<f64>> = rows
-                    .iter()
-                    .map(
-                        |&r| match model.sheet(sheet).and_then(|ws| ws.cell(r, col)) {
-                            Some(c) => match c.value {
-                                CellValue::Number(x) => Some(x),
-                                _ => None,
-                            },
-                            None => None,
-                        },
-                    )
-                    .collect();
-                let mut sorted: Vec<f64> = nums.iter().flatten().copied().collect();
-                if sorted.is_empty() {
-                    return vec![false; rows.len()];
-                }
-                sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-                if *top {
-                    sorted.reverse();
-                }
-                let count = if *percent {
-                    ((sorted.len() as f64) * n / 100.0).ceil().max(1.0) as usize
-                } else {
-                    *n as usize
-                };
-                let cut = sorted[count.clamp(1, sorted.len()) - 1];
-                nums.iter()
-                    .map(|v| match v {
-                        Some(x) if *top => *x >= cut,
-                        Some(x) => *x <= cut,
-                        None => false,
-                    })
-                    .collect()
-            }
-            // Not applied by a Paged view (see sheet_core::filter).
-            C::Unsupported => vec![true; rows.len()],
-        }
+        self.remove_autofilter(sheet)
     }
 
     /// Find every populated cell matching `needle` (spec: the panel's
@@ -1761,6 +1465,15 @@ impl SheetSession {
                     row: cand.row,
                     col: cand.col,
                     reason: "spilled cell — edit the anchor formula".to_string(),
+                });
+                continue;
+            }
+            if let Err(e) = self.guard_cells([(cand.sheet, cand.row, cand.col)]) {
+                result.skipped.push(SkippedCell {
+                    sheet: cand.sheet,
+                    row: cand.row,
+                    col: cand.col,
+                    reason: e.0,
                 });
                 continue;
             }
@@ -2010,6 +1723,139 @@ impl SheetSession {
         Ok(rows)
     }
 
+    /// Where Ctrl+arrow lands from `(row, col)` in direction `(d_row,
+    /// d_col)` (one of them ±1), as Excel moves: inside a run of filled
+    /// cells, to the run's last cell; otherwise to the next filled cell, or
+    /// to the sheet's edge when there is none. Cost is the populated cells
+    /// of that row or column, never the empty span.
+    pub fn data_edge(
+        &self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        d_row: i32,
+        d_col: i32,
+    ) -> Result<(u32, u32), SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if (sheet as usize) >= sheet_count {
+            return Err(SessionError(format!(
+                "sheet id {sheet} out of range ({sheet_count} sheets)"
+            )));
+        }
+        let model = self.engine().model();
+        let Some(ws) = model.sheet(sheet) else {
+            return Ok((row, col));
+        };
+        let filled = |c: &sheet_core::Cell| !matches!(c.value, CellValue::Empty);
+        // The filled positions along the line, sorted.
+        let (pos, max, line): (u32, u32, Vec<u32>) = if d_row != 0 {
+            let mut rows: Vec<u32> = ws
+                .cells
+                .iter()
+                .filter(|(&(_, c), cell)| c == col && filled(cell))
+                .map(|(&(r, _), _)| r)
+                .collect();
+            rows.sort_unstable();
+            (row, sheet_core::MAX_ROW, rows)
+        } else {
+            let cols: Vec<u32> = ws
+                .cells
+                .range((row, 0)..=(row, sheet_core::MAX_COL))
+                .filter(|(_, cell)| filled(cell))
+                .map(|(&(_, c), _)| c)
+                .collect();
+            (col, sheet_core::MAX_COL, cols)
+        };
+        let forward = d_row > 0 || d_col > 0;
+        let is_filled = |p: u32| line.binary_search(&p).is_ok();
+        let next = |p: u32| -> Option<u32> {
+            if forward {
+                (p < max).then(|| p + 1)
+            } else {
+                p.checked_sub(1)
+            }
+        };
+        let target = match next(pos) {
+            None => pos,
+            Some(n) if is_filled(pos) && is_filled(n) => {
+                // Run to the last filled cell of this run.
+                let mut p = n;
+                while let Some(q) = next(p) {
+                    if !is_filled(q) {
+                        break;
+                    }
+                    p = q;
+                }
+                p
+            }
+            Some(_) => {
+                // The next filled cell, else the edge.
+                let found = if forward {
+                    line.iter().copied().find(|&p| p > pos)
+                } else {
+                    line.iter().rev().copied().find(|&p| p < pos)
+                };
+                found.unwrap_or(if forward { max } else { 0 })
+            }
+        };
+        Ok(if d_row != 0 {
+            (target, col)
+        } else {
+            (row, target)
+        })
+    }
+
+    /// The status-bar statistics of a range (sheet ADR 510): how many cells
+    /// hold a value, how many hold a number, and the numbers' sum, average,
+    /// minimum and maximum. Sum and average are also given as text in the
+    /// number format of the first numeric cell, as Excel's status bar shows
+    /// them. Reads only the populated cells, so a whole column is cheap.
+    pub fn range_stats(&self, sheet: u16, range: &str) -> Result<RangeStats, SessionError> {
+        let (sheet, cell_range) = self.resolve_range(sheet, range)?;
+        let (top, left, bottom, right) = (
+            cell_range.r0.min(cell_range.r1),
+            cell_range.c0.min(cell_range.c1),
+            cell_range.r0.max(cell_range.r1),
+            cell_range.c0.max(cell_range.c1),
+        );
+        let model = self.engine().model();
+        let mut stats = RangeStats::default();
+        let mut first_style = None;
+        if let Some(ws) = model.sheet(sheet) {
+            for (&(r, c), cell) in ws.cells.range((top, 0)..=(bottom, sheet_core::MAX_COL)) {
+                if c < left || c > right || ws.row_hidden(r) {
+                    continue;
+                }
+                match &cell.value {
+                    CellValue::Empty => {}
+                    CellValue::Number(n) => {
+                        stats.count += 1;
+                        stats.numbers += 1;
+                        stats.sum += n;
+                        stats.min = Some(stats.min.map_or(*n, |m: f64| m.min(*n)));
+                        stats.max = Some(stats.max.map_or(*n, |m: f64| m.max(*n)));
+                        first_style.get_or_insert(cell.style);
+                    }
+                    _ => stats.count += 1,
+                }
+            }
+        }
+        if stats.numbers > 0 {
+            let average = stats.sum / stats.numbers as f64;
+            stats.average = Some(average);
+            let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
+            let mut cache = FormatCache::default();
+            let code = model.styles.num_fmt_of(first_style.unwrap_or_default());
+            let show = |v: f64, cache: &mut FormatCache| match cache.get(code) {
+                Ok(fmt) => sheet_format::format_value(&CellValue::Number(v), fmt, &ctx),
+                Err(_) => sheet_format::format_general(&CellValue::Number(v)),
+            };
+            stats.sum_display = show(stats.sum, &mut cache);
+            stats.average_display = show(average, &mut cache);
+        }
+        Ok(stats)
+    }
+
     /// Paginate `range` of `sheet` across `frames` (the host frame chain's
     /// content boxes; Wave 2D, S-05). Threads a tall range into the ordered
     /// frame list — rows that do not fit flow to the next frame, headers can
@@ -2256,139 +2102,6 @@ impl SheetSession {
             .collect()
     }
 
-    /// AUTHOR a chart over live data (editor-ui-coverage M — the model was
-    /// import-only). Constructs a [`ChartModel`] and appends it to the
-    /// session's chart vector: `values` is the data block, `categories`
-    /// (may be empty) the shared label range, `kind` one of
-    /// [`CHART_KIND_TAGS`], empty `title` = none, legend on when there is
-    /// more than one series. Returns the new chart index — the same handle
-    /// `get_chart_geometry` / the lowering take, so an authored chart
-    /// renders and lowers exactly like a parsed one.
-    ///
-    /// `series_in` is the §16.4 TRANSPOSE ROWS/COLUMNS control: `"columns"`
-    /// (the default, and what an empty string means) reads one series per
-    /// COLUMN of the values block; `"rows"` reads one series per ROW. It
-    /// re-reads the SAME cells the other way round — the workbook is never
-    /// rewritten to transpose a chart (that is what the `TRANSPOSE` worksheet
-    /// function is for, and it would edit the user's data).
-    ///
-    /// HONEST SCOPE (publishing-first): authored charts live on the PAGE —
-    /// the xlsx writer never re-derives chart parts, so a save round-trip
-    /// carries only the workbook's original charts.
-    pub fn add_chart(
-        &mut self,
-        sheet: u16,
-        values: &str,
-        categories: &str,
-        kind: &str,
-        title: &str,
-        series_in: &str,
-    ) -> Result<u32, SessionError> {
-        use sheet_chart::{Axis, ChartModel, Series};
-        self.validate_sheet(sheet)?;
-        let chart_kind = chart_kind_from_tag(kind).ok_or_else(|| {
-            SessionError(format!(
-                "unknown chart kind {kind:?} ({})",
-                CHART_KIND_TAGS.join("|")
-            ))
-        })?;
-        let by_row = match series_in {
-            "" | "columns" => false,
-            "rows" => true,
-            other => {
-                return Err(SessionError(format!(
-                    "unknown series orientation {other:?} (columns|rows)"
-                )))
-            }
-        };
-        let vr = parse_range(values)?;
-        let (top, bottom) = (vr.r0.min(vr.r1), vr.r0.max(vr.r1));
-        let (left, right) = (vr.c0.min(vr.c1), vr.c0.max(vr.c1));
-        let cell = |row: u32, col: u32| CellRef {
-            sheet: sheet as SheetId,
-            row,
-            col,
-            row_abs: false,
-            col_abs: false,
-        };
-        let cat_ref = if categories.is_empty() {
-            None
-        } else {
-            let cr = parse_range(categories)?;
-            Some(RangeRef {
-                start: cell(cr.r0.min(cr.r1), cr.c0.min(cr.c1)),
-                end: cell(cr.r0.max(cr.r1), cr.c0.max(cr.c1)),
-            })
-        };
-        // One series per COLUMN (default) or per ROW (`series_in: "rows"` —
-        // the transpose). `resolve_values` walks a range row-major, so a
-        // single-row range reads left-to-right and a single-column range
-        // top-to-bottom; both orientations need only the right slice.
-        let series: Vec<Series> = if by_row {
-            (top..=bottom)
-                .map(|row| Series {
-                    name: None,
-                    categories: cat_ref,
-                    values: RangeRef {
-                        start: cell(row, left),
-                        end: cell(row, right),
-                    },
-                    color: None,
-                })
-                .collect()
-        } else {
-            (left..=right)
-                .map(|col| Series {
-                    name: None,
-                    categories: cat_ref,
-                    values: RangeRef {
-                        start: cell(top, col),
-                        end: cell(bottom, col),
-                    },
-                    color: None,
-                })
-                .collect()
-        };
-        let legend = series.len() > 1;
-        self.doc.charts.push(XlsxChart {
-            host_sheet: sheet as SheetId,
-            model: ChartModel {
-                kind: chart_kind,
-                title: if title.is_empty() {
-                    None
-                } else {
-                    Some(title.into())
-                },
-                series,
-                cat_axis: Axis::default(),
-                val_axis: Axis::default(),
-                legend,
-            },
-        });
-        Ok((self.doc.charts.len() - 1) as u32)
-    }
-
-    /// Enumerate the workbook's parsed charts (M2 charts track, spec §8.4):
-    /// index (the [`get_chart_geometry`](Self::get_chart_geometry) handle), host
-    /// sheet, kind, title, and series count. Empty for a workbook with no
-    /// charts. The charts were parsed from the XLSX `xl/charts/chartN.xml` parts
-    /// on load (`sheet_xlsx::XlsxDocument::charts`); the parts stay opaque /
-    /// round-trip-preserved.
-    pub fn list_charts(&self) -> Vec<ChartInfo> {
-        self.doc
-            .charts
-            .iter()
-            .enumerate()
-            .map(|(i, c)| ChartInfo {
-                index: i as u32,
-                host_sheet: c.host_sheet,
-                kind: chart_kind_tag(c.model.kind),
-                title: c.model.title.as_ref().map(|t| t.to_string()),
-                series_count: c.model.series.len() as u32,
-            })
-            .collect()
-    }
-
     /// Enumerate the worksheets that carry a FROZEN PANE (spec §8.1), as
     /// `[{sheet,rows,cols}]` in sheet order. Read-only derived state parsed
     /// from each worksheet's `<sheetViews><pane>` on load (the view still
@@ -2495,46 +2208,6 @@ impl SheetSession {
             .collect()
     }
 
-    /// Resolve a parsed chart's series ranges to [`PlotData`] against the LIVE
-    /// model (so the geometry is live to recalculation — spec §8.4) and call the
-    /// PURE `sheet_chart::generate` for a `w_pt × h_pt` content box. `chart_index`
-    /// is an index into [`list_charts`](Self::list_charts); an OOB index is a
-    /// boundary error (finding-2 discipline, matching `set_cell`). The returned
-    /// [`ChartGeometry`] is the same IR the page-surface paged.draw lowering AND
-    /// the grid view consume — one generator, two projections.
-    pub fn get_chart_geometry(
-        &self,
-        chart_index: u32,
-        w_pt: f64,
-        h_pt: f64,
-    ) -> Result<ChartGeometry, SessionError> {
-        let chart: &XlsxChart = self.doc.charts.get(chart_index as usize).ok_or_else(|| {
-            SessionError(format!(
-                "chart index {chart_index} out of range ({} charts)",
-                self.doc.charts.len()
-            ))
-        })?;
-        let model = self.engine().model();
-
-        // Resolve each series' values range to a numeric vector, and the shared
-        // category labels from the FIRST series that carries a category range.
-        let mut data = PlotData::default();
-        for series in &chart.model.series {
-            data.series.push(resolve_values(model, &series.values));
-        }
-        if let Some(cat_ref) = chart
-            .model
-            .series
-            .iter()
-            .find_map(|s| s.categories.as_ref())
-        {
-            let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
-            data.categories = resolve_labels(model, cat_ref, &ctx);
-        }
-
-        Ok(generate_chart(&chart.model, &data, w_pt, h_pt))
-    }
-
     /// Workbook metadata for the panel.
     pub fn metadata(&self) -> Metadata {
         let model = self.engine().model();
@@ -2549,6 +2222,7 @@ impl SheetSession {
             // the edited-cell set instead (cleared on a successful save).
             dirty: !self.edited.is_empty()
                 || !self.extra_dirty.is_empty()
+                || self.doc.charts.iter().any(|c| c.dirty)
                 || self.structure_changed,
             unparsed_formulas: self.unparsed_formulas,
         }
@@ -2641,7 +2315,7 @@ fn cell_input_text(model: &SheetModel, sheet: SheetId, row: u32, col: u32) -> St
 // ───────────────────────────────────── bulk-edit helpers (sort / find)
 
 /// A1 label for a 0-based `(row, col)` — error-message formatting only.
-fn a1_of(row: u32, col: u32) -> String {
+pub(crate) fn a1_of(row: u32, col: u32) -> String {
     let mut n = col as i64;
     let mut label = String::new();
     loop {
@@ -2793,105 +2467,6 @@ fn excerpt_of(text: &str) -> String {
     }
     let mut out: String = text.chars().take(MAX).collect();
     out.push('…');
-    out
-}
-
-/// Every chart-kind TAG `add_chart` accepts / `list_charts` reports, in the
-/// order the panel offers them. ONE list, so the parser
-/// ([`chart_kind_from_tag`]) and the printer ([`chart_kind_tag`]) cannot
-/// disagree and the panel cannot offer a kind the engine refuses.
-pub const CHART_KIND_TAGS: &[&str] = &[
-    "column",
-    "stackedColumn",
-    "bar",
-    "stackedBar",
-    "line",
-    "area",
-    "scatter",
-    "pie",
-    "donut",
-    "radar",
-];
-
-/// The lowercase kind tag for a [`sheet_chart::model::ChartKind`] — the same
-/// space the geometry IR's `Primitive` tags / the registry use.
-fn chart_kind_tag(kind: sheet_chart::model::ChartKind) -> &'static str {
-    use sheet_chart::model::ChartKind::*;
-    match kind {
-        Column => "column",
-        Bar => "bar",
-        Line => "line",
-        Area => "area",
-        Pie => "pie",
-        Donut => "donut",
-        Scatter => "scatter",
-        StackedColumn => "stackedColumn",
-        StackedBar => "stackedBar",
-        Radar => "radar",
-    }
-}
-
-/// A [`CHART_KIND_TAGS`] tag → its [`sheet_chart::model::ChartKind`]. The exact
-/// inverse of [`chart_kind_tag`]; an unknown tag is `None` (the caller turns it
-/// into the boundary error naming the accepted set).
-fn chart_kind_from_tag(tag: &str) -> Option<sheet_chart::model::ChartKind> {
-    use sheet_chart::model::ChartKind::*;
-    Some(match tag {
-        "bar" => Bar,
-        "column" => Column,
-        "line" => Line,
-        "area" => Area,
-        "pie" => Pie,
-        "donut" => Donut,
-        "scatter" => Scatter,
-        "stackedColumn" => StackedColumn,
-        "stackedBar" => StackedBar,
-        "radar" => Radar,
-        _ => return None,
-    })
-}
-
-/// Resolve a series' values [`RangeRef`] to a numeric vector against the LIVE
-/// model (chart geometry is live to recalc — spec §8.4). Cells iterate in
-/// natural order (row-major), so a column range `$B$2:$B$4` and a row range
-/// `$B$2:$D$2` both yield their values left-to-right / top-to-bottom. A numeric
-/// cell contributes its value; a bool contributes 0/1; empty / text / error
-/// cells contribute 0.0 (the publishing reading — a gap in a chart is a zero,
-/// never a panic).
-fn resolve_values(model: &SheetModel, range: &RangeRef) -> Vec<f64> {
-    let r = range.normalized();
-    let sheet = r.start.sheet;
-    let mut out = Vec::new();
-    for row in r.start.row..=r.end.row {
-        for col in r.start.col..=r.end.col {
-            let v = model
-                .sheet(sheet)
-                .and_then(|ws| ws.cell(row, col))
-                .map(|c| match &c.value {
-                    CellValue::Number(n) => *n,
-                    CellValue::Bool(true) => 1.0,
-                    _ => 0.0,
-                })
-                .unwrap_or(0.0);
-            out.push(v);
-        }
-    }
-    out
-}
-
-/// Resolve a category [`RangeRef`] to formatted label strings against the live
-/// model (the category axis shows the cells' DISPLAY text — spec §9, the same
-/// formatting the grid / page lower use). Empty cells become empty labels.
-fn resolve_labels(model: &SheetModel, range: &RangeRef, ctx: &FormatCtx) -> Vec<String> {
-    let r = range.normalized();
-    let sheet = r.start.sheet;
-    let mut cache = FormatCache::default();
-    let mut out = Vec::new();
-    for row in r.start.row..=r.end.row {
-        for col in r.start.col..=r.end.col {
-            out.push(cell_display(model, sheet, row, col, &mut cache, ctx));
-        }
-    }
     out
 }
 

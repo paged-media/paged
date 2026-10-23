@@ -23,16 +23,17 @@
 use paged_ooxml::tree::{alternate, El, Ns};
 
 use crate::model::{
-    Axis, Chart, ChartTitle, DataLabels, Legend, Plot, PlotKind, Series, SeriesRefs,
+    Axis, Chart, ChartTitle, DataLabels, ErrorBars, Legend, Plot, PlotKind, PlotOptions, Series,
+    SeriesRefs, Trendline,
 };
 
 /// What a module reads of a chart's paints and text: the `S` and `T` of the
 /// model. `()` reads neither.
 pub trait Props {
     /// The shape properties of a `c:spPr`.
-    type Shape: Default;
+    type Shape: Default + Clone;
     /// The run properties of an `a:rPr` / `a:defRPr`.
-    type Text;
+    type Text: Clone;
     /// Read a `c:spPr` element.
     fn shape(&self, sp_pr: &El) -> Self::Shape;
     /// Read an `a:rPr` / `a:defRPr` element.
@@ -77,11 +78,17 @@ pub fn chart<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
         val_axis: None,
         legend: None,
         plot_area: P::Shape::default(),
+        axes: Vec::new(),
+        blanks: None,
+        view_3d: false,
+        chart_ex: false,
     };
     let Some(c) = root.child(Ns::C, "chart") else {
         return out;
     };
     let title_deleted = val_bool(c.child(Ns::C, "autoTitleDeleted"), false);
+    out.blanks = val_str(c.child(Ns::C, "dispBlanksAs"));
+    out.view_3d = c.child(Ns::C, "view3D").is_some();
     if let Some(t) = c.child(Ns::C, "title") {
         out.title = Some(title(t, props));
     } else if !title_deleted && single_series_auto_title(c) {
@@ -116,15 +123,17 @@ pub fn chart<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
                     hole: (el.local == "doughnutChart")
                         .then(|| val_i32(el.child(Ns::C, "holeSize")).unwrap_or(50)),
                 },
-                "catAx" | "dateAx" => {
+                "catAx" | "dateAx" | "valAx" | "serAx" => {
                     if P::AXES_AND_LABELS {
-                        out.cat_axis = Some(axis(el, props));
-                    }
-                    continue;
-                }
-                "valAx" => {
-                    if P::AXES_AND_LABELS {
-                        out.val_axis = Some(axis(el, props));
+                        let a = axis(el, props);
+                        if el.local == "valAx" {
+                            if out.val_axis.is_none() {
+                                out.val_axis = Some(a.clone());
+                            }
+                        } else if el.local != "serAx" && out.cat_axis.is_none() {
+                            out.cat_axis = Some(a.clone());
+                        }
+                        out.axes.push(a);
                     }
                     continue;
                 }
@@ -144,6 +153,11 @@ pub fn chart<P: Props>(root: &El, props: &P) -> Chart<P::Shape, P::Text> {
                     .filter(|_| P::AXES_AND_LABELS)
                     .map(|d| labels(d, props)),
                 element: el.local.clone(),
+                options: plot_options(el),
+                axis_ids: el
+                    .children_named(Ns::C, "axId")
+                    .filter_map(|a| a.attr_u32("val"))
+                    .collect(),
             });
         }
     }
@@ -171,7 +185,7 @@ fn single_series_auto_title(c: &El) -> bool {
         .unwrap_or(false)
 }
 
-fn title<P: Props>(t: &El, props: &P) -> ChartTitle<P::Text> {
+pub(crate) fn title<P: Props>(t: &El, props: &P) -> ChartTitle<P::Text> {
     let rich = t.path(&[(Ns::C, "tx"), (Ns::C, "rich")]);
     let text = rich
         .map(|r| {
@@ -179,6 +193,11 @@ fn title<P: Props>(t: &El, props: &P) -> ChartTitle<P::Text> {
                 .map(|p| p.deep_text())
                 .collect::<Vec<_>>()
                 .join("\n")
+        })
+        .or_else(|| {
+            // A title bound to a cell: its cached text.
+            t.path(&[(Ns::C, "tx"), (Ns::C, "strRef"), (Ns::C, "strCache")])
+                .map(|c| points(c).into_iter().map(|(_, v)| v).collect::<String>())
         })
         .unwrap_or_default();
     // The run properties of a rich title's first run win over its txPr.
@@ -244,6 +263,7 @@ fn series<P: Props>(s: &El, props: &P) -> Series<P::Shape, P::Text> {
         values: formula(s.child(Ns::C, "val")),
         x_values: formula(s.child(Ns::C, "xVal")),
         y_values: formula(s.child(Ns::C, "yVal")),
+        bubble_sizes: formula(s.child(Ns::C, "bubbleSize")),
     };
     Series {
         index: val_u32(s.child(Ns::C, "idx")).unwrap_or(0),
@@ -266,6 +286,71 @@ fn series<P: Props>(s: &El, props: &P) -> Series<P::Shape, P::Text> {
             .map(|d| labels(d, props)),
         format,
         refs,
+        marker_size: s
+            .path(&[(Ns::C, "marker"), (Ns::C, "size")])
+            .and_then(|m| m.attr_u32("val")),
+        marker_props: s
+            .path(&[(Ns::C, "marker"), (Ns::C, "spPr")])
+            .map(|m| props.shape(m)),
+        trendlines: s
+            .children_named(Ns::C, "trendline")
+            .map(|t| Trendline {
+                name: t.child(Ns::C, "name").map(El::deep_text),
+                kind: val_str(t.child(Ns::C, "trendlineType")).unwrap_or("linear".into()),
+                order: val_u32(t.child(Ns::C, "order")),
+                period: val_u32(t.child(Ns::C, "period")),
+                forward: val_f64(t.child(Ns::C, "forward")),
+                backward: val_f64(t.child(Ns::C, "backward")),
+                intercept: val_f64(t.child(Ns::C, "intercept")),
+                display_r2: val_bool(t.child(Ns::C, "dispRSqr"), false),
+                display_equation: val_bool(t.child(Ns::C, "dispEq"), false),
+                props: sp_pr(t, props),
+            })
+            .collect(),
+        error_bars: s
+            .children_named(Ns::C, "errBars")
+            .map(|e| ErrorBars {
+                direction: val_str(e.child(Ns::C, "errDir")),
+                bar_type: val_str(e.child(Ns::C, "errBarType")).unwrap_or("both".into()),
+                value_type: val_str(e.child(Ns::C, "errValType")).unwrap_or("fixedVal".into()),
+                value: val_f64(e.child(Ns::C, "val")),
+                no_end_cap: val_bool(e.child(Ns::C, "noEndCap"), false),
+                plus: formula(e.child(Ns::C, "plus")),
+                minus: formula(e.child(Ns::C, "minus")),
+                props: sp_pr(e, props),
+            })
+            .collect(),
+        explosion: val_u32(s.child(Ns::C, "explosion")),
+        invert_if_negative: val_bool(s.child(Ns::C, "invertIfNegative"), false),
+    }
+}
+
+/// The type-specific options of a plot element.
+fn plot_options(el: &El) -> PlotOptions {
+    PlotOptions {
+        scatter_style: val_str(el.child(Ns::C, "scatterStyle")),
+        radar_style: val_str(el.child(Ns::C, "radarStyle")),
+        bubble_scale: val_u32(el.child(Ns::C, "bubbleScale")),
+        show_neg_bubbles: val_bool(el.child(Ns::C, "showNegBubbles"), false),
+        size_represents: val_str(el.child(Ns::C, "sizeRepresents")),
+        of_pie_type: val_str(el.child(Ns::C, "ofPieType")),
+        split_type: val_str(el.child(Ns::C, "splitType")),
+        split_pos: val_f64(el.child(Ns::C, "splitPos")),
+        cust_split: el
+            .child(Ns::C, "custSplit")
+            .map(|c| {
+                c.children_named(Ns::C, "secondPiePt")
+                    .filter_map(|p| p.attr_u32("val"))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        second_pie_size: val_u32(el.child(Ns::C, "secondPieSize")),
+        hi_low_lines: el.child(Ns::C, "hiLowLines").is_some(),
+        up_down_bars: el.child(Ns::C, "upDownBars").is_some(),
+        drop_lines: el.child(Ns::C, "dropLines").is_some(),
+        marker: el.child(Ns::C, "marker").map(|m| val_bool(Some(m), true)),
+        wireframe: val_bool(el.child(Ns::C, "wireframe"), false),
+        ex: Default::default(),
     }
 }
 
@@ -334,6 +419,8 @@ fn labels<P: Props>(d: &El, props: &P) -> DataLabels<P::Text> {
             .child(Ns::C, "numFmt")
             .and_then(|f| f.attr("formatCode"))
             .map(str::to_string),
+        show_bubble_size: val_bool(d.child(Ns::C, "showBubbleSize"), false),
+        separator: d.child(Ns::C, "separator").map(El::deep_text),
     }
 }
 
@@ -347,6 +434,15 @@ fn axis<P: Props>(el: &El, props: &P) -> Axis<P::Shape, P::Text> {
     };
     let fmt = el.child(Ns::C, "numFmt");
     Axis {
+        id: val_u32(el.child(Ns::C, "axId")).unwrap_or(0),
+        cross_ax: val_u32(el.child(Ns::C, "crossAx")).unwrap_or(0),
+        element: el.local.clone(),
+        title: el.child(Ns::C, "title").map(|t| title(t, props)),
+        log_base: num("logBase"),
+        minor_unit: val_f64(el.child(Ns::C, "minorUnit")),
+        crosses: val_str(el.child(Ns::C, "crosses")),
+        crosses_at: val_f64(el.child(Ns::C, "crossesAt")),
+        base_time_unit: val_str(el.child(Ns::C, "baseTimeUnit")),
         deleted: val_bool(el.child(Ns::C, "delete"), false),
         position: val_str(el.child(Ns::C, "axPos")).unwrap_or_default(),
         major_gridlines: el.child(Ns::C, "majorGridlines").map(|g| sp_pr(g, props)),
@@ -371,14 +467,14 @@ fn axis<P: Props>(el: &El, props: &P) -> Axis<P::Shape, P::Text> {
     }
 }
 
-fn sp_pr<P: Props>(el: &El, props: &P) -> P::Shape {
+pub(crate) fn sp_pr<P: Props>(el: &El, props: &P) -> P::Shape {
     el.child(Ns::C, "spPr")
         .map(|s| props.shape(s))
         .unwrap_or_default()
 }
 
 /// `c:txPr`: the default run properties of its first paragraph.
-fn tx_pr<P: Props>(el: &El, props: &P) -> Option<P::Text> {
+pub(crate) fn tx_pr<P: Props>(el: &El, props: &P) -> Option<P::Text> {
     el.child(Ns::C, "txPr")?
         .children_named(Ns::A, "p")
         .find_map(|p| p.path(&[(Ns::A, "pPr"), (Ns::A, "defRPr")]))
@@ -391,6 +487,11 @@ fn val_str(el: Option<&El>) -> Option<String> {
 
 fn val_i32(el: Option<&El>) -> Option<i32> {
     el.and_then(|e| e.attr_i32("val"))
+}
+
+fn val_f64(el: Option<&El>) -> Option<f64> {
+    el.and_then(|e| e.attr("val"))
+        .and_then(|v| v.trim().parse().ok())
 }
 
 fn val_u32(el: Option<&El>) -> Option<u32> {
