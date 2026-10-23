@@ -1,0 +1,213 @@
+{
+  "widthPt": 360.0,
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 20.0,
+      "s": "Sunburst",
+      "sizePt": 14.0,
+      "anchor": "middle",
+      "role": "title"
+    },
+    {
+      "kind": "rect",
+      "x": 314.25,
+      "y": 120.6,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#4472C4",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 325.25,
+      "y": 127.25,
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 314.25,
+      "y": 133.20000000000002,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#ED7D31",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 325.25,
+      "y": 139.85000000000002,
+      "s": "Veg",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 56.59149999999999,
+      "startDeg": 229.99999999999997,
+      "endDeg": 360.0,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "innerR": 14.762999999999998
+    },
+    {
+      "kind": "text",
+      "x": 123.7904305049467,
+      "y": 118.15714262131162,
+      "s": "Veg",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 320.0,
+      "endDeg": 360.0,
+      "fill": "#F09150",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 129.61647227643658,
+      "y": 60.40341865652261,
+      "s": "Bean",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 260.0,
+      "endDeg": 320.0,
+      "fill": "#F09150",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 83.2934186565226,
+      "y": 106.72647227643654,
+      "s": "Kale",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 229.99999999999997,
+      "endDeg": 260.0,
+      "fill": "#F09150",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 85.88093523488418,
+      "y": 165.9903453399092,
+      "s": "Leek",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 56.59149999999999,
+      "startDeg": 0.0,
+      "endDeg": 229.99999999999997,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "innerR": 14.762999999999998
+    },
+    {
+      "kind": "text",
+      "x": 188.4595694950533,
+      "y": 148.31285737868836,
+      "s": "Fruit",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 149.99999999999997,
+      "endDeg": 229.99999999999994,
+      "fill": "#6087CD",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 142.6662677537914,
+      "y": 209.56326350302595,
+      "s": "Plum",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 99.99999999999999,
+      "endDeg": 149.99999999999997,
+      "fill": "#6087CD",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 219.6139935566515,
+      "y": 177.69047188171507,
+      "s": "Pear",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "wedge",
+      "cx": 156.125,
+      "cy": 130.4,
+      "r": 98.41999999999999,
+      "startDeg": 0.0,
+      "endDeg": 99.99999999999999,
+      "fill": "#6087CD",
+      "stroke": "#FFFFFF",
+      "innerR": 56.59149999999999
+    },
+    {
+      "kind": "text",
+      "x": 215.49784909726873,
+      "y": 83.41526422053751,
+      "s": "Apple",
+      "sizePt": 8.0,
+      "anchor": "middle",
+      "role": "dataLabel"
+    }
+  ]
+}

@@ -257,11 +257,35 @@ export interface ReplaceResult {
 export interface ChartInfo {
   index: number;
   hostSheet: number;
-  /** The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
-   *  `"pie"`, `"donut"`, `"scatter"`). */
+  /** The kind tag (`"column"`, `"stackedLine"`, `"waterfall"`, …;
+   *  `"unsupported"` for a chart Paged does not draw). */
   kind: string;
   title: string | null;
   seriesCount: number;
+  /** A 3-D chart drawn as its 2-D kind (W4). */
+  flattened3d?: boolean;
+  /** The element the kind came from when it is not its own. */
+  source?: string | null;
+  /** The chart is a chartsheet (its own tab). */
+  chartsheet?: boolean;
+  /** More than one plot (a combo chart). */
+  combo?: boolean;
+}
+
+/** A chartsheet: a sheet tab that is one chart. */
+export interface ChartsheetInfo {
+  sheet: number;
+  name: string;
+  chart: number | null;
+}
+
+/** One sparkline: its cell, kind and data range. */
+export interface SparklineInfo {
+  sheet: number;
+  row: number;
+  col: number;
+  kind: "line" | "column" | "winLoss";
+  data: string;
 }
 
 /** One registered function for the formula-bar autocomplete (S-04). The
@@ -444,7 +468,7 @@ export interface SheetEngine extends SheetEngineW2 {
    *  values COLUMN, `"rows"` one per ROW, re-reading the SAME cells the other
    *  way round (never a rewrite of the user's data). Returns the new chart
    *  index (same handle the geometry/lowering lanes take). Publishing-first:
-   *  authored charts are page-side only — never written back to xlsx. */
+   *  the chart is written into the xlsx on save. */
   addChart(
     sheet: number,
     values: string,
@@ -478,6 +502,19 @@ export interface SheetEngine extends SheetEngineW2 {
    *  live to recalc). The IR feeds BOTH the page paged.draw lowering and the
    *  grid view (one generator, two projections). */
   getChartGeometry(index: number, wPt: number, hPt: number): ChartGeometry;
+  /** W4 — the chartsheets (a tab that is one chart). */
+  listChartsheets?(): ChartsheetInfo[];
+  /** W4 — the sparklines of a sheet. */
+  listSparklines?(sheet: number): SparklineInfo[];
+  /** W4 — a sparkline's primitives in a `wPt × hPt` cell box (null when
+   *  the cell has none). */
+  sparklineGeometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    wPt: number,
+    hPt: number,
+  ): ChartGeometry["prims"] | null;
   /** Release the wasm-held model. */
   dispose(): void;
 
@@ -656,6 +693,13 @@ export interface SeriesSpec {
   values: string;
   categories?: string | null;
   color?: string | null;
+  /** The document swatch the fill names. */
+  colorSwatch?: string | null;
+  /** The series' plot kind (differs from the chart's in a combo). */
+  kind?: string;
+  secondary?: boolean;
+  xValues?: string | null;
+  sizes?: string | null;
 }
 
 /** One chart with the options the object model reads. */
@@ -670,6 +714,13 @@ export interface ChartSpec {
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string | null;
+  dataLabels?: boolean;
+  style?: number | null;
+  flattened3d?: boolean;
+  titleParagraphStyle?: string | null;
 }
 
 /** A chart patch: absent = unchanged, `null` clears a nullable field. A
@@ -683,11 +734,23 @@ export interface ChartPatch {
     categories: string;
     name: string;
     color: string;
+    colorSwatch?: string;
+    /** A combo: this series' kind tag (empty = the chart's). */
+    kind?: string;
+    secondary?: boolean;
+    xValues?: string;
+    sizes?: string;
   }[];
   categoryAxisTitle?: string | null;
   valueAxisTitle?: string | null;
   valueAxisMin?: number | null;
   valueAxisMax?: number | null;
+  valueAxisLogBase?: number | null;
+  valueAxisFormat?: string | null;
+  legendPosition?: string;
+  dataLabels?: boolean;
+  style?: number | null;
+  titleParagraphStyle?: string | null;
 }
 
 /** A range argument resolved by the engine: its sheet, normalized A1, and
@@ -884,6 +947,15 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
   list_comments(): CommentInfo[];
   list_functions(): FunctionInfo[];
   get_chart_geometry(index: number, w_pt: number, h_pt: number): ChartGeometry;
+  list_chartsheets?(): ChartsheetInfo[];
+  list_sparklines?(sheet: number): SparklineInfo[];
+  sparkline_geometry?(
+    sheet: number,
+    row: number,
+    col: number,
+    w_pt: number,
+    h_pt: number,
+  ): ChartGeometry["prims"] | null;
   free(): void;
   // Wave 4 (optional: older artifacts / fakes lack them).
   get_range_page?(
@@ -1085,6 +1157,10 @@ export function wrapEngine(
     listFunctions: () => wasm.list_functions(),
     getChartGeometry: (index, wPt, hPt) =>
       wasm.get_chart_geometry(index, wPt, hPt),
+    listChartsheets: () => wasm.list_chartsheets?.() ?? [],
+    listSparklines: (sheet) => wasm.list_sparklines?.(sheet) ?? [],
+    sparklineGeometry: (sheet, row, col, wPt, hPt) =>
+      wasm.sparkline_geometry?.(sheet, row, col, wPt, hPt) ?? null,
     dispose: () => wasm.free(),
     getRangePage: (sheet, range, opts) =>
       need("get_range_page")(sheet, range, opts) as LoweredContent,

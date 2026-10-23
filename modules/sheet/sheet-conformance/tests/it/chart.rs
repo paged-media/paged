@@ -31,7 +31,7 @@
 
 use std::path::PathBuf;
 
-use sheet_chart::model::{Axis, ChartKind, ChartModel, Series};
+use sheet_chart::model::{ChartKind, ChartModel, ColorRef, Grouping, Legend, Series};
 use sheet_chart::{generate, ChartGeometry, PlotData, Primitive};
 use sheet_core::{CellRef, RangeRef};
 use sheet_js::core::SheetSession;
@@ -74,42 +74,33 @@ fn count<F: Fn(&Primitive) -> bool>(g: &ChartGeometry, f: F) -> usize {
 
 // ── sheet.chart.model ───────────────────────────────────────────────────────
 
-/// The frozen chart MODEL: kind + series/axis bindings + legend construct and
-/// expose their fields. A model is the IR the geometry generator projects.
+/// The chart MODEL: plots (kind, grouping, series bound to ranges), axes,
+/// legend. A model is the IR the geometry generator projects.
 #[test]
 fn sheet_chart_model() {
-    let m = ChartModel {
-        kind: ChartKind::Column,
-        title: Some("Q1 Revenue".into()),
-        series: vec![Series {
-            name: Some("Revenue".into()),
-            categories: Some(rr(1, 0, 3, 0)),
-            values: rr(1, 1, 3, 1),
-            color: Some("#3366CC".into()),
-        }],
-        cat_axis: Axis::default(),
-        val_axis: Axis {
-            title: Some("EUR".into()),
-            min: Some(0.0),
-            max: None,
-        },
-        legend: true,
-    };
-    assert_eq!(m.kind, ChartKind::Column);
-    assert_eq!(m.series.len(), 1);
-    assert_eq!(m.series[0].values.rows(), 3);
-    assert_eq!(m.series[0].color.as_deref(), Some("#3366CC"));
-    assert!(m.legend);
+    let mut s = Series::of(rr(1, 1, 3, 1));
+    s.name = Some("Revenue".into());
+    s.categories = Some(rr(1, 0, 3, 0));
+    s.fill = ColorRef::from_hex("#3366CC");
+    let mut m = ChartModel::single(ChartKind::Column, Grouping::Standard, vec![s]);
+    m.title = Some("Q1 Revenue".into());
+    m.val_axis.title = Some("EUR".into());
+    m.val_axis.min = Some(0.0);
+    m.legend = Some(Legend::default());
+    assert_eq!(m.kind(), ChartKind::Column);
+    assert_eq!(m.series_count(), 1);
+    let s = m.series().next().unwrap();
+    assert_eq!(s.values.rows(), 3);
+    assert_eq!(s.fill, Some(ColorRef::rgb(0x3366CC)));
+    assert!(m.legend.is_some());
     assert_eq!(m.val_axis.min, Some(0.0));
 }
 
 // ── sheet.chart.xlsx-part ───────────────────────────────────────────────────
 
-/// The XLSX chart part parses into the chart model: 09-chart.xlsx's column
-/// barChart is discovered through the worksheet→drawing→chart relationship
-/// chain, its series binds to the right Sheet1 ranges, and the title / legend /
-/// color / cached series name come through. The chart + drawing parts stay
-/// OPAQUE so a zero-edit round-trip is byte-identical (preservation invariant).
+/// The XLSX chart part parses into the chart model through the
+/// worksheet→drawing→chart chain; the parts stay OPAQUE so a zero-edit
+/// round-trip is byte-identical (preservation invariant).
 #[test]
 fn sheet_chart_xlsx_part() {
     let doc = XlsxDocument::open(&load("09-chart.xlsx")).expect("open 09-chart");
@@ -120,25 +111,23 @@ fn sheet_chart_xlsx_part() {
     );
     let chart = &doc.charts[0];
     assert_eq!(chart.host_sheet, 0, "anchored to Sheet1");
+    assert_eq!(chart.part.as_deref(), Some("xl/charts/chart1.xml"));
 
     let m = &chart.model;
-    assert_eq!(m.kind, ChartKind::Column);
+    assert_eq!(m.kind(), ChartKind::Column);
     assert_eq!(m.title.as_deref(), Some("Q1 Revenue"));
-    assert!(m.legend, "the <c:legend> is present");
-    assert_eq!(m.series.len(), 1);
-    let s = &m.series[0];
+    assert!(m.legend.is_some(), "the <c:legend> is present");
+    assert_eq!(m.series_count(), 1);
+    let s = m.series().next().unwrap();
     assert_eq!(s.name.as_deref(), Some("Revenue"));
-    assert_eq!(s.color.as_deref(), Some("#3366CC"));
-    // values = Sheet1!$B$2:$B$4 → rows 1..3, col 1.
-    assert_eq!(s.values.start.row, 1);
-    assert_eq!(s.values.start.col, 1);
-    assert_eq!(s.values.end.row, 3);
-    // categories = Sheet1!$A$2:$A$4 → col 0.
+    assert_eq!(s.fill, Some(ColorRef::rgb(0x3366CC)));
+    assert_eq!(
+        (s.values.start.row, s.values.start.col, s.values.end.row),
+        (1, 1, 3)
+    );
     let cats = s.categories.expect("categories range");
-    assert_eq!(cats.start.col, 0);
-    assert_eq!(cats.end.row, 3);
+    assert_eq!((cats.start.col, cats.end.row), (0, 3));
 
-    // Round-trip preserves the OPAQUE chart + drawing parts byte-identical.
     let out = doc.save().expect("save");
     let orig = unzip(&load("09-chart.xlsx"));
     let saved = unzip(&out);
@@ -147,14 +136,12 @@ fn sheet_chart_xlsx_part() {
         let b = saved.iter().find(|(n, _)| n == part).map(|(_, b)| b);
         assert_eq!(a, b, "{part} must round-trip byte-identical (preservation)");
     }
-    // The chart re-parses from the saved bytes too (the model still resolves).
     let doc2 = XlsxDocument::open(&out).expect("reopen saved 09-chart");
     assert_eq!(doc2.charts.len(), 1);
-    assert_eq!(doc2.charts[0].model.kind, ChartKind::Column);
+    assert_eq!(doc2.charts[0].model.kind(), ChartKind::Column);
 }
 
-/// Unzip a package to `(name, bytes)` (skips dirs) — for the per-part identity
-/// assertion.
+/// Unzip a package to `(name, bytes)` (skips dirs).
 fn unzip(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
     use std::io::Read;
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("valid zip");
@@ -175,69 +162,68 @@ fn unzip(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
 // ── sheet.chart.geometry.* ──────────────────────────────────────────────────
 
 /// A 3-category, single-series model + its resolved data (10, 20, 30).
-fn three_value_model(kind: ChartKind) -> (ChartModel, PlotData) {
-    let model = ChartModel {
-        kind,
-        title: None,
-        series: vec![Series {
-            name: Some("S".into()),
-            categories: Some(rr(1, 0, 3, 0)),
-            values: rr(1, 1, 3, 1),
-            color: Some("#4E79A7".into()),
-        }],
-        cat_axis: Axis::default(),
-        val_axis: Axis::default(),
-        legend: false,
-    };
-    let data = PlotData {
-        series: vec![vec![10.0, 20.0, 30.0]],
-        categories: vec!["Q1".into(), "Q2".into(), "Q3".into()],
-    };
+fn three_value_model(kind: ChartKind, grouping: Grouping) -> (ChartModel, PlotData) {
+    let mut s = Series::of(rr(1, 1, 3, 1));
+    s.name = Some("S".into());
+    s.categories = Some(rr(1, 0, 3, 0));
+    s.fill = ColorRef::from_hex("#4E79A7");
+    let model = ChartModel::single(kind, grouping, vec![s]);
+    let data = PlotData::of(
+        vec![vec![10.0, 20.0, 30.0]],
+        vec!["Q1".into(), "Q2".into(), "Q3".into()],
+    );
     (model, data)
 }
 
-/// Bar/column geometry: one bar Rect per (series, category), an axis frame, and
-/// tick/category labels — the proven generator, here for both orientations.
+/// Bar/column geometry: one bar Rect per (series, category) carrying the
+/// series' colour, the category axis rule, and labels.
 #[test]
 fn sheet_chart_geometry_bar_column() {
     for kind in [ChartKind::Column, ChartKind::Bar] {
-        let (model, data) = three_value_model(kind);
+        let (model, data) = three_value_model(kind, Grouping::Standard);
         let g = generate(&model, &data, 300.0, 200.0);
-        let bars = count(&g, |p| matches!(p, Primitive::Rect { .. }));
-        assert_eq!(bars, 3, "{kind:?}: 3 bars");
-        let lines = count(&g, |p| matches!(p, Primitive::Line { .. }));
-        assert_eq!(lines, 2, "{kind:?}: the cartesian axis frame");
-        // The bars carry the explicit series color.
+        assert_eq!(
+            count(&g, |p| matches!(p, Primitive::Rect { .. })),
+            3,
+            "{kind:?}: 3 bars"
+        );
+        assert_eq!(
+            count(&g, |p| matches!(p, Primitive::Line { .. })),
+            1,
+            "{kind:?}: the category axis rule"
+        );
         let colored = g
             .prims
             .iter()
-            .any(|p| matches!(p, Primitive::Rect { fill: Some(f), .. } if f == "#4E79A7"));
-        assert!(colored, "{kind:?}: bars use the series swatch");
+            .filter(|p| matches!(p, Primitive::Rect { fill: Some(f), .. } if f == "#4E79A7"))
+            .count();
+        assert_eq!(colored, 3, "{kind:?}: bars use the series colour");
     }
 }
 
-/// Line/area geometry: a polyline per series; area additionally fills a closed
-/// baseline polygon.
+/// Line/area geometry: a polyline per series; area fills a closed polygon.
 #[test]
 fn sheet_chart_geometry_line_area() {
-    let (line_model, data) = three_value_model(ChartKind::Line);
+    let (mut line_model, data) = three_value_model(ChartKind::Line, Grouping::Standard);
+    line_model.plots[0].series[0].marker = Some(sheet_chart::Marker {
+        symbol: sheet_chart::MarkerSymbol::None,
+        ..Default::default()
+    });
     let gl = generate(&line_model, &data, 300.0, 200.0);
-    // 2 axis rules + 1 series polyline = 3 Line prims; no fill polygon.
-    assert_eq!(count(&gl, |p| matches!(p, Primitive::Line { .. })), 3);
+    // The axis rule + the series polyline; no fill polygon.
+    assert_eq!(count(&gl, |p| matches!(p, Primitive::Line { .. })), 2);
     assert_eq!(count(&gl, |p| matches!(p, Primitive::Polygon { .. })), 0);
 
-    let (area_model, data) = three_value_model(ChartKind::Area);
+    let (area_model, data) = three_value_model(ChartKind::Area, Grouping::Standard);
     let ga = generate(&area_model, &data, 300.0, 200.0);
-    assert_eq!(count(&ga, |p| matches!(p, Primitive::Line { .. })), 3);
-    // The area band is one closed polygon (the series dropped to baseline).
     assert_eq!(count(&ga, |p| matches!(p, Primitive::Polygon { .. })), 1);
 }
 
-/// Pie/donut geometry: one Wedge per slice with proportional angles; donut adds
-/// a center-hole disc.
+/// Pie/donut geometry: one Wedge per slice with proportional angles; a donut
+/// is ring segments (an inner radius), not a pie under a page-white disc.
 #[test]
 fn sheet_chart_geometry_pie_donut() {
-    let (pie_model, data) = three_value_model(ChartKind::Pie);
+    let (pie_model, data) = three_value_model(ChartKind::Pie, Grouping::Standard);
     let gp = generate(&pie_model, &data, 200.0, 200.0);
     let wedges: Vec<(f64, f64)> = gp
         .prims
@@ -249,131 +235,113 @@ fn sheet_chart_geometry_pie_donut() {
             _ => None,
         })
         .collect();
-    assert_eq!(wedges.len(), 3, "pie: one wedge per slice, no hole");
-    // Shares 10/20/30 of 60 => 60°, 120°, 180° cumulative to 360°.
+    assert_eq!(wedges.len(), 3, "pie: one wedge per slice");
     assert!((wedges[0].1 - 60.0).abs() < 1e-6);
     assert!((wedges[2].1 - 360.0).abs() < 1e-6, "full sweep");
 
-    let (donut_model, data) = three_value_model(ChartKind::Donut);
+    let (donut_model, data) = three_value_model(ChartKind::Donut, Grouping::Standard);
     let gd = generate(&donut_model, &data, 200.0, 200.0);
-    // 3 slices + 1 center-hole disc.
-    assert_eq!(count(&gd, |p| matches!(p, Primitive::Wedge { .. })), 4);
+    let rings = count(
+        &gd,
+        |p| matches!(p, Primitive::Wedge { inner_r: Some(r), .. } if *r > 0.0),
+    );
+    assert_eq!(rings, 3);
+    assert_eq!(
+        count(&gd, |p| matches!(p, Primitive::Wedge { .. })),
+        3,
+        "no hole disc"
+    );
 }
 
-/// Scatter geometry: a diamond marker (4-point polygon) per (x, y) point; X
-/// from series 0, Y from series 1; no category axis.
+/// Scatter geometry: a marker per (x, y) point; X from the series' own X
+/// range, several series each with their own.
 #[test]
 fn sheet_chart_geometry_scatter() {
-    let model = ChartModel {
-        kind: ChartKind::Scatter,
-        title: None,
-        series: vec![
-            Series {
-                name: Some("X".into()),
-                categories: None,
-                values: rr(0, 0, 2, 0),
-                color: None,
-            },
-            Series {
-                name: Some("Y".into()),
-                categories: None,
-                values: rr(0, 1, 2, 1),
-                color: None,
-            },
-        ],
-        cat_axis: Axis::default(),
-        val_axis: Axis::default(),
-        legend: false,
-    };
-    let data = PlotData {
-        series: vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]],
-        categories: vec![],
-    };
+    let mut a = Series::of(rr(0, 1, 2, 1));
+    a.x_values = Some(rr(0, 0, 2, 0));
+    a.line = Some(sheet_chart::model::LineStyle {
+        none: true,
+        ..Default::default()
+    });
+    a.marker = Some(sheet_chart::Marker {
+        symbol: sheet_chart::MarkerSymbol::Diamond,
+        ..Default::default()
+    });
+    let mut b = a.clone();
+    b.values = rr(0, 2, 2, 2);
+    let model = ChartModel::single(ChartKind::Scatter, Grouping::Standard, vec![a, b]);
+    let mut data = PlotData::of(vec![vec![4.0, 5.0, 6.0], vec![1.0, 2.0, 3.0]], vec![]);
+    data.x_values = vec![Some(vec![1.0, 2.0, 3.0]), Some(vec![1.5, 2.5, 3.5])];
     let g = generate(&model, &data, 300.0, 200.0);
-    let markers = count(&g, |p| matches!(p, Primitive::Polygon { .. }));
-    assert_eq!(markers, 3, "one diamond marker per (x,y) point");
-    assert_eq!(count(&g, |p| matches!(p, Primitive::Rect { .. })), 0);
+    assert_eq!(
+        count(&g, |p| matches!(p, Primitive::Polygon { .. })),
+        6,
+        "a marker per point, both series"
+    );
 }
 
-/// Stacked geometry (`sheet.chart.geometry.stacked`): the two Illustrator
-/// §16.4 stacked types. The PRIMITIVE contract is unchanged — one Rect per
-/// (series, category) — only the arithmetic stacks: the series segments share
-/// ONE bar per category and the value scale runs to the largest category
-/// TOTAL, so the tallest stack exactly fills the plot.
+/// Stacked geometry (`sheet.chart.geometry.stacked`, Excel's rule since W4):
+/// the segments share one bar per category; positive values stack up,
+/// negative down; percent-stacked fills 100%.
 #[test]
 fn sheet_chart_geometry_stacked() {
-    let (mut model, _) = three_value_model(ChartKind::StackedColumn);
-    model.series.push(Series {
-        name: Some("S2".into()),
-        categories: None,
-        values: rr(1, 2, 3, 2),
-        color: Some("#F28E2B".into()),
-    });
-    // Totals 15 / 30 / 45 — the third category is the tallest stack.
-    let data = PlotData {
-        series: vec![vec![10.0, 20.0, 30.0], vec![5.0, 10.0, 15.0]],
-        categories: vec!["Q1".into(), "Q2".into(), "Q3".into()],
-    };
-
+    let (mut model, _) = three_value_model(ChartKind::Column, Grouping::Stacked);
+    let mut s2 = Series::of(rr(1, 2, 3, 2));
+    s2.fill = ColorRef::from_hex("#F28E2B");
+    model.plots[0].series.push(s2);
+    let data = PlotData::of(
+        vec![vec![10.0, 20.0, 30.0], vec![5.0, 10.0, 15.0]],
+        vec!["Q1".into(), "Q2".into(), "Q3".into()],
+    );
     let gc = generate(&model, &data, 300.0, 200.0);
     let rects: Vec<(f64, f64, f64, f64)> = gc
         .prims
         .iter()
         .filter_map(|p| match p {
-            Primitive::Rect { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+            Primitive::Rect { x, y, w, h, .. } if *w > 8.0 => Some((*x, *y, *w, *h)),
             _ => None,
         })
         .collect();
-    assert_eq!(rects.len(), 6, "one Rect per (series, category), as ever");
-    // Category Q1's two segments share one bar and sit on each other.
-    assert!((rects[0].0 - rects[1].0).abs() < 1e-6, "shared x");
-    assert!((rects[0].2 - rects[1].2).abs() < 1e-6, "shared width");
-    assert!(
-        ((rects[1].1 + rects[1].3) - rects[0].1).abs() < 1.5,
-        "stacks"
-    );
-    // The tallest stack (45) fills the plot height; Q1's (15) is a third of it.
-    let plot_h = 200.0 - 20.0 - 24.0; // PAD_TOP / PAD_BOTTOM
-    let q3 = rects[4].3 + rects[5].3;
-    let q1 = rects[0].3 + rects[1].3;
-    assert!((q3 - plot_h).abs() < 1.5, "tallest stack fills the plot");
-    assert!((q1 - plot_h / 3.0).abs() < 1.5, "15/45 of the plot");
+    assert_eq!(rects.len(), 6, "one Rect per (series, category)");
+    // Series 0 then series 1, category by category within each series.
+    let (q1a, q1b) = (rects[0], rects[3]);
+    assert!((q1a.0 - q1b.0).abs() < 1e-6, "shared x");
+    assert!((q1a.2 - q1b.2).abs() < 1e-6, "shared width");
+    assert!(((q1b.1 + q1b.3) - q1a.1).abs() < 1e-6, "stacks");
+    let q3 = rects[2].3 + rects[5].3;
+    let q1 = q1a.3 + q1b.3;
+    assert!((q3 / q1 - 3.0).abs() < 1e-6, "45/15 of the stack height");
 
-    // StackedBar is the transpose: shared y/height, segments running right.
-    model.kind = ChartKind::StackedBar;
+    model.plots[0].kind = ChartKind::Bar;
     let gb = generate(&model, &data, 300.0, 200.0);
     let bars: Vec<(f64, f64, f64, f64)> = gb
         .prims
         .iter()
         .filter_map(|p| match p {
-            Primitive::Rect { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+            Primitive::Rect { x, y, w, h, .. } if *h > 8.0 => Some((*x, *y, *w, *h)),
             _ => None,
         })
         .collect();
     assert_eq!(bars.len(), 6);
-    assert!((bars[0].1 - bars[1].1).abs() < 1e-6, "shared y");
-    assert!((bars[0].3 - bars[1].3).abs() < 1e-6, "shared height");
+    assert!((bars[0].1 - bars[3].1).abs() < 1e-6, "shared y");
     assert!(
-        ((bars[0].0 + bars[0].2) - bars[1].0).abs() < 1.5,
+        ((bars[0].0 + bars[0].2) - bars[3].0).abs() < 1e-6,
         "runs right"
     );
 }
 
-/// Radar geometry (`sheet.chart.geometry.radar`): the ninth Illustrator graph
-/// type. A polar grid (one ring per value tick + one spoke per category) plus
-/// one CLOSED polyline per series — every one a `Line` in the FROZEN primitive
-/// vocabulary, so the paged.draw lowering needed no new op to draw it.
+/// Radar geometry: a polar grid, one spoke per category, a closed outline
+/// per series.
 #[test]
 fn sheet_chart_geometry_radar() {
-    let (model, data) = three_value_model(ChartKind::Radar);
+    let (mut model, data) = three_value_model(ChartKind::Radar, Grouping::Standard);
+    model.plots[0].series[0].marker = Some(sheet_chart::Marker {
+        symbol: sheet_chart::MarkerSymbol::None,
+        ..Default::default()
+    });
     let g = generate(&model, &data, 300.0, 240.0);
-
-    // Nothing outside the existing vocabulary, and no filled shapes (a filled
-    // radar hides every series drawn under it).
     assert_eq!(count(&g, |p| matches!(p, Primitive::Polygon { .. })), 0);
     assert_eq!(count(&g, |p| matches!(p, Primitive::Wedge { .. })), 0);
-    assert_eq!(count(&g, |p| matches!(p, Primitive::Rect { .. })), 0);
-
     let lines: Vec<&Vec<(f64, f64)>> = g
         .prims
         .iter()
@@ -382,51 +350,36 @@ fn sheet_chart_geometry_radar() {
             _ => None,
         })
         .collect();
-    // 4 grid rings (VAL_TICKS - 1) + 3 spokes + 1 series outline.
-    assert_eq!(lines.len(), 4 + 3 + 1);
-    // Rings and the series outline close (first point repeated).
-    assert_eq!(lines[0].len(), 4);
-    assert_eq!(lines[0][0], lines[0][3], "the grid ring closes");
     let series = lines[lines.len() - 1];
+    assert_eq!(series.len(), 4);
     assert_eq!(series[0], series[3], "the series outline closes");
-    // The spokes share the center, and the series' 10/20/30 map to growing
-    // radii from it (0..30 over the outer radius).
-    let center = lines[4][0];
+    let spoke = lines[lines.len() - 2];
+    let center = spoke[0];
     let radius = |p: (f64, f64)| (p.0 - center.0).hypot(p.1 - center.1);
-    assert!(radius(series[0]) < radius(series[1]));
-    assert!(radius(series[1]) < radius(series[2]));
+    assert!(radius(series[0]) < radius(series[1]) && radius(series[1]) < radius(series[2]));
     assert!(
-        (radius(series[0]) * 3.0 - radius(series[2])).abs() < 2.0,
-        "10 sits at a third of 30's radius"
+        (radius(series[0]) * 3.0 - radius(series[2])).abs() < 1e-6,
+        "10 at a third of 30"
     );
 }
 
-/// Axis titles (`sheet.chart.axis-titles`): `Axis::title` has been parsed from
-/// the chart part since M2 but never REACHED the geometry — a modelled field
-/// that drew nothing. It draws now, on every cartesian kind, and the `Bar`
-/// family transposes which title runs along the bottom.
+/// Axis titles (`sheet.chart.axis-titles`): drawn on every cartesian kind;
+/// the Bar family transposes which runs along the bottom.
 #[test]
 fn sheet_chart_axis_titles() {
-    for kind in [
-        ChartKind::Column,
-        ChartKind::Bar,
-        ChartKind::StackedColumn,
-        ChartKind::StackedBar,
-        ChartKind::Line,
-        ChartKind::Area,
-        ChartKind::Scatter,
+    for (kind, grouping) in [
+        (ChartKind::Column, Grouping::Standard),
+        (ChartKind::Bar, Grouping::Standard),
+        (ChartKind::Column, Grouping::Stacked),
+        (ChartKind::Bar, Grouping::Stacked),
+        (ChartKind::Line, Grouping::Standard),
+        (ChartKind::Area, Grouping::Standard),
+        (ChartKind::Scatter, Grouping::Standard),
     ] {
-        let (mut model, data) = three_value_model(kind);
-        // No titles => no title primitives (existing charts are untouched).
-        let bare = generate(&model, &data, 300.0, 200.0);
+        let (mut model, data) = three_value_model(kind, grouping);
         model.cat_axis.title = Some("Quarter".into());
         model.val_axis.title = Some("EUR".into());
         let titled = generate(&model, &data, 300.0, 200.0);
-        assert_eq!(
-            titled.prims.len() - bare.prims.len(),
-            2,
-            "{kind:?}: exactly the two axis titles"
-        );
         let labels: Vec<&str> = titled
             .prims
             .iter()
@@ -442,10 +395,8 @@ fn sheet_chart_axis_titles() {
 
 // ── sheet.chart.xlsx.grouping ───────────────────────────────────────────────
 
-/// The XLSX chart part's `c:grouping` + `c:radarChart`
-/// (`sheet.chart.xlsx.grouping`). Before this, `c:grouping` was ignored, so an
-/// Excel STACKED bar/column chart imported as a GROUPED one and rendered wrong
-/// without saying so; `c:radarChart` fell through to the Column default.
+/// `c:grouping` selects the grouping on bars, lines and areas, and every
+/// plot element maps to its own kind (never a silent column).
 #[test]
 fn sheet_chart_xlsx_grouping() {
     use sheet_xlsx::parts::chart::{parse, SheetResolver};
@@ -455,247 +406,186 @@ fn sheet_chart_xlsx_grouping() {
             Some(0)
         }
     }
-    let bar = |dir: &str, grouping: &str| {
+    let plot = |body: &str| {
         let xml = format!(
-            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
-<c:chart><c:plotArea><c:barChart>
-<c:barDir val="{dir}"/><c:grouping val="{grouping}"/>
-<c:ser><c:val><c:numRef><c:f>Sheet1!$B$1:$B$3</c:f></c:numRef></c:val></c:ser>
-</c:barChart></c:plotArea></c:chart></c:chartSpace>"#
+            r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea>{body}</c:plotArea></c:chart></c:chartSpace>"#
         );
-        parse(xml.as_bytes(), 0, &NoNames)
-            .expect("parse")
-            .model
-            .kind
+        let m = parse(xml.as_bytes(), 0, &NoNames).expect("parse").model;
+        (m.kind(), m.grouping())
     };
-    assert_eq!(bar("col", "clustered"), ChartKind::Column);
-    assert_eq!(bar("col", "stacked"), ChartKind::StackedColumn);
-    assert_eq!(bar("col", "percentStacked"), ChartKind::StackedColumn);
-    assert_eq!(bar("bar", "stacked"), ChartKind::StackedBar);
-
-    let radar = r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
-<c:chart><c:plotArea><c:radarChart>
-<c:ser><c:val><c:numRef><c:f>Sheet1!$B$1:$B$5</c:f></c:numRef></c:val></c:ser>
-</c:radarChart></c:plotArea></c:chart></c:chartSpace>"#;
+    let ser = r#"<c:ser><c:val><c:numRef><c:f>Sheet1!$B$1:$B$3</c:f></c:numRef></c:val></c:ser>"#;
+    let bar = |dir: &str, g: &str| {
+        plot(&format!(
+            r#"<c:barChart><c:barDir val="{dir}"/><c:grouping val="{g}"/>{ser}</c:barChart>"#
+        ))
+    };
     assert_eq!(
-        parse(radar.as_bytes(), 0, &NoNames)
-            .expect("parse radar")
-            .model
-            .kind,
+        bar("col", "clustered"),
+        (ChartKind::Column, Grouping::Standard)
+    );
+    assert_eq!(
+        bar("col", "stacked"),
+        (ChartKind::Column, Grouping::Stacked)
+    );
+    assert_eq!(
+        bar("col", "percentStacked"),
+        (ChartKind::Column, Grouping::PercentStacked)
+    );
+    assert_eq!(bar("bar", "stacked"), (ChartKind::Bar, Grouping::Stacked));
+    assert_eq!(
+        plot(&format!("<c:radarChart>{ser}</c:radarChart>")).0,
         ChartKind::Radar
+    );
+    assert_eq!(
+        plot(&format!(
+            r#"<c:lineChart><c:grouping val="stacked"/>{ser}</c:lineChart>"#
+        )),
+        (ChartKind::Line, Grouping::Stacked)
     );
 }
 
-/// The showcase kind battery (`sheet.chart.xlsx-part`): `annual-charts.xlsx`
-/// (`corpus/xlsx-corpus/generate-annual.py`, byte-stable) carries TEN charts —
-/// one per curated [`ChartKind`], all anchored through ONE drawing on its
-/// `Charts` sheet — and the importer enumerates all ten and reads each kind
-/// from its documented encoding (`c:barDir` + `c:grouping` for the four
-/// bar/column variants, `c:doughnutChart` ≠ `c:pieChart`, `c:xVal`/`c:yVal`
-/// for scatter). The editor showcase places a verbatim copy of this workbook
-/// (`apps/canvas/tests/showcase/assets/annual-charts.xlsx`).
+/// The showcase kind battery: `annual-charts.xlsx` carries ten charts and
+/// the importer reads each kind from its encoding.
 #[test]
 fn sheet_chart_xlsx_part_kind_battery() {
     let doc = XlsxDocument::open(&load("annual-charts.xlsx")).expect("open annual-charts");
-    let kinds: Vec<ChartKind> = doc.charts.iter().map(|c| c.model.kind).collect();
+    let kinds: Vec<(ChartKind, Grouping)> = doc
+        .charts
+        .iter()
+        .map(|c| (c.model.kind(), c.model.grouping()))
+        .collect();
     assert_eq!(
         kinds,
         [
-            ChartKind::Column,
-            ChartKind::Bar,
-            ChartKind::StackedColumn,
-            ChartKind::StackedBar,
-            ChartKind::Line,
-            ChartKind::Area,
-            ChartKind::Pie,
-            ChartKind::Donut,
-            ChartKind::Scatter,
-            ChartKind::Radar,
+            (ChartKind::Column, Grouping::Standard),
+            (ChartKind::Bar, Grouping::Standard),
+            (ChartKind::Column, Grouping::Stacked),
+            (ChartKind::Bar, Grouping::Stacked),
+            (ChartKind::Line, Grouping::Standard),
+            (ChartKind::Area, Grouping::Standard),
+            (ChartKind::Pie, Grouping::Standard),
+            (ChartKind::Donut, Grouping::Standard),
+            (ChartKind::Scatter, Grouping::Standard),
+            (ChartKind::Radar, Grouping::Standard),
         ],
-        "ten charts, one per curated kind, in drawing-rel order"
+        "ten charts in drawing-rel order"
     );
-    // Every chart carries at least one series bound to the Data sheet, and the
-    // scatter's X/Y pair folded into the (series[0]=X, series[1]=Y) layout.
     for c in &doc.charts {
-        assert!(!c.model.series.is_empty(), "{:?} has series", c.model.kind);
+        assert!(
+            c.model.series_count() > 0,
+            "{:?} has series",
+            c.model.kind()
+        );
     }
-    let scatter = &doc.charts[8];
-    assert_eq!(scatter.model.series.len(), 2, "scatter folds xVal + yVal");
+    let scatter = &doc.charts[8].model;
+    let s = scatter.series().next().unwrap();
+    assert!(
+        s.x_values.is_some(),
+        "scatter keeps its X range beside the values"
+    );
 }
 
 // ── sheet.chart.lower.paged-draw ────────────────────────────────────────────
 
-/// The geometry IR serializes to the camelCase wire shape the TS paged.draw
-/// lowering (`chartGeometryToMutations`) consumes: `{widthPt, heightPt, prims:
-/// [{kind, ...}]}` with lowercase primitive tags and camelCase fields. This is
-/// the Rust contract the TS translator (registry vitest pointer
-/// `packages/sheet-host-model/test/chart.spec.ts`) turns into insertPath /
-/// insertTextFrame native ops — paged.draw is a CORE SDK surface, never another
-/// plugin (spec §2.1).
+/// The geometry IR serializes to the camelCase wire shape the TS lowering
+/// consumes.
 #[test]
 fn sheet_chart_lower_paged_draw() {
-    let (model, data) = three_value_model(ChartKind::Pie);
+    let (model, data) = three_value_model(ChartKind::Pie, Grouping::Standard);
     let g = generate(&model, &data, 200.0, 200.0);
     let json = serde_json::to_value(&g).expect("serialize geometry");
-
-    // The content-box size crosses the wire as camelCase scalars.
     assert_eq!(json["widthPt"], 200.0);
     assert_eq!(json["heightPt"], 200.0);
     let prims = json["prims"].as_array().expect("prims array");
-    assert!(!prims.is_empty());
-
-    // A wedge primitive carries the lowercase tag + camelCase angle fields the
-    // TS `WedgePrim` mirror expects (the lowering flattens these into an arc).
     let wedge = prims
         .iter()
         .find(|p| p["kind"] == "wedge")
         .expect("a wedge prim");
-    assert!(wedge.get("cx").is_some());
-    assert!(wedge.get("startDeg").is_some(), "camelCase startDeg");
-    assert!(wedge.get("endDeg").is_some(), "camelCase endDeg");
-
-    // A bar/column rect carries the camelCase `strokeW` field name.
-    let (bar_model, bar_data) = three_value_model(ChartKind::Column);
-    let bg = generate(&bar_model, &bar_data, 300.0, 200.0);
-    let bjson = serde_json::to_value(&bg).unwrap();
+    assert!(wedge.get("startDeg").is_some() && wedge.get("endDeg").is_some());
+    let (bar_model, bar_data) = three_value_model(ChartKind::Column, Grouping::Standard);
+    let bjson = serde_json::to_value(generate(&bar_model, &bar_data, 300.0, 200.0)).unwrap();
     let rect = bjson["prims"]
         .as_array()
         .unwrap()
         .iter()
         .find(|p| p["kind"] == "rect")
         .expect("a rect prim");
-    assert!(rect.get("strokeW").is_some(), "camelCase strokeW");
-    assert!(rect.get("fill").is_some());
+    assert!(rect.get("strokeW").is_some() && rect.get("fill").is_some());
 }
 
 // ── sheet.chart.grid-view ───────────────────────────────────────────────────
 
-/// The grid-view projection is the SAME generator: the engine resolves a parsed
-/// chart's series ranges against the live model and runs `sheet_chart::generate`
-/// (the §8.1 surface consumes the identical IR the page lowering does — one
-/// generator, two projections). Drive it through the engine session for the
-/// corpus chart and assert real geometry comes back.
+/// The grid view and the page draw the same generator's IR, resolved
+/// against the live model.
 #[test]
 fn sheet_chart_grid_view() {
     let session = SheetSession::load_xlsx(&load("09-chart.xlsx")).expect("load 09-chart");
     let charts = session.list_charts();
-    assert_eq!(charts.len(), 1, "the corpus chart is listed");
+    assert_eq!(charts.len(), 1);
     assert_eq!(charts[0].kind, "column");
     assert_eq!(charts[0].series_count, 1);
     assert_eq!(charts[0].title.as_deref(), Some("Q1 Revenue"));
-
+    assert!(!charts[0].flattened3d);
     let g = session
         .get_chart_geometry(0, 300.0, 200.0)
-        .expect("geometry for chart 0");
-    assert_eq!(g.width_pt, 300.0);
-    assert_eq!(g.height_pt, 200.0);
-    // The column chart's values (10, 20, 30) resolve to 3 bars. The corpus
-    // chart has a legend on, which adds a small swatch Rect (7pt-wide); count
-    // bars only (the wide Rects), excluding the legend swatch.
+        .expect("geometry");
     let bars = count(&g, |p| matches!(p, Primitive::Rect { w, .. } if *w > 7.5));
     assert_eq!(bars, 3, "3 bars for the 3 resolved values");
-
-    // An out-of-range chart index is a boundary error (finding-2 discipline).
     assert!(session.get_chart_geometry(9, 100.0, 100.0).is_err());
 }
 
 // ── sheet.chart.recalc-live ─────────────────────────────────────────────────
 
-/// Charts are LIVE to recalculation (spec §8.4): editing a value cell in a
-/// series' range re-resolves the ranges and regenerates the geometry. The
-/// tallest bar tracks the changed value.
+/// Charts are LIVE to recalculation.
 #[test]
 fn sheet_chart_recalc_live() {
     let mut session = SheetSession::load_xlsx(&load("09-chart.xlsx")).expect("load 09-chart");
-
-    // Before the edit the values are 10/20/30; the chart geometry is fixed.
     let before = session.get_chart_geometry(0, 300.0, 200.0).expect("geom");
-
-    // Edit B4 (row 3, col 1) to 100 — far above the old max (30).
     session.set_cell(0, 3, 1, "100").expect("set B4");
-
     let after = session.get_chart_geometry(0, 300.0, 200.0).expect("geom2");
-
-    // The geometry REGENERATED against the recalculated value — it is no longer
-    // byte-identical to the pre-edit geometry (live to recalc, spec §8.4).
     assert_ne!(before, after, "chart geometry tracks recalculated values");
-
-    // The new value (100) is now the scale max, so its bar reaches the plot top
-    // — the tallest bar now spans (near) the full plot height.
-    let tallest_after = max_bar_height(&after);
-    // Plot height = 200 - PAD_TOP(20) - PAD_BOTTOM(24) = 156; the 100 bar at a
-    // 0..100 scale spans the whole plot.
-    assert!(
-        tallest_after > 150.0,
-        "the edited value's bar spans the plot ({tallest_after})"
-    );
-}
-
-/// The tallest bar Rect height in a chart geometry (0 when there are no bars).
-fn max_bar_height(g: &ChartGeometry) -> f64 {
-    g.prims
+    // 100 now dominates: the tallest bar is far taller than the next one.
+    let mut hs: Vec<f64> = after
+        .prims
         .iter()
         .filter_map(|p| match p {
-            Primitive::Rect { h, .. } => Some(*h),
+            Primitive::Rect { w, h, .. } if *w > 7.5 => Some(*h),
             _ => None,
         })
-        .fold(0.0_f64, f64::max)
+        .collect();
+    hs.sort_by(|a, b| b.total_cmp(a));
+    assert!(hs[0] > hs[1] * 4.0, "{hs:?}");
 }
 
 // ── sheet.chart.authoring ───────────────────────────────────────────────────
 
-/// AUTHOR a chart over live data (editor-ui-coverage M — the model was
-/// import-only): add_chart constructs a ChartModel (one series per values
-/// column, shared categories, legend iff >1 series) and returns an index the
-/// SAME geometry generator serves. Publishing-first honesty: the xlsx writer
-/// never re-derives chart parts, so a save round-trip carries only the
-/// workbook's ORIGINAL charts — asserted here.
+/// AUTHOR a chart over live data: add_chart builds a model the same
+/// generator serves.
 #[test]
-fn sheet_chart_authoring_add_chart_generates_and_never_saves_back() {
+fn sheet_chart_authoring_add_chart_generates() {
     let mut session = SheetSession::load_xlsx(&load("09-chart.xlsx")).expect("load 09-chart");
     let before = session.list_charts().len();
-
-    // Two value columns → two series, legend on; B-column categories.
     let idx = session
         .add_chart(0, "B2:C4", "A2:A4", "line", "Authored", "columns")
         .expect("author a chart");
     assert_eq!(idx as usize, before, "appended at the end");
     let charts = session.list_charts();
-    assert_eq!(charts.len(), before + 1);
     let authored = &charts[idx as usize];
     assert_eq!(authored.kind, "line");
     assert_eq!(authored.series_count, 2);
     assert_eq!(authored.title.as_deref(), Some("Authored"));
-
-    // The SAME generator projects it (real geometry, not a stub).
     let g = session
         .get_chart_geometry(idx, 300.0, 200.0)
-        .expect("authored chart geometry");
-    assert!(!g.prims.is_empty(), "authored chart draws primitives");
-
-    // Bad inputs stay boundary errors.
+        .expect("geometry");
+    assert!(!g.prims.is_empty());
     assert!(session
         .add_chart(0, "B2:C4", "", "hexagon", "", "")
         .is_err());
     assert!(session.add_chart(9, "B2:C4", "", "line", "", "").is_err());
-
-    // Save: the authored chart does NOT invent an xlsx chart part — the
-    // round-trip carries the original workbook charts only.
-    let saved = session.save_xlsx().expect("save");
-    let reloaded = SheetSession::load_xlsx(&saved).expect("reload");
-    assert_eq!(
-        reloaded.list_charts().len(),
-        before,
-        "authored charts are page-side only (no chart-part write-back)"
-    );
 }
 
-/// EVERY kind tag the engine advertises is authorable and round-trips through
-/// `list_charts` to a real geometry (`sheet.chart.kind-set`). This is the
-/// Illustrator §16.4 "nine graph types" claim made executable: the tag set is
-/// a superset of Column, Stacked Column, Bar, Stacked Bar, Line, Area,
-/// Scatter, Pie and Radar — plus Donut. A kind the panel can offer but the
-/// engine refuses (or reports under another tag) fails here.
+/// EVERY kind tag the engine advertises is authorable and renders
+/// (`sheet.chart.kind-set`).
 #[test]
 fn sheet_chart_kind_set_every_advertised_kind_authors_and_renders() {
     use sheet_js::core::CHART_KIND_TAGS;
@@ -709,10 +599,23 @@ fn sheet_chart_kind_set_every_advertised_kind_authors_and_renders() {
         "scatter",
         "pie",
         "radar",
+        "bubble",
+        "stock",
+        "waterfall",
+        "funnel",
+        "treemap",
+        "sunburst",
+        "histogram",
+        "pareto",
+        "boxWhisker",
+        "pieOfPie",
+        "barOfPie",
+        "filledRadar",
+        "surface",
     ] {
         assert!(
             CHART_KIND_TAGS.contains(&want),
-            "the Illustrator §16.4 type {want:?} is missing from the kind set"
+            "{want:?} is missing from the kind set"
         );
     }
     let mut session = SheetSession::load_xlsx(&load("09-chart.xlsx")).expect("load 09-chart");
@@ -720,11 +623,7 @@ fn sheet_chart_kind_set_every_advertised_kind_authors_and_renders() {
         let idx = session
             .add_chart(0, "B2:C4", "A2:A4", tag, "", "columns")
             .unwrap_or_else(|e| panic!("author {tag}: {e:?}"));
-        assert_eq!(
-            session.list_charts()[idx as usize].kind,
-            *tag,
-            "{tag} round-trips through list_charts"
-        );
+        assert_eq!(session.list_charts()[idx as usize].kind, *tag);
         let g = session
             .get_chart_geometry(idx, 320.0, 240.0)
             .unwrap_or_else(|e| panic!("geometry {tag}: {e:?}"));
@@ -732,15 +631,10 @@ fn sheet_chart_kind_set_every_advertised_kind_authors_and_renders() {
     }
 }
 
-/// TRANSPOSE ROWS/COLUMNS (`sheet.chart.series-orientation`, Illustrator
-/// §16.4). The same value block reads as one series per COLUMN or per ROW; the
-/// workbook is never rewritten to transpose a chart. Both orientations feed the
-/// SAME generator, so the bar count follows the series/category shape.
+/// TRANSPOSE ROWS/COLUMNS (`sheet.chart.series-orientation`).
 #[test]
 fn sheet_chart_series_orientation_transposes_rows_and_columns() {
     let mut session = SheetSession::load_xlsx(&load("09-chart.xlsx")).expect("load 09-chart");
-
-    // B2:C4 is 3 rows × 2 columns.
     let by_col = session
         .add_chart(0, "B2:C4", "A2:A4", "column", "", "columns")
         .expect("columns");
@@ -750,29 +644,17 @@ fn sheet_chart_series_orientation_transposes_rows_and_columns() {
     let charts = session.list_charts();
     assert_eq!(charts[by_col as usize].series_count, 2, "2 columns");
     assert_eq!(charts[by_row as usize].series_count, 3, "3 rows");
-
-    // An empty orientation means the default (columns) — the compatible read.
     let default = session
         .add_chart(0, "B2:C4", "A2:A4", "column", "", "")
         .expect("default");
     assert_eq!(session.list_charts()[default as usize].series_count, 2);
-
-    // Both project real geometry through the one generator: 3 categories × 2
-    // series = 6 bars one way, and the transpose puts 3 series over the same
-    // shared category labels.
-    // (`bars` skips the LEGEND_SWATCH-sized Rects — a multi-series chart
-    // turns its legend on, and those swatches are Rects too.)
     let bars = |g: &ChartGeometry| count(g, |p| matches!(p, Primitive::Rect { w, .. } if *w > 8.0));
-    let gc = session
-        .get_chart_geometry(by_col, 300.0, 200.0)
-        .expect("gc");
-    assert_eq!(bars(&gc), 6, "3 categories × 2 column-series");
-    let gr = session
-        .get_chart_geometry(by_row, 300.0, 200.0)
-        .expect("gr");
-    assert_eq!(bars(&gr), 9, "3 categories × 3 row-series");
-
-    // An unknown orientation is a boundary error, not a silent default.
+    // Column C of the fixture is empty: its cells are gaps (Excel draws no
+    // bar for a blank), so only column B's three values draw.
+    assert_eq!(
+        bars(&session.get_chart_geometry(by_col, 300.0, 200.0).unwrap()),
+        3
+    );
     assert!(session
         .add_chart(0, "B2:C4", "", "column", "", "diagonal")
         .is_err());

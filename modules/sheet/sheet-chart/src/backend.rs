@@ -168,6 +168,8 @@ impl DrawingBackend for GeomBackend {
             pts: vec![(from.0 as f64, from.1 as f64), (to.0 as f64, to.1 as f64)],
             stroke: hex(style.color()),
             stroke_w: style.stroke_width() as f64,
+            stroke_swatch_ref: None,
+            dash: None,
         });
         Ok(())
     }
@@ -200,6 +202,8 @@ impl DrawingBackend for GeomBackend {
             fill: fillc,
             stroke: strokec,
             stroke_w,
+            fill_swatch_ref: None,
+            stroke_swatch_ref: None,
         });
         Ok(())
     }
@@ -220,6 +224,8 @@ impl DrawingBackend for GeomBackend {
                 pts,
                 stroke: hex(style.color()),
                 stroke_w: style.stroke_width() as f64,
+                stroke_swatch_ref: None,
+                dash: None,
             });
         }
         Ok(())
@@ -242,6 +248,8 @@ impl DrawingBackend for GeomBackend {
                 fill: Some(hex(style.color())),
                 stroke: None,
                 stroke_w: 0.0,
+                fill_swatch_ref: None,
+                stroke_swatch_ref: None,
             });
         }
         Ok(())
@@ -280,6 +288,8 @@ impl DrawingBackend for GeomBackend {
             } else {
                 style.stroke_width() as f64
             },
+            fill_swatch_ref: None,
+            stroke_swatch_ref: None,
         });
         Ok(())
     }
@@ -295,13 +305,13 @@ impl DrawingBackend for GeomBackend {
         if style.color().alpha == 0.0 || text.is_empty() {
             return Ok(());
         }
-        self.sink.borrow_mut().push(Primitive::Text {
-            x: pos.0 as f64,
-            y: pos.1 as f64,
-            s: text.to_string(),
-            size_pt: style.size(),
-            anchor: anchor_of(style),
-        });
+        self.sink.borrow_mut().push(Primitive::text(
+            pos.0 as f64,
+            pos.1 as f64,
+            text.to_string(),
+            style.size(),
+            anchor_of(style),
+        ));
         Ok(())
     }
 

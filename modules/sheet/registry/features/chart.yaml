@@ -54,7 +54,11 @@
 
 - id: sheet.chart.geometry.line-area
   title: "Geometry: line/area — polyline series + area fill polygons over the cartesian frame"
-  ruling: "Line emits a Line polyline per series (no markers — publishing-clean); Area adds a closed Polygon dropped to the value-axis baseline (sheet-chart/src/geometry.rs::generate_line_area)."
+  ruling: >
+    Line emits a Line polyline per series with Excel's markers (automatic
+    symbols unless the series says none; authored lines have none); Area adds
+    a closed Polygon to the crossing value. Stacked and percent-stacked lines
+    and areas accumulate in series order (W4, ADR 518).
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
@@ -62,7 +66,12 @@
 
 - id: sheet.chart.geometry.pie-donut
   title: "Geometry: pie/donut — Wedge primitives (donut = pie with a center hole)"
-  ruling: "One Wedge per slice with angles proportional to each value's MAGNITUDE share of the total, clockwise from 12 o'clock. Donut: the frozen Wedge carries a single radius, so the ring is self-describing — full wedges PLUS a final page-colored center disc (sheet-chart/src/geometry.rs::generate_pie); both projections render it identically from the primitive list."
+  ruling: >
+    One Wedge per slice with angles proportional to each value's magnitude
+    share, clockwise from the first-slice angle. A doughnut draws one ring per
+    series as ring segments (the Wedge's optional `innerR`), no longer a pie
+    under a page-white disc. A pie draws its first series, as Excel does
+    (ruling sheet.chart.kinds.pie-series, ADR 518).
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
@@ -70,7 +79,10 @@
 
 - id: sheet.chart.geometry.scatter
   title: "Geometry: scatter — point markers in (x,y) value space (no category axis)"
-  ruling: "A diamond Polygon marker per point; series 0 supplies X, series 1 Y (the ECMA c:scatterChart xVal/yVal pairing); a lone series plots index-vs-value (sheet-chart/src/geometry.rs::generate_scatter)."
+  ruling: >
+    A marker per point in (x, y) value space; each series carries its own X
+    range (c:xVal), several series per chart, lines unless the series' line is
+    none; a series without X plots 1, 2, 3… (ADR 518).
   status: implemented
   provenance: ["spec §8.4", "ECMA-376 §21.2 (c:scatterChart)", "sheet-chart/src/geometry.rs"]
   tests:
@@ -79,16 +91,11 @@
 - id: sheet.chart.geometry.stacked
   title: "Geometry: stacked column / stacked bar — segments share one bar per category over a totals-based value scale"
   ruling: >
-    The PRIMITIVE contract is unchanged — still one Rect per (series,
-    category); only the arithmetic stacks. A stacked chart draws ONE
-    full-width bar per category and each series' segment sits on the running
-    total, and the value scale runs to the largest category TOTAL (not the
-    largest single value) so the tallest stack exactly fills the plot. A
-    segment whose value falls below the value-axis floor contributes NO height
-    and nothing to the total — Excel stacks a negative downward; the
-    publishing reading (and the unstacked generators' own clamp) is that a
-    sub-floor bar has no height. An explicit, provenanced adoption, not an
-    accident (spec §3).
+    Excel's rule since W4 (ADR 518): the segments share one bar per category;
+    positive values stack upward and negative values downward on separate
+    running totals; percent-stacked divides each category by the sum of its
+    magnitudes on a 0–100% axis. (Before W4 a sub-floor segment had no height;
+    that ruling is superseded.)
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (Stacked Column / Stacked Bar)", "spec §8.4", "sheet-chart/src/geometry.rs::generate_column / generate_bar"]
   tests:
@@ -134,15 +141,10 @@
 - id: sheet.chart.xlsx.grouping
   title: XLSX chart part — c:grouping selects the stacked kind; c:radarChart parses
   ruling: >
-    `c:grouping` was IGNORED, so an Excel stacked bar/column chart imported as
-    a GROUPED one and rendered wrong without saying so, and `c:radarChart` fell
-    through to the Column default. Both are read now. `percentStacked` reads as
-    `stacked`: the segment proportions are right, the axis is not normalised to
-    100% — an honest, labelled approximation, not a claim. `c:grouping` on a
-    LINE or AREA chart stays ignored (the curated set has no stacked line/area
-    kind), so those render unstacked — labelled here, never silently. The part
-    itself stays an OPAQUE OPC part, so the preservation invariant is untouched:
-    a zero-edit round-trip is still byte-identical.
+    `c:grouping` selects the grouping on bar, line and area plots (standard,
+    stacked, percent-stacked — all drawn as such since W4, ADR 518), and every
+    plot element maps to its own kind (sheet.chart.kinds). The part stays
+    opaque, so a zero-edit round-trip is byte-identical.
   status: implemented
   provenance: ["ECMA-376 §21.2.2.78 (c:grouping), §21.2.2.153 (c:radarChart)", "spec §8.4, §10.2", "sheet-xlsx/src/parts/chart.rs"]
   tests:
@@ -152,12 +154,12 @@
   title: The advertised chart-kind set is a superset of Illustrator's nine graph types
   ruling: >
     ONE list (`sheet_js::core::CHART_KIND_TAGS`) is the tag vocabulary the
-    parser, the printer and the panel all read, so a kind can never be offered
-    that the engine refuses or reported under a tag `add_chart` will not take.
-    The set is column, stackedColumn, bar, stackedBar, line, area, scatter,
-    pie, donut, radar — Illustrator §16.4's nine plus donut. The test authors
-    EVERY advertised tag against a real workbook and renders it, so the "nine
-    graph types" claim is executable rather than prose.
+    parser, the printer and the panel all read: one tag per kind and grouping
+    (column, stackedColumn, percentStackedColumn, the same for bar, line and
+    area, then scatter, bubble, pie, donut, pieOfPie, barOfPie, radar,
+    filledRadar, stock, surface, waterfall, funnel, treemap, sunburst,
+    histogram, pareto, boxWhisker). The test authors EVERY advertised tag
+    against a real workbook and renders it.
   status: implemented
   provenance: ["Illustrator capability catalog §16.4", "sheet-js/src/core.rs::CHART_KIND_TAGS"]
   tests:
@@ -260,3 +262,96 @@
   provenance: ["spec §8.4 (charts live to recalculation)", "sheet-js/src/core.rs"]
   tests:
     rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_recalc_live"]
+
+- id: sheet.chart.kinds
+  title: Every chart kind is drawn as itself — 3-D flagged, chartEx read, never a silent column
+  ruling: >
+    Each plot element maps to its own kind (bar/col, line, area, pie,
+    doughnut, of-pie, scatter, bubble, radar/filled, stock, surface, and the
+    chartEx layouts waterfall, funnel, treemap, sunburst, histogram, pareto,
+    box & whisker). A 3-D element is its 2-D kind with flattened_3d set; an
+    element nothing draws (region map, unknown) is Unsupported, a labelled
+    placeholder. The drawing's /chartEx relationship is followed. The opt-in
+    corpus lane (sheet-conformance chart_corpus, private corpus) checks 172 of
+    172 real charts (ADR 518).
+  status: implemented
+  provenance: ["ECMA-376 §21.2", "[MS-ODRAWXML] chartEx", "ADR 518", "sheet-xlsx/src/parts/chart.rs"]
+  tests:
+    rust:
+      - "sheet-xlsx/src/parts/chart_tests.rs::every_element_maps_to_its_own_kind"
+      - "sheet-xlsx/src/parts/chart_tests.rs::three_d_is_flagged"
+      - "sheet-chart/tests/kinds.rs::every_kind_matches_its_snapshot"
+
+- id: sheet.chart.chartex
+  title: chartEx parts (cx:chartSpace) — series, data dimensions and layout options read
+  ruling: "dml_chart::chart_ex reads each cx:series as a plot (element cx:<layoutId>), its data dimensions by dataId as the series' ranges, and cx:layoutPr (subtotals, binning, statistics, visibility, parent labels) as the plot's ExLayout; a pareto line folds into its owner's pareto layout (ADR 518)."
+  status: implemented
+  provenance: ["[MS-ODRAWXML] §2.24 (chartEx)", "platform/shared/dml-chart/src/read_ex.rs"]
+  tests:
+    rust: ["sheet-xlsx/src/parts/chart_tests.rs::chart_ex_parts_are_read"]
+
+- id: sheet.chart.combo
+  title: Combo charts — several plots, each with its kind, grouping and axis group; a secondary value axis
+  ruling: "ChartModel.plots is a list; a plot whose value axis is not the first plot's is on the secondary axis, drawn on the right with its own scale. Authoring a combo gives each series a kind and axis group; set_series groups consecutive series into plots (ADR 518)."
+  status: implemented
+  provenance: ["ECMA-376 §21.2.2.145 (c:plotArea)", "ADR 518"]
+  tests:
+    rust:
+      - "sheet-xlsx/src/parts/chart_tests.rs::a_combo_keeps_its_plots"
+      - "sheet-chart/src/model.rs::set_series_groups_a_combo"
+
+- id: sheet.chart.stacking
+  title: Stacked and 100% stacked bars, lines and areas as Excel draws them
+  ruling: "Positive values stack up, negative down, on separate totals; percent-stacked normalises each category to 100% on a 0–100% axis; stacked lines and areas accumulate in series order (ADR 518)."
+  status: implemented
+  provenance: ["ADR 518", "sheet-chart/src/cartesian.rs"]
+  tests:
+    rust:
+      - "sheet-chart/tests/kinds.rs::percent_stacked_columns_fill_the_axis"
+      - "sheet-chart/tests/kinds.rs::stacked_lines_accumulate"
+
+- id: sheet.chart.series-features
+  title: Markers, data labels, trendlines (R², equation) and error bars
+  ruling: "Excel's marker symbols and automatic sequence; data labels with value/category/series/percent/bubble size, position and number format; trendlines fitted with the function library's least-squares solver (the one behind LINEST): linear, exponential, logarithmic, polynomial 2–6, power, moving average; error bars fixed, percentage, standard deviation (centred on the mean), standard error, custom (ADR 518)."
+  status: implemented
+  provenance: ["ECMA-376 §21.2.2 (c:marker, c:dLbls, c:trendline, c:errBars)", "ADR 518"]
+  tests:
+    rust:
+      - "sheet-xlsx/src/parts/chart_tests.rs::series_features_are_read"
+      - "sheet-chart/src/extras.rs::linear_fit_matches_linest"
+      - "sheet-chart/src/extras.rs::every_type_fits_its_own_curve"
+      - "sheet-chart/src/extras.rs::error_ends_by_type"
+
+- id: sheet.chart.axes
+  title: Axes — Excel's automatic bounds, log scale, reversed, crossing, date axis, number format, gridlines
+  ruling: "Automatic bounds with 5% headroom and a 1-2-5 unit, zero included unless the data sit in a narrow band; explicit min/max/unit win; logarithmic and reversed scales; bars grow from the crossing value; date axes by base unit; axis or source number format; major/minor gridlines; legend positions r/l/t/b/tr (ADR 518)."
+  status: implemented
+  provenance: ["ECMA-376 §21.2.2 (c:valAx, c:dateAx, c:scaling)", "sheet-chart/src/scale.rs"]
+  tests:
+    rust:
+      - "sheet-chart/src/scale.rs::excel_bounds_with_headroom"
+      - "sheet-chart/src/scale.rs::log_and_reversed"
+      - "sheet-chart/src/scale.rs::overrides_win"
+
+- id: sheet.chart.style-roles
+  title: Chart colour and text roles carry document swatch / style references beside the concrete value
+  ruling: "ColorRef { concrete, doc } and TextStyleRef { concrete, doc_paragraph, doc_character } on every role; the geometry carries fillSwatchRef/strokeSwatchRef/colorSwatchRef/paragraphStyle/characterStyle beside the resolved colour; the page lowering references the swatch (never mints it) and applies the style with an auto-sizing label frame. Paged's c:extLst records references; a reference is restored on import only while the concrete value is unchanged (ADR 518)."
+  status: implemented
+  provenance: ["ADR 518", "packages/sheet-host-model/src/chart.ts"]
+  tests:
+    rust:
+      - "sheet-chart/tests/kinds.rs::style_refs_ride_beside_the_colour"
+      - "sheet-xlsx/src/parts/chart_tests.rs::document_references_return_only_while_the_value_holds"
+      - "sheet-chart/src/colors.rs::theme_refs_resolve_with_their_swatch"
+    vitest: ["packages/sheet-host-model/test/chart.spec.ts"]
+
+- id: sheet.chart.sparklines
+  title: Sparklines (x14 line, column, win/loss) read and drawn in a cell box
+  ruling: "x14:sparklineGroups in a worksheet's captured extLst become SparklineGroups (colours rgb or theme+tint, markers, high/low/first/last/negative, axis, custom bounds, blanks); sheet_chart::sparkline draws one in its cell's box; the captured bytes round-trip unchanged (ADR 518)."
+  status: implemented
+  provenance: ["[MS-XLSX] §2.6.86 (sparklineGroup)", "sheet-xlsx/src/parts/sparkline.rs", "sheet-chart/src/sparkline.rs"]
+  tests:
+    rust:
+      - "sheet-xlsx/src/parts/sparkline.rs::reads_groups_colours_and_cells"
+      - "sheet-chart/src/sparkline.rs::three_kinds_draw_in_the_cell"
+      - "sheet-chart/tests/kinds.rs::sparklines_draw_in_their_cell"

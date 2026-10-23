@@ -176,7 +176,8 @@ describe.skipIf(!ENGINE_BUILT)(
       const art = await spreads();
       // An edit to a series value (B2) replaces the chart: as many elements
       // (never a second chart beside the first), different art.
-      session.editCell(0, 1, 1, "999");
+      // A value that keeps the axis (0–35), so the redraw has as many marks.
+      session.editCell(0, 1, 1, "15");
       await session.refreshPlacements();
       await settle();
       const replaced = new Set(
