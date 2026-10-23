@@ -145,6 +145,7 @@ describe("workbook panel layout", () => {
       "cell-style",
       "doc-styles",
       "charts",
+      "chartStyle",
       "functions",
     ]);
     expect(

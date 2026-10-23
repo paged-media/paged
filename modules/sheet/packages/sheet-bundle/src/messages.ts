@@ -551,4 +551,39 @@ export const DOC_STYLES = defineMessages("sheet.docStyles", {
   noWorkbook: "Open or create a workbook first.",
 });
 
+/** Sheet ADR 525 — the Workbook panel's Chart style section. */
+export const CHART_STYLE = defineMessages("sheet.chartStyle", {
+  title: "Chart style",
+  target: "Chart style of",
+  workbookDefault: "Workbook default",
+  chartN: "Chart {n}",
+  chartArea: "Chart area",
+  plotArea: "Plot area",
+  axisLine: "Axis lines",
+  gridlines: "Gridlines",
+  text: "Chart text",
+  title2: "Title",
+  axisTitle: "Axis titles",
+  tickLabels: "Axis labels",
+  legend: "Legend",
+  dataLabels: "Data labels",
+  swatch: "Colour",
+  paragraphStyle: "Paragraph style",
+  characterStyle: "Character style",
+  noParagraphStyle: "No paragraph style",
+  noCharacterStyle: "No character style",
+  none: "None",
+  fromDefault: "Default: {name}",
+  useDefault: "Workbook default",
+  seriesColors: "Series colours",
+  themeColors: "Theme colours",
+  useAsDefault: "Use as default for this workbook",
+  resetToDefault: "Reset to default",
+  updated: "Chart style updated.",
+  failed: "The chart style could not be changed.",
+  noDocumentStyles:
+    "The document has no swatches yet: add swatches to the document to colour charts with them.",
+  note: "Charts use the document's swatches and styles: editing a swatch recolours every placed chart.",
+});
+
 defineTranslations("de", de);

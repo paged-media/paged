@@ -168,6 +168,12 @@ pub struct XlsxDocument {
     /// workbook has a theme part.
     pub chart_theme: Option<[u32; 12]>,
 
+    /// The workbook's document chart style (sheet ADR 525): the role
+    /// references and series palette every chart follows where it does not
+    /// override them, read from the paged extension of `workbook.xml` and
+    /// spliced back by [`set_chart_style`](Self::set_chart_style).
+    pub chart_style: sheet_chart::style::ChartStyle,
+
     /// The CACHED values of every referenced external workbook (M3
     /// external-link reads, spec §13; the no-network ruling §1.1), indexed by
     /// the workbook's `<externalReferences>` order — the `[n]` external-book
@@ -776,6 +782,7 @@ impl XlsxDocument {
             chartsheets,
             sparklines,
             chart_theme,
+            chart_style: parts::chart_style::parse(&workbook_bytes),
             external_links,
             freeze_panes,
             data_validations,
@@ -926,6 +933,25 @@ impl XlsxDocument {
             *dirty = true;
         }
         self.container.dirty = true;
+    }
+
+    /// Set the workbook's document chart style (sheet ADR 525): the paged
+    /// extension of `workbook.xml` is spliced in place (taken out for an
+    /// empty style), every other byte of the part kept. Setting the style it
+    /// already has changes nothing.
+    pub fn set_chart_style(
+        &mut self,
+        style: sheet_chart::style::ChartStyle,
+    ) -> Result<(), XlsxError> {
+        if style == self.chart_style {
+            return Ok(());
+        }
+        let wb = self.workbook_bytes()?;
+        let out = parts::chart_style::splice_into(&wb, &style)?;
+        let part = self.workbook_part.clone();
+        self.set_part_bytes(&part, out);
+        self.chart_style = style;
+        Ok(())
     }
 
     /// True if any sheet has been marked dirty (a re-encode is pending).
