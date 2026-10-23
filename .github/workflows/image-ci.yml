@@ -232,8 +232,8 @@ jobs:
       # brotli-compressed (over-the-wire) size against that budget. This is
       # a REPORT, not yet a hard gate — the real gate flips once the engine
       # has substance to measure (spec §9.3 / I-07 follow-up).
-      - name: wasm32 release build of image-js
-        run: cargo build --release --target wasm32-unknown-unknown -p image-js
+      - name: wasm32 wasm-release build of image-js (the shipped profile)
+        run: cargo build --profile wasm-release --target wasm32-unknown-unknown -p image-js
       - name: install brotli
         # Bounded, and apt only when the tool is absent. 2026-08-19:
         # GitHub's Ubuntu runners intermittently could not reach the
@@ -262,7 +262,7 @@ jobs:
       - name: wasm size report (vs 120 MB app wasm budget)
         run: |
           set -euo pipefail
-          WASM=target/wasm32-unknown-unknown/release/image_js.wasm
+          WASM=target/wasm32-unknown-unknown/wasm-release/image_js.wasm
           if [ ! -f "$WASM" ]; then
             echo "::warning::$WASM not found — image-js may not yet emit a cdylib; skipping size report"
             exit 0

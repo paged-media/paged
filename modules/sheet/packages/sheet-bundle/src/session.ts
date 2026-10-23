@@ -898,8 +898,11 @@ export interface WorkbookSession extends DataToolsApi {
   pointerDownInFrame(
     contentX: number,
     contentY: number,
-    mods?: { shift?: boolean; copy?: boolean },
+    mods?: { shift?: boolean; copy?: boolean; add?: boolean },
   ): boolean;
+  /** Every area of the selection: those Ctrl/Cmd-click added, then the
+   *  current one. */
+  selectionAreas(): GridSelection[];
   /** What a press at `(x, y)` would grab: the selection's border (move),
    *  the fill handle, or a cell — for the pointer's cursor. */
   grabAt(contentX: number, contentY: number): "move" | "fill" | "cell" | null;
@@ -1466,6 +1469,11 @@ export function createWorkbookSession(
   // refresh on exit; `suppressRefresh` keeps a document-driven unwind from
   // writing the page the document just restored.
   let refreshDeferred = false;
+  /** Excel's multi-area selection: the areas Ctrl/Cmd-click added before
+   *  the current one (the current one is `state.gridSelection`). */
+  let extraAreas: GridSelection[] = [];
+  /** True while a Ctrl/Cmd-click is laying out a new area. */
+  let addingArea = false;
   /** Paste special's options card is open (the sheet bar shows it). */
   let pasteSpecialCard = false;
   let suppressRefresh = false;
@@ -2060,6 +2068,7 @@ export function createWorkbookSession(
   /** Make `m` the selection: record it, scroll the in-frame grid so the
    *  active cell shows, re-render. */
   function applyModel(m: SelectionModel): void {
+    if (!addingArea) extraAreas = [];
     const r = rectOf(m);
     applyGridSelection(r.anchorRow, r.anchorCol, r.rows, r.cols, m);
     revealInFrame(m.active);
@@ -2236,20 +2245,22 @@ export function createWorkbookSession(
     if (!engine || sheet === null)
       return { ok: false, message: "no workbook / sheet" };
     if (!sel) return { ok: false, message: "select the cells to clear" };
-    // Every cell of the selection written "" in ONE batch; the reply's
-    // priors say which held something (only those journal).
+    // Every cell of the selection (every area of it) written "" in ONE
+    // batch; the reply's priors say which held something (only those
+    // journal).
     const targets: CellEditRecord[] = [];
-    for (let r = 0; r < sel.rows; r++) {
-      for (let c = 0; c < sel.cols; c++) {
-        targets.push({
-          sheet,
-          row: sel.anchorRow + r,
-          col: sel.anchorCol + c,
-          prevInput: "",
-          nextInput: "",
-        });
+    for (const area of [...extraAreas, sel])
+      for (let r = 0; r < area.rows; r++) {
+        for (let c = 0; c < area.cols; c++) {
+          targets.push({
+            sheet,
+            row: area.anchorRow + r,
+            col: area.anchorCol + c,
+            prevInput: "",
+            nextInput: "",
+          });
+        }
       }
-    }
     const { written, journaled } = writeTargets(
       engine,
       targets,
@@ -4847,6 +4858,13 @@ export function createWorkbookSession(
       if (!sel) {
         return { ok: false as const, message: "select a range to copy" };
       }
+      // Excel: a copy takes one range, not several separate areas.
+      if (extraAreas.length > 0) {
+        return {
+          ok: false as const,
+          message: "this can't be done with several separate areas selected",
+        };
+      }
       const range = selectionRangeA1(
         sel.anchorRow,
         sel.anchorCol,
@@ -5841,6 +5859,29 @@ export function createWorkbookSession(
           ok: false as const,
           message: "select cells or enter a range first",
         };
+      if (extraAreas.length > 0) {
+        // Every area in one undo step.
+        const ranges = [...extraAreas, state.gridSelection!].map((a) =>
+          selectionRangeA1(a.anchorRow, a.anchorCol, a.rows, a.cols),
+        );
+        return journalFormat(
+          (e) => {
+            const seals = ranges.map((r) => styleSnapshot(e, t.sheet, r));
+            if (seals.some((x) => x === null)) return null;
+            return () => {
+              const steps = seals.map((x) => x!());
+              return {
+                undo: (x) => steps.forEach((st) => st.undo(x)),
+                redo: (x) => steps.forEach((st) => st.redo(x)),
+              };
+            };
+          },
+          (e) => {
+            if (!e.setStyle) throw new Error("engine wasm predates set_style");
+            for (const r of ranges) e.setStyle(t.sheet, r, patch);
+          },
+        );
+      }
       return journalFormat(
         (e) => styleSnapshot(e, t.sheet, t.range),
         (e) => {
@@ -6197,9 +6238,23 @@ export function createWorkbookSession(
       // A click elsewhere COMMITS the open edit (Excel).
       if (cellEdit) commitEdit();
       const m = currentModel();
+      // Ctrl/Cmd-click adds an area (Excel's multi-area selection).
+      if (mods?.add && sel) {
+        extraAreas = [...extraAreas, sel];
+        addingArea = true;
+        applyModel(collapsed(hit));
+        drag = { kind: "select" };
+        return true;
+      }
+      addingArea = false;
       applyModel(mods?.shift && m ? extendTo(m, hit) : collapsed(hit));
       drag = { kind: "select" };
       return true;
+    },
+
+    selectionAreas() {
+      const sel = state.gridSelection;
+      return sel ? [...extraAreas, sel] : [...extraAreas];
     },
 
     grabAt(contentX, contentY) {
@@ -6247,6 +6302,8 @@ export function createWorkbookSession(
     pointerUpInFrame() {
       const d = drag;
       drag = null;
+      // The added area is laid out; the next selection change starts over.
+      addingArea = false;
       if (!d) return false;
       if (d.kind === "move") {
         fillPreview = null;
