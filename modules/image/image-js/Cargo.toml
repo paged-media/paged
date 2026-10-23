@@ -15,7 +15,7 @@ workspace = true
 
 [dependencies]
 image-core = { path = "../image-core" }
-image-kernels = { path = "../image-kernels" }
+image-kernels = { path = "../image-kernels", features = ["cpu"] }
 image-pipeline = { path = "../image-pipeline" }
 # The M4 ingest slice: codec decode (inherently-CPU work) + the PSD
 # merged-composite decode + the GPU context the async sink drives.

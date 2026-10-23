@@ -13,7 +13,7 @@ stood, for decisions made earlier; their status says so.
 
 | ADR | Title | Status |
 |---|---|---|
-| [450](450-gpu-only-kernels.md) | Kernels execute on the GPU only; the scalar twin is for tests | Accepted, recorded retroactively 2026-10-02 |
+| [450](450-gpu-only-kernels.md) | Kernels execute on the GPU only; the scalar twin is for tests | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-23 by 465) |
 | [451](451-one-kernel-definition.md) | One kernel definition feeds both lanes | Accepted, recorded retroactively 2026-10-02 |
 | [452](452-kernel-abi.md) | The frozen shader kernel ABI (v1, amended to v1.1) | Accepted, recorded retroactively 2026-10-02 |
 | [453](453-tolerance-not-golden-bytes.md) | GPU output is verified against the scalar reference by tolerance, never by golden bytes | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-04) |
@@ -27,6 +27,8 @@ stood, for decisions made earlier; their status says so.
 | [461](461-clean-room-protocol.md) | The clean-room two-role protocol | Accepted, recorded retroactively 2026-10-02 |
 | [462](462-sessions-persist-in-parts.md) | Raster sessions persist in container parts and bake into the frame | Accepted 2026-10-04 |
 | [463](463-one-undo-list.md) | One undo list for pixels and the layer stack, reachable from the host | Accepted 2026-10-04 |
+| [464](464-layers-at-their-own-bounds.md) | Layers live at their own bounds | Accepted 2026-10-05 |
+| [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
