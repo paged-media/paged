@@ -35,6 +35,7 @@ it stood, for decisions made earlier; their status says so.
 | [519](519-charts-excel-parity.md) | Charts as Excel draws them: plots, every kind, style roles, written back | Accepted 2026-10-23; amends 016, 503 |
 | [520](520-document-styles-in-the-frame.md) | The document's styles inside the sheet frame: host panels assign them, the grid draws them | Accepted 2026-10-23 |
 | [521](521-files-and-formula-dialect.md) | Files and the formula dialect: macro workbooks, templates, ODS read, CSV export, R1C1 and localized function names | Accepted 2026-10-23; amends 509 |
+| [522](522-placement-views-print-areas-and-chart-delete.md) | Placement kinds: a frame's view and sizing, print areas of several ranges, a deleted chart leaves the file | Accepted 2026-10-23; extends 510, 503 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed
