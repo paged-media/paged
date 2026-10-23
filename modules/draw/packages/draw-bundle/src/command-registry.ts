@@ -36,12 +36,40 @@ import type {
   CommandContribution,
   Disposable,
 } from "@paged-media/plugin-api";
+import { defineMessages, t } from "@paged-media/strings";
 
 export type CommandHandler = CommandContribution["handler"];
 
+/** The palette categories the command modules name (their exported
+ *  `*_COMMAND_CATEGORY` constants), for the shell's `categoryLabel`: a
+ *  category is an identity and stays English. */
+defineMessages("commandCategory", {
+  Appearance: "Appearance",
+  "Graphic Styles": "Graphic Styles",
+  Select: "Select",
+  Path: "Path",
+  Insert: "Insert",
+  Corners: "Corners",
+  Transform: "Transform",
+  "Objects on Path": "Objects on Path",
+  Repeat: "Repeat",
+  Pattern: "Pattern",
+  Symbols: "Symbols",
+  Type: "Type",
+  Stroke: "Stroke",
+  Pathfinder: "Pathfinder",
+  Fill: "Fill",
+  Transparency: "Transparency",
+  Blend: "Blend",
+  "Live Paint": "Live Paint",
+  Image: "Image",
+});
+
 const tables = new WeakMap<object, Map<string, CommandHandler>>();
 
-/** Register a command through the host AND record its handler. */
+/** Register a command through the host AND record its handler. The
+ *  command's `title` is a message key (or plain text), read in the
+ *  editor's locale here, when the bundle activates. */
 export function registerCommand(
   host: BundleHost,
   command: CommandContribution,
@@ -51,7 +79,10 @@ export function registerCommand(
     table = new Map();
     tables.set(host, table);
   }
-  const sub = host.contribute.command(command);
+  const sub = host.contribute.command({
+    ...command,
+    title: t(command.title),
+  });
   table.set(command.id, command.handler);
   const own = table;
   return {

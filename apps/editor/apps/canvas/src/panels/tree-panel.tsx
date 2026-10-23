@@ -26,11 +26,17 @@ import { useEffect, useState } from "react";
 import { useCanvasClient, useSelection } from "@paged-media/shell";
 
 import type { ElementId, SceneTreeNode } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.treePanel", {
+  noDocument: "No document loaded.",
+});
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type PanelProps = any;
 
 export function TreePanel(_: PanelProps) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { elementSelection, setElementSelection, setElementGeometry } =
     useSelection();
@@ -83,7 +89,7 @@ export function TreePanel(_: PanelProps) {
   if (roots.length === 0) {
     return (
       <div className="p-3 text-sm text-muted-foreground" data-tree="empty">
-        No document loaded.
+        {strings.t(M.noDocument)}
       </div>
     );
   }

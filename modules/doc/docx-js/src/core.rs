@@ -27,7 +27,7 @@
 use docx_core::DocxDocument;
 use docx_export::{
     apply_edits, build_bindings, diff, overlay_story_content, DocxBindings, EditSet, RunEdit,
-    StoryContentIn,
+    StoryContentIn, StructuralEdit,
 };
 use docx_import::import_docx_with_package;
 use docx_lower::ir::{LoweredBlock, LoweredDoc};
@@ -196,6 +196,20 @@ impl DocSession {
                 set.runs.push(RunEdit::text(e.block, r, String::new()));
             }
         }
+        for &block in &edits.delete_paragraphs {
+            paragraph(block)?;
+            set.structural
+                .push(StructuralEdit::DeleteParagraph { block });
+        }
+        for e in &edits.clone_paragraphs {
+            paragraph(e.source)?;
+            paragraph(e.after)?;
+            set.structural.push(StructuralEdit::CloneParagraph {
+                source: e.source,
+                after: e.after,
+                text: e.text.clone(),
+            });
+        }
         Ok(set)
     }
 
@@ -230,6 +244,22 @@ pub struct ObjectEdits {
     pub runs: Vec<RunTextEdit>,
     #[serde(default)]
     pub merge_fields: Vec<MergeFieldEdit>,
+    /// Body paragraph blocks to remove whole (a list item taken away).
+    #[serde(default)]
+    pub delete_paragraphs: Vec<usize>,
+    /// Paragraphs to add: each a copy of a body paragraph's properties
+    /// carrying new text (a list item added to its list).
+    #[serde(default)]
+    pub clone_paragraphs: Vec<CloneParagraphEdit>,
+}
+
+/// Add a paragraph after body block `after`, like body block `source` (its
+/// paragraph properties and first run's look) with `text`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CloneParagraphEdit {
+    pub source: usize,
+    pub after: usize,
+    pub text: String,
 }
 
 /// Set one body run's text.

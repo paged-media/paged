@@ -44,7 +44,9 @@ fi
 mkdir -p "$CONTAINER"
 SCRATCH="$(mktemp -d "$CONTAINER/paged-oracle.XXXXXX")" || {
     echo "error: cannot stage inside $CONTAINER" >&2; exit 1; }
-cp "$HERE/recalc.applescript" "$SCRATCH/recalc.applescript"
+# PAGED_ORACLE_SCRIPT picks another per-file AppleScript with the same
+# (src, dst) contract — the open-check lane's `opencheck.applescript`.
+cp "$HERE/${PAGED_ORACLE_SCRIPT:-recalc.applescript}" "$SCRATCH/recalc.applescript"
 
 # ── pin Excel to en-US for the run ──────────────────────────────────
 # Excel computes in its UI language and region: under de-AT, CONCAT(TRUE) is
@@ -173,6 +175,7 @@ for fam in "${FAMS[@]}"; do
     out="$(timeout "$TIMEOUT" osascript "$SCRATCH/recalc.applescript" \
         "$SCRATCH/in.xlsx" "$SCRATCH/out.xlsx" 2>&1 < /dev/null)"
     rc=$?
+    printf '%s\n' "rc=$rc $out" > "$BUILD/$fam.meta"
     if [ -f "$SCRATCH/out.xlsx" ] && [ "$(stat -f%z "$SCRATCH/out.xlsx")" -gt 1024 ]; then
         mv "$SCRATCH/out.xlsx" "$dst"
         ok=$((ok + 1))

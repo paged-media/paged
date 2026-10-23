@@ -28,6 +28,8 @@
 // StrictMode-safe dragging: pointer capture on the dial element —
 // no window listeners registered inside pointerdown.
 
+import { useStrings } from "@paged-media/strings";
+import { INPUT } from "../messages";
 import {
   useEffect,
   useEffectEvent,
@@ -78,6 +80,7 @@ export function SmartDialMicro({
   onChange,
   onCommit,
 }: SmartDialMicroProps) {
+  const strings = useStrings();
   const inert = disabled || onChange == null;
   const clamp = (v: number) => Math.max(min, Math.min(max, v));
   const fmt = (v: number) =>
@@ -152,7 +155,7 @@ export function SmartDialMicro({
         onPointerMove={onPointer("move")}
         onPointerUp={onPointer("up")}
         onPointerCancel={onPointer("up")}
-        title={inert ? undefined : "Drag to adjust"}
+        title={inert ? undefined : strings.t(INPUT.dragToAdjust)}
         className="w-[26px] h-[26px] shrink-0"
         style={{
           cursor: inert ? "default" : "ns-resize",

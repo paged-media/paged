@@ -59,6 +59,73 @@ import {
 } from "../live-bridge";
 import { downloadBytes } from "../shell-file-saver";
 import { color, font, radius, status } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+// The panel's words. Commit messages, branch names, the live bridge's tool
+// names and outcomes are the record's own and stay as written.
+const M = defineMessages("app.libraryPanel", {
+  opening: "Opening {name}",
+  signInFirst: "Sign in to the server first.",
+  noPrivateFs:
+    "The library needs the browser's private file system, which is not " +
+    "available here. Files still open and save as before.",
+  thisDocument: "This document",
+  notInLibrary:
+    "Not in the library yet. Save (Cmd+S) keeps it here, with every later " +
+    "save as a version.",
+  exportHistoryTitle:
+    "A .paged file that carries every version; opening it elsewhere brings " +
+    "them along",
+  exportHistory: "Export with history",
+  agent: "agent",
+  released: "released {name}",
+  version: "Version {n}",
+  restoreTitle:
+    "Make this version current again, as a new version; nothing is lost",
+  restore: "Restore",
+  download: "Download",
+  releaseTitle: "Name this version; a release never moves",
+  release: "Release",
+  releaseName: "Release name",
+  releasePlaceholder: "Release name (it never moves)",
+  cancel: "Cancel",
+  server: "Server",
+  signedOut: "signed out",
+  signOut: "Sign out",
+  signIn: "Sign in",
+  pushTitle: "Send this document's versions the server lacks",
+  pushed:
+    "Pushed {count, plural, one {# object} other {# objects}} " +
+    "({bytes} bytes)",
+  upToDate: "Up to date",
+  push: "Push",
+  pullTitle:
+    "Take the server's newer versions; a document that moved apart is " +
+    "refused, not merged",
+  pulled: "Pulled newer versions",
+  pull: "Pull",
+  openFromServer: "Open from server…",
+  serverRepository: "Server repository",
+  open: "Open",
+  claude: "Claude",
+  connected: "Connected · Claude can use this tab",
+  disconnect: "Disconnect",
+  connectTitle:
+    "Let Claude (signed in to this server as you) run scripts, render " +
+    "pages and save versions in this tab",
+  connecting: "Connecting…",
+  connect: "Connect to Claude",
+  askBefore: "Ask before each change",
+  wantsSave: "Claude wants to save a version on its own branch",
+  wantsScript: "Claude wants to run a script",
+  allow: "Allow",
+  decline: "Decline",
+  branches: "Claude's branches",
+  mergeTitle: "Approve and merge into main; Claude cannot do this itself",
+  merge: "Merge into main",
+  library: "Library",
+  noDocuments: "No documents yet. Opening or saving a file adds it.",
+});
 
 const mono = {
   fontFamily: font.mono,
@@ -143,6 +210,7 @@ async function readLibrary(
 }
 
 export function LibraryPanel() {
+  const strings = useStrings();
   const editor = usePaged();
   const { version, library, current } = useSyncExternalStore(
     subscribeLibrary,
@@ -217,7 +285,13 @@ export function LibraryPanel() {
 
   const open = async (entry: DocumentEntry, target = "main") => {
     if (!library) return;
-    if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
+    if (
+      !(await confirmDiscard(
+        editor,
+        strings.t(M.opening, { name: entry.name }),
+      ))
+    )
+      return;
     const bytes = await library.exportPaged(entry.id, target);
     const doc = editor.document;
     await loadDocumentFile(
@@ -250,7 +324,7 @@ export function LibraryPanel() {
     const token = await accessToken(SERVER);
     if (!token) {
       setWho(null);
-      throw new Error("Sign in to the server first.");
+      throw new Error(strings.t(M.signInFirst));
     }
     return { url: SERVER, repo: remoteRepo(d), token };
   };
@@ -265,8 +339,7 @@ export function LibraryPanel() {
           color: "var(--pg-muted-fg)",
         }}
       >
-        The library needs the browser&apos;s private file system, which is not
-        available here. Files still open and save as before.
+        {strings.t(M.noPrivateFs)}
       </div>
     );
   }
@@ -280,14 +353,13 @@ export function LibraryPanel() {
         color: "var(--pg-fg)",
       }}
     >
-      <div style={{ ...kicker, marginTop: 0 }}>This document</div>
+      <div style={{ ...kicker, marginTop: 0 }}>{strings.t(M.thisDocument)}</div>
       {!current ? (
         <p
           data-library-unsaved
           style={{ margin: 0, color: "var(--pg-muted-fg)" }}
         >
-          Not in the library yet. Save (Cmd+S) keeps it here, with every later
-          save as a version.
+          {strings.t(M.notInLibrary)}
         </p>
       ) : (
         <>
@@ -304,7 +376,7 @@ export function LibraryPanel() {
               type="button"
               data-library-export-history
               style={button}
-              title="A .paged file that carries every version; opening it elsewhere brings them along"
+              title={strings.t(M.exportHistoryTitle)}
               onClick={act(async () =>
                 downloadBytes(
                   await library.exportPaged(current.id, "main", true),
@@ -313,7 +385,7 @@ export function LibraryPanel() {
                 ),
               )}
             >
-              Export with history
+              {strings.t(M.exportHistory)}
             </button>
           </div>
           <ul
@@ -351,7 +423,7 @@ export function LibraryPanel() {
                             color: "var(--status-warn)",
                           }}
                         >
-                          agent
+                          {strings.t(M.agent)}
                         </span>
                       )}
                       {releases[c.hash] && (
@@ -362,7 +434,7 @@ export function LibraryPanel() {
                             color: status.ok,
                           }}
                         >
-                          released {releases[c.hash]}
+                          {strings.t(M.released, { name: releases[c.hash]! })}
                         </span>
                       )}
                     </span>
@@ -386,7 +458,7 @@ export function LibraryPanel() {
                       title={c.hash}
                       data-library-version-label
                     >
-                      Version {log.length - i}
+                      {strings.t(M.version, { n: log.length - i })}
                       {c.author ? ` · ${c.author}` : ""}
                     </span>
                     {i > 0 && (
@@ -394,13 +466,13 @@ export function LibraryPanel() {
                         type="button"
                         data-library-restore
                         style={button}
-                        title="Make this version current again, as a new version; nothing is lost"
+                        title={strings.t(M.restoreTitle)}
                         onClick={act(async () => {
                           await library.restore(current.id, c.hash);
                           await open(current);
                         })}
                       >
-                        Restore
+                        {strings.t(M.restore)}
                       </button>
                     )}
                     <button
@@ -415,20 +487,20 @@ export function LibraryPanel() {
                         ),
                       )}
                     >
-                      Download
+                      {strings.t(M.download)}
                     </button>
                     <button
                       type="button"
                       data-library-release
                       style={button}
-                      title="Name this version; a release never moves"
+                      title={strings.t(M.releaseTitle)}
                       aria-expanded={releasing === c.hash}
                       onClick={() => {
                         setReleasing(releasing === c.hash ? null : c.hash);
                         setReleaseName("");
                       }}
                     >
-                      Release
+                      {strings.t(M.release)}
                     </button>
                   </div>
                   {releasing === c.hash && (
@@ -452,8 +524,8 @@ export function LibraryPanel() {
                     >
                       <input
                         autoFocus
-                        aria-label="Release name"
-                        placeholder="Release name (it never moves)"
+                        aria-label={strings.t(M.releaseName)}
+                        placeholder={strings.t(M.releasePlaceholder)}
                         data-library-release-name
                         value={releaseName}
                         onChange={(e) => setReleaseName(e.target.value)}
@@ -468,14 +540,14 @@ export function LibraryPanel() {
                         style={button}
                         disabled={!releaseName.trim()}
                       >
-                        Release
+                        {strings.t(M.release)}
                       </button>
                       <button
                         type="button"
                         style={button}
                         onClick={() => setReleasing(null)}
                       >
-                        Cancel
+                        {strings.t(M.cancel)}
                       </button>
                     </form>
                   )}
@@ -488,7 +560,7 @@ export function LibraryPanel() {
 
       {SERVER && (
         <div data-library-server>
-          <div style={kicker}>Server</div>
+          <div style={kicker}>{strings.t(M.server)}</div>
           <div
             style={{
               display: "flex",
@@ -504,7 +576,7 @@ export function LibraryPanel() {
             >
               {who
                 ? `${new URL(SERVER).host} · ${who}`
-                : `${new URL(SERVER).host} · signed out`}
+                : `${new URL(SERVER).host} · ${strings.t(M.signedOut)}`}
             </span>
             {who ? (
               <button
@@ -516,7 +588,7 @@ export function LibraryPanel() {
                   setWho(null);
                 }}
               >
-                Sign out
+                {strings.t(M.signOut)}
               </button>
             ) : (
               <button
@@ -528,7 +600,7 @@ export function LibraryPanel() {
                   setWho(signedInAs(SERVER));
                 })}
               >
-                Sign in
+                {strings.t(M.signIn)}
               </button>
             )}
           </div>
@@ -549,7 +621,7 @@ export function LibraryPanel() {
                 type="button"
                 data-library-push
                 style={button}
-                title="Send this document's versions the server lacks"
+                title={strings.t(M.pushTitle)}
                 onClick={act(async () => {
                   const r = await library.push(
                     current.id,
@@ -557,30 +629,33 @@ export function LibraryPanel() {
                   );
                   setSyncNote(
                     r.sent
-                      ? `Pushed ${r.sent} object${r.sent === 1 ? "" : "s"} (${r.bytes.toLocaleString()} bytes)`
-                      : "Up to date",
+                      ? strings.t(M.pushed, {
+                          count: r.sent,
+                          bytes: r.bytes.toLocaleString(strings.locale),
+                        })
+                      : strings.t(M.upToDate),
                   );
                 })}
               >
-                Push
+                {strings.t(M.push)}
               </button>
               <button
                 type="button"
                 data-library-pull
                 style={button}
-                title="Take the server's newer versions; a document that moved apart is refused, not merged"
+                title={strings.t(M.pullTitle)}
                 onClick={act(async () => {
                   const r = await library.pull(
                     current.id,
                     await remoteFor(current),
                   );
                   setSyncNote(
-                    r.changed ? "Pulled newer versions" : "Up to date",
+                    r.changed ? strings.t(M.pulled) : strings.t(M.upToDate),
                   );
                   if (r.changed) await open(current);
                 })}
               >
-                Pull
+                {strings.t(M.pull)}
               </button>
             </div>
           )}
@@ -595,7 +670,7 @@ export function LibraryPanel() {
                 setCloneRepo("");
               }}
             >
-              Open from server…
+              {strings.t(M.openFromServer)}
             </button>
           )}
           {who && cloning && (
@@ -609,7 +684,7 @@ export function LibraryPanel() {
                 setCloning(false);
                 act(async () => {
                   const token = await accessToken(SERVER);
-                  if (!token) throw new Error("Sign in to the server first.");
+                  if (!token) throw new Error(strings.t(M.signInFirst));
                   await open(
                     await library.clone({ url: SERVER, repo, token }, repo),
                   );
@@ -618,8 +693,8 @@ export function LibraryPanel() {
             >
               <input
                 autoFocus
-                aria-label="Server repository"
-                placeholder="Server repository"
+                aria-label={strings.t(M.serverRepository)}
+                placeholder={strings.t(M.serverRepository)}
                 data-library-clone-repo
                 value={cloneRepo}
                 onChange={(e) => setCloneRepo(e.target.value)}
@@ -629,20 +704,20 @@ export function LibraryPanel() {
                 style={{ ...button, flex: 1, minWidth: 0 }}
               />
               <button type="submit" style={button} disabled={!cloneRepo.trim()}>
-                Open
+                {strings.t(M.open)}
               </button>
               <button
                 type="button"
                 style={button}
                 onClick={() => setCloning(false)}
               >
-                Cancel
+                {strings.t(M.cancel)}
               </button>
             </form>
           )}
           {who && (
             <div data-library-claude style={{ marginTop: 10 }}>
-              <div style={kicker}>Claude</div>
+              <div style={kicker}>{strings.t(M.claude)}</div>
               <div
                 style={{
                   display: "flex",
@@ -657,7 +732,7 @@ export function LibraryPanel() {
                       style={{ ...mono, color: "var(--pg-muted-fg)" }}
                       data-library-live-state
                     >
-                      Connected · Claude can use this tab
+                      {strings.t(M.connected)}
                     </span>
                     <button
                       type="button"
@@ -665,7 +740,7 @@ export function LibraryPanel() {
                       style={button}
                       onClick={() => disconnectLive()}
                     >
-                      Disconnect
+                      {strings.t(M.disconnect)}
                     </button>
                   </>
                 ) : (
@@ -674,12 +749,12 @@ export function LibraryPanel() {
                     data-library-live-connect
                     style={button}
                     disabled={live.state() === "connecting"}
-                    title="Let Claude (signed in to this server as you) run scripts, render pages and save versions in this tab"
+                    title={strings.t(M.connectTitle)}
                     onClick={act(() => connectLive(SERVER, editor.client))}
                   >
                     {live.state() === "connecting"
-                      ? "Connecting…"
-                      : "Connect to Claude"}
+                      ? strings.t(M.connecting)
+                      : strings.t(M.connect)}
                   </button>
                 )}
                 <label
@@ -696,7 +771,7 @@ export function LibraryPanel() {
                     checked={live.ask()}
                     onChange={(e) => live.setAsk(e.target.checked)}
                   />
-                  Ask before each change
+                  {strings.t(M.askBefore)}
                 </label>
               </div>
               {live.pending().map((call) => (
@@ -711,10 +786,9 @@ export function LibraryPanel() {
                   }}
                 >
                   <div style={mono}>
-                    Claude wants to{" "}
                     {call.tool === "save_document"
-                      ? "save a version on its own branch"
-                      : "run a script"}
+                      ? strings.t(M.wantsSave)
+                      : strings.t(M.wantsScript)}
                   </div>
                   {typeof call.args.source === "string" && (
                     <pre
@@ -735,7 +809,7 @@ export function LibraryPanel() {
                       style={button}
                       onClick={() => live.answer(call.id, true)}
                     >
-                      Allow
+                      {strings.t(M.allow)}
                     </button>
                     <button
                       type="button"
@@ -743,7 +817,7 @@ export function LibraryPanel() {
                       style={button}
                       onClick={() => live.answer(call.id, false)}
                     >
-                      Decline
+                      {strings.t(M.decline)}
                     </button>
                   </div>
                 </div>
@@ -791,7 +865,7 @@ export function LibraryPanel() {
           )}
           {current && branches.length > 0 && (
             <div data-library-agent-branches style={{ marginTop: 8 }}>
-              <div style={kicker}>Claude's branches</div>
+              <div style={kicker}>{strings.t(M.branches)}</div>
               {branches.map((b) => (
                 <div
                   key={b}
@@ -807,13 +881,13 @@ export function LibraryPanel() {
                     type="button"
                     data-library-merge={b}
                     style={button}
-                    title="Approve and merge into main; Claude cannot do this itself"
+                    title={strings.t(M.mergeTitle)}
                     onClick={act(async () => {
                       await library.mergeBranch(current.id, b);
                       await open(current);
                     })}
                   >
-                    Merge into main
+                    {strings.t(M.merge)}
                   </button>
                 </div>
               ))}
@@ -834,10 +908,10 @@ export function LibraryPanel() {
         </div>
       )}
 
-      <div style={kicker}>Library</div>
+      <div style={kicker}>{strings.t(M.library)}</div>
       {docs.length === 0 ? (
         <p style={{ margin: 0, color: "var(--pg-muted-fg)" }}>
-          No documents yet. Opening or saving a file adds it.
+          {strings.t(M.noDocuments)}
         </p>
       ) : (
         <ul
@@ -869,7 +943,7 @@ export function LibraryPanel() {
                     style={button}
                     onClick={act(() => open(d))}
                   >
-                    Open
+                    {strings.t(M.open)}
                   </button>
                 )}
               </span>

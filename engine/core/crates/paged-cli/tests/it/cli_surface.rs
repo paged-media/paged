@@ -38,8 +38,9 @@
 //! v71's `paged get` → `RequestGet`, 39 of 70 once v71's script host
 //! bridge added `HostObjectsResult`, which only a host with an object
 //! registry sends; 40 of 71 with ADR 193's `paged read snippet` →
-//! `ExportElements`; 40 of 75 once v75 and v76 added the template session's
-//! four kinds, which the Node CLI sends); what
+//! `ExportElements`; 42 of 73 with `paged template`, which sends
+//! `SetSessionPolicy` and `SetTemplateFields`; 42 of 75 with v76's two
+//! template-ingest kinds, which the Node CLI sends); what
 //! remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
@@ -142,18 +143,14 @@ const UNREACHED: &[(&str, &str)] = &[
      "no CLI verb: every subcommand builds a fresh `Session`, so a new process IS the reset this kind performs"),
     ("HostObjectsResult",
      "the answer half of the ADR 323 script host bridge: only a host with an object registry (the editor, the SDK's headless host, the Node CLI) can answer for plugin objects; the Rust CLI sends `executeScript` without `hostObjects`, so its scripts never suspend and a `plugin:` address throws noHost"),
-    ("SetSessionPolicy",
-     "template sessions are driven by the Node CLI (`paged-node template`), which sends these through the same worker core; the Rust CLI has no template verbs yet (plan F6)"),
-    ("SetTemplateFields",
-     "template sessions are driven by the Node CLI (`paged-node template`), which sends these through the same worker core; the Rust CLI has no template verbs yet (plan F6)"),
     ("RequestDerivedTemplateFields",
-     "template sessions are driven by the Node CLI (`paged-node template`), which sends these through the same worker core; the Rust CLI has no template verbs yet (plan F6)"),
+     "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
     ("OpenAsTemplate",
-     "template sessions are driven by the Node CLI (`paged-node template`), which sends these through the same worker core; the Rust CLI has no template verbs yet (plan F6)"),
+     "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 35;
+const UNREACHED_COUNT: usize = 33;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -287,8 +284,8 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_40_of_75() {
-    assert_eq!(kinds_the_cli_sends().len(), 40);
+fn the_cli_reaches_42_of_75() {
+    assert_eq!(kinds_the_cli_sends().len(), 42);
     assert_eq!(every_kind().len(), 75);
 }
 

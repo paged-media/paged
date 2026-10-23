@@ -154,6 +154,17 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.graphicStyles", {
+  save: "Graphic Styles: Save style from selection",
+  apply: "Graphic Styles: Apply style to selection",
+  redefine: "Graphic Styles: Redefine style from selection",
+  breakLink: "Graphic Styles: Break link (keep the appearance)",
+  rename: "Graphic Styles: Rename style",
+  delete: "Graphic Styles: Delete style",
+});
 export const GRAPHIC_STYLES_COMMAND_CATEGORY = "Graphic Styles";
 
 export const SAVE_GRAPHIC_STYLE_COMMAND_ID =
@@ -1184,21 +1195,21 @@ export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: SAVE_GRAPHIC_STYLE_COMMAND_ID,
-      title: "Graphic Styles: Save style from selection",
+      title: M.save,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySaveGraphicStyle(host, payloadOf(payload)).then(() => undefined),
     }),
     registerCommand(host, {
       id: APPLY_GRAPHIC_STYLE_COMMAND_ID,
-      title: "Graphic Styles: Apply style to selection",
+      title: M.apply,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyGraphicStyleToSelection(host, payloadOf(payload).styleId),
     }),
     registerCommand(host, {
       id: REDEFINE_GRAPHIC_STYLE_COMMAND_ID,
-      title: "Graphic Styles: Redefine style from selection",
+      title: M.redefine,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyRedefineGraphicStyle(host, payloadOf(payload).styleId).then(
@@ -1207,13 +1218,13 @@ export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: BREAK_GRAPHIC_STYLE_LINK_COMMAND_ID,
-      title: "Graphic Styles: Break link (keep the appearance)",
+      title: M.breakLink,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: () => applyBreakGraphicStyleLink(host),
     }),
     registerCommand(host, {
       id: RENAME_GRAPHIC_STYLE_COMMAND_ID,
-      title: "Graphic Styles: Rename style",
+      title: M.rename,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
@@ -1224,7 +1235,7 @@ export function contributeGraphicStyleCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: DELETE_GRAPHIC_STYLE_COMMAND_ID,
-      title: "Graphic Styles: Delete style",
+      title: M.delete,
       category: GRAPHIC_STYLES_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDeleteGraphicStyle(host, payloadOf(payload).styleId).then(

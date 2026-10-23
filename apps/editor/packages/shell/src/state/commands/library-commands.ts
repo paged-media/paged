@@ -23,6 +23,8 @@
 // the document's swatches back to `.ase` (core serialises losslessly
 // from the raw channels; this side only triggers the download).
 
+import { t } from "@paged-media/strings";
+import { COMMANDS } from "../messages";
 import type { PagedEditor } from "../paged-editor";
 import type { CommandContribution } from "../../registries";
 
@@ -35,7 +37,7 @@ export function buildImportAseCommand(options: {
 }): CommandContribution {
   return {
     id: PAGED_LIBRARY_IMPORT_ASE,
-    title: "Import swatches (.ase)…",
+    title: t(COMMANDS.importSwatches),
     category: "File",
     handler: async (paged) => {
       const editor = paged as PagedEditor;
@@ -61,7 +63,7 @@ export function buildExportAseCommand(options: {
 }): CommandContribution {
   return {
     id: PAGED_LIBRARY_EXPORT_ASE,
-    title: "Save swatches (.ase)…",
+    title: t(COMMANDS.saveSwatches),
     category: "File",
     handler: async (paged) => {
       const editor = paged as PagedEditor;

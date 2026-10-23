@@ -370,18 +370,34 @@ fn delete_cols_and_rows__feat__sheet_calc_rewrite_structural_door() {
 }
 
 /// A sheet carrying preserved, cell-addressed content (data validations)
-/// REFUSES a structural edit and is left untouched.
+/// takes a structural edit: the rules move with their cells (W1.2; before,
+/// the edit was refused).
 #[test]
-fn structural_edit_refuses_preserved_addresses__feat__sheet_calc_rewrite_structural_door() {
-    let mut s = SheetSession::load_xlsx(&fixture("12-datavalidation.xlsx")).unwrap();
+fn structural_edit_shifts_preserved_addresses__feat__sheet_calc_rewrite_structural_door() {
+    let src = fixture("12-datavalidation.xlsx");
+    let mut s = SheetSession::load_xlsx(&src).unwrap();
     let before: Vec<String> = (0..6).map(|r| s.get_cell_display(0, r, 0)).collect();
-    let err = s
-        .structural_edit(0, StructuralEdit::InsertRows, 0, 1)
-        .unwrap_err();
-    assert!(err.to_string().contains("dataValidations"), "{err}");
-    let after: Vec<String> = (0..6).map(|r| s.get_cell_display(0, r, 0)).collect();
+    s.structural_edit(0, StructuralEdit::InsertRows, 0, 1)
+        .unwrap();
+    let after: Vec<String> = (1..7).map(|r| s.get_cell_display(0, r, 0)).collect();
     assert_eq!(before, after);
-    assert!(!s.metadata().dirty);
+    let out = s.save_xlsx().unwrap();
+    let sqrefs = |bytes: &[u8]| -> Vec<String> {
+        let x = part_text(bytes, "xl/worksheets/sheet1.xml");
+        x.match_indices("sqref=\"")
+            .map(|(i, _)| {
+                let rest = &x[i + 7..];
+                rest[..rest.find('"').unwrap()].to_string()
+            })
+            .collect()
+    };
+    let was = sqrefs(&src);
+    let now = sqrefs(&out);
+    assert!(!was.is_empty());
+    assert_eq!(was.len(), now.len());
+    for (a, b) in was.iter().zip(&now) {
+        assert_ne!(a, b, "every validation range moved down one row");
+    }
 }
 
 // ── 8. CSV / TSV import ──────────────────────────────────────────────────

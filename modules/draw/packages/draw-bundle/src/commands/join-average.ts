@@ -68,6 +68,14 @@ import type { AnchorTable, Vec2 } from "@paged-media/draw-geometry";
 
 import { registerCommand } from "../command-registry";
 import { batchMutationFor } from "./batch-handles";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.joinAverage", {
+  join: "Path: Join",
+  close: "Path: Close path",
+  average: "Path: Average endpoints",
+});
 export const JOIN_AVERAGE_COMMAND_CATEGORY = "Path";
 
 export const JOIN_COMMAND_ID = "media.paged.draw.command.joinEndpoints";
@@ -443,19 +451,19 @@ export function contributeJoinAverageCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: JOIN_COMMAND_ID,
-      title: "Path: Join",
+      title: M.join,
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
       handler: () => applyJoin(host),
     }),
     registerCommand(host, {
       id: CLOSE_PATH_COMMAND_ID,
-      title: "Path: Close path",
+      title: M.close,
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
       handler: () => applyClosePath(host),
     }),
     registerCommand(host, {
       id: AVERAGE_COMMAND_ID,
-      title: "Path: Average endpoints",
+      title: M.average,
       category: JOIN_AVERAGE_COMMAND_CATEGORY,
       handler: () =>
         applyEndpointPlan(host, AVERAGE_COMMAND_ID, planAverageEndpoints),

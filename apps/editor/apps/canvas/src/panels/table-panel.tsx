@@ -104,14 +104,81 @@ import type {
 
 import { addressOfElement } from "../object-model";
 import { CoreCommandButton } from "../core-command-dialog";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.tablePanel", {
+  top: "Top",
+  center: "Center",
+  bottom: "Bottom",
+  justify: "Justify",
+  left: "Left",
+  right: "Right",
+  rowSpan: "Row span",
+  columnSpan: "Column span",
+  empty:
+    "Click into a table cell to edit its row, column, insets, fill, and " +
+    "applied styles.",
+  title: "Table",
+  cellAddress: "Row {row}, Column {col}",
+  selectedCell: "Selected cell",
+  row: "Row",
+  column: "Column",
+  rowsByColumns: "Rows × columns",
+  rowAndColumn: "Row & column",
+  rowHeight: "Row height",
+  columnWidth: "Column width",
+  addRow: "+ Row",
+  removeRow: "− Row",
+  addColumn: "+ Col",
+  removeColumn: "− Col",
+  deleteTable: "Delete table",
+  headerFooter: "Header & footer",
+  headerRows: "Header rows",
+  addHeader: "+ Header",
+  removeHeader: "− Header",
+  footerRows: "Footer rows",
+  addFooter: "+ Footer",
+  removeFooter: "− Footer",
+  totalRows: "Total rows",
+  mergeSplit: "Merge & split",
+  merge: "Merge 2×2",
+  split: "Split",
+  keepOptions: "Keep options",
+  startRow: "Start row",
+  keepWithNext: "Keep with next row",
+  cell: "Cell",
+  fill: "Fill",
+  none: "[None]",
+  tint: "Tint",
+  insets: "Insets (T L B R)",
+  vertJustify: "Vert. justify",
+  cellOptions: "Cell options",
+  cellStrokes: "Cell strokes",
+  weightShort: "Wt",
+  appliedStyles: "Applied styles",
+  cellStyle: "Cell style",
+  tableStyle: "Table style",
+  textNote:
+    "Cell text: pick the Type tool and click into a cell to edit its text " +
+    "in place. This panel edits cell structure, fills, strokes, insets, " +
+    "spans, and styles.",
+});
+
+/** The cell edges, by the name their paths carry, with their words. */
+const SIDE_LABELS: Readonly<Record<string, string>> = {
+  Top: M.top,
+  Bottom: M.bottom,
+  Left: M.left,
+  Right: M.right,
+};
 
 /** IDML `<Cell VerticalJustification>` values (same enum as the text
  *  frame preference). */
 const VJUSTIFY: Array<{ value: string; label: string }> = [
-  { value: "TopAlign", label: "Top" },
-  { value: "CenterAlign", label: "Center" },
-  { value: "BottomAlign", label: "Bottom" },
-  { value: "JustifyAlign", label: "Justify" },
+  { value: "TopAlign", label: M.top },
+  { value: "CenterAlign", label: M.center },
+  { value: "BottomAlign", label: M.bottom },
+  { value: "JustifyAlign", label: M.justify },
 ];
 
 /** One cell edge's stroke read-back. `color` is a swatch ref (or null
@@ -182,8 +249,8 @@ const CELL_PATHS = [
  *  `columnSpan` to `setCellSpan`). The fill tint sits under the fill
  *  colour, as in InDesign's Cell Options ▸ Strokes and Fills. */
 const CELL_SCHEMA_FIELDS: ReadonlyArray<{ path: string; label: string }> = [
-  { path: "rowSpan", label: "Row span" },
-  { path: "columnSpan", label: "Column span" },
+  { path: "rowSpan", label: M.rowSpan },
+  { path: "columnSpan", label: M.columnSpan },
 ];
 const TABLE_PATHS = [
   "appliedTableStyle",
@@ -241,6 +308,7 @@ function readCell(f: Record<string, ObjectField>): CellReadback {
 }
 
 export function TablePanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const ts = useOptionalTableSelection();
   const cell = ts?.cell ?? null;
@@ -381,8 +449,7 @@ export function TablePanel() {
     return (
       <div className="p-3" data-table-panel="empty">
         <div className="pg-ui-xs" style={{ color: "var(--pg-muted-fg)" }}>
-          Click into a table cell to edit its row, column, insets, fill, and
-          applied styles.
+          {strings.t(M.empty)}
         </div>
       </div>
     );
@@ -391,30 +458,30 @@ export function TablePanel() {
   return (
     <div data-table-panel="ready" style={{ overflowY: "auto", height: "100%" }}>
       <CockpitPanelHeader
-        title="Table"
+        title={strings.t(M.title)}
         action={
           // Counted from 1, in words, as InDesign's Table panel and a
           // spreadsheet's row headers count (the wire's indices are 0-based).
           <span className="pg-mono-meta" data-table-cell-address>
-            Row {cell.row + 1}, Column {cell.col + 1}
+            {strings.t(M.cellAddress, { row: cell.row + 1, col: cell.col + 1 })}
           </span>
         }
       />
 
-      <CockpitSection title="Selected cell">
-        <CockpitRow label="Row">
+      <CockpitSection title={strings.t(M.selectedCell)}>
+        <CockpitRow label={strings.t(M.row)}>
           <span className="pg-mono-meta" data-cell-row>
             {cell.row + 1}
           </span>
         </CockpitRow>
-        <CockpitRow label="Column">
+        <CockpitRow label={strings.t(M.column)}>
           <span className="pg-mono-meta" data-cell-col>
             {cell.col + 1}
           </span>
         </CockpitRow>
         {/* Aftercare-C: row / column totals now read back from the Table
             NodeId (tableRowCount / tableColumnCount). */}
-        <CockpitRow label="Rows × columns">
+        <CockpitRow label={strings.t(M.rowsByColumns)}>
           <span className="pg-mono-meta" data-table-dims>
             {tableRead?.rowCount != null && tableRead?.columnCount != null
               ? `${tableRead.rowCount} × ${tableRead.columnCount}`
@@ -423,7 +490,7 @@ export function TablePanel() {
         </CockpitRow>
       </CockpitSection>
 
-      <CockpitSection title="Row & column">
+      <CockpitSection title={strings.t(M.rowAndColumn)}>
         {/* ADR 323 §4 — the selected row's height and column's width as
             INDEXED table rows (`rows[i].height`, `columns[i].width` on
             the table address): read back, one undo step, Bind to data…. */}
@@ -434,14 +501,14 @@ export function TablePanel() {
           <PropertyField
             key={`row-${cell.row}`}
             path={`rows[${cell.row}].height`}
-            label="Row height"
+            label={strings.t(M.rowHeight)}
             targets={tableAddress ? [tableAddress] : NO_TARGETS}
             schemaKind={tableAddress ?? "table"}
           />
           <PropertyField
             key={`col-${cell.col}`}
             path={`columns[${cell.col}].width`}
-            label="Column width"
+            label={strings.t(M.columnWidth)}
             targets={tableAddress ? [tableAddress] : NO_TARGETS}
             schemaKind={tableAddress ?? "table"}
           />
@@ -452,34 +519,34 @@ export function TablePanel() {
             testId="insert-row"
             onClick={() => tableLineOp("insertTableRow", cell.row)}
           >
-            + Row
+            {strings.t(M.addRow)}
           </CockpitBtn>
           <CockpitBtn
             sm
             testId="delete-row"
             onClick={() => tableLineOp("deleteTableRow", cell.row)}
           >
-            − Row
+            {strings.t(M.removeRow)}
           </CockpitBtn>
           <CockpitBtn
             sm
             testId="insert-column"
             onClick={() => tableLineOp("insertTableColumn", cell.col)}
           >
-            + Col
+            {strings.t(M.addColumn)}
           </CockpitBtn>
           <CockpitBtn
             sm
             testId="delete-column"
             onClick={() => tableLineOp("deleteTableColumn", cell.col)}
           >
-            − Col
+            {strings.t(M.removeColumn)}
           </CockpitBtn>
         </div>
         <div className="flex gap-[5px] px-3 pb-1 pt-1">
           <CoreCommandButton
             op="deleteTable"
-            label="Delete table"
+            label={strings.t(M.deleteTable)}
             testId="delete-table"
             args={{
               storyId: `story:${cell.storyId}`,
@@ -489,43 +556,43 @@ export function TablePanel() {
         </div>
       </CockpitSection>
 
-      <CockpitSection title="Header & footer">
-        <CockpitRow label="Header rows">
+      <CockpitSection title={strings.t(M.headerFooter)}>
+        <CockpitRow label={strings.t(M.headerRows)}>
           <div className="flex items-center gap-[5px]">
             <CockpitBtn
               sm
               testId="insert-header-row"
               onClick={() => headerFooterOp("insertHeaderRow")}
             >
-              + Header
+              {strings.t(M.addHeader)}
             </CockpitBtn>
             <CockpitBtn
               sm
               testId="remove-header-row"
               onClick={() => headerFooterOp("removeHeaderRow")}
             >
-              − Header
+              {strings.t(M.removeHeader)}
             </CockpitBtn>
             <span className="pg-mono-meta" data-header-count>
               {headerApplied}
             </span>
           </div>
         </CockpitRow>
-        <CockpitRow label="Footer rows">
+        <CockpitRow label={strings.t(M.footerRows)}>
           <div className="flex items-center gap-[5px]">
             <CockpitBtn
               sm
               testId="insert-footer-row"
               onClick={() => headerFooterOp("insertFooterRow")}
             >
-              + Footer
+              {strings.t(M.addFooter)}
             </CockpitBtn>
             <CockpitBtn
               sm
               testId="remove-footer-row"
               onClick={() => headerFooterOp("removeFooterRow")}
             >
-              − Footer
+              {strings.t(M.removeFooter)}
             </CockpitBtn>
             <span className="pg-mono-meta" data-footer-count>
               {footerApplied}
@@ -535,22 +602,22 @@ export function TablePanel() {
         {/* Header / footer rows count toward the table's total row count;
             the engine exposes no separate header/footer read, so the
             count beside each control is the panel-applied delta. */}
-        <CockpitRow label="Total rows">
+        <CockpitRow label={strings.t(M.totalRows)}>
           <span className="pg-mono-meta" data-table-total-rows>
             {tableRead?.rowCount != null ? tableRead.rowCount : "—"}
           </span>
         </CockpitRow>
       </CockpitSection>
 
-      <CockpitSection title="Merge & split">
-        <CockpitRow label="Row span">
+      <CockpitSection title={strings.t(M.mergeSplit)}>
+        <CockpitRow label={strings.t(M.rowSpan)}>
           <NumberCommit
             testId="row-span"
             value={rowSpan}
             onCommit={(v) => applySpan(v, columnSpan)}
           />
         </CockpitRow>
-        <CockpitRow label="Column span">
+        <CockpitRow label={strings.t(M.columnSpan)}>
           <NumberCommit
             testId="column-span"
             value={columnSpan}
@@ -565,10 +632,10 @@ export function TablePanel() {
               applySpan(Math.max(2, rowSpan), Math.max(2, columnSpan))
             }
           >
-            Merge 2×2
+            {strings.t(M.merge)}
           </CockpitBtn>
           <CockpitBtn sm testId="split-cells" onClick={() => applySpan(1, 1)}>
-            Split
+            {strings.t(M.split)}
           </CockpitBtn>
         </div>
         <div className="px-3">
@@ -582,15 +649,15 @@ export function TablePanel() {
           Table Options ▸ Rows and Columns ▸ Keep Options: where the row
           starts, and whether it keeps with the next. Schema fields on the
           cell address — the row is reached through any of its cells. */}
-      <CockpitSection title="Keep options">
-        <CockpitRow label="Start row">
+      <CockpitSection title={strings.t(M.keepOptions)}>
+        <CockpitRow label={strings.t(M.startRow)}>
           <PropertyField
             path="rowStartRow"
             targets={cellAddress ? [cellAddress] : NO_TARGETS}
             schemaKind="cell"
           />
         </CockpitRow>
-        <CockpitRow label="Keep with next row">
+        <CockpitRow label={strings.t(M.keepWithNext)}>
           <PropertyField
             path="rowKeepWithNext"
             targets={cellAddress ? [cellAddress] : NO_TARGETS}
@@ -599,8 +666,8 @@ export function TablePanel() {
         </CockpitRow>
       </CockpitSection>
 
-      <CockpitSection title="Cell">
-        <CockpitRow label="Fill">
+      <CockpitSection title={strings.t(M.cell)}>
+        <CockpitRow label={strings.t(M.fill)}>
           <ObjectFieldFrame
             field={cellFields.cellFillColor}
             className="relative inline-flex w-full"
@@ -618,7 +685,7 @@ export function TablePanel() {
                 className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
                 style={{ color: "var(--pg-fg)" }}
               >
-                <option value="">[None]</option>
+                <option value="">{strings.t(M.none)}</option>
                 {(swatches ?? []).map((s) => (
                   <option key={s.selfId} value={s.selfId}>
                     {displayName(s.name)}
@@ -634,7 +701,7 @@ export function TablePanel() {
             </span>
           </ObjectFieldFrame>
         </CockpitRow>
-        <CockpitRow label="Tint">
+        <CockpitRow label={strings.t(M.tint)}>
           <PropertyField
             path="cellFillTint"
             targets={cellAddress ? [cellAddress] : NO_TARGETS}
@@ -642,7 +709,7 @@ export function TablePanel() {
             chrome={{ suffix: "%" }}
           />
         </CockpitRow>
-        <CockpitRow label="Insets (T L B R)">
+        <CockpitRow label={strings.t(M.insets)}>
           <div className="grid grid-cols-4 gap-1">
             <ObjectFieldFrame
               field={cellFields.cellInsetTop}
@@ -694,7 +761,7 @@ export function TablePanel() {
             </ObjectFieldFrame>
           </div>
         </CockpitRow>
-        <CockpitRow label="Vert. justify">
+        <CockpitRow label={strings.t(M.vertJustify)}>
           <ObjectFieldFrame
             field={cellFields.cellVerticalJustification}
             className="relative inline-flex w-full"
@@ -714,7 +781,7 @@ export function TablePanel() {
               >
                 {VJUSTIFY.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {strings.t(o.label)}
                   </option>
                 ))}
               </select>
@@ -729,7 +796,7 @@ export function TablePanel() {
         </CockpitRow>
       </CockpitSection>
 
-      <CockpitSection title="Cell options">
+      <CockpitSection title={strings.t(M.cellOptions)}>
         <div
           className="flex flex-col gap-1.5 pb-2"
           data-cell-schema-fields={cellAddress ?? ""}
@@ -738,7 +805,7 @@ export function TablePanel() {
             <PropertyField
               key={f.path}
               path={f.path}
-              label={f.label}
+              label={strings.t(f.label)}
               targets={cellAddress ? [cellAddress] : NO_TARGETS}
               schemaKind={cellAddress ?? "cell"}
             />
@@ -746,7 +813,7 @@ export function TablePanel() {
         </div>
       </CockpitSection>
 
-      <CockpitSection title="Cell strokes">
+      <CockpitSection title={strings.t(M.cellStrokes)}>
         {/* v35 per-cell edge strokes — colour / weight / tint per edge,
             all read back from the cell properties surface. */}
         {(
@@ -757,7 +824,7 @@ export function TablePanel() {
             ["Right", cellRead?.edgeRight ?? EMPTY_EDGE],
           ] as Array<[string, EdgeStroke]>
         ).map(([side, edge]) => (
-          <CockpitRow key={side} label={side}>
+          <CockpitRow key={side} label={strings.t(SIDE_LABELS[side]!)}>
             <div className="grid grid-cols-[1fr_56px_56px] gap-1">
               <ObjectFieldFrame
                 field={cellFields[`cell${side}EdgeStrokeColor`]}
@@ -771,7 +838,7 @@ export function TablePanel() {
                     className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
                     style={{ color: "var(--pg-fg)" }}
                   >
-                    <option value="">[None]</option>
+                    <option value="">{strings.t(M.none)}</option>
                     {(swatches ?? []).map((s) => (
                       <option key={s.selfId} value={s.selfId}>
                         {displayName(s.name)}
@@ -792,7 +859,7 @@ export function TablePanel() {
               >
                 <NumberCommit
                   testId={`edge-weight-${side.toLowerCase()}`}
-                  placeholder="Wt"
+                  placeholder={strings.t(M.weightShort)}
                   value={edge.weight ?? undefined}
                   onCommit={(v) => setEdgeWeight(side, v)}
                 />
@@ -803,7 +870,7 @@ export function TablePanel() {
               >
                 <NumberCommit
                   testId={`edge-tint-${side.toLowerCase()}`}
-                  placeholder="Tint"
+                  placeholder={strings.t(M.tint)}
                   value={edge.tint ?? undefined}
                   onCommit={(v) => setEdgeTint(side, v)}
                 />
@@ -813,8 +880,8 @@ export function TablePanel() {
         ))}
       </CockpitSection>
 
-      <CockpitSection title="Applied styles">
-        <CockpitRow label="Cell style">
+      <CockpitSection title={strings.t(M.appliedStyles)}>
+        <CockpitRow label={strings.t(M.cellStyle)}>
           <ObjectFieldFrame
             field={cellFields.appliedCellStyle}
             className="relative inline-flex w-full"
@@ -830,7 +897,7 @@ export function TablePanel() {
             />
           </ObjectFieldFrame>
         </CockpitRow>
-        <CockpitRow label="Table style">
+        <CockpitRow label={strings.t(M.tableStyle)}>
           <ObjectFieldFrame
             field={tableFields.appliedTableStyle}
             className="relative inline-flex w-full"
@@ -855,9 +922,7 @@ export function TablePanel() {
           color: "var(--pg-muted-fg)",
         }}
       >
-        Cell text: pick the Type tool and click into a cell to edit its text in
-        place. This panel edits cell structure, fills, strokes, insets, spans,
-        and styles.
+        {strings.t(M.textNote)}
       </div>
     </div>
   );
@@ -931,6 +996,7 @@ function StyleSelect({
   onApply: (id: string) => void;
   testId: string;
 }) {
+  const strings = useStrings();
   return (
     <span className="relative inline-flex w-full">
       <select
@@ -941,7 +1007,7 @@ function StyleSelect({
         className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
         style={{ color: "var(--pg-fg)" }}
       >
-        <option value="">[None]</option>
+        <option value="">{strings.t(M.none)}</option>
         {items.map((s) => (
           <option key={s.selfId} value={s.selfId}>
             {displayName(s.name)}

@@ -90,9 +90,9 @@ describe("the slide property panels", () => {
     await selectOnSlide(second);
     const index = await fieldOf(view.container, "index");
     expect(index.dataset.target).toBe(second);
-    // The slide's position is derived from the page order: a readout.
-    expect(index.textContent).toBe("2");
-    expect(index.hasAttribute("data-readonly")).toBe(true);
+    // The slide's position: a number the slide moves to when it is set.
+    expect((index as HTMLInputElement).value).toBe("2");
+    expect(index.hasAttribute("data-readonly")).toBe(false);
     const hidden = (await fieldOf(
       view.container,
       "hidden",

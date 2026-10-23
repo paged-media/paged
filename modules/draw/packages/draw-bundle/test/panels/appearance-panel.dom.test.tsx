@@ -28,6 +28,7 @@
 // inside a selection listener — and that is one selection behind. It
 // now takes the ids the event hands it (`src/panels/reload.ts`).
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
@@ -115,7 +116,7 @@ describe("Appearance panel — rendered against the engine", () => {
       }
       // The B-24 note is on screen, verbatim.
       expect(panel.get("[data-draw-appearance-note]").textContent).toBe(
-        APPEARANCE_BAKE_NOTE,
+        t(APPEARANCE_BAKE_NOTE),
       );
     });
 

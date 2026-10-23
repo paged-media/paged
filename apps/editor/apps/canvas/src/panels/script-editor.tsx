@@ -36,7 +36,7 @@
 import { useRef, useState } from "react";
 
 import {
-  AI_UNAVAILABLE_TEXT,
+  aiUnavailableText,
   describeAiError,
   plainSummary,
   PoweredByClaude,
@@ -44,6 +44,26 @@ import {
   useAiAvailability,
   useCanvasClient,
 } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.scriptEditor", {
+  you: "You: {prompt}",
+  declined: "Claude declined this request.",
+  turnLimit: " (stopped at the turn limit)",
+  truncated: " (the reply was cut off)",
+  claude: "Claude: {summary}{stopped}",
+  done: "Done.",
+  dispatchFailed: "dispatch failed: {message}",
+  askPlaceholder: "Ask Claude to write a script…",
+  askLabel: "Ask Claude to write a script",
+  stop: "Stop",
+  ask: "Ask",
+  engine: "JS — embedded Boa",
+  running: "running…",
+  run: "Run ▶",
+  source: "Script source",
+  empty: "Cmd-Enter to run. Output appears here.",
+});
 
 interface LogEntry {
   source: string;
@@ -64,6 +84,7 @@ console.log("set opacity to 50");
 `;
 
 export function ScriptEditorPanel(_: PanelProps) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [source, setSource] = useState<string>(EXAMPLE);
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -92,7 +113,12 @@ export function ScriptEditorPanel(_: PanelProps) {
       setLog((prev) => [...prev, entry]);
       scrollLog();
     };
-    append({ source: "", output: [], error: null, note: `You: ${prompt}` });
+    append({
+      source: "",
+      output: [],
+      error: null,
+      note: strings.t(M.you, { prompt }),
+    });
     // A promise chain rather than try/finally: the React Compiler does
     // not compile a component with a `finally` in it (ADR 229).
     await runEditorAgent(client, {
@@ -114,20 +140,23 @@ export function ScriptEditorPanel(_: PanelProps) {
           append({
             source: "",
             output: [],
-            error: "Claude declined this request.",
+            error: strings.t(M.declined),
           });
         else {
           const stopped =
             result.outcome === "turnLimit"
-              ? " (stopped at the turn limit)"
+              ? strings.t(M.turnLimit)
               : result.outcome === "truncated"
-                ? " (the reply was cut off)"
+                ? strings.t(M.truncated)
                 : "";
           append({
             source: "",
             output: [],
             error: null,
-            note: `Claude: ${plainSummary(result.summary) || "Done."}${stopped}`,
+            note: strings.t(M.claude, {
+              summary: plainSummary(result.summary) || strings.t(M.done),
+              stopped,
+            }),
           });
         }
         setAsk("");
@@ -161,7 +190,9 @@ export function ScriptEditorPanel(_: PanelProps) {
           {
             source,
             output: [],
-            error: `dispatch failed: ${(err as Error).message}`,
+            error: strings.t(M.dispatchFailed, {
+              message: (err as Error).message,
+            }),
           },
         ]);
       })
@@ -181,8 +212,8 @@ export function ScriptEditorPanel(_: PanelProps) {
         <input
           value={ask}
           onChange={(e) => setAsk(e.target.value)}
-          placeholder="Ask Claude to write a script…"
-          aria-label="Ask Claude to write a script"
+          placeholder={strings.t(M.askPlaceholder)}
+          aria-label={strings.t(M.askLabel)}
           disabled={asking !== null}
           className="flex-1 min-w-0 text-xs px-2 py-1 rounded bg-background border border-input outline-none focus:ring-1 focus:ring-ring"
           data-script-ask-input
@@ -194,17 +225,17 @@ export function ScriptEditorPanel(_: PanelProps) {
             className="px-2 py-0.5 rounded hover:bg-muted/60 text-xs"
             data-action="ask-stop"
           >
-            Stop
+            {strings.t(M.stop)}
           </button>
         ) : (
           <button
             type="submit"
             disabled={!ask.trim() || running || offline}
-            title={offline ? AI_UNAVAILABLE_TEXT : undefined}
+            title={offline ? aiUnavailableText() : undefined}
             className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs"
             data-action="ask"
           >
-            Ask
+            {strings.t(M.ask)}
           </button>
         )}
         <PoweredByClaude size={10} />
@@ -215,12 +246,12 @@ export function ScriptEditorPanel(_: PanelProps) {
           data-script-ai-unavailable
           className="px-2 py-1 text-xs text-muted-foreground border-b border-input"
         >
-          {AI_UNAVAILABLE_TEXT}
+          {aiUnavailableText()}
         </div>
       ) : null}
       <div className="flex items-center justify-between p-1 border-b border-input">
         <span className="text-xs text-muted-foreground px-1">
-          JS — embedded Boa
+          {strings.t(M.engine)}
         </span>
         <button
           type="button"
@@ -229,11 +260,11 @@ export function ScriptEditorPanel(_: PanelProps) {
           className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50"
           data-action="run"
         >
-          {running ? "running…" : "Run ▶"}
+          {running ? strings.t(M.running) : strings.t(M.run)}
         </button>
       </div>
       <textarea
-        aria-label="Script source"
+        aria-label={strings.t(M.source)}
         value={source}
         onChange={(e) => setSource(e.target.value)}
         className="font-mono text-xs p-2 flex-1 min-h-0 bg-background outline-none focus:ring-1 focus:ring-ring resize-none border-b border-input"
@@ -254,9 +285,7 @@ export function ScriptEditorPanel(_: PanelProps) {
         data-script-log
       >
         {log.length === 0 ? (
-          <div className="text-muted-foreground">
-            Cmd-Enter to run. Output appears here.
-          </div>
+          <div className="text-muted-foreground">{strings.t(M.empty)}</div>
         ) : (
           log.map((entry, i) => (
             <div key={i} className="border-b border-input/30 mb-1 pb-1">

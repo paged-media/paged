@@ -37,6 +37,8 @@
 //     screen. See `UncapturedTally` in `model.ts` for why the direct-
 //     edit count is a floor rather than an exact ledger.
 
+import { t } from "@paged-media/strings";
+import { ACTIONS } from "./messages";
 import {
   createContext,
   useCallback,
@@ -285,7 +287,9 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       if (!current || current.steps.length === 0) return null;
       const action: PagedAction = {
         id: newActionId(),
-        name: name.trim() || `Action ${library.actions.length + 1}`,
+        name:
+          name.trim() ||
+          t(ACTIONS.defaultName, { n: library.actions.length + 1 }),
         createdAt: Date.now(),
         steps: current.steps,
         uncaptured: current.uncaptured,
@@ -414,13 +418,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     const disposers = [
       registries.commands.register({
         id: "paged.actions.record",
-        title: "Actions: start recording",
+        title: t(ACTIONS.startRecording),
         category: "Actions",
         handler: () => apiRef.current?.startRecording(),
       }),
       registries.commands.register({
         id: "paged.actions.stop",
-        title: "Actions: stop recording",
+        title: t(ACTIONS.stopRecording),
         category: "Actions",
         handler: () => apiRef.current?.stopRecording(""),
       }),
@@ -433,7 +437,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
         // the palette entry actually usable and matches the "play what
         // I just recorded" reflex; the panel's Play button always
         // passes an explicit id.
-        title: "Actions: play most recent",
+        title: t(ACTIONS.playRecent),
         category: "Actions",
         handler: (_editor, payload) => {
           const current = apiRef.current;

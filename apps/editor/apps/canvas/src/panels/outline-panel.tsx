@@ -22,10 +22,17 @@
 // from context hooks, no props.
 
 import { useCamera, useDocument, type PanelProps } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import { Outline } from "../ui/Outline";
 import { useAnimatedCamera } from "../ui/useAnimatedCamera";
 
+const M = defineMessages("app.outlinePanel", {
+  unavailable:
+    "Outline unavailable. Load a document with heading anchors to populate.",
+});
+
 export function OutlinePanel(_props: PanelProps) {
+  const strings = useStrings();
   const { handle, resolution } = useDocument();
   const { camera, setCamera, viewportSize } = useCamera();
   const animateCamera = useAnimatedCamera(camera, setCamera);
@@ -33,7 +40,7 @@ export function OutlinePanel(_props: PanelProps) {
   if (!handle || handle.pageCount === 0 || !resolution) {
     return (
       <div style={{ padding: 12, opacity: 0.5 }}>
-        Outline unavailable. Load a document with heading anchors to populate.
+        {strings.t(M.unavailable)}
       </div>
     );
   }

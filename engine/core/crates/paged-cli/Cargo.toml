@@ -18,6 +18,8 @@ path = "src/main.rs"
 # subcommand without the dependency cycle that keeps `paged-inspect` and
 # `paged-export` in separate binaries.
 paged-canvas = { path = "../paged-canvas" }
+# The template policy's roles (`template` in the session, engine-serve).
+paged-template = { path = "../paged-template" }
 # `paged place` names a `PropertyPath` and a `Value` to set the fit and
 # the placed image's transform. Both come through `paged-canvas`
 # already; naming the crate makes the existing dependency honest rather

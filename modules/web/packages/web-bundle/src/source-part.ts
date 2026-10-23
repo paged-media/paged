@@ -47,6 +47,7 @@
 // source. The ones no label and no undo step can reach are dropped on save
 // by parts-gc.ts (ADR 410).
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   BundleHost,
   ElementId,
@@ -70,6 +71,13 @@ import {
   type WebFrameSource,
   type WebSourceEnvelope,
 } from "../../web-model/src";
+
+const M = defineMessages("web.persist", {
+  tooLarge:
+    "the web source is {kib} KiB; a document label holds at most 64 KiB and this host has no container parts to store it in",
+  notStored: "the web source ({kib} KiB) could not be stored: {error}",
+  noValueParts: "this host has no container parts to keep document values in",
+});
 
 type PersistHost = Pick<BundleHost, "document" | "parts" | "supports">;
 
@@ -184,9 +192,7 @@ export async function prepareSourceLabel(
   const kib = Math.ceil(stored.ref.bytes / 1024);
   if (!host.supports("storage.parts@1")) {
     return {
-      refused:
-        `the web source is ${kib} KiB; a document label holds at most 64 KiB ` +
-        "and this host has no container parts to store it in",
+      refused: t(M.tooLarge, { kib }),
     };
   }
   try {
@@ -195,7 +201,7 @@ export async function prepareSourceLabel(
     partsWrittenThisSession(host).add(path);
   } catch (err) {
     return {
-      refused: `the web source (${kib} KiB) could not be stored: ${String(err)}`,
+      refused: t(M.notStored, { kib, error: String(err) }),
     };
   }
   return { label: stored.label };
@@ -240,9 +246,7 @@ export function planSourceWrite(
   if (!host.supports("storage.parts@1")) {
     const kib = Math.ceil(stored.ref.bytes / 1024);
     return {
-      refused:
-        `the web source is ${kib} KiB; a document label holds at most 64 KiB ` +
-        "and this host has no container parts to store it in",
+      refused: t(M.tooLarge, { kib }),
     };
   }
   const path = sourcePartPath(stored.ref);
@@ -402,7 +406,7 @@ export async function writeDocumentValues(
   if (!host.supports("storage.parts@1")) {
     return {
       applied: false,
-      reason: "this host has no container parts to keep document values in",
+      reason: t(M.noValueParts),
     };
   }
   try {

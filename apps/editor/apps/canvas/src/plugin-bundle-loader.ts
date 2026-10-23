@@ -38,6 +38,11 @@
 // (`scripts/journal.test.mjs`).
 
 import { errorIdent } from "@paged-media/client/journal";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.pluginBundleLoader", {
+  failedToLoad: "{id} failed to load: {error}",
+});
 
 import type {
   BundleLike,
@@ -140,7 +145,7 @@ export function createBundleActivator<
     deps.publishProblem(id, "activation", [
       {
         severity: "error",
-        message: `${id} failed to load: ${String(err)}`,
+        message: t(M.failedToLoad, { id, error: String(err) }),
         source: "loadBundle",
       },
     ]);

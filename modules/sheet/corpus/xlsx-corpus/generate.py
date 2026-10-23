@@ -1023,6 +1023,298 @@ def gen_15_saveloss():
     write_zip("15-saveloss.xlsx", members)
 
 
+def gen_16_structure():
+    """16: EVERYTHING A ROW/COLUMN INSERT OR DELETE MUST MOVE (W1.2). Sheet
+    `Data` carries a conditional format, a list validation, an internal
+    hyperlink, a sheet autoFilter (with its `_FilterDatabase` name), a table
+    (`Rates`, H1:J4), a drawing with a picture and a chart over Data's ranges,
+    a note (legacy comment + VML box), a threaded comment, a page break, a
+    selection, a sparkline group in the x14 extension, a print area and a
+    defined name. Sheet `Report` sums Data and validates against it, so a
+    shift on Data must move references on another sheet too. Every piece is
+    written as Excel writes it, so the Excel open-check lane can open the
+    Paged-saved result without a repair prompt.
+    """
+    ns_x14 = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"
+    ns_xm = "http://schemas.microsoft.com/office/excel/2006/main"
+    ns_mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
+    ns_tc = "http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments"
+    rt_tc = "http://schemas.microsoft.com/office/2017/10/relationships/threadedComment"
+    rt_person = "http://schemas.microsoft.com/office/2017/10/relationships/person"
+    person_id = "{6F1D7E2A-0000-4000-8000-000000000001}"
+    tc_id = "{6F1D7E2A-0000-4000-8000-000000000002}"
+
+    def t(ref, text):
+        return f'<c r="{ref}" t="inlineStr"><is><t>{text}</t></is></c>'
+
+    def n(ref, v, s=None):
+        st = f' s="{s}"' if s else ""
+        return f'<c r="{ref}"{st}><v>{v}</v></c>'
+
+    rows = (
+        '<row r="1">' + t("A1", "Item") + t("B1", "Qty") + t("C1", "Kind") + t("D1", "Limit")
+        + t("F1", "a") + t("H1", "Code") + t("I1", "Rate") + t("J1", "Note") + "</row>"
+        '<row r="2">' + t("A2", "Pens") + n("B2", 12) + t("C2", "a") + n("D2", 15)
+        + t("F2", "b") + t("H2", "X") + n("I2", 1.5) + t("J2", "x") + "</row>"
+        '<row r="3">' + t("A3", "Ink") + n("B3", 20) + t("C3", "b") + n("D3", 15)
+        + t("F3", "c") + t("H3", "Y") + n("I3", 2.5) + t("J3", "y") + "</row>"
+        '<row r="4">' + t("A4", "Paper") + n("B4", 7) + t("C4", "c") + n("D4", 15)
+        + t("H4", "Z") + n("I4", 3.5) + t("J4", "z") + "</row>"
+        '<row r="5">' + t("A5", "Clips") + n("B5", 30) + t("C5", "a") + n("D5", 15) + "</row>"
+        '<row r="6">' + t("A6", "Total") + '<c r="B6"><f>SUM(B2:B5)</f><v>69</v></c>'
+        + '<c r="E6"><f>SUM(Rates[Rate])</f><v>7.5</v></c>' + "</row>"
+    )
+    sheet_data = (
+        XML_DECL
+        + f'<worksheet xmlns="{NS_MAIN}" xmlns:r="{NS_R}" xmlns:mc="{ns_mc}" '
+        f'mc:Ignorable="x14ac" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac">'
+        '<dimension ref="A1:J6"/>'
+        '<sheetViews><sheetView tabSelected="1" workbookViewId="0">'
+        '<selection activeCell="B4" sqref="B4"/></sheetView></sheetViews>'
+        '<sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.25"/>'
+        "<sheetData>" + rows + "</sheetData>"
+        '<autoFilter ref="A1:D5"/>'
+        '<conditionalFormatting sqref="B2:B5">'
+        '<cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>$D$2</formula></cfRule>'
+        "</conditionalFormatting>"
+        '<dataValidations count="1"><dataValidation type="list" allowBlank="1" '
+        'showInputMessage="1" showErrorMessage="1" sqref="C2:C5"><formula1>$F$1:$F$3</formula1>'
+        "</dataValidation></dataValidations>"
+        '<hyperlinks><hyperlink ref="A6" location="Report!A1" display="Total"/></hyperlinks>'
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+        '<rowBreaks count="1" manualBreakCount="1"><brk id="4" max="16383" man="1"/></rowBreaks>'
+        '<drawing r:id="rId1"/>'
+        '<legacyDrawing r:id="rId2"/>'
+        '<tableParts count="1"><tablePart r:id="rId3"/></tableParts>'
+        "<extLst>"
+        f'<ext uri="{{05C60535-1F16-4fd2-B633-F4F36F0B64E0}}" xmlns:x14="{ns_x14}">'
+        f'<x14:sparklineGroups xmlns:xm="{ns_xm}">'
+        '<x14:sparklineGroup displayEmptyCellsAs="gap">'
+        '<x14:colorSeries rgb="FF376092"/><x14:colorNegative rgb="FFD00000"/>'
+        '<x14:colorAxis rgb="FF000000"/><x14:colorMarkers rgb="FFD00000"/>'
+        '<x14:colorFirst rgb="FFD00000"/><x14:colorLast rgb="FFD00000"/>'
+        '<x14:colorHigh rgb="FFD00000"/><x14:colorLow rgb="FFD00000"/>'
+        "<x14:sparklines>"
+        "<x14:sparkline><xm:f>Data!B2:B5</xm:f><xm:sqref>B7</xm:sqref></x14:sparkline>"
+        "</x14:sparklines></x14:sparklineGroup></x14:sparklineGroups></ext>"
+        "</extLst>"
+        "</worksheet>"
+    )
+    sheet_data_rels = (
+        XML_DECL
+        + f'<Relationships xmlns="{NS_REL}">'
+        f'<Relationship Id="rId1" Type="{RT_DRAWING}" Target="../drawings/drawing1.xml"/>'
+        f'<Relationship Id="rId2" Type="{NS_R}/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/>'
+        f'<Relationship Id="rId3" Type="{RT_TABLE}" Target="../tables/table1.xml"/>'
+        f'<Relationship Id="rId4" Type="{RT_COMMENTS}" Target="../comments1.xml"/>'
+        f'<Relationship Id="rId5" Type="{rt_tc}" Target="../threadedComments/threadedComment1.xml"/>'
+        "</Relationships>"
+    )
+    report = (
+        XML_DECL
+        + f'<worksheet xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><dimension ref="A1:B1"/>'
+        "<sheetData><row r=\"1\">"
+        '<c r="A1"><f>SUM(Data!B2:B5)</f><v>69</v></c>' + t("B1", "Pens")
+        + "</row></sheetData>"
+        '<dataValidations count="1"><dataValidation type="list" allowBlank="1" '
+        'showInputMessage="1" showErrorMessage="1" sqref="B1"><formula1>Data!$A$2:$A$5</formula1>'
+        "</dataValidation></dataValidations>"
+        '<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>'
+        "</worksheet>"
+    )
+    table1 = (
+        XML_DECL
+        + f'<table xmlns="{NS_MAIN}" id="1" name="Rates" displayName="Rates" ref="H1:J4" totalsRowShown="0">'
+        '<autoFilter ref="H1:J4"/>'
+        '<tableColumns count="3"><tableColumn id="1" name="Code"/>'
+        '<tableColumn id="2" name="Rate"/><tableColumn id="3" name="Note"/></tableColumns>'
+        '<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" '
+        'showRowStripes="1" showColumnStripes="0"/></table>'
+    )
+    def png_1x1():
+        import struct
+        import zlib
+
+        def chunk(kind, data):
+            body = kind + data
+            return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+        ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0)
+        idat = zlib.compress(b"\x00\x33\x66\xcc\xff", 9)
+        return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+
+    png = png_1x1()
+    drawing1 = (
+        XML_DECL
+        + f'<xdr:wsDr xmlns:xdr="{NS_XDR}" xmlns:a="{NS_A}" xmlns:r="{NS_R}">'
+        '<xdr:twoCellAnchor editAs="oneCell">'
+        "<xdr:from><xdr:col>11</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>"
+        "<xdr:to><xdr:col>12</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>"
+        '<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="2" name="Picture 1"/><xdr:cNvPicPr>'
+        '<a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>'
+        '<xdr:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>'
+        '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="609600" cy="381000"/></a:xfrm>'
+        '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>'
+        "<xdr:clientData/></xdr:twoCellAnchor>"
+        "<xdr:twoCellAnchor>"
+        "<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>8</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>"
+        "<xdr:to><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>20</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>"
+        '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="3" name="Chart 1"/>'
+        "<xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>"
+        '<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>'
+        f'<a:graphic><a:graphicData uri="{NS_C}"><c:chart xmlns:c="{NS_C}" r:id="rId2"/>'
+        "</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>"
+        "</xdr:wsDr>"
+    )
+    drawing1_rels = (
+        XML_DECL
+        + f'<Relationships xmlns="{NS_REL}">'
+        f'<Relationship Id="rId1" Type="{NS_R}/image" Target="../media/image1.png"/>'
+        f'<Relationship Id="rId2" Type="{RT_CHART}" Target="../charts/chart1.xml"/>'
+        "</Relationships>"
+    )
+    chart1 = (
+        XML_DECL
+        + f'<c:chartSpace xmlns:c="{NS_C}" xmlns:a="{NS_A}" xmlns:r="{NS_R}">'
+        "<c:chart><c:autoTitleDeleted val=\"1\"/><c:plotArea><c:layout/>"
+        '<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>'
+        '<c:ser><c:idx val="0"/><c:order val="0"/>'
+        "<c:tx><c:strRef><c:f>Data!$B$1</c:f><c:strCache><c:ptCount val=\"1\"/>"
+        '<c:pt idx="0"><c:v>Qty</c:v></c:pt></c:strCache></c:strRef></c:tx>'
+        '<c:invertIfNegative val="0"/>'
+        "<c:cat><c:strRef><c:f>Data!$A$2:$A$5</c:f><c:strCache><c:ptCount val=\"4\"/>"
+        '<c:pt idx="0"><c:v>Pens</c:v></c:pt><c:pt idx="1"><c:v>Ink</c:v></c:pt>'
+        '<c:pt idx="2"><c:v>Paper</c:v></c:pt><c:pt idx="3"><c:v>Clips</c:v></c:pt>'
+        "</c:strCache></c:strRef></c:cat>"
+        "<c:val><c:numRef><c:f>Data!$B$2:$B$5</c:f><c:numCache><c:formatCode>General</c:formatCode>"
+        '<c:ptCount val="4"/><c:pt idx="0"><c:v>12</c:v></c:pt><c:pt idx="1"><c:v>20</c:v></c:pt>'
+        '<c:pt idx="2"><c:v>7</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt>'
+        "</c:numCache></c:numRef></c:val></c:ser>"
+        '<c:gapWidth val="150"/><c:axId val="10"/><c:axId val="20"/></c:barChart>'
+        '<c:catAx><c:axId val="10"/><c:scaling><c:orientation val="minMax"/></c:scaling>'
+        '<c:delete val="0"/><c:axPos val="b"/><c:numFmt formatCode="General" sourceLinked="1"/>'
+        '<c:majorTickMark val="out"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>'
+        '<c:crossAx val="20"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/>'
+        '<c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx>'
+        '<c:valAx><c:axId val="20"/><c:scaling><c:orientation val="minMax"/></c:scaling>'
+        '<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>'
+        '<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="out"/>'
+        '<c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="10"/>'
+        '<c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>'
+        "</c:plotArea><c:plotVisOnly val=\"1\"/></c:chart></c:chartSpace>"
+    )
+    comments1 = (
+        XML_DECL
+        + f'<comments xmlns="{NS_MAIN}" xmlns:mc="{ns_mc}" mc:Ignorable="xr" '
+        'xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision">'
+        f"<authors><author>Reviewer</author><author>tc={tc_id}</author></authors>"
+        "<commentList>"
+        '<comment ref="B3" authorId="0" shapeId="0"><text><r><t>Check the count.</t></r></text></comment>'
+        f'<comment ref="D3" authorId="1" shapeId="0" xr:uid="{tc_id}"><text><t>'
+        "[Threaded comment]\n\nYour version of Excel allows you to read this threaded comment; "
+        "however, any edits to it will get removed if the file is opened in a newer version of "
+        "Excel. Learn more: https://go.microsoft.com/fwlink/?linkid=870924\n\nComment:\n    "
+        "Is the limit right?</t></text></comment>"
+        "</commentList></comments>"
+    )
+
+    def note_shape(sid, row, col):
+        return (
+            f'<v:shape id="_x0000_s{sid}" type="#_x0000_t202" style="position:absolute;'
+            "margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:1;"
+            'visibility:hidden" fillcolor="#ffffe1" o:insetmode="auto">'
+            '<v:fill color2="#ffffe1"/><v:shadow on="t" color="black" obscured="t"/>'
+            '<v:path o:connecttype="none"/><v:textbox style="mso-direction-alt:auto">'
+            '<div style="text-align:left"></div></v:textbox>'
+            '<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/>'
+            f"<x:Anchor>{col + 1}, 15, {row}, 10, {col + 3}, 15, {row + 4}, 4</x:Anchor>"
+            f"<x:AutoFill>False</x:AutoFill><x:Row>{row}</x:Row><x:Column>{col}</x:Column>"
+            "</x:ClientData></v:shape>"
+        )
+
+    vml = (
+        '<xml xmlns:v="urn:schemas-microsoft-com:vml" '
+        'xmlns:o="urn:schemas-microsoft-com:office:office" '
+        'xmlns:x="urn:schemas-microsoft-com:office:excel">'
+        '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>'
+        '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" '
+        'path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/>'
+        '<v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>'
+        + note_shape(1025, 2, 1)
+        + note_shape(1026, 2, 3)
+        + "</xml>"
+    )
+    threaded = (
+        XML_DECL
+        + f'<ThreadedComments xmlns="{ns_tc}" xmlns:x="{NS_MAIN}">'
+        f'<threadedComment ref="D3" dT="2026-10-22T10:00:00.00" personId="{person_id}" id="{tc_id}">'
+        "<text>Is the limit right?</text></threadedComment></ThreadedComments>"
+    )
+    persons = (
+        XML_DECL
+        + f'<personList xmlns="{ns_tc}" xmlns:x="{NS_MAIN}">'
+        f'<person displayName="Reviewer" id="{person_id}" userId="Reviewer" providerId="None"/>'
+        "</personList>"
+    )
+    st = styles(
+        cell_xfs=[dict(numFmtId=0, fontId=0, fillId=0, borderId=0)],
+        dxfs=['<dxf><font><b/></font></dxf>'],
+    )
+    wb = workbook(
+        [("Data", 1, "rId1"), ("Report", 2, "rId2")],
+        defined_names=[
+            ("_xlnm._FilterDatabase", "Data!$A$1:$D$5", 0),
+            ("_xlnm.Print_Area", "Data!$A$1:$D$6", 0),
+            ("Limits", "Data!$D$2:$D$5", None),
+        ],
+    ).replace(
+        '<definedName name="_xlnm._FilterDatabase" localSheetId="0">',
+        '<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">',
+    )
+    ct = content_types([
+        ("/xl/workbook.xml", CT_WORKBOOK),
+        ("/xl/worksheets/sheet1.xml", CT_WORKSHEET),
+        ("/xl/worksheets/sheet2.xml", CT_WORKSHEET),
+        ("/xl/styles.xml", CT_STYLES),
+        ("/xl/tables/table1.xml", CT_TABLE),
+        ("/xl/drawings/drawing1.xml", CT_DRAWING),
+        ("/xl/charts/chart1.xml", CT_CHART),
+        ("/xl/comments1.xml", CT_COMMENTS),
+        ("/xl/threadedComments/threadedComment1.xml", "application/vnd.ms-excel.threadedcomments+xml"),
+        ("/xl/persons/person.xml", "application/vnd.ms-excel.person+xml"),
+    ]).replace(
+        f'<Default Extension="xml" ContentType="{CT_XML}"/>',
+        f'<Default Extension="xml" ContentType="{CT_XML}"/>'
+        f'<Default Extension="vml" ContentType="{CT_VML}"/>'
+        '<Default Extension="png" ContentType="image/png"/>',
+    )
+    members = [
+        ("[Content_Types].xml", ct),
+        ("_rels/.rels", root_rels()),
+        ("xl/workbook.xml", wb),
+        ("xl/_rels/workbook.xml.rels", workbook_rels([
+            ("rId1", RT_WORKSHEET, "worksheets/sheet1.xml"),
+            ("rId2", RT_WORKSHEET, "worksheets/sheet2.xml"),
+            ("rId3", RT_STYLES, "styles.xml"),
+            ("rId4", rt_person, "persons/person.xml"),
+        ])),
+        ("xl/worksheets/sheet1.xml", sheet_data),
+        ("xl/worksheets/_rels/sheet1.xml.rels", sheet_data_rels),
+        ("xl/worksheets/sheet2.xml", report),
+        ("xl/styles.xml", st),
+        ("xl/tables/table1.xml", table1),
+        ("xl/drawings/drawing1.xml", drawing1),
+        ("xl/drawings/_rels/drawing1.xml.rels", drawing1_rels),
+        ("xl/media/image1.png", png),
+        ("xl/charts/chart1.xml", chart1),
+        ("xl/comments1.xml", comments1),
+        ("xl/drawings/vmlDrawing1.vml", vml),
+        ("xl/threadedComments/threadedComment1.xml", threaded),
+        ("xl/persons/person.xml", persons),
+    ]
+    write_zip("16-structure.xlsx", members)
+
+
 def main():
     gen_01_minimal()
     gen_02_formulas()
@@ -1038,6 +1330,7 @@ def main():
     gen_12_datavalidation()
     gen_13_comments()
     gen_15_saveloss()
+    gen_16_structure()
 
 
 if __name__ == "__main__":

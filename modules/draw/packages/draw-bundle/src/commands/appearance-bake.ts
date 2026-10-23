@@ -149,6 +149,13 @@ import { parentGroupOf } from "./parentage";
 import { linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.appearanceBake", {
+  bake: "Appearance: Bake stack to a group",
+  release: "Appearance: Release baked stack",
+});
 export const APPEARANCE_BAKE_COMMAND_ID =
   "media.paged.draw.command.bakeAppearance";
 export const APPEARANCE_RELEASE_COMMAND_ID =
@@ -860,7 +867,7 @@ export function contributeAppearanceBakeCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: APPEARANCE_BAKE_COMMAND_ID,
-      title: "Appearance: Bake stack to a group",
+      title: M.bake,
       category: "Appearance",
       handler: () =>
         forEachSelectedCarrier(host, APPEARANCE_BAKE_COMMAND_ID, (carrier) =>
@@ -869,7 +876,7 @@ export function contributeAppearanceBakeCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: APPEARANCE_RELEASE_COMMAND_ID,
-      title: "Appearance: Release baked stack",
+      title: M.release,
       category: "Appearance",
       handler: () =>
         forEachSelectedCarrier(host, APPEARANCE_RELEASE_COMMAND_ID, (carrier) =>

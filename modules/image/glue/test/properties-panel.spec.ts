@@ -35,9 +35,12 @@ import { KIND_PREFIX, KIND_ROWS } from "../src/object-model/image-objects";
 import {
   BIND,
   IMAGE_PANEL_FIELDS,
-  IMAGE_PROPERTIES_PANEL,
+  imagePropertiesPanel,
   PROPERTIES_PANEL_ID,
 } from "../src/panels/properties-panel";
+
+/** The panel as the bundle contributes it (in English here). */
+const IMAGE_PROPERTIES_PANEL = imagePropertiesPanel();
 
 const schemaOf = (k: string): readonly PropertySchema[] | undefined =>
   k.startsWith(KIND_PREFIX)
@@ -91,11 +94,16 @@ describe("image properties panel (property rows)", () => {
         (r) => `${r.field.kind!.slice(KIND_PREFIX.length)}.${r.field.path}`,
       ),
     );
-    const writable = Object.entries(KIND_ROWS).flatMap(([kind, rows]) =>
-      (rows as readonly PropertySchema[])
-        .filter((r) => (r.access ?? "readWrite") === "readWrite")
-        .map((r) => `${kind}.${r.path}`),
-    );
+    // The image kind's writable rows are canvas operations (crop, canvas
+    // size, rotate / flip) on the whole stack, reached by typed commands;
+    // this panel edits one layer.
+    const writable = Object.entries(KIND_ROWS)
+      .filter(([kind]) => kind !== "image")
+      .flatMap(([kind, rows]) =>
+        (rows as readonly PropertySchema[])
+          .filter((r) => (r.access ?? "readWrite") === "readWrite")
+          .map((r) => `${kind}.${r.path}`),
+      );
     expect(writable.length).toBeGreaterThan(90);
     expect(writable.filter((w) => !declared.has(w))).toEqual([]);
   });

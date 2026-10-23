@@ -49,7 +49,9 @@ import {
   EXPORT_PDF_COMMAND,
   IMPORT_IDML_COMMAND,
   pdfExportArgs,
+  PREFLIGHT_COMMAND,
   type ExportResult,
+  type PreflightResult,
 } from "../src/commands";
 
 type Reply = { kind: string; payload?: unknown };
@@ -225,6 +227,65 @@ describe("media.paged.publish.exportPdf (unit)", () => {
       /failed: no document/,
     );
     expect(sent(b.fake)).toEqual(["exportPdfBegin"]);
+    b.dispose();
+  });
+});
+
+describe("media.paged.publish.preflight (unit)", () => {
+  it("runs the PDF session with the same options and answers the findings without the bytes", async () => {
+    covers("command:media.paged.publish.preflight");
+    const b = boot(pdfEngine(2));
+    const out = (await b.host.objects.invoke(PREFLIGHT_COMMAND, {
+      pages: "1-2",
+      tagged: true,
+    })) as PreflightResult;
+    expect(sent(b.fake)).toEqual([
+      "exportPdfBegin",
+      "exportPdfPage",
+      "exportPdfPage",
+      "exportPdfFinish",
+    ]);
+    const begin = b.fake.ofChannel("send")[0]!.message as Extract<
+      MainToWorkerKind,
+      { kind: "exportPdfBegin" }
+    >;
+    expect(begin.payload.options).toMatchObject({
+      pageFrom: 0,
+      pageTo: 1,
+      tagged: true,
+      bookmarks: false,
+    });
+    expect(out).toEqual({
+      ok: true,
+      pageCount: 2,
+      errors: 0,
+      warnings: 1,
+      findings: [
+        {
+          severity: "warning",
+          code: "overset",
+          message: "overset text on page 2",
+          page: 2,
+        },
+        {
+          severity: "info",
+          code: "pdf",
+          message: "image downsampled",
+          page: 0,
+        },
+      ],
+    });
+    expect(b.fake.mutations()).toEqual([]);
+    b.dispose();
+  });
+
+  it("refuses the options the exporter refuses, before the engine is asked", async () => {
+    covers("command:media.paged.publish.preflight");
+    const b = boot(pdfEngine(1));
+    await expect(
+      b.host.objects.invoke(PREFLIGHT_COMMAND, { standard: "pdfx4" }),
+    ).rejects.toThrow(/invalidValue: pdfx4 needs an outputIntentProfile/);
+    expect(sent(b.fake)).toEqual([]);
     b.dispose();
   });
 });

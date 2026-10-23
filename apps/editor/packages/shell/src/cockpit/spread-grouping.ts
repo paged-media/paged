@@ -23,6 +23,8 @@
 // in until the wire exposes it). Shared by the Document Map and the
 // thumbnail filmstrip.
 
+import { t } from "@paged-media/strings";
+import { PAGES } from "./messages";
 import type { PageId, SpreadSummary } from "@paged-media/client";
 
 export interface SpreadEntry {
@@ -74,12 +76,12 @@ export function groupSpreads(
         key: s.selfId,
         name:
           entries.length === 0 && pageIndices.length === 1
-            ? "Cover"
+            ? t(PAGES.cover)
             : labelUsable
               ? s.label
               : pageIndices.length === 1
-                ? `Page ${range}`
-                : `Pages ${range}`,
+                ? t(PAGES.page, { range })
+                : t(PAGES.pages, { range }),
         range,
         pageIndices,
       });
@@ -89,7 +91,7 @@ export function groupSpreads(
     const n = cursor + 1;
     entries.push({
       key: `page-${pageIds[cursor]}`,
-      name: cursor === 0 ? "Cover" : `Page ${n}`,
+      name: cursor === 0 ? t(PAGES.cover) : t(PAGES.page, { range: n }),
       range: String(n),
       pageIndices: [cursor],
     });

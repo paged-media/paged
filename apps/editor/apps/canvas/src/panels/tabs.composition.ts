@@ -32,10 +32,17 @@
 
 import type { CompositionNode } from "@paged-media/catalog";
 import { PAGED_LAYOUT_SECTION } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
 
-export const tabsComposition: CompositionNode = {
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Tabs", heading: false },
-  bindings: {},
-  children: [],
-};
+const M = defineMessages("app.tabsComposition", {
+  tabs: "Tabs",
+});
+
+export function tabsComposition(strings: Strings): CompositionNode {
+  return {
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.tabs), heading: false },
+    bindings: {},
+    children: [],
+  };
+}

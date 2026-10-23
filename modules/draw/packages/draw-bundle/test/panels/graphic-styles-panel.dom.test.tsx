@@ -31,6 +31,7 @@
 // many elements follow a style, not their paint — and one property read
 // for the selected element.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -107,7 +108,7 @@ describe("Graphic styles panel — rendered against the engine", () => {
       expect(panel.disabled("[data-draw-graphic-style-save]")).toBe(true);
       expect(panel.disabled("[data-draw-graphic-style-break]")).toBe(true);
       expect(panel.get("[data-draw-graphic-styles-note]").textContent).toBe(
-        GRAPHIC_STYLES_NOTE,
+        t(GRAPHIC_STYLES_NOTE),
       );
     });
 

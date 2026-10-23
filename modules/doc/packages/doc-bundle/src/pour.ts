@@ -22,6 +22,9 @@
 import type { StoryStep } from "@paged-media/doc-host-model";
 import type { BundleHost, ElementId, Mutation } from "@paged-media/plugin-api";
 import { refusalText } from "@paged-media/panel-kit";
+import { t } from "@paged-media/strings";
+
+import { DOC } from "./messages.js";
 
 /** A conservative story-offset advance past a table paragraph. The exact
  *  footprint is refined during editor integration (a table occupies one
@@ -214,7 +217,7 @@ export async function applyStyleOpsReporting(
         ? `${args.path} on ${args.styleId ?? "?"}`
         : ((op as { op?: string }).op ?? "?");
       out.messages.push(
-        `This engine cannot apply ${what}: ${refusalText(one.error)}`,
+        t(DOC.cannotApply, { what, reason: refusalText(one.error) }),
       );
       if (args?.path) out.paths.add(args.path);
     }

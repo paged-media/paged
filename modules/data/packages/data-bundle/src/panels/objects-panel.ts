@@ -34,9 +34,11 @@ import type {
   PanelSchema,
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
 import { PANEL_FIELDS, PLUGIN_ID, type KindName } from "../object-model";
 import type { DataSourceSession } from "../session";
+import { COMMANDS, OBJECTS as M } from "../messages";
 
 export const OBJECTS_PANEL_ID = "media.paged.data.panel.objects";
 
@@ -57,16 +59,27 @@ export const BIND = {
 } as const;
 
 /** The panels that create and edit each kind — the overview's rows
- *  open them; it is an index, not a second editor. */
+ *  open them; it is an index, not a second editor. Titles are message
+ *  keys. */
 const PANEL = {
-  sources: { id: "media.paged.data.panel.sources", title: "Data sources" },
-  query: { id: "media.paged.data.panel.query", title: "Data query" },
-  bindings: { id: "media.paged.data.panel.bindings", title: "Bindings" },
-  dataset: { id: "media.paged.data.panel.dataset", title: "Dataset preview" },
+  sources: {
+    id: "media.paged.data.panel.sources",
+    title: COMMANDS.sourcesPanel,
+  },
+  query: { id: "media.paged.data.panel.query", title: COMMANDS.queryPanel },
+  bindings: {
+    id: "media.paged.data.panel.bindings",
+    title: COMMANDS.bindingsPanel,
+  },
+  dataset: {
+    id: "media.paged.data.panel.dataset",
+    title: COMMANDS.datasetPanel,
+  },
 } as const;
 
 /** One section per kind: an empty line naming where the kind is made,
- *  the list (each row opens its panel), then the picked item's rows. */
+ *  the list (each row opens its panel), then the picked item's rows.
+ *  `title` and `empty` are message keys. */
 const SECTIONS: ReadonlyArray<{
   kind: KindName;
   title: string;
@@ -79,51 +92,47 @@ const SECTIONS: ReadonlyArray<{
 }> = [
   {
     kind: "source",
-    title: "Sources",
+    title: M.sources,
     rows: BIND.sources,
     select: BIND.source,
     secondaryPath: "type",
     panel: PANEL.sources,
-    empty:
-      "No sources yet. Import a file or add a remote source in Data sources.",
+    empty: M.sourcesEmpty,
   },
   {
     kind: "query",
-    title: "Queries",
+    title: M.queries,
     rows: BIND.queries,
     select: BIND.query,
     secondaryPath: "shape",
     panel: PANEL.query,
-    empty: "No saved queries. Build and save one in Data query.",
+    empty: M.queriesEmpty,
   },
   {
     kind: "binding",
-    title: "Bindings",
+    title: M.bindings,
     rows: BIND.bindings,
     select: BIND.binding,
     secondaryPath: "kind",
     panel: PANEL.bindings,
-    empty:
-      "Nothing on the page is bound yet. Bind a frame's text or image in Bindings.",
+    empty: M.bindingsEmpty,
   },
   {
     kind: "dataSet",
-    title: "Data sets",
+    title: M.dataSets,
     rows: BIND.dataSets,
     select: BIND.dataSet,
     panel: PANEL.dataset,
-    empty:
-      "No data sets. Capture the current values as one in Dataset preview.",
+    empty: M.dataSetsEmpty,
   },
   {
     kind: "variable",
-    title: "Variables",
+    title: M.variables,
     rows: BIND.variables,
     select: BIND.variable,
     secondaryPath: "trait",
     panel: PANEL.dataset,
-    empty:
-      "No variables yet. They appear once a source or a query defines them.",
+    empty: M.variablesEmpty,
   },
 ];
 
@@ -149,7 +158,7 @@ const list = (
     // The host derives `paged.panel.show.<id>` for every registered panel.
     actions: [
       {
-        label: `Open in ${panel.title}`,
+        label: t(M.openIn, { panel: t(panel.title) }),
         action: {
           kind: "command" as const,
           command: `paged.panel.show.${panel.id}`,
@@ -159,12 +168,13 @@ const list = (
   },
 });
 
-/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind). */
-export const DATA_OBJECTS_PANEL: PanelSchema = {
+/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind), in
+ *  the active locale's words (built when the bundle registers it). */
+export const dataObjectsPanel = (): PanelSchema => ({
   id: OBJECTS_PANEL_ID,
   // "Data overview": every data object of the document in one place. It was
   // "Data objects", the one panel title a designer would not parse.
-  title: "Data overview",
+  title: t(M.title),
   icon: "panel-tree",
   defaultDock: "right",
   sections: [
@@ -173,20 +183,18 @@ export const DATA_OBJECTS_PANEL: PanelSchema = {
         {
           widget: "paged.label",
           props: {
-            text:
-              "Everything this document's data setup holds. Pick an item to see its settings; " +
-              "Open takes you to the panel where it is made.",
+            text: t(M.intro),
           },
         },
       ],
     },
     ...SECTIONS.map((s, i) => ({
-      title: s.title,
+      title: t(s.title),
       ...(i > 1 ? { collapsible: true } : {}),
       rows: [
         {
           widget: "paged.label",
-          props: { text: s.empty },
+          props: { text: t(s.empty) },
           visible: { bind: hasRowsBinding(s.rows), negate: true },
         },
         // The list shows once it has rows; until then the sentence above
@@ -199,7 +207,7 @@ export const DATA_OBJECTS_PANEL: PanelSchema = {
       ],
     })),
   ],
-};
+});
 
 /** Keep the five lists live. The session's objects are session state the
  *  object registry does not announce, so a session change re-reads them

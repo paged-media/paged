@@ -41,6 +41,22 @@ import type {
 } from "./plugin-secret-store";
 import { color, font, radius } from "@paged-media/panel-kit";
 import { FocusScope } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.secretPromptDialog", {
+  tierWebcrypto:
+    "Stored for this document, encrypted with your passphrase (browser " +
+    "keychain — the weaker tier; an OS keychain ships with the desktop shell).",
+  tierSession:
+    "Held for this browser session only — it is not saved. Re-enter it " +
+    "after a reload (set a passphrase in settings to persist it, wrapped).",
+  title: "This source uses a stored credential",
+  refBefore: "A plugin asked to store a credential under",
+  refAfter: ". The plugin keeps only this reference — never the secret itself.",
+  credential: "Credential",
+  cancel: "Cancel",
+  store: "Store credential",
+});
 
 export function SecretPromptDialog({
   controller,
@@ -60,6 +76,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
   // user pasted into the source dialog). The user confirms or edits; only
   // what they confirm is stored.
   const [value, setValue] = useState<string>(pending.suggested);
+  const strings = useStrings();
 
   const cancel = (): void => pending.decide(null);
   const save = (): void => pending.decide(value);
@@ -76,8 +93,8 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
 
   const tierNote =
     pending.tier === "webcrypto"
-      ? "Stored for this document, encrypted with your passphrase (browser keychain — the weaker tier; an OS keychain ships with the desktop shell)."
-      : "Held for this browser session only — it is not saved. Re-enter it after a reload (set a passphrase in settings to persist it, wrapped).";
+      ? strings.t(M.tierWebcrypto)
+      : strings.t(M.tierSession);
 
   return (
     <div
@@ -116,10 +133,10 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
             focus returns to the opener on close. */}
         <FocusScope trap autoFocus restoreFocus>
           <h2 id="secret-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-            This source uses a stored credential
+            {strings.t(M.title)}
           </h2>
           <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-            A plugin asked to store a credential under{" "}
+            {strings.t(M.refBefore)}{" "}
             <code
               data-testid="secret-ref"
               style={{
@@ -129,7 +146,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
             >
               {pending.ref}
             </code>
-            . The plugin keeps only this reference — never the secret itself.
+            {strings.t(M.refAfter)}
           </p>
 
           <label
@@ -139,7 +156,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
               color: color.mutedFg,
             }}
           >
-            Credential
+            {strings.t(M.credential)}
             <input
               type="password"
               data-testid="secret-input"
@@ -182,7 +199,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
               onClick={cancel}
               style={btnStyle(false)}
             >
-              Cancel
+              {strings.t(M.cancel)}
             </button>
             <button
               type="button"
@@ -191,7 +208,7 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
               disabled={value.length === 0}
               style={btnStyle(true, value.length === 0)}
             >
-              Store credential
+              {strings.t(M.store)}
             </button>
           </div>
         </FocusScope>

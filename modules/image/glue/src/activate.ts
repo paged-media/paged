@@ -39,11 +39,14 @@ import {
   contributeTool,
 } from "@paged-media/plugin-sdk";
 import {
-  IMAGE_PROPERTIES_PANEL,
+  imagePropertiesPanel,
   PROPERTIES_PANEL_ID,
   publishPropertyLists,
 } from "./panels/properties-panel";
 import { contributeMenu } from "./menu";
+import { defineMessages, defineTranslations, t } from "@paged-media/strings";
+
+import de from "../locales/de.json" with { type: "json" };
 
 import manifest from "../manifest.json";
 
@@ -65,6 +68,92 @@ import {
   contributeImageObjectModel,
   type UntypedCommand,
 } from "./object-model/contribute";
+
+const CMD = defineMessages("image.command", {
+  image: "Image",
+  openImagePanel: "Open image panel",
+  adjustImage: "Adjust image",
+  autoEnhanceImage: "Auto-enhance image",
+  serveImageTilesToTheRenderer: "Serve image tiles to the renderer",
+  applyCrop: "Apply crop",
+  fillSelectionWithAGradient: "Fill selection with a gradient",
+  fillSelectionWithNoise: "Fill selection with noise",
+  addImageLayer: "Add image layer",
+  addLayerMaskRevealAll: "Add layer mask (reveal all)",
+  addLayerMaskHideAll: "Add layer mask (hide all)",
+  bakeAdjustmentsIntoTheActiveLayer: "Bake adjustments into the active layer",
+  undoImageEdit: "Undo image edit",
+  redoImageEdit: "Redo image edit",
+  median3x3: "Median (3×3)",
+  maximum3x3: "Maximum (3×3)",
+  minimum3x3: "Minimum (3×3)",
+  fillWithTheForegroundColour: "Fill with the foreground colour",
+  rotateCanvas90Clockwise: "Rotate canvas 90° clockwise",
+  rotateCanvas90CounterClockwise: "Rotate canvas 90° counter-clockwise",
+  rotateCanvas180: "Rotate canvas 180°",
+  flipCanvasHorizontal: "Flip canvas horizontal",
+  flipCanvasVertical: "Flip canvas vertical",
+  commitImageEditsToTheDocument: "Commit image edits to the document",
+  convertActiveLayerToSmartObject: "Convert active layer to smart object",
+  definePatternFromSelectionImage: "Define pattern from selection (image)",
+  fillSelectionWithTheDefinedPattern: "Fill selection with the defined pattern",
+  shapeBlurDefinedPatternAsTheShape:
+    "Shape blur (defined pattern as the shape)",
+  applyAdjustmentsToTheFile: "Apply adjustments to the file",
+  saveTheAdjustedFile: "Save the adjusted file",
+  loadBrushLibraryAbr: "Load brush library (.abr)",
+  selectionToPathImage: "Selection to path (image)",
+  pathToSelectionImage: "Path to selection (image)",
+  luminosityChannelToSelectionImage: "Luminosity channel to selection (image)",
+  setTypeImage: "Set type (image)",
+  contentAwareFill: "Content-aware fill",
+  selectAllImage: "Select all (image)",
+  deselectImage: "Deselect (image)",
+  invertSelectionImage: "Invert selection (image)",
+  featherSelectionImage: "Feather selection (image)",
+});
+
+const TOOL = defineMessages("image.tool", {
+  crop: "Crop",
+  movePixels: "Move pixels",
+  paintBucket: "Paint bucket",
+  gradient: "Gradient",
+  redEye: "Red eye",
+  marqueeRectangle: "Marquee (rectangle)",
+  marqueeEllipse: "Marquee (ellipse)",
+  lasso: "Lasso",
+  polygonalLasso: "Polygonal lasso",
+  magicWand: "Magic wand",
+  quickSelection: "Quick selection",
+  brushRaster: "Brush (raster)",
+  pencilRaster: "Pencil (raster)",
+  eraserRaster: "Eraser (raster)",
+  cloneStamp: "Clone stamp",
+  healingBrush: "Healing brush",
+  spotHealingBrush: "Spot healing brush",
+  patch: "Patch",
+  typeRaster: "Type (raster)",
+  dodge: "Dodge",
+  burn: "Burn",
+  sponge: "Sponge",
+  blurBrush: "Blur (brush)",
+  sharpenBrush: "Sharpen (brush)",
+});
+
+const IO = defineMessages("image.io", {
+  imagePsdPngJpeg: "Image (PSD/PNG/JPEG)",
+  psdAdjustedPixelsEditedLayers: "PSD (adjusted pixels + edited layers)",
+  pngAdjustedPixels: "PNG (adjusted pixels)",
+  jpegAdjustedPixels: "JPEG (adjusted pixels)",
+});
+
+// The commands' category stays English (an identity); the shell shows it
+// through its category labels.
+defineMessages("commandCategory", { Image: "Image" });
+
+// The German of every message in this bundle (the editor's catalogue for
+// a language is all packages' translations together).
+defineTranslations("de", de);
 
 const PANEL_ID = "media.paged.image.panel.adjustments";
 const CROP_TOOL_ID = "media.paged.image.tool.crop";
@@ -114,7 +203,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributePanel(host, {
     id: PANEL_ID,
-    title: "Image",
+    title: t(CMD.image),
     icon: "panel-canvas",
     component: makeImagePanel(session),
     defaultDock: "right",
@@ -122,7 +211,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   command({
     id: "media.paged.image.command.openImage",
-    title: "Open image panel",
+    title: t(CMD.openImagePanel),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -134,7 +223,7 @@ export function activate(host: BundleHost): BundleHandle {
   // panel's committed Apply runs the GPU chain + the in-frame composite.
   command({
     id: "media.paged.image.command.adjustSelected",
-    title: "Adjust image",
+    title: t(CMD.adjustImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -156,7 +245,7 @@ export function activate(host: BundleHost): BundleHandle {
   // params. Like every edit it's PREVIEW-only — the user commits with Apply.
   command({
     id: "media.paged.image.command.autoEnhance",
-    title: "Auto-enhance image",
+    title: t(CMD.autoEnhanceImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -171,7 +260,7 @@ export function activate(host: BundleHost): BundleHandle {
   // resource channel (rendering.resourceProvider@1 is false).
   command({
     id: "media.paged.image.command.claimTiles",
-    title: "Serve image tiles to the renderer",
+    title: t(CMD.serveImageTilesToTheRenderer),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -202,7 +291,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributeTool(host, {
     id: CROP_TOOL_ID,
-    title: "Crop",
+    title: t(TOOL.crop),
     icon: "tool-crop",
     group: CROP_TOOL_ID,
     section: "transform",
@@ -218,7 +307,7 @@ export function activate(host: BundleHost): BundleHandle {
   // "v" is the host Selection tool, which moves the FRAME.
   contributeTool(host, {
     id: MOVE_TOOL_ID,
-    title: "Move pixels",
+    title: t(TOOL.movePixels),
     icon: "tool-select",
     group: CROP_TOOL_ID,
     section: "transform",
@@ -230,7 +319,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: BUCKET_TOOL_ID,
     ...optionsFor(BUCKET_TOOL_ID),
-    title: "Paint bucket",
+    title: t(TOOL.paintBucket),
     icon: "tool-gradient",
     group: BRUSH_TOOL_ID,
     section: "drawType",
@@ -242,7 +331,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: GRADIENT_TOOL_ID,
     ...optionsFor(GRADIENT_TOOL_ID),
-    title: "Gradient",
+    title: t(TOOL.gradient),
     icon: "tool-gradient",
     group: BRUSH_TOOL_ID,
     section: "drawType",
@@ -252,7 +341,7 @@ export function activate(host: BundleHost): BundleHandle {
   // RED EYE — drag a box around the eye; shares the healing brush's slot.
   contributeTool(host, {
     id: RED_EYE_TOOL_ID,
-    title: "Red eye",
+    title: t(TOOL.redEye),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
     section: "drawType",
@@ -263,7 +352,7 @@ export function activate(host: BundleHost): BundleHandle {
   // button): cut the machine's rect out of the engine source + recomposite.
   command({
     id: "media.paged.image.command.commitCrop",
-    title: "Apply crop",
+    title: t(CMD.applyCrop),
     category: "Image",
     handler: () => {
       void session.commitCrop();
@@ -286,7 +375,7 @@ export function activate(host: BundleHost): BundleHandle {
   // built-ins at pick time.
   contributeTool(host, {
     id: MARQUEE_RECT_TOOL_ID,
-    title: "Marquee (rectangle)",
+    title: t(TOOL.marqueeRectangle),
     icon: "tool-marquee-rect",
     group: MARQUEE_RECT_TOOL_ID,
     section: "selection",
@@ -295,7 +384,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   contributeTool(host, {
     id: MARQUEE_ELLIPSE_TOOL_ID,
-    title: "Marquee (ellipse)",
+    title: t(TOOL.marqueeEllipse),
     icon: "tool-marquee-ellipse",
     group: MARQUEE_ELLIPSE_TOOL_ID,
     section: "selection",
@@ -304,7 +393,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   contributeTool(host, {
     id: LASSO_TOOL_ID,
-    title: "Lasso",
+    title: t(TOOL.lasso),
     icon: "tool-lasso",
     group: LASSO_TOOL_ID,
     section: "selection",
@@ -326,7 +415,7 @@ export function activate(host: BundleHost): BundleHandle {
   // paged.draw's CLAUDE.md warns about.
   contributeTool(host, {
     id: POLY_LASSO_TOOL_ID,
-    title: "Polygonal lasso",
+    title: t(TOOL.polygonalLasso),
     icon: "tool-lasso",
     group: LASSO_TOOL_ID,
     section: "selection",
@@ -339,7 +428,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: MAGIC_WAND_TOOL_ID,
     ...optionsFor(MAGIC_WAND_TOOL_ID),
-    title: "Magic wand",
+    title: t(TOOL.magicWand),
     icon: "tool-magic-wand",
     group: MAGIC_WAND_TOOL_ID,
     section: "selection",
@@ -357,7 +446,7 @@ export function activate(host: BundleHost): BundleHandle {
   // complaint that makes a wand feel unpredictable.
   contributeTool(host, {
     id: QUICK_SELECT_TOOL_ID,
-    title: "Quick selection",
+    title: t(TOOL.quickSelection),
     icon: "tool-magic-wand",
     group: MAGIC_WAND_TOOL_ID,
     section: "selection",
@@ -386,7 +475,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: BRUSH_TOOL_ID,
     ...optionsFor(BRUSH_TOOL_ID),
-    title: "Brush (raster)",
+    title: t(TOOL.brushRaster),
     icon: "tool-paintbrush",
     group: BRUSH_TOOL_ID,
     section: "drawType",
@@ -397,7 +486,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: PENCIL_TOOL_ID,
     ...optionsFor(PENCIL_TOOL_ID),
-    title: "Pencil (raster)",
+    title: t(TOOL.pencilRaster),
     icon: "tool-pencil",
     group: PENCIL_TOOL_ID,
     section: "drawType",
@@ -408,7 +497,7 @@ export function activate(host: BundleHost): BundleHandle {
   contributeTool(host, {
     id: ERASER_TOOL_ID,
     ...optionsFor(ERASER_TOOL_ID),
-    title: "Eraser (raster)",
+    title: t(TOOL.eraserRaster),
     icon: "tool-erase",
     group: ERASER_TOOL_ID,
     section: "drawType",
@@ -434,7 +523,7 @@ export function activate(host: BundleHost): BundleHandle {
   // (INV-REG-1 keeps tool shortcuts globally unique).
   contributeTool(host, {
     id: CLONE_TOOL_ID,
-    title: "Clone stamp",
+    title: t(TOOL.cloneStamp),
     icon: "tool-clone",
     group: CLONE_TOOL_ID,
     section: "drawType",
@@ -444,7 +533,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   contributeTool(host, {
     id: HEAL_TOOL_ID,
-    title: "Healing brush",
+    title: t(TOOL.healingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
     section: "drawType",
@@ -460,17 +549,17 @@ export function activate(host: BundleHost): BundleHandle {
   // coverage masks `adjust.dodge_burn` on the layer. They share the clone
   // stamp's rail slot (the retouching slot) and take no shortcut.
   for (const [id, title, tool] of [
-    [DODGE_TOOL_ID, "Dodge", "dodge"],
-    [BURN_TOOL_ID, "Burn", "burn"],
-    [SPONGE_TOOL_ID, "Sponge", "sponge"],
+    [DODGE_TOOL_ID, TOOL.dodge, "dodge"],
+    [BURN_TOOL_ID, TOOL.burn, "burn"],
+    [SPONGE_TOOL_ID, TOOL.sponge, "sponge"],
     // Blur / sharpen: the same filter-stroke lane over the unsharp chain;
     // the brush's flow is their strength.
-    [BLUR_TOOL_ID, "Blur (brush)", "blur"],
-    [SHARPEN_TOOL_ID, "Sharpen (brush)", "sharpen"],
+    [BLUR_TOOL_ID, TOOL.blurBrush, "blur"],
+    [SHARPEN_TOOL_ID, TOOL.sharpenBrush, "sharpen"],
   ] as const) {
     contributeTool(host, {
       id,
-      title,
+      title: t(title),
       icon: "tool-clone",
       group: CLONE_TOOL_ID,
       section: "drawType",
@@ -484,7 +573,7 @@ export function activate(host: BundleHost): BundleHandle {
   // source then).
   contributeTool(host, {
     id: SPOT_HEAL_TOOL_ID,
-    title: "Spot healing brush",
+    title: t(TOOL.spotHealingBrush),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
     section: "drawType",
@@ -496,7 +585,7 @@ export function activate(host: BundleHost): BundleHandle {
   // and healed on release. Shares the healing brush's slot; no shortcut.
   contributeTool(host, {
     id: PATCH_TOOL_ID,
-    title: "Patch",
+    title: t(TOOL.patch),
     icon: "tool-heal",
     group: HEAL_TOOL_ID,
     section: "drawType",
@@ -513,7 +602,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Generate section exposes the pickers.
   command({
     id: "media.paged.image.command.fillSelection",
-    title: "Fill selection with a gradient",
+    title: t(CMD.fillSelectionWithAGradient),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -529,7 +618,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.fillNoise",
-    title: "Fill selection with noise",
+    title: t(CMD.fillSelectionWithNoise),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -547,7 +636,7 @@ export function activate(host: BundleHost): BundleHandle {
   // history, which the editor owns and which this plugin never mutates.
   command({
     id: "media.paged.image.command.addLayer",
-    title: "Add image layer",
+    title: t(CMD.addImageLayer),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -557,12 +646,12 @@ export function activate(host: BundleHost): BundleHandle {
   // ADD LAYER MASK, Photoshop's two forms. The mask becomes the paint
   // tools' target (the panel's M toggle switches back to pixels).
   for (const [suffix, title, reveal] of [
-    ["addLayerMask", "Add layer mask (reveal all)", true],
-    ["addLayerMaskHideAll", "Add layer mask (hide all)", false],
+    ["addLayerMask", CMD.addLayerMaskRevealAll, true],
+    ["addLayerMaskHideAll", CMD.addLayerMaskHideAll, false],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,
-      title,
+      title: t(title),
       category: "Image",
       handler: () => {
         host.shell.openPanel(PANEL_ID);
@@ -572,7 +661,7 @@ export function activate(host: BundleHost): BundleHandle {
   }
   command({
     id: "media.paged.image.command.bakeAdjustToLayer",
-    title: "Bake adjustments into the active layer",
+    title: t(CMD.bakeAdjustmentsIntoTheActiveLayer),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -581,7 +670,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.undo",
-    title: "Undo image edit",
+    title: t(CMD.undoImageEdit),
     category: "Image",
     handler: () => {
       void session.undo();
@@ -589,7 +678,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.redo",
-    title: "Redo image edit",
+    title: t(CMD.redoImageEdit),
     category: "Image",
     handler: () => {
       void session.redo();
@@ -600,35 +689,35 @@ export function activate(host: BundleHost): BundleHandle {
   // these are the palette and menu reach.
   // Filters and Image-menu verbs added with the fundamentals.
   for (const [suffix, title, run] of [
-    ["median", "Median (3×3)", () => session.applyMedian()],
-    ["maximum", "Maximum (3×3)", () => session.applyMorph("max")],
-    ["minimum", "Minimum (3×3)", () => session.applyMorph("min")],
+    ["median", CMD.median3x3, () => session.applyMedian()],
+    ["maximum", CMD.maximum3x3, () => session.applyMorph("max")],
+    ["minimum", CMD.minimum3x3, () => session.applyMorph("min")],
     [
       "fillForeground",
-      "Fill with the foreground colour",
+      CMD.fillWithTheForegroundColour,
       () => session.fillForeground(),
     ],
     [
       "rotateCw",
-      "Rotate canvas 90° clockwise",
+      CMD.rotateCanvas90Clockwise,
       () => session.canvasOp("rotate-cw"),
     ],
     [
       "rotateCcw",
-      "Rotate canvas 90° counter-clockwise",
+      CMD.rotateCanvas90CounterClockwise,
       () => session.canvasOp("rotate-ccw"),
     ],
-    ["rotate180", "Rotate canvas 180°", () => session.canvasOp("rotate-180")],
+    ["rotate180", CMD.rotateCanvas180, () => session.canvasOp("rotate-180")],
     [
       "flipHorizontal",
-      "Flip canvas horizontal",
+      CMD.flipCanvasHorizontal,
       () => session.canvasOp("flip-h"),
     ],
-    ["flipVertical", "Flip canvas vertical", () => session.canvasOp("flip-v")],
+    ["flipVertical", CMD.flipCanvasVertical, () => session.canvasOp("flip-v")],
   ] as const) {
     command({
       id: `media.paged.image.command.${suffix}`,
-      title,
+      title: t(title),
       category: "Image",
       handler: () => {
         host.shell.openPanel(PANEL_ID);
@@ -638,7 +727,7 @@ export function activate(host: BundleHost): BundleHandle {
   }
   command({
     id: "media.paged.image.command.commitImage",
-    title: "Commit image edits to the document",
+    title: t(CMD.commitImageEditsToTheDocument),
     category: "Image",
     handler: () => {
       void session.commitToDocument();
@@ -646,7 +735,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.convertLayerToSmart",
-    title: "Convert active layer to smart object",
+    title: t(CMD.convertActiveLayerToSmartObject),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -655,7 +744,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.definePattern",
-    title: "Define pattern from selection (image)",
+    title: t(CMD.definePatternFromSelectionImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -664,7 +753,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.fillPattern",
-    title: "Fill selection with the defined pattern",
+    title: t(CMD.fillSelectionWithTheDefinedPattern),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -673,7 +762,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.shapeBlur",
-    title: "Shape blur (defined pattern as the shape)",
+    title: t(CMD.shapeBlurDefinedPatternAsTheShape),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -698,7 +787,7 @@ export function activate(host: BundleHost): BundleHandle {
   // below remain the delivery lane for a host with no saver.
   command({
     id: "media.paged.image.command.applyToFile",
-    title: "Apply adjustments to the file",
+    title: t(CMD.applyAdjustmentsToTheFile),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -708,7 +797,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   command({
     id: "media.paged.image.command.saveToFile",
-    title: "Save the adjusted file",
+    title: t(CMD.saveTheAdjustedFile),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -723,7 +812,7 @@ export function activate(host: BundleHost): BundleHandle {
   // no handle is retained.
   command({
     id: "media.paged.image.command.loadBrushLibrary",
-    title: "Load brush library (.abr)",
+    title: t(CMD.loadBrushLibraryAbr),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -736,7 +825,7 @@ export function activate(host: BundleHost): BundleHandle {
   // only the bridge.
   command({
     id: "media.paged.image.command.selectionToPath",
-    title: "Selection to path (image)",
+    title: t(CMD.selectionToPathImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -745,7 +834,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.pathToSelection",
-    title: "Path to selection (image)",
+    title: t(CMD.pathToSelectionImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -754,7 +843,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.channelToSelection",
-    title: "Luminosity channel to selection (image)",
+    title: t(CMD.luminosityChannelToSelectionImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -779,7 +868,7 @@ export function activate(host: BundleHost): BundleHandle {
   // `shift+u` and it COLLIDED, which the check caught.
   contributeTool(host, {
     id: TYPE_TOOL_ID,
-    title: "Type (raster)",
+    title: t(TOOL.typeRaster),
     icon: "tool-type",
     group: TYPE_TOOL_ID,
     section: "drawType",
@@ -809,7 +898,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   command({
     id: "media.paged.image.command.setType",
-    title: "Set type (image)",
+    title: t(CMD.setTypeImage),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -818,7 +907,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   command({
     id: "media.paged.image.command.contentAwareFill",
-    title: "Content-aware fill",
+    title: t(CMD.contentAwareFill),
     category: "Image",
     handler: () => {
       host.shell.openPanel(PANEL_ID);
@@ -829,7 +918,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Selection commands (the panel buttons + command-palette reach).
   command({
     id: "media.paged.image.command.selectAll",
-    title: "Select all (image)",
+    title: t(CMD.selectAllImage),
     category: "Image",
     handler: () => {
       session.selectAll();
@@ -837,7 +926,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.deselect",
-    title: "Deselect (image)",
+    title: t(CMD.deselectImage),
     category: "Image",
     handler: () => {
       session.deselect();
@@ -845,7 +934,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   command({
     id: "media.paged.image.command.invertSelection",
-    title: "Invert selection (image)",
+    title: t(CMD.invertSelectionImage),
     category: "Image",
     handler: () => {
       session.invertSelection();
@@ -854,7 +943,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Fixed v0 sigma (session FEATHER_SIGMA_DEFAULT) — a slider follows.
   command({
     id: "media.paged.image.command.featherSelection",
-    title: "Feather selection (image)",
+    title: t(CMD.featherSelectionImage),
     category: "Image",
     handler: () => {
       session.featherSelection();
@@ -867,7 +956,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.importer@1")) {
     host.contribute.importer({
       id: "media.paged.image.importer.raster",
-      title: "Image (PSD/PNG/JPEG)",
+      title: t(IO.imagePsdPngJpeg),
       extensions: [".psd", ".psb", ".png", ".jpg", ".jpeg"],
       mimeTypes: ["image/vnd.adobe.photoshop", "image/png", "image/jpeg"],
       import: async ({ name, bytes }) => {
@@ -895,21 +984,21 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.exporter@1")) {
     host.contribute.exporter({
       id: "media.paged.image.exporter.psd",
-      title: "PSD (adjusted pixels + edited layers)",
+      title: t(IO.psdAdjustedPixelsEditedLayers),
       extension: ".psd",
       mimeType: "image/vnd.adobe.photoshop",
       export: () => session.psdExportBytes(),
     });
     host.contribute.exporter({
       id: "media.paged.image.exporter.png",
-      title: "PNG (adjusted pixels)",
+      title: t(IO.pngAdjustedPixels),
       extension: ".png",
       mimeType: "image/png",
       export: () => session.rasterExportBytes("png"),
     });
     host.contribute.exporter({
       id: "media.paged.image.exporter.jpeg",
-      title: "JPEG (adjusted pixels)",
+      title: t(IO.jpegAdjustedPixels),
       extension: ".jpg",
       mimeType: "image/jpeg",
       export: () => session.rasterExportBytes("jpeg"),
@@ -1099,17 +1188,23 @@ export function activate(host: BundleHost): BundleHandle {
 
   // ADR 323 — the layer stacks as addressable, typed objects (headless:
   // no edit context, no GPU), plus a typed twin of every command above.
-  const objectModel = contributeImageObjectModel(host, untyped);
+  const objectModel = contributeImageObjectModel(
+    host,
+    untyped,
+    undefined,
+    () => session.state().source !== null,
+  );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).
+  const propertiesSchema = imagePropertiesPanel();
   const propertyLists =
     objectModel && host.supports("contribute.schemaPanel@1")
       ? (contributeSchemaPanel(host, {
           id: PROPERTIES_PANEL_ID,
-          title: IMAGE_PROPERTIES_PANEL.title,
-          icon: IMAGE_PROPERTIES_PANEL.icon,
+          title: propertiesSchema.title,
+          icon: propertiesSchema.icon,
           defaultDock: "right",
-          schema: IMAGE_PROPERTIES_PANEL,
+          schema: propertiesSchema,
         }),
         publishPropertyLists(host))
       : null;

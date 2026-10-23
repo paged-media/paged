@@ -21,6 +21,10 @@ on:
     paths:
       - "platform/shared/helpers/**"
       - "platform/shared/panel-kit/**"
+      - "platform/shared/strings/**"
+      - "**/locales/*.json"
+      - "apps/editor/**/*.ts"
+      - "apps/editor/**/*.tsx"
       - "platform/shared/wasm-boot/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -35,6 +39,10 @@ on:
     paths:
       - "platform/shared/helpers/**"
       - "platform/shared/panel-kit/**"
+      - "platform/shared/strings/**"
+      - "**/locales/*.json"
+      - "apps/editor/**/*.ts"
+      - "apps/editor/**/*.tsx"
       - "platform/shared/wasm-boot/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -65,11 +73,15 @@ jobs:
       - name: bun install (root workspace)
         run: bun install --frozen-lockfile
       - name: typecheck
-        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/panel-kit' --filter './platform/shared/wasm-boot' typecheck
+        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/panel-kit' --filter './platform/shared/strings' --filter './platform/shared/wasm-boot' typecheck
       - name: bun test
-        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/panel-kit' --filter './platform/shared/wasm-boot' test
+        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/panel-kit' --filter './platform/shared/strings' --filter './platform/shared/wasm-boot' test
       # The panel kit's controls again, compiled by the React Compiler with
       # the build's options (apps/editor ADR 229): the editor and every module
       # bundle ship them compiled.
+      # Every message the editor and the modules define has its German
+      # text, with the same {parameters} (docs/composable-editor-plan.md E10).
+      - name: strings guard
+        run: bun platform/shared/strings/scripts/guard.mjs
       - name: bun test, panel-kit compiled (React Compiler)
         run: bun run --filter './platform/shared/panel-kit' test:compiled

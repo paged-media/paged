@@ -632,3 +632,129 @@ fn engine_serve() {
         &transcript,
     );
 }
+
+/// A template: `headline`, a text field of at most 20 characters ("Old
+/// title"), beside a frame the template does not open.
+const TEMPLATE_AUTHOR: &str = r#"
+const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
+const pages = parse(paged.pages());
+const before = new Set(parse(paged.stories()).map((s) => s.selfId));
+const frame = paged.insertTextFrame(pages[0].selfId, [72, 72, 200, 300]);
+const story = parse(paged.stories()).map((s) => s.selfId).find((s) => !before.has(s));
+paged.insertText(story, 0, "Old title");
+paged.setPluginMetadata(String(frame), "x-paged:template",
+  JSON.stringify({ v: 1, data: { field: { name: "headline", kind: "text", constraints: { maxLength: 20 } } } }));
+paged.insertFrame(pages[0].selfId, [300, 72, 360, 200]);
+"#;
+
+fn template_fixture(tag: &str) -> Fx {
+    let fx = Fx::new(tag);
+    fx.blank("blank.paged");
+    fx.write("author.js", TEMPLATE_AUTHOR);
+    fx.run(&[
+        "script",
+        "blank.paged",
+        "author.js",
+        "--role",
+        "author",
+        "-o",
+        "t.paged",
+    ])
+    .code(0);
+    fx
+}
+
+#[test]
+fn template_group() {
+    covers!("cli:paged template");
+    let fx = Fx::new("template");
+    fx.help("paged template");
+    fx.run(&["template"])
+        .code(2)
+        .golden("paged template", "usage-no-subcommand");
+}
+
+#[test]
+fn template_fields() {
+    covers!("cli:paged template fields");
+    let fx = template_fixture("template-fields");
+    fx.help("paged template fields");
+    fx.run(&["template", "fields"])
+        .code(2)
+        .golden("paged template fields", "usage-no-document");
+    fx.run(&["template", "fields", "missing.paged"])
+        .code(1)
+        .golden("paged template fields", "input-missing-file");
+    fx.run(&["template", "fields", "t.paged"])
+        .code(0)
+        .golden("paged template fields", "text");
+}
+
+#[test]
+fn template_fill() {
+    covers!("cli:paged template fill");
+    let fx = template_fixture("template-fill");
+    fx.help("paged template fill");
+    fx.run(&["template", "fill", "t.paged", "-o", "out.paged"])
+        .code(2)
+        .golden("paged template fill", "usage-no-values");
+    fx.run(&[
+        "template",
+        "fill",
+        "t.paged",
+        "--values",
+        r#"{"headline":"A title much longer than twenty"}"#,
+        "-o",
+        "refused.paged",
+    ])
+    .code(1)
+    .golden("paged template fill", "input-value-too-long");
+    assert!(!fx.exists("refused.paged"));
+    fx.run(&[
+        "template",
+        "fill",
+        "t.paged",
+        "--values",
+        r#"{"headline":"Ada Example"}"#,
+        "-o",
+        "filled.paged",
+    ])
+    .code(0)
+    .golden("paged template fill", "filled");
+}
+
+#[test]
+fn template_check() {
+    covers!("cli:paged template check");
+    let fx = template_fixture("template-check");
+    fx.help("paged template check");
+    fx.run(&[
+        "template",
+        "fill",
+        "t.paged",
+        "--values",
+        r#"{"headline":"Ada Example"}"#,
+        "-o",
+        "filled.paged",
+    ])
+    .code(0);
+    fx.run(&["template", "check", "t.paged"])
+        .code(2)
+        .golden("paged template check", "usage-no-filled");
+    fx.run(&["template", "check", "t.paged", "missing.paged"])
+        .code(1)
+        .golden("paged template check", "input-missing-file");
+    fx.run(&["template", "check", "t.paged", "filled.paged"])
+        .code(0)
+        .golden("paged template check", "clean");
+    fx.write(
+        "move.js",
+        r#"const f = JSON.parse(JSON.stringify(paged.query("rectangle")));
+           paged.set(Array.isArray(f) ? f[0] : JSON.parse(f)[0], "frameBounds", [320, 90, 380, 220]);"#,
+    );
+    fx.run(&["script", "filled.paged", "move.js", "-o", "tampered.paged"])
+        .code(0);
+    fx.run(&["template", "check", "t.paged", "tampered.paged"])
+        .code(1)
+        .golden("paged template check", "changed-outside-the-fields");
+}

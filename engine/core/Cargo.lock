@@ -2367,6 +2367,7 @@ dependencies = [
  "paged-mutate",
  "paged-repo",
  "paged-script",
+ "paged-template",
  "paged-test-resources",
  "paged-wire",
  "serde",

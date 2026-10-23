@@ -26,6 +26,8 @@
 // SEMANTICS (what M3 freezes), replacing the startup-only wart the
 // SDK had to work around bundle-side.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS } from "../messages";
 import type { Disposable } from "../../registries/types";
 import type { PanelContribution } from "../../registries/panel";
 import type { ToolContribution } from "../../registries/tool";
@@ -85,7 +87,7 @@ export function installRegistryDerivedContributions(
     ds.push(
       registries.commands.register({
         id: command,
-        title: `Tool: ${tool.title}`,
+        title: t(COMMANDS.activateTool, { tool: tool.title }),
         category: "Tools",
         icon: tool.icon,
         handler: (paged) => {

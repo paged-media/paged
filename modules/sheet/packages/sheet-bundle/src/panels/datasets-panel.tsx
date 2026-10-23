@@ -36,9 +36,11 @@
 import { type CSSProperties, type ReactElement } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { color, font, radius, space, useConfirm } from "@paged-media/panel-kit";
+import { useStrings, type Strings } from "@paged-media/strings";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
+import { DATASETS } from "../messages";
 import type { WorkbookSession } from "../session";
 
 // ---------------------------------------------------------------- styles
@@ -106,15 +108,20 @@ export function datasetLabel(id: string): string {
 }
 
 /** "3 fields: name, price, qty" (the first few field names). */
-function fieldSummary(fields: readonly { name: string }[]): string {
+function fieldSummary(
+  { t }: Strings,
+  fields: readonly { name: string }[],
+): string {
   const n = fields.length;
-  const head = `${n} field${n === 1 ? "" : "s"}`;
-  if (n === 0) return head;
+  if (n === 0) return t(DATASETS.fields, { count: n });
   const names = fields
     .slice(0, 3)
     .map((f) => f.name)
     .join(", ");
-  return `${head}: ${names}${n > 3 ? ", …" : ""}`;
+  return t(DATASETS.fieldsNamed, {
+    count: n,
+    names: `${names}${n > 3 ? ", …" : ""}`,
+  });
 }
 
 // ----------------------------------------------------------------- panel
@@ -131,6 +138,8 @@ export function makeDatasetsPanel(
     // The session as a render value (react-live, editor ADR 229): a new
     // view after every change, so what is read from it is read again.
     const live = useLive(session, onDidChangeOf);
+    const strings = useStrings();
+    const { t } = strings;
 
     // The governed datasets in the "dataset" category — schema + revision,
     // NO rows. [] when no registry is wired (paged.data absent / headless).
@@ -155,14 +164,13 @@ export function makeDatasetsPanel(
           flexDirection: "column",
         }}
       >
-        <div style={{ ...kicker, marginTop: 0 }}>Datasets</div>
+        <div style={{ ...kicker, marginTop: 0 }}>{t(DATASETS.kicker)}</div>
 
         {datasets.length === 0 ? (
           // Honest empty state — §2.1 graceful absence: paged.data not
           // installed / no shared registry wired ⇒ no governed sources.
           <p data-datasets-empty style={{ ...note, marginTop: 0 }}>
-            No datasets yet. Publish a query as a dataset in paged.data, and it
-            appears here.
+            {t(DATASETS.empty)}
           </p>
         ) : (
           <div
@@ -190,8 +198,11 @@ export function makeDatasetsPanel(
                       data-dataset-fields={d.schema.fields.length}
                       style={metaStyle}
                     >
-                      {fieldSummary(d.schema.fields)}
-                      {sourced && (stale ? " · update available" : " · in use")}
+                      {fieldSummary(strings, d.schema.fields)}
+                      {sourced &&
+                        (stale
+                          ? t(DATASETS.updateAvailable)
+                          : t(DATASETS.inUse))}
                     </div>
                   </div>
                   <button
@@ -205,18 +216,18 @@ export function makeDatasetsPanel(
                     }}
                     title={
                       stale
-                        ? "Replace the sheet with the newer revision"
+                        ? t(DATASETS.updateTitle)
                         : workbookOpen && !sourced
-                          ? "Replaces the open workbook with this dataset; this can't be undone"
-                          : "Start a new workbook from this dataset"
+                          ? t(DATASETS.replaceTitle)
+                          : t(DATASETS.startTitle)
                     }
                     style={sourceButton}
                   >
                     {armed === d.id
-                      ? "Confirm replace"
+                      ? t(DATASETS.confirmReplace)
                       : stale
-                        ? "Update"
-                        : "Use"}
+                        ? t(DATASETS.update)
+                        : t(DATASETS.use)}
                   </button>
                 </div>
               );
@@ -229,8 +240,7 @@ export function makeDatasetsPanel(
             fetches (paged.data owns the network). A refresh is an explicit
             re-source, never automatic on open (§1.1 / the consumer RFC). */}
         <p data-datasets-honesty style={note}>
-          A sheet made from a dataset is a snapshot saved with the document;
-          choose Update when a newer revision is available.
+          {t(DATASETS.honesty)}
         </p>
       </div>
     );

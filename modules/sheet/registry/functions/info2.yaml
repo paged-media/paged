@@ -51,12 +51,12 @@
   volatility: none
   range_aware: true
   ref_args: true
-  rust: info2::sheet
+  special_form: true
   status: implemented
-  provenance: ["Microsoft SHEET (public docs) — 1-based sheet of a reference; current cell's sheet when absent. a non-reference non-text value is #N/A (Excel 16, recorded). T1 LIMITATION: sheet-name text arg unsupported (falls back to the current sheet)"]
+  provenance: ["Microsoft SHEET (public docs) — 1-based sheet of a reference (3D: its first sheet), of a sheet NAME (case-insensitive; unknown #N/A), the current cell's sheet when absent; a non-reference non-text value is #N/A (Excel-recorded). Evaluator special form (sheet-calc/src/eval/info.rs)"]
   tests:
-    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_sheet"]
-    corpus: ["corpus/fn-corpus/info2/sheet.golden.tsv"]
+    rust: ["sheet-conformance/tests/it/info_model.rs::sheet_fn_info_sheet_names"]
+    corpus: ["corpus/fn-corpus/info2/sheet.golden.tsv", "corpus/fn-corpus/info3/sheet3.golden.tsv"]
 
 - id: sheet.fn.info.sheets
   name: SHEETS
@@ -66,12 +66,12 @@
   volatility: none
   range_aware: true
   ref_args: true
-  rust: info2::sheets
+  special_form: true
   status: implemented
-  provenance: ["Microsoft SHEETS (public docs) — sheets a reference spans. T1 LIMITATION: always 1 (no 3-D range Arg shape; EvalCtx lacks a workbook sheet count)"]
+  provenance: ["Microsoft SHEETS (public docs) — sheets a reference spans (3D: its span, else 1); the workbook's sheet count when absent; a value #N/A (Excel-recorded). Evaluator special form (sheet-calc/src/eval/info.rs)"]
   tests:
-    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_sheets"]
-    corpus: ["corpus/fn-corpus/info2/sheets.golden.tsv"]
+    rust: ["sheet-conformance/tests/it/info_model.rs::sheet_fn_info_sheets_counts"]
+    corpus: ["corpus/fn-corpus/info2/sheets.golden.tsv", "corpus/fn-corpus/info3/sheet3.golden.tsv"]
 
 - id: sheet.fn.info.iseven
   name: ISEVEN

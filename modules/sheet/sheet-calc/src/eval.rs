@@ -59,6 +59,8 @@ use crate::accel::{self, Fast};
 use crate::argview::{self, RangeBuf};
 use crate::spill::SpillState;
 
+mod groupby;
+mod info;
 mod lambda;
 pub(crate) mod lift;
 pub use lift::eval_array;
@@ -827,6 +829,68 @@ fn cell_is_subtotal_result(model: &SheetModel, cell: CellRef) -> bool {
     matches!(&f.root, Expr::Func(ffid, _) if is_subtotal_family(*ffid))
 }
 
+fn row_is_hidden(model: &SheetModel, cell: CellRef) -> bool {
+    model
+        .sheet(cell.sheet)
+        .is_some_and(|ws| ws.row_hidden(cell.row) || ws.filtered_rows.contains(&cell.row))
+}
+
+fn row_is_filtered(model: &SheetModel, cell: CellRef) -> bool {
+    model
+        .sheet(cell.sheet)
+        .is_some_and(|ws| ws.filtered_rows.contains(&cell.row))
+}
+
+fn mask_nested_hidden(model: &SheetModel, cell: CellRef) -> bool {
+    cell_is_subtotal_result(model, cell) || row_is_hidden(model, cell)
+}
+
+fn mask_nested_filtered(model: &SheetModel, cell: CellRef) -> bool {
+    cell_is_subtotal_result(model, cell) || row_is_filtered(model, cell)
+}
+
+/// The cell mask a SUBTOTAL / AGGREGATE call applies to its references, or
+/// `None` for any other function. The selector arguments are read here
+/// (`SUBTOTAL(function_num, …)`, `AGGREGATE(function_num, options, …)`); an
+/// unreadable one keeps the default mask and the kernel reports the error.
+type CellMask = fn(&SheetModel, CellRef) -> bool;
+
+fn subtotal_mask(
+    model: &SheetModel,
+    fid: FuncId,
+    args: &[Expr],
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> Option<CellMask> {
+    let num_at = |i: usize| -> Option<f64> {
+        let e = args.get(i)?;
+        match eval(model, e, ctx, spills) {
+            CellValue::Number(n) => Some(n.trunc()),
+            CellValue::Empty => Some(0.0),
+            v => coerce::to_number(&v).ok().map(f64::trunc),
+        }
+    };
+    match sheet_core::funcs::meta(fid).name {
+        "SUBTOTAL" => Some(if num_at(0).is_some_and(|n| n >= 101.0) {
+            mask_nested_hidden
+        } else {
+            mask_nested_filtered
+        }),
+        "AGGREGATE" => {
+            // Nested SUBTOTAL/AGGREGATE results are skipped under every
+            // option, 4–7 included (Excel-recorded: AGGREGATE(9,4,…) over a
+            // nested SUBTOTAL leaves it out).
+            let opt = num_at(1).unwrap_or(0.0);
+            Some(if matches!(opt as i64, 1 | 3 | 5 | 7) {
+                mask_nested_hidden
+            } else {
+                cell_is_subtotal_result
+            })
+        }
+        _ => None,
+    }
+}
+
 /// Materialize a call's arguments into the owned [`RangeBuf`] backings plus a
 /// parallel [`ArgPlan`] list. Shared by [`eval_func`] and [`eval_func_rich`] so
 /// the scalar and array doors build their `&[Arg]` slice identically. The caller
@@ -850,15 +914,19 @@ fn plan_args<'m>(
     // double-counted nested subtotals (the only flagged scope limit that
     // returned a confidently-wrong scalar — `SUBTOTAL(9,A1:A6)` with a nested
     // A6 gave 30 instead of 15).
-    let exclude_subtotals = is_subtotal_family(fid);
+    //
+    // The same door drops hidden rows (W3): SUBTOTAL 101–111 and AGGREGATE's
+    // options 1/3/5/7 skip every hidden row, SUBTOTAL 1–11 the rows a filter
+    // hid.
+    let mask = subtotal_mask(model, fid, args, ctx, spills);
+    let exclude_subtotals = mask.is_some();
     // Materialize a range, masking nested subtotal cells iff this is a
     // SUBTOTAL/AGGREGATE call. (A non-subtotal caller never pays the per-cell
     // formula lookup.)
     let materialize = |model: &'m SheetModel, r: RangeRef| -> RangeBuf<'m> {
-        if exclude_subtotals {
-            argview::materialize_range_masked(model, r, cell_is_subtotal_result)
-        } else {
-            argview::materialize_range(model, r)
+        match mask {
+            Some(m) => argview::materialize_range_masked(model, r, m),
+            None => argview::materialize_range(model, r),
         }
     };
 
@@ -925,8 +993,13 @@ fn plan_args<'m>(
             // arg). Mask it to blank so the kernel skips it; otherwise it reads
             // as its scalar value. (FINDING 3 — `SUBTOTAL(9, A1:A3, A7)` with
             // `A7 = SUBTOTAL(...)` excludes A7.)
+            // AGGREGATE's reference form needs the cell as a reference.
+            Expr::Ref(r) if exclude_subtotals && meta.name == "AGGREGATE" => {
+                bufs.push(materialize(model, RangeRef { start: *r, end: *r }));
+                plans.push(ArgPlan::BufAt(bufs.len() - 1));
+            }
             Expr::Ref(r) if exclude_subtotals => {
-                let v = if cell_is_subtotal_result(model, *r) {
+                let v = if mask.is_some_and(|m| m(model, *r)) {
                     CellValue::Empty
                 } else {
                     argview::cell_value(model, *r)
@@ -1411,6 +1484,19 @@ fn eval_func_rich(
         if let Some(r) = lambda::special_rich(model, fid, args, ctx, spills) {
             return r;
         }
+        // CELL("width") spills its {width, is_default} pair; GROUPBY and
+        // PIVOTBY build their blocks (eval/groupby.rs).
+        let meta = sheet_core::funcs::meta(fid);
+        let arity_ok = args.len() >= meta.min_args as usize
+            && meta.max_args.is_none_or(|m| args.len() <= m as usize);
+        match meta.name {
+            "GROUPBY" if arity_ok => return groupby::groupby(model, args, ctx, spills),
+            "PIVOTBY" if arity_ok => return groupby::pivotby(model, args, ctx, spills),
+            _ => {}
+        }
+        if meta.name == "CELL" && args.len() >= meta.min_args as usize && args.len() <= 2 {
+            return info::cell_rich(model, args, ctx, spills);
+        }
         return FnResult::Scalar(eval_special_form(model, fid, args, ctx, spills));
     }
     if refuses_3d(fid, args) {
@@ -1565,6 +1651,15 @@ fn eval_special_form(
         // resolvable OFFSET/INDIRECT) — the same resolution special forms
         // use. A value, an array or an unresolvable INDIRECT is FALSE.
         "ISREF" => CellValue::Bool(eval_as_ref(model, &args[0], ctx, spills).is_some()),
+        // The information forms that read the workbook (W3, eval/info.rs).
+        "SHEET" => info::sheet(model, args, ctx, spills),
+        "SHEETS" => info::sheets(model, args, ctx, spills),
+        "INFO" => info::info(model, args, ctx, spills),
+        "ISOMITTED" => info::isomitted(args),
+        "AREAS" => info::areas(model, args, ctx, spills),
+        "CELL" => lambda::collapse(info::cell_rich(model, args, ctx, spills)),
+        "GROUPBY" => lambda::collapse(groupby::groupby(model, args, ctx, spills)),
+        "PIVOTBY" => lambda::collapse(groupby::pivotby(model, args, ctx, spills)),
         // A registered special form with no handler is an internal invariant
         // break (a new `special_form: true` row landed without wiring eval).
         _ => CellValue::Error(CellError::Name),
@@ -1788,20 +1883,22 @@ fn indirect_target(
     if let CellValue::Error(e) = v {
         return Err(e);
     }
-    // The `a1` flag: default TRUE; FALSE (R1C1) is a documented T2 limitation.
+    // The `a1` flag: default TRUE; FALSE reads an R1C1 address relative to
+    // the formula's cell (W3).
+    let mut r1c1 = false;
     if let Some(a1_expr) = args.get(1) {
         let a1v = eval(model, a1_expr, ctx, spills);
         if let CellValue::Error(e) = a1v {
             return Err(e);
         }
         if let Ok(n) = coerce::to_number(&a1v) {
-            if n == 0.0 {
-                // R1C1 addressing — not parsed in T2.
-                return Err(CellError::Ref);
-            }
+            r1c1 = n == 0.0;
         }
     }
     let text = coerce::to_text(&v);
+    if r1c1 {
+        return parse_r1c1_reference(model, text.as_str(), ctx.current).ok_or(CellError::Ref);
+    }
     parse_a1_reference(model, text.as_str(), ctx.current.sheet).ok_or(CellError::Ref)
 }
 
@@ -1810,6 +1907,92 @@ fn indirect_target(
 /// is optional (defaults to `home`). Returns `None` for any unparseable form
 /// (INDIRECT maps that to `#REF!`). R1C1 is not handled here (the caller rejects
 /// `a1 = FALSE` first).
+/// One R1C1 coordinate: `R`, `R5`, `R[-2]` (row) or the same with `C`.
+/// `None` when the letter is absent; the inner `None` is an invalid one.
+fn r1c1_part(s: &mut &str, letter: char, here: u32, max: u32) -> Option<Option<u32>> {
+    let first = s.chars().next()?;
+    if !first.eq_ignore_ascii_case(&letter) {
+        return None;
+    }
+    *s = &s[1..];
+    if let Some(rest) = s.strip_prefix('[') {
+        let Some(close) = rest.find(']') else {
+            return Some(None);
+        };
+        let Ok(off) = rest[..close].trim().parse::<i64>() else {
+            return Some(None);
+        };
+        *s = &rest[close + 1..];
+        let v = i64::from(here) + off;
+        return Some((0..=i64::from(max)).contains(&v).then_some(v as u32));
+    }
+    let digits = s.chars().take_while(char::is_ascii_digit).count();
+    if digits == 0 {
+        return Some(Some(here));
+    }
+    let n: u32 = s[..digits].parse().ok()?;
+    *s = &s[digits..];
+    Some((1..=max + 1).contains(&n).then(|| n - 1))
+}
+
+/// Parse an R1C1 address (`R2C3`, `R[1]C[-1]`, `RC`, `R1:R3`, `C2`,
+/// `Sheet2!R1C1:R2C2`) relative to `here` (INDIRECT with `a1` FALSE, W3).
+/// A row-only part spans the whole row, a column-only part the column.
+fn parse_r1c1_reference(model: &SheetModel, text: &str, here: CellRef) -> Option<RangeRef> {
+    const MAX_ROW: u32 = 1_048_575;
+    const MAX_COL: u32 = 16_383;
+    let text = text.trim();
+    let (sheet, addr) = match text.rsplit_once('!') {
+        Some((name, rest)) => (model.sheet_id(&unquote_sheet(name))?, rest),
+        None => (here.sheet, text),
+    };
+    // Each end: (row range, col range).
+    let end = |part: &str| -> Option<((u32, u32), (u32, u32))> {
+        let mut s = part.trim();
+        let row = r1c1_part(&mut s, 'R', here.row, MAX_ROW);
+        let col = r1c1_part(&mut s, 'C', here.col, MAX_COL);
+        if !s.is_empty() || (row.is_none() && col.is_none()) {
+            return None;
+        }
+        let rows = match row {
+            Some(r) => {
+                let r = r?;
+                (r, r)
+            }
+            None => (0, MAX_ROW),
+        };
+        let cols = match col {
+            Some(c) => {
+                let c = c?;
+                (c, c)
+            }
+            None => (0, MAX_COL),
+        };
+        Some((rows, cols))
+    };
+    let (a, b) = match addr.split_once(':') {
+        Some((x, y)) => (end(x)?, end(y)?),
+        None => {
+            let e = end(addr)?;
+            (e, e)
+        }
+    };
+    let cell = |row, col| CellRef {
+        sheet,
+        row,
+        col,
+        row_abs: true,
+        col_abs: true,
+    };
+    Some(
+        RangeRef {
+            start: cell(a.0 .0.min(b.0 .0), a.1 .0.min(b.1 .0)),
+            end: cell(a.0 .1.max(b.0 .1), a.1 .1.max(b.1 .1)),
+        }
+        .normalized(),
+    )
+}
+
 fn parse_a1_reference(model: &SheetModel, text: &str, home: SheetId) -> Option<RangeRef> {
     let text = text.trim();
     if text.is_empty() {
@@ -1965,6 +2148,7 @@ impl sheet_parser::SheetNames for ModelSheetNames<'_> {
 /// per-cell [`EvalCtx`]. Kept here so the eval layer owns the convention.
 pub fn ctx_for(model: &SheetModel, current: CellRef, now_serial: f64, rng_seed: u64) -> EvalCtx {
     EvalCtx::new(model.calc.date_system, current, now_serial, rng_seed)
+        .with_locale(model.calc.locale)
 }
 
 #[cfg(test)]

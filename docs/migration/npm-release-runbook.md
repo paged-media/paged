@@ -1,7 +1,8 @@
 # npm release runbook
 
 What the package owner does on npm and GitHub to finish [PM-0008](../adr/PM-0008-npm-packages-and-release.md)
-(three public packages since amendment 3, one release workflow) and to cut a release. The
+(three public packages since amendment 3, four since [PM-0013](../adr/PM-0013-editor-package.md), one
+release workflow) and to cut a release. The
 repository side is done: `.github/workflows/release.yml` publishes, and nothing in the repository
 publishes anything else. The inventory these steps act on is [npm.md](npm.md).
 
@@ -13,15 +14,16 @@ the owner's account is a member of it. Scoped packages publish as `restricted` u
 otherwise, so every public package says `"publishConfig": { "access": "public" }` and
 `release.yml` passes `--access public` (both are checked: `tooling/release/verify-tarballs.mjs`).
 
-## The three packages
+## The four packages
 
 | Package | Directory | Entries | What it carries |
 |---|---|---|---|
 | `@paged-media/paged` | `packages/paged` | `.`, `./introspect`, `./introspect/catalog.json`, `./repo`, each wasm by its own subpath; bin `paged` | the engine (the editing canvas, the introspection, the document repository), assembled from the private `canvas-wasm`, and the `paged` command line (`apps/cli` bundled), with `paged mcp` |
+| `@paged-media/editor` | `apps/editor/packages/editor` | `.`, `./iframe`, `./presets`, `./style.css`, `./feature-ids.json`, `./theme-tokens.json` | the embeddable editor (`createEditor`, `mountEditor`; `connectEditor` for a frame), every private package bundled; depends on `@paged-media/paged` for the engine, React is a peer (PM-0013) |
 | `@paged-media/viewer` | `engine/core/web/idml-viewer` | `.`, `./session`, `./session/paged_sdk_bg.wasm` | the viewer, and the renderer-only `ViewerSession` it wraps |
 | `@paged-media/plugin-sdk` | `platform/extensions/packages/plugin-sdk` | `.`, `./gesture-kit`, `./api` (type-only), `./api/manifest.schema.json`; bin `paged-plugin` | the extension runtime, the contract (the private `plugin-api`, inlined) and the manifest CLI (`init`, `validate`, …) |
 
-All three are `AGPL-3.0-only OR LicenseRef-PMEL`. A tag `v0.<protocol>.<patch>` publishes all three
+All four are `AGPL-3.0-only OR LicenseRef-PMEL`. A tag `v0.<protocol>.<patch>` publishes all four
 at `0.<protocol>.<patch>` (PM-0008, amendment 1); a tag with a `-suffix` publishes under `next`.
 
 Measured on 2026-10-19 at a test version (`bun tooling/release/stage.mjs 0.74.1 <dir>`, which
@@ -32,6 +34,7 @@ Measured on 2026-10-19 at a test version (`bun tooling/release/stage.mjs 0.74.1 
 | `paged-media-paged-0.74.1.tgz` | 16 | 15.8 MB | 45.6 MB | `paged_canvas_wasm_bg.wasm` 28.8 MB, `introspect/paged_introspect_wasm_bg.wasm` 13.8 MB, `dist/paged.js` 1.5 MB, `repo/paged_repo_wasm_bg.wasm` 0.7 MB |
 | `paged-media-viewer-0.74.1.tgz` | 21 | 4.6 MB | 11.7 MB | `wasm/paged_sdk_bg.wasm` 11.5 MB |
 | `paged-media-plugin-sdk-0.74.1.tgz` | 62 | 0.3 MB | 1.3 MB | `dist/index.js` 0.6 MB, `dist/api/wire.d.ts` 0.2 MB |
+| `paged-media-editor-0.75.0-rc.1.tgz` (2026-10-23) | 758 | 17.5 MiB | 51.6 MiB | the module wasm the bundles ship: `blitz_web_bg` 9.1 MB, `docx_js_bg` 6.8 MB, `pdfium.esm` 5.2 MB, `image_js_bg` 3.5 MB, `sheet_js_bg` 2.7 MB, `slide_js_bg` 1.7 MB; the editor's code; no engine wasm |
 
 ## 0. Before anything: what is on the remote and on npm
 
@@ -41,7 +44,7 @@ Two releases have raced before. Check both, every time, before naming a version:
 git fetch origin --tags
 git ls-remote --tags origin 'v0.*' | grep -v '\^{}' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -5
 grep -oE 'ProtocolVersion\([0-9]+\)' engine/core/crates/paged-canvas/src/channel.rs | head -1
-for p in paged viewer plugin-sdk; do
+for p in paged editor viewer plugin-sdk; do
   printf '%s: ' "$p"; npm view "@paged-media/$p" dist-tags --json 2>/dev/null | tr -d ' \n' || printf '(not on npm)'; echo
 done
 node tooling/release/assert-dist-tags.mjs --audit   # read-only
@@ -65,9 +68,9 @@ repository secret, for all three packages:
    expiry (7 days is enough), and, if the account requires it, "bypass 2FA" for automation.
 2. `gh secret set NPM_TOKEN -R paged-media/paged` and paste the token.
 
-`release.yml`'s auth gate passes when trusted publishing is ready for all three packages, or else
+`release.yml`'s auth gate passes when trusted publishing is ready for every package, or else
 when `NPM_TOKEN` authenticates (`npm whoami`); it fails before building when neither holds. Its step
-"trusted publishing — readiness of the three packages" prints, for each package, whether npm's token
+"trusted publishing — readiness of the four packages" prints, for each package, whether npm's token
 exchange accepts this run; for the first release it prints `NOT READY` for `paged` and `viewer`
 (they do not exist yet), and the publish uses the token. npm tries OIDC first and falls back to the
 token, so a plugin-sdk entry already registered does no harm.
@@ -109,10 +112,26 @@ npx -y @paged-media/paged@0.74.1 --version     # {"cli":"0.74.1","engine":"0.74.
 Each should print the version and a provenance predicate. A release to `latest` also moves the
 stale `latest` of plugin-sdk (June's `0.2.8-canary.0`) to the release.
 
+## 1a. A new package's first release (`@paged-media/editor`, PM-0013)
+
+The same holds for every name added later: npm takes a Trusted Publisher entry only for a package
+that exists. The release that first carries `@paged-media/editor` therefore needs the token path
+again, once:
+
+1. Mint a granular token as in step 1 (read and write on `@paged-media`, 7 days) and
+   `gh secret set NPM_TOKEN -R paged-media/paged`.
+2. Tag and push as in step 2. The readiness step prints `NOT READY` for `editor` only; the auth
+   gate accepts the token; `paged`, `viewer` and `plugin-sdk` still publish through OIDC (npm tries
+   it first), the editor through the token. Before publishing, the run hosts paged.data's engines
+   the editor names at `modules.paged.media` (`scripts/host-modules.mjs`, with the
+   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets the deploy already uses).
+3. Register the Trusted Publisher of `@paged-media/editor` as in step 3 (same four fields), then
+   delete the secret and revoke the token. The next release prints `OK` for all four.
+
 ## 3. Trusted publishers, then retire the token
 
-After the first release, for each of `@paged-media/paged`, `@paged-media/viewer` and
-`@paged-media/plugin-sdk`, on npmjs.com: the package → **Settings** → **Trusted Publisher** →
+After the first release, for each of `@paged-media/paged`, `@paged-media/viewer`,
+`@paged-media/plugin-sdk` and (after its first release, step 1a) `@paged-media/editor`, on npmjs.com: the package → **Settings** → **Trusted Publisher** →
 **GitHub Actions**, with exactly:
 
 | Field | Value |
@@ -131,7 +150,7 @@ gh secret delete NPM_TOKEN -R paged-media/paged
 ```
 
 and **Access Tokens** → revoke it on npmjs.com. The next release's readiness step prints `OK` for
-all three; from then on trusted publishing is the only way in, and the auth gate fails a run whose
+all four; from then on trusted publishing is the only way in, and the auth gate fails a run whose
 packages are not all ready. Optionally, set each package's **Publishing access** to require
 two-factor authentication and disallow tokens.
 

@@ -6,6 +6,11 @@
 # file	id	kind	engine	excel	reason
 arraytotext.golden.tsv	tx-2	defect	s:100000000000000000000	s:1E+20	defect: TEXT(x,"General") follows the cell General format, which Excel renders in 11 characters (1E+20); the engine's format engine keeps the fixed form
 arraytotext.golden.tsv	tx-4	defect	s:0.00000012345678901	s:1.23457E-07	defect: TEXT(x,"General") follows the cell General format, which Excel renders in 11 characters (1.23457E-07); the engine's format engine keeps all 15 digits in fixed notation
+cell.golden.tsv	cell-19	diverges	n:8	n:10	harness artifact: Excel's CELL("width") is the Mac default column (10); the engine's default is Excel's 8.43 (8)
+cell.golden.tsv	cell-20	diverges	s:	s:/Users/drietsch/Library/Containers/com.microsoft.Excel/Data/Documents/paged-oracle.f78v8w/[in.xlsx]c21	harness artifact: CELL("filename") is the oracle's file path in Excel; the engine names the document only when the host does (unsaved: "")
+cell.golden.tsv	cell-23	diverges	s:$C$5	s:[in.xlsx]c1!$A$1	ruling: CELL without a reference reads the formula's own cell; Excel reads the last changed cell (the oracle's active sheet c1)
+cell.golden.tsv	cell-24	diverges	n:5	n:1	ruling: CELL without a reference reads the formula's own cell; Excel reads the last changed cell (the oracle's active sheet c1)
+cell.golden.tsv	cell-32	diverges	n:8	n:10	harness artifact: Excel's CELL("width") is the Mac default column (10); the engine's default is Excel's 8.43 (8)
 encodeurl.golden.tsv	eu-0	diverges	s:a%20b	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
 encodeurl.golden.tsv	eu-1	diverges	s:https%3A%2F%2Fx.org%2F%3Fq%3D1%26r%3D%C3%A4	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
 encodeurl.golden.tsv	eu-10	diverges	s:%E2%82%AC	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
@@ -37,6 +42,11 @@ filterxml.golden.tsv	fx-4	diverges	e:#VALUE!	e:#NAME?	harness: ENCODEURL, FILTER
 filterxml.golden.tsv	fx-5	diverges	e:#VALUE!	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
 filterxml.golden.tsv	fx-6	diverges	n:3	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
 filterxml.golden.tsv	fx-7	diverges	s:y	e:#NAME?	harness: ENCODEURL, FILTERXML and EUROCONVERT are not available in Excel for Mac (the oracle host; Microsoft function reference) — the expected value follows the reference
+indirect3.golden.tsv	in-4	diverges	n:0	s:	ruling: an R1C1 reference to the formula's own whole row (R) or a whole column (C2) in a value position: Excel answers from its circular-reference and spill rules, the engine reads the intersecting cell
+indirect3.golden.tsv	in-5	diverges	n:0	e:#SPILL!	ruling: an R1C1 reference to the formula's own whole row (R) or a whole column (C2) in a value position: Excel answers from its circular-reference and spill rules, the engine reads the intersecting cell
+info.golden.tsv	info-0	diverges	n:1	n:69	ruling: INFO answers for the engine (sheet count of this workbook, release 16.0, system pcdos), not for the oracle's Excel for Mac and its 75-sheet workbook
+info.golden.tsv	info-2	diverges	s:16.0	s:16.114	ruling: INFO answers for the engine (sheet count of this workbook, release 16.0, system pcdos), not for the oracle's Excel for Mac and its 75-sheet workbook
+info.golden.tsv	info-3	diverges	s:pcdos	s:mac	ruling: INFO answers for the engine (sheet count of this workbook, release 16.0, system pcdos), not for the oracle's Excel for Mac and its 75-sheet workbook
 irr.golden.tsv	irr-doc-pos	diverges	n:0.08663094803625213	n:8.663094803652216E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
 jis.golden.tsv	jis-0	diverges	s:ABC	e:#NAME?	harness: JIS is DBCS's name in the Japanese UI; en-US Excel does not know the name (#NAME?) — the engine accepts it as the DBCS alias
 jis.golden.tsv	jis-1	diverges	s:ｶﾞ	e:#NAME?	harness: JIS is DBCS's name in the Japanese UI; en-US Excel does not know the name (#NAME?) — the engine accepts it as the DBCS alias
@@ -50,7 +60,13 @@ sheet.golden.tsv	multi-cell-range-origin-sheet	diverges	n:1	n:39	harness artifac
 sheet.golden.tsv	no-arg-is-current-sheet	diverges	n:1	n:37	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
 sheet.golden.tsv	scalar-text-name-arg-falls-back	diverges	n:1	e:#N/A	harness artifact: the oracle workbook has no sheet named Sheet1 (sheets are c1..cN), so Excel's #N/A is about the harness
 sheet.golden.tsv	single-cell-range-origin-sheet	diverges	n:1	n:38	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+sheet3.golden.tsv	sh-0	diverges	n:1	n:69	harness artifact: the oracle workbook holds one sheet per case (c1..cN, locale_probe), the engine case one sheet; the multi-sheet behaviour is tested in tests/it/info_model.rs
+sheet3.golden.tsv	sh-1	diverges	e:#N/A	n:3	harness artifact: the oracle workbook holds one sheet per case (c1..cN, locale_probe), the engine case one sheet; the multi-sheet behaviour is tested in tests/it/info_model.rs
+sheet3.golden.tsv	sh-2	diverges	e:#N/A	n:3	harness artifact: the oracle workbook holds one sheet per case (c1..cN, locale_probe), the engine case one sheet; the multi-sheet behaviour is tested in tests/it/info_model.rs
+sheet3.golden.tsv	sh-5	diverges	n:1	n:67	harness artifact: the oracle workbook holds one sheet per case (c1..cN, locale_probe), the engine case one sheet; the multi-sheet behaviour is tested in tests/it/info_model.rs
+sheet3.golden.tsv	sh-6	diverges	e:#N/A	n:69	harness artifact: the oracle workbook holds one sheet per case (c1..cN, locale_probe), the engine case one sheet; the multi-sheet behaviour is tested in tests/it/info_model.rs
 sheets.golden.tsv	no-arg-is-one	diverges	n:1	n:52	harness artifact: the oracle workbook holds one sheet per case, so Excel's SHEET()/SHEETS() see a many-sheet workbook while the engine case has one sheet
+trend3.golden.tsv	tr-8	diverges	e:#NUM!	n:0.5	ruling: collinear regressors are #NUM! (as LINEST); Excel drops a collinear regressor and fits the rest
 xirr.golden.tsv	xirr-guess	diverges	n:0.10000000000000006	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
 xirr.golden.tsv	xirr-one-year	diverges	n:0.1	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method
 xirr.golden.tsv	xirr-two-year	diverges	n:0.1	n:9.9999994039535522E-2	iterative solver: the engine converges to a tighter root than Excel's own stopping tolerance; both are roots within Excel's precision of the method

@@ -578,7 +578,8 @@ pub fn replace(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 /// T1 subset). `instance` defaults to `1`; a **negative** instance counts
 /// occurrences from the end (`-1` = last); `0` is `#VALUE!`. Matching is
 /// **case-sensitive** by default (`match_mode` 1 folds case — Excel 16,
-/// recorded); `if_not_found` replaces `#N/A`; `match_end` is not modelled. An
+/// recorded); `if_not_found` replaces `#N/A`; `match_end` makes the end of the
+/// text (the start, counting back) one more delimiter. An
 /// empty
 /// `delimiter` returns `""` (the whole text is "after" an empty delimiter at
 /// position 0). An error propagates.
@@ -660,13 +661,36 @@ fn textsplit(args: &[Arg], side: Side) -> CellValue {
         };
     }
     let dchars: Vec<char> = delim.chars().collect();
+    // match_end: the end of the text (counting forward) or its start
+    // (counting back) is one more, zero-width delimiter (W3, Excel-recorded);
+    // an empty text is then #VALUE!.
+    let match_end = match args.get(4) {
+        None | Some(Arg::Scalar(CellValue::Empty)) => false,
+        Some(arg) => match arg_number(arg) {
+            Ok(n) => n != 0.0,
+            Err(e) => return CellValue::Error(e),
+        },
+    };
+    if match_end && tchars.is_empty() {
+        return CellValue::Error(CellError::Value);
+    }
 
-    // All occurrence start indices (0-based, char positions), case-insensitive.
-    let occ = find_all(&tchars, &dchars, case_insensitive);
+    // All occurrences as (start, width), char positions.
+    let mut occ: Vec<(usize, usize)> = find_all(&tchars, &dchars, case_insensitive)
+        .into_iter()
+        .map(|i| (i, dchars.len()))
+        .collect();
+    if match_end {
+        if instance > 0 {
+            occ.push((tchars.len(), 0));
+        } else {
+            occ.insert(0, (0, 0));
+        }
+    }
     if occ.is_empty() {
         return not_found();
     }
-    let idx = if instance > 0 {
+    let (idx, width) = if instance > 0 {
         let k = instance as usize;
         if k > occ.len() {
             return not_found();
@@ -682,7 +706,7 @@ fn textsplit(args: &[Arg], side: Side) -> CellValue {
 
     let out: String = match side {
         Side::Before => tchars[..idx].iter().collect(),
-        Side::After => tchars[idx + dchars.len()..].iter().collect(),
+        Side::After => tchars[idx + width..].iter().collect(),
     };
     CellValue::Text(CompactString::new(out))
 }

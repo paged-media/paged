@@ -66,9 +66,45 @@ import {
 } from "@paged-media/shell";
 import type { ElementId, StorySummary } from "@paged-media/client";
 import { NumberInput } from "@paged-media/ui";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { layoutPages, fitCamera } from "../../ui/layout";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
+
+const M = defineMessages("app.cockpitStoriesPanel", {
+  stories: "Stories",
+  loading: "Loading stories…",
+  story: "Story {n}",
+  counts: "{count, plural, one {# char} other {# chars}} · {paragraphs} ¶",
+  oversetBadge: "overset",
+  noStories: "No stories yet",
+  noStoriesBody:
+    "This document carries no text stories. Place a text frame and type " +
+    "to start one.",
+  oversetSummary:
+    "{count, plural, one {# overset story} other {# overset stories}}",
+  overset: "Overset",
+  fits: "Fits",
+  storyId: "Story id",
+  characters: "Characters",
+  paragraphs: "Paragraphs",
+  yes: "yes",
+  no: "no",
+  words: "Words",
+  wordsNote:
+    "Word count is not available yet: the editor only knows the character " +
+    "count of a story.",
+  firstParagraph: "First paragraph",
+  firstParagraphNote: "A preview of the story text is not available yet.",
+  footer:
+    "Renaming, approval, and comments land with the collaboration backend " +
+    "— stories cannot be renamed yet.",
+  notAvailable: "not available yet",
+  smartReflow: "Smart text reflow",
+  addPages: "Add pages while overset",
+  maxPages: "Max added pages",
+  default: "Default",
+});
 
 /** What `revealStoryFrame` acts through: the panel's hooks, handed over. */
 interface RevealDeps {
@@ -147,6 +183,7 @@ async function revealStoryFrame(
 }
 
 export function StoriesPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { handle } = useDocument();
   const { contentSelection, setContentSelection } = useContentSelection();
@@ -189,9 +226,9 @@ export function StoriesPanel() {
         data-stories-panel="loading"
         style={{ overflowY: "auto", height: "100%" }}
       >
-        <CockpitPanelHeader title="Stories" />
+        <CockpitPanelHeader title={strings.t(M.stories)} />
         <div className="pg-ui-xs" style={{ padding: "10px 14px" }}>
-          Loading stories…
+          {strings.t(M.loading)}
         </div>
       </div>
     );
@@ -210,13 +247,16 @@ export function StoriesPanel() {
   const rows: ListRowSpec[] = stories.map((s, i) => ({
     key: s.selfId,
     icon: "panel-character",
-    primary: `Story ${i + 1}`,
-    secondary: `${s.characterCount} char${
-      s.characterCount === 1 ? "" : "s"
-    } · ${s.paragraphCount} ¶`,
+    primary: strings.t(M.story, { n: i + 1 }),
+    secondary: strings.t(M.counts, {
+      count: s.characterCount,
+      paragraphs: s.paragraphCount,
+    }),
     // The id stays out of sight (R13): searchable, never printed.
-    searchText: `Story ${i + 1} ${s.selfId}`,
-    badge: s.overset ? { label: "overset", tone: "error" } : undefined,
+    searchText: `${strings.t(M.story, { n: i + 1 })} ${s.selfId}`,
+    badge: s.overset
+      ? { label: strings.t(M.oversetBadge), tone: "error" }
+      : undefined,
     selected: s.selfId === activeStoryId,
     // Selecting a story = a caret at its head (the same
     // content-selection the text tool drives) + opens the inspector.
@@ -240,13 +280,12 @@ export function StoriesPanel() {
       }}
     >
       <CockpitPanelHeader
-        title="Stories"
+        title={strings.t(M.stories)}
         action={<span className="pg-mono-meta">{stories.length}</span>}
       />
       {stories.length === 0 ? (
-        <ComingSoon icon="panel-character" title="No stories yet">
-          This document carries no text stories. Place a text frame and type to
-          start one.
+        <ComingSoon icon="panel-character" title={strings.t(M.noStories)}>
+          {strings.t(M.noStoriesBody)}
         </ComingSoon>
       ) : (
         <>
@@ -259,7 +298,7 @@ export function StoriesPanel() {
                 color: "var(--status-error)",
               }}
             >
-              {oversetCount} overset stor{oversetCount === 1 ? "y" : "ies"}
+              {strings.t(M.oversetSummary, { count: oversetCount })}
             </div>
           )}
           <div data-story-list>
@@ -287,6 +326,7 @@ function StoryInspector({
   story: StorySummary;
   index: number;
 }) {
+  const strings = useStrings();
   return (
     <div
       data-story-inspector={story.selfId}
@@ -305,37 +345,37 @@ function StoryInspector({
           marginBottom: 9,
         }}
       >
-        <span className="pg-label">Story {index + 1}</span>
+        <span className="pg-label">{strings.t(M.story, { n: index + 1 })}</span>
         <StatusPill
           tone={story.overset ? "error" : "ready"}
           testId="story-overset-status"
         >
-          {story.overset ? "Overset" : "Fits"}
+          {story.overset ? strings.t(M.overset) : strings.t(M.fits)}
         </StatusPill>
       </div>
 
       {/* REAL — the four honest StorySummary fields. */}
       <Field
-        label="Story id"
+        label={strings.t(M.storyId)}
         value={story.selfId}
         mono
         testId="story-self-id"
       />
       <Field
-        label="Characters"
+        label={strings.t(M.characters)}
         value={String(story.characterCount)}
         mono
         testId="story-char-count"
       />
       <Field
-        label="Paragraphs"
+        label={strings.t(M.paragraphs)}
         value={String(story.paragraphCount)}
         mono
         testId="story-para-count"
       />
       <Field
-        label="Overset"
-        value={story.overset ? "yes" : "no"}
+        label={strings.t(M.overset)}
+        value={story.overset ? strings.t(M.yes) : strings.t(M.no)}
         mono
         testId="story-overset"
       />
@@ -359,14 +399,14 @@ function StoryInspector({
         }}
       />
       <Seam
-        label="Words"
+        label={strings.t(M.words)}
         testId="story-seam-words"
-        note="Word count is not available yet: the editor only knows the character count of a story."
+        note={strings.t(M.wordsNote)}
       />
       <Seam
-        label="First paragraph"
+        label={strings.t(M.firstParagraph)}
         testId="story-seam-preview"
-        note="A preview of the story text is not available yet."
+        note={strings.t(M.firstParagraphNote)}
       />
 
       <div
@@ -374,8 +414,7 @@ function StoryInspector({
         style={{ marginTop: 11, lineHeight: 1.45 }}
         data-story-inspector-footer
       >
-        Renaming, approval, and comments land with the collaboration backend —
-        stories cannot be renamed yet.
+        {strings.t(M.footer)}
       </div>
     </div>
   );
@@ -439,6 +478,7 @@ function Seam({
   note: string;
   testId: string;
 }) {
+  const strings = useStrings();
   return (
     <div
       data-story-seam={testId}
@@ -458,7 +498,7 @@ function Seam({
         className="pg-ui-xs"
         style={{ fontStyle: "italic", color: "var(--pg-muted-fg)" }}
       >
-        not available yet
+        {strings.t(M.notAvailable)}
       </span>
     </div>
   );
@@ -493,6 +533,7 @@ function StoryReflow({
   storyId: string;
   rule: { grow: boolean; maxPages?: number | null } | null;
 }) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const rule: GrowRuleState = {
     grow: held?.grow ?? false,
@@ -511,7 +552,7 @@ function StoryReflow({
   return (
     <div data-story-reflow={storyId} style={{ marginTop: 10 }}>
       <div className="pg-label" style={{ marginBottom: 4 }}>
-        Smart text reflow
+        {strings.t(M.smartReflow)}
       </div>
       <div
         style={{
@@ -522,7 +563,7 @@ function StoryReflow({
           padding: "4px 0",
         }}
       >
-        <span className="pg-ui-xs">Add pages while overset</span>
+        <span className="pg-ui-xs">{strings.t(M.addPages)}</span>
         <TogglePill
           testId="story-reflow-grow"
           checked={rule.grow}
@@ -538,10 +579,10 @@ function StoryReflow({
           padding: "2px 0",
         }}
       >
-        <span className="pg-ui-xs">Max added pages</span>
+        <span className="pg-ui-xs">{strings.t(M.maxPages)}</span>
         <NumberInput
           value={rule.maxPages}
-          unsetText="Default"
+          unsetText={strings.t(M.default)}
           min={1}
           precision={0}
           onChange={() => {}}

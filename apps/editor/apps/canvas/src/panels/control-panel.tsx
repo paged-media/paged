@@ -42,8 +42,14 @@ import { characterComposition } from "./character.composition";
 import { objectTransformComposition } from "./object-transform.composition";
 import { paragraphComposition } from "./paragraph.composition";
 import { strokeComposition } from "./stroke.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.controlPanel", {
+  empty: "Select a frame or place a text caret.",
+});
 
 export function ControlPanel() {
+  const strings = useStrings();
   const { elementSelection } = useSelection();
   const { contentSelection } = useContentSelection();
   const hasElement = elementSelection.length > 0;
@@ -62,7 +68,7 @@ export function ControlPanel() {
             className="text-xs text-muted-foreground self-center"
             data-control-empty
           >
-            Select a frame or place a text caret.
+            {strings.t(M.empty)}
           </div>
         ) : null}
         {hasElement ? (
@@ -70,7 +76,9 @@ export function ControlPanel() {
             className="shrink-0 min-w-[14rem] border-r border-input pr-3"
             data-control-section="object"
           >
-            <CompositionRenderer composition={objectTransformComposition} />
+            <CompositionRenderer
+              composition={objectTransformComposition(strings)}
+            />
           </div>
         ) : null}
         {hasElement ? (
@@ -78,7 +86,7 @@ export function ControlPanel() {
             className="shrink-0 min-w-[14rem] border-r border-input pr-3"
             data-control-section="stroke"
           >
-            <CompositionRenderer composition={strokeComposition} />
+            <CompositionRenderer composition={strokeComposition(strings)} />
           </div>
         ) : null}
         {hasContent ? (
@@ -86,7 +94,7 @@ export function ControlPanel() {
             className="shrink-0 min-w-[14rem] border-r border-input pr-3"
             data-control-section="character"
           >
-            <CompositionRenderer composition={characterComposition} />
+            <CompositionRenderer composition={characterComposition(strings)} />
           </div>
         ) : null}
         {hasContent ? (
@@ -94,7 +102,7 @@ export function ControlPanel() {
             className="shrink-0 min-w-[14rem]"
             data-control-section="paragraph"
           >
-            <CompositionRenderer composition={paragraphComposition} />
+            <CompositionRenderer composition={paragraphComposition(strings)} />
           </div>
         ) : null}
       </div>

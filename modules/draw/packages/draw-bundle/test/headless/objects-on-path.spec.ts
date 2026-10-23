@@ -38,6 +38,7 @@
 //   (4) The two distribution modes, align, pivot, offset and order.
 //   (5) EXPAND ≠ RELEASE on the same document.
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -1041,11 +1042,11 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
 
     it("the panel note carries the two facts the form cannot show", () => {
       // The panel's About text says both facts in plain words.
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain(
+      expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain(
         "This moves the objects you selected; it does not copy them",
       );
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("Text frames work too");
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain(
+      expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain("Text frames work too");
+      expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain(
         "Objects are kept on the page",
       );
       // (1) It MOVES rather than copies — the opposite of every other row.
@@ -1061,7 +1062,7 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(OBJECTS_ON_PATH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       expect(OBJECTS_ON_PATH_NOTE).toContain("STRICTER rule");
       // …and the undo arithmetic.
-      expect(OBJECTS_ON_PATH_PANEL_NOTE).toContain("one undo step each");
+      expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain("one undo step each");
     });
 
     it("objectsOnPathRowLabel says what was asked for and what is on the path", () => {

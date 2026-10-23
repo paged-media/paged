@@ -34,6 +34,7 @@
 //     `{ kind: "exportIdml" }` → `idmlExported`). This escape hatch is used
 //     DELIBERATELY as a transitional bridge (see exportIdml below).
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   BundleHost,
   Disposable,
@@ -115,6 +116,8 @@ async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
 
 // ------------------------------------------------------- registration
 
+const M = defineMessages("publish.io", { idmlPackage: "IDML package" });
+
 /** Register both the IDML importer and exporter through the K-2 doors,
  *  capability-gated (degrades honestly when a host predates the door).
  *  Returns a Disposable dropping both. */
@@ -124,7 +127,7 @@ export function contributeIdmlIo(host: BundleHost): Disposable {
     disposers.push(
       host.contribute.importer({
         id: IDML_IMPORTER_ID,
-        title: "IDML package",
+        title: t(M.idmlPackage),
         extensions: [".idml"],
         mimeTypes: [IDML_MIME],
         import: (file) => importIdml(host, file),
@@ -139,7 +142,7 @@ export function contributeIdmlIo(host: BundleHost): Disposable {
     disposers.push(
       host.contribute.exporter({
         id: IDML_EXPORTER_ID,
-        title: "IDML package",
+        title: t(M.idmlPackage),
         extension: ".idml",
         mimeType: IDML_MIME,
         export: () => exportIdml(host),

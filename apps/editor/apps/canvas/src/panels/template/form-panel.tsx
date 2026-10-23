@@ -46,6 +46,9 @@ import {
   useCollection,
 } from "@paged-media/shell";
 
+import { useStrings } from "@paged-media/strings";
+
+import { FORM, problemText } from "./messages";
 import { ModuleFieldControl } from "./module-field";
 
 const IMAGE_TYPES = [
@@ -70,6 +73,7 @@ function fileName(uri: string): string {
 
 function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   const client = useCanvasClient();
+  const strings = useStrings();
   const { field } = row;
   const current =
     row.value?.kind === "text"
@@ -93,14 +97,16 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
       return;
     }
     if ("problems" in result) {
-      setMessage(result.problems.map((p) => p.problem).join("; "));
+      setMessage(
+        result.problems.map((p) => problemText(strings, p.problem)).join("; "),
+      );
       return;
     }
     const reply = result.reply;
     setMessage(
       reply.kind === "mutationFailed"
         ? refusalText(reply.payload.error)
-        : "The change did not apply.",
+        : strings.t(FORM.didNotApply),
     );
   };
 
@@ -164,14 +170,14 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
               textOverflow: "ellipsis",
             }}
           >
-            {current ? fileName(current) : "No picture"}
+            {current ? fileName(current) : strings.t(FORM.noPicture)}
           </span>
           <button
             type="button"
             data-field-replace={field.name}
             onClick={() => void replacePicture()}
           >
-            Replace…
+            {strings.t(FORM.replace)}
           </button>
         </div>
       );
@@ -196,7 +202,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
     default:
       control = (
         <span style={{ color: "var(--pg-muted-fg)" }}>
-          This field cannot be filled in here yet.
+          {strings.t(FORM.cannotFill)}
         </span>
       );
   }
@@ -237,7 +243,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
         ) : null}
         {row.overset ? (
           <StatusLine tone="warn" attr="data-field-overset">
-            The text does not fit its frame.
+            {strings.t(FORM.overset)}
           </StatusLine>
         ) : null}
         <StatusLine tone="error" attr="data-field-problem">
@@ -250,6 +256,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
 
 /** The template form: one row per field, grouped by the author's groups. */
 export function TemplateFormPanel(): ReactElement {
+  const strings = useStrings();
   const rows = useCollection<TemplateFieldSummary>("templateFields");
   if (rows === null) return <div style={{ padding: space[3] }} />;
   if (rows.length === 0) {
@@ -258,7 +265,7 @@ export function TemplateFormPanel(): ReactElement {
         data-template-form-empty
         style={{ padding: space[3], color: "var(--pg-muted-fg)" }}
       >
-        This document has no fields to fill in.
+        {strings.t(FORM.empty)}
       </div>
     );
   }

@@ -3,8 +3,24 @@
 // own parameters; the brush section's size, hardness, flow and spacing
 // apply to these tools too (the sponge's strength IS the flow).
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import { TONE_RANGES, type ToneOptions, type ToneRange } from "../../engine";
+import { toneRangeLabel } from "../../words";
 import { note, row, sectionTitle } from "./styles";
+
+const M = defineMessages("image.tone", {
+  title: "Dodge / burn / sponge",
+  range: "Range",
+  exposure: "Exposure",
+  sponge: "Sponge",
+  desaturate: "desaturate",
+  saturate: "saturate",
+  note:
+    "Dodge lightens and burn darkens the chosen tonal range by the exposure; " +
+    "the sponge changes saturation at the brush's flow. All three paint " +
+    "with the brush tip and stay inside the selection.",
+});
 
 export function ToneSection({
   tone,
@@ -18,10 +34,10 @@ export function ToneSection({
   return (
     <>
       <div style={sectionTitle} data-image-tone-title>
-        Dodge / burn / sponge
+        {t(M.title)}
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-tone-range">Range</label>
+        <label htmlFor="pg-image-tone-range">{t(M.range)}</label>
         <select
           id="pg-image-tone-range"
           data-image-tone-range
@@ -31,13 +47,13 @@ export function ToneSection({
         >
           {TONE_RANGES.map((r) => (
             <option key={r} value={r}>
-              {r}
+              {toneRangeLabel(r)}
             </option>
           ))}
         </select>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-tone-exposure">Exposure</label>
+        <label htmlFor="pg-image-tone-exposure">{t(M.exposure)}</label>
         <input
           id="pg-image-tone-exposure"
           data-image-tone-exposure
@@ -52,7 +68,7 @@ export function ToneSection({
         <span>{Math.round(tone.exposure * 100)}%</span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-tone-sponge">Sponge</label>
+        <label htmlFor="pg-image-tone-sponge">{t(M.sponge)}</label>
         <select
           id="pg-image-tone-sponge"
           data-image-tone-sponge
@@ -62,15 +78,11 @@ export function ToneSection({
             onChange({ saturate: e.target.value === "saturate" })
           }
         >
-          <option value="desaturate">desaturate</option>
-          <option value="saturate">saturate</option>
+          <option value="desaturate">{t(M.desaturate)}</option>
+          <option value="saturate">{t(M.saturate)}</option>
         </select>
       </div>
-      <div style={note}>
-        Dodge lightens and burn darkens the chosen tonal range by the exposure;
-        the sponge changes saturation at the brush&apos;s flow. All three paint
-        with the brush tip and stay inside the selection.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

@@ -1,0 +1,35 @@
+# CELL(info_type, [reference]).
+# id	formula	setup	expected
+cell-0	=CELL("address",B3)	-	$B$3
+cell-1	=CELL("address",B3:C4)	-	$B$3
+cell-2	=CELL("col",D7)	-	4
+cell-3	=CELL("row",D7)	-	7
+cell-4	=CELL("contents",A1)	A1=42	42
+cell-5	=CELL("contents",A1)	A1=text:hi	hi
+cell-6	=CELL("contents",A1)	-	0
+cell-7	=CELL("type",A1)	A1=42	v
+cell-8	=CELL("type",A1)	A1=text:hi	l
+cell-9	=CELL("type",A1)	-	b
+cell-10	=CELL("type",A1)	A1=TRUE	v
+cell-11	=CELL("type",A1)	A1=#N/A	v
+cell-12	=CELL("format",A1)	A1=1	G
+cell-13	=CELL("color",A1)	A1=-1	0
+cell-14	=CELL("parentheses",A1)	A1=1	0
+cell-15	=CELL("prefix",A1)	A1=text:x	'
+cell-16	=CELL("prefix",A1)	A1=1	
+cell-17	=CELL("protect",A1)	-	1
+cell-18	=ROWS(CELL("width",A1))	-	1
+cell-19	=INDEX(CELL("width",A1),1)	-	8
+cell-20	=CELL("filename",A1)	-	
+cell-21	=CELL("bogus",A1)	-	#VALUE!
+cell-22	=CELL("ADDRESS",B3)	-	$B$3
+cell-23	=CELL("address")	@C5	$C$5
+cell-24	=CELL("row")	@C5	5
+cell-25	=CELL(1,A1)	-	#VALUE!
+cell-26	=CELL("address",1)	-	#VALUE!
+cell-27	=CELL("contents",A1:B2)	A1=7;B2=8	7
+cell-28	=CELL("address",INDIRECT("E9"))	-	$E$9
+cell-29	=CELL("contents",A1)	A1=#DIV/0!	#DIV/0!
+cell-30	=COLUMNS(CELL("width",A1))	-	2
+cell-31	=INDEX(CELL("width",A1),1,2)	-	TRUE
+cell-32	=CELL("width",A1)	-	8

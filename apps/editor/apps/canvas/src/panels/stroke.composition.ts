@@ -64,14 +64,43 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.strokeComposition", {
+  solid: "Solid",
+  dashed: "Dashed",
+  dotted: "Dotted",
+  none: "None",
+  simple: "Simple",
+  triangle: "Triangle",
+  circle: "Circle",
+  bar: "Bar",
+  stroke: "Stroke",
+  weight: "Weight",
+  color: "Color",
+  type: "Type",
+  cap: "Cap",
+  join: "Join",
+  miter: "Miter",
+  align: "Align",
+  center: "Center",
+  inside: "Inside",
+  outside: "Outside",
+  gapColor: "Gap color",
+  gapTint: "Gap tint",
+  dashesArrows: "Dashes & arrows",
+  dashPattern: "Dash pattern",
+  start: "Start",
+  end: "End",
+});
 
 // Built-in IDML StrokeType references. The canvas read-side returns
 // the full `StrokeStyle/$ID/...` ref; an out-of-list custom stroke
 // still renders via SelectLeaf's pass-through option.
-const STROKE_TYPES = [
-  { value: "StrokeStyle/$ID/Solid", label: "Solid" },
-  { value: "StrokeStyle/$ID/Dashed", label: "Dashed" },
-  { value: "StrokeStyle/$ID/Dotted", label: "Dotted" },
+const strokeTypes = (strings: Strings) => [
+  { value: "StrokeStyle/$ID/Solid", label: strings.t(M.solid) },
+  { value: "StrokeStyle/$ID/Dashed", label: strings.t(M.dashed) },
+  { value: "StrokeStyle/$ID/Dotted", label: strings.t(M.dotted) },
 ];
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
@@ -79,208 +108,214 @@ const STROKE_TYPES = [
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
 /** Core's `frameStroke*Arrowhead` enum, with words for its members. */
-const ARROWHEAD_OPTIONS = [
-  { value: "None", label: "None" },
-  { value: "SimpleArrowHead", label: "Simple" },
-  { value: "TriangleArrowHead", label: "Triangle" },
-  { value: "CircleSolidArrowHead", label: "Circle" },
-  { value: "BarArrowHead", label: "Bar" },
+const arrowheadOptions = (strings: Strings) => [
+  { value: "None", label: strings.t(M.none) },
+  { value: "SimpleArrowHead", label: strings.t(M.simple) },
+  { value: "TriangleArrowHead", label: strings.t(M.triangle) },
+  { value: "CircleSolidArrowHead", label: strings.t(M.circle) },
+  { value: "BarArrowHead", label: strings.t(M.bar) },
 ];
 
-export const strokeComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Stroke", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_LENGTH,
-      props: { label: "Weight", icon: "ui-size" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeWeight",
-        },
-      },
-    },
-    {
-      catalogId: PAGED_INPUT_COLOR_SWATCH,
-      props: { label: "Color" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeColor",
-        },
-      },
-    },
-    {
-      // LIVE stroke-type (built-in StrokeStyle refs → dash pattern).
-      catalogId: PAGED_INPUT_SELECT,
-      props: { label: "Type", placeholder: "Solid", options: STROKE_TYPES },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeType",
-        },
-      },
-    },
-    {
-      // LIVE end-cap (TextFrame raises UnsupportedProperty →
-      // em-dash group).
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Cap",
-        options: [
-          { value: "ButtEndCap", label: "—" },
-          { value: "RoundEndCap", label: "○" },
-          { value: "ProjectingEndCap", label: "□" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeEndCap",
-        },
-      },
-    },
-    {
-      // LIVE end-join (Rectangle-only parse field → em-dash on
-      // other kinds). Glyph stand-ins per the deep1 card.
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Join",
-        options: [
-          { value: "MiterEndJoin", label: "tool-polygon" },
-          { value: "RoundEndJoin", label: "tool-ellipse" },
-          { value: "BevelEndJoin", label: "tool-rectangle" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeJoin",
-        },
-      },
-    },
-    {
-      // LIVE miter limit (Rectangle-only).
-      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-      props: { label: "Miter" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeMiterLimit",
-        },
-      },
-    },
-    {
-      // LIVE stroke-to-path alignment (Rectangle-only).
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Align",
-        options: [
-          { value: "CenterAlignment", label: "Center" },
-          { value: "InsideAlignment", label: "Inside" },
-          { value: "OutsideAlignment", label: "Outside" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeAlignment",
-        },
-      },
-    },
-    {
-      // LIVE gap colour + tint (the colour painted between dashes /
-      // stripes). Mirrors the frameStrokeColor swatch binding.
-      catalogId: PAGED_INPUT_COLOR_SWATCH,
-      props: { label: "Gap color" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeGapColor",
-        },
-      },
-    },
-    {
-      catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-      props: { label: "Gap tint", suffix: "%" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameStrokeGapTint",
-        },
-      },
-    },
-    {
-      // Dashes and arrowheads, on the core paths paged.draw's separate
-      // "Vector stroke" panel used to carry (the two panels are merged
-      // here). The dash pattern is a list (dash, gap, dash, gap … in pt):
-      // its PropertyField renders the schema's list editor. Arrowheads
-      // apply to lines and open paths; core refuses them elsewhere.
-      catalogId: PAGED_LAYOUT_SECTION,
-      props: {
-        title: "Dashes & arrows",
-        collapsible: true,
-        defaultOpen: false,
-      },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: {
-            label: "Dash pattern",
-            labelPosition: "stack",
-            suffix: "pt",
+export function strokeComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.stroke), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_LENGTH,
+        props: { label: strings.t(M.weight), icon: "ui-size" },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeWeight",
           },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "frameStrokeDashArray",
+        },
+      },
+      {
+        catalogId: PAGED_INPUT_COLOR_SWATCH,
+        props: { label: strings.t(M.color) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeColor",
+          },
+        },
+      },
+      {
+        // LIVE stroke-type (built-in StrokeStyle refs → dash pattern).
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.type),
+          placeholder: strings.t(M.solid),
+          options: strokeTypes(strings),
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeType",
+          },
+        },
+      },
+      {
+        // LIVE end-cap (TextFrame raises UnsupportedProperty →
+        // em-dash group).
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.cap),
+          options: [
+            { value: "ButtEndCap", label: "—" },
+            { value: "RoundEndCap", label: "○" },
+            { value: "ProjectingEndCap", label: "□" },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeEndCap",
+          },
+        },
+      },
+      {
+        // LIVE end-join (Rectangle-only parse field → em-dash on
+        // other kinds). Glyph stand-ins per the deep1 card.
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.join),
+          options: [
+            { value: "MiterEndJoin", label: "tool-polygon" },
+            { value: "RoundEndJoin", label: "tool-ellipse" },
+            { value: "BevelEndJoin", label: "tool-rectangle" },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeJoin",
+          },
+        },
+      },
+      {
+        // LIVE miter limit (Rectangle-only).
+        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+        props: { label: strings.t(M.miter) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeMiterLimit",
+          },
+        },
+      },
+      {
+        // LIVE stroke-to-path alignment (Rectangle-only).
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.align),
+          options: [
+            { value: "CenterAlignment", label: strings.t(M.center) },
+            { value: "InsideAlignment", label: strings.t(M.inside) },
+            { value: "OutsideAlignment", label: strings.t(M.outside) },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeAlignment",
+          },
+        },
+      },
+      {
+        // LIVE gap colour + tint (the colour painted between dashes /
+        // stripes). Mirrors the frameStrokeColor swatch binding.
+        catalogId: PAGED_INPUT_COLOR_SWATCH,
+        props: { label: strings.t(M.gapColor) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeGapColor",
+          },
+        },
+      },
+      {
+        catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+        props: { label: strings.t(M.gapTint), suffix: "%" },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameStrokeGapTint",
+          },
+        },
+      },
+      {
+        // Dashes and arrowheads, on the core paths paged.draw's separate
+        // "Vector stroke" panel used to carry (the two panels are merged
+        // here). The dash pattern is a list (dash, gap, dash, gap … in pt):
+        // its PropertyField renders the schema's list editor. Arrowheads
+        // apply to lines and open paths; core refuses them elsewhere.
+        catalogId: PAGED_LAYOUT_SECTION,
+        props: {
+          title: strings.t(M.dashesArrows),
+          collapsible: true,
+          defaultOpen: false,
+        },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+            props: {
+              label: strings.t(M.dashPattern),
+              labelPosition: "stack",
+              suffix: "pt",
+            },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "frameStrokeDashArray",
+              },
             },
           },
-        },
-        {
-          catalogId: PAGED_INPUT_SELECT,
-          props: {
-            label: "Start",
-            labelPosition: "stack",
-            options: ARROWHEAD_OPTIONS,
-          },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "frameStrokeStartArrowhead",
+          {
+            catalogId: PAGED_INPUT_SELECT,
+            props: {
+              label: strings.t(M.start),
+              labelPosition: "stack",
+              options: arrowheadOptions(strings),
+            },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "frameStrokeStartArrowhead",
+              },
             },
           },
-        },
-        {
-          catalogId: PAGED_INPUT_SELECT,
-          props: {
-            label: "End",
-            labelPosition: "stack",
-            options: ARROWHEAD_OPTIONS,
-          },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "element",
-              path: "frameStrokeEndArrowhead",
+          {
+            catalogId: PAGED_INPUT_SELECT,
+            props: {
+              label: strings.t(M.end),
+              labelPosition: "stack",
+              options: arrowheadOptions(strings),
+            },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "element",
+                path: "frameStrokeEndArrowhead",
+              },
             },
           },
-        },
-      ],
-    },
-  ],
-});
+        ],
+      },
+    ],
+  });
+}

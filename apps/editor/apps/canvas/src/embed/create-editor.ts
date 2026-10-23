@@ -38,6 +38,7 @@ import {
   type EditorProfile,
   type FeatureStore,
 } from "@paged-media/shell";
+import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
 import { mountEditor } from "../main";
@@ -57,6 +58,19 @@ export interface EditorConfig {
   actions?: HostActions;
   /** Field values to set once the document is open. */
   values?: Readonly<Record<string, FieldValue | string | boolean>>;
+  /** The language of the editor's words (`de`); English by default. */
+  locale?: string;
+  /** The locale's catalogue, when the host supplies it; else the editor's
+   *  own, else `<assetBase>/locales/<locale>.json`. */
+  messages?: Readonly<Record<string, string>>;
+  /** Where the editor's files are served from (locales). */
+  assetBase?: string;
+  /**
+   * Where the engine's wasm is served (`paged_canvas_wasm_bg.wasm` of
+   * `@paged-media/paged`). The editor's own build when absent; the
+   * `@paged-media/editor` package fills it from its dependency (PM-0013).
+   */
+  engineWasm?: string;
 }
 
 export type EditorEvent =
@@ -75,6 +89,16 @@ export interface EditorHandle {
   exportPdf(options?: ExportPdfWireOptions): Promise<Uint8Array>;
   /** The template's fields, in form order, with their values. */
   fields(): Promise<readonly TemplateFieldSummary[]>;
+  /**
+   * The editor's look: its dark or light theme, and design tokens
+   * (`--paged-*`, `--chrome-*`, … from apps/editor/docs/theme-tokens.json)
+   * the host overrides with its brand. A token set to null returns to the
+   * editor's own.
+   */
+  setTheme(theme: {
+    mode?: "dark" | "light";
+    tokens?: Readonly<Record<string, string | null>>;
+  }): void;
   /** The template's values by field name. */
   getFieldValues(): Promise<Record<string, FieldValue>>;
   /** Fill fields: one undo step, checked against the session's role. */
@@ -132,19 +156,27 @@ export async function createEditor(
     typeof preset === "string"
       ? { extends: preset, ...(config.role ? { role: config.role } : {}) }
       : { ...preset, ...(config.role ? { role: config.role } : {}) };
+  const { strings, problem } = await loadLocale(config.locale ?? "en", {
+    ...(config.messages ? { messages: config.messages } : {}),
+    ...(config.assetBase ? { assetBase: config.assetBase } : {}),
+  });
+  if (problem) console.warn(`createEditor: ${problem}`);
   let resolveShell!: (shell: ShellAccess) => void;
   const shellReady = new Promise<ShellAccess>((r) => (resolveShell = r));
   const mounted = mountEditor(element, {
     profile,
     actions: config.actions ?? {},
     library: false,
+    strings,
     onShell: (shell) => resolveShell(shell),
+    ...(config.engineWasm ? { engineWasm: config.engineWasm } : {}),
   });
   const shell = await shellReady;
   await bootBundlesSettled();
   const { client, paged, registries } = shell;
 
   const listeners = new Set<(event: EditorEvent) => void>();
+  const themed = new Set<string>();
   const emit = (event: EditorEvent) => {
     for (const l of [...listeners]) l(event);
   };
@@ -210,6 +242,23 @@ export async function createEditor(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    setTheme({ mode, tokens }) {
+      if (mode) shell.setThemeMode(mode);
+      // On the root, not the editor's element: the editor's popovers and
+      // floating panels render outside it and read the same tokens.
+      const root = document.documentElement.style;
+      for (const [name, value] of Object.entries(tokens ?? {})) {
+        if (!name.startsWith("--"))
+          throw new Error(`setTheme: "${name}" is not a token (--name)`);
+        if (value === null) {
+          root.removeProperty(name);
+          themed.delete(name);
+        } else {
+          root.setProperty(name, value);
+          themed.add(name);
+        }
+      }
+    },
     hostSlot: (id) =>
       element.querySelector<HTMLElement>(
         `[data-host-component="${CSS.escape(id)}"]`,
@@ -218,6 +267,8 @@ export async function createEditor(
     dispose() {
       offClient();
       listeners.clear();
+      for (const name of themed)
+        document.documentElement.style.removeProperty(name);
       mounted.dispose();
     },
   };

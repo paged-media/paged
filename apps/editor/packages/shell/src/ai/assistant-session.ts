@@ -23,6 +23,8 @@
 // in the one AI Assistant panel, and survives the panel being hidden.
 // The run executes here, not in a component.
 
+import { t } from "@paged-media/strings";
+import { AI } from "./messages";
 import type { CanvasClient } from "@paged-media/client";
 
 import {
@@ -140,7 +142,7 @@ function stepLabel(source: string, n: number): string {
       .map((l) => l.trim())
       .find((l) => l.length > 0) ?? "";
   const comment = /^\/\/\s*(.+)$/.exec(first)?.[1];
-  return comment ? comment.slice(0, 90) : `Step ${n}: changing the document`;
+  return comment ? comment.slice(0, 90) : t(AI.stepGeneric, { n });
 }
 
 export interface StartRunOptions {
@@ -185,18 +187,20 @@ export function startAssistantRun(options: StartRunOptions): void {
             if (last) last.state = e.run.error ? "failed" : "ok";
             if (e.run.error)
               push({
-                label: `Retrying: ${e.run.error.split("\n")[0]!.slice(0, 80)}`,
+                label: t(AI.retrying, {
+                  error: e.run.error.split("\n")[0]!.slice(0, 80),
+                }),
                 state: "info",
               });
             if (e.overset && e.overset.length > 0)
               push({
-                label: `${e.overset.length} ${e.overset.length === 1 ? "story is" : "stories are"} overset`,
+                label: t(AI.overset, { count: e.overset.length }),
                 state: "info",
               });
             if (state.run.phase === "running")
               set({ run: { ...state.run, steps: [...steps] } });
           } else if (e.type === "render")
-            push({ label: `Checked the look of page ${e.page}`, state: "ok" });
+            push({ label: t(AI.checkedPage, { page: e.page }), state: "ok" });
         },
       });
       const after = await undoTop(options.client);
@@ -206,7 +210,7 @@ export function startAssistantRun(options: StartRunOptions): void {
             phase: "error",
             prompt: options.prompt,
             steps,
-            message: "Claude declined this request.",
+            message: t(AI.declined),
           },
         });
         return;
@@ -248,8 +252,7 @@ export async function undoAssistantRun(client: CanvasClient): Promise<void> {
           phase: "error",
           prompt: run.prompt,
           steps: run.steps,
-          message:
-            "The document changed after Claude's edit, so it was not undone. Use Edit ▸ Undo instead.",
+          message: t(AI.notUndone),
         },
   });
 }

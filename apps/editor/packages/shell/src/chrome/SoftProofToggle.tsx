@@ -27,9 +27,13 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 
+import { useStrings } from "@paged-media/strings";
+
 import { useCanvasClient } from "../state/canvas-client-context";
+import { SOFT_PROOF } from "./messages";
 
 export function SoftProofToggle() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [proofOn, setProofOn] = useState(false);
   const [profiles, setProfiles] = useState<string[]>([]);
@@ -77,15 +81,17 @@ export function SoftProofToggle() {
   return (
     <button
       type="button"
-      aria-label="Proof colors"
+      aria-label={strings.t(SOFT_PROOF.label)}
       aria-pressed={proofOn}
       data-soft-proof={proofOn ? "on" : "off"}
       title={
         disabled
-          ? "Proof colors — register an output profile first (Color settings)"
+          ? strings.t(SOFT_PROOF.needsProfile)
           : proofOn
-            ? "Proof colors: on — click to turn off"
-            : `Proof colors: simulate ${target ?? "output"}`
+            ? strings.t(SOFT_PROOF.on)
+            : target === null
+              ? strings.t(SOFT_PROOF.simulateOutput)
+              : strings.t(SOFT_PROOF.simulate, { profile: target })
       }
       disabled={disabled}
       onClick={toggle}

@@ -24,7 +24,8 @@ keeps its text.
 | [PM-0003](PM-0003-one-lint-config.md) | One root lint config: bun lint, with the import boundaries and the Rules of React enforced |
 | [PM-0005](PM-0005-workspace-policy.md) | Separate Cargo workspaces, one JS workspace, the IDML crates in the engine |
 | [PM-0006](PM-0006-proto-moon-mcp.md) | proto, Moon and the Moon MCP server |
-| [PM-0008](PM-0008-npm-packages-and-release.md) | Four public npm packages, one release workflow; three since amendment 3 (viewer, paged, plugin-sdk) |
+| [PM-0008](PM-0008-npm-packages-and-release.md) | Four public npm packages, one release workflow; three since amendment 3 (viewer, paged, plugin-sdk), four since PM-0013 |
 | [PM-0010](PM-0010-history-import.md) | The repository was assembled from twelve repositories, with their history |
 | [PM-0011](PM-0011-dependency-updates-and-supply-chain.md) | Dependency updates by Renovate; licences and advisories checked daily over every workspace |
 | [PM-0012](PM-0012-engine-adr-range.md) | The engine's records continue at 1000–1099; its 200–209 keep their numbers |
+| [PM-0013](PM-0013-editor-package.md) | A fourth public package, `@paged-media/editor`: the editor bundled, the engine from `@paged-media/paged`, React a peer |

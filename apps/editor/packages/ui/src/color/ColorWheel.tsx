@@ -31,6 +31,8 @@
 // elements (no window listeners registered inside pointerdown —
 // a leaked pair would double-fire after a StrictMode remount).
 
+import { useStrings } from "@paged-media/strings";
+import { COLOR, HARMONY } from "../messages";
 import {
   useRef,
   useState,
@@ -109,6 +111,7 @@ export function ColorWheel({
   onAddSwatch,
   onPalette,
 }: ColorWheelProps) {
+  const strings = useStrings();
   const [hsv, setHsv] = useState<Hsv>(() => seedHsv(value));
   const [harmony, setHarmony] = useState<HarmonyName>("Triadic");
   const [model, setModel] = useState<FieldModel>("HEX");
@@ -368,7 +371,9 @@ export function ColorWheel({
           type="button"
           data-wheel-chip
           title={
-            onAddSwatch ? "Copy hex · double-click adds a swatch" : "Copy hex"
+            onAddSwatch
+              ? strings.t(COLOR.copyHexOrAdd)
+              : strings.t(COLOR.copyHex)
           }
           onClick={() => copy(hex, "sw")}
           onDoubleClick={() =>
@@ -495,7 +500,7 @@ export function ColorWheel({
             )}
             <button
               type="button"
-              title="Copy"
+              title={strings.t(COLOR.copy)}
               data-wheel-copy
               onClick={() =>
                 copy(
@@ -539,7 +544,7 @@ export function ColorWheel({
       {/* harmony picker */}
       <div>
         <div className="pg-label" style={{ marginBottom: 8 }}>
-          Harmony
+          {strings.t(COLOR.harmony)}
         </div>
         <div
           style={{
@@ -572,7 +577,7 @@ export function ColorWheel({
                 fontFamily: "var(--font-sans)",
               }}
             >
-              {k}
+              {strings.t(HARMONY[k === "Split-Comp" ? "SplitComp" : k])}
             </Segment>
           ))}
         </div>

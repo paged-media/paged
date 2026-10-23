@@ -36,6 +36,8 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
+import { createStrings, useStrings, type Strings } from "@paged-media/strings";
+
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 
 import {
@@ -51,7 +53,7 @@ import {
   type AssistantStep,
 } from "../../ai/assistant-session";
 import { PoweredByClaude } from "../../ai/powered-by-claude";
-import { AI_UNAVAILABLE_TEXT, useAiAvailability } from "../../ai/availability";
+import { aiUnavailableText, useAiAvailability } from "../../ai/availability";
 import {
   useCollection,
   useDocumentMeta,
@@ -68,42 +70,48 @@ import { useDocument } from "../../state/document-context";
 import { useOptionalPaged } from "../../state/paged-editor";
 import { useSelection } from "../../state/selection-context";
 import { Btn, PanelHeader, Section } from "./kit";
+import { ASSISTANT as M } from "../messages";
 
 /** The panels' shared low-res floor (publication-health-panel). */
 const LOW_RES_PPI = 150;
 
 export type AssistantKind = "text" | "image" | "frame" | "page";
 
-const SUGGESTIONS: Record<
-  AssistantKind,
-  Array<[icon: string, label: string]>
-> = {
+/** Each suggestion's icon and message key. */
+const SUGGESTIONS: Record<AssistantKind, Array<[icon: string, key: string]>> = {
   text: [
-    ["panel-character", "Shorten text to fit"],
-    ["ui-leading", "Adjust spacing to fit"],
-    ["ui-flow", "Flow into a new frame"],
-    ["panel-pages", "Add 1 more page"],
+    ["panel-character", M.shortenText],
+    ["ui-leading", M.adjustSpacing],
+    ["ui-flow", M.flowNewFrame],
+    ["panel-pages", M.addPage],
   ],
   image: [
-    ["ui-wand", "Fit the image proportionally"],
-    ["ui-wand", "Centre the image in its frame"],
+    ["ui-wand", M.fitImage],
+    ["ui-wand", M.centreImage],
   ],
   frame: [
-    ["ui-wand", "Centre on the page"],
-    ["ui-wand", "Align to the margins"],
+    ["ui-wand", M.centreOnPage],
+    ["ui-wand", M.alignMargins],
   ],
   page: [
-    ["ui-wand", "Tidy the layout of this page"],
-    ["panel-pages", "Add 1 more page"],
+    ["ui-wand", M.tidyLayout],
+    ["panel-pages", M.addPage],
   ],
 };
 
-const SIZES: Array<{ id: string; label: string; pt: [number, number] }> = [
+/** `label` is the size as the request to the model names it; `key`, when
+ *  set, is how the panel shows it. */
+const SIZES: Array<{
+  id: string;
+  label: string;
+  key?: string;
+  pt: [number, number];
+}> = [
   { id: "a4", label: "A4", pt: [595, 842] },
-  { id: "letter", label: "US Letter", pt: [612, 792] },
+  { id: "letter", label: "US Letter", key: M.sizeLetter, pt: [612, 792] },
   { id: "a5", label: "A5", pt: [420, 595] },
   { id: "a3", label: "A3", pt: [842, 1191] },
-  { id: "square", label: "Square 210 mm", pt: [595, 595] },
+  { id: "square", label: "Square 210 mm", key: M.sizeSquare, pt: [595, 595] },
 ];
 
 const field: React.CSSProperties = {
@@ -132,7 +140,20 @@ const select: React.CSSProperties = {
   padding: "0 6px",
 };
 
+/** One finding of the local diagnosis: its message key and count. */
+type Issue = [key: string, count: number];
+
+/** The words the request to the model is written in, whatever the
+ *  editor's locale. */
+const ENGLISH = createStrings();
+
+/** The findings as one phrase ("2 overset stories, 1 missing font"). */
+function issueList(strings: Strings, issues: readonly Issue[]): string {
+  return issues.map(([key, count]) => strings.t(key, { count })).join(", ");
+}
+
 export function AIAssistant() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const editor = useOptionalPaged();
   const { handle } = useDocument();
@@ -163,29 +184,19 @@ export function AIAssistant() {
 
   // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const diagnosis = useMemo(() => {
-    const issues: string[] = [];
+    const issues: Issue[] = [];
     const overset = stats?.overset_stories ?? 0;
-    if (overset > 0)
-      issues.push(`${overset} overset ${overset === 1 ? "story" : "stories"}`);
+    if (overset > 0) issues.push([M.oversetStories, overset]);
     const lowRes =
       links?.filter(
         (l) => l.effectivePpi != null && l.effectivePpi < LOW_RES_PPI,
       ).length ?? 0;
-    if (lowRes > 0)
-      issues.push(
-        `${lowRes} low-resolution ${lowRes === 1 ? "image" : "images"}`,
-      );
+    if (lowRes > 0) issues.push([M.lowResImages, lowRes]);
     const missingLinks =
       links?.filter((l) => l.status === "missing").length ?? 0;
-    if (missingLinks > 0)
-      issues.push(
-        `${missingLinks} missing ${missingLinks === 1 ? "image" : "images"}`,
-      );
+    if (missingLinks > 0) issues.push([M.missingImages, missingLinks]);
     const missingFonts = fonts?.filter((f) => f.isMissing).length ?? 0;
-    if (missingFonts > 0)
-      issues.push(
-        `${missingFonts} missing ${missingFonts === 1 ? "font" : "fonts"}`,
-      );
+    if (missingFonts > 0) issues.push([M.missingFonts, missingFonts]);
     return issues;
   }, [stats, links, fonts]);
 
@@ -206,7 +217,7 @@ export function AIAssistant() {
     }
     lines.push(
       diagnosis.length
-        ? `Document issues: ${diagnosis.join(", ")}.`
+        ? `Document issues: ${issueList(ENGLISH, diagnosis)}.`
         : "The document has no overset text, image or font issues.",
     );
     return lines.join("\n");
@@ -244,7 +255,7 @@ export function AIAssistant() {
       mode: "document",
       prompt: `${text}\n\nPage size: ${size.label} (${size.pt[0]} × ${size.pt[1]} pt). The document is open with one blank page of that size.`,
       prepare: async () => {
-        if (!(await confirmDiscard(editor, "Creating a new document")))
+        if (!(await confirmDiscard(editor, strings.t(M.creatingDocument))))
           return false;
         await mintBlankDocument(editor, size.pt, {
           setStatus: () => {},
@@ -274,7 +285,7 @@ export function AIAssistant() {
       }}
     >
       <PanelHeader
-        title="AI Assistant"
+        title={strings.t(M.title)}
         action={<PoweredByClaude size={10} />}
       />
 
@@ -286,7 +297,7 @@ export function AIAssistant() {
           onClick={() => setAssistantView("ask")}
           testId="ai-view-ask"
         >
-          Ask
+          {strings.t(M.ask)}
         </Btn>
         <Btn
           sm
@@ -295,7 +306,7 @@ export function AIAssistant() {
           onClick={() => setAssistantView("brief")}
           testId="ai-view-brief"
         >
-          New document
+          {strings.t(M.newDocument)}
         </Btn>
       </div>
 
@@ -320,10 +331,10 @@ export function AIAssistant() {
         <Section
           title={
             run.phase === "running"
-              ? "Working"
+              ? strings.t(M.working)
               : run.phase === "done"
-                ? "Done"
-                : "Stopped"
+                ? strings.t(M.done)
+                : strings.t(M.stopped)
           }
         >
           <div
@@ -336,7 +347,9 @@ export function AIAssistant() {
             }}
           >
             {run.steps.length === 0 && run.phase === "running" && (
-              <StepLine step={{ label: "Thinking…", state: "info" }} />
+              <StepLine
+                step={{ label: strings.t(M.thinking), state: "info" }}
+              />
             )}
             {run.steps.map((s, i) => (
               <StepLine key={i} step={s} />
@@ -348,7 +361,7 @@ export function AIAssistant() {
               style={{ display: "flex", justifyContent: "flex-end" }}
             >
               <Btn sm onClick={() => stopAssistantRun()} testId="ai-stop">
-                Stop
+                {strings.t(M.stop)}
               </Btn>
             </div>
           )}
@@ -365,7 +378,7 @@ export function AIAssistant() {
                 }}
               >
                 {run.summary}
-                {run.stopped ? " (It stopped before finishing.)" : ""}
+                {run.stopped ? strings.t(M.stoppedEarly) : ""}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 {run.changed && (
@@ -374,7 +387,7 @@ export function AIAssistant() {
                     onClick={() => void undoAssistantRun(client)}
                     testId="ai-undo"
                   >
-                    Undo
+                    {strings.t(M.undo)}
                   </Btn>
                 )}
                 <Btn
@@ -383,7 +396,7 @@ export function AIAssistant() {
                   onClick={() => dismissAssistantRun()}
                   testId="ai-dismiss"
                 >
-                  Done
+                  {strings.t(M.done)}
                 </Btn>
               </div>
             </div>
@@ -408,7 +421,7 @@ export function AIAssistant() {
                 onClick={() => dismissAssistantRun()}
                 testId="ai-dismiss"
               >
-                Done
+                {strings.t(M.done)}
               </Btn>
             </div>
           )}
@@ -460,11 +473,12 @@ function AskView({
   onAsk,
 }: {
   kind: AssistantKind;
-  diagnosis: string[];
+  diagnosis: Issue[];
   draft: string;
   running: boolean;
   onAsk: (text: string) => void;
 }) {
+  const strings = useStrings();
   // F-25 (PN-355): with no AI service, say so before a request is made.
   const offline = useAiAvailability() === "unavailable";
   const blocked = running || offline;
@@ -480,7 +494,7 @@ function AskView({
           className="pg-ui-xs"
           style={{ marginBottom: 12, color: "var(--pg-muted-fg)" }}
         >
-          {AI_UNAVAILABLE_TEXT}
+          {aiUnavailableText()}
         </div>
       ) : null}
       <div
@@ -506,13 +520,13 @@ function AskView({
           style={{ flex: 1, lineHeight: 1.45, color: "var(--pg-fg)" }}
         >
           {diagnosis.length
-            ? `This document has ${diagnosis.join(", ")}.`
-            : "No overset text, image or font issues found."}
+            ? strings.t(M.issues, { issues: issueList(strings, diagnosis) })
+            : strings.t(M.noIssues)}
         </div>
       </div>
 
       <div className="pg-label" style={{ margin: "0 0 8px" }}>
-        Suggestions
+        {strings.t(M.suggestions)}
       </div>
       <div
         style={{
@@ -522,13 +536,13 @@ function AskView({
           marginBottom: 12,
         }}
       >
-        {SUGGESTIONS[kind].map(([icon, label]) => (
+        {SUGGESTIONS[kind].map(([icon, key]) => (
           <button
             type="button"
-            key={label}
+            key={key}
             disabled={blocked}
-            onClick={() => ask(label)}
-            data-ai-suggestion={label}
+            onClick={() => ask(strings.t(key))}
+            data-ai-suggestion={ENGLISH.t(key)}
             style={{
               display: "flex",
               alignItems: "center",
@@ -550,7 +564,7 @@ function AskView({
               size={15}
               style={{ color: "var(--pg-muted-fg)" }}
             />
-            {label}
+            {strings.t(key)}
           </button>
         ))}
       </div>
@@ -573,8 +587,8 @@ function AskView({
           }}
           disabled={running}
           rows={3}
-          placeholder="Ask for a change — “make this spread more premium”…"
-          aria-label="Ask the AI Assistant"
+          placeholder={strings.t(M.askPlaceholder)}
+          aria-label={strings.t(M.askLabel)}
           data-ai-input
           style={field}
         />
@@ -586,7 +600,7 @@ function AskView({
             onClick={() => ask(draft)}
             testId="ai-ask"
           >
-            Ask Claude
+            {strings.t(M.askClaude)}
           </Btn>
         </div>
       </form>
@@ -605,6 +619,7 @@ function BriefView({
   canBuild: boolean;
   onBuild: (brief: string, sizeId: string) => void;
 }) {
+  const strings = useStrings();
   const sizeId = useSyncExternalStore(subscribeSize, getSize);
   return (
     <div
@@ -620,23 +635,24 @@ function BriefView({
         className="pg-ui-xs"
         style={{ lineHeight: 1.45, color: "var(--pg-muted-fg)" }}
       >
-        Describe the document. Claude builds it page by page in a new document
-        while you watch; every step can be undone.
+        {strings.t(M.briefIntro)}
       </div>
       <textarea
         value={draft}
         onChange={(e) => setAssistantDraft(e.target.value)}
         disabled={running}
         rows={6}
-        placeholder="A four-page spring catalogue for a small tea shop: cover with a large headline, two pages of products with prices, a back page with opening hours and the address."
-        aria-label="Brief"
+        placeholder={strings.t(M.briefPlaceholder)}
+        aria-label={strings.t(M.briefLabel)}
         data-brief-input
         style={field}
       />
       <label
         style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}
       >
-        <span style={{ color: "var(--pg-muted-fg)" }}>Page size</span>
+        <span style={{ color: "var(--pg-muted-fg)" }}>
+          {strings.t(M.pageSize)}
+        </span>
         <select
           value={sizeId}
           onChange={(e) => setSize(e.target.value)}
@@ -646,7 +662,7 @@ function BriefView({
         >
           {SIZES.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.label}
+              {s.key ? strings.t(s.key) : s.label}
             </option>
           ))}
         </select>
@@ -659,7 +675,7 @@ function BriefView({
           onClick={() => onBuild(draft, sizeId)}
           testId="brief-generate"
         >
-          Build document
+          {strings.t(M.buildDocument)}
         </Btn>
       </div>
     </div>

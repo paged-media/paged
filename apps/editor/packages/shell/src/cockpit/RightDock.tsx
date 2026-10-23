@@ -45,6 +45,8 @@
 // panel comes in from the side its tab is on, the outgoing one leaves the
 // other way; under reduced motion it just switches.
 
+import { useStrings } from "@paged-media/strings";
+import { COCKPIT } from "./messages";
 import { Activity, ViewTransition, useEffect, useRef, useState } from "react";
 
 import {
@@ -67,6 +69,7 @@ import { useCockpitState } from "./cockpit-state-context";
 import { PanelHost } from "./PanelHost";
 
 export function RightDock() {
+  const strings = useStrings();
   const { rightTabs, activeTab, activateTab, closeTab } = useCockpitState();
   const panels = useRegistryView(useRegistries().panels);
 
@@ -177,7 +180,7 @@ export function RightDock() {
             data-dock-strip
             data-overflowing={overflowing || undefined}
             role="tablist"
-            aria-label="Panels"
+            aria-label={strings.t(COCKPIT.panels)}
             onKeyDown={onStripKey}
             onWheel={(e) => {
               if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -257,7 +260,9 @@ export function RightDock() {
                   {a && t.closable !== false && (
                     <span
                       role="button"
-                      aria-label={`Close ${t.title}`}
+                      aria-label={strings.t(COCKPIT.closePanel, {
+                        panel: t.title,
+                      })}
                       data-dock-tab-close={t.id}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -283,8 +288,8 @@ export function RightDock() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 data-dock-overflow
-                aria-label="More panels"
-                title="More panels"
+                aria-label={strings.t(COCKPIT.morePanels)}
+                title={strings.t(COCKPIT.morePanels)}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -321,7 +326,7 @@ export function RightDock() {
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         {!active && (
           <div className="pg-ui-xs" style={{ padding: 16, opacity: 0.6 }}>
-            No panel open.
+            {strings.t(COCKPIT.noPanelOpen)}
           </div>
         )}
         {tabs.map((t) => (

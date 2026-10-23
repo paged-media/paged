@@ -62,6 +62,11 @@ import {
 } from "./object-commands";
 import { PAGED_EDIT_SELECT_ALL } from "./select-all";
 import { layoutPages } from "./ui/layout";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.canvasContextMenu", {
+  showContextMenu: "Show context menu",
+});
 
 export const PAGED_EDIT_CONTEXT_MENU = "paged.edit.contextMenu";
 
@@ -151,7 +156,9 @@ function keyboardPoint(paged: PagedEditor): [number, number] {
 
 export const CANVAS_CONTEXT_MENU_COMMAND: CommandContribution = {
   id: PAGED_EDIT_CONTEXT_MENU,
-  title: "Show context menu",
+  get title() {
+    return t(M.showContextMenu);
+  },
   category: "Edit",
   handler: (paged) => {
     const [x, y] = keyboardPoint(paged as PagedEditor);

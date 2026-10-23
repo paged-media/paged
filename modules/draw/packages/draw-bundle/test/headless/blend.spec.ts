@@ -38,6 +38,7 @@
 //       frame, and a TYPED count over the ceiling (which refuses, where
 //       a DERIVED one clamps).
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -1082,13 +1083,13 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
     it("the panel note carries the two honesty facts in plain words", () => {
       // The panel's About text says the same two things as the module's
       // notes, without their internal terms.
-      expect(BLEND_PANEL_NOTE).toContain(
+      expect(t(BLEND_PANEL_NOTE)).toContain(
         "does not change the intermediates until",
       );
-      expect(BLEND_PANEL_NOTE).toContain(
+      expect(t(BLEND_PANEL_NOTE)).toContain(
         "the artwork is only rebuilt when you build or update",
       );
-      expect(BLEND_PANEL_NOTE).toContain(
+      expect(t(BLEND_PANEL_NOTE)).toContain(
         "keeps its own colour and stays outside the blend's group",
       );
       // What "live" means: a preview of the PLAN, not of the artwork.
@@ -1099,7 +1100,7 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       expect(BLEND_SPINE_NOTE).toContain("KEEPS ITS OWN PAINT");
       expect(BLEND_SPINE_NOTE).toContain("NOT put inside the blend's group");
       // And the undo arithmetic.
-      expect(BLEND_PANEL_NOTE).toContain("one undo step each");
+      expect(t(BLEND_PANEL_NOTE)).toContain("one undo step each");
     });
 
     it("blendRowLabel says what was asked for and what is on the page", () => {

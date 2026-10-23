@@ -67,6 +67,7 @@ import {
 } from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
+import de from "../locales/de.json" with { type: "json" };
 
 import { drawTools } from "./tools";
 import {
@@ -102,6 +103,10 @@ import {
   COMPOUND_PATH_COMMAND_IDS,
 } from "./commands/compound-path";
 import { contributeDashCommands, DASH_COMMAND_IDS } from "./commands/dash";
+import {
+  contributeCutCommands,
+  CUT_COMMAND_IDS,
+} from "./commands/cut-commands";
 import {
   contributePatternCommands,
   PATTERN_COMMAND_IDS,
@@ -192,10 +197,15 @@ import { makePathOptionsPanel } from "./panels/path-options-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
 import {
-  DRAW_PROPERTIES_PANEL,
+  drawPropertiesPanel,
   DRAW_PROPERTIES_PANEL_ID,
   publishDrawPropertyLists,
 } from "./panels/properties-panel";
+import { defineTranslations } from "@paged-media/strings";
+
+// The bundle's translations (`locales/<locale>.json`), registered beside
+// its English messages whenever the bundle loads.
+defineTranslations("de", de);
 
 export function activate(host: BundleHost): BundleHandle {
   // B-17 — the anchor-edit tools are built from a host-bound factory;
@@ -491,6 +501,8 @@ export function activate(host: BundleHost): BundleHandle {
   // deliberately absent (only Rainbow renders). It FLOWS AN EXISTING
   // story — the wire has no create-story op — and says so.
   const textOnPathCommandsSub = contributeTextOnPathCommands(host);
+  // The Knife, Scissors and Shape Builder as commands (their gesture as data).
+  const cutCommandsSub = contributeCutCommands(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -584,14 +596,15 @@ export function activate(host: BundleHost): BundleHandle {
   const objectModelHandle = contributeDrawObjectModel(host);
   // ADR 323 — draw's object properties as host-rendered PropertyFields (a
   // schema panel of property rows; needs the object model + bindings).
+  const propertiesPanel = drawPropertiesPanel();
   const propertyListsSub = objectModelHandle
     ? (contributeSchemaPanel(host, {
         id: DRAW_PROPERTIES_PANEL_ID,
-        title: DRAW_PROPERTIES_PANEL.title,
-        icon: DRAW_PROPERTIES_PANEL.icon,
+        title: propertiesPanel.title,
+        icon: propertiesPanel.icon,
         defaultDock: "right",
         defaultGroup: "draw",
-        schema: DRAW_PROPERTIES_PANEL,
+        schema: propertiesPanel,
       }),
       publishDrawPropertyLists(host))
     : null;
@@ -622,7 +635,8 @@ export function activate(host: BundleHost): BundleHandle {
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
-        OBJECTS_ON_PATH_COMMAND_IDS.length
+        OBJECTS_ON_PATH_COMMAND_IDS.length +
+        CUT_COMMAND_IDS.length
       } commands + 1 edit context + ` +
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
@@ -647,6 +661,7 @@ export function activate(host: BundleHost): BundleHandle {
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
       textOnPathCommandsSub.dispose();
+      cutCommandsSub.dispose();
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();

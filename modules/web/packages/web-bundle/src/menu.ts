@@ -9,6 +9,7 @@
  * */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
+import { defineMessages } from "@paged-media/strings";
 
 const C = "media.paged.web.command";
 
@@ -22,6 +23,20 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Web/Unthread flow", "unthreadWebFlow", "flow-off"],
   ["Web/Bake to document", "bakeWebFrame", "bake"],
 ];
+
+/** The menu segments this bundle creates, for the shell's `menuLabel`:
+ *  a path is an identity and stays English; the shell shows each segment
+ *  in the editor's language. */
+defineMessages("menu", {
+  Web: "Web",
+  "Insert web frame…": "Insert web frame…",
+  "Render frame": "Render frame",
+  "Render flow across frames": "Render flow across frames",
+  "Thread flow into frames": "Thread flow into frames",
+  "Thread into named flow…": "Thread into named flow…",
+  "Unthread flow": "Unthread flow",
+  "Bake to document": "Bake to document",
+});
 
 /** Register every entry; one Disposable drops them all. */
 export function contributeMenu(host: BundleHost): Disposable {

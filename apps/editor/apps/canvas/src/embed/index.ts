@@ -30,3 +30,10 @@ export {
 export { mountEditor, type MountOptions, type MountedEditor } from "../main";
 export type { HostActions } from "../app/instance";
 export { PRESETS } from "../profiles/presets";
+export { connectEditor } from "./connect";
+export type { ConnectConfig, RemoteEditorHandle } from "./connect";
+export { BRIDGED_METHODS } from "./protocol";
+export type { FrameConfig } from "./protocol";
+// Where the default faces are served, for a build that ships them beside
+// its modules (the `@paged-media/editor` package, PM-0013).
+export { setDefaultFontUrls } from "@paged-media/shell";

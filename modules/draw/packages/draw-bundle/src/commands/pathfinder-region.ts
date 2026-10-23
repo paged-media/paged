@@ -56,6 +56,17 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.pathfinderRegion", {
+  divide: "Pathfinder: Divide",
+  trim: "Pathfinder: Trim",
+  merge: "Pathfinder: Merge",
+  crop: "Pathfinder: Crop",
+  outline: "Pathfinder: Outline",
+  minusBack: "Pathfinder: Minus back",
+});
 export const PATHFINDER_REGION_COMMAND_CATEGORY = "Pathfinder";
 
 /** The binding a refusal (or the last success) is published on, so a
@@ -83,32 +94,32 @@ export interface PathfinderRegionPreset {
 export const PATHFINDER_REGION_PRESETS: readonly PathfinderRegionPreset[] = [
   {
     id: "media.paged.draw.command.pathfinderDivide",
-    title: "Pathfinder: Divide",
+    title: M.divide,
     verb: "pathfinderDivide",
   },
   {
     id: "media.paged.draw.command.pathfinderTrim",
-    title: "Pathfinder: Trim",
+    title: M.trim,
     verb: "pathfinderTrim",
   },
   {
     id: "media.paged.draw.command.pathfinderMerge",
-    title: "Pathfinder: Merge",
+    title: M.merge,
     verb: "pathfinderMerge",
   },
   {
     id: "media.paged.draw.command.pathfinderCrop",
-    title: "Pathfinder: Crop",
+    title: M.crop,
     verb: "pathfinderCrop",
   },
   {
     id: "media.paged.draw.command.pathfinderOutline",
-    title: "Pathfinder: Outline",
+    title: M.outline,
     verb: "pathfinderOutline",
   },
   {
     id: "media.paged.draw.command.pathfinderMinusBack",
-    title: "Pathfinder: Minus back",
+    title: M.minusBack,
     verb: "pathfinderMinusBack",
   },
 ] as const;

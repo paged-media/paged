@@ -27,6 +27,33 @@
 
 import { PAGED_FILE_NEW, PAGED_FILE_NEW_FROM_BRIEF } from "@paged-media/shell";
 import type { MenuItemContribution } from "@paged-media/shell";
+import { defineMessages } from "@paged-media/strings";
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  "New document…": "New document…",
+  "New from a brief…": "New from a brief…",
+  "Open recent": "Open recent",
+  Close: "Close",
+  "Package…": "Package…",
+  "Print…": "Print…",
+  "Margins and columns…": "Margins and columns…",
+  "Ruler guides…": "Ruler guides…",
+  "Create guides…": "Create guides…",
+  "Numbering and section options…": "Numbering and section options…",
+  "Character…": "Character…",
+  "Paragraph…": "Paragraph…",
+  "Tabs…": "Tabs…",
+  "Bullets and numbering…": "Bullets and numbering…",
+  "Paragraph styles": "Paragraph styles",
+  "Character styles": "Character styles",
+  "Glyphs…": "Glyphs…",
+  "Text variables": "Text variables",
+  Transform: "Transform",
+  Effects: "Effects",
+  "Effects…": "Effects…",
+});
 
 const soon = (
   path: string,

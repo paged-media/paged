@@ -56,6 +56,59 @@ import {
 } from "../journal-sink";
 import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
 import { FocusScope } from "@paged-media/shell";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+// The panel's words. The entries themselves (codes, data, origins) and the
+// client's declared blind spots are the recorder's own record and stay as
+// recorded.
+const M = defineMessages("app.journalPanel", {
+  journal: "Journal",
+  minSeverity: "Minimum severity",
+  all: "all",
+  infoUp: "info+",
+  warnUp: "warn+",
+  errors: "errors",
+  export: "Export…",
+  summary:
+    "{entries, plural, one {# entry} other {# entries}} · " +
+    "{errors, plural, one {# error} other {# errors}} · " +
+    "{warnings, plural, one {# warning} other {# warnings}}",
+  empty: "Nothing recorded at this severity yet.",
+  cannotSee: "What this cannot see",
+  nothingUncaptured: "Nothing uncaptured so far this session.",
+  evicted: "evicted",
+  evictedWhy: "recorded, then overwritten by the ring",
+  collapsed: "collapsed",
+  collapsedWhy:
+    "folded into another entry by a rate policy (the count survives on it)",
+  rejected: "rejected data",
+  rejectedWhy:
+    "values dropped for failing the identifier rule — THIS IS A BUG IN THE EMITTING CODE",
+  gestureWrites: "gesture SAB writes",
+  cameraWrites: "camera SAB writes",
+  notJournaled: "deliberately not journaled individually",
+  workerDropped: "worker entries dropped",
+  workerDroppedWhy: "lost to the worker ring before a drain reached them",
+  drainFailures: "drain failures",
+  drainFailuresWhy: "an UNKNOWN number of worker entries are missing",
+  pluginLog: "plugin log lines",
+  pluginLogWhy:
+    "censused (severity + site hash); the text is withheld by design",
+  tracing:
+    "engine tracing events — fired and dropped; no shipped subscriber carries their text",
+  blindSpots: "{count} structural blind spots (always present, by design)",
+  costToFix: "Cost to fix: {cost}",
+  exportTitle: "Export journal bundle",
+  exportIntro:
+    "{count} entries. Nothing has been sent anywhere — this writes a file " +
+    "to your machine. Below is exactly what it will contain.",
+  includeCrash: "Include crash stack traces",
+  includeCrashWhy: " — stack traces usually contain file paths from your disk.",
+  includeShape: "Include document shape",
+  includeShapeWhy: " — page/story counts and font names. No document text.",
+  cancel: "Cancel",
+  saveFile: "Save file",
+});
 
 const DOT: Record<JournalSeverity, string> = {
   error: "var(--status-error)",
@@ -109,6 +162,7 @@ const getView = (): JournalView => {
 };
 
 export function JournalPanel() {
+  const strings = useStrings();
   const { entries, ledger, counts } = useSyncExternalStore(
     subscribe,
     getView,
@@ -151,7 +205,7 @@ export function JournalPanel() {
           gap: 8,
         }}
       >
-        <div style={kicker}>Journal</div>
+        <div style={kicker}>{strings.t(M.journal)}</div>
         <div
           style={{
             display: "flex",
@@ -163,7 +217,7 @@ export function JournalPanel() {
         >
           <select
             data-journal-filter
-            aria-label="Minimum severity"
+            aria-label={strings.t(M.minSeverity)}
             value={minSeverity}
             onChange={(e) =>
               setMinSeverity(e.target.value as JournalSeverity | "all")
@@ -177,10 +231,10 @@ export function JournalPanel() {
               padding: "2px 4px",
             }}
           >
-            <option value="all">all</option>
-            <option value="info">info+</option>
-            <option value="warn">warn+</option>
-            <option value="error">errors</option>
+            <option value="all">{strings.t(M.all)}</option>
+            <option value="info">{strings.t(M.infoUp)}</option>
+            <option value="warn">{strings.t(M.warnUp)}</option>
+            <option value="error">{strings.t(M.errors)}</option>
           </select>
           <button
             type="button"
@@ -200,7 +254,7 @@ export function JournalPanel() {
               padding: "2px 8px",
             }}
           >
-            Export…
+            {strings.t(M.export)}
           </button>
         </div>
       </div>
@@ -209,10 +263,11 @@ export function JournalPanel() {
         data-journal-summary
         style={{ ...mono, margin: "0 0 8px", color: "var(--pg-muted-fg)" }}
       >
-        {entries.length} entr{entries.length === 1 ? "y" : "ies"} ·{" "}
-        {counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
-        warning
-        {counts.warn === 1 ? "" : "s"}
+        {strings.t(M.summary, {
+          entries: entries.length,
+          errors: counts.error,
+          warnings: counts.warn,
+        })}
       </p>
 
       {shown.length === 0 ? (
@@ -220,7 +275,7 @@ export function JournalPanel() {
           data-journal-empty
           style={{ margin: 0, color: "var(--pg-muted-fg)" }}
         >
-          Nothing recorded at this severity yet.
+          {strings.t(M.empty)}
         </p>
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -297,44 +352,38 @@ function UncapturedSection({
 }: {
   ledger: ReturnType<typeof journal.getLedger>;
 }) {
+  const strings = useStrings();
   const clean = ledgerIsClean(ledger);
-  const rows: [string, number, string][] = [
-    ["evicted", ledger.evicted, "recorded, then overwritten by the ring"],
-    [
-      "collapsed",
-      ledger.collapsed,
-      "folded into another entry by a rate policy (the count survives on it)",
-    ],
-    [
-      "rejected data",
-      ledger.rejectedData,
-      "values dropped for failing the identifier rule — THIS IS A BUG IN THE EMITTING CODE",
-    ],
+  // [id, count, label, why]: the id names the row for tests and exports.
+  const rows: [string, number, string, string][] = [
+    ["evicted", ledger.evicted, M.evicted, M.evictedWhy],
+    ["collapsed", ledger.collapsed, M.collapsed, M.collapsedWhy],
+    ["rejected data", ledger.rejectedData, M.rejected, M.rejectedWhy],
     [
       "gesture SAB writes",
       ledger.sabGestureUpdates,
-      "deliberately not journaled individually",
+      M.gestureWrites,
+      M.notJournaled,
     ],
     [
       "camera SAB writes",
       ledger.sabCameraWrites,
-      "deliberately not journaled individually",
+      M.cameraWrites,
+      M.notJournaled,
     ],
     [
       "worker entries dropped",
       ledger.workerDropped,
-      "lost to the worker ring before a drain reached them",
+      M.workerDropped,
+      M.workerDroppedWhy,
     ],
     [
       "drain failures",
       ledger.drainFailures,
-      "an UNKNOWN number of worker entries are missing",
+      M.drainFailures,
+      M.drainFailuresWhy,
     ],
-    [
-      "plugin log lines",
-      ledger.pluginLogCensus,
-      "censused (severity + site hash); the text is withheld by design",
-    ],
+    ["plugin log lines", ledger.pluginLogCensus, M.pluginLog, M.pluginLogWhy],
   ];
   const tracing = ledger.engineTracing;
   const tracingTotal =
@@ -349,28 +398,29 @@ function UncapturedSection({
         borderTop: `1px solid ${color.border}`,
       }}
     >
-      <div style={kicker}>What this cannot see</div>
+      <div style={kicker}>{strings.t(M.cannotSee)}</div>
 
       {clean && tracingTotal === 0 ? (
         <p style={{ ...mono, margin: "0 0 8px", color: "var(--pg-muted-fg)" }}>
-          Nothing uncaptured so far this session.
+          {strings.t(M.nothingUncaptured)}
         </p>
       ) : (
         <ul style={{ listStyle: "none", margin: "0 0 10px", padding: 0 }}>
           {rows
             .filter(([, n]) => n > 0)
-            .map(([label, n, why]) => (
+            .map(([id, n, label, why]) => (
               <li
-                key={label}
-                data-journal-uncaptured-row={label}
+                key={id}
+                data-journal-uncaptured-row={id}
                 style={{
                   ...mono,
                   color: "var(--pg-muted-fg)",
                   padding: "1px 0",
                 }}
               >
-                <strong style={{ color: "var(--pg-fg)" }}>{n}</strong> {label}
-                <span style={{ marginLeft: 6 }}>— {why}</span>
+                <strong style={{ color: "var(--pg-fg)" }}>{n}</strong>{" "}
+                {strings.t(label)}
+                <span style={{ marginLeft: 6 }}>— {strings.t(why)}</span>
               </li>
             ))}
           {tracingTotal > 0 && (
@@ -378,8 +428,7 @@ function UncapturedSection({
               style={{ ...mono, color: "var(--pg-muted-fg)", padding: "1px 0" }}
             >
               <strong style={{ color: "var(--pg-fg)" }}>{tracingTotal}</strong>{" "}
-              engine tracing events — fired and dropped; no shipped subscriber
-              carries their text
+              {strings.t(M.tracing)}
             </li>
           )}
         </ul>
@@ -387,7 +436,7 @@ function UncapturedSection({
 
       <Disclosure
         data-journal-blindspots
-        summary={`${KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by design)`}
+        summary={strings.t(M.blindSpots, { count: KNOWN_BLIND_SPOTS.length })}
         summaryStyle={{ ...mono, color: "var(--pg-muted-fg)" }}
       >
         <ul
@@ -408,7 +457,7 @@ function UncapturedSection({
               <div style={{ color: "var(--pg-fg)" }}>{spot.what}</div>
               <div style={{ color: "var(--pg-muted-fg)" }}>{spot.why}</div>
               <div style={{ color: "var(--pg-muted-fg)", fontStyle: "italic" }}>
-                Cost to fix: {spot.wouldCost}
+                {strings.t(M.costToFix, { cost: spot.wouldCost })}
               </div>
             </li>
           ))}
@@ -426,6 +475,7 @@ function UncapturedSection({
  * shown cannot drift from what is written.
  */
 function ExportDialog({ onClose }: { onClose: () => void }) {
+  const strings = useStrings();
   const [includeCrash, setIncludeCrash] = useState(false);
   const [includeShape, setIncludeShape] = useState(false);
 
@@ -480,12 +530,10 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             id="journal-export-title"
             style={{ margin: "0 0 4px", fontSize: 15 }}
           >
-            Export journal bundle
+            {strings.t(M.exportTitle)}
           </h2>
           <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
-            {bundle.counters.recorded} entries. Nothing has been sent anywhere —
-            this writes a file to your machine. Below is exactly what it will
-            contain.
+            {strings.t(M.exportIntro, { count: bundle.counters.recorded })}
           </p>
 
           <div style={{ display: "grid", gap: 6, margin: "0 0 12px" }}>
@@ -499,10 +547,9 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setIncludeCrash(e.target.checked)}
               />
               <span>
-                Include crash stack traces
+                {strings.t(M.includeCrash)}
                 <span style={{ color: color.mutedFg }}>
-                  {" "}
-                  — stack traces usually contain file paths from your disk.
+                  {strings.t(M.includeCrashWhy)}
                 </span>
               </span>
             </label>
@@ -516,10 +563,9 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
                 onChange={(e) => setIncludeShape(e.target.checked)}
               />
               <span>
-                Include document shape
+                {strings.t(M.includeShape)}
                 <span style={{ color: color.mutedFg }}>
-                  {" "}
-                  — page/story counts and font names. No document text.
+                  {strings.t(M.includeShapeWhy)}
                 </span>
               </span>
             </label>
@@ -550,7 +596,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               onClick={onClose}
               style={buttonStyle}
             >
-              Cancel
+              {strings.t(M.cancel)}
             </button>
             <button
               type="button"
@@ -560,7 +606,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
               }}
               style={{ ...buttonStyle, borderColor: color.primary }}
             >
-              Save file
+              {strings.t(M.saveFile)}
             </button>
           </div>
         </FocusScope>

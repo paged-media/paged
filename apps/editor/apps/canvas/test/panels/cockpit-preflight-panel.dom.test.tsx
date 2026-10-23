@@ -119,7 +119,7 @@ describe("Preflight: Validate output", () => {
     const h = await mount(linksDocument());
     await validate(h);
     expect(pill(h.root, "validation-state")).toEqual({
-      text: "2 finding(s)",
+      text: "2 findings",
       tone: "warn",
     });
     expect(

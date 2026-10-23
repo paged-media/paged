@@ -1,0 +1,31 @@
+{
+  "name": "@paged-media/strings",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal: the words the editor and the built-in modules show, as message catalogues with an English source beside the code that uses them and locale catalogues that override it (apps/editor docs/composable-editor-plan.md E4, E10). Never published.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./locales/*.json": "./locales/*.json"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts",
+    "test:guard": "bun scripts/guard.mjs"
+  },
+  "peerDependencies": {
+    "react": ">=19.3"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "typescript": "catalog:"
+  }
+}
