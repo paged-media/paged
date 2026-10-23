@@ -561,6 +561,11 @@ export interface SheetEngine extends SheetEngineW2 {
   ): { cells: number; styles: number };
   /** The full style of one cell. */
   getStyle?(sheet: number, row: number, col: number): CellStylePatch;
+  /** W2.2 — the cell visual model of one cell (colours as `ColorRefInfo`). */
+  getCellVisual?(sheet: number, row: number, col: number): CellVisualInfo;
+  /** W2.2 — the workbook's Excel named cell styles and the built-ins it can
+   *  add. */
+  namedStyles?(): NamedStyleInfo[];
   /** Wave 9 — the style ids of every cell of `range`, row-major: an exact
    *  snapshot for `setStyleIds` (the in-session undo of a format change). */
   getStyleIds?(sheet: number, range: string): number[];
@@ -712,6 +717,79 @@ export interface ResolvedRange {
 export interface EdgeStyle {
   style: string;
   color?: string | null;
+  /** A document swatch the line colour references (W2.2). */
+  swatch?: DocSwatch | null;
+}
+
+/** A reference to a document swatch (sheet ADR 518): the swatch id, its
+ *  colour model and the sRGB an xlsx reader shows (what a save writes). */
+export interface DocSwatch {
+  id: string;
+  model: "rgb" | "cmyk" | "spot" | "lab";
+  fallbackRgb: string;
+}
+
+/** A gradient fill: `linear` at `degree`, or `path` from the inner
+ *  rectangle (fractions of the cell); stops `{position 0..1, color}`. */
+export interface GradientStyle {
+  kind?: "linear" | "path";
+  degree?: number;
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  stops: { position: number; color: string }[];
+}
+
+/** A colour of the cell visual model (`getCellVisual`): what the workbook
+ *  stores plus an optional document swatch. */
+export interface ColorRefInfo {
+  concrete:
+    | { kind: "rgb"; r: number; g: number; b: number }
+    | { kind: "theme"; index: number; tint: number }
+    | { kind: "indexed"; index: number }
+    | { kind: "auto" };
+  doc?: { id: string; model: string; fallbackRgb: [number, number, number] };
+}
+
+/** The cell visual model (`getCellVisual`, the serde shape of
+ *  `sheet_core::CellVisual`). */
+export interface CellVisualInfo {
+  font: {
+    font: {
+      name?: string | null;
+      size?: number | null;
+      bold: boolean;
+      italic: boolean;
+      underline: string;
+      strike: boolean;
+      vertAlign: string;
+      color?: ColorRefInfo | null;
+      scheme?: string | null;
+    };
+    docCharStyle?: string;
+    docParaStyle?: string;
+  };
+  fill: { kind: string; [k: string]: unknown };
+  border: Record<string, unknown>;
+  alignment: {
+    horizontal: string;
+    vertical: string;
+    wrap: boolean;
+    indent: number;
+    rotation: number;
+    shrink: boolean;
+  };
+  namedStyle?: string;
+  docCellStyle?: string;
+}
+
+/** One Excel named cell style (`namedStyles`). */
+export interface NamedStyleInfo {
+  name: string;
+  builtinId?: number | null;
+  /** The workbook carries it (else applying it adds Excel's built-in). */
+  present: boolean;
 }
 
 /** A partial cell style (`setStyle`): absent fields are left as each cell
@@ -740,6 +818,32 @@ export interface CellStylePatch {
   /** Format Cells ▸ Protection (sheet ADR 517). */
   locked?: boolean;
   formulaHidden?: boolean;
+  // ── W2.2 (sheet ADR 518) ──
+  /** A fill pattern (`solid`, `gray125`, `darkTrellis`, … `none`); `fill`
+   *  is its foreground, `fillBg` its background. */
+  pattern?: string;
+  fillBg?: string;
+  gradient?: GradientStyle | null;
+  borderDiagonal?: EdgeStyle;
+  diagonalUp?: boolean;
+  diagonalDown?: boolean;
+  indent?: number;
+  /** 0–180, 255 = stacked. */
+  rotation?: number;
+  shrink?: boolean;
+  strike?: boolean;
+  /** `baseline` / `superscript` / `subscript`. */
+  vertAlign?: string;
+  /** `none` / `single` / `double` / `singleAccounting` / `doubleAccounting`. */
+  underlineStyle?: string;
+  fillSwatch?: DocSwatch | null;
+  fillBgSwatch?: DocSwatch | null;
+  fontSwatch?: DocSwatch | null;
+  docCharStyle?: string;
+  docParaStyle?: string;
+  docCellStyle?: string;
+  /** An Excel named cell style by name (`Heading 1`, `Good`, …). */
+  namedStyle?: string;
 }
 
 /** A sheet's layout: explicit column widths (characters) and row heights
@@ -945,6 +1049,8 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
     patch: CellStylePatch,
   ): { cells: number; styles: number };
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
+  get_cell_visual?(sheet: number, row: number, col: number): CellVisualInfo;
+  named_styles?(): NamedStyleInfo[];
   get_style_ids?(sheet: number, range: string): Uint32Array;
   set_style_ids?(sheet: number, range: string, ids: Uint32Array): void;
   merge?(sheet: number, range: string): { changed: CellChange[] };
@@ -1148,6 +1254,9 @@ export function wrapEngine(
       },
     getStyle: (sheet, row, col) =>
       need("get_style")(sheet, row, col) as CellStylePatch,
+    getCellVisual: (sheet, row, col) =>
+      need("get_cell_visual")(sheet, row, col) as CellVisualInfo,
+    namedStyles: () => need("named_styles")() as NamedStyleInfo[],
     getStyleIds: (sheet, range) =>
       Array.from(need("get_style_ids")(sheet, range) as Uint32Array),
     setStyleIds: (sheet, range, ids) =>

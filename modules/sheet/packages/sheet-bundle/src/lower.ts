@@ -732,6 +732,14 @@ export interface LoweredTableInfo {
   print?: FramePrint;
   sizing?: FrameSizing;
   boxPt?: { widthPt: number; heightPt: number };
+  /** Sheet ADR 510 (P6) — the frames the table's story threads after this
+   *  one and their content boxes, in chain order: the window then fills
+   *  them all, as one table the engine flows from frame to frame (frozen
+   *  rows repeat as header rows). Absent for a single frame. */
+  chain?: { frames: string[]; boxes: { widthPt: number; heightPt: number }[] };
+  /** The first sheet row each frame of the chain shows (head first), from
+   *  the last window lowered — where a continuation frame's grid starts. */
+  chainStarts?: number[];
 }
 
 /** Re-stamp a placed table's binding alone — its view changed but the
@@ -904,9 +912,32 @@ export function placementWindow(
   engine: SheetEngine,
   info: Pick<
     LoweredTableInfo,
-    "sheet" | "range" | "view" | "print" | "sizing" | "boxPt"
+    "sheet" | "range" | "view" | "print" | "sizing" | "boxPt" | "chain"
   >,
-): { content: LoweredContent; range: string | null } | null {
+): {
+  content: LoweredContent;
+  range: string | null;
+  chainStarts?: number[];
+} | null {
+  if (
+    info.sizing === "window" &&
+    info.view &&
+    info.boxPt &&
+    info.chain &&
+    info.chain.boxes.length > 0 &&
+    engine.getTracksPage
+  ) {
+    const tl = cellOfA1(info.view.topLeft);
+    if (tl)
+      return chainWindow(
+        engine,
+        info.sheet,
+        tl,
+        info.boxPt,
+        info.chain.boxes,
+        info.print,
+      );
+  }
   if (
     info.sizing === "window" &&
     info.view &&
@@ -930,6 +961,67 @@ export function placementWindow(
     }
   }
   return null;
+}
+
+/** Rows a heading row takes on a printed chain frame (an estimate: the
+ *  heading row is the sheet's default height). */
+const HEADING_ROW_PT = 15;
+
+/** One window over a frame chain (P6): the head's columns, and the rows
+ *  that fill every frame in turn as the engine will split the one table —
+ *  whole rows per frame, the frozen rows (header rows) repeated at the top
+ *  of each continuation frame. */
+function chainWindow(
+  engine: SheetEngine,
+  sheet: number,
+  tl: { row: number; col: number },
+  head: { widthPt: number; heightPt: number },
+  more: readonly { widthPt: number; heightPt: number }[],
+  print: FramePrint | undefined,
+): { content: LoweredContent; range: string | null; chainStarts: number[] } {
+  const boxes = [head, ...more];
+  const total = boxes.reduce((a, b) => a + b.heightPt, 0);
+  const fw = engine.getFrameWindow(sheet, {
+    topRow: tl.row,
+    leftCol: tl.col,
+    widthPt: head.widthPt,
+    heightPt: total,
+  });
+  const frozen = fw.frozenRows;
+  const headerPt =
+    fw.rowHeightsPt.slice(0, frozen).reduce((a, b) => a + b, 0) +
+    (print?.headings ? HEADING_ROW_PT : 0);
+  const body = fw.rows.slice(frozen);
+  const bodyPt = fw.rowHeightsPt.slice(frozen);
+  const kept: number[] = [];
+  const chainStarts: number[] = [];
+  let i = 0;
+  for (const box of boxes) {
+    chainStarts.push(body[i] ?? body[body.length - 1] ?? tl.row);
+    let room = box.heightPt - headerPt;
+    // A frame always takes at least one row (a row taller than the frame
+    // overflows rather than stalling the chain).
+    let took = 0;
+    while (i < body.length && (bodyPt[i] <= room || took === 0)) {
+      room -= bodyPt[i];
+      kept.push(body[i]);
+      i += 1;
+      took += 1;
+    }
+  }
+  const content = engine.getTracksPage!(sheet, {
+    rows: [...fw.rows.slice(0, frozen), ...kept],
+    cols: fw.cols,
+    headerRows: frozen,
+    frozenCols: fw.frozenCols,
+    printHeadings: print?.headings ?? false,
+    printGridlines: print?.gridlines ?? false,
+  });
+  return {
+    content: withoutGridlines(content),
+    range: windowRange(content),
+    chainStarts,
+  };
 }
 
 /** Column letters of a 0-based column index (`0` -> `A`, `27` -> `AB`). */
