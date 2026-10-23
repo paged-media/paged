@@ -24,6 +24,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  hiddenBoundaries,
   columnLetters,
   paintGridScene,
   rowHeadingWidthPt,
@@ -357,5 +358,15 @@ describe("sparklines in the frame surface [sheet.chart.sparklines]", () => {
         (c) => c.op === "lineTo" && c.args[0] === 45 && c.args[1] === 19,
       ),
     ).toBe(true);
+  });
+});
+
+describe("hidden track markers", () => {
+  it("marks the boundaries where shown indices skip, not the frozen seam", () => {
+    // Rows 0 (frozen), then 5, 6, 9: the seam 0→5 is a scroll; 6→9 hides
+    // rows 7 and 8.
+    expect(hiddenBoundaries([0, 5, 6, 9], 1)).toEqual([3]);
+    expect(hiddenBoundaries([2, 3, 4], 0)).toEqual([]);
+    expect(hiddenBoundaries(undefined, 0)).toEqual([]);
   });
 });

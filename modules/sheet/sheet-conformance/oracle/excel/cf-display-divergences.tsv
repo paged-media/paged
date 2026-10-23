@@ -1,0 +1,4 @@
+# Engine-vs-Excel disagreements of the conditional-format display lane
+# (tests/it/excel_cf_display.rs). cell<TAB>reason
+N7	diverges: colour-scale rounding — Excel lands one level short of the lower stop where the share of a channel's difference is a whole number above a percentile midpoint (204,221,130 against the engine's 203,220,129); elsewhere the engine's truncation toward the lower stop matches all 192 recorded cells
+N9	diverges: the same colour-scale rounding case (134,201,126 against 134,200,125)
