@@ -9,5 +9,7 @@ Links: 1
   u5.png                           written
 
 Spot inks: 0
+
+Paged document: doc.paged (the whole document)
 --- stderr
 (empty)

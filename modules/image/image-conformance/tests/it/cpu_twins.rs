@@ -35,7 +35,7 @@ use image_conformance::Px;
 use image_js::ingest::AdjustParams;
 use image_js::region_filter::{
     filter_masked_cpu, filter_masked_gpu, filter_region_cpu, filter_region_gpu, mask_coverage,
-    PixelRect, RegionMask,
+    rasterize_polygons, FillRule, PixelRect, PolygonOp, RegionMask,
 };
 use image_kernels::cpu::{self, CPU_KERNELS};
 use image_kernels::families::adjust::*;
@@ -608,6 +608,145 @@ fn a_mask_rasterises_to_coverage__feat__image_editor_region_filter() {
         ..RegionMask::default()
     })
     .contains("not a number"));
+}
+
+/// A fill rule over all the polygons, and per-polygon ops: an inner
+/// polygon cuts a hole (even–odd always, non-zero when wound the other
+/// way), a subtract polygon cuts one in any shape, an intersect keeps the
+/// overlap, and the union without a rule never cuts. One polygon fills
+/// exactly as the lasso's rasteriser fills it.
+#[test]
+#[allow(non_snake_case)]
+fn polygons_fill_by_rule_and_op__feat__image_editor_region_filter() {
+    let (w, h) = (40u32, 30u32);
+    let at = |c: &image_gpu::SelectionCoverage, x: u32, y: u32| c.coverage_at(x, y);
+    let outer = square(2.0, 2.0, 30.0, 26.0);
+    // The same inner square in both windings.
+    let inner_cw = square(10.0, 8.0, 20.0, 18.0);
+    let inner_ccw: Vec<(f32, f32)> = inner_cw.iter().rev().copied().collect();
+    let mask = |polygons: Vec<Vec<(f32, f32)>>, ops: Vec<PolygonOp>, fill_rule| RegionMask {
+        polygons,
+        ops,
+        fill_rule,
+        ..RegionMask::default()
+    };
+    let cov = |m: &RegionMask| mask_coverage(w, h, FULL, m).unwrap();
+    let (ring, hole, out) = ((5, 5), (15, 13), (35, 28));
+
+    // No rule: the union, so the inner square is still inside.
+    let c = cov(&mask(
+        vec![outer.clone(), inner_cw.clone()],
+        vec![],
+        FillRule::Union,
+    ));
+    assert_eq!((at(&c, ring.0, ring.1), at(&c, hole.0, hole.1)), (255, 255));
+
+    // Even–odd: a hole whatever the winding.
+    for inner in [&inner_cw, &inner_ccw] {
+        let c = cov(&mask(
+            vec![outer.clone(), inner.clone()],
+            vec![],
+            FillRule::EvenOdd,
+        ));
+        assert_eq!(at(&c, ring.0, ring.1), 255);
+        assert_eq!(at(&c, hole.0, hole.1), 0, "even-odd cuts the hole");
+        assert_eq!(at(&c, out.0, out.1), 0);
+    }
+    // Non-zero: same winding fills, opposite winding cuts.
+    let same = cov(&mask(
+        vec![outer.clone(), inner_cw.clone()],
+        vec![],
+        FillRule::NonZero,
+    ));
+    assert_eq!(at(&same, hole.0, hole.1), 255);
+    let opposite = cov(&mask(
+        vec![outer.clone(), inner_ccw.clone()],
+        vec![],
+        FillRule::NonZero,
+    ));
+    assert_eq!(at(&opposite, hole.0, hole.1), 0);
+    assert_eq!(at(&opposite, ring.0, ring.1), 255);
+
+    // Ops: subtract cuts (any winding), intersect keeps the overlap.
+    let cut = cov(&mask(
+        vec![outer.clone(), inner_cw.clone()],
+        vec![PolygonOp::Add, PolygonOp::Subtract],
+        FillRule::Union,
+    ));
+    assert_eq!(at(&cut, hole.0, hole.1), 0);
+    assert_eq!(at(&cut, ring.0, ring.1), 255);
+    let half_open = square(20.5, 0.0, 40.0, 30.0);
+    let kept = cov(&mask(
+        vec![outer.clone(), half_open.clone()],
+        vec![PolygonOp::Add, PolygonOp::Intersect],
+        FillRule::Union,
+    ));
+    assert_eq!(at(&kept, 25, 13), 255);
+    assert_eq!(at(&kept, 15, 13), 0);
+    assert_eq!(at(&kept, 20, 13), 128, "the half-covered column");
+    // Without an add polygon the ops start from the whole image.
+    let all_but = cov(&mask(
+        vec![inner_cw.clone()],
+        vec![PolygonOp::Subtract],
+        FillRule::Union,
+    ));
+    assert_eq!(at(&all_but, hole.0, hole.1), 0);
+    assert_eq!(at(&all_but, out.0, out.1), 255);
+
+    // An island in the hole: three nested squares, even–odd.
+    let island = square(13.0, 11.0, 17.0, 15.0);
+    let c = cov(&mask(
+        vec![outer.clone(), inner_cw.clone(), island],
+        vec![],
+        FillRule::EvenOdd,
+    ));
+    assert_eq!(at(&c, 15, 13), 255);
+    assert_eq!(at(&c, 11, 9), 0);
+
+    // One polygon, either rule: the lasso's own rasteriser, byte for byte
+    // (a self-crossing bow tie, where even–odd and non-zero agree).
+    let bow = vec![(3.0, 3.0), (27.5, 21.0), (27.5, 3.0), (3.0, 21.0)];
+    let lasso = image_gpu::SelectionCoverage::rasterize_polygon(w, h, &bow);
+    for rule in [FillRule::EvenOdd, FillRule::NonZero] {
+        assert_eq!(rasterize_polygons(w, h, &[&bow], rule).data(), lasso.data());
+    }
+    // A self-overlapping star: non-zero fills the centre, even–odd not.
+    let star: Vec<(f32, f32)> = (0..5)
+        .map(|k| {
+            let a = std::f32::consts::PI * (0.5 + 0.8 * k as f32);
+            (20.0 + 12.0 * a.cos(), 15.0 - 12.0 * a.sin())
+        })
+        .collect();
+    assert_eq!(
+        at(
+            &rasterize_polygons(w, h, &[&star], FillRule::NonZero),
+            20,
+            15
+        ),
+        255
+    );
+    assert_eq!(
+        at(
+            &rasterize_polygons(w, h, &[&star], FillRule::EvenOdd),
+            20,
+            15
+        ),
+        0
+    );
+
+    // What is wrong is said.
+    let err = mask_coverage(
+        w,
+        h,
+        FULL,
+        &mask(
+            vec![outer.clone(), inner_cw],
+            vec![PolygonOp::Add],
+            FillRule::EvenOdd,
+        ),
+    )
+    .unwrap_err();
+    assert!(err.contains("2 polygons name 1 ops"), "{err}");
 }
 
 /// Under a mask the CPU lane writes only where coverage is non-zero, a

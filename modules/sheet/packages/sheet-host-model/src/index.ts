@@ -31,6 +31,9 @@ export {
   type LoweredStyle,
   type BorderLine,
   type BorderLines,
+  type FillGradient,
+  type FillPattern,
+  type LoweredRun,
   type Merge,
   type Page,
   type Rule,
@@ -194,6 +197,7 @@ export {
   estimateLabelMetrics,
   labelBox,
   labelJustification,
+  labelAutoSizeOp,
   labelStyleOps,
   LABEL_FIT_ALLOWANCE_PT,
   LABEL_SLACK_PT,
@@ -239,6 +243,17 @@ export {
   cellsNeedingRealign,
   needsAlignStyles,
 } from "./cell-paragraph-align";
+
+// W2.2 — cell rotation (cell styles) and diagonal borders (page lines).
+export {
+  cellRotationOps,
+  needsRotationStyles,
+  rotationCellStyleId,
+  tableDiagonalOps,
+  tableDiagonals,
+  tableRotation,
+  type DiagonalLine,
+} from "./cell-orientation";
 
 // Wave 9 — conditional-format data bars on the native placed table.
 export { tableDataBarOps, tableDataBars } from "./table-databars";

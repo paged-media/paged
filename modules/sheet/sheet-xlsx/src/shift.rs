@@ -750,14 +750,32 @@ impl XlsxDocument {
         self.record_structural_edit(target, edit);
         self.refresh_derived(&dirty);
         // Charts the session holds (read or authored) follow their ranges.
+        // (The chart parts' own `c:f` text is shifted with the other parts
+        // below, so a parsed chart need not be spliced for it.)
         for ch in &mut self.charts {
-            for s in &mut ch.model.series {
-                if let Some(v) = sheet_parser::shift_range_ref(s.values, &edit) {
-                    s.values = v;
+            for p in &mut ch.model.plots {
+                for s in &mut p.series {
+                    s.map_ranges(|r| sheet_parser::shift_range_ref(r, &edit).or(Some(r)));
                 }
-                if let Some(c) = s.categories {
-                    s.categories = sheet_parser::shift_range_ref(c, &edit).or(Some(c));
-                }
+            }
+        }
+        // Sparklines follow their data and their cells too.
+        for groups in self.sparklines.values_mut() {
+            for g in groups.iter_mut() {
+                g.sparklines.retain_mut(|(data, at)| {
+                    let cell = sheet_core::RangeRef {
+                        start: *at,
+                        end: *at,
+                    };
+                    let Some(moved) = sheet_parser::shift_range_ref(cell, &edit) else {
+                        return false;
+                    };
+                    *at = moved.start;
+                    if let Some(d) = sheet_parser::shift_range_ref(*data, &edit) {
+                        *data = d;
+                    }
+                    true
+                });
             }
         }
         Ok(dirty.into_iter().collect())

@@ -1,0 +1,10 @@
+# CHIDIST(x,deg_freedom) - legacy right tail.
+# id	formula	setup	expected
+cdl-0	=CHIDIST(18.307,10)	-	0.050000589091398
+cdl-1	=CHIDIST(0.5,1)	-	0.479500122186953
+cdl-2	=CHIDIST(2,3)	-	0.57240670447088
+cdl-3	=CHIDIST(200,10)	-	1.61393053369773E-37
+cdl-4	=CHIDIST(-1,3)	-	#NUM!
+cdl-5	=CHIDIST(2,0)	-	#NUM!
+cdl-6	=CHIDIST("x",3)	-	#VALUE!
+cdl-7	=CHIDIST(0,3)	-	1

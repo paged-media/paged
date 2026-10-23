@@ -83,6 +83,9 @@ describe("sheet_plugin_manifest_valid", () => {
       "media.paged.sheet.command.findNext",
       "media.paged.sheet.command.cutSelection",
       "media.paged.sheet.command.formatCells",
+      "media.paged.sheet.command.pasteSpecial",
+      "media.paged.sheet.command.dataValidation",
+      "media.paged.sheet.command.circleInvalid",
     ]);
   });
 

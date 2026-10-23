@@ -1,0 +1,12 @@
+# TDIST(x,deg_freedom,tails) - legacy.
+# id	formula	setup	expected
+tdl-0	=TDIST(1.959999998,60,2)	-	0.054644929975921
+tdl-1	=TDIST(1.959999998,60,1)	-	0.02732246498796
+tdl-2	=TDIST(1,1,1)	-	0.25
+tdl-3	=TDIST(0,5,2)	-	1
+tdl-4	=TDIST(-1,5,2)	-	#NUM!
+tdl-5	=TDIST(1,5,3)	-	#NUM!
+tdl-6	=TDIST(1,0,1)	-	#NUM!
+tdl-7	=TDIST(3,2.5,1.5)	-	0.047732983133355
+tdl-8	=TDIST("x",5,1)	-	#VALUE!
+tdl-9	=TDIST(10,30,2)	-	4.57525140822961E-11

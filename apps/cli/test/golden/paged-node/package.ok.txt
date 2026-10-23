@@ -1,0 +1,21 @@
+$ paged-node package <TMP>/fixture.paged -o <TMP>/pkg --no-plugins
+# exit 0
+# stdout
+{
+  "package": "<TMP>/pkg",
+  "document": "<TMP>/pkg/fixture.idml",
+  "paged": "<TMP>/pkg/fixture.paged",
+  "moduleParts": [],
+  "links": [],
+  "fonts": [],
+  "inks": [],
+  "lost": []
+}
+# stderr
+(empty)
+# structure
+Instructions.txt
+Links
+fixture Report.txt
+fixture.idml
+fixture.paged

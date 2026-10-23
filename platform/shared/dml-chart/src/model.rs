@@ -49,6 +49,15 @@ pub struct Chart<S = (), T = ()> {
     pub text: Option<T>,
     /// `c:style` (Office's chart style number), when given.
     pub style: Option<u32>,
+    /// Every axis of the plot area in file order (`cat_axis` / `val_axis`
+    /// are the first of each); the plots name theirs by id.
+    pub axes: Vec<Axis<S, T>>,
+    /// `c:dispBlanksAs` (`gap`, `zero`, `span`).
+    pub blanks: Option<String>,
+    /// The chart has a `c:view3D` (a 3-D chart).
+    pub view_3d: bool,
+    /// Read from a chartEx part (`cx:chartSpace`).
+    pub chart_ex: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -98,8 +107,73 @@ pub struct Plot<S = (), T = ()> {
     pub labels: Option<DataLabels<T>>,
     /// The plot's element name as written (`barChart`, `bar3DChart`,
     /// `scatterChart`, …): [`PlotKind`] folds the 3-D variants into the flat
-    /// kinds, and a reader may want to tell them apart.
+    /// kinds, and a reader may want to tell them apart. A chartEx series
+    /// layout is `cx:<layoutId>` (`cx:waterfall`, `cx:treemap`, …).
     pub element: String,
+    /// The type-specific options the kind does not carry.
+    pub options: PlotOptions,
+    /// `c:axId`: the axes this plot is drawn on.
+    pub axis_ids: Vec<u32>,
+}
+
+/// The options of a chart type beyond its [`PlotKind`].
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct PlotOptions {
+    /// `c:scatterStyle` (`lineMarker`, `marker`, `smoothMarker`, …).
+    pub scatter_style: Option<String>,
+    /// `c:radarStyle` (`standard`, `marker`, `filled`).
+    pub radar_style: Option<String>,
+    /// `c:bubbleScale` (%).
+    pub bubble_scale: Option<u32>,
+    pub show_neg_bubbles: bool,
+    /// `c:sizeRepresents` (`area`, `w`).
+    pub size_represents: Option<String>,
+    /// `c:ofPieType` (`pie`, `bar`).
+    pub of_pie_type: Option<String>,
+    /// `c:splitType` (`auto`, `pos`, `val`, `percent`, `cust`).
+    pub split_type: Option<String>,
+    pub split_pos: Option<f64>,
+    /// `c:custSplit/c:secondPiePt`.
+    pub cust_split: Vec<u32>,
+    pub second_pie_size: Option<u32>,
+    pub hi_low_lines: bool,
+    pub up_down_bars: bool,
+    pub drop_lines: bool,
+    /// `c:lineChart/c:marker`: markers shown (absent = `None`).
+    pub marker: Option<bool>,
+    /// `c:surfaceChart/c:wireframe`.
+    pub wireframe: bool,
+    /// chartEx `cx:layoutPr` and the series' owner (a pareto line).
+    pub ex: ExLayout,
+}
+
+/// A chartEx series' layout properties (`cx:layoutPr`).
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ExLayout {
+    /// Waterfall `cx:subtotals/cx:idx`.
+    pub subtotals: Vec<u32>,
+    /// Histogram `cx:binning`: `binSize`, `binCount`, `intervalClosed`
+    /// (`l`/`r`), `underflow`/`overflow` (`auto` or a number).
+    pub bin_size: Option<f64>,
+    pub bin_count: Option<u32>,
+    pub interval_closed: Option<String>,
+    pub underflow: Option<String>,
+    pub overflow: Option<String>,
+    /// `cx:aggregation`: bins by category.
+    pub aggregation: bool,
+    /// Box & whisker `cx:statistics quartileMethod`.
+    pub quartile_method: Option<String>,
+    /// `cx:visibility` of a box & whisker.
+    pub mean_line: Option<bool>,
+    pub mean_marker: Option<bool>,
+    pub nonoutliers: Option<bool>,
+    pub outliers: Option<bool>,
+    /// Treemap `cx:parentLabelLayout`.
+    pub parent_label_layout: Option<String>,
+    /// `ownerIdx`: the series this one belongs to (a pareto line).
+    pub owner_idx: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -125,6 +199,52 @@ pub struct Series<S = (), T = ()> {
     pub format: Option<String>,
     /// The formulas the series is bound to (`c:f`), as written.
     pub refs: SeriesRefs,
+    /// `c:marker/c:size`.
+    pub marker_size: Option<u32>,
+    /// `c:marker/c:spPr`.
+    pub marker_props: Option<S>,
+    pub trendlines: Vec<Trendline<S>>,
+    pub error_bars: Vec<ErrorBars<S>>,
+    /// `c:explosion` (%).
+    pub explosion: Option<u32>,
+    pub invert_if_negative: bool,
+}
+
+/// `c:trendline`.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Trendline<S = ()> {
+    pub name: Option<String>,
+    /// `c:trendlineType` (`linear`, `exp`, `log`, `poly`, `power`,
+    /// `movingAvg`).
+    pub kind: String,
+    /// `c:order` (poly) or `c:period` (movingAvg).
+    pub order: Option<u32>,
+    pub period: Option<u32>,
+    pub forward: Option<f64>,
+    pub backward: Option<f64>,
+    pub intercept: Option<f64>,
+    pub display_r2: bool,
+    pub display_equation: bool,
+    pub props: S,
+}
+
+/// `c:errBars`.
+#[derive(Debug, Clone, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ErrorBars<S = ()> {
+    /// `c:errDir` (`x`, `y`).
+    pub direction: Option<String>,
+    /// `c:errBarType` (`both`, `plus`, `minus`).
+    pub bar_type: String,
+    /// `c:errValType` (`fixedVal`, `percentage`, `stdDev`, `stdErr`, `cust`).
+    pub value_type: String,
+    pub value: Option<f64>,
+    pub no_end_cap: bool,
+    /// `c:plus/…/c:f` and `c:minus/…/c:f`.
+    pub plus: Option<String>,
+    pub minus: Option<String>,
+    pub props: S,
 }
 
 /// The `c:f` formula text of a series' parts, as written (a sheet-qualified
@@ -143,6 +263,8 @@ pub struct SeriesRefs {
     pub x_values: Option<String>,
     /// `c:yVal/…/c:f` (scatter).
     pub y_values: Option<String>,
+    /// `c:bubbleSize/…/c:f`.
+    pub bubble_sizes: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -156,11 +278,30 @@ pub struct DataLabels<T = ()> {
     pub position: Option<String>,
     pub text: Option<T>,
     pub format: Option<String>,
+    pub show_bubble_size: bool,
+    /// `c:separator`.
+    pub separator: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Axis<S = (), T = ()> {
+    /// `c:axId`.
+    pub id: u32,
+    /// `c:crossAx`.
+    pub cross_ax: u32,
+    /// The element: `catAx`, `valAx`, `dateAx`, `serAx`.
+    pub element: String,
+    /// `c:title`.
+    pub title: Option<ChartTitle<T>>,
+    /// `c:scaling/c:logBase`.
+    pub log_base: Option<f64>,
+    pub minor_unit: Option<f64>,
+    /// `c:crosses` (`autoZero`, `min`, `max`).
+    pub crosses: Option<String>,
+    pub crosses_at: Option<f64>,
+    /// `c:baseTimeUnit` (`days`, `months`, `years`).
+    pub base_time_unit: Option<String>,
     /// `c:delete`: the axis (line and labels) is hidden.
     pub deleted: bool,
     /// `c:axPos` (l, r, t, b).

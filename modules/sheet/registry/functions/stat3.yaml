@@ -1,0 +1,1247 @@
+# sheet.fn.stat.* (W3 F2) — the A aggregates, the probability distributions
+# and their inverses, hypothesis tests, moments, covariance, GROWTH/LOGEST,
+# FORECAST.ETS, and the legacy compatibility names (each with its legacy
+# arguments). Kernels in sheet-fn/src/families/stat3.rs (+ ets.rs) over the
+# numerics of sheet-fn/src/special.rs. Expected values are recorded from Excel
+# (sheet-conformance/oracle/excel/recorded/stat3.tsv); provenance: the
+# published mathematics and Microsoft's public function reference.
+
+- id: sheet.fn.stat.averagea
+  name: AVERAGEA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::averagea
+  status: implemented
+  provenance: ["Microsoft function reference (AVERAGEA) — text and FALSE 0, TRUE 1 in references"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_averagea"]
+    corpus: ["corpus/fn-corpus/stat3/averagea.golden.tsv"]
+
+- id: sheet.fn.stat.maxa
+  name: MAXA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::maxa
+  status: implemented
+  provenance: ["Microsoft function reference (MAXA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_maxa"]
+    corpus: ["corpus/fn-corpus/stat3/maxa.golden.tsv"]
+
+- id: sheet.fn.stat.mina
+  name: MINA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::mina
+  status: implemented
+  provenance: ["Microsoft function reference (MINA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_mina"]
+    corpus: ["corpus/fn-corpus/stat3/mina.golden.tsv"]
+
+- id: sheet.fn.stat.stdeva
+  name: STDEVA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::stdeva
+  status: implemented
+  provenance: ["Microsoft function reference (STDEVA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_stdeva"]
+    corpus: ["corpus/fn-corpus/stat3/stdeva.golden.tsv"]
+
+- id: sheet.fn.stat.stdevpa
+  name: STDEVPA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::stdevpa
+  status: implemented
+  provenance: ["Microsoft function reference (STDEVPA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_stdevpa"]
+    corpus: ["corpus/fn-corpus/stat3/stdevpa.golden.tsv"]
+
+- id: sheet.fn.stat.vara
+  name: VARA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::vara
+  status: implemented
+  provenance: ["Microsoft function reference (VARA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_vara"]
+    corpus: ["corpus/fn-corpus/stat3/vara.golden.tsv"]
+
+- id: sheet.fn.stat.varpa
+  name: VARPA
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  ref_args: true
+  rust: stat3::varpa
+  status: implemented
+  provenance: ["Microsoft function reference (VARPA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_varpa"]
+    corpus: ["corpus/fn-corpus/stat3/varpa.golden.tsv"]
+
+- id: sheet.fn.stat.beta-dist
+  name: BETA.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 6 }
+  volatility: none
+  range_aware: false
+  rust: stat3::beta_dist
+  status: implemented
+  provenance: ["Microsoft function reference (BETA.DIST) — regularised incomplete beta (continued fraction)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_beta_dist"]
+    corpus: ["corpus/fn-corpus/stat3/beta_dist.golden.tsv"]
+
+- id: sheet.fn.stat.beta-inv
+  name: BETA.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: stat3::beta_inv
+  status: implemented
+  provenance: ["Microsoft function reference (BETA.INV) — bracketed root of BETA.DIST"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_beta_inv"]
+    corpus: ["corpus/fn-corpus/stat3/beta_inv.golden.tsv"]
+
+- id: sheet.fn.stat.betadist
+  name: BETADIST
+  family: stat
+  arity: { min: 3, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: stat3::betadist
+  status: implemented
+  provenance: ["Microsoft function reference (BETADIST) — legacy compatibility name, cumulative"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_betadist"]
+    corpus: ["corpus/fn-corpus/stat3/betadist.golden.tsv"]
+
+- id: sheet.fn.stat.betainv
+  name: BETAINV
+  family: stat
+  arity: { min: 3, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: stat3::beta_inv
+  status: implemented
+  provenance: ["Microsoft function reference (BETAINV) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_betainv"]
+    corpus: ["corpus/fn-corpus/stat3/betainv.golden.tsv"]
+
+- id: sheet.fn.stat.binom-dist
+  name: BINOM.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::binom_dist
+  status: implemented
+  provenance: ["Microsoft function reference (BINOM.DIST) — Loader's binomial density"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_binom_dist"]
+    corpus: ["corpus/fn-corpus/stat3/binom_dist.golden.tsv"]
+
+- id: sheet.fn.stat.binom-dist-range
+  name: BINOM.DIST.RANGE
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::binom_dist_range
+  status: implemented
+  provenance: ["Microsoft function reference (BINOM.DIST.RANGE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_binom_dist_range"]
+    corpus: ["corpus/fn-corpus/stat3/binom_dist_range.golden.tsv"]
+
+- id: sheet.fn.stat.binom-inv
+  name: BINOM.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::binom_inv
+  status: implemented
+  provenance: ["Microsoft function reference (BINOM.INV) — smallest count reaching alpha"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_binom_inv"]
+    corpus: ["corpus/fn-corpus/stat3/binom_inv.golden.tsv"]
+
+- id: sheet.fn.stat.binomdist
+  name: BINOMDIST
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::binom_dist
+  status: implemented
+  provenance: ["Microsoft function reference (BINOMDIST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_binomdist"]
+    corpus: ["corpus/fn-corpus/stat3/binomdist.golden.tsv"]
+
+- id: sheet.fn.stat.critbinom
+  name: CRITBINOM
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::binom_inv
+  status: implemented
+  provenance: ["Microsoft function reference (CRITBINOM) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_critbinom"]
+    corpus: ["corpus/fn-corpus/stat3/critbinom.golden.tsv"]
+
+- id: sheet.fn.stat.chisq-dist
+  name: CHISQ.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_dist
+  status: implemented
+  provenance: ["Microsoft function reference (CHISQ.DIST) — regularised incomplete gamma"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chisq_dist"]
+    corpus: ["corpus/fn-corpus/stat3/chisq_dist.golden.tsv"]
+
+- id: sheet.fn.stat.chisq-dist-rt
+  name: CHISQ.DIST.RT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_dist_rt
+  status: implemented
+  provenance: ["Microsoft function reference (CHISQ.DIST.RT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chisq_dist_rt"]
+    corpus: ["corpus/fn-corpus/stat3/chisq_dist_rt.golden.tsv"]
+
+- id: sheet.fn.stat.chisq-inv
+  name: CHISQ.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_inv
+  status: implemented
+  provenance: ["Microsoft function reference (CHISQ.INV)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chisq_inv"]
+    corpus: ["corpus/fn-corpus/stat3/chisq_inv.golden.tsv"]
+
+- id: sheet.fn.stat.chisq-inv-rt
+  name: CHISQ.INV.RT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_inv_rt
+  status: implemented
+  provenance: ["Microsoft function reference (CHISQ.INV.RT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chisq_inv_rt"]
+    corpus: ["corpus/fn-corpus/stat3/chisq_inv_rt.golden.tsv"]
+
+- id: sheet.fn.stat.chisq-test
+  name: CHISQ.TEST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::chisq_test
+  status: implemented
+  provenance: ["Microsoft function reference (CHISQ.TEST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chisq_test"]
+    corpus: ["corpus/fn-corpus/stat3/chisq_test.golden.tsv"]
+
+- id: sheet.fn.stat.chidist
+  name: CHIDIST
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_dist_rt
+  status: implemented
+  provenance: ["Microsoft function reference (CHIDIST) — legacy compatibility name, right tail"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chidist"]
+    corpus: ["corpus/fn-corpus/stat3/chidist.golden.tsv"]
+
+- id: sheet.fn.stat.chiinv
+  name: CHIINV
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::chisq_inv_rt
+  status: implemented
+  provenance: ["Microsoft function reference (CHIINV) — legacy compatibility name, right tail"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chiinv"]
+    corpus: ["corpus/fn-corpus/stat3/chiinv.golden.tsv"]
+
+- id: sheet.fn.stat.chitest
+  name: CHITEST
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::chisq_test
+  status: implemented
+  provenance: ["Microsoft function reference (CHITEST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_chitest"]
+    corpus: ["corpus/fn-corpus/stat3/chitest.golden.tsv"]
+
+- id: sheet.fn.stat.f-dist
+  name: F.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_dist
+  status: implemented
+  provenance: ["Microsoft function reference (F.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_f_dist"]
+    corpus: ["corpus/fn-corpus/stat3/f_dist.golden.tsv"]
+
+- id: sheet.fn.stat.f-dist-rt
+  name: F.DIST.RT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_dist_rt
+  status: implemented
+  provenance: ["Microsoft function reference (F.DIST.RT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_f_dist_rt"]
+    corpus: ["corpus/fn-corpus/stat3/f_dist_rt.golden.tsv"]
+
+- id: sheet.fn.stat.f-inv
+  name: F.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_inv
+  status: implemented
+  provenance: ["Microsoft function reference (F.INV)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_f_inv"]
+    corpus: ["corpus/fn-corpus/stat3/f_inv.golden.tsv"]
+
+- id: sheet.fn.stat.f-inv-rt
+  name: F.INV.RT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_inv_rt
+  status: implemented
+  provenance: ["Microsoft function reference (F.INV.RT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_f_inv_rt"]
+    corpus: ["corpus/fn-corpus/stat3/f_inv_rt.golden.tsv"]
+
+- id: sheet.fn.stat.f-test
+  name: F.TEST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::f_test
+  status: implemented
+  provenance: ["Microsoft function reference (F.TEST) — two-tailed"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_f_test"]
+    corpus: ["corpus/fn-corpus/stat3/f_test.golden.tsv"]
+
+- id: sheet.fn.stat.fdist
+  name: FDIST
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_dist_rt
+  status: implemented
+  provenance: ["Microsoft function reference (FDIST) — legacy compatibility name, right tail"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_fdist"]
+    corpus: ["corpus/fn-corpus/stat3/fdist.golden.tsv"]
+
+- id: sheet.fn.stat.finv
+  name: FINV
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::f_inv_rt
+  status: implemented
+  provenance: ["Microsoft function reference (FINV) — legacy compatibility name, right tail"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_finv"]
+    corpus: ["corpus/fn-corpus/stat3/finv.golden.tsv"]
+
+- id: sheet.fn.stat.ftest
+  name: FTEST
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::f_test
+  status: implemented
+  provenance: ["Microsoft function reference (FTEST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_ftest"]
+    corpus: ["corpus/fn-corpus/stat3/ftest.golden.tsv"]
+
+- id: sheet.fn.stat.t-dist
+  name: T.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_dist
+  status: implemented
+  provenance: ["Microsoft function reference (T.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_dist"]
+    corpus: ["corpus/fn-corpus/stat3/t_dist.golden.tsv"]
+
+- id: sheet.fn.stat.t-dist-2t
+  name: T.DIST.2T
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_dist_2t
+  status: implemented
+  provenance: ["Microsoft function reference (T.DIST.2T)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_dist_2t"]
+    corpus: ["corpus/fn-corpus/stat3/t_dist_2t.golden.tsv"]
+
+- id: sheet.fn.stat.t-dist-rt
+  name: T.DIST.RT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_dist_rt
+  status: implemented
+  provenance: ["Microsoft function reference (T.DIST.RT)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_dist_rt"]
+    corpus: ["corpus/fn-corpus/stat3/t_dist_rt.golden.tsv"]
+
+- id: sheet.fn.stat.t-inv
+  name: T.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_inv
+  status: implemented
+  provenance: ["Microsoft function reference (T.INV) — left-tailed"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_inv"]
+    corpus: ["corpus/fn-corpus/stat3/t_inv.golden.tsv"]
+
+- id: sheet.fn.stat.t-inv-2t
+  name: T.INV.2T
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_inv_2t
+  status: implemented
+  provenance: ["Microsoft function reference (T.INV.2T)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_inv_2t"]
+    corpus: ["corpus/fn-corpus/stat3/t_inv_2t.golden.tsv"]
+
+- id: sheet.fn.stat.t-test
+  name: T.TEST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: stat3::t_test
+  status: implemented
+  provenance: ["Microsoft function reference (T.TEST) — paired, pooled and Welch"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_t_test"]
+    corpus: ["corpus/fn-corpus/stat3/t_test.golden.tsv"]
+
+- id: sheet.fn.stat.tdist
+  name: TDIST
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::tdist
+  status: implemented
+  provenance: ["Microsoft function reference (TDIST) — legacy compatibility name: x >= 0, tails 1 or 2"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_tdist"]
+    corpus: ["corpus/fn-corpus/stat3/tdist.golden.tsv"]
+
+- id: sheet.fn.stat.tinv
+  name: TINV
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::t_inv_2t
+  status: implemented
+  provenance: ["Microsoft function reference (TINV) — legacy compatibility name, two-tailed"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_tinv"]
+    corpus: ["corpus/fn-corpus/stat3/tinv.golden.tsv"]
+
+- id: sheet.fn.stat.ttest
+  name: TTEST
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: stat3::t_test
+  status: implemented
+  provenance: ["Microsoft function reference (TTEST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_ttest"]
+    corpus: ["corpus/fn-corpus/stat3/ttest.golden.tsv"]
+
+- id: sheet.fn.stat.z-test
+  name: Z.TEST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  rust: stat3::z_test
+  status: implemented
+  provenance: ["Microsoft function reference (Z.TEST) — one-tailed upper probability"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_z_test"]
+    corpus: ["corpus/fn-corpus/stat3/z_test.golden.tsv"]
+
+- id: sheet.fn.stat.ztest
+  name: ZTEST
+  family: stat
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  rust: stat3::z_test
+  status: implemented
+  provenance: ["Microsoft function reference (ZTEST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_ztest"]
+    corpus: ["corpus/fn-corpus/stat3/ztest.golden.tsv"]
+
+- id: sheet.fn.stat.expon-dist
+  name: EXPON.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::expon_dist
+  status: implemented
+  provenance: ["Microsoft function reference (EXPON.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_expon_dist"]
+    corpus: ["corpus/fn-corpus/stat3/expon_dist.golden.tsv"]
+
+- id: sheet.fn.stat.expondist
+  name: EXPONDIST
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::expon_dist
+  status: implemented
+  provenance: ["Microsoft function reference (EXPONDIST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_expondist"]
+    corpus: ["corpus/fn-corpus/stat3/expondist.golden.tsv"]
+
+- id: sheet.fn.stat.gamma
+  name: GAMMA
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gamma_fn
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMA) — Lanczos approximation, reflection below 1/2"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gamma"]
+    corpus: ["corpus/fn-corpus/stat3/gamma.golden.tsv"]
+
+- id: sheet.fn.stat.gammaln
+  name: GAMMALN
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gammaln
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMALN)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gammaln"]
+    corpus: ["corpus/fn-corpus/stat3/gammaln.golden.tsv"]
+
+- id: sheet.fn.stat.gammaln-precise
+  name: GAMMALN.PRECISE
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gammaln
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMALN.PRECISE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gammaln_precise"]
+    corpus: ["corpus/fn-corpus/stat3/gammaln_precise.golden.tsv"]
+
+- id: sheet.fn.stat.gamma-dist
+  name: GAMMA.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gamma_dist
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMA.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gamma_dist"]
+    corpus: ["corpus/fn-corpus/stat3/gamma_dist.golden.tsv"]
+
+- id: sheet.fn.stat.gamma-inv
+  name: GAMMA.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gamma_inv
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMA.INV)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gamma_inv"]
+    corpus: ["corpus/fn-corpus/stat3/gamma_inv.golden.tsv"]
+
+- id: sheet.fn.stat.gammadist
+  name: GAMMADIST
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gamma_dist
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMADIST) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gammadist"]
+    corpus: ["corpus/fn-corpus/stat3/gammadist.golden.tsv"]
+
+- id: sheet.fn.stat.gammainv
+  name: GAMMAINV
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gamma_inv
+  status: implemented
+  provenance: ["Microsoft function reference (GAMMAINV) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gammainv"]
+    corpus: ["corpus/fn-corpus/stat3/gammainv.golden.tsv"]
+
+- id: sheet.fn.stat.gauss
+  name: GAUSS
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::gauss
+  status: implemented
+  provenance: ["Microsoft function reference (GAUSS) — NORM.S.DIST(z) - 1/2"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_gauss"]
+    corpus: ["corpus/fn-corpus/stat3/gauss.golden.tsv"]
+
+- id: sheet.fn.stat.phi
+  name: PHI
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::phi
+  status: implemented
+  provenance: ["Microsoft function reference (PHI) — standard normal density"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_phi"]
+    corpus: ["corpus/fn-corpus/stat3/phi.golden.tsv"]
+
+- id: sheet.fn.stat.hypgeom-dist
+  name: HYPGEOM.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 5, max: 5 }
+  volatility: none
+  range_aware: false
+  rust: stat3::hypgeom_dist
+  status: implemented
+  provenance: ["Microsoft function reference (HYPGEOM.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_hypgeom_dist"]
+    corpus: ["corpus/fn-corpus/stat3/hypgeom_dist.golden.tsv"]
+
+- id: sheet.fn.stat.hypgeomdist
+  name: HYPGEOMDIST
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::hypgeomdist
+  status: implemented
+  provenance: ["Microsoft function reference (HYPGEOMDIST) — legacy compatibility name, density"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_hypgeomdist"]
+    corpus: ["corpus/fn-corpus/stat3/hypgeomdist.golden.tsv"]
+
+- id: sheet.fn.stat.lognorm-dist
+  name: LOGNORM.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::lognorm_dist
+  status: implemented
+  provenance: ["Microsoft function reference (LOGNORM.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_lognorm_dist"]
+    corpus: ["corpus/fn-corpus/stat3/lognorm_dist.golden.tsv"]
+
+- id: sheet.fn.stat.lognorm-inv
+  name: LOGNORM.INV
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::lognorm_inv
+  status: implemented
+  provenance: ["Microsoft function reference (LOGNORM.INV)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_lognorm_inv"]
+    corpus: ["corpus/fn-corpus/stat3/lognorm_inv.golden.tsv"]
+
+- id: sheet.fn.stat.lognormdist
+  name: LOGNORMDIST
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::lognormdist
+  status: implemented
+  provenance: ["Microsoft function reference (LOGNORMDIST) — legacy compatibility name, cumulative"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_lognormdist"]
+    corpus: ["corpus/fn-corpus/stat3/lognormdist.golden.tsv"]
+
+- id: sheet.fn.stat.loginv
+  name: LOGINV
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::lognorm_inv
+  status: implemented
+  provenance: ["Microsoft function reference (LOGINV) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_loginv"]
+    corpus: ["corpus/fn-corpus/stat3/loginv.golden.tsv"]
+
+- id: sheet.fn.stat.negbinom-dist
+  name: NEGBINOM.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::negbinom_dist
+  status: implemented
+  provenance: ["Microsoft function reference (NEGBINOM.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_negbinom_dist"]
+    corpus: ["corpus/fn-corpus/stat3/negbinom_dist.golden.tsv"]
+
+- id: sheet.fn.stat.negbinomdist
+  name: NEGBINOMDIST
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::negbinomdist
+  status: implemented
+  provenance: ["Microsoft function reference (NEGBINOMDIST) — legacy compatibility name, density"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_negbinomdist"]
+    corpus: ["corpus/fn-corpus/stat3/negbinomdist.golden.tsv"]
+
+- id: sheet.fn.stat.poisson-dist
+  name: POISSON.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::poisson_dist
+  status: implemented
+  provenance: ["Microsoft function reference (POISSON.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_poisson_dist"]
+    corpus: ["corpus/fn-corpus/stat3/poisson_dist.golden.tsv"]
+
+- id: sheet.fn.stat.poisson
+  name: POISSON
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::poisson_dist
+  status: implemented
+  provenance: ["Microsoft function reference (POISSON) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_poisson"]
+    corpus: ["corpus/fn-corpus/stat3/poisson.golden.tsv"]
+
+- id: sheet.fn.stat.weibull-dist
+  name: WEIBULL.DIST
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::weibull_dist
+  status: implemented
+  provenance: ["Microsoft function reference (WEIBULL.DIST)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_weibull_dist"]
+    corpus: ["corpus/fn-corpus/stat3/weibull_dist.golden.tsv"]
+
+- id: sheet.fn.stat.weibull
+  name: WEIBULL
+  family: stat
+  arity: { min: 4, max: 4 }
+  volatility: none
+  range_aware: false
+  rust: stat3::weibull_dist
+  status: implemented
+  provenance: ["Microsoft function reference (WEIBULL) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_weibull"]
+    corpus: ["corpus/fn-corpus/stat3/weibull.golden.tsv"]
+
+- id: sheet.fn.stat.confidence-norm
+  name: CONFIDENCE.NORM
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::confidence_norm
+  status: implemented
+  provenance: ["Microsoft function reference (CONFIDENCE.NORM)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_confidence_norm"]
+    corpus: ["corpus/fn-corpus/stat3/confidence_norm.golden.tsv"]
+
+- id: sheet.fn.stat.confidence
+  name: CONFIDENCE
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::confidence_norm
+  status: implemented
+  provenance: ["Microsoft function reference (CONFIDENCE) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_confidence"]
+    corpus: ["corpus/fn-corpus/stat3/confidence.golden.tsv"]
+
+- id: sheet.fn.stat.confidence-t
+  name: CONFIDENCE.T
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::confidence_t
+  status: implemented
+  provenance: ["Microsoft function reference (CONFIDENCE.T)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_confidence_t"]
+    corpus: ["corpus/fn-corpus/stat3/confidence_t.golden.tsv"]
+
+- id: sheet.fn.stat.covariance-p
+  name: COVARIANCE.P
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::covariance_p
+  status: implemented
+  provenance: ["Microsoft function reference (COVARIANCE.P)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_covariance_p"]
+    corpus: ["corpus/fn-corpus/stat3/covariance_p.golden.tsv"]
+
+- id: sheet.fn.stat.covariance-s
+  name: COVARIANCE.S
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::covariance_s
+  status: implemented
+  provenance: ["Microsoft function reference (COVARIANCE.S)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_covariance_s"]
+    corpus: ["corpus/fn-corpus/stat3/covariance_s.golden.tsv"]
+
+- id: sheet.fn.stat.covar
+  name: COVAR
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::covariance_p
+  status: implemented
+  provenance: ["Microsoft function reference (COVAR) — legacy compatibility name"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_covar"]
+    corpus: ["corpus/fn-corpus/stat3/covar.golden.tsv"]
+
+- id: sheet.fn.stat.pearson
+  name: PEARSON
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::pearson
+  status: implemented
+  provenance: ["Microsoft function reference (PEARSON)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_pearson"]
+    corpus: ["corpus/fn-corpus/stat3/pearson.golden.tsv"]
+
+- id: sheet.fn.stat.steyx
+  name: STEYX
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::steyx
+  status: implemented
+  provenance: ["Microsoft function reference (STEYX)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_steyx"]
+    corpus: ["corpus/fn-corpus/stat3/steyx.golden.tsv"]
+
+- id: sheet.fn.stat.kurt
+  name: KURT
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: stat3::kurt
+  status: implemented
+  provenance: ["Microsoft function reference (KURT) — sample excess kurtosis"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_kurt"]
+    corpus: ["corpus/fn-corpus/stat3/kurt.golden.tsv"]
+
+- id: sheet.fn.stat.skew
+  name: SKEW
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: stat3::skew
+  status: implemented
+  provenance: ["Microsoft function reference (SKEW)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_skew"]
+    corpus: ["corpus/fn-corpus/stat3/skew.golden.tsv"]
+
+- id: sheet.fn.stat.skew-p
+  name: SKEW.P
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  rust: stat3::skew_p
+  status: implemented
+  provenance: ["Microsoft function reference (SKEW.P)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_skew_p"]
+    corpus: ["corpus/fn-corpus/stat3/skew_p.golden.tsv"]
+
+- id: sheet.fn.stat.standardize
+  name: STANDARDIZE
+  family: stat
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  rust: stat3::standardize
+  status: implemented
+  provenance: ["Microsoft function reference (STANDARDIZE)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_standardize"]
+    corpus: ["corpus/fn-corpus/stat3/standardize.golden.tsv"]
+
+- id: sheet.fn.stat.trimmean
+  name: TRIMMEAN
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: true
+  rust: stat3::trimmean
+  status: implemented
+  provenance: ["Microsoft function reference (TRIMMEAN) — excluded count rounded down to an even number"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_trimmean"]
+    corpus: ["corpus/fn-corpus/stat3/trimmean.golden.tsv"]
+
+- id: sheet.fn.stat.mode-mult
+  name: MODE.MULT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: stat3::mode_mult
+  status: implemented
+  provenance: ["Microsoft function reference (MODE.MULT) — vertical array in order of first appearance"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_mode_mult"]
+    corpus: ["corpus/fn-corpus/stat3/mode_mult.golden.tsv"]
+
+- id: sheet.fn.stat.rank-avg
+  name: RANK.AVG
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: true
+  rust: stat3::rank_avg
+  status: implemented
+  provenance: ["Microsoft function reference (RANK.AVG)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_rank_avg"]
+    corpus: ["corpus/fn-corpus/stat3/rank_avg.golden.tsv"]
+
+- id: sheet.fn.stat.permutationa
+  name: PERMUTATIONA
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  rust: stat3::permutationa
+  status: implemented
+  provenance: ["Microsoft function reference (PERMUTATIONA)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_permutationa"]
+    corpus: ["corpus/fn-corpus/stat3/permutationa.golden.tsv"]
+
+- id: sheet.fn.stat.prob
+  name: PROB
+  family: stat
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: stat3::prob
+  status: implemented
+  provenance: ["Microsoft function reference (PROB)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_prob"]
+    corpus: ["corpus/fn-corpus/stat3/prob.golden.tsv"]
+
+- id: sheet.fn.stat.fisher
+  name: FISHER
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::fisher
+  status: implemented
+  provenance: ["Microsoft function reference (FISHER)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_fisher"]
+    corpus: ["corpus/fn-corpus/stat3/fisher.golden.tsv"]
+
+- id: sheet.fn.stat.fisherinv
+  name: FISHERINV
+  family: stat
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: stat3::fisherinv
+  status: implemented
+  provenance: ["Microsoft function reference (FISHERINV)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_fisherinv"]
+    corpus: ["corpus/fn-corpus/stat3/fisherinv.golden.tsv"]
+
+- id: sheet.fn.stat.growth
+  name: GROWTH
+  family: stat
+  arity: { min: 1, max: 4 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: stat3::growth
+  status: implemented
+  provenance: ["Microsoft function reference (GROWTH) — LINEST over ln y"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_growth"]
+    corpus: ["corpus/fn-corpus/stat3/growth.golden.tsv"]
+
+- id: sheet.fn.stat.logest
+  name: LOGEST
+  family: stat
+  arity: { min: 1, max: 4 }
+  volatility: none
+  range_aware: true
+  returns_array: true
+  rust: stat3::logest
+  status: implemented
+  provenance: ["Microsoft function reference (LOGEST) — LINEST over ln y, coefficients exponentiated"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_logest"]
+    corpus: ["corpus/fn-corpus/stat3/logest.golden.tsv"]
+
+- id: sheet.fn.stat.forecast-ets
+  name: FORECAST.ETS
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 6 }
+  volatility: none
+  range_aware: true
+  rust: ets::forecast_ets
+  status: implemented
+  provenance: ["Microsoft function reference (FORECAST.ETS) — AAA exponential smoothing (published method); Excel's optimiser is unpublished, forecasts on inexact fits diverge in later digits"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_forecast_ets"]
+    corpus: ["corpus/fn-corpus/stat3/forecast_ets.golden.tsv"]
+
+- id: sheet.fn.stat.forecast-ets-confint
+  name: FORECAST.ETS.CONFINT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 7 }
+  volatility: none
+  range_aware: true
+  rust: ets::forecast_ets_confint
+  status: implemented
+  provenance: ["Microsoft function reference (FORECAST.ETS.CONFINT) — prediction-interval half-width of the AAA model"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_forecast_ets_confint"]
+    corpus: ["corpus/fn-corpus/stat3/forecast_ets_confint.golden.tsv"]
+
+- id: sheet.fn.stat.forecast-ets-seasonality
+  name: FORECAST.ETS.SEASONALITY
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 2, max: 4 }
+  volatility: none
+  range_aware: true
+  rust: ets::forecast_ets_seasonality
+  status: implemented
+  provenance: ["Microsoft function reference (FORECAST.ETS.SEASONALITY) — strongest autocorrelation peak of the detrended series"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_forecast_ets_seasonality"]
+    corpus: ["corpus/fn-corpus/stat3/forecast_ets_seasonality.golden.tsv"]
+
+- id: sheet.fn.stat.forecast-ets-stat
+  name: FORECAST.ETS.STAT
+  xlfn_prefix: "_xlfn."
+  family: stat
+  arity: { min: 3, max: 6 }
+  volatility: none
+  range_aware: true
+  rust: ets::forecast_ets_stat
+  status: implemented
+  provenance: ["Microsoft function reference (FORECAST.ETS.STAT) — alpha, beta, gamma, MASE, SMAPE, MAE, RMSE, step"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_stat3.rs::sheet_fn_stat3_forecast_ets_stat"]
+    corpus: ["corpus/fn-corpus/stat3/forecast_ets_stat.golden.tsv"]

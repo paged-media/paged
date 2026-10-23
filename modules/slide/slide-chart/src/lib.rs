@@ -1046,6 +1046,8 @@ mod tests {
                     }],
                     labels: None,
                     element: "barChart".into(),
+                    options: Default::default(),
+                    axis_ids: Vec::new(),
                 }],
                 ..Default::default()
             };

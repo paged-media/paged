@@ -342,6 +342,20 @@ export function makeFakeEditor() {
       fn({ kind: "elementSelectionApplied", payload: { ids } });
     }
   };
+  /** Open another document (the worker's `documentLoaded` broadcast). */
+  const emitDocumentLoaded = () => {
+    for (const fn of [...subscribers]) {
+      fn({
+        kind: "documentLoaded",
+        payload: {
+          docId: "doc-2",
+          pageCount: 1,
+          pageIds: ["pg1"],
+          pageSizesPt: [[612, 792]],
+        },
+      });
+    }
+  };
   /** Drive the worker→main resourceTilesNeeded event; resolves after the
    *  SDK adapter's async source→submit microtasks settle. */
   const emitTilesNeeded = async (need: {
@@ -370,6 +384,7 @@ export function makeFakeEditor() {
     imageReleases,
     imageSubmits,
     emitTilesNeeded,
+    emitDocumentLoaded,
     placed,
     pathAnchors,
     mutations,

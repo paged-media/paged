@@ -1,0 +1,16 @@
+# F.INV.RT(probability,deg_freedom1,deg_freedom2).
+# id	formula	setup	expected
+fir-0	=F.INV.RT(0.01,6,4)	-	15.2068648611575
+fir-1	=F.INV.RT(0.5,1,1)	-	1
+fir-2	=F.INV.RT(0.05,10,20)	-	2.34787756699831
+fir-3	=F.INV.RT(0.95,3,30)	-	0.116055381518633
+fir-4	=F.INV.RT(0,4,5)	-	#NUM!
+fir-5	=F.INV.RT(1,4,5)	-	0
+fir-6	=F.INV.RT(1.5,4,5)	-	#NUM!
+fir-7	=F.INV.RT(0.5,0,5)	-	#NUM!
+fir-8	=F.INV.RT(1E-8,2,2)	-	99999999.0000002
+fir-9	=F.INV.RT(0.3,200,300)	-	1.06877599597613
+fir-10	=F.INV.RT(0.001,1,1)	-	405284.067902849
+fir-txt	=F.INV.RT("x",4,5)	-	#VALUE!
+fir-err	=F.INV.RT(A1,4,5)	A1=#DIV/0!	#DIV/0!
+fir-numtxt	=F.INV.RT("0.5",4,5)	-	0.964562296847094

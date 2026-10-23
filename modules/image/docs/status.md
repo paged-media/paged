@@ -94,14 +94,24 @@ frame keeps its previous image until a GPU realm re-composites it.
   ([ADR 465](adr/465-cpu-twins-for-region-filters.md)), each within its kernel's tolerance of
   the reference, the two paths within one 8-bit level of each other. Adjustment layers, smart
   objects, locked and 16-bit layers are refused, and so is a filter that changes nothing.
-  A selection is data headless: `mask` takes `polygons` (`[x, y]` image pixels, unioned,
+  A selection is data headless: `mask` takes `polygons` (`[x, y]` image pixels,
   anti-aliased), `alpha` (one coverage byte per canvas pixel, or an image of the canvas size
   whose luminance times alpha is the coverage; `paged-node invoke` reads it from a file as
   `"@path"`) and `feather` (σ px), rasterised in Rust and clipped to `region`; partial
   coverage blends filtered and original pixels, the same mask on the GPU and the CPU path.
-  `selection: true` filters within the editor's live selection of that frame (intersected
-  with any `mask`); without one (headless, another image open, nothing selected) it is
-  refused with the reason. A mask that covers no pixel is refused.
+  Without `fillRule` each polygon fills alone and they union; `fillRule: "evenodd"` or
+  `"nonzero"` fills them together as one path, so an inner polygon cuts a hole (non-zero:
+  when wound the other way). `ops`, one `add` / `subtract` / `intersect` per polygon, folds
+  the subtract and intersect polygons in order into the add polygons' shape (the whole
+  image when there is no add polygon). `selection: true` filters within the editor's
+  selection of that frame (intersected with any `mask`): the live one while the frame's
+  image is open, and once another image opened, the one it had when it closed (the session
+  keeps the last four frames' selections until another document opens). A selection made
+  on the same image at another size (the aspect agrees within a pixel) is resampled to the
+  canvas; one of another aspect (another crop) is refused, and so is a frame with no
+  selection, headless or not, with the reason. A mask that covers no pixel is refused.
+  `tests/plugin-surface/image-filter-selection.spec.ts` drives it in the running editor: a
+  marquee drag, then the typed command, then one undo.
 - **Interactive twins refuse headless.** A typed twin that acts on the image open in the
   editor fails with `unmapped:` when none is open, instead of doing nothing.
 

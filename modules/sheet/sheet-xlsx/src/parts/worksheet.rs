@@ -55,6 +55,8 @@ pub struct ParsedCell {
     /// `cm=`: the 1-based cell-metadata block (`metadata.xml`) the cell
     /// points at — on an array formula, the dynamic-array marker.
     pub cm: Option<u32>,
+    /// `t="s"`: the shared-string index (its rich runs are read by it).
+    pub shared_index: Option<u32>,
 }
 
 /// Everything a worksheet part yields.
@@ -74,6 +76,45 @@ pub struct ParsedWorksheet {
     pub col_meta: Vec<sheet_core::ColMeta>,
     /// Unknown `<worksheet>` children, re-emitted on dirty re-encode.
     pub captured: CapturedSubtrees,
+    /// What-if data tables (`<f t="dataTable">`, sheet ADR 517).
+    pub data_tables: Vec<DataTableDef>,
+}
+
+/// One what-if data table (ECMA-376 §18.3.1.40 `f` with `t="dataTable"`):
+/// the result range, one or two variables, and the input cells the
+/// variables substitute.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataTableDef {
+    /// The result range `(r0, c0, r1, c1)` (`ref`).
+    pub range: (u32, u32, u32, u32),
+    /// Two variables (`dt2D`).
+    pub two_d: bool,
+    /// A one-variable table laid out in a row (`dtr`).
+    pub row: bool,
+    /// The first input cell `(row, col)` (`r1`): the row input of a 2-D
+    /// table, the only input of a 1-D one.
+    pub r1: Option<(u32, u32)>,
+    /// The column input cell of a 2-D table (`r2`).
+    pub r2: Option<(u32, u32)>,
+}
+
+fn data_table_of(e: &quick_xml::events::BytesStart<'_>) -> Result<Option<DataTableDef>, XlsxError> {
+    if attr(e, b"t")?.as_deref() != Some("dataTable") {
+        return Ok(None);
+    }
+    let Some(range) = attr(e, b"ref")?.as_deref().and_then(parse_range) else {
+        return Ok(None);
+    };
+    let n = range.normalized();
+    let flag = |v: Option<String>| v.is_some_and(|v| v == "1" || v == "true");
+    let cell = |v: Option<String>| v.as_deref().and_then(parse_a1).map(|(r, c, _, _)| (r, c));
+    Ok(Some(DataTableDef {
+        range: (n.start.row, n.start.col, n.end.row, n.end.col),
+        two_d: flag(attr(e, b"dt2D")?),
+        row: flag(attr(e, b"dtr")?),
+        r1: cell(attr(e, b"r1")?),
+        r2: cell(attr(e, b"r2")?),
+    }))
 }
 
 /// The understood direct children of `<worksheet>`; everything else is
@@ -158,6 +199,9 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                         b"v" => text_target = Some(TextTarget::Value),
                         b"t" => text_target = Some(TextTarget::InlineText),
                         b"f" => {
+                            if let Some(dt) = data_table_of(&e)? {
+                                out.data_tables.push(dt);
+                            }
                             // record shared-formula attributes for masters
                             let t = attr(&e, b"t")?;
                             let si = attr(&e, b"si")?.and_then(|s| s.parse::<u32>().ok());
@@ -239,6 +283,9 @@ pub fn parse(xml: &[u8], shared: &[CompactString]) -> Result<ParsedWorksheet, Xl
                             }
                         }
                         b"f" => {
+                            if let Some(dt) = data_table_of(&e)? {
+                                out.data_tables.push(dt);
+                            }
                             // empty <f/>: a shared-formula member with no text.
                             let si = attr(&e, b"si")?.and_then(|s| s.parse::<u32>().ok());
                             if let Some(c) = cur_cell.as_mut() {
@@ -418,6 +465,7 @@ fn push_cell(
         cm: acc.cm,
         formula,
         style_index: acc.style_index,
+        shared_index: (acc.ty == "s").then(|| acc.v.trim().parse().ok()).flatten(),
     });
     Ok(())
 }

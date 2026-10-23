@@ -265,12 +265,17 @@ pub fn lower_tracks_styled(
     for (dr, &r) in rows.iter().enumerate() {
         let mut line = Vec::with_capacity(n_cols);
         for (dc, &c) in cols.iter().enumerate() {
+            let empty_key = match ws.and_then(|w| w.cell(r, c)) {
+                Some(_) => 0,
+                None => styler.key_for_empty(r, c),
+            };
             let mut out = LoweredCell {
                 col: c,
                 text: String::new(),
                 align: Align::General,
-                style_key: 0,
+                style_key: empty_key,
                 fill: None,
+                runs: None,
             };
             if let Some(cell) = ws.and_then(|w| w.cell(r, c)) {
                 let d = lower_cell_display(model, cell, &mut cache, &ctx);
@@ -296,6 +301,11 @@ pub fn lower_tracks_styled(
                         }
                     }
                     None => {
+                        out.runs = styler.runs(sheet, r, c, cell, &d.text).map(|rs| {
+                            rs.into_iter()
+                                .map(|(text, style_key)| crate::LoweredRun { text, style_key })
+                                .collect()
+                        });
                         out.text = d.text;
                         out.align = d.align;
                         out.style_key = key;
@@ -336,6 +346,19 @@ pub fn lower_tracks_styled(
         }
     }
     let mut styles = styler.into_styles();
+    // Stacked text, as the page lowering and the grid stack it.
+    for line in &mut grid {
+        for cell in line.iter_mut() {
+            if styles
+                .get(cell.style_key as usize)
+                .is_some_and(|s| s.rotation == Some(sheet_core::visual::ROTATION_STACKED))
+            {
+                cell.text = crate::stack_text(&cell.text);
+                cell.runs = None;
+                cell.fill = None;
+            }
+        }
+    }
     let heading_key = styles.len() as u32;
     if hd == 1 {
         styles.push(heading_style(heading_key));
@@ -346,6 +369,7 @@ pub fn lower_tracks_styled(
         align: Align::Center,
         style_key: heading_key,
         fill: None,
+        runs: None,
     };
 
     // ---- Assemble rows / cols (headings first). ----

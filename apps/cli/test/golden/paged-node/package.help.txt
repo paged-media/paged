@@ -1,0 +1,24 @@
+$ paged-node package --help
+# exit 0
+# stdout
+paged-node package <doc>
+
+InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt, a report and the document as .paged (with the module content IDML cannot carry), into a new folder or a .zip
+
+options:
+  -o, --out <dir|x.zip>              the package: a new (or empty) folder, or a .zip that unpacks into <name>/ beside it (required)
+  --fonts <dir|file>                 font files to collect the document's faces from (an IDML carries no font binaries) (repeatable)
+  --pdf                              also write <name>.pdf (through the typed exporter when installed)
+  --no-paged                         leave out <name>.paged (the whole document, with the module content IDML cannot carry)
+  --instructions <text>              the text of Instructions.txt, instead of the default note
+  --format <json|text>               output style (default json)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)
+  --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
+  --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
+  --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

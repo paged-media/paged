@@ -102,6 +102,7 @@ import type {
   DataProviderSnapshot,
   Mutation,
   MutationInput,
+  MutateOptions,
   MutationOutcome,
   NetworkSurface,
   ObjectTypeContribution,
@@ -223,6 +224,11 @@ export const HOST_FEATURES: readonly string[] = [
   "contribute.importer@1",
   "contribute.exporter@1",
   "document.mutate@1",
+  // Engine ADR 1004 — `mutate(…, { amend })` joins the undo step a change
+  // committed, and `onDidChange` events carry that step's `appliedSeq`.
+  // STATIC: the worker handshake refuses an engine older than the pinned
+  // protocol (76), which answers `amendMutation`.
+  "document.mutate.amend@1",
   "document.undo@1",
   "document.collection@1",
   "document.frameChain@1",
@@ -2459,9 +2465,33 @@ export function createBundleHost(
   };
 
   const document: DocumentSurface = {
-    async mutate(mutation: MutationInput): Promise<MutationOutcome> {
+    async mutate(
+      mutation: MutationInput,
+      options?: MutateOptions,
+    ): Promise<MutationOutcome> {
       const gated = gateRawWrite(mutation, "document.mutate");
       if (gated !== null) return gated;
+      if (options?.amend !== undefined) {
+        // Engine ADR 1004 — join the undo step `amend` names. The engine
+        // checks it is still the last step and that no undo or redo ran
+        // since; a refusal is an outcome (`notAmendable`), never a throw.
+        const amend = options.amend;
+        if (!Number.isSafeInteger(amend) || amend < 0) {
+          return {
+            applied: false,
+            error: `document.mutate: amend must be an appliedSeq (a whole number), got ${String(amend)}`,
+          };
+        }
+        try {
+          const reply = await getEditor().client.send({
+            kind: "amendMutation",
+            payload: { appliedSeq: amend, mutation: mutation as Mutation },
+          });
+          return mutateOutcome(reply);
+        } catch (error) {
+          return { applied: false, error };
+        }
+      }
       try {
         // The narrow `PagedClient.mutate` handle is typed against the
         // VENDORED `Mutation` (protocol 51). A protocol-ahead op (v56;

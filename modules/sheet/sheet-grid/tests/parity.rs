@@ -29,10 +29,80 @@ use sheet_grid::{frame_page, grid_scene_styled, FrameWindowSpec, PagePrint};
 use sheet_lower::condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, ScaleStop, SheetCondFmt,
 };
-use sheet_lower::{lower_range_condfmt, CellRange, ViewOptions, VisualAttrs};
+use sheet_lower::{lower_range_condfmt, CellRange, ViewOptions, VisualAttrs, VisualStyleSource};
+
+/// The style source: varied visual styles, and (W2.2) rich-text runs on
+/// every text cell whose row + column is a multiple of three.
+struct Source;
+
+impl VisualStyleSource for Source {
+    fn visual(&self, id: StyleId) -> Option<VisualAttrs> {
+        visual(id)
+    }
+
+    fn rich_runs(
+        &self,
+        _sheet: sheet_core::SheetId,
+        row: u32,
+        col: u32,
+        text: &str,
+        base: &VisualAttrs,
+    ) -> Option<Vec<(String, VisualAttrs)>> {
+        if !(row + col).is_multiple_of(3) || text != "text" {
+            return None;
+        }
+        let bold = VisualAttrs {
+            bold: true,
+            text_rgb: Some("#C00000".into()),
+            ..base.clone()
+        };
+        Some(vec![("te".into(), bold), ("xt".into(), base.clone())])
+    }
+}
 
 fn visual(id: StyleId) -> Option<VisualAttrs> {
-    match id.0 % 5 {
+    match id.0 % 7 {
+        5 => Some(VisualAttrs {
+            fill_rgb: Some("#DFDFDF".into()),
+            fill_pattern: Some(sheet_lower::FillPattern {
+                pattern: "gray125".into(),
+                fg_rgb: Some("#000000".into()),
+                ..Default::default()
+            }),
+            rotation: Some(255),
+            strike: true,
+            ..Default::default()
+        }),
+        6 => Some(VisualAttrs {
+            fill_rgb: Some("#A0B0C0".into()),
+            fill_gradient: Some(sheet_lower::FillGradient {
+                kind: "linear".into(),
+                degree: 90.0,
+                stops: vec![
+                    sheet_lower::FillGradientStop {
+                        position: 0.0,
+                        rgb: "#FFFFFF".into(),
+                        swatch: None,
+                    },
+                    sheet_lower::FillGradientStop {
+                        position: 1.0,
+                        rgb: "#4472C4".into(),
+                        swatch: Some("Color/Brand".into()),
+                    },
+                ],
+                ..Default::default()
+            }),
+            indent_pt: Some(13.5),
+            rotation: Some(45),
+            vert_align: Some("superscript".into()),
+            ..Default::default()
+        }),
+        n => visual_base(n),
+    }
+}
+
+fn visual_base(n: u32) -> Option<VisualAttrs> {
+    match n % 5 {
         1 => Some(VisualAttrs {
             bold: true,
             fill_rgb: Some("#FFCC00".into()),
@@ -72,7 +142,7 @@ struct Seed {
 
 fn seed() -> impl Strategy<Value = Seed> {
     (
-        prop::collection::vec((0u32..40, 0u32..12, 0u8..4, 0u32..7), 0..160),
+        prop::collection::vec((0u32..40, 0u32..12, 0u8..4, 0u32..14), 0..160),
         prop::collection::vec(0u32..40, 0..6),
         prop::collection::vec(1u32..12, 0..3),
         any::<bool>(),
@@ -147,6 +217,7 @@ fn build(seed: &Seed) -> (SheetModel, SheetCondFmt) {
     }
     let cf = if seed.cf {
         SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![
                 CfBlock {
                     ranges: vec![(0, 0, 39, 3)],
@@ -203,7 +274,7 @@ proptest! {
             freeze_rows: 0,
             freeze_cols: 0,
         };
-        let scene = grid_scene_styled(&m, 0, &spec, true, &[], &cf, &visual);
+        let scene = grid_scene_styled(&m, 0, &spec, true, &[], &cf, &Source);
         let vp = &scene.viewport;
         let (r0, c0) = (vp.row_indices[0], vp.col_indices[0]);
         let range = CellRange {
@@ -212,7 +283,7 @@ proptest! {
             r1: *vp.row_indices.last().unwrap(),
             c1: *vp.col_indices.last().unwrap(),
         };
-        let page = lower_range_condfmt(&m, 0, range, &ViewOptions::default(), &visual, &cf);
+        let page = lower_range_condfmt(&m, 0, range, &ViewOptions::default(), &Source, &cf);
         // Same tracks: the page skips the same hidden rows and columns.
         let page_rows: Vec<u32> = page.rows.iter().map(|r| r.index + r0).collect();
         prop_assert_eq!(&page_rows, &vp.row_indices);
@@ -225,6 +296,7 @@ proptest! {
             let pc = row.cells.iter().find(|pc| pc.col == cell.col - c0).unwrap();
             prop_assert_eq!(&cell.text, &pc.text);
             prop_assert_eq!(&cell.fill, &pc.fill);
+            prop_assert_eq!(&cell.runs, &pc.runs);
             prop_assert_eq!(cell.align, pc.align);
             prop_assert_eq!(cell.style_key, pc.style_key);
         }
@@ -298,14 +370,14 @@ proptest! {
             freeze_rows,
             freeze_cols,
         };
-        let scene = grid_scene_styled(&m, 0, &spec, true, &[], &cf, &visual);
+        let scene = grid_scene_styled(&m, 0, &spec, true, &[], &cf, &Source);
         let page = frame_page(
             &m,
             0,
             &spec,
             PagePrint { headings: false, gridlines: true },
             &cf,
-            &visual,
+            &Source,
         );
         let vp = &scene.viewport;
         // Same tracks (sheet indices, display order) and sizes.

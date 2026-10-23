@@ -217,6 +217,7 @@ impl SheetConditionalFormats {
     /// `dxfId` out of range resolves to the default (inert) override.
     pub fn to_lower(&self, dxfs: &[VisualStyle]) -> sheet_lower::SheetCondFmt {
         sheet_lower::SheetCondFmt {
+            tables: Vec::new(),
             blocks: self
                 .blocks
                 .iter()
@@ -235,7 +236,7 @@ impl CfRule {
         let dxf = self
             .dxf_id
             .and_then(|id| dxfs.get(id as usize))
-            .map(VisualStyle::to_lower_attrs)
+            .cloned()
             .unwrap_or_default();
         sheet_lower::CfRule {
             kind: self.kind.to_lower(),

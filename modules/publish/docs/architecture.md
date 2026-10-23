@@ -173,6 +173,15 @@ The publish bundle contributes typed commands through `host.contribute.objectMod
 `exportPaged`, `importIdml`, and `preflight`, which runs the PDF exporter with the same options
 and answers its findings without the bytes (`ok` when none is an error).
 
+The Node CLI (`apps/cli`) reaches them: every PDF it writes (`export`, `template fill -o
+x.pdf`, `merge --format pdf`, `generate`, `package --pdf`) goes through `exportPdf` when the
+bundle is loaded, and `paged-node preflight <doc>` runs `preflight` with the options given,
+exiting 1 when a finding is an error. `paged-node package <doc> -o <dir|x.zip>` collects the
+document for print (InDesign's File ▸ Package) from the engine's IDML export with a link base:
+the IDML, its linked files, the fonts it sets in (from the faces the engine holds and the files
+`--fonts` names; a face whose licence restricts embedding is reported, not copied), and a
+report (extensions ADR 324, amendment of 2026-10-23).
+
 Neither bundle has a template field kind yet. The one planned, `media.paged.pdf.page` (which
 page of a placed PDF a frame shows), needs the engine first: it draws page 1 of a placed PDF
 whatever the IDML says (`<PDFAttribute PageNumber>` is not read).

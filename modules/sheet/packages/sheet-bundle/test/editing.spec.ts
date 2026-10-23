@@ -406,6 +406,51 @@ describe.skipIf(!built)("copy / paste [sheet.edit.clipboard]", () => {
     expect(input(s, 1, 1)).toBe("12");
     expect(display(s, 1, 0)).toBe("Apples");
   });
+
+  it("paste special: values, transpose with formulas, skip blanks, add", async () => {
+    const { s } = await open([
+      [0, 0, "2"],
+      [1, 0, "=A1*3"],
+      [2, 0, ""],
+      [0, 4, "100"],
+      [2, 4, "7"],
+    ]);
+    s.selectCell(0, 0);
+    s.extendSelection(2, 0);
+    await s.copySelection();
+    // Values: what the cells show, no formula.
+    s.selectCell(0, 1);
+    await s.pasteAtSelection({ what: "values" });
+    expect([input(s, 0, 1), input(s, 1, 1)]).toEqual(["2", "6"]);
+    // Transpose: a column lands as a row; each formula shifts by its own
+    // cell's move (A2 → B6: four rows down, one column right), as Excel.
+    s.selectCell(5, 0);
+    await s.pasteAtSelection({ transpose: true });
+    expect([input(s, 5, 0), input(s, 5, 1)]).toEqual(["2", "=B5*3"]);
+    // Add, skipping blanks: E1 100 + 2, E2 empty + 6 (=A1*3 is a formula,
+    // so values are used), E3 keeps 7 (the source is blank).
+    s.selectCell(0, 4);
+    await s.pasteAtSelection({
+      what: "values",
+      operation: "add",
+      skipBlanks: true,
+    });
+    expect([input(s, 0, 4), input(s, 1, 4), input(s, 2, 4)]).toEqual([
+      "102",
+      "6",
+      "7",
+    ]);
+    expect(s.pasteSpecialOpen()).toBe(false);
+  });
+
+  it("Ctrl+Shift+V opens paste special", async () => {
+    const { s } = await open([[0, 0, "1"]]);
+    s.selectCell(0, 0);
+    s.handleGridKey({ key: "V", ctrlKey: true, shiftKey: true });
+    expect(s.pasteSpecialOpen()).toBe(true);
+    s.closePasteSpecial();
+    expect(s.pasteSpecialOpen()).toBe(false);
+  });
 });
 
 describe.skipIf(!built)(

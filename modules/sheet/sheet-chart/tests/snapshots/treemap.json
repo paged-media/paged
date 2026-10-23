@@ -1,0 +1,215 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Treemap",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 120.6
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "x": 325.25,
+      "y": 127.25
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 133.2
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Veg",
+      "sizePt": 9.0,
+      "x": 325.25,
+      "y": 139.85
+    },
+    {
+      "fill": "#D26012",
+      "h": 13.5,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 108.424,
+      "x": 197.826,
+      "y": 26.8
+    },
+    {
+      "anchor": "start",
+      "bold": true,
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Veg",
+      "sizePt": 9.0,
+      "x": 200.826,
+      "y": 37.3
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 104.3,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 46.467,
+      "x": 259.783,
+      "y": 129.7
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Leek",
+      "sizePt": 9.0,
+      "x": 263.783,
+      "y": 140.5
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 104.3,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 61.956,
+      "x": 197.826,
+      "y": 129.7
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Bean",
+      "sizePt": 9.0,
+      "x": 201.826,
+      "y": 140.5
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 89.4,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 108.424,
+      "x": 197.826,
+      "y": 40.3
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Kale",
+      "sizePt": 9.0,
+      "x": 201.826,
+      "y": 51.1
+    },
+    {
+      "fill": "#335AA1",
+      "h": 13.5,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 191.826,
+      "x": 6.0,
+      "y": 26.8
+    },
+    {
+      "anchor": "start",
+      "bold": true,
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "x": 9.0,
+      "y": 37.3
+    },
+    {
+      "fill": "#4472C4",
+      "h": 42.109,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 191.826,
+      "x": 6.0,
+      "y": 191.891
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Pear",
+      "sizePt": 9.0,
+      "x": 10.0,
+      "y": 202.691
+    },
+    {
+      "fill": "#4472C4",
+      "h": 151.591,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 85.256,
+      "x": 112.57,
+      "y": 40.3
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Plum",
+      "sizePt": 9.0,
+      "x": 116.57,
+      "y": 51.1
+    },
+    {
+      "fill": "#4472C4",
+      "h": 151.591,
+      "kind": "rect",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0,
+      "w": 106.57,
+      "x": 6.0,
+      "y": 40.3
+    },
+    {
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Apple",
+      "sizePt": 9.0,
+      "x": 10.0,
+      "y": 51.1
+    }
+  ],
+  "widthPt": 360.0
+}

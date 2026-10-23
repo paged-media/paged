@@ -203,3 +203,53 @@ three silent failures and one missing flag. Each is now a decision:
   sniffer makes holds `9.9` and a date (paged.data's oracle defect DM-8, closed for the
   merge in `modules/data`). A value is typed only where the query asks for one: a `CAST`,
   or a computation.
+
+## Amendment — 2026-10-23: data through typed commands, `generate`, `preflight`, `package`
+
+The editor's module-coverage audit (`apps/editor/docs/composable-editor-plan.md`, G4) found
+the data verbs reaching into paged.data's session object and the PDF of `merge` and
+`template fill` bypassing the typed exporter. Decided:
+
+- **Data through typed commands only.** `apply`, `merge` and the new `generate` call what a
+  script calls: `media.paged.data.importSource` (a file's bytes as a source), a `query`
+  object through `host.objects`, `previewQuery`, `defineBinding` (a session binding kind,
+  as the Bindings panel defines it), `apply`, `merge` (which now takes `imageBase` and
+  `imageFields`, and answers the undo steps it took) and `planBatch`. Nothing in
+  `apps/cli/src/data.ts` touches `sessionFor`.
+- **`generate <template>`**: a batch, one document per record (`--per record`) or per group
+  of records with the same `--by` values (`--per group`), planned by paged.data's
+  `planBatch`; each unit is a Data Merge of its records, written and undone.
+- **Every PDF through the typed exporter.** `session.exportBytes("pdf")` routes through
+  paged.publish's `exportPdf` (or another `*.exportPdf`) when one is installed, so
+  `template fill -o x.pdf`, `merge --format pdf`, `generate`, `package --pdf` and `-o x.pdf`
+  on a write make the PDF the editor's Export dialog makes. `export --core` keeps core's door.
+- **`preflight <doc>`** runs paged.publish's typed `preflight` with the PDF options given
+  (`--pdf-standard`, `--pages`, `--option key=value`) and exits 1 when a finding is an error.
+  Without paged.publish it is a usage error naming the bundle.
+- **`package <doc> -o <dir|x.zip>`** is InDesign's File ▸ Package, laid out as the Rust
+  `paged package`: `<name>.idml` with its links rebased into `Links/`, every linked file
+  (the engine's bytes, else the file the link names, relative to the document), the
+  document's fonts in `Document fonts/`, `Instructions.txt` and `<name> Report.txt`; `--pdf`
+  adds a PDF. A `.zip` unpacks into `<name>/` beside it, and its links point there. An IDML
+  carries no font binaries, so a face is collected only from the faces the engine holds for
+  the family and from the files `--fonts <dir|file>` names. A face whose OS/2 `fsType` says
+  Restricted Licence embedding is not copied, and the report says so; a family no face
+  answers for is reported missing. Whether a font's licence lets it be handed on otherwise
+  is the user's question: the report lists what was copied.
+- **The package carries the `.paged` too** (decided the same day, after the first cut wrote
+  the IDML alone). Beside the IDML, `<name>.paged` is the whole document, with the module
+  content IDML cannot carry: the container's `paged/` parts (a sheet, a drawing, a web
+  frame, the data session). It is written by default, because a package is the document's
+  archive and a package without the only lossless copy turns the report's "not carried"
+  list into a loss; `--no-paged` leaves it out for a printer who wants the IDML alone. The
+  report names the file (`paged`) and lists the module parts (`moduleParts`, everything
+  under `paged/` but the engine's own `paged/core/` model part), and its text says they are
+  in the `.paged`, or that `--no-paged` left them out. The `.paged` keeps the document's own
+  link spelling; the IDML's links are the ones pointed into `Links/`. The Rust `paged
+  package` writes the same file with the same flag and report fields.
+- **Expression property bindings in `apply`.** A `property` binding with an `expr` goes
+  through paged.data's typed `defineProperty` and is applied by `apply` with the session
+  bindings: the engine evaluates the expression and types the value by the property's schema
+  row (ADR 558). A binding with a `field` instead stays the CLI's shorthand (the record's text
+  for the field, typed as `set` types a value, all such bindings in one `host.objects.batch`);
+  giving both is a usage error. The "needs Wave 5" refusal is gone.

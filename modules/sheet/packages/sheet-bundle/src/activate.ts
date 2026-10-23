@@ -516,6 +516,27 @@ export function activate(host: BundleHost): BundleHandle {
       void host.shell?.openPanel?.(PROPERTIES_PANEL_ID);
     },
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.pasteSpecial",
+    title: t(COMMANDS.pasteSpecial),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => session.openPasteSpecial(),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.dataValidation",
+    title: t(COMMANDS.dataValidation),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "validation" }),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.circleInvalid",
+    title: t(COMMANDS.circleInvalid),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.toggleInvalidCircles(),
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
@@ -694,6 +715,13 @@ export function activate(host: BundleHost): BundleHandle {
                 includeGridRules: false,
               });
             },
+            // P7 — the host's Character / Paragraph / style panels write
+            // the selected cells (sheet ADR 518 `setStyle`).
+            applyStyle: (patch) => {
+              const r = session.setStyle(patch);
+              return r.ok ? { ok: true } : { ok: false, message: r.message };
+            },
+            swatchRef: (id) => session.documentSwatchRef(id),
           }).provider,
         )
       : null;

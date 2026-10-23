@@ -37,7 +37,9 @@ import {
 import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
+  withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
+import { dataToolsStub } from "./data-tools-stub";
 
 afterEach(cleanup);
 
@@ -56,7 +58,7 @@ const scene: GridScene = {
   selection: { anchorRow: 0, anchorCol: 0, rows: 1, cols: 1 },
 };
 
-function fakeSession() {
+function fakeSession(shown: GridScene = scene) {
   const calls: Array<[string, ...unknown[]]> = [];
   let edit: {
     row: number;
@@ -69,7 +71,22 @@ function fakeSession() {
     for (const l of listeners) l();
   };
   let lock = false;
+  let pasteCard = false;
+  let activeSheet = 0;
   const session: FrameSurfaceSession = {
+    ...dataToolsStub(),
+    undoCellEdit: () => false,
+    pasteSpecialOpen: () => pasteCard,
+    closePasteSpecial: () => {
+      pasteCard = false;
+      changed();
+    },
+    pasteAtSelection: async (options) => {
+      calls.push(["paste", options]);
+      pasteCard = false;
+      changed();
+      return { ok: true as const, rows: 1, cols: 1 };
+    },
     frameView: () => ({ topLeft: "A1", lock }),
     setFrameViewLock: (next) => {
       calls.push(["lock", next]);
@@ -79,7 +96,7 @@ function fakeSession() {
     },
     attachFrameSurface(sink, area) {
       calls.push(["attach", area]);
-      sink(scene);
+      sink(shown);
       return () => calls.push(["detach"]);
     },
     pointerDownInFrame: (x, y, m) => (calls.push(["down", x, y, m]), true),
@@ -133,10 +150,36 @@ function fakeSession() {
     functionList: () => [
       { name: "SUM", family: "math", minArgs: 1, maxArgs: null },
     ],
-    sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
-    state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
+    sheets: () => [
+      { id: 0, name: "Sheet1", rows: 3, cols: 3 },
+      { id: 1, name: "Prices", rows: 3, cols: 3 },
+    ],
+    state: () =>
+      ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    documentSwatchColors: async (ids) =>
+      new Map(ids.map((id) => [id, "#123456"] as [string, string])),
+    documentStyleRevision: () => 0,
+    documentTextDefault: async () => ({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    }),
+    documentFontFace: async (family, style) => {
+      calls.push(["face", family, style]);
+      return null;
+    },
+    setFrameSheet: (id) => {
+      calls.push(["sheet", id]);
+      activeSheet = id;
+      changed();
+      return true;
+    },
   };
-  return { session, calls };
+  const openPaste = () => {
+    pasteCard = true;
+    changed();
+  };
+  return { session, calls, openPaste };
 }
 
 function props(over: Partial<FrameSurfaceProps> = {}): FrameSurfaceProps {
@@ -274,6 +317,125 @@ describe("sheet frame surface", () => {
     expect(r.getByTestId("sheet-bar-lock").getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  it("paste special's card pastes with the chosen options", () => {
+    const { session, calls, openPaste } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    expect(r.queryByTestId("sheet-paste-special")).toBeNull();
+    act(() => openPaste());
+    const card = r.getByTestId("sheet-paste-special");
+    fireEvent.click(r.getByLabelText("Values"));
+    fireEvent.click(r.getByLabelText("Add"));
+    fireEvent.click(r.getByLabelText("Transpose"));
+    fireEvent.click(r.getByTestId("sheet-paste-special-ok"));
+    expect(calls).toContainEqual([
+      "paste",
+      { what: "values", operation: "add", skipBlanks: false, transpose: true },
+    ]);
+    // The paste closes the card.
+    expect(card.isConnected).toBe(false);
+  });
+
+  it("the bar's sheet menu switches the frame to another sheet", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    const select = r.getByTestId("sheet-bar-sheet") as HTMLSelectElement;
+    expect(select.value).toBe("0");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(calls).toContainEqual(["sheet", 1]);
+    expect((r.getByTestId("sheet-bar-sheet") as HTMLSelectElement).value).toBe(
+      "1",
+    );
+  });
+
+  it("asks the document for the faces the cells use", async () => {
+    const g = globalThis as { FontFace?: unknown };
+    const hadFontFace = g.FontFace !== undefined;
+    if (!hadFontFace)
+      g.FontFace = class {
+        load() {
+          return Promise.resolve(this);
+        }
+      };
+    const doc = document as unknown as { fonts?: unknown };
+    const hadFonts = "fonts" in document;
+    if (!hadFonts)
+      Object.defineProperty(document, "fonts", {
+        configurable: true,
+        value: { add() {} },
+      });
+    try {
+      const styled: GridScene = {
+        ...scene,
+        styles: [
+          {
+            key: 1,
+            bold: true,
+            italic: false,
+            borderTop: false,
+            borderRight: false,
+            borderBottom: false,
+            borderLeft: false,
+            fontName: "Minion Pro",
+          },
+        ],
+      };
+      const { session, calls } = fakeSession(styled);
+      render(createElement(makeSheetFrameSurface(session).render, props()));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(calls).toContainEqual(["face", "Minion Pro", "Bold"]);
+      // The document's default face is asked for too (un-styled cells).
+      expect(calls).toContainEqual(["face", "Minion Pro", "Regular"]);
+    } finally {
+      if (!hadFontFace) delete g.FontFace;
+      if (!hadFonts) delete doc.fonts;
+    }
+  });
+
+  it("draws referenced document swatches in the document's current colours", () => {
+    const styled: GridScene = {
+      ...scene,
+      styles: [
+        {
+          key: 1,
+          bold: false,
+          italic: false,
+          borderTop: false,
+          borderRight: false,
+          borderBottom: true,
+          borderLeft: false,
+          fillRgb: "#FF0000",
+          fillSwatch: "Color/Brand",
+          textRgb: "#000000",
+          borderLines: {
+            bottom: {
+              style: "thin",
+              weightPt: 0.5,
+              rgb: "#000000",
+              swatch: "Color/Ink",
+            },
+          },
+        },
+      ],
+    };
+    const shown = withSwatchColors(
+      styled,
+      new Map([
+        ["Color/Brand", "#c8102e"],
+        ["Color/Ink", "#222222"],
+      ]),
+    );
+    expect(shown.styles[0]?.fillRgb).toBe("#c8102e");
+    // A plain colour (no reference) stays as the workbook has it.
+    expect(shown.styles[0]?.textRgb).toBe("#000000");
+    expect(shown.styles[0]?.borderLines?.bottom?.rgb).toBe("#222222");
   });
 
   it("detaches on unmount", () => {

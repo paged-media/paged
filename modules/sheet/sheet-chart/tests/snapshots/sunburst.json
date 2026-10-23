@@ -1,0 +1,213 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Sunburst",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 120.6
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "x": 325.25,
+      "y": 127.25
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 314.25,
+      "y": 133.2
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Veg",
+      "sizePt": 9.0,
+      "x": 325.25,
+      "y": 139.85
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 360.0,
+      "fill": "#ED7D31",
+      "innerR": 14.763,
+      "kind": "wedge",
+      "r": 56.591,
+      "startDeg": 230.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Veg",
+      "sizePt": 8.0,
+      "x": 123.79,
+      "y": 118.157
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 360.0,
+      "fill": "#F09150",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 320.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Bean",
+      "sizePt": 8.0,
+      "x": 129.616,
+      "y": 60.403
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 320.0,
+      "fill": "#F09150",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 260.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Kale",
+      "sizePt": 8.0,
+      "x": 83.293,
+      "y": 106.726
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 260.0,
+      "fill": "#F09150",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 230.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Leek",
+      "sizePt": 8.0,
+      "x": 85.881,
+      "y": 165.99
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 230.0,
+      "fill": "#4472C4",
+      "innerR": 14.763,
+      "kind": "wedge",
+      "r": 56.591,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Fruit",
+      "sizePt": 8.0,
+      "x": 188.46,
+      "y": 148.313
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 230.0,
+      "fill": "#6087CD",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 150.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Plum",
+      "sizePt": 8.0,
+      "x": 142.666,
+      "y": 209.563
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 150.0,
+      "fill": "#6087CD",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 100.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Pear",
+      "sizePt": 8.0,
+      "x": 219.614,
+      "y": 177.69
+    },
+    {
+      "cx": 156.125,
+      "cy": 130.4,
+      "endDeg": 100.0,
+      "fill": "#6087CD",
+      "innerR": 56.591,
+      "kind": "wedge",
+      "r": 98.42,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "Apple",
+      "sizePt": 8.0,
+      "x": 215.498,
+      "y": 83.415
+    }
+  ],
+  "widthPt": 360.0
+}
