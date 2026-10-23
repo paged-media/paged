@@ -313,6 +313,20 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect(s.styleAtTarget()?.fillSwatch?.model).toBe("spot");
   });
 
+  it("full screen outlines where the page window lands on leaving", async () => {
+    const { s, frame } = await placed();
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    expect(s.pageWindowsOnLeave()).toEqual([
+      { top: 0, left: 0, bottom: 4, right: 2 },
+    ]);
+    expect(s.scrollInFrame(10, 1)).toBe(true);
+    const [w] = s.pageWindowsOnLeave();
+    expect(w!.top).toBe(10);
+    expect(w!.left).toBe(1);
+    expect(w!.bottom - w!.top).toBe(4);
+    s.hideGridInFrame();
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);

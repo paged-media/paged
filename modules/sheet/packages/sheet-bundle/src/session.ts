@@ -980,6 +980,16 @@ export interface WorkbookSession extends DataToolsApi {
   /** Every area of the selection: those Ctrl/Cmd-click added, then the
    *  current one. */
   selectionAreas(): GridSelection[];
+  /** Where the entered window frame's page window will land when the frame
+   *  is left (the same rule leaving applies, `viewToContain`), as sheet
+   *  cell ranges — one per frame of a chain. Empty for a frame that is not
+   *  a window. The full-screen grid outlines them. */
+  pageWindowsOnLeave(): {
+    top: number;
+    left: number;
+    bottom: number;
+    right: number;
+  }[];
   /** What a press at `(x, y)` would grab: the selection's border (move),
    *  the fill handle, or a cell — for the pointer's cursor. */
   grabAt(contentX: number, contentY: number): "move" | "fill" | "cell" | null;
@@ -6610,6 +6620,44 @@ export function createWorkbookSession(
       applyModel(mods?.shift && m ? extendTo(m, hit) : collapsed(hit));
       drag = { kind: "select" };
       return true;
+    },
+
+    pageWindowsOnLeave() {
+      const id = enteredContinuation?.head ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!info || info.sizing !== "window" || !info.view || !info.content)
+        return [];
+      const page = pageBodyTracks(info.content);
+      if (page.rows.length === 0 || page.cols.length === 0) return [];
+      const at = cellOfA1(info.view.topLeft) ?? { row: 0, col: 0 };
+      let next = at;
+      const vp = lastGridScene?.viewport;
+      if (!info.view.lock && vp && lastGridWindow) {
+        const win = lastGridWindow;
+        next = viewToContain(at, page, {
+          rows: Array.from(
+            { length: Math.max(0, vp.rows - (vp.frozenRows ?? 0)) },
+            (_, i) => win.firstRow + i,
+          ),
+          cols: Array.from(
+            { length: Math.max(0, vp.cols - (vp.frozenCols ?? 0)) },
+            (_, i) => win.firstCol + i,
+          ),
+        });
+      }
+      const dRow = next.row - at.row;
+      const dCol = next.col - at.col;
+      const left = Math.min(...page.cols) + dCol;
+      const right = Math.max(...page.cols) + dCol;
+      // A chain: each frame's rows start where the last window split them.
+      const starts = info.chainStarts ?? [Math.min(...page.rows)];
+      const last = Math.max(...page.rows);
+      return starts.map((start, i) => ({
+        top: start + dRow,
+        bottom: (i + 1 < starts.length ? starts[i + 1]! - 1 : last) + dRow,
+        left,
+        right,
+      }));
     },
 
     selectionAreas() {
