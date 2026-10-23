@@ -38,6 +38,7 @@ import {
   gridSceneToSceneLayer,
   hitCell,
   hitFillHandle,
+  hitSelectionBorder,
   cellOfA1,
   contentHash,
   parseBinding,
@@ -895,8 +896,11 @@ export interface WorkbookSession extends DataToolsApi {
   pointerDownInFrame(
     contentX: number,
     contentY: number,
-    mods?: { shift?: boolean },
+    mods?: { shift?: boolean; copy?: boolean },
   ): boolean;
+  /** What a press at `(x, y)` would grab: the selection's border (move),
+   *  the fill handle, or a cell — for the pointer's cursor. */
+  grabAt(contentX: number, contentY: number): "move" | "fill" | "cell" | null;
   pointerMoveInFrame(contentX: number, contentY: number): boolean;
   pointerUpInFrame(contentX: number, contentY: number): boolean;
   /** Scroll the in-frame grid window by rows / columns (never above A1). */
@@ -1290,7 +1294,118 @@ export function createWorkbookSession(
   let drag:
     | { kind: "select" }
     | { kind: "fill"; source: GridSelection; target: GridSelection | null }
+    | {
+        kind: "move";
+        source: GridSelection;
+        anchor: { row: number; col: number };
+        target: GridSelection | null;
+        copy: boolean;
+      }
     | null = null;
+
+  /** Excel's auto-scroll: a drag past the cell area's edge scrolls the
+   *  window one track toward it per move; answers the cell under the
+   *  clamped point. */
+  function autoScrollHit(
+    contentX: number,
+    contentY: number,
+  ): { row: number; col: number } | null {
+    if (!lastGridScene || !lastGridWindow) return null;
+    const w = lastGridWindow.wPt;
+    const h = lastGridWindow.hPt;
+    const dRow = contentY > h ? 1 : contentY < 0 ? -1 : 0;
+    const dCol = contentX > w ? 1 : contentX < 0 ? -1 : 0;
+    if (dRow === 0 && dCol === 0) return null;
+    const scene = lastGridScene;
+    const vp = scene.viewport;
+    const xs = vp.xOffsets;
+    const ys = vp.yOffsets;
+    const cx = Math.min(
+      Math.max(contentX, 0.5),
+      (xs[xs.length - 1] ?? 1) - 0.5,
+    );
+    const cy = Math.min(
+      Math.max(contentY, 0.5),
+      (ys[ys.length - 1] ?? 1) - 0.5,
+    );
+    const hit = hitCell(scene, cx, cy);
+    if (!hit) return null;
+    // The scene repaints asynchronously: place the cell by the window's
+    // new origin, which the scroll moves at once.
+    api.scrollInFrame(dRow, dCol);
+    const win = lastGridWindow;
+    return {
+      row: Math.max(0, hit.row - vp.firstRow + win.firstRow),
+      col: Math.max(0, hit.col - vp.firstCol + win.firstCol),
+    };
+  }
+
+  /** Move (or, with `copy`, copy) the cells of `source` to `target` — one
+   *  undo step. A move keeps its formulas as they are; a copy re-addresses
+   *  them like a paste. The source cells the target does not cover are
+   *  emptied on a move. (Cell formats stay where they are.) */
+  function moveCells(
+    source: GridSelection,
+    target: GridSelection,
+    copy: boolean,
+  ): SessionResult {
+    const engine = state.engine;
+    const sheet = state.activeSheet;
+    if (!engine || sheet === null || !engine.getRangeInputs)
+      return { ok: false, message: "open a workbook first" };
+    const range = selectionRangeA1(
+      source.anchorRow,
+      source.anchorCol,
+      source.rows,
+      source.cols,
+    );
+    let inputs = engine.getRangeInputs(sheet, range);
+    const dRow = target.anchorRow - source.anchorRow;
+    const dCol = target.anchorCol - source.anchorCol;
+    if (copy && engine.shiftFormulas) {
+      try {
+        inputs = engine.shiftFormulas(sheet, inputs, dRow, dCol);
+      } catch {
+        return { ok: false, message: "the copy could not adjust its formulas" };
+      }
+    }
+    const targets: CellEditRecord[] = [];
+    inputs.forEach((row, r) =>
+      row.forEach((next, c) =>
+        targets.push({
+          sheet,
+          row: target.anchorRow + r,
+          col: target.anchorCol + c,
+          prevInput: "",
+          nextInput: next,
+        }),
+      ),
+    );
+    if (!copy) {
+      const inTarget = (r: number, c: number) =>
+        r >= target.anchorRow &&
+        r < target.anchorRow + target.rows &&
+        c >= target.anchorCol &&
+        c < target.anchorCol + target.cols;
+      for (let r = source.anchorRow; r < source.anchorRow + source.rows; r++)
+        for (let c = source.anchorCol; c < source.anchorCol + source.cols; c++)
+          if (!inTarget(r, c))
+            targets.push({
+              sheet,
+              row: r,
+              col: c,
+              prevInput: "",
+              nextInput: "",
+            });
+    }
+    const { written, journaled } = writeTargets(engine, targets, "moveCells");
+    if (journaled) journalBatch(written);
+    else markEdited();
+    emitter.emit({ kind: "cells", regions: regionsOf(written) });
+    applyModel(modelOfRect(target));
+    void submitInFrameGrid();
+    return { ok: true };
+  }
   let fillPreview: GridSelection | null = null;
   let copySource: {
     sheet: number;
@@ -6038,6 +6153,21 @@ export function createWorkbookSession(
         drag = { kind: "fill", source: sel, target: null };
         return true;
       }
+      // Excel — a press on the selection's border grabs it to move.
+      if (sel && hitSelectionBorder(lastGridScene, contentX, contentY)) {
+        const at = hitCell(lastGridScene, contentX, contentY);
+        if (at) {
+          if (cellEdit) commitEdit();
+          drag = {
+            kind: "move",
+            source: sel,
+            anchor: at,
+            target: null,
+            copy: !!mods?.copy,
+          };
+          return true;
+        }
+      }
       const hit = hitCell(lastGridScene, contentX, contentY);
       if (!hit) return false;
       // A click elsewhere COMMITS the open edit (Excel).
@@ -6048,10 +6178,34 @@ export function createWorkbookSession(
       return true;
     },
 
+    grabAt(contentX, contentY) {
+      if (!lastGridScene) return null;
+      if (state.gridSelection) {
+        if (hitFillHandle(lastGridScene, contentX, contentY)) return "fill";
+        if (hitSelectionBorder(lastGridScene, contentX, contentY))
+          return "move";
+      }
+      return hitCell(lastGridScene, contentX, contentY) ? "cell" : null;
+    },
+
     pointerMoveInFrame(contentX, contentY) {
       if (!drag || !lastGridScene) return false;
-      const hit = hitCell(lastGridScene, contentX, contentY);
+      const hit =
+        autoScrollHit(contentX, contentY) ??
+        hitCell(lastGridScene, contentX, contentY);
       if (!hit) return false;
+      if (drag.kind === "move") {
+        const d = drag;
+        const target: GridSelection = {
+          ...d.source,
+          anchorRow: Math.max(0, d.source.anchorRow + hit.row - d.anchor.row),
+          anchorCol: Math.max(0, d.source.anchorCol + hit.col - d.anchor.col),
+        };
+        drag = { ...d, target };
+        fillPreview = target;
+        void submitInFrameGrid();
+        return true;
+      }
       if (drag.kind === "select") {
         const m = currentModel();
         if (!m || (m.focus.row === hit.row && m.focus.col === hit.col))
@@ -6070,6 +6224,21 @@ export function createWorkbookSession(
       const d = drag;
       drag = null;
       if (!d) return false;
+      if (d.kind === "move") {
+        fillPreview = null;
+        const t = d.target;
+        if (
+          t &&
+          (t.anchorRow !== d.source.anchorRow ||
+            t.anchorCol !== d.source.anchorCol)
+        ) {
+          const r = moveCells(d.source, t, d.copy);
+          if (!r.ok) host.log.warn(`move: ${r.message}`);
+        } else {
+          void submitInFrameGrid();
+        }
+        return true;
+      }
       if (d.kind === "fill") {
         fillPreview = null;
         if (d.target) {

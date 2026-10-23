@@ -168,6 +168,7 @@ function fakeSession(shown: GridScene = scene) {
       return { ok: true as const };
     },
     styleAtTarget: () => null,
+    grabAt: () => "cell" as const,
     setStyle: (patch) => {
       calls.push(["style", patch]);
       return { ok: true as const };
@@ -234,7 +235,7 @@ describe("sheet frame surface", () => {
       shiftKey: true,
     });
     fireEvent.pointerUp(root, { button: 0, clientX: hw + 10, clientY: hh + 5 });
-    expect(calls).toContainEqual(["down", 10, 5, { shift: true }]);
+    expect(calls).toContainEqual(["down", 10, 5, { shift: true, copy: false }]);
     expect(calls).toContainEqual(["up", 10, 5]);
   });
 
