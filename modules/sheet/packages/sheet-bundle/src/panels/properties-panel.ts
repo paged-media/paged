@@ -56,11 +56,10 @@ import type { WorkbookSession } from "../session";
 export const PROPERTIES_PANEL_ID = "media.paged.sheet.panel.properties";
 
 type FieldKind =
-  "workbook" | "sheet" | "cell" | "range" | "namedRange" | "chart";
+  "workbook" | "sheet" | "cell" | "range" | "namedRange" | "chart" | "table";
 
 /** The schema-driven panel fields (ADR 323 / Wave 4), in panel order. Every
- *  entry is a writable row of its kind (a spec holds it to that); tables
- *  are read-only and have none. */
+ *  entry is a writable row of its kind (a spec holds it to that). */
 export const SHEET_PANEL_FIELDS: ReadonlyArray<{
   kind: FieldKind;
   path: string;
@@ -110,6 +109,14 @@ export const SHEET_PANEL_FIELDS: ReadonlyArray<{
   { kind: "chart", path: "valueAxisTitle", group: "Chart" },
   { kind: "chart", path: "valueAxisMin", group: "Chart" },
   { kind: "chart", path: "valueAxisMax", group: "Chart" },
+  { kind: "table", path: "name", group: "Table" },
+  { kind: "table", path: "range", group: "Table" },
+  { kind: "table", path: "totalsRow", group: "Table" },
+  { kind: "table", path: "style", group: "Table" },
+  { kind: "table", path: "bandedRows", group: "Table" },
+  { kind: "table", path: "bandedColumns", group: "Table" },
+  { kind: "table", path: "firstColumn", group: "Table" },
+  { kind: "table", path: "lastColumn", group: "Table" },
 ];
 
 const qualified = (kind: FieldKind) => `plugin:${PLUGIN_ID}/${kind}`;
@@ -124,6 +131,8 @@ export const BIND = {
   name: "sheet.properties.namedRange",
   charts: "sheet.properties.charts",
   chart: "sheet.properties.chart",
+  tables: "sheet.properties.tables",
+  table: "sheet.properties.table",
 } as const;
 
 const pathsOf = (group: string) =>
@@ -167,6 +176,7 @@ const GROUP_TITLES: Readonly<Record<string, string>> = {
   Workbook: PROPERTIES.workbook,
   "Named range": PROPERTIES.namedRange,
   Chart: PROPERTIES.chart,
+  Table: PROPERTIES.table,
 };
 
 const section = (
@@ -207,6 +217,12 @@ export const sheetPropertiesPanel = (): PanelSchema => ({
     {
       ...section("Chart", { bind: BIND.chart }, [
         list(BIND.charts, BIND.chart),
+      ]),
+      collapsible: true,
+    },
+    {
+      ...section("Table", { bind: BIND.table }, [
+        list(BIND.tables, BIND.table),
       ]),
       collapsible: true,
     },
@@ -274,6 +290,12 @@ export function publishPropertyBindings(
       selector: () => qualified("chart"),
       labelPath: "title",
       secondaryPath: "kind",
+    }),
+    publishObjectList(host, {
+      rows: BIND.tables,
+      select: BIND.table,
+      selector: () => qualified("table"),
+      secondaryPath: "range",
     }),
   ];
   // A workbook loading / switching sheets changes the lists the object
