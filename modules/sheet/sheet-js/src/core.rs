@@ -187,6 +187,10 @@ pub struct StyleSwap {
 #[serde(rename_all = "camelCase")]
 pub struct FilterResult {
     pub hidden_rows: Vec<u32>,
+    /// The cells the visibility change recalculated: SUBTOTAL and AGGREGATE
+    /// skip the rows a filter hides (W3). Absent when none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub changed: Vec<CellChange>,
 }
 
 /// Options shared by [`SheetSession::find_all`] / [`SheetSession::replace_all`]
@@ -1499,7 +1503,12 @@ impl SheetSession {
         if !self.engine_mut().set_filter_view(sheet, filters, hidden) {
             return Err(SessionError(format!("unknown sheet {sheet}")));
         }
-        Ok(FilterResult { hidden_rows })
+        let result = self.engine_mut().recalc_visibility();
+        let changed = self.changes_of(&result).changed;
+        Ok(FilterResult {
+            hidden_rows,
+            changed,
+        })
     }
 
     /// Which of `rows` satisfy `criterion` in column `col`.

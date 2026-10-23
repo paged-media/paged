@@ -82,9 +82,15 @@ const SEAMS = [
     op: "alignToMargins",
   },
   {
-    text: "${s.hint} — awaiting engine support",
+    // The Align panel's third scope; a message since E10, so the quoted
+    // text now reads as a seam string, as Page and Margins do.
+    text: "Spread — awaiting engine support",
+    op: "alignToSpread",
+  },
+  {
+    text: "{hint} — awaiting engine support",
     reason:
-      "the Pathfinder panel's per-op hints: a TEMPLATE, so the seam text is per-row and the op it waits on differs by row. The individual ops are covered by the capability matrix through pathfinder-panel's own spec rather than by a string match here",
+      "the Pathfinder panel's per-op hints: a MESSAGE with a {hint} parameter, so the seam text is per-row and the op it waits on differs by row. The individual ops are covered by the capability matrix through pathfinder-panel's own spec rather than by a string match here",
   },
   {
     text: "awaiting the engine",

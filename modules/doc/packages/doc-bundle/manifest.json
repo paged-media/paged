@@ -194,9 +194,8 @@
                 "kind": "text",
                 "multiline": true
               },
-              "access": "derived",
               "title": "Text",
-              "summary": "A paragraph's text; a table's cells (tab between cells, newline between rows); empty for an image."
+              "summary": "A paragraph's text; a table's cells (tab between cells, newline between rows); empty for an image. Writable for a body paragraph: its first run takes the text and keeps its look, the other runs are emptied, in the .docx and the poured text in one undo step."
             },
             {
               "path": "paragraphStyle",
@@ -206,6 +205,41 @@
               "nullable": true,
               "access": "readOnly",
               "title": "Paragraph style"
+            },
+            {
+              "path": "headingLevel",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "nullable": true,
+              "access": "readOnly",
+              "title": "Heading level",
+              "summary": "1–9 for a paragraph in a heading style (by id or by name), else null."
+            },
+            {
+              "path": "bookmarks",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "access": "readOnly",
+              "title": "Bookmarks",
+              "summary": "The Word bookmarks that start in the paragraph, by name."
+            },
+            {
+              "path": "listItems",
+              "type": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
+              },
+              "nullable": true,
+              "title": "List items",
+              "summary": "The texts of the Word list the paragraph is an item of (its contiguous paragraphs with the same w:numId); null for a paragraph that is not a list item. A write sets the items: the first take the new texts, the rest are removed, and items past the old count are copies of the last item (the same list and look)."
             },
             {
               "path": "runCount",
@@ -519,6 +553,20 @@
               }
             }
           }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.doc.blockText",
+          "title": "Word paragraph text"
+        },
+        {
+          "kind": "media.paged.doc.mergeField",
+          "title": "Word merge field"
+        },
+        {
+          "kind": "media.paged.doc.listItems",
+          "title": "Word list items"
         }
       ]
     }

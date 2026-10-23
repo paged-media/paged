@@ -30,6 +30,7 @@
 // and the swatch collection once per document REVISION, so a selection
 // change reads neither; one part read per reload.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -113,7 +114,7 @@ describe("Live paint panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-live-paint-row]")).toBe(0);
       expect(panel.disabled("[data-draw-live-paint-make]")).toBe(true);
       expect(panel.get("[data-draw-live-paint-note]").textContent).toBe(
-        LIVE_PAINT_NOTE,
+        t(LIVE_PAINT_NOTE),
       );
     });
 

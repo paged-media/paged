@@ -25,6 +25,8 @@
 // callbacks (typically the setters from DocumentContext). It does
 // NOT depend on React; pass it the setters and it dispatches.
 
+import { t } from "@paged-media/strings";
+import { LOAD } from "./messages";
 import type { CanvasClient } from "@paged-media/client";
 import type { DocumentHandle, PageId } from "@paged-media/client";
 
@@ -199,7 +201,7 @@ export async function createBlankDocument(
  */
 export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
   try {
-    const fontResp = await fetch("/fonts/Inter.ttf");
+    const fontResp = await fetch(defaultFontUrls.roman);
     if (fontResp.ok) {
       const bytes = new Uint8Array(await fontResp.arrayBuffer());
       // A static host answers a missing file with its SPA index.html and a
@@ -211,6 +213,24 @@ export async function fetchDefaultFont(): Promise<Uint8Array | undefined> {
     // fall through to undefined — the caller warns.
   }
   return undefined;
+}
+
+/**
+ * Where the default faces are served: the editor app's own `/fonts/`. An
+ * embedding build that ships them elsewhere (the `@paged-media/editor`
+ * package, beside its modules) says so once, before the first load.
+ */
+let defaultFontUrls = {
+  roman: "/fonts/Inter.ttf",
+  italic: "/fonts/Inter-Italic.ttf",
+};
+
+export function setDefaultFontUrls(urls: {
+  roman: string;
+  italic: string;
+}): void {
+  defaultFontUrls = { ...urls };
+  defaultItalic = null;
 }
 
 /** The family the editor's bundled default face (`/fonts/Inter.ttf`)
@@ -229,7 +249,7 @@ export async function fetchDefaultFontFaces(): Promise<
 > {
   defaultItalic ??= (async () => {
     try {
-      const resp = await fetch("/fonts/Inter-Italic.ttf");
+      const resp = await fetch(defaultFontUrls.italic);
       if (!resp.ok) return undefined;
       const bytes = new Uint8Array(await resp.arrayBuffer());
       return isFontFile(bytes) ? bytes : undefined;
@@ -260,9 +280,7 @@ function isFontFile(bytes: Uint8Array): boolean {
 /** U5/A7 — a missing default font is the "blank text" precondition;
  *  say so where the user can see it instead of failing silently. */
 function warnDefaultFontUnavailable(cb: DocumentLoaderCallbacks): void {
-  cb.pushWarning(
-    "default font unavailable — text in documents with missing fonts will not render",
-  );
+  cb.pushWarning(t(LOAD.fontUnavailable));
 }
 
 /** One page's thumbnail as an object URL (the caller revokes it). The

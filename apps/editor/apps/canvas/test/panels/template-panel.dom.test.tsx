@@ -58,7 +58,8 @@ describe("Template panel", () => {
       op: "insertTextFrame",
       args: { pageId: h.handle!.pageIds[0], bounds: [100, 40, 160, 300] },
     } as never);
-    const id = (made as { payload: { createdId: never } }).payload.createdId;
+    const id = (made as unknown as { payload: { createdId: never } }).payload
+      .createdId;
 
     // An editor may not write the template: the panel offers authoring.
     expect(
@@ -137,7 +138,8 @@ describe("Template panel", () => {
       op: "insertTextFrame",
       args: { pageId: h.handle!.pageIds[0], bounds: [100, 40, 160, 300] },
     } as never);
-    const id = (made as { payload: { createdId: never } }).payload.createdId;
+    const id = (made as unknown as { payload: { createdId: never } }).payload
+      .createdId;
     await h.click(q(h, '[data-template-role="author"]')!);
     await h.select([id]);
     await until(h, "[data-template-save]");

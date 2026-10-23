@@ -33,6 +33,23 @@ import type {
   MenuItemContribution,
 } from "@paged-media/shell";
 import { color, radius } from "@paged-media/panel-kit";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.globalLightDialog", {
+  command: "Global light…",
+  title: "Global light",
+  angle: "Angle",
+  altitude: "Altitude",
+  done: "Done",
+});
+
+// The menu's segments and the command's category stay English (they are
+// identities); the shell shows them through these messages.
+defineMessages("menu", {
+  Effects: "Effects",
+  "Global light…": "Global light…",
+});
+defineMessages("commandCategory", { Object: "Object" });
 
 export const GLOBAL_LIGHT_COMMAND = "paged.effects.globalLight";
 
@@ -58,7 +75,9 @@ export function openGlobalLight(): void {
 export const GLOBAL_LIGHT_COMMANDS: CommandContribution[] = [
   {
     id: GLOBAL_LIGHT_COMMAND,
-    title: "Global light…",
+    get title() {
+      return t(M.command);
+    },
     category: "Object",
     handler: () => openGlobalLight(),
   },
@@ -79,6 +98,7 @@ export function GlobalLightDialog() {
 }
 
 function GlobalLightForm() {
+  const strings = useStrings();
   const close = () => setOpen(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,19 +146,19 @@ function GlobalLightForm() {
             id="global-light-title"
             style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600 }}
           >
-            Global light
+            {strings.t(M.title)}
           </h2>
           <div className="flex flex-col gap-1.5">
             <PropertyField
               path="documentGlobalLightAngle"
-              label="Angle"
+              label={strings.t(M.angle)}
               targets={DOC_TARGETS}
               schemaKind="doc"
               chrome={{ suffix: "°" }}
             />
             <PropertyField
               path="documentGlobalLightAltitude"
-              label="Altitude"
+              label={strings.t(M.altitude)}
               targets={DOC_TARGETS}
               schemaKind="doc"
               chrome={{ suffix: "°" }}
@@ -157,7 +177,7 @@ function GlobalLightForm() {
               onClick={close}
               style={buttonStyle}
             >
-              Done
+              {strings.t(M.done)}
             </button>
           </div>
         </FocusScope>

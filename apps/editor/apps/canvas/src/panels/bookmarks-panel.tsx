@@ -24,21 +24,34 @@
 
 import { ListRows, useCollection } from "@paged-media/shell";
 import type { BookmarkSummary, PageSummary } from "@paged-media/client";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.bookmarksPanel", {
+  page: "Page {name}",
+  aPage: "A page",
+  aTextAnchor: "A text anchor",
+  loading: "Loading bookmarks…",
+  empty: "No bookmarks in this document.",
+});
 
 // R13 (ADR 254) — a bookmark's destination in words: the page it goes to
 // by its folio, never the destination object's id.
 function destinationText(
+  strings: Strings,
   b: BookmarkSummary,
   pages: readonly PageSummary[] | null,
 ): string | undefined {
   if (b.destinationPage) {
     const page = pages?.find((p) => p.selfId === b.destinationPage);
-    return page ? `Page ${page.name ?? page.index}` : "A page";
+    return page
+      ? strings.t(M.page, { name: page.name ?? page.index })
+      : strings.t(M.aPage);
   }
-  return b.destination ? "A text anchor" : undefined;
+  return b.destination ? strings.t(M.aTextAnchor) : undefined;
 }
 
 export function BookmarksPanel() {
+  const strings = useStrings();
   const items = useCollection<BookmarkSummary>("bookmarks");
   const pages = useCollection<PageSummary>("pages");
   if (items === null) {
@@ -47,7 +60,7 @@ export function BookmarksPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-bookmarks-panel="loading"
       >
-        Loading bookmarks…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -55,13 +68,13 @@ export function BookmarksPanel() {
     <div data-bookmarks-panel="ready">
       {items.length === 0 ? (
         <div className="p-3 text-xs text-muted-foreground" data-empty-bookmarks>
-          No bookmarks in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-bookmark-list>
           <ListRows
             rows={items.map((b) => {
-              const to = destinationText(b, pages);
+              const to = destinationText(strings, b, pages);
               return {
                 key: b.selfId,
                 icon: "panel-bookmarks",

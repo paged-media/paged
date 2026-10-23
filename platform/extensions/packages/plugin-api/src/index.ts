@@ -102,6 +102,8 @@ export type { BundleHandle, PagedBundle } from "./bundle.js";
 
 export type {
   BundleHost,
+  StringsSurface,
+  MessageParams,
   ContributionSurface,
   SceneLayerSurface,
   SceneLayerSubmitResult,

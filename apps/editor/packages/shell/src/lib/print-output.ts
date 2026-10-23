@@ -27,6 +27,8 @@
 // said was not active, and Health warned about PDF/X-4 while Export read
 // "Ready · PDF 1.7".
 
+import { t } from "@paged-media/strings";
+import { PRINT } from "./messages";
 import type { DocumentMeta } from "@paged-media/client";
 
 /** The standard the Print PDF target exports by default. */
@@ -72,10 +74,10 @@ export function printOutputFacts(
  *  profile" when there is none. Never the bare name of a profile whose
  *  bytes the editor does not have. */
 export function workingProfileLabel(facts: PrintOutputFacts): string {
-  if (facts.profileName == null) return "No CMYK profile";
+  if (facts.profileName == null) return t(PRINT.noProfile);
   return facts.profileActive
     ? facts.profileName
-    : `${facts.profileName} · not loaded`;
+    : t(PRINT.notLoaded, { profile: facts.profileName });
 }
 
 /** The standard's display name. */
@@ -86,13 +88,13 @@ export function printStandardLabel(standard: PrintStandard): string {
 /** The Print PDF readiness pill (Export Center, its inspector, Health,
  *  the Document Map): either standard exports, so both read ready. */
 export function printReadinessLabel(facts: PrintOutputFacts): string {
-  return facts.standard === "pdfx4" ? "Ready · X-4" : "Ready · PDF 1.7";
+  return facts.standard === "pdfx4" ? t(PRINT.readyX4) : t(PRINT.readyPdf17);
 }
 
 /** Why the print PDF is not PDF/X-4, for a tooltip; `null` when it is. */
 export function printStandardReason(facts: PrintOutputFacts): string | null {
   if (facts.standard === "pdfx4") return null;
   return facts.profileName == null
-    ? "No output intent: the document has no CMYK working space, so the print PDF is PDF 1.7. Choose a profile in Color settings for PDF/X-4."
-    : `No output intent: ${facts.profileName} is named but not loaded, so the print PDF is PDF 1.7. Load the profile in Color settings for PDF/X-4.`;
+    ? t(PRINT.noIntentNoProfile)
+    : t(PRINT.noIntentNotLoaded, { profile: facts.profileName });
 }

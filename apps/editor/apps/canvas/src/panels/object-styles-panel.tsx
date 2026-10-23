@@ -29,9 +29,16 @@
 
 import { useObjectField } from "@paged-media/shell";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { StyleApplyPanel } from "./style-apply";
 
+const M = defineMessages("app.objectStylesPanel", {
+  newStyle: "New object style",
+});
+
 export function ObjectStylesPanel() {
+  const strings = useStrings();
   // ADR 323 — the applied style is an object-model field on the selection.
   const applied = useObjectField({
     path: "appliedObjectStyle",
@@ -47,7 +54,7 @@ export function ObjectStylesPanel() {
         testId="object-styles"
         createOp="createObjectStyle"
         deleteOp="deleteObjectStyle"
-        newName="New object style"
+        newName={strings.t(M.newStyle)}
       />
     </div>
   );

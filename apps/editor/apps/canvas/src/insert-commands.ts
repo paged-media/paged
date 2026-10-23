@@ -93,6 +93,56 @@ import { layoutPages, type PageRect } from "./ui/layout";
 import { pickFiles } from "./shell-file-picker";
 import type { PlaceDropPayload } from "@paged-media/shell";
 import { refusalOf } from "./object-commands";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.insertCommands", {
+  insertTextFrame: "Insert text frame",
+  insertRectangle: "Insert rectangle",
+  insertEllipse: "Insert ellipse",
+  insertLine: "Insert line",
+  insertTable: "Insert table",
+  deletePage: "Delete page",
+  placeImage: "Place image…",
+  addPage: "Add page",
+  placeImageVerb: "Place image",
+  needsDocument: "{verb} needs an open document. Open or create one first.",
+  editContextBlocked:
+    "{verb} inserts page items, and you are editing inside a {type}. Leave the frame (Esc) to insert into the document.",
+  refused: "{verb} refused: {reason}",
+  deletePageNoPage: "Delete page needs a page in view.",
+  onlyPage:
+    "this is the document's only page. Add another page first, or close the document.",
+  psdNoPlugin: `Place image: "{name}" is a Photoshop file, and no loaded plugin reads one.`,
+  cannotDecode: `Place image: could not decode "{name}" as an image.`,
+  importerFailed: `Place image: {importer} could not read "{name}" — {error}`,
+});
+
+// The words of this file's menu rows; the shell's menu bar shows each
+// path segment through them (`menu.<segment>`).
+defineMessages("menu", {
+  "Data sources…": "Data sources…",
+  "Bindings…": "Bindings…",
+  "Dataset preview…": "Dataset preview…",
+  "Keyboard shortcuts": "Keyboard shortcuts",
+  "Insert text frame": "Insert text frame",
+  "Insert rectangle": "Insert rectangle",
+  "Insert ellipse": "Insert ellipse",
+  "Insert line": "Insert line",
+  "Insert table": "Insert table",
+  "Place…": "Place…",
+  "Add page": "Add page",
+  "Delete page": "Delete page",
+  Ellipse: "Ellipse",
+  Line: "Line",
+  Rectangle: "Rectangle",
+  Table: "Table",
+  "Text frame": "Text frame",
+});
+
+// The palette categories of this file's commands (`commandCategory.<name>`).
+defineMessages("commandCategory", {
+  Insert: "Insert",
+});
 
 export const PAGED_INSERT_TEXT_FRAME = "paged.insert.textFrame";
 export const PAGED_INSERT_RECTANGLE = "paged.insert.rectangle";
@@ -167,15 +217,11 @@ export async function deleteCurrentPage(
   if (blockedFor(paged, report, "Delete page")) return REFUSED;
   const target = currentPageTarget(paged);
   if (!target) {
-    report("error", "Delete page needs a page in view.");
+    report("error", t(M.deletePageNoPage));
     return REFUSED;
   }
   if ((paged.document.handle?.pageCount ?? 0) <= 1) {
-    report(
-      "error",
-      "Delete page refused: this is the document's only page. " +
-        "Add another page first, or close the document.",
-    );
+    report("error", refused("Delete page", t(M.onlyPage)));
     return REFUSED;
   }
   const reply = await paged.client.mutate({
@@ -184,7 +230,7 @@ export async function deleteCurrentPage(
   });
   const refusal = refusalOf(reply);
   if (refusal) {
-    report("error", `Delete page refused: ${refusal}`);
+    report("error", refused("Delete page", refusal));
     return REFUSED;
   }
   return outcomeOf(reply);
@@ -345,6 +391,28 @@ const insertApplies = (state: unknown): boolean => {
   return !s.editContext;
 };
 
+/** A verb's words for a report. */
+function verbText(verb: string): string {
+  const key = VERB_KEYS[verb];
+  return key ? t(key) : verb;
+}
+
+const VERB_KEYS: Readonly<Record<string, string>> = {
+  "Insert text frame": M.insertTextFrame,
+  "Insert rectangle": M.insertRectangle,
+  "Insert ellipse": M.insertEllipse,
+  "Insert line": M.insertLine,
+  "Insert table": M.insertTable,
+  "Delete page": M.deletePage,
+  "Place image": M.placeImageVerb,
+  "Add page": M.addPage,
+};
+
+/** "<verb> refused: <reason>", in the editor's words. */
+function refused(verb: string, reason: string): string {
+  return t(M.refused, { verb: verbText(verb), reason });
+}
+
 /** The runner-side guard. Returns true when the command must NOT run,
  *  having already told the user why — a report, not a silent return
  *  (the `paged.object.*` rule: the user pressed something and is owed
@@ -356,15 +424,14 @@ function blockedFor(
 ): boolean {
   const handle = paged.document.handle;
   if (!handle || handle.pageCount === 0) {
-    report("info", `${verb} needs an open document. Open or create one first.`);
+    report("info", t(M.needsDocument, { verb: verbText(verb) }));
     return true;
   }
   const ctx = paged.editContext;
   if (ctx) {
     report(
       "info",
-      `${verb} inserts page items, and you are editing inside a ${ctx.type}. ` +
-        "Leave the frame (Esc) to insert into the document.",
+      t(M.editContextBlocked, { verb: verbText(verb), type: ctx.type }),
     );
     return true;
   }
@@ -376,7 +443,7 @@ function blockedFor(
 function refusedTap(report: InsertReport, verb: string) {
   return (reply: MutateReply) => {
     const refusal = refusalOf(reply);
-    if (refusal) report("error", `${verb} refused: ${refusal}`);
+    if (refusal) report("error", refused(verb, refusal));
   };
 }
 
@@ -788,20 +855,14 @@ export async function placeImage(
     if (psd) {
       importer = paged.registries.importers.resolve(file.name, file.mimeType);
       if (!importer) {
-        report(
-          "error",
-          `Place image: "${file.name}" is a Photoshop file, and no loaded plugin reads one.`,
-        );
+        report("error", t(M.psdNoPlugin, { name: file.name }));
         return REFUSED;
       }
       size = psd;
     }
   }
   if (!size) {
-    report(
-      "error",
-      `Place image: could not decode "${file.name}" as an image.`,
-    );
+    report("error", t(M.cannotDecode, { name: file.name }));
     return REFUSED;
   }
 
@@ -818,8 +879,11 @@ export async function placeImage(
       } catch (err) {
         report(
           "error",
-          `Place image: ${importer.title} could not read "${file.name}" — ` +
-            (err instanceof Error ? err.message : String(err)),
+          t(M.importerFailed, {
+            importer: importer.title,
+            name: file.name,
+            error: err instanceof Error ? err.message : String(err),
+          }),
         );
         return false;
       }
@@ -965,7 +1029,7 @@ export async function addPage(
   });
   const refusal = refusalOf(reply);
   if (refusal) {
-    report("error", `Add page refused: ${refusal}`);
+    report("error", refused("Add page", refusal));
     return REFUSED;
   }
   return outcomeOf(reply);
@@ -1008,21 +1072,21 @@ export function buildInsertCommands(
     handler: (paged) => run(paged as PagedEditor),
   });
   return [
-    cmd(PAGED_INSERT_TEXT_FRAME, "Insert text frame", handlers.textFrame),
-    cmd(PAGED_INSERT_RECTANGLE, "Insert rectangle", handlers.rectangle),
-    cmd(PAGED_INSERT_ELLIPSE, "Insert ellipse", handlers.ellipse),
-    cmd(PAGED_INSERT_LINE, "Insert line", handlers.line),
-    cmd(PAGED_INSERT_TABLE, "Insert table", handlers.table),
-    cmd(PAGED_INSERT_DELETE_PAGE, "Delete page", handlers.deletePage),
+    cmd(PAGED_INSERT_TEXT_FRAME, t(M.insertTextFrame), handlers.textFrame),
+    cmd(PAGED_INSERT_RECTANGLE, t(M.insertRectangle), handlers.rectangle),
+    cmd(PAGED_INSERT_ELLIPSE, t(M.insertEllipse), handlers.ellipse),
+    cmd(PAGED_INSERT_LINE, t(M.insertLine), handlers.line),
+    cmd(PAGED_INSERT_TABLE, t(M.insertTable), handlers.table),
+    cmd(PAGED_INSERT_DELETE_PAGE, t(M.deletePage), handlers.deletePage),
     {
-      ...cmd(PAGED_INSERT_PLACE_IMAGE, "Place image…", handlers.placeImage),
+      ...cmd(PAGED_INSERT_PLACE_IMAGE, t(M.placeImage), handlers.placeImage),
       handler: (paged, payload) =>
         handlers.placeImage(
           paged as PagedEditor,
           isPlaceDropPayload(payload) ? payload : undefined,
         ),
     },
-    cmd(PAGED_INSERT_NEW_PAGE, "Add page", handlers.newPage),
+    cmd(PAGED_INSERT_NEW_PAGE, t(M.addPage), handlers.newPage),
   ];
 }
 

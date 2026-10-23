@@ -554,6 +554,91 @@ pub fn patch_document_xml_cols(
     (out, refusals)
 }
 
+/// A new `<w:p>` like the body paragraph `para_ord` of `src`: its `<w:pPr>`
+/// bytes verbatim and one `<w:r>` carrying `text` with the paragraph's first
+/// direct run's `<w:rPr>` bytes verbatim. `None` when there is no such
+/// paragraph, or its `<w:pPr>` holds a `<w:sectPr>` (the copy would start a
+/// section of its own).
+pub fn clone_paragraph(src: &[u8], para_ord: u32, text: &str) -> Option<Vec<u8>> {
+    let mut reader = Reader::from_reader(src);
+    let mut stack: Vec<Vec<u8>> = Vec::new();
+    let mut p_ord: i64 = -1;
+    let mut inside = false;
+    let mut ppr: Option<&[u8]> = None;
+    let mut rpr: Option<&[u8]> = None;
+    loop {
+        let event_start = reader.buffer_position() as usize;
+        let ev = reader.read_event().ok()?;
+        match ev {
+            Event::Eof => return None,
+            Event::Start(e) => {
+                let name = e.name().as_ref().to_vec();
+                let ln = local_name(&name).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"p" && parent == Some(b"body".as_ref()) {
+                    p_ord += 1;
+                    inside = p_ord == para_ord as i64;
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"pPr" {
+                    reader.read_to_end(QName(&name)).ok()?;
+                    ppr = Some(&src[event_start..reader.buffer_position() as usize]);
+                    continue;
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"r" {
+                    // The run's first child is its `<w:rPr>`, when it has one.
+                    let child_start = reader.buffer_position() as usize;
+                    match reader.read_event().ok()? {
+                        Event::Start(c) if local_name(c.name().as_ref()) == b"rPr" => {
+                            let cname = c.name().as_ref().to_vec();
+                            reader.read_to_end(QName(&cname)).ok()?;
+                            rpr = Some(&src[child_start..reader.buffer_position() as usize]);
+                        }
+                        Event::Empty(c) if local_name(c.name().as_ref()) == b"rPr" => {
+                            rpr = Some(&src[child_start..reader.buffer_position() as usize]);
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
+                stack.push(ln);
+            }
+            Event::Empty(e) => {
+                let ln = local_name(e.name().as_ref()).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"p" && parent == Some(b"body".as_ref()) {
+                    p_ord += 1;
+                    if p_ord == para_ord as i64 {
+                        break;
+                    }
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"pPr" {
+                    ppr = Some(&src[event_start..reader.buffer_position() as usize]);
+                }
+            }
+            Event::End(e) => {
+                stack.pop();
+                if inside
+                    && local_name(e.name().as_ref()) == b"p"
+                    && stack.last().map(Vec::as_slice) == Some(b"body".as_ref())
+                {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if p_ord != para_ord as i64 {
+        return None;
+    }
+    if ppr.is_some_and(|b| b.windows(6).any(|w| w == b"sectPr")) {
+        return None;
+    }
+    let mut out = b"<w:p>".to_vec();
+    out.extend_from_slice(ppr.unwrap_or_default());
+    out.extend_from_slice(b"<w:r>");
+    out.extend_from_slice(rpr.unwrap_or_default());
+    out.extend_from_slice(&crate::rpr::render_wt(text));
+    out.extend_from_slice(b"</w:r></w:p>");
+    Some(out)
+}
+
 fn find_target(targets: &[ResolvedTarget], p: i64, r: i64) -> Option<&ResolvedTarget> {
     targets
         .iter()

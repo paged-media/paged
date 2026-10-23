@@ -1,0 +1,6 @@
+$ paged template check t.paged tampered.paged
+--- exit: 1
+--- stdout
+changed outside the template's fields, in nothing a page draws (an empty frame, a style, a label or a setting)
+--- stderr
+(empty)

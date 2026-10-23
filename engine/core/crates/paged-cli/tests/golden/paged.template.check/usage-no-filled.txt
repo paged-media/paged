@@ -1,0 +1,11 @@
+$ paged template check t.paged
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <FILLED>
+
+Usage: paged template check <TEMPLATE> <FILLED>
+
+For more information, try '--help'.

@@ -259,3 +259,18 @@ fn sheet_calc_corpus_eng() {
 fn sheet_calc_corpus_text3() {
     run_family("text3");
 }
+
+#[test]
+fn sheet_calc_corpus_info3() {
+    run_family("info3");
+}
+
+#[test]
+fn sheet_calc_corpus_array3() {
+    run_family("array3");
+}
+
+#[test]
+fn sheet_calc_corpus_fix3() {
+    run_family("fix3");
+}

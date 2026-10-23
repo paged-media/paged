@@ -29,7 +29,9 @@ import type {
   PanelSchema,
 } from "@paged-media/plugin-api";
 import { propertyRows, publishObjectList } from "@paged-media/plugin-sdk";
+import { t } from "@paged-media/strings";
 
+import { DOC } from "../messages.js";
 import { PANEL_FIELDS, PLUGIN_ID } from "../object-model.js";
 
 export const PROPERTIES_PANEL_ID = "media.paged.doc.panel.properties";
@@ -64,20 +66,21 @@ const list = (rows: string, select: string) => ({
   },
 });
 
-/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind). */
-export const DOC_PROPERTIES_PANEL: PanelSchema = {
+/** The panel, from `PANEL_FIELDS` (every entry is a row of its kind), in
+ *  the editor's language when it is registered. */
+export const docPropertiesPanel = (): PanelSchema => ({
   id: PROPERTIES_PANEL_ID,
-  title: "Word properties",
+  title: t(DOC.propertiesTitle),
   icon: "panel-properties",
   defaultDock: "right",
   sections: [
     {
-      title: "Document",
+      title: t(DOC.sectionDocument),
       // The selected frame's Word document (`<selected> > docxDocument`).
       rows: propertyRows(DOCUMENT, paths(DOCUMENT, "Document"), "selection"),
     },
     {
-      title: "Mail merge",
+      title: t(DOC.sectionMailMerge),
       rows: [
         ...propertyRows(DOCUMENT, paths(DOCUMENT, "Mail merge"), "selection"),
         list(BIND.mergeFields, BIND.mergeField),
@@ -87,7 +90,7 @@ export const DOC_PROPERTIES_PANEL: PanelSchema = {
       ],
     },
     {
-      title: "Block",
+      title: t(DOC.sectionBlock),
       collapsible: true,
       rows: [
         list(BIND.blocks, BIND.block),
@@ -95,7 +98,7 @@ export const DOC_PROPERTIES_PANEL: PanelSchema = {
       ],
     },
     {
-      title: "Run",
+      title: t(DOC.sectionRun),
       collapsible: true,
       rows: [
         list(BIND.runs, BIND.run),
@@ -103,7 +106,7 @@ export const DOC_PROPERTIES_PANEL: PanelSchema = {
       ],
     },
   ],
-};
+});
 
 /** Keep the lists live: the merge fields and blocks of the selected Word
  *  frame, and the runs of the picked block. */

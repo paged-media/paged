@@ -76,6 +76,7 @@ import {
   INT,
   LEN,
   NUM,
+  POINT,
   REFS,
   TEXT,
   addressOf,
@@ -448,6 +449,14 @@ export const TWINS: readonly TwinSpec[] = [
   ),
   recipeVerb("expandObjectsOnPath", "onPath", "objectsOnPath", "onPathId"),
   recipeVerb("releaseObjectsOnPath", "onPath", "objectsOnPath", "onPathId"),
+  // The tool-only cuts, their gesture as data (page pt).
+  twin("knife", { ...T, page: TEXT, cut: { kind: "list", of: POINT } }),
+  twin("scissorsAt", { ...T, point: POINT, tolerance: LEN }),
+  twin("shapeBuild", {
+    ...T,
+    path: { kind: "list", of: POINT },
+    mode: enumOf(["keep", "remove"]),
+  }),
   // Image trace — the full option set.
   twin("imageTrace", { ...T, ...TRACE }),
 ];

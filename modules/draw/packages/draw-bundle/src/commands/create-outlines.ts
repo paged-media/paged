@@ -80,6 +80,12 @@ import {
 } from "../page-origin";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.createOutlines", {
+  title: "Type: Create outlines",
+});
 export const CREATE_OUTLINES_COMMAND_ID =
   "media.paged.draw.command.createOutlines";
 export const CREATE_OUTLINES_COMMAND_IDS = [CREATE_OUTLINES_COMMAND_ID];
@@ -331,7 +337,7 @@ export async function applyCreateOutlines(
 export function contributeCreateOutlinesCommands(host: BundleHost): Disposable {
   const sub = registerCommand(host, {
     id: CREATE_OUTLINES_COMMAND_ID,
-    title: "Type: Create outlines",
+    title: M.title,
     category: "Type",
     handler: () => applyCreateOutlines(host),
   });

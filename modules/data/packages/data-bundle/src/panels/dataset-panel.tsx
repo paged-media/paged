@@ -46,6 +46,8 @@ import type {
   VariableSummary,
 } from "../session";
 import { color, font, space, status } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
+import { DATASET as M } from "../messages";
 
 const wrap: CSSProperties = {
   display: "flex",
@@ -90,6 +92,7 @@ export function makeDatasetPanel(
   // see `return function DatasetPanel()`, editor ADR 229).
   function DatasetPanel(): ReactElement {
     const [snapshot, refreshSnapshot] = useSessionSnapshot(session);
+    const { t } = useStrings();
     const [query, setQuery] = useState<string>("");
     const [catalog, setCatalog] = useState<GovernedCatalog | null>(null);
     const [rows, setRows] = useState<QueryPreview | null>(null);
@@ -114,7 +117,7 @@ export function makeDatasetPanel(
     const [variables, setVariables] = useState<VariableSummary[]>([]);
     const [dataSets, setDataSets] = useState<string[]>([]);
     const [activeSet, setActiveSet] = useState<string>("");
-    const [setName, setSetName] = useState<string>("Data Set 1");
+    const [setName, setSetName] = useState<string>(t(M.defaultSetName));
     const [skips, setSkips] = useState<Record<string, string>>({});
     const [exportedXml, setExportedXml] = useState<string>("");
 
@@ -174,9 +177,7 @@ export function makeDatasetPanel(
       if (!planMode) return;
       const rf = session.listBindings().find((b) => b.kind === "recordFlow");
       if (!rf) {
-        setError(
-          "no record-flow binding — define one in the Bindings panel first",
-        );
+        setError(t(M.noFlowBinding));
         return;
       }
       setError("");
@@ -202,9 +203,12 @@ export function makeDatasetPanel(
         // Registered with the host's data-provider registry (D-09) when the
         // host injects one; only a host without it gets the "can't share" note.
         setProviderNote(
-          session.isProviderRegistered(pub.id)
-            ? `Provider "${pub.id}" (revision ${pub.revision}) is shared with other plugins.`
-            : `Provider "${pub.id}" (revision ${pub.revision}) is ready; this editor can't share it with other plugins yet.`,
+          t(
+            session.isProviderRegistered(pub.id)
+              ? M.providerShared
+              : M.providerReady,
+            { id: pub.id, revision: pub.revision },
+          ),
         );
       } catch (e) {
         setError(String(e));
@@ -250,7 +254,7 @@ export function makeDatasetPanel(
       setExportedXml("");
       const xml = await session.exportVariableLibrary();
       if (!xml) {
-        setError("nothing to export (no variables defined)");
+        setError(t(M.nothingToExport));
         return;
       }
       // Write the file through the host's own save door when it has one
@@ -272,7 +276,7 @@ export function makeDatasetPanel(
       setError("");
       if (!host.supports("shell.pickFile@1")) {
         // Technical detail: the missing door is shell.pickFile@1.
-        setError("This host has no file picker.");
+        setError(t(M.noPicker));
         return;
       }
       const picked = await host.shell.pickFile({ accept: [".xml"] });
@@ -300,7 +304,7 @@ export function makeDatasetPanel(
       <div style={wrap}>
         {/* §9.1 localization — the session formatting locale. */}
         <label style={row}>
-          Locale:{" "}
+          {t(M.locale)}{" "}
           <select
             value={locale}
             onChange={(e) => {
@@ -328,8 +332,8 @@ export function makeDatasetPanel(
           <div style={row} data-data-dataset-empty>
             <p style={{ ...note, margin: 0, flexBasis: "100%" }}>
               {snapshot.sources.length === 0
-                ? "No queries yet. Import a data source first."
-                : "No queries yet. Pick records in Bindings, or save a query in Data query."}
+                ? t(M.noQueriesNoSources)
+                : t(M.noQueries)}
             </p>
             {snapshot.sources.length === 0 ? (
               <button
@@ -337,7 +341,7 @@ export function makeDatasetPanel(
                 data-data-dataset-open-sources
                 onClick={() => openPanel(SOURCES_PANEL_ID)}
               >
-                Open Data sources
+                {t(M.openSources)}
               </button>
             ) : (
               <button
@@ -345,14 +349,14 @@ export function makeDatasetPanel(
                 data-data-dataset-open-query
                 onClick={() => openPanel(QUERY_PANEL_ID)}
               >
-                Open Data query
+                {t(M.openQuery)}
               </button>
             )}
           </div>
         ) : (
           <>
             <label style={row}>
-              Query{" "}
+              {t(M.query)}{" "}
               <select
                 value={selected}
                 onChange={(e) => {
@@ -375,24 +379,23 @@ export function makeDatasetPanel(
               <button
                 type="button"
                 data-data-dataset-preview
-                title="Refresh the data and show the query's first rows"
+                title={t(M.previewTitle)}
                 onClick={() => void showCatalog()}
               >
-                Preview rows
+                {t(M.previewRows)}
               </button>
               <button type="button" onClick={() => void publish()}>
-                Publish provider
+                {t(M.publishProvider)}
               </button>
             </div>
 
             {catalog && (
               <div style={note}>
-                {catalog.columns.length} column
-                {catalog.columns.length === 1 ? "" : "s"} · {documented}{" "}
-                documented
-                {drift > 0
-                  ? ` · ${drift} schema note${drift === 1 ? "" : "s"}`
-                  : ""}
+                {t(M.catalogColumns, {
+                  count: catalog.columns.length,
+                  documented,
+                })}
+                {drift > 0 ? t(M.schemaNotes, { count: drift }) : ""}
               </div>
             )}
             {rows && rows.diagnostic && (
@@ -446,8 +449,13 @@ export function makeDatasetPanel(
                 </div>
                 <span style={note}>
                   {rows.rows.length === 0
-                    ? "The query returned no rows."
-                    : `First ${rows.rows.length}${rows.total !== null ? ` of ${rows.total}` : ""} row${rows.total === 1 ? "" : "s"}.`}
+                    ? t(M.noRows)
+                    : rows.total !== null
+                      ? t(M.firstRowsOf, {
+                          shown: rows.rows.length,
+                          total: rows.total,
+                        })
+                      : t(M.firstRows, { shown: rows.rows.length })}
                 </span>
               </div>
             )}
@@ -455,22 +463,23 @@ export function makeDatasetPanel(
             {/* The §10 batch plan (per-record / per-group / one-catalog
                 generation units). */}
             <div style={row}>
-              Split output:
+              {t(M.splitOutput)}
               <button type="button" onClick={() => void showPlan("perRecord")}>
-                Per record
+                {t(M.perRecord)}
               </button>
               <button type="button" onClick={() => void showPlan("perGroup")}>
-                Per group
+                {t(M.perGroup)}
               </button>
               <button type="button" onClick={() => void showPlan("oneCatalog")}>
-                One catalog
+                {t(M.oneCatalog)}
               </button>
             </div>
             {plan && (
               <div>
-                {plan.units.length} output{plan.units.length === 1 ? "" : "s"}{" "}
-                from {plan.totalRecords} record
-                {plan.totalRecords === 1 ? "" : "s"}
+                {t(M.planSummary, {
+                  units: plan.units.length,
+                  records: plan.totalRecords,
+                })}
                 <span style={note}>
                   {" "}
                   —{" "}
@@ -489,20 +498,19 @@ export function makeDatasetPanel(
                     disabled={!flowBinding}
                     title={
                       flowBinding
-                        ? "Count the frames and records each output takes. No pages are made in this editor."
-                        : "Needs a record-flow binding — add one in Bindings."
+                        ? t(M.planBatchTitle)
+                        : t(M.planBatchNeedsFlow)
                     }
                     onClick={() => void runBatch()}
                   >
-                    Plan batch
+                    {t(M.planBatch)}
                   </button>
                 </div>
               </div>
             )}
             {runs && (
               <div data-data-batch-runs={runs.length}>
-                Planned {runs.length} output document
-                {runs.length === 1 ? "" : "s"}:
+                {t(M.planned, { count: runs.length })}
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {runs.slice(0, 6).map((r, i) => {
                     const flow = r.flow as {
@@ -513,15 +521,18 @@ export function makeDatasetPanel(
                       <li key={i}>
                         {r.label}
                         <span style={note}>
-                          {" "}
-                          · {flow.frames?.length ?? "?"} frame(s) ·{" "}
-                          {flow.total ?? "?"} record(s)
+                          {t(M.runDetail, {
+                            frames: flow.frames?.length ?? "?",
+                            records: flow.total ?? "?",
+                          })}
                         </span>
                       </li>
                     );
                   })}
                   {runs.length > 6 && (
-                    <li style={note}>… {runs.length - 6} more</li>
+                    <li style={note}>
+                      {t(M.more, { count: runs.length - 6 })}
+                    </li>
                   )}
                 </ul>
                 {/* Developer knowledge (was user-facing copy): real
@@ -529,10 +540,7 @@ export function makeDatasetPanel(
                     frame-chain read is D-12); output documents materialize
                     via the automation lane (data-cli / napi), not in this
                     editor. */}
-                <span style={note}>
-                  Output documents are produced by the batch automation tools,
-                  not inside this editor.
-                </span>
+                <span style={note}>{t(M.outputNote)}</span>
               </div>
             )}
 
@@ -541,23 +549,19 @@ export function makeDatasetPanel(
                 id is the name and the binding kind is the trait. */}
             <div data-data-variables>
               <div style={row}>
-                Variables:
+                {t(M.variables)}
                 <button type="button" onClick={() => void refreshPalette()}>
-                  Refresh palette
+                  {t(M.refreshPalette)}
                 </button>
                 <button type="button" onClick={() => void importLibrary()}>
-                  Import library (XML)
+                  {t(M.importLibrary)}
                 </button>
                 <button type="button" onClick={() => void exportLibrary()}>
-                  Export library (XML)
+                  {t(M.exportLibrary)}
                 </button>
               </div>
               {variables.length === 0 ? (
-                <p style={note}>
-                  No variables yet. A text, image or visibility binding IS a
-                  variable — define one in the Bindings panel, then capture a
-                  data set here.
-                </p>
+                <p style={note}>{t(M.noVariables)}</p>
               ) : (
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {variables.map((v) => (
@@ -572,8 +576,8 @@ export function makeDatasetPanel(
                               data is carried through the library verbatim but
                               never applied — the apply lane is RFI D-15. */}
                           {v.trait === "graphdata"
-                            ? "graph data — kept in the library, but not applied in this document"
-                            : "not bound in this document — skipped on apply"}
+                            ? t(M.graphData)
+                            : t(M.notBound)}
                         </span>
                       )}
                     </li>
@@ -585,25 +589,25 @@ export function makeDatasetPanel(
                 <input
                   value={setName}
                   onChange={(e) => setSetName(e.target.value)}
-                  aria-label="data set name"
+                  aria-label={t(M.setNameLabel)}
                   size={14}
                 />
                 <button type="button" onClick={() => void capture()}>
-                  Capture current
+                  {t(M.captureCurrent)}
                 </button>
                 <button type="button" onClick={() => void captureAll()}>
-                  Capture every record
+                  {t(M.captureEvery)}
                 </button>
               </div>
 
               {dataSets.length > 0 && (
                 <div style={row}>
-                  data set:{" "}
+                  {t(M.dataSet)}{" "}
                   <select
                     value={activeSet}
                     onChange={(e) => void switchTo(e.target.value)}
                   >
-                    <option value="">— pick a data set —</option>
+                    <option value="">{t(M.pickDataSet)}</option>
                     {dataSets.map((d) => (
                       <option key={d} value={d}>
                         {d}
@@ -611,8 +615,7 @@ export function makeDatasetPanel(
                     ))}
                   </select>
                   <span style={note}>
-                    {dataSets.length} set{dataSets.length === 1 ? "" : "s"} ·
-                    switching is one undo step
+                    {t(M.setsNote, { count: dataSets.length })}
                   </span>
                 </div>
               )}
@@ -621,10 +624,7 @@ export function makeDatasetPanel(
                   {/* Technical detail (kept for developers): the missing door
                       is shell.saveFile — K-10, built upstream in plugin-sdk
                       main but not in any published contract yet. */}
-                  <span style={note}>
-                    This host can&apos;t save files directly — copy the library
-                    below into a .xml file.
-                  </span>
+                  <span style={note}>{t(M.cannotSave)}</span>
                   <textarea
                     readOnly
                     value={exportedXml}
@@ -644,9 +644,7 @@ export function makeDatasetPanel(
                   data-data-set-skips
                 >
                   {Object.entries(skips).map(([name, why]) => (
-                    <li key={name}>
-                      skipped {name}: {why}
-                    </li>
+                    <li key={name}>{t(M.skipped, { name, reason: why })}</li>
                   ))}
                 </ul>
               )}
@@ -688,9 +686,7 @@ export function makeDatasetPanel(
             registration rides host.dataProviders (D-09) when the host injects
             it; native server/CI batch awaits the napi-rs binding. The engine
             sides are done. */}
-        <p style={note}>
-          Server-side batch runs aren&apos;t available in this editor yet.
-        </p>
+        <p style={note}>{t(M.serverBatch)}</p>
       </div>
     );
   }

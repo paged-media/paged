@@ -17,6 +17,10 @@
 //             source refuses the policy and says so.
 //   never     a frozen snapshot: nothing refreshes it automatically.
 
+import { t } from "@paged-media/strings";
+
+import { SOURCES as M } from "./messages";
+
 export type RefreshPolicy =
   | { policy: "manual" }
   | { policy: "onOpen" }
@@ -35,10 +39,10 @@ export function refusePolicy(
 ): string | null {
   if (p.policy === "interval") {
     if (kind === "file") {
-      return "a local file cannot be watched from the browser — import it again to update it, or refresh on open";
+      return t(M.localCannotWatch);
     }
     if (!Number.isFinite(p.secs) || p.secs < MIN_INTERVAL_SECS) {
-      return `the interval must be at least ${MIN_INTERVAL_SECS} seconds`;
+      return t(M.intervalTooShort, { secs: MIN_INTERVAL_SECS });
     }
   }
   return null;
@@ -65,13 +69,13 @@ export function readPolicy(v: unknown): RefreshPolicy {
 export function policyLabel(p: RefreshPolicy): string {
   switch (p.policy) {
     case "manual":
-      return "manual";
+      return t(M.policyManual);
     case "onOpen":
-      return "on open";
+      return t(M.policyOnOpen);
     case "interval":
-      return `every ${p.secs} s`;
+      return t(M.policyEverySecs, { secs: p.secs });
     case "never":
-      return "never (snapshot)";
+      return t(M.policyNever);
   }
 }
 

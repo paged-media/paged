@@ -15,6 +15,9 @@
     "test": "bun test --parallel --timeout 30000 --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts",
     "test:compiled": "bun test --parallel --timeout 30000 --preload ../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ../../../tooling/js/bun-react-compiler.ts"
   },
+  "dependencies": {
+    "@paged-media/strings": "workspace:*"
+  },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
     "react": ">=19.3"

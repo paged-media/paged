@@ -25,7 +25,10 @@
 // is a Rust path (`Mutation::PathfinderBoolean`) or names an IDML
 // property and node (`property FrameStrokeMiterLimit is not supported on
 // Oval("u3")`). `refusalText` turns each into one plain sentence, so no
-// panel shows wire JSON, a variant name or an enum token.
+// panel shows wire JSON, a variant name or an enum token. The sentences
+// are messages (`@paged-media/strings`), so they follow the editor's locale.
+
+import { defineMessages, t } from "@paged-media/strings";
 
 /** "topLeft" → "Top left", "easeInOut" → "Ease in out",
  *  "FrameStrokeMiterLimit" → "Frame stroke miter limit". */
@@ -38,7 +41,7 @@ export function humanize(token: string): string {
 }
 
 /** The engine's node kinds, as a user names them (with the article). */
-const NODE_NAMES: Readonly<Record<string, string>> = {
+const NODE_NAMES = defineMessages("node", {
   Rectangle: "a rectangle",
   Oval: "an oval",
   Polygon: "a path",
@@ -50,19 +53,19 @@ const NODE_NAMES: Readonly<Record<string, string>> = {
   Story: "a story",
   Page: "a page",
   Spread: "a spread",
-};
+});
 
 /** What the engine's error kinds mean, where the kind alone says it. */
-const ENGINE_KINDS: Readonly<Record<string, string>> = {
+const ENGINE_KINDS = defineMessages("engineError", {
   noDocument: "No document is open.",
   unknownPage: "That page is no longer in the document.",
   // v75 (engine ADR 1000): the typed refusals.
   locked: "The object is locked. Unlock it to change it.",
   notPermitted: "This part of the template cannot be changed.",
-};
+});
 
 /** What a write result's code means when it comes with no reason. */
-const CODES: Readonly<Record<string, string>> = {
+const CODES = defineMessages("writeCode", {
   failed: "The change did not apply.",
   invalidValue: "That value cannot be used here.",
   readOnly: "This value cannot be changed.",
@@ -72,15 +75,31 @@ const CODES: Readonly<Record<string, string>> = {
   badAddress: "The object is no longer in the document.",
   unknownCommand: "This action is not available.",
   unmapped: "This setting cannot be changed here yet.",
-};
+});
 
-const NOTHING = "The action did not run.";
+const M = defineMessages("refusal", {
+  nothing: "The action did not run.",
+  propertyNotOn: "{name} does not apply to {node}.",
+  thisObject: "this object",
+  notAvailableFor: "{subject} is not available for these objects yet.",
+  engineCannot: "The engine cannot do this with these objects yet.",
+});
+
+/** A kind or code's sentence, or null when it has none. */
+function known(
+  table: Readonly<Record<string, string>>,
+  k: string,
+): string | null {
+  return Object.hasOwn(table, k) ? t(table[k]!) : null;
+}
+
+const nothing = () => t(M.nothing);
 
 /** One plain sentence: capitalised, with a full stop. */
 function sentence(text: string): string {
-  const t = text.trim();
-  if (t.length === 0) return NOTHING;
-  const s = t[0]!.toUpperCase() + t.slice(1);
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return nothing();
+  const s = trimmed[0]!.toUpperCase() + trimmed.slice(1);
   return /[.!?)]$/.test(s) ? s : `${s}.`;
 }
 
@@ -99,15 +118,13 @@ function engineWhat(what: string, subject: string | undefined): string {
   const property = /property (\w+) is not supported on (\w+)/.exec(text);
   if (property) {
     const name = humanize(property[1]!.replace(/^Frame(?=[A-Z])/, ""));
-    const node = NODE_NAMES[property[2]!] ?? "this object";
-    return `${name} does not apply to ${node}.`;
+    const node = known(NODE_NAMES, property[2]!) ?? t(M.thisObject);
+    return t(M.propertyNotOn, { name, node });
   }
   // A bare Rust path (`Mutation::PathfinderBoolean`): the engine has no
   // arm for this operation on these objects.
   if (/^\w+(?:::\w+)+$/.test(text)) {
-    return subject
-      ? `${subject} is not available for these objects yet.`
-      : "The engine cannot do this with these objects yet.";
+    return subject ? t(M.notAvailableFor, { subject }) : t(M.engineCannot);
   }
   return sentence(text);
 }
@@ -123,12 +140,12 @@ function fromObject(value: object, subject: string | undefined): string | null {
       return engineWhat(details.what, subject);
     if (typeof o.reason === "string" && o.reason.trim())
       return refusalText(o.reason, subject);
-    return ENGINE_KINDS[o.kind] ?? CODES[o.kind] ?? NOTHING;
+    return known(ENGINE_KINDS, o.kind) ?? known(CODES, o.kind) ?? nothing();
   }
   if (typeof o.code === "string") {
     if (typeof o.reason === "string" && o.reason.trim())
       return refusalText(o.reason, subject);
-    return CODES[o.code] ?? NOTHING;
+    return known(CODES, o.code) ?? nothing();
   }
   if (typeof o.message === "string") return refusalText(o.message, subject);
   return null;
@@ -154,9 +171,9 @@ function fromJson(json: string, subject: string | undefined): string | null {
  * engine cannot do this" becomes "Intersect is not available…").
  */
 export function refusalText(raw: unknown, subject?: string): string {
-  if (raw == null) return NOTHING;
+  if (raw == null) return nothing();
   if (raw instanceof Error) return refusalText(raw.message, subject);
-  if (typeof raw === "object") return fromObject(raw, subject) ?? NOTHING;
+  if (typeof raw === "object") return fromObject(raw, subject) ?? nothing();
   let text = String(raw).trim();
   // The command id or the result code in front ("media.paged.draw.blend:",
   // "failed:", "invalidValue:"), however many.
@@ -175,7 +192,7 @@ export function refusalText(raw: unknown, subject?: string): string {
   }
   text = text.replace(/\s*[—-]+\s*no-op\.?$/i, "");
   if (/^[a-z]+(?:[A-Z][a-z0-9]*)+$/.test(text))
-    return ENGINE_KINDS[text] ?? CODES[text] ?? NOTHING;
+    return known(ENGINE_KINDS, text) ?? known(CODES, text) ?? nothing();
   if (/^\w+(?:::\w+)+$|frame mutation failed|not supported on \w+/i.test(text))
     return engineWhat(text, subject);
   return sentence(text);

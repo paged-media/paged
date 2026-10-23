@@ -29,6 +29,7 @@ Commands:
   session       Speak the headless NDJSON engine protocol on stdin/stdout
   mcp           Serve the paged MCP tools over stdio, for Claude Desktop or Claude Code: the library's documents, and the engine run here
   engine-serve  Serve the engine over HTTP for paged.server's headless lane: stateless `POST /run` calls that bring a document and take back the result
+  template      A template's fields: list them, fill them as a filler, check a submission changed only its fields
   library       The local library of documents `paged mcp` serves
   help          Print this message or the help of the given subcommand(s)
 

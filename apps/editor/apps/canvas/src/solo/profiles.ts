@@ -44,6 +44,17 @@
 // than in the UI.
 
 import type { ModeCockpitSlots } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
+
+/** Each solo app's one-line blurb (the mode switcher's tooltip). */
+const M = defineMessages("app.soloProfiles", {
+  drawBlurb: "Paths, shapes, appearance",
+  imageBlurb: "Adjustments, selections, layers",
+  sheetBlurb: "Workbooks, ranges, charts",
+  docBlurb: "Text, styles, outline",
+  webBlurb: "HTML source, flow, bake",
+  dataBlurb: "Sources, bindings, generated pages",
+});
 
 /** A plugin hosted as its own application. */
 export interface SoloProfile {
@@ -175,7 +186,9 @@ const DRAW_PROFILE: SoloProfile = {
     "paged.swatches",
     "paged.problems",
   ],
-  blurb: "Paths, shapes, appearance",
+  get blurb() {
+    return t(M.drawBlurb);
+  },
   paletteSuggestions: [
     "media.paged.draw.command.pathfinderUnite",
     "media.paged.draw.command.outlineStroke",
@@ -228,7 +241,9 @@ const IMAGE_PROFILE: SoloProfile = {
     "paged.layers",
     "paged.problems",
   ],
-  blurb: "Adjustments, selections, layers",
+  get blurb() {
+    return t(M.imageBlurb);
+  },
   paletteSuggestions: [
     "media.paged.image.command.adjustSelected",
     "media.paged.image.command.autoEnhance",
@@ -281,7 +296,9 @@ const SHEET_PROFILE: SoloProfile = {
     "paged.properties",
     "paged.problems",
   ],
-  blurb: "Workbooks, ranges, charts",
+  get blurb() {
+    return t(M.sheetBlurb);
+  },
   paletteSuggestions: [
     "media.paged.sheet.command.openGrid",
     "media.paged.sheet.command.sortRange",
@@ -351,7 +368,9 @@ const DOC_PROFILE: SoloProfile = {
     "paged.paragraph-styles",
     "paged.problems",
   ],
-  blurb: "Text, styles, outline",
+  get blurb() {
+    return t(M.docBlurb);
+  },
   paletteSuggestions: ["media.paged.doc.command.placeDoc"],
 };
 
@@ -399,7 +418,9 @@ const WEB_PROFILE: SoloProfile = {
     "paged.properties",
     "paged.problems",
   ],
-  blurb: "HTML source, flow, bake",
+  get blurb() {
+    return t(M.webBlurb);
+  },
   paletteSuggestions: [
     "media.paged.web.command.renderWebFrame",
     "media.paged.web.command.bakeWebFrame",
@@ -465,7 +486,9 @@ const DATA_PROFILE: SoloProfile = {
     "paged.pages",
     "paged.problems",
   ],
-  blurb: "Sources, bindings, generated pages",
+  get blurb() {
+    return t(M.dataBlurb);
+  },
   paletteSuggestions: [
     "media.paged.data.command.resolveBindings",
     "media.paged.data.command.lowerBinding",

@@ -27,6 +27,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
+import { activeStrings } from "@paged-media/strings";
 import {
   CatalogRegistryProvider,
   CompositionRenderer,
@@ -399,7 +400,9 @@ describe("Object/Transform panel: findings", () => {
           <ObjectTransformPanel />
           <CatalogRegistryProvider registry={appCatalogRegistry()}>
             <div data-object-section="">
-              <CompositionRenderer composition={objectTransformComposition} />
+              <CompositionRenderer
+                composition={objectTransformComposition(activeStrings())}
+              />
             </div>
           </CatalogRegistryProvider>
         </>

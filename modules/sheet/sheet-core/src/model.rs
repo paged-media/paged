@@ -50,6 +50,12 @@ pub struct SheetModel {
     /// edited: they exist so a formula over another workbook evaluates from
     /// the values Excel cached (the no-network ruling).
     pub external_sheets: Vec<Worksheet>,
+    /// The document's name as the host knows it (a file name such as
+    /// `Budget.xlsx`), for `CELL("filename")` and the workbook part of a
+    /// `CELL("address")` on another sheet. `None` — an unsaved workbook —
+    /// gives `""`, as in Excel. W3 versioned amendment (sheet ADR 516);
+    /// never written to the file.
+    pub document_name: Option<CompactString>,
 }
 
 /// The first [`SheetId`] of [`SheetModel::external_sheets`].
@@ -72,6 +78,7 @@ impl SheetModel {
             calc: CalcSettings::default(),
             preserved: PreservedParts::default(),
             external_sheets: Vec::new(),
+            document_name: None,
         }
     }
 

@@ -28,7 +28,7 @@ import manifest from "../manifest.json";
 import { PANEL_FIELDS, schemaOf } from "../src/object-model";
 import {
   PROPERTIES_PANEL_ID,
-  WEB_PROPERTIES_PANEL,
+  webPropertiesPanel,
 } from "../src/panels/properties-panel";
 
 const kindOf = (q: string) =>
@@ -37,7 +37,7 @@ const kindOf = (q: string) =>
 describe("web properties panel (property rows)", () => {
   it("validates against the manifest schemas", () => {
     expect(
-      validatePanelSchema(WEB_PROPERTIES_PANEL, {
+      validatePanelSchema(webPropertiesPanel(), {
         pluginId: manifest.id,
         schemaOf: (k) =>
           k.startsWith(`plugin:${manifest.id}/`)
@@ -47,7 +47,7 @@ describe("web properties panel (property rows)", () => {
     ).toEqual([]);
   });
   it("covers every declared PANEL_FIELDS entry, each through a property row", () => {
-    const rows = propertyRowsOf(WEB_PROPERTIES_PANEL).map(
+    const rows = propertyRowsOf(webPropertiesPanel()).map(
       (r) => `${kindOf(r.field.kind!)}.${r.field.path}`,
     );
     expect(rows.sort()).toEqual(

@@ -1,0 +1,6 @@
+$ paged template fill t.paged --values '{"headline":"Ada Example"}' -o filled.paged
+--- exit: 0
+--- stdout
+filled.paged — paged, <N> bytes
+--- stderr
+(empty)

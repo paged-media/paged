@@ -181,6 +181,19 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.objectsOnPath", {
+  make: "Objects on Path: Make (the LAST selected item is the path — your objects MOVE onto it, nothing is copied)",
+  update:
+    "Objects on Path: Update (re-distribute — spacing, count, offset, align, pivot, order)",
+  select: "Objects on Path: Select the objects",
+  expand:
+    "Objects on Path: Expand (stop tracking, leave the objects on the path)",
+  release:
+    "Objects on Path: Release (put every object back exactly where it was)",
+});
 export const OBJECTS_ON_PATH_COMMAND_CATEGORY = "Objects on Path";
 
 export const MAKE_OBJECTS_ON_PATH_COMMAND_ID =
@@ -1561,39 +1574,35 @@ export function contributeObjectsOnPathCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: MAKE_OBJECTS_ON_PATH_COMMAND_ID,
-      title:
-        "Objects on Path: Make (the LAST selected item is the path — your objects MOVE onto it, nothing is copied)",
+      title: M.make,
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyMakeObjectsOnPath(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: UPDATE_OBJECTS_ON_PATH_COMMAND_ID,
-      title:
-        "Objects on Path: Update (re-distribute — spacing, count, offset, align, pivot, order)",
+      title: M.update,
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyUpdateObjectsOnPath(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: SELECT_OBJECTS_ON_PATH_COMMAND_ID,
-      title: "Objects on Path: Select the objects",
+      title: M.select,
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applySelectObjectsOnPath(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: EXPAND_OBJECTS_ON_PATH_COMMAND_ID,
-      title:
-        "Objects on Path: Expand (stop tracking, leave the objects on the path)",
+      title: M.expand,
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyExpandObjectsOnPath(host, payload).then(() => undefined),
     }),
     registerCommand(host, {
       id: RELEASE_OBJECTS_ON_PATH_COMMAND_ID,
-      title:
-        "Objects on Path: Release (put every object back exactly where it was)",
+      title: M.release,
       category: OBJECTS_ON_PATH_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyReleaseObjectsOnPath(host, payload).then(() => undefined),

@@ -30,6 +30,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -101,7 +102,7 @@ describe("Pattern options panel — rendered against the engine", () => {
       expect(panel.disabled("[data-draw-pattern-make]")).toBe(true);
       // The not-a-swatch boundary is on screen, verbatim.
       expect(panel.get("[data-draw-pattern-note]").textContent).toBe(
-        PATTERN_PANEL_NOTE,
+        t(PATTERN_PANEL_NOTE),
       );
       // No v0 tiles in this document, so no legacy line.
       expect(panel.count("[data-draw-pattern-legacy]")).toBe(0);
@@ -175,10 +176,10 @@ describe("Pattern options panel — rendered against the engine", () => {
       // the words are pinned together here.
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
-      expect(PATTERN_PANEL_NOTE).toContain(
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
         "Making, re-planning, releasing and deleting the copies are one undo step each",
       );
-      expect(PATTERN_PANEL_NOTE).not.toContain("two undo steps");
+      expect(t(PATTERN_PANEL_NOTE)).not.toContain("two undo steps");
 
       // THE PANEL followed.
       expect(panel.attr(PANEL, "data-draw-pattern-panel")).toBe("1");

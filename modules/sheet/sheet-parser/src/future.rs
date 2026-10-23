@@ -41,7 +41,7 @@ pub fn storage_prefix(name: &str) -> &'static str {
 /// result is the display dialect [`crate::parse`] reads. Text without
 /// prefixes is returned unchanged.
 pub fn strip_storage_prefixes(text: &str) -> String {
-    const PREFIXES: [&str; 3] = ["_xlfn.", "_xlws.", "_xlpm."];
+    const PREFIXES: [&str; 4] = ["_xlfn.", "_xlws.", "_xlpm.", "_xleta."];
     const SINGLE: &str = "_xlfn.SINGLE(";
     let mut out = String::with_capacity(text.len());
     let mut in_string = false;
@@ -112,6 +112,12 @@ fn prefixes_known_function(rest: &str) -> bool {
         let lower = r.get(..6).map(str::to_ascii_lowercase);
         match lower.as_deref() {
             Some("_xlfn.") | Some("_xlws.") => r = &r[6..],
+            _ if r
+                .get(..7)
+                .is_some_and(|p| p.eq_ignore_ascii_case("_xleta.")) =>
+            {
+                r = &r[7..]
+            }
             _ => break,
         }
     }
@@ -225,6 +231,15 @@ mod tests {
         assert_eq!(
             strip_storage_prefixes("_xlfn.FUTUREFN(A1,\"x\")+_xlfn.XLOOKUP(1,B1:B2,C1:C2)"),
             "_xlfn.FUTUREFN(A1,\"x\")+XLOOKUP(1,B1:B2,C1:C2)"
+        );
+    }
+
+    #[test]
+    fn eta_lambda_prefix_is_stripped() {
+        // GROUPBY(r, v, SUM) is stored with an eta-reduced `_xleta.SUM` (W3).
+        assert_eq!(
+            strip_storage_prefixes("_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)"),
+            "GROUPBY(A2:A7,C2:C7,SUM)"
         );
     }
 

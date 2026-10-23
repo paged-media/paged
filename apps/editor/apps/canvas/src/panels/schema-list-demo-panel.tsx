@@ -55,6 +55,12 @@ import {
   type ShellPanelSchema,
 } from "@paged-media/shell";
 import type { Mutation, Value } from "@paged-media/client";
+import {
+  defineMessages,
+  t,
+  useStrings,
+  type Strings,
+} from "@paged-media/strings";
 
 import { appCatalogRegistry } from "./catalog-registry";
 
@@ -66,12 +72,29 @@ const SELECTED_BINDING = "demo.selectedSwatch";
 // tab close/reopen (selection state is UI state, not document state).
 const demoBindings = createLocalBindingsSurface();
 
-const DEMO_SCHEMA: ShellPanelSchema = {
-  id: SCHEMA_LIST_DEMO_PANEL_ID,
+const M = defineMessages("app.schemaListDemoPanel", {
   title: "Swatch List (schema)",
+  swatches: "Swatches",
+  fill: "Fill",
+  stroke: "Stroke",
+  selected: "Selected",
+  rowSelected: "swatch row selected",
+  applyStroke: "Apply swatch to stroke (schema demo)",
+});
+
+// The palette shows a command's category through `commandCategory.<cat>`;
+// the category itself stays English (an identity). The tree demo's
+// commands share it.
+defineMessages("commandCategory", {
+  Demo: "Demo",
+});
+
+const demoSchema = (strings: Strings): ShellPanelSchema => ({
+  id: SCHEMA_LIST_DEMO_PANEL_ID,
+  title: strings.t(M.title),
   sections: [
     {
-      title: "Swatches",
+      title: strings.t(M.swatches),
       rows: [
         {
           widget: PAGED_LIST,
@@ -83,7 +106,7 @@ const DEMO_SCHEMA: ShellPanelSchema = {
             selectionBinding: SELECTED_BINDING,
             actions: [
               {
-                label: "Fill",
+                label: strings.t(M.fill),
                 action: {
                   kind: "applyEntity",
                   path: "frameFillColor",
@@ -91,7 +114,7 @@ const DEMO_SCHEMA: ShellPanelSchema = {
                 },
               },
               {
-                label: "Stroke",
+                label: strings.t(M.stroke),
                 action: { kind: "command", command: DEMO_APPLY_STROKE_COMMAND },
               },
             ],
@@ -101,15 +124,19 @@ const DEMO_SCHEMA: ShellPanelSchema = {
           // Gated on the list's published selection binding — renders
           // only once a row is selected (the publish-back proof).
           widget: PAGED_READOUT,
-          props: { label: "Selected", text: "swatch row selected" },
+          props: {
+            label: strings.t(M.selected),
+            text: strings.t(M.rowSelected),
+          },
           visible: { bind: SELECTED_BINDING },
         },
       ],
     },
   ],
-};
+});
 
 export function SchemaListDemoPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const registries = useRegistries();
   const { elementSelection } = useSelection();
@@ -123,7 +150,7 @@ export function SchemaListDemoPanel() {
     if (registries.commands.get(DEMO_APPLY_STROKE_COMMAND)) return;
     const handle = registries.commands.register({
       id: DEMO_APPLY_STROKE_COMMAND,
-      title: "Apply swatch to stroke (schema demo)",
+      title: t(M.applyStroke),
       category: "Demo",
       handler: (_paged, payload) => {
         const swatchId = typeof payload === "string" ? payload : null;
@@ -145,7 +172,10 @@ export function SchemaListDemoPanel() {
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
-      <SchemaPanelRenderer schema={DEMO_SCHEMA} bindings={demoBindings} />
+      <SchemaPanelRenderer
+        schema={demoSchema(strings)}
+        bindings={demoBindings}
+      />
     </CatalogRegistryProvider>
   );
 }

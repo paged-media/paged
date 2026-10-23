@@ -46,6 +46,7 @@
 //       (RFI C-23) — warned at place, and reset falls back to the
 //       recorded origin rather than failing mutely.
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -1508,22 +1509,22 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     it("the inline note NAMES the semantics and every honest limit", () => {
       // The feature's substance, in plain words (the panel's About text;
       // the full account of what is and is not built lives in the docs).
-      expect(SYMBOLS_NOTE).toContain(
+      expect(t(SYMBOLS_NOTE)).toContain(
         "adds an instance linked to its definition",
       );
-      expect(SYMBOLS_NOTE).toContain("Redefine rebuilds every instance");
-      expect(SYMBOLS_NOTE).toContain(
+      expect(t(SYMBOLS_NOTE)).toContain("Redefine rebuilds every instance");
+      expect(t(SYMBOLS_NOTE)).toContain(
         "Reset transform rebuilds the selected instance",
       );
-      expect(SYMBOLS_NOTE).toContain("Break link keeps the artwork");
+      expect(t(SYMBOLS_NOTE)).toContain("Break link keeps the artwork");
       // The static-instance decision: a redefine loses local changes.
-      expect(SYMBOLS_NOTE).toContain("changes made to an instance are lost");
+      expect(t(SYMBOLS_NOTE)).toContain("changes made to an instance are lost");
       // The library lives in the document, outside the undo stack.
-      expect(SYMBOLS_NOTE).toContain("The library is saved in the document");
-      expect(SYMBOLS_NOTE).toContain("cannot be undone");
+      expect(t(SYMBOLS_NOTE)).toContain("The library is saved in the document");
+      expect(t(SYMBOLS_NOTE)).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
-      expect(SYMBOLS_NOTE).toContain("Text cannot go into a symbol");
-      expect(SYMBOLS_NOTE).toContain(
+      expect(t(SYMBOLS_NOTE)).toContain("Text cannot go into a symbol");
+      expect(t(SYMBOLS_NOTE)).toContain(
         "placed images, gradients and appearance stacks are not kept",
       );
     });

@@ -34,23 +34,26 @@ import { useState, type CSSProperties, type ReactElement } from "react";
 import type { CellStylePatch, EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
 import { font, space } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
+
+import { FORMAT, NAMES, TOKENS } from "../messages";
 
 /** Number-format presets — format CODES offered as a starting point (the
- *  engine renders them; "Custom" takes any code). */
+ *  engine renders them; "Custom" takes any code). `label` is a message key. */
 export const NUMBER_FORMAT_PRESETS: { label: string; code: string }[] = [
-  { label: "General", code: "General" },
-  { label: "Integer (0)", code: "0" },
-  { label: "Decimal (0.00)", code: "0.00" },
-  { label: "Thousands (#,##0)", code: "#,##0" },
-  { label: "Thousands, 2 dp", code: "#,##0.00" },
-  { label: "Percent (0%)", code: "0%" },
-  { label: "Percent, 2 dp", code: "0.00%" },
-  { label: "Scientific", code: "0.00E+00" },
-  { label: "Date (yyyy-mm-dd)", code: "yyyy-mm-dd" },
-  { label: "Date (d-mmm-yy)", code: "d-mmm-yy" },
-  { label: "Time (h:mm)", code: "h:mm" },
-  { label: "Euro", code: "#,##0.00 [$€-407]" },
-  { label: "Text (@)", code: "@" },
+  { label: FORMAT.presetGeneral, code: "General" },
+  { label: FORMAT.presetInteger, code: "0" },
+  { label: FORMAT.presetDecimal, code: "0.00" },
+  { label: FORMAT.presetThousands, code: "#,##0" },
+  { label: FORMAT.presetThousands2, code: "#,##0.00" },
+  { label: FORMAT.presetPercent, code: "0%" },
+  { label: FORMAT.presetPercent2, code: "0.00%" },
+  { label: FORMAT.presetScientific, code: "0.00E+00" },
+  { label: FORMAT.presetDateIso, code: "yyyy-mm-dd" },
+  { label: FORMAT.presetDateShort, code: "d-mmm-yy" },
+  { label: FORMAT.presetTime, code: "h:mm" },
+  { label: FORMAT.presetEuro, code: "#,##0.00 [$€-407]" },
+  { label: FORMAT.presetText, code: "@" },
 ];
 
 const BORDER_STYLES = [
@@ -68,6 +71,16 @@ const V_ALIGNS = ["bottom", "center", "top"];
 /** "center" → "Center": an engine enum value as a sentence-case label. */
 export const labelOf = (value: string): string =>
   value ? value[0].toUpperCase() + value.slice(1) : value;
+
+/** An engine token's label in the editor's locale: its message where one
+ *  is defined, else `labelOf`. */
+export const tokenLabel = (
+  t: (key: string) => string,
+  value: string,
+): string =>
+  Object.hasOwn(TOKENS, value)
+    ? t(TOKENS[value as keyof typeof TOKENS])
+    : labelOf(value);
 
 export interface FormatSectionStyles {
   kicker: CSSProperties;
@@ -96,6 +109,7 @@ export function FormatSection(props: {
   openProperties?: () => void;
 }): ReactElement {
   const { session, styles: st, openProperties } = props;
+  const { t } = useStrings();
   const [msg, setMsg] = useState<string | null>(null);
   const report = (r: SessionResult, done: string) =>
     setMsg(r.ok ? done : r.message);
@@ -125,12 +139,14 @@ export function FormatSection(props: {
         [cur.fontName, cur.fontSize ? `${cur.fontSize} pt` : null]
           .filter(Boolean)
           .join(" "),
-        cur.bold ? "bold" : null,
-        cur.italic ? "italic" : null,
-        cur.underline ? "underline" : null,
-        cur.fill ? `fill ${cur.fill}` : null,
-        cur.hAlign !== "general" ? `align ${cur.hAlign}` : null,
-        cur.wrap ? "wrap" : null,
+        cur.bold ? t(FORMAT.bold) : null,
+        cur.italic ? t(FORMAT.italic) : null,
+        cur.underline ? t(FORMAT.underline) : null,
+        cur.fill ? t(FORMAT.fillSummary, { color: cur.fill }) : null,
+        cur.hAlign !== "general"
+          ? t(FORMAT.alignSummary, { align: cur.hAlign ?? "" })
+          : null,
+        cur.wrap ? t(FORMAT.wrapSummary) : null,
       ]
         .filter((p) => p)
         .join(" · ")
@@ -139,7 +155,8 @@ export function FormatSection(props: {
   return (
     <div data-sheet-format-section>
       <div style={{ ...st.kicker, marginTop: 0 }}>
-        Format{target ? ` (${target.range})` : ""}
+        {t(FORMAT.kicker)}
+        {target ? ` (${target.range})` : ""}
       </div>
       {summary && (
         <div data-sheet-fmt-current style={{ ...st.body, opacity: 0.8 }}>
@@ -152,14 +169,14 @@ export function FormatSection(props: {
           data-sheet-fmt-pointer
           style={{ ...st.body, margin: `${space[1]} 0 0` }}
         >
-          Number format, font, fill, alignment and iterative calculation are in{" "}
+          {t(FORMAT.pointer)}{" "}
           <button
             type="button"
             data-sheet-open-properties
             onClick={openProperties}
             style={linkButton}
           >
-            Sheet properties
+            {t(FORMAT.properties)}
           </button>
           .
         </p>
@@ -177,13 +194,13 @@ export function FormatSection(props: {
         <select
           data-sheet-fmt-border-style
           value={borderStyle}
-          aria-label="Border style"
+          aria-label={t(FORMAT.borderStyle)}
           onChange={(e) => setBorderStyle(e.target.value)}
           style={st.input}
         >
           {BORDER_STYLES.map((b) => (
             <option key={b} value={b}>
-              {labelOf(b)}
+              {tokenLabel(t, b)}
             </option>
           ))}
         </select>
@@ -192,7 +209,7 @@ export function FormatSection(props: {
           type="color"
           value={borderColor}
           onChange={(e) => setBorderColor(e.target.value)}
-          title="Border colour"
+          title={t(FORMAT.borderColour)}
         />
         {(
           ["all", "outline", "top", "bottom", "left", "right", "none"] as const
@@ -206,33 +223,33 @@ export function FormatSection(props: {
               borders(
                 k,
                 k === "none"
-                  ? "Borders removed."
-                  : `${labelOf(k)} borders applied.`,
+                  ? t(FORMAT.bordersRemoved)
+                  : t(FORMAT.bordersApplied, { edges: tokenLabel(t, k) }),
               )
             }
           >
-            {labelOf(k)}
+            {tokenLabel(t, k)}
           </button>
         ))}
       </div>
 
-      <div style={st.kicker}>Layout</div>
+      <div style={st.kicker}>{t(FORMAT.layout)}</div>
       <div style={st.row}>
         <button
           type="button"
           data-sheet-merge
           style={st.button}
-          onClick={() => report(session.mergeTarget(), "Merged.")}
+          onClick={() => report(session.mergeTarget(), t(FORMAT.merged))}
         >
-          Merge
+          {t(FORMAT.merge)}
         </button>
         <button
           type="button"
           data-sheet-unmerge
           style={st.button}
-          onClick={() => report(session.unmergeTarget(), "Unmerged.")}
+          onClick={() => report(session.unmergeTarget(), t(FORMAT.unmerged))}
         >
-          Unmerge
+          {t(FORMAT.unmerge)}
         </button>
         <button
           type="button"
@@ -242,13 +259,13 @@ export function FormatSection(props: {
           onClick={() =>
             report(
               session.toggleFreeze(),
-              frozen ? "Panes unfrozen." : "Panes frozen.",
+              frozen ? t(FORMAT.unfrozen) : t(FORMAT.frozen),
             )
           }
         >
           {frozen
-            ? `Unfreeze (${layout!.freezeRows} × ${layout!.freezeCols})`
-            : "Freeze panes"}
+            ? `${t(FORMAT.unfreeze)} (${layout!.freezeRows} × ${layout!.freezeCols})`
+            : t(FORMAT.freeze)}
         </button>
       </div>
       <div style={st.row}>
@@ -258,8 +275,8 @@ export function FormatSection(props: {
           min={0}
           max={255}
           value={width}
-          placeholder="Width (ch)"
-          aria-label="Column width in characters"
+          placeholder={t(FORMAT.widthPlaceholder)}
+          aria-label={t(FORMAT.widthAria)}
           onChange={(e) => setWidth(e.target.value)}
           style={{ ...st.input, width: 80 }}
         />
@@ -268,22 +285,22 @@ export function FormatSection(props: {
           data-sheet-col-width-set
           style={st.button}
           disabled={!width.trim()}
-          title={width.trim() ? undefined : "Enter a width first"}
+          title={width.trim() ? undefined : t(FORMAT.widthFirst)}
           onClick={() =>
-            report(session.setColumnWidth(Number(width)), "Column width set.")
+            report(session.setColumnWidth(Number(width)), t(FORMAT.widthSet))
           }
         >
-          Set width
+          {t(FORMAT.setWidth)}
         </button>
         <button
           type="button"
           data-sheet-col-width-reset
           style={st.button}
           onClick={() =>
-            report(session.setColumnWidth(null), "Column width reset.")
+            report(session.setColumnWidth(null), t(FORMAT.widthReset))
           }
         >
-          Default
+          {t(FORMAT.default)}
         </button>
       </div>
       <div style={st.row}>
@@ -293,8 +310,8 @@ export function FormatSection(props: {
           min={0}
           max={409}
           value={height}
-          placeholder="Height (pt)"
-          aria-label="Row height in points"
+          placeholder={t(FORMAT.heightPlaceholder)}
+          aria-label={t(FORMAT.heightAria)}
           onChange={(e) => setHeight(e.target.value)}
           style={{ ...st.input, width: 80 }}
         />
@@ -303,22 +320,22 @@ export function FormatSection(props: {
           data-sheet-row-height-set
           style={st.button}
           disabled={!height.trim()}
-          title={height.trim() ? undefined : "Enter a height first"}
+          title={height.trim() ? undefined : t(FORMAT.heightFirst)}
           onClick={() =>
-            report(session.setRowHeight(Number(height)), "Row height set.")
+            report(session.setRowHeight(Number(height)), t(FORMAT.heightSet))
           }
         >
-          Set height
+          {t(FORMAT.setHeight)}
         </button>
         <button
           type="button"
           data-sheet-row-height-reset
           style={st.button}
           onClick={() =>
-            report(session.setRowHeight(null), "Row height reset.")
+            report(session.setRowHeight(null), t(FORMAT.heightReset))
           }
         >
-          Default
+          {t(FORMAT.default)}
         </button>
       </div>
 
@@ -345,6 +362,7 @@ function DuplicatedFormatRows(props: {
   report: (r: SessionResult, done: string) => void;
 }): ReactElement {
   const { session, styles: st, apply, report } = props;
+  const { t } = useStrings();
   const live = useLive(session, onDidChangeOf);
   const cur = live.styleAtTarget();
   const [preset, setPreset] = useState("0.00");
@@ -360,13 +378,13 @@ function DuplicatedFormatRows(props: {
         <select
           data-sheet-fmt-numfmt
           value={preset}
-          aria-label="Number format"
+          aria-label={t(FORMAT.numberFormat)}
           onChange={(e) => setPreset(e.target.value)}
           style={st.input}
         >
           {NUMBER_FORMAT_PRESETS.map((p) => (
             <option key={p.code} value={p.code}>
-              {p.label}
+              {t(p.label)}
             </option>
           ))}
         </select>
@@ -374,8 +392,8 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-numfmt-custom
           type="text"
           value={custom}
-          placeholder="Custom code"
-          aria-label="Custom number format code"
+          placeholder={t(FORMAT.customCode)}
+          aria-label={t(FORMAT.customCodeAria)}
           onChange={(e) => setCustom(e.target.value)}
           style={{ ...st.input, width: 110 }}
         />
@@ -384,10 +402,13 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-numfmt-apply
           style={st.button}
           onClick={() =>
-            apply({ numFmt: custom.trim() || preset }, "Number format applied.")
+            apply(
+              { numFmt: custom.trim() || preset },
+              t(FORMAT.numberFormatApplied),
+            )
           }
         >
-          Number format
+          {t(FORMAT.numberFormat)}
         </button>
       </div>
 
@@ -398,9 +419,9 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-bold
           style={{ ...st.button, fontWeight: 700 }}
           aria-pressed={!!cur?.bold}
-          aria-label="Bold"
-          title="Bold"
-          onClick={() => apply({ bold: !cur?.bold }, "Bold toggled.")}
+          aria-label={t(FORMAT.boldLabel)}
+          title={t(FORMAT.boldLabel)}
+          onClick={() => apply({ bold: !cur?.bold }, t(FORMAT.boldToggled))}
         >
           B
         </button>
@@ -409,9 +430,11 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-italic
           style={{ ...st.button, fontStyle: "italic" }}
           aria-pressed={!!cur?.italic}
-          aria-label="Italic"
-          title="Italic"
-          onClick={() => apply({ italic: !cur?.italic }, "Italic toggled.")}
+          aria-label={t(FORMAT.italicLabel)}
+          title={t(FORMAT.italicLabel)}
+          onClick={() =>
+            apply({ italic: !cur?.italic }, t(FORMAT.italicToggled))
+          }
         >
           I
         </button>
@@ -420,10 +443,10 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-underline
           style={{ ...st.button, textDecoration: "underline" }}
           aria-pressed={!!cur?.underline}
-          aria-label="Underline"
-          title="Underline"
+          aria-label={t(FORMAT.underlineLabel)}
+          title={t(FORMAT.underlineLabel)}
           onClick={() =>
-            apply({ underline: !cur?.underline }, "Underline toggled.")
+            apply({ underline: !cur?.underline }, t(FORMAT.underlineToggled))
           }
         >
           U
@@ -432,8 +455,8 @@ function DuplicatedFormatRows(props: {
           data-sheet-fmt-font-name
           type="text"
           value={fontName}
-          placeholder={cur?.fontName ?? "Font"}
-          aria-label="Font name"
+          placeholder={cur?.fontName ?? t(FORMAT.font)}
+          aria-label={t(FORMAT.fontName)}
           onChange={(e) => setFontName(e.target.value)}
           style={{ ...st.input, width: 90 }}
         />
@@ -444,7 +467,7 @@ function DuplicatedFormatRows(props: {
           max={409}
           value={fontSize}
           placeholder={cur?.fontSize ? String(cur.fontSize) : "pt"}
-          aria-label="Font size in points"
+          aria-label={t(FORMAT.fontSize)}
           onChange={(e) => setFontSize(e.target.value)}
           style={{ ...st.input, width: 48 }}
         />
@@ -453,7 +476,7 @@ function DuplicatedFormatRows(props: {
           type="color"
           value={fontColor}
           onChange={(e) => setFontColor(e.target.value)}
-          title="Text colour"
+          title={t(FORMAT.textColour)}
         />
         <button
           type="button"
@@ -466,11 +489,11 @@ function DuplicatedFormatRows(props: {
                 ...(fontSize.trim() ? { fontSize: Number(fontSize) } : {}),
                 fontColor,
               },
-              "Font applied.",
+              t(FORMAT.fontApplied),
             )
           }
         >
-          Font
+          {t(FORMAT.font)}
         </button>
       </div>
 
@@ -481,23 +504,23 @@ function DuplicatedFormatRows(props: {
           type="color"
           value={fill}
           onChange={(e) => setFill(e.target.value)}
-          title="Fill colour"
+          title={t(FORMAT.fillColour)}
         />
         <button
           type="button"
           data-sheet-fmt-fill-apply
           style={st.button}
-          onClick={() => apply({ fill }, "Fill applied.")}
+          onClick={() => apply({ fill }, t(FORMAT.fillApplied))}
         >
-          Fill
+          {t(FORMAT.fill)}
         </button>
         <button
           type="button"
           data-sheet-fmt-fill-clear
           style={st.button}
-          onClick={() => apply({ fill: "" }, "Fill cleared.")}
+          onClick={() => apply({ fill: "" }, t(FORMAT.fillCleared))}
         >
-          No fill
+          {t(FORMAT.noFill)}
         </button>
       </div>
 
@@ -506,30 +529,30 @@ function DuplicatedFormatRows(props: {
         <select
           data-sheet-fmt-halign
           value={cur?.hAlign ?? "general"}
-          aria-label="Horizontal alignment"
+          aria-label={t(FORMAT.hAlign)}
           onChange={(e) =>
-            apply({ hAlign: e.target.value }, "Alignment applied.")
+            apply({ hAlign: e.target.value }, t(FORMAT.alignApplied))
           }
           style={st.input}
         >
           {H_ALIGNS.map((a) => (
             <option key={a} value={a}>
-              {labelOf(a)}
+              {tokenLabel(t, a)}
             </option>
           ))}
         </select>
         <select
           data-sheet-fmt-valign
           value={cur?.vAlign ?? "bottom"}
-          aria-label="Vertical alignment"
+          aria-label={t(FORMAT.vAlign)}
           onChange={(e) =>
-            apply({ vAlign: e.target.value }, "Vertical alignment applied.")
+            apply({ vAlign: e.target.value }, t(FORMAT.vAlignApplied))
           }
           style={st.input}
         >
           {V_ALIGNS.map((a) => (
             <option key={a} value={a}>
-              {labelOf(a)}
+              {tokenLabel(t, a)}
             </option>
           ))}
         </select>
@@ -543,11 +566,11 @@ function DuplicatedFormatRows(props: {
             onChange={(e) =>
               apply(
                 { wrap: e.target.checked },
-                e.target.checked ? "Wrap on." : "Wrap off.",
+                e.target.checked ? t(FORMAT.wrapOn) : t(FORMAT.wrapOff),
               )
             }
           />
-          Wrap
+          {t(FORMAT.wrap)}
         </label>
       </div>
 
@@ -568,13 +591,11 @@ function DuplicatedFormatRows(props: {
           onChange={(e) =>
             report(
               session.setIterative(e.target.checked),
-              e.target.checked
-                ? "Iterative calculation on."
-                : "Iterative calculation off.",
+              e.target.checked ? t(FORMAT.iterativeOn) : t(FORMAT.iterativeOff),
             )
           }
         />
-        Iterative calculation (circular references converge)
+        {t(FORMAT.iterative)}
       </label>
     </>
   );
@@ -586,6 +607,7 @@ export function NamesSection(props: {
   styles: FormatSectionStyles;
 }): ReactElement {
   const { session, styles: st } = props;
+  const { t } = useStrings();
   const [msg, setMsg] = useState<string | null>(null);
   const report = (r: SessionResult, done: string) =>
     setMsg(r.ok ? done : r.message);
@@ -603,8 +625,8 @@ export function NamesSection(props: {
           data-sheet-name-new
           type="text"
           value={nameNew}
-          placeholder="Name"
-          aria-label="Name"
+          placeholder={t(NAMES.name)}
+          aria-label={t(NAMES.name)}
           onChange={(e) => setNameNew(e.target.value)}
           style={{ ...st.input, width: 90 }}
         />
@@ -613,7 +635,7 @@ export function NamesSection(props: {
           type="text"
           value={nameRefers}
           placeholder={target?.range ?? "A1:B5"}
-          aria-label="Refers to (range)"
+          aria-label={t(NAMES.refersTo)}
           onChange={(e) => setNameRefers(e.target.value)}
           style={{ ...st.input, width: 90 }}
         />
@@ -626,14 +648,14 @@ export function NamesSection(props: {
             checked={nameLocal}
             onChange={(e) => setNameLocal(e.target.checked)}
           />
-          This sheet only
+          {t(NAMES.thisSheetOnly)}
         </label>
         <button
           type="button"
           data-sheet-name-define
           style={st.button}
           disabled={!nameNew.trim()}
-          title={nameNew.trim() ? undefined : "Enter a name first"}
+          title={nameNew.trim() ? undefined : t(NAMES.nameFirst)}
           onClick={() =>
             report(
               session.defineName(
@@ -641,11 +663,11 @@ export function NamesSection(props: {
                 nameRefers.trim() || undefined,
                 nameLocal,
               ),
-              `Name ${nameNew.trim()} defined.`,
+              t(NAMES.defined, { name: nameNew.trim() }),
             )
           }
         >
-          Define
+          {t(NAMES.define)}
         </button>
       </div>
       {names.length > 0 && (
@@ -656,25 +678,25 @@ export function NamesSection(props: {
           {names.map((n) => (
             <li key={`${n.name}:${n.scope ?? "wb"}`}>
               <span style={{ fontFamily: font.mono }}>{n.name}</span>
-              {n.scope != null ? " (this sheet)" : ""} = {n.refersTo}{" "}
+              {n.scope != null ? t(NAMES.thisSheet) : ""} = {n.refersTo}{" "}
               <button
                 type="button"
                 data-sheet-name-place={n.name}
                 style={st.button}
-                title="Place this range on the page"
+                title={t(NAMES.placeTitle)}
                 onClick={() =>
                   void session
                     .placeName(n.name)
                     .then((id) =>
                       setMsg(
                         id
-                          ? `Placed ${n.name} on the page.`
-                          : `${n.name} does not name a range.`,
+                          ? t(NAMES.placed, { name: n.name })
+                          : t(NAMES.notARange, { name: n.name }),
                       ),
                     )
                 }
               >
-                Place
+                {t(NAMES.place)}
               </button>{" "}
               <button
                 type="button"
@@ -683,11 +705,11 @@ export function NamesSection(props: {
                 onClick={() =>
                   report(
                     session.deleteName(n.name, n.scope ?? null),
-                    `Name ${n.name} deleted.`,
+                    t(NAMES.deleted, { name: n.name }),
                   )
                 }
               >
-                Delete
+                {t(NAMES.delete)}
               </button>
             </li>
           ))}

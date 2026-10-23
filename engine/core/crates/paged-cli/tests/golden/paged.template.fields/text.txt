@@ -1,0 +1,6 @@
+$ paged template fields t.paged
+--- exit: 0
+--- stdout
+headline	text	{"kind":"text","text":"Old title"}
+--- stderr
+(empty)

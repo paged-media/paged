@@ -173,6 +173,29 @@ tasks:
     options:
       runInCI: false
 
+  package:
+    description: "@paged-media/editor (packages/editor, PM-0013): its types against the embedding API, then dist/ and check-dist."
+    script: "bun run --filter ./packages/editor typecheck && bun run --filter ./packages/editor build"
+    deps:
+      [
+        "core:wasm-pkg",
+        "doc:wasm",
+        "slide:wasm",
+        "sheet:wasm",
+        "data:wasm",
+        "data:duckdb",
+        "web:wasm",
+        "draw:wasm",
+        "image:wasm",
+        "publish:wasm",
+      ]
+    inputs:
+      - "@group(js-sources)"
+    outputs:
+      - "packages/editor/dist/**/*"
+    options:
+      runInCI: false
+
   fixtures:
     description: "paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does."
     toolchains: ["rust"]

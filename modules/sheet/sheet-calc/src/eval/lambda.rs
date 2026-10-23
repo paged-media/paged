@@ -160,6 +160,24 @@ fn reduce(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> R
             Reduced::Lambda(names, body[0].clone())
         }
         Expr::Func(_, args) if is_func(e, "LET") => reduce_let(model, args, ctx, spills),
+        // A function's bare name as a value is an eta-reduced LAMBDA (W3,
+        // `GROUPBY(r, v, SUM)`, stored `_xleta.SUM`): as many parameters as
+        // the function's required arguments (at least one).
+        Expr::UnknownName(n) => match sheet_core::funcs::lookup_func(n) {
+            Some(fid) => {
+                let k = usize::from(sheet_core::funcs::meta(fid).min_args).max(1);
+                let params: Vec<String> = (0..k).map(|i| format!("_eta{i}")).collect();
+                let body = Expr::Func(
+                    fid,
+                    params
+                        .iter()
+                        .map(|p| Expr::Local(p.as_str().into()))
+                        .collect(),
+                );
+                Reduced::Lambda(params, body)
+            }
+            None => Reduced::Value(eval_value(model, e, ctx, spills)),
+        },
         Expr::Call(callee, args) => reduce_call(model, callee, args, ctx, spills),
         // A defined name whose formula is a LAMBDA (a named LAMBDA, sheet
         // ADR 513) reduces to that lambda; any other name to its value.
@@ -304,6 +322,11 @@ fn ref_expr(r: RangeRef) -> Expr {
 
 /// The expression substituted for a bound name (see the module docs).
 fn bind(model: &SheetModel, e: &Expr, ctx: &EvalCtx, spills: &SpillState) -> Expr {
+    // An empty argument stays empty, so ISOMITTED can see it (W3); used as a
+    // value it still reads as a blank.
+    if matches!(e, Expr::Missing) {
+        return Expr::Missing;
+    }
     if is_ref_shaped(e) {
         if let Some(r) = eval_as_ref(model, e, ctx, spills) {
             return ref_expr(r);
@@ -520,6 +543,30 @@ impl Elements {
             )),
         }
     }
+}
+
+/// A lambda (or an eta-reduced function name) as `(params, body)`, for the
+/// grouping functions (W3: GROUPBY / PIVOTBY call it once per group).
+pub(super) fn as_lambda(
+    model: &SheetModel,
+    e: &Expr,
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> Result<(Vec<String>, Expr), CellError> {
+    lambda_arg(model, e, ctx, spills)
+}
+
+/// Apply a lambda to values (each bound as a literal or an array literal).
+pub(super) fn apply_to_values(
+    model: &SheetModel,
+    params: &[String],
+    body: &Expr,
+    values: Vec<FnResult>,
+    ctx: &EvalCtx,
+    spills: &SpillState,
+) -> FnResult {
+    let bound: Vec<Expr> = values.into_iter().map(value_expr).collect();
+    apply_value(model, params, body, &bound, ctx, spills)
 }
 
 /// The trailing lambda argument of a helper.

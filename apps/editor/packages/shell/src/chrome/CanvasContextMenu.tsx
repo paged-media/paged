@@ -42,6 +42,8 @@ import { useOptionalPaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { nativeKey, prettyKey } from "./MenuBar";
+import { CONTEXT_MENU } from "./messages";
+import { useStrings } from "@paged-media/strings";
 
 /** One row: a command, in a group (a separator between groups). */
 export interface ContextMenuEntry {
@@ -94,6 +96,7 @@ export function CanvasContextMenu({
 }: {
   entries: readonly ContextMenuEntry[];
 }) {
+  const strings = useStrings();
   const point = useSyncExternalStore(
     store.subscribe,
     store.current,
@@ -149,7 +152,7 @@ export function CanvasContextMenu({
         align="start"
         side="bottom"
         sideOffset={0}
-        aria-label="Canvas"
+        aria-label={strings.t(CONTEXT_MENU.label)}
         data-testid="canvas-context-menu"
         className="min-w-[13rem]"
       >

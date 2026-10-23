@@ -28,22 +28,35 @@ import {
   BUNDLES_ENTRY,
   type EditorProfile,
 } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
 
 import { SOLO_PROFILES, type SoloProfile } from "../solo/profiles";
+
+const M = defineMessages("app.profilesPresets", {
+  fillIn: "Fill in",
+  fillInBlurb: "Fill in the template's fields",
+  view: "View",
+});
 
 /** A solo profile as a preset. Field for field what `main.tsx` filters by. */
 export function soloPreset(profile: SoloProfile): EditorProfile {
   return {
     extends: "full",
     title: profile.title,
-    blurb: profile.blurb,
+    // Getters: the presets are built when the module loads, the words are
+    // read when a profile resolves, in the editor's locale.
+    get blurb() {
+      return profile.blurb;
+    },
     bundles: [profile.bundleId],
     panels: [...profile.panelIds],
     modes: [
       {
         id: "design",
         title: profile.title,
-        blurb: profile.blurb,
+        get blurb() {
+          return profile.blurb;
+        },
         slots: profile.slots,
         paletteSuggestions: [...profile.paletteSuggestions],
         menus: ["*"],
@@ -76,14 +89,20 @@ export function soloPresetId(soloName: string): string {
  *  permits. */
 const TEMPLATE_FILL: EditorProfile = {
   extends: "full",
-  title: "Fill in",
+  get title() {
+    return t(M.fillIn);
+  },
   role: "filler",
   panels: ["paged.template.form"],
   modes: [
     {
       id: "fill",
-      title: "Fill in",
-      blurb: "Fill in the template's fields",
+      get title() {
+        return t(M.fillIn);
+      },
+      get blurb() {
+        return t(M.fillInBlurb);
+      },
       slots: { left: "paged.template.form", inspector: "paged.template.form" },
     },
   ],
@@ -114,10 +133,20 @@ const TEMPLATE_FILL: EditorProfile = {
 /** Look at a document: the canvas and its pages, nothing to change. */
 const VIEWER: EditorProfile = {
   extends: "full",
-  title: "View",
+  get title() {
+    return t(M.view);
+  },
   role: "viewer",
   panels: [],
-  modes: [{ id: "view", title: "View", slots: { left: "" } }],
+  modes: [
+    {
+      id: "view",
+      get title() {
+        return t(M.view);
+      },
+      slots: { left: "" },
+    },
+  ],
   regions: {
     header: null,
     menubar: null,

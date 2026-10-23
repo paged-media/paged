@@ -277,6 +277,28 @@ const networkConnectSrcPolicy = {
   },
 };
 
+// Embedding plan E6 — the pages that may frame embed.html: the floor in
+// public/_headers is the editor's own origin; a build with
+// VITE_EMBED_ORIGINS writes the list into the output's copy, the same list
+// the bridge checks messages against.
+const EMBED_ORIGINS = parseDataOrigins(process.env.VITE_EMBED_ORIGINS);
+
+const embedFrameAncestors = {
+  name: "embed-frame-ancestors",
+  writeBundle(options: { dir?: string }) {
+    if (EMBED_ORIGINS.length === 0 || !options.dir) return;
+    const file = resolve(options.dir, "_headers");
+    if (!existsSync(file)) return;
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replace(
+        "frame-ancestors 'self'",
+        `frame-ancestors 'self' ${EMBED_ORIGINS.join(" ")}`,
+      ),
+    );
+  },
+};
+
 /**
  * Dev only: the Claude proxy at /api/ai (ADR 221), the same handler the
  * Pages Function mounts in production (functions/api/ai). Active when the
@@ -783,6 +805,7 @@ export default defineConfig({
     ...reactCompiler({ reactCompilerPreset, babel }),
     crossOriginIsolation,
     networkConnectSrcPolicy,
+    embedFrameAncestors,
     aiProxyDev(),
     fontsRoute(),
     corpusIdmlRoute(),
@@ -867,6 +890,8 @@ export default defineConfig({
     rolldownOptions: {
       input: Object.fromEntries([
         ["main", resolve(__dirname, "index.html")],
+        // The editor as an iframe a host drives (embedding plan E6).
+        ["embed", resolve(__dirname, "embed.html")],
         ...readdirSync(resolve(__dirname, "demos"))
           .filter((n) => n.endsWith(".html"))
           .map((n) => [

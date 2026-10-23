@@ -113,7 +113,25 @@ import { applyReflect } from "./transform";
 import { supportsPathOps } from "./path-ops";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages, t } from "@paged-media/strings";
 export const PATH_OPTIONS_PANEL_ID = "media.paged.draw.panel.pathOptions";
+
+/** The section titles and the "…" commands' title, read in the editor's locale. */
+const M = defineMessages("draw.pathOptions", {
+  offset: "Offset path",
+  simplify: "Simplify",
+  outlineStroke: "Outline stroke",
+  dash: "Stroke dashes",
+  reflect: "Reflect",
+  arc: "Insert arc",
+  spiral: "Insert spiral",
+  rectGrid: "Insert rectangular grid",
+  polarGrid: "Insert polar grid",
+  selectSameWeight: "Select same stroke weight",
+  command: "Path options: {section}…",
+  offsetJoinNote:
+    "This engine bevels every outward corner whatever join is chosen — the join and the miter limit are sent with the offset and remembered, and take effect on engine 0.65 or later.",
+});
 
 export const PATH_OPTIONS_COMMAND_CATEGORY = "Path";
 
@@ -133,17 +151,18 @@ export const PATH_OPTION_SECTIONS = [
 
 export type PathOptionSection = (typeof PATH_OPTION_SECTIONS)[number];
 
+/** Each section's title, as a message key (`t()` reads it). */
 export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
-  offset: "Offset path",
-  simplify: "Simplify",
-  outlineStroke: "Outline stroke",
-  dash: "Stroke dashes",
-  reflect: "Reflect",
-  arc: "Insert arc",
-  spiral: "Insert spiral",
-  rectGrid: "Insert rectangular grid",
-  polarGrid: "Insert polar grid",
-  selectSameWeight: "Select same stroke weight",
+  offset: M.offset,
+  simplify: M.simplify,
+  outlineStroke: M.outlineStroke,
+  dash: M.dash,
+  reflect: M.reflect,
+  arc: M.arc,
+  spiral: M.spiral,
+  rectGrid: M.rectGrid,
+  polarGrid: M.polarGrid,
+  selectSameWeight: M.selectSameWeight,
 };
 
 /** The sections whose Apply acts on the SELECTION (the inserts need
@@ -202,10 +221,7 @@ export interface OffsetOptions {
  *  Illustrator — and the same release added `duplicateElements`, which is
  *  how the panel tells the two apart (one vocabulary probe, shared with
  *  Reflect ▸ Copy). */
-export const OFFSET_JOIN_NOTE =
-  "This engine bevels every outward corner whatever join is chosen — " +
-  "the join and the miter limit are sent with the offset and remembered, " +
-  "and take effect on engine 0.65 or later.";
+export const OFFSET_JOIN_NOTE = M.offsetJoinNote;
 
 export interface SimplifyOptions {
   /** pt — the largest deviation a removed anchor may introduce. */
@@ -734,7 +750,7 @@ export async function openPathOptions(
   if (showPathOptions(host, section)) return;
   host.log.info(
     `${PATH_OPTIONS_COMMANDS[section]}: this host cannot raise a panel ` +
-      `(${OPEN_PANEL_FEATURE}) — applying "${PATH_OPTION_SECTION_TITLES[section]}" ` +
+      `(${OPEN_PANEL_FEATURE}) — applying "${t(PATH_OPTION_SECTION_TITLES[section])}" ` +
       "with its last used values instead",
   );
   await applyLastUsed(host, section);
@@ -745,7 +761,7 @@ export function contributePathOptionsCommands(host: BundleHost): Disposable {
   const disposers = PATH_OPTION_SECTIONS.map((section) =>
     registerCommand(host, {
       id: PATH_OPTIONS_COMMANDS[section],
-      title: `Path options: ${PATH_OPTION_SECTION_TITLES[section]}…`,
+      title: t(M.command, { section: t(PATH_OPTION_SECTION_TITLES[section]) }),
       category: PATH_OPTIONS_COMMAND_CATEGORY,
       handler: () => openPathOptions(host, section),
     }),

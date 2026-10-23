@@ -26,7 +26,8 @@
 // shared with the editor and the other modules.
 
 import type { ElementId } from "@paged-media/plugin-api";
-import { color, font } from "@paged-media/panel-kit";
+import { color, font, humanize } from "@paged-media/panel-kit";
+import { defineMessages, t } from "@paged-media/strings";
 import type * as React from "react";
 
 const introStyle: React.CSSProperties = {
@@ -51,16 +52,67 @@ export function PanelIntro(props: {
 
 // ------------------------------------------------------------ labels
 
-const KIND_LABELS: Readonly<Record<string, string>> = {
+const KIND_LABELS = defineMessages("draw.kind", {
   polygon: "path",
   graphicLine: "line",
   rectangle: "rectangle",
   oval: "ellipse",
   textFrame: "text frame",
   group: "group",
-};
+  object: "object",
+});
 
-/** "path", "line", "text frame"… for a selected element's kind. */
+/** "path", "line", "text frame"… for a selected element's kind, in the
+ *  editor's locale. */
 export function elementKindLabel(id: ElementId): string {
-  return KIND_LABELS[id.kind] ?? "object";
+  return t(
+    Object.hasOwn(KIND_LABELS, id.kind)
+      ? KIND_LABELS[id.kind as keyof typeof KIND_LABELS]
+      : KIND_LABELS.object,
+  );
+}
+
+/** The enum tokens the panels offer (easing, joins, caps, layouts, repeat
+ *  kinds, the nine-point grid), as words. English is what `humanize`
+ *  makes of the token. */
+const TOKEN_LABELS = defineMessages("draw.token", {
+  linear: "Linear",
+  easeIn: "Ease in",
+  easeOut: "Ease out",
+  easeInOut: "Ease in out",
+  miter: "Miter",
+  round: "Round",
+  bevel: "Bevel",
+  butt: "Butt",
+  square: "Square",
+  grid: "Grid",
+  brick: "Brick",
+  hex: "Hex",
+  radial: "Radial",
+  mirror: "Mirror",
+  topLeft: "Top left",
+  top: "Top",
+  topRight: "Top right",
+  left: "Left",
+  center: "Center",
+  right: "Right",
+  bottomLeft: "Bottom left",
+  bottom: "Bottom",
+  bottomRight: "Bottom right",
+  rightInFront: "Right in front",
+  leftInFront: "Left in front",
+  bottomInFront: "Bottom in front",
+  topInFront: "Top in front",
+  page: "Page",
+  path: "Path",
+  count: "Count",
+  spacing: "Spacing",
+});
+
+/** A token as a label in the editor's locale: "easeInOut" → "Ease in out";
+ *  a token without a message is humanized. */
+export function tokenLabel(token: string): string {
+  return Object.hasOwn(TOKEN_LABELS, token)
+    ? t(TOKEN_LABELS[token as keyof typeof TOKEN_LABELS])
+    : humanize(token);
 }

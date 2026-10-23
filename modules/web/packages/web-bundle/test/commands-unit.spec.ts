@@ -23,12 +23,13 @@
 // the document and says why. (Insert, render-to-frame and the three thread
 // commands have their unit specs in activate.spec.ts, bake.spec.ts and
 // flow-command.spec.ts; all seven run on the engine in
-// test/headless/commands.spec.ts.)
+// test/headless/commands.spec.ts.) The typed importHtml and makeWebFrame
+// (no untyped twin) are below: what they write, and what they refuse.
 
 import { describe, expect, it } from "bun:test";
 
 import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
-import { createBundleHost } from "@paged-media/plugin-sdk";
+import { createBundleHost, silentConsole } from "@paged-media/plugin-sdk";
 import { covers, createFakeEditor } from "@paged-media/test-kit";
 
 import { webBundle } from "../src";
@@ -121,5 +122,148 @@ describe("media.paged.web.command.bakeWebFrame (unit)", () => {
     expect(said).toHaveLength(1);
     expect(said[0]).not.toContain("baked ");
     b.dispose();
+  });
+});
+
+/** The bundle over a fake editor whose scene tree holds `FRAME`, carrying
+ *  `label` as its paged.web label when given. */
+function bootTree(label?: string) {
+  const fake = createFakeEditor({
+    reply: (m) =>
+      m.kind === "requestSceneTree"
+        ? ({
+            kind: "sceneTree",
+            payload: {
+              roots: [
+                {
+                  id: FRAME,
+                  children: [],
+                  pluginMetadata: label
+                    ? [{ key: "x-paged:media.paged.web", value: label }]
+                    : [],
+                },
+              ],
+            },
+          } as never)
+        : undefined,
+  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    webBundle.manifest as PluginManifest,
+    { console: silentConsole },
+  );
+  const bundle = webBundle.activate(handle.host);
+  return {
+    fake,
+    objects: handle.host.objects,
+    dispose() {
+      bundle.dispose();
+      handle.dispose();
+    },
+  };
+}
+
+/** The label value a mutation set on an element, parsed. */
+const labelOf = (m: unknown): { data: { html: string; css: string } } => {
+  const args = (m as { args: { value: string } }).args;
+  return JSON.parse(args.value);
+};
+
+describe("media.paged.web.command.importHtml (unit)", () => {
+  it("inserts one frame and its sanitised label in ONE batch, splitting a whole file into lanes", async () => {
+    covers("command:media.paged.web.command.importHtml");
+    const b = bootTree();
+    const out = (await b.objects.invoke("media.paged.web.command.importHtml", {
+      html: '<html><head><style>p { color: red; }</style></head><body><p onclick="x()">Hi</p><script>x()</script></body></html>',
+      page: "page:#1",
+      bounds: [10, 10, 110, 210],
+    })) as { webFrame: string; frame: string; removed: string[] };
+    const [batch] = b.fake.mutations() as unknown as {
+      op: string;
+      args: { ops: { op: string }[] };
+    }[];
+    expect(b.fake.mutations()).toHaveLength(1);
+    expect(batch!.op).toBe("batch");
+    expect(batch!.args.ops.map((o) => o.op)).toEqual([
+      "insertFrame",
+      "setPluginMetadata",
+    ]);
+    const { data } = labelOf(batch!.args.ops[1]);
+    expect(data.css).toBe("p { color: red; }");
+    expect(data.html).not.toContain("script");
+    expect(data.html).not.toContain("onclick");
+    expect(out.removed.sort()).toEqual([
+      "<script> element",
+      "event-handler attribute",
+    ]);
+    expect(out.webFrame).toBe(
+      `plugin:media.paged.web/webFrame/${out.frame.split(":")[1]}`,
+    );
+    b.dispose();
+  });
+
+  it("refuses a page the document does not have, writing nothing", async () => {
+    covers("command:media.paged.web.command.importHtml");
+    const b = bootTree();
+    await expect(
+      b.objects.invoke("media.paged.web.command.importHtml", {
+        html: "<p>x</p>",
+        css: "",
+        page: "page:#4",
+        bounds: [0, 0, 10, 10],
+      }),
+    ).rejects.toThrow(/invalidValue: page:#4 is not a page/);
+    expect(b.fake.mutations()).toEqual([]);
+    b.dispose();
+  });
+});
+
+describe("media.paged.web.command.makeWebFrame (unit)", () => {
+  it("writes a starter's source as the frame's label: one mutation", async () => {
+    covers("command:media.paged.web.command.makeWebFrame");
+    const b = bootTree();
+    const out = (await b.objects.invoke(
+      "media.paged.web.command.makeWebFrame",
+      { frame: "rectangle:u7", template: "card" },
+    )) as { webFrame: string };
+    expect(out.webFrame).toBe("plugin:media.paged.web/webFrame/u7");
+    const muts = b.fake.mutations() as unknown as {
+      op: string;
+      args: { elementId: ElementId; key: string };
+    }[];
+    expect(muts).toHaveLength(1);
+    expect(muts[0]!.op).toBe("setPluginMetadata");
+    expect(muts[0]!.args.elementId).toEqual(FRAME);
+    expect(labelOf(muts[0]).data.html.length).toBeGreaterThan(0);
+    b.dispose();
+  });
+
+  it("refuses a frame that is a web frame already, an unknown starter and a missing item", async () => {
+    covers("command:media.paged.web.command.makeWebFrame");
+    const label = JSON.stringify({
+      v: 1,
+      data: { html: "<p/>", css: "", options: { media: "print" } },
+    });
+    const web = bootTree(label);
+    await expect(
+      web.objects.invoke("media.paged.web.command.makeWebFrame", {
+        frame: "rectangle:u7",
+      }),
+    ).rejects.toThrow(/is a web frame already/);
+    web.dispose();
+    const plain = bootTree();
+    await expect(
+      plain.objects.invoke("media.paged.web.command.makeWebFrame", {
+        frame: "rectangle:u7",
+        template: "nope",
+      }),
+    ).rejects.toThrow(/invalidValue/);
+    await expect(
+      plain.objects.invoke("media.paged.web.command.makeWebFrame", {
+        frame: "rectangle:u99",
+      }),
+    ).rejects.toThrow(/invalidValue: rectangle:u99 is not a page item/);
+    expect(plain.fake.mutations()).toEqual([]);
+    plain.dispose();
   });
 });

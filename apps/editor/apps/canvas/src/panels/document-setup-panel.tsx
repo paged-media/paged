@@ -50,59 +50,101 @@ import {
   useDocumentUnit,
 } from "@paged-media/ui";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { SchemaSections, type SectionSpec } from "./schema-sections";
+import { sectionsIn } from "./section-strings";
+
+const M = defineMessages("app.documentSetupPanel", {
+  bleed: "Bleed",
+  top: "Top",
+  bottom: "Bottom",
+  inside: "Inside",
+  outside: "Outside",
+  slug: "Slug",
+  defaults: "Defaults",
+  fill: "Fill",
+  stroke: "Stroke",
+  weight: "Weight",
+  colorManagement: "Color Management",
+  cmykProfile: "CMYK profile",
+  rgbPolicy: "RGB policy",
+  intent: "Intent",
+  blackPoint: "Black point",
+  labForSpots: "Lab for spots",
+  proofSetup: "Proof Setup",
+  profile: "Profile",
+  paperWhite: "Paper white",
+  conditions: "Conditions",
+  activeSet: "Active set",
+  page: "Page",
+  bounds: "Bounds",
+  master: "Master",
+  margins: "Margins",
+  columns: "Columns",
+  number: "Number",
+  gutter: "Gutter",
+  documentSetup: "Document Setup",
+  units: "Units",
+  marginsAndColumns: "Margins and Columns",
+  pages: "Pages",
+  pageN: "Page {index}",
+  allPages: "All pages",
+});
+
+// Section titles and field labels are message keys (`sectionsIn`).
 
 const DOCUMENT_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Bleed",
+    title: M.bleed,
     fields: [
-      { path: "documentBleedTop", label: "Top" },
-      { path: "documentBleedBottom", label: "Bottom" },
-      { path: "documentBleedInsideOrLeft", label: "Inside" },
-      { path: "documentBleedOutsideOrRight", label: "Outside" },
+      { path: "documentBleedTop", label: M.top },
+      { path: "documentBleedBottom", label: M.bottom },
+      { path: "documentBleedInsideOrLeft", label: M.inside },
+      { path: "documentBleedOutsideOrRight", label: M.outside },
     ],
   },
   {
-    title: "Slug",
+    title: M.slug,
     fields: [
-      { path: "documentSlugTop", label: "Top" },
-      { path: "documentSlugBottom", label: "Bottom" },
-      { path: "documentSlugInsideOrLeft", label: "Inside" },
-      { path: "documentSlugRightOrOutside", label: "Outside" },
+      { path: "documentSlugTop", label: M.top },
+      { path: "documentSlugBottom", label: M.bottom },
+      { path: "documentSlugInsideOrLeft", label: M.inside },
+      { path: "documentSlugRightOrOutside", label: M.outside },
     ],
   },
   {
-    title: "Defaults",
+    title: M.defaults,
     fields: [
-      { path: "defaultFillColor", label: "Fill", collection: "swatches" },
-      { path: "defaultStrokeColor", label: "Stroke", collection: "swatches" },
-      { path: "defaultStrokeWeight", label: "Weight" },
+      { path: "defaultFillColor", label: M.fill, collection: "swatches" },
+      { path: "defaultStrokeColor", label: M.stroke, collection: "swatches" },
+      { path: "defaultStrokeWeight", label: M.weight },
     ],
   },
   {
-    title: "Color Management",
+    title: M.colorManagement,
     fields: [
-      { path: "cmykProfile", label: "CMYK profile" },
-      { path: "rgbPolicy", label: "RGB policy" },
-      { path: "renderingIntent", label: "Intent" },
-      { path: "blackPointCompensation", label: "Black point" },
-      { path: "useStandardLabForSpots", label: "Lab for spots" },
+      { path: "cmykProfile", label: M.cmykProfile },
+      { path: "rgbPolicy", label: M.rgbPolicy },
+      { path: "renderingIntent", label: M.intent },
+      { path: "blackPointCompensation", label: M.blackPoint },
+      { path: "useStandardLabForSpots", label: M.labForSpots },
     ],
   },
   {
-    title: "Proof Setup",
+    title: M.proofSetup,
     fields: [
-      { path: "proofProfile", label: "Profile" },
-      { path: "proofIntent", label: "Intent" },
-      { path: "proofSimulatePaperWhite", label: "Paper white" },
+      { path: "proofProfile", label: M.profile },
+      { path: "proofIntent", label: M.intent },
+      { path: "proofSimulatePaperWhite", label: M.paperWhite },
     ],
   },
   {
-    title: "Conditions",
+    title: M.conditions,
     fields: [
       {
         path: "activeConditionSet",
-        label: "Active set",
+        label: M.activeSet,
         collection: "conditionSets",
       },
     ],
@@ -111,26 +153,26 @@ const DOCUMENT_SECTIONS: readonly SectionSpec[] = [
 
 const PAGE_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Page",
+    title: M.page,
     fields: [
-      { path: "pageBounds", label: "Bounds" },
-      { path: "appliedMaster", label: "Master", collection: "masterPages" },
+      { path: "pageBounds", label: M.bounds },
+      { path: "appliedMaster", label: M.master, collection: "masterPages" },
     ],
   },
   {
-    title: "Margins",
+    title: M.margins,
     fields: [
-      { path: "pageMarginTop", label: "Top" },
-      { path: "pageMarginBottom", label: "Bottom" },
-      { path: "pageMarginLeft", label: "Inside" },
-      { path: "pageMarginRight", label: "Outside" },
+      { path: "pageMarginTop", label: M.top },
+      { path: "pageMarginBottom", label: M.bottom },
+      { path: "pageMarginLeft", label: M.inside },
+      { path: "pageMarginRight", label: M.outside },
     ],
   },
   {
-    title: "Columns",
+    title: M.columns,
     fields: [
-      { path: "pageColumnCount", label: "Number" },
-      { path: "pageColumnGutter", label: "Gutter" },
+      { path: "pageColumnCount", label: M.number },
+      { path: "pageColumnGutter", label: M.gutter },
     ],
   },
 ];
@@ -138,13 +180,14 @@ const PAGE_SECTIONS: readonly SectionSpec[] = [
 const DOC_TARGETS = ["doc"] as const;
 
 export function DocumentSetupPanel() {
+  const strings = useStrings();
   return (
     <div data-document-setup-panel="ready">
-      <CockpitPanelHeader title="Document Setup" />
+      <CockpitPanelHeader title={strings.t(M.documentSetup)} />
       <UnitsRow />
       <SchemaSections
         targets={DOC_TARGETS}
-        sections={DOCUMENT_SECTIONS}
+        sections={sectionsIn(strings, DOCUMENT_SECTIONS)}
         testId="doc"
       />
     </div>
@@ -155,10 +198,11 @@ export function DocumentSetupPanel() {
  *  Units & Increments). An editor preference: the document model keeps
  *  points, and a typed unit converts whatever is chosen here. */
 export function UnitsRow() {
+  const strings = useStrings();
   const unit = useDocumentUnit();
   return (
     <div className="px-3.5 pb-2">
-      <CockpitRow label="Units">
+      <CockpitRow label={strings.t(M.units)}>
         <FieldSelect
           data-units-select=""
           className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
@@ -184,6 +228,7 @@ export function pageAddress(selfId: string): string {
 }
 
 export function MarginsColumnsPanel() {
+  const strings = useStrings();
   const pages = useCollection<PageSummary>("pages");
   const [pick, setPick] = useState<string>("");
   const chosen = pick || pages?.[0]?.selfId || "";
@@ -198,9 +243,9 @@ export function MarginsColumnsPanel() {
       data-margins-columns-panel={pages ? "ready" : "loading"}
       data-page-targets={targets.length}
     >
-      <CockpitPanelHeader title="Margins and Columns" />
+      <CockpitPanelHeader title={strings.t(M.marginsAndColumns)} />
       <div className="px-3.5 pb-2">
-        <CockpitRow label="Pages">
+        <CockpitRow label={strings.t(M.pages)}>
           <FieldSelect
             data-page-select=""
             className="h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]"
@@ -209,10 +254,12 @@ export function MarginsColumnsPanel() {
           >
             {(pages ?? []).map((p) => (
               <option key={p.selfId} value={p.selfId}>
-                Page {p.index}
+                {strings.t(M.pageN, { index: p.index })}
               </option>
             ))}
-            {(pages?.length ?? 0) > 1 && <option value={ALL}>All pages</option>}
+            {(pages?.length ?? 0) > 1 && (
+              <option value={ALL}>{strings.t(M.allPages)}</option>
+            )}
           </FieldSelect>
         </CockpitRow>
       </div>
@@ -220,7 +267,7 @@ export function MarginsColumnsPanel() {
         <SchemaSections
           key={targets.join(" ")}
           targets={targets}
-          sections={PAGE_SECTIONS}
+          sections={sectionsIn(strings, PAGE_SECTIONS)}
           testId="page"
         />
       )}

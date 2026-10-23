@@ -55,6 +55,32 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.characterComposition", {
+  metrics: "Metrics",
+  optical: "Optical",
+  none: "None",
+  englishUsa: "English: USA",
+  englishUk: "English: UK",
+  german: "German",
+  french: "French",
+  spanish: "Spanish",
+  italian: "Italian",
+  character: "Character",
+  auto: "Auto",
+  case: "Case",
+  position: "Position",
+  underline: "Underline",
+  strikethrough: "Strikethrough",
+  ligatures: "Ligatures",
+  noBreak: "No break",
+  language: "Language",
+  fill: "Fill",
+  hScale: "H scale",
+  vScale: "V scale",
+  skew: "Skew",
+});
 
 // Common IDML FontStyle face names — a static write surface (no
 // per-family face listing on the wire yet). An out-of-list current
@@ -70,267 +96,280 @@ const FONT_STYLES = [
 ];
 
 // IDML KerningMethod enum strings.
-const KERNING_METHODS = [
-  { value: "Metrics", label: "Metrics" },
-  { value: "Optical", label: "Optical" },
-  { value: "None", label: "None" },
+const kerningMethods = (strings: Strings) => [
+  { value: "Metrics", label: strings.t(M.metrics) },
+  { value: "Optical", label: strings.t(M.optical) },
+  { value: "None", label: strings.t(M.none) },
 ];
 
 // A pragmatic short list of IDML AppliedLanguage names; an
 // out-of-list current value renders via the pass-through option.
-const LANGUAGES = [
-  { value: "$ID/English: USA", label: "English: USA" },
-  { value: "$ID/English: UK", label: "English: UK" },
-  { value: "$ID/German", label: "German" },
-  { value: "$ID/French", label: "French" },
-  { value: "$ID/Spanish", label: "Spanish" },
-  { value: "$ID/Italian", label: "Italian" },
+const languages = (strings: Strings) => [
+  { value: "$ID/English: USA", label: strings.t(M.englishUsa) },
+  { value: "$ID/English: UK", label: strings.t(M.englishUk) },
+  { value: "$ID/German", label: strings.t(M.german) },
+  { value: "$ID/French", label: strings.t(M.french) },
+  { value: "$ID/Spanish", label: strings.t(M.spanish) },
+  { value: "$ID/Italian", label: strings.t(M.italian) },
 ];
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const characterComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Character", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_LAYOUT_CLUSTER,
-      props: { count: 2 },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_SELECT,
-          props: { placeholder: "—", options: FONT_STYLES },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterFontStyle",
+export function characterComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.character), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_LAYOUT_CLUSTER,
+        props: { count: 2 },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_SELECT,
+            props: { placeholder: "—", options: FONT_STYLES },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterFontStyle",
+              },
             },
           },
-        },
-        {
-          catalogId: PAGED_INPUT_LENGTH,
-          props: { icon: "ui-size" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterFontSize",
+          {
+            catalogId: PAGED_INPUT_LENGTH,
+            props: { icon: "ui-size" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterFontSize",
+              },
             },
           },
-        },
-      ],
-    },
-    {
-      catalogId: PAGED_LAYOUT_CLUSTER,
-      props: { count: 2 },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_LENGTH,
-          // Unset leading is Auto (R3, PN-21), not 0 pt.
-          props: { icon: "ui-leading", unsetText: "Auto" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterLeading",
-            },
-          },
-        },
-        {
-          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { icon: "ui-tracking" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterTracking",
-            },
-          },
-        },
-      ],
-    },
-    {
-      catalogId: PAGED_LAYOUT_CLUSTER,
-      props: { count: 2 },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_SELECT,
-          props: { icon: "ui-kerning", options: KERNING_METHODS },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterKerningMethod",
-            },
-          },
-        },
-        {
-          catalogId: PAGED_INPUT_LENGTH,
-          props: { icon: "ui-size" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterBaselineShift",
-            },
-          },
-        },
-      ],
-    },
-    {
-      catalogId: PAGED_LAYOUT_CLUSTER,
-      props: { count: 3, sublabels: ["H scale", "V scale", "Skew"] },
-      bindings: {},
-      children: [
-        {
-          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { suffix: "%" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterHorizontalScale",
-            },
-          },
-        },
-        {
-          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { suffix: "%" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterVerticalScale",
-            },
-          },
-        },
-        {
-          catalogId: PAGED_INPUT_NUMERIC_SCRUB,
-          props: { suffix: "°" },
-          bindings: {
-            value: {
-              kind: "selectionProperty",
-              scope: "content",
-              path: "characterSkew",
-            },
-          },
-        },
-      ],
-    },
-    {
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Case",
-        options: [
-          { value: "Normal", label: "ab" },
-          { value: "AllCaps", label: "AB" },
-          { value: "SmallCaps", label: "Ab" },
         ],
       },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterCase",
-        },
-      },
-    },
-    {
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Position",
-        options: [
-          { value: "Normal", label: "ui-minus" },
-          { value: "Superscript", label: "ui-size" },
-          { value: "Subscript", label: "ui-leading" },
+      {
+        catalogId: PAGED_LAYOUT_CLUSTER,
+        props: { count: 2 },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_LENGTH,
+            // Unset leading is Auto (R3, PN-21), not 0 pt.
+            props: { icon: "ui-leading", unsetText: strings.t(M.auto) },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterLeading",
+              },
+            },
+          },
+          {
+            catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+            props: { icon: "ui-tracking" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterTracking",
+              },
+            },
+          },
         ],
       },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterPosition",
+      {
+        catalogId: PAGED_LAYOUT_CLUSTER,
+        props: { count: 2 },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_SELECT,
+            props: { icon: "ui-kerning", options: kerningMethods(strings) },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterKerningMethod",
+              },
+            },
+          },
+          {
+            catalogId: PAGED_INPUT_LENGTH,
+            props: { icon: "ui-size" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterBaselineShift",
+              },
+            },
+          },
+        ],
+      },
+      {
+        catalogId: PAGED_LAYOUT_CLUSTER,
+        props: {
+          count: 3,
+          sublabels: [
+            strings.t(M.hScale),
+            strings.t(M.vScale),
+            strings.t(M.skew),
+          ],
+        },
+        bindings: {},
+        children: [
+          {
+            catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+            props: { suffix: "%" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterHorizontalScale",
+              },
+            },
+          },
+          {
+            catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+            props: { suffix: "%" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterVerticalScale",
+              },
+            },
+          },
+          {
+            catalogId: PAGED_INPUT_NUMERIC_SCRUB,
+            props: { suffix: "°" },
+            bindings: {
+              value: {
+                kind: "selectionProperty",
+                scope: "content",
+                path: "characterSkew",
+              },
+            },
+          },
+        ],
+      },
+      {
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.case),
+          options: [
+            { value: "Normal", label: "ab" },
+            { value: "AllCaps", label: "AB" },
+            { value: "SmallCaps", label: "Ab" },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterCase",
+          },
         },
       },
-    },
-    {
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Underline" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterUnderline",
+      {
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.position),
+          options: [
+            { value: "Normal", label: "ui-minus" },
+            { value: "Superscript", label: "ui-size" },
+            { value: "Subscript", label: "ui-leading" },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterPosition",
+          },
         },
       },
-    },
-    {
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Strikethrough" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterStrikethru",
+      {
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.underline) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterUnderline",
+          },
         },
       },
-    },
-    {
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Ligatures" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterLigatures",
+      {
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.strikethrough) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterStrikethru",
+          },
         },
       },
-    },
-    {
-      // InDesign's Character panel menu ▸ No Break. Laid out ahead of the
-      // pinned engine (core ADR 153): shown once the schema and the
-      // running engine report the path; the pinned wire's `PropertyPath`
-      // union does not name it yet, hence the cast.
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "No break", hideUnreported: true },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterNoBreak" as PropertyPath,
+      {
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.ligatures) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterLigatures",
+          },
         },
       },
-    },
-    {
-      catalogId: PAGED_INPUT_SELECT,
-      props: { label: "Language", placeholder: "—", options: LANGUAGES },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterLanguage",
+      {
+        // InDesign's Character panel menu ▸ No Break. Laid out ahead of the
+        // pinned engine (core ADR 153): shown once the schema and the
+        // running engine report the path; the pinned wire's `PropertyPath`
+        // union does not name it yet, hence the cast.
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.noBreak), hideUnreported: true },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterNoBreak" as PropertyPath,
+          },
         },
       },
-    },
-    {
-      // LIVE extra beyond the card (the card hosts fill in the
-      // Properties inspector) — kept for capability.
-      catalogId: PAGED_INPUT_COLOR_SWATCH,
-      props: { label: "Fill" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "content",
-          path: "characterFillColor",
+      {
+        catalogId: PAGED_INPUT_SELECT,
+        props: {
+          label: strings.t(M.language),
+          placeholder: "—",
+          options: languages(strings),
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterLanguage",
+          },
         },
       },
-    },
-  ],
-});
+      {
+        // LIVE extra beyond the card (the card hosts fill in the
+        // Properties inspector) — kept for capability.
+        catalogId: PAGED_INPUT_COLOR_SWATCH,
+        props: { label: strings.t(M.fill) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "content",
+            path: "characterFillColor",
+          },
+        },
+      },
+    ],
+  });
+}

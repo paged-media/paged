@@ -56,6 +56,10 @@
 // drifted apart over time and nothing could notice, since there was no
 // single thing for them to disagree with. There is now.
 
+import { t } from "@paged-media/strings";
+
+import { APPLICABILITY } from "./messages";
+
 export type Applicability = "here" | "elsewhere" | "absent";
 
 /** What KIND of surface is rendering the state, because the right
@@ -157,9 +161,9 @@ export function applicabilityOf(opts: {
 export function applicabilityHint(state: Applicability): string {
   switch (state) {
     case "elsewhere":
-      return " — leaves this context";
+      return t(APPLICABILITY.elsewhere);
     case "absent":
-      return " — coming soon";
+      return t(APPLICABILITY.absent);
     default:
       return "";
   }

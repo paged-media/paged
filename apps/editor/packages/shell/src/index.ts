@@ -22,6 +22,12 @@
 // substrate, and command palette per
 // the original architecture spec §17 (not published; see `docs/architecture.md`).
 
+// The shell's German (plan E10), registered with the shell.
+import "./translations";
+
+// Menu path segments and command categories in the editor's locale.
+export { categoryLabel, menuLabel } from "./chrome/messages";
+
 // ── State contexts ─────────────────────────────────────────────
 export {
   CanvasClientProvider,
@@ -412,6 +418,7 @@ export {
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
+  setDefaultFontUrls,
   DEFAULT_FONT_FAMILY,
   type DocumentLoaderCallbacks,
 } from "./state/document-loader";
@@ -672,6 +679,7 @@ export {
 } from "./ai/editor-ai";
 export {
   AI_UNAVAILABLE_TEXT,
+  aiUnavailableText,
   getAiAvailability,
   probeAiService,
   resetAiAvailability,

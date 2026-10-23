@@ -29,6 +29,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { t, useStrings } from "@paged-media/strings";
 import { applicabilityOf, applicabilityStyle } from "./applicability";
 
 import { useRegistries } from "../state/registries-context";
@@ -51,6 +52,7 @@ import type { EditContextContribution } from "../registries/edit-context";
 import { font, IconButton } from "@paged-media/panel-kit";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
+import { TOOL_RAIL } from "./messages";
 
 // Concept 1 (T4) — the left tool rail. Shell CHROME, rendered as a
 // sibling of the dockview container, NOT a dock panel: fixed, not
@@ -93,7 +95,7 @@ function isPlanned(tool: ToolContribution): boolean {
  *  bound (see `ToolStatus`), so showing it would promise a keystroke
  *  that does nothing. */
 function tooltipFor(tool: ToolContribution): string {
-  if (isPlanned(tool)) return `${tool.title} — coming soon`;
+  if (isPlanned(tool)) return t(TOOL_RAIL.toolComingSoon, { tool: tool.title });
   return tool.shortcut
     ? `${tool.title} (${formatShortcut(tool.shortcut)})`
     : tool.title;
@@ -277,6 +279,7 @@ export function ToolRail({
    *  no tool is treated as a plugin's (nothing is hidden). */
   hostToolIds?: ReadonlySet<string>;
 }) {
+  const strings = useStrings();
   const registries = useRegistries();
   const chrome = useChromeRegions();
   const { effectiveTool, setBaseTool } = useTool();
@@ -465,13 +468,17 @@ export function ToolRail({
     .filter((c) => c.slots.length > 0);
 
   return (
-    <nav style={railStyle} aria-label="Tools" data-tool-rail="ready">
+    <nav
+      style={railStyle}
+      aria-label={strings.t(TOOL_RAIL.tools)}
+      data-tool-rail="ready"
+    >
       {/* The tools scroll on a short window; the foot (fill/stroke,
        *  proof, screen mode) stays pinned below them, never scrolled
        *  out of reach. */}
       <div
         role="toolbar"
-        aria-label="Tools"
+        aria-label={strings.t(TOOL_RAIL.tools)}
         aria-orientation="vertical"
         style={railToolsStyle}
         onScroll={tooltip.hide}
@@ -517,7 +524,7 @@ export function ToolRail({
       {foot != null && (
         <div
           role="toolbar"
-          aria-label="Fill, stroke and view"
+          aria-label={strings.t(TOOL_RAIL.foot)}
           aria-orientation="vertical"
           style={footStyle}
           {...footRoving}
@@ -569,6 +576,7 @@ function FloatingToolPalette({
   onMove: (pos: { x: number; y: number }) => void;
   onClose: () => void;
 }) {
+  const strings = useStrings();
   const onGripDown = (e: ReactPointerEvent) => {
     e.preventDefault();
     const start = { x: e.clientX, y: e.clientY, origX: pos.x, origY: pos.y };
@@ -590,7 +598,9 @@ function FloatingToolPalette({
     <div
       style={{ ...paletteStyle, left: pos.x, top: pos.y }}
       role="toolbar"
-      aria-label={`${slot.defaultTool.title} tools`}
+      aria-label={strings.t(TOOL_RAIL.groupTools, {
+        tool: slot.defaultTool.title,
+      })}
       data-tool-palette={slot.group}
     >
       <div style={paletteGripStyle} onPointerDown={onGripDown}>
@@ -601,10 +611,10 @@ function FloatingToolPalette({
           ⠿
         </span>
         <IconButton
-          label="Close palette"
+          label={strings.t(TOOL_RAIL.closePalette)}
           onClick={onClose}
           style={paletteCloseStyle}
-          title="Close palette"
+          title={strings.t(TOOL_RAIL.closePalette)}
           data-tool-palette-close
         >
           ×
@@ -658,6 +668,7 @@ function ToolSlot({
   onHint?: (tool: ToolContribution, anchor: RailAnchor) => void;
   onUnhint?: () => void;
 }) {
+  const strings = useStrings();
   const [flyoutOpen, setFlyoutOpen] = useState(false);
   // Flyout is portalled to <body> so it escapes the rail's overflow
   // clip (overflow-y:auto forces overflow-x to compute as auto too).
@@ -881,7 +892,9 @@ function ToolSlot({
             }}
             style={{ ...flyoutStyle, left: flyoutPos.left, top: flyoutPos.top }}
             role="menu"
-            aria-label={`${slot.defaultTool.title} tools`}
+            aria-label={strings.t(TOOL_RAIL.groupTools, {
+              tool: slot.defaultTool.title,
+            })}
             data-tool-flyout={slot.group}
             onFocus={flyoutRoving.onFocus}
             onKeyDown={(e) => {
@@ -898,7 +911,7 @@ function ToolSlot({
               <button
                 type="button"
                 role="menuitem"
-                title="Tear off into a floating palette"
+                title={strings.t(TOOL_RAIL.tearOffTitle)}
                 data-tool-tearoff={slot.group}
                 onClick={() => {
                   setFlyoutOpen(false);
@@ -909,7 +922,7 @@ function ToolSlot({
                 }}
                 style={tearOffStyle}
               >
-                ⠿ Tear off
+                ⠿ {strings.t(TOOL_RAIL.tearOff)}
               </button>
             )}
             {slot.members.map((member) => {
@@ -951,7 +964,9 @@ function ToolSlot({
                   <SlotGlyph tool={member} />
                   <span style={flyoutLabelStyle}>{member.title}</span>
                   {memberPlanned ? (
-                    <span style={flyoutShortcutStyle}>Coming soon</span>
+                    <span style={flyoutShortcutStyle}>
+                      {strings.t(TOOL_RAIL.comingSoon)}
+                    </span>
                   ) : (
                     member.shortcut && (
                       <span style={flyoutShortcutStyle}>
@@ -1068,6 +1083,7 @@ function useRailTooltip() {
 }
 
 function RailTooltip({ hint }: { hint: RailHint }) {
+  const strings = useStrings();
   const { tool, cluster, more, anchor } = hint;
   const planned = isPlanned(tool);
   return (
@@ -1088,7 +1104,7 @@ function RailTooltip({ hint }: { hint: RailHint }) {
         )}
       </div>
       {planned ? (
-        <div style={tooltipBodyStyle}>Coming soon</div>
+        <div style={tooltipBodyStyle}>{strings.t(TOOL_RAIL.comingSoon)}</div>
       ) : (
         tool.description && (
           <div style={tooltipBodyStyle}>{tool.description}</div>
@@ -1096,7 +1112,7 @@ function RailTooltip({ hint }: { hint: RailHint }) {
       )}
       {more > 0 && (
         <div style={tooltipMoreStyle}>
-          Hold or right-click for {more} more {more === 1 ? "tool" : "tools"}
+          {strings.t(TOOL_RAIL.more, { count: more })}
         </div>
       )}
     </div>

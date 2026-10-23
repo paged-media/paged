@@ -35,6 +35,9 @@ import {
   useObjectModel,
   type ShellObjectsSurface,
 } from "@paged-media/shell";
+import { t } from "@paged-media/strings";
+
+import { FORM } from "./messages";
 
 export function moduleFieldRef(
   row: TemplateFieldSummary,
@@ -67,8 +70,7 @@ function useModuleField(
     const read = objects?.readTemplateField;
     if (!ref || !read) {
       void Promise.resolve().then(() => {
-        if (live)
-          setLoaded({ state: "missing", why: "No module reads this field." });
+        if (live) setLoaded({ state: "missing", why: t(FORM.noModuleReads) });
       });
     } else {
       read(ref).then(
@@ -80,7 +82,7 @@ function useModuleField(
             setLoaded({
               state: "missing",
               why: /unknownFieldKind/.test(String(err))
-                ? "The module this field belongs to is not loaded."
+                ? t(FORM.moduleNotLoaded)
                 : String(err),
             });
         },
@@ -102,7 +104,7 @@ function writeField(
 ): Promise<string | null> {
   const ref = moduleFieldRef(row);
   const write = objects?.writeTemplateField;
-  if (!ref || !write) return Promise.resolve("No module writes this field.");
+  if (!ref || !write) return Promise.resolve(t(FORM.noModuleWrites));
   return write(ref, value).then(
     (r) => (r.ok ? null : r.problem),
     (err: unknown) => String(err),
@@ -267,7 +269,7 @@ export function ModuleFieldControl({
       return (
         <div style={{ display: "flex", gap: space[2], alignItems: "center" }}>
           <span data-field-picture={name} style={{ flex: 1, minWidth: 0 }}>
-            {current ?? "No picture"}
+            {current ?? t(FORM.noPicture)}
           </span>
           <button
             type="button"
@@ -281,7 +283,7 @@ export function ModuleFieldControl({
               });
             }}
           >
-            Replace…
+            {t(FORM.replace)}
           </button>
         </div>
       );

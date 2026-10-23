@@ -41,30 +41,38 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.swatchesComposition", {
+  swatches: "Swatches",
+  fill: "Fill",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const swatchesComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Swatches" },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_COLLECTION_SELECT,
-      props: {
-        label: "Fill",
-        collectionName: "swatches",
-        valueType: "colorRef",
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameFillColor",
+export function swatchesComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.swatches) },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_COLLECTION_SELECT,
+        props: {
+          label: strings.t(M.fill),
+          collectionName: "swatches",
+          valueType: "colorRef",
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameFillColor",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}

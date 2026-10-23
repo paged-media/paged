@@ -23,6 +23,10 @@
 // edit-time, strictly after the per-origin consent gate. No binding/expression
 // semantics live here (CLAUDE.md hard rule).
 
+import { t } from "@paged-media/strings";
+
+import { SOURCES as M } from "./messages";
+
 /** The remote formats the M1 fetch lane hands to DuckDB. */
 export type RemoteFormat = "csv" | "tsv" | "json" | "parquet";
 
@@ -62,16 +66,16 @@ export function validateRemoteUrl(url: string): string | null {
   try {
     parsed = new URL(url);
   } catch {
-    return `not a valid URL: ${url}`;
+    return t(M.notAUrl, { url });
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    return `remote url must be http(s), got ${parsed.protocol}//`;
+    return t(M.urlNotHttp, { protocol: parsed.protocol });
   }
   if (parsed.username !== "" || parsed.password !== "") {
-    return "remote url embeds credentials (user:pass@) — use a stored credential instead";
+    return t(M.urlCredentials);
   }
   if (parsed.hostname === "") {
-    return "remote url has no host";
+    return t(M.urlNoHost);
   }
   return null;
 }

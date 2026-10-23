@@ -52,6 +52,11 @@ import type {
 } from "@paged-media/plugin-sdk";
 import { createDataProviderRegistry } from "@paged-media/plugin-sdk";
 import type { CanvasClient } from "@paged-media/client";
+import {
+  activeStrings,
+  defineMessages,
+  defineTranslations,
+} from "@paged-media/strings";
 
 import { createHostConsole, journal } from "./journal-sink";
 import { createEditorAssetSource } from "./plugin-asset-source";
@@ -247,6 +252,10 @@ export function createEditorHostOptions(
     // bundle's `contribute.objectModel` registers into it and its
     // `host.objects` routes across bundles. Flips supports("objects.shared@1").
     objects: deps.objects,
+    // Extensions ADR 333 — a bundle's words in the editor's language: its
+    // messages and translations join the editor's catalogue. Flips
+    // supports("strings@1").
+    strings: editorStrings,
     // D-03 — the network-consent door (default-deny without it; the OUTER
     // wall is the CSP connect-src).
     consent: deps.consent,
@@ -288,6 +297,18 @@ export function createEditorHostOptions(
     toolSettings,
   };
 }
+
+/** The editor's catalogue behind `host.strings`: a bundle's key is
+ *  `<plugin id>.<name>`, so its namespace is the plugin id. */
+const editorStrings: NonNullable<CreateBundleHostOptions["strings"]> = {
+  locale: () => activeStrings().locale,
+  define(key, english) {
+    const dot = key.lastIndexOf(".");
+    defineMessages(key.slice(0, dot), { [key.slice(dot + 1)]: english });
+  },
+  translate: (locale, key, text) => defineTranslations(locale, { [key]: text }),
+  t: (key, params) => activeStrings().t(key, params),
+};
 
 /** ADR 025 §4a — identical doors for every bundle, but a PER-PLUGIN console
  *  so `host.log` is attributed at the source rather than parsed back out of

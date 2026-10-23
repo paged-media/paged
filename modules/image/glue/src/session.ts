@@ -35,6 +35,7 @@ import type {
   ElementId,
 } from "@paged-media/plugin-api";
 import { refusalText } from "@paged-media/panel-kit";
+import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
@@ -89,6 +90,7 @@ import {
 } from "./engine";
 import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
 import { claimImageTiles } from "./tile-provider";
+import { gradientKindLabel, warpKindLabel } from "./words";
 import { readPgil } from "./object-model/pgil";
 import { collectGarbage } from "./session-store";
 import { createDecodePool, type DecodePool } from "./decode-pool";
@@ -933,6 +935,355 @@ export function elementIdOf(value: unknown): string | null {
 /** Subdivisions per cubic segment when flattening a host path into the
  *  pixel mask. The target is a per-pixel coverage, so more precision
  *  than this buys nothing measurable and the cost stays bounded. */
+/** The status line's sentences (and the notes it carries): every outcome
+ *  and refusal a session action reports, in the editor's language when
+ *  the action runs. */
+const S = defineMessages("image.status", {
+  nothingIngestedIngestAPlacedImage:
+    "Nothing ingested — ingest a placed image first.",
+  frameDeselectedInFramePreviewCleared:
+    "Frame deselected — in-frame preview cleared.",
+  selectExactlyOnePlacedImageFrame: "Select exactly one placed image frame.",
+  selectionCarriesNoElementId: "Selection carries no element id.",
+  hostServesNoPlacedImageBytes:
+    "Host serves no placed-image bytes (assets.images@1 is false).",
+  readingPlacedBytes: "Reading placed bytes…",
+  noPlacedImageOnThisFrame:
+    "No placed image on this frame (or the link is unresolved).",
+  patchNeedsASelectionSelectThe:
+    "Patch needs a selection — select the area to replace, then drag it onto the source.",
+  webgpuUnavailableTheAdjustedSaveBack:
+    "WebGPU unavailable — the adjusted save-back needs a device.",
+  compositingTheFullResolutionResult: "Compositing the full-resolution result…",
+  psdSaveBackUnavailableTheStructural:
+    "PSD save-back unavailable — the structural parse failed on this file (the adjusted PNG lane is still available via Export).",
+  thisEditorVersionCannotSaveFiles:
+    "This editor version cannot save files from a panel — use the Export Center.",
+  webgpuUnavailableTheAdjustedExportNeeds:
+    "WebGPU unavailable — the adjusted export needs a device.",
+  commitNeedsAnImageIngestedFrom:
+    "Commit needs an image ingested from a frame in the document.",
+  thisHostStoresNoPluginData:
+    "This host stores no plugin data in the document (storage.parts@1 is false) — the layers cannot be kept, so nothing was committed.",
+  committingTheImageToTheDocument: "Committing the image to the document…",
+  noPatternDefinedUseDefinePattern:
+    "No pattern defined — use Define pattern first.",
+  shapeBlurUsesTheDefinedPattern:
+    "Shape blur uses the defined pattern as its shape — define one first.",
+  webgpuUnavailableTheGeneratorsAreGpu:
+    "WebGPU unavailable — the generators are GPU-only kernels.",
+  selectTheAreaToFillFirst:
+    "Select the area to fill first — content-aware fill synthesises the SELECTION from the rest of the image.",
+  autoEnhanceSetLevelsWhiteBalance:
+    "Auto-enhance set levels + white balance — click Apply to composite (document unchanged).",
+  selectedAllAdjustmentsApplyToThe:
+    "Selected all — adjustments apply to the whole image.",
+  deselectedAdjustmentsApplyToTheWhole:
+    "Deselected — adjustments apply to the whole image.",
+  selectionInverted: "Selection inverted.",
+  nothingToResizeIngestAnImage: "Nothing to resize — ingest an image first.",
+  nothingSelectedSelectARegionFirst:
+    "Nothing selected — select a region first.",
+  theFrameSGeometryCouldNot:
+    "The frame's geometry could not be read, so the path would land in the wrong place. Nothing was inserted.",
+  selectExactlyOneVectorElementOther:
+    "Select exactly ONE vector element (other than the image frame) to load its path as the selection.",
+  thatElementExposesNoPathWith:
+    "That element exposes no path with at least three anchors (a plain rectangle often carries none).",
+  theImageFrameSGeometryCould: "The image frame's geometry could not be read.",
+  thisHostServesNoFontsAssets: "This host serves no fonts (assets.fonts@1).",
+  theImageEngineCouldNotStart: "The image engine could not start.",
+  thisHostWiresNoFilePicker:
+    "This host wires no file picker (shell.pickFile@1).",
+  noBrushLibraryChosen: "No brush library chosen.",
+  noSuchBrushPreset: "No such brush preset.",
+  nothingToPaintOnIngestA: "Nothing to paint on — ingest a placed image first.",
+  webgpuUnavailablePaintingIsGpuOnly:
+    "WebGPU unavailable — painting is GPU-only.",
+  altClickToSetTheClone:
+    "Alt-click to set the clone source first — a clone with no source has nothing to copy.",
+  paintingIntoTheEngineImageSelect:
+    "Painting into the engine image — select the target frame to see the stroke in-frame.",
+  adjustmentLayerAddedItTransformsEverything:
+    "Adjustment layer added — it transforms everything beneath it, and deleting it restores the original exactly.",
+  strokeCancelledTheEnginePixelsAre:
+    "Stroke cancelled — the engine pixels are exactly as they were.",
+  nothingToCropIngestAPlaced: "Nothing to crop — ingest a placed image first.",
+  nothingIngestedSelectAnImageFrame:
+    "Nothing ingested — select an image frame and ingest first.",
+  selectTheTargetFrameToComposite:
+    "Select the target frame to composite the import into.",
+  noSceneChannelRenderingScenelayer1:
+    "No scene channel (rendering.sceneLayer@1 is false).",
+  webgpuUnavailableOnlyTheIdentityComposite:
+    "WebGPU unavailable — only the identity composite works.",
+  adjusting: "Adjusting…",
+  selectTheFrameToClaimTiles: "Select the frame to claim tiles for.",
+  hostServesNoTileResourceRendering:
+    "Host serves no tile resource (rendering.resourceProvider@1 is false).",
+  resetInFramePreviewCleared: "Reset — in-frame preview cleared.",
+  adjustmentEditFailed: "Adjustment edit failed: {error}",
+  compositeFailed: "Composite failed: {error}",
+  groupEditFailed: "Group edit failed: {error}",
+  decodeFailed: "Decode failed: {error}",
+  modifyFailed: "Modify failed: {error}",
+  psdEditFailed: "PSD edit failed: {error}",
+  psdRenameFailed: "PSD rename failed: {error}",
+  psdRemoveFailed: "PSD remove failed: {error}",
+  psdSaveFailed: "PSD save failed: {error}",
+  saveBackFailed: "Save-back failed: {error}",
+  exportFailed: "Export failed: {error}",
+  commitFailed: "Commit failed: {error}",
+  definePatternFailed: "Define pattern failed: {error}",
+  fillFailed: "Fill failed: {error}",
+  autoEnhanceFailed: "Auto-enhance failed: {error}",
+  selectAllFailed: "Select all failed: {error}",
+  invertSelectionFailed: "Invert selection failed: {error}",
+  featherFailed: "Feather failed: {error}",
+  resizeFailed: "Resize failed: {error}",
+  channelSelectionFailed: "Channel selection failed: {error}",
+  pathReadFailed: "Path read failed: {error}",
+  pathSelectionFailed: "Path selection failed: {error}",
+  typeFailed: "Type failed: {error}",
+  paintFailed: "Paint failed: {error}",
+  paintCommitFailed: "Paint commit failed: {error}",
+  selectLayerFailed: "Select layer failed: {error}",
+  layerMaskFailed: "Layer mask failed: {error}",
+  layerMaskToggleFailed: "Layer mask toggle failed: {error}",
+  clipFailed: "Clip failed: {error}",
+  groupFailed: "Group failed: {error}",
+  ungroupFailed: "Ungroup failed: {error}",
+  convertToSmartObjectFailed: "Convert to smart object failed: {error}",
+  smartReRenderFailed: "Smart re-render failed: {error}",
+  addLayerMaskFailed: "Add layer mask failed: {error}",
+  editTargetFailed: "Edit target failed: {error}",
+  layerMaskClearFailed: "Layer mask clear failed: {error}",
+  layerLockFailed: "Layer lock failed: {error}",
+  renameFailed: "Rename failed: {error}",
+  adjustmentLayerFailed: "Adjustment layer failed: {error}",
+  bakeFailed: "Bake failed: {error}",
+  cropFailed: "Crop failed: {error}",
+  adjustFailed: "Adjust failed: {error}",
+  initial: "Select a placed image on the page, then choose Use selected frame.",
+  changedOutside:
+    "This frame's image was changed outside paged.image since its layers were stored, so it opens as one layer.",
+  storedUnreadable:
+    "Stored layers could not be read ({reason}" + "); opened as one layer.",
+  storedUnrestorable:
+    "Stored layers could not be restored ({error}" + "); opened as one layer.",
+  reopenedPending:
+    "Reopened {count, plural, one {# stored layer} other {# stored layers}} (revision {rev}; its composite is new and will be committed).",
+  reopened:
+    "Reopened {count, plural, one {# stored layer} other {# stored layers}} (revision {rev}" +
+    ").",
+  noGpuDetail:
+    "WebGPU unavailable — adjustments disabled (kernels are GPU-only; identity composite still works)",
+  whatFailed: "{what} failed: {error}",
+  undoFailed: "Undo failed: {error}",
+  redoFailed: "Redo failed: {error}",
+  nothingToUndo: "Nothing to undo.",
+  nothingToRedo: "Nothing to redo.",
+  droppedPermanent:
+    "{count, plural, one {# older edit is past the undo budget and permanent.} other {# older edits are past the undo budget and permanent.}}",
+  undid: "Undid “{label}”.",
+  redid: "Redid “{label}”.",
+  psdLayersOpened:
+    "Opened the PSD's own {count, plural, one {# layer} other {# layers}}.",
+  psdLayersDeclined: "Layered PSD import declined — {why}",
+  decodedOffThread: "{name} — {width}×{height} decoded (off-thread).",
+  decoded: "{name} — {width}×{height} decoded.",
+  engineUnavailable: "Engine unavailable: {detail}",
+  unknown: "unknown",
+  importedUnbound:
+    "{name} — {width}×{height} decoded. Select an image frame and Apply to composite.",
+  importedPlaced:
+    "{name} — {width}×{height} decoded and placed in the selected frame, {count, plural, one {# layer} other {# layers}} stored with it (revision {rev}" +
+    "). Double-click the frame to edit the layers; undo in the document removes it.",
+  importedNotPlaced:
+    "{name} — {width}×{height} decoded into the selected frame, but not placed in it: {reason}",
+  importedPreview:
+    "{name} — {width}×{height} decoded into the selected frame. Apply to composite, or paint on it.",
+  canvasSized: "Canvas size → {width}×{height}. One undo step.",
+  canvasChanged: "Canvas → {width}×{height}. One undo step.",
+  psdSaveBack: "PSD save-back — {shape}.",
+  jpegSaveBack:
+    "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG).",
+  pngSaveBack: "PNG save-back — lossless re-encode of the adjusted pixels.",
+  saveBackReady: "{note} {file}, {bytes} bytes — ready.",
+  saveFromPanel:
+    "Save it from the panel, or deliver it from the Export Center.",
+  noPanelSave:
+    "This editor version cannot save files from a panel — deliver it from the Export Center.",
+  savedHandedOver:
+    "{file} handed to the host's save path (a browser download cannot report a cancel, so this is delivery, not proof of a file on disk).",
+  saveDeclined: "The host declined to save {file}.",
+  psdExport: "PSD export — {note}.",
+  psdExportFlattened: "PSD export flattened: {reason}.",
+  gpuOnlyKernel: "WebGPU unavailable — {label} is a GPU-only kernel.",
+  applied: "{label} applied.",
+  sampledAverage: "Sampled {colour} at {x}, {y} ({size}×{size} average).",
+  sampled: "Sampled {colour} at {x}, {y}.",
+  bakedTooLarge:
+    "The baked image is {size} MB; the host takes at most 8 MB per image until it accepts binary transfers. Nothing was committed.",
+  committed:
+    "Committed revision {rev}: {count, plural, one {# layer} other {# layers}} stored in the document ({pieces} of layer data), the composite placed in the frame. Undo in the document reverts it.",
+  pieces: "{count, plural, one {# new piece} other {# new pieces}}",
+  patternFromSelection:
+    "Pattern defined — {w}×{h} px from the selection's bounds.",
+  patternFromImage: "Pattern defined — {w}×{h} px from the whole image.",
+  filledSelection:
+    "Filled the selection with {what}{how} Document unchanged; Apply to recomposite.",
+  filledImage:
+    "Filled the whole image with {what}{how} Document unchanged; Apply to recomposite.",
+  aGradient: "a {kind} gradient",
+  noise: "noise",
+  onLayerUndoable: " on layer “{layer}” — undoable.",
+  destructive: " (destructive, no layer stack bound).",
+  feathered: "Selection feathered (σ {sigma}px).",
+  resampled:
+    "Resampled to {width}×{height} ({filter}" +
+    ") — document unchanged; Apply to recomposite.",
+  fromChannel:
+    "Selection loaded from the {channel} channel — its values ARE the coverage, so mid-tones select partially.",
+  nothingTraced:
+    "Nothing traced at coverage ≥ {threshold} — the selection is empty at that cut.",
+  hostRefusedInsert: "the host refused the insert",
+  pathInsertRefusedBecause: "The host refused the path insert: {error}",
+  pathInsertRefused: "The host refused the path insert.",
+  traced:
+    "Traced {count, plural, one {# path} other {# paths}} from the selection",
+  tracedHoles:
+    "({count, plural, one {# of them hole} other {# of them holes}}, inserted separately — this engine emits one polygon per contour)",
+  fromPath:
+    "Selection loaded from a {anchors}-anchor path ({points} points after flattening).",
+  noFontBytes:
+    "The document carries no bytes for “{face}” — type renders the faces the document already embeds, never a web fetch.",
+  typeMissingGlyphs:
+    "Type set in {family} — {count, plural, one {# character has no glyph in this font and was not drawn.} other {# characters have no glyph in this font and were not drawn.}}",
+  typeStyleDrift:
+    "Type set in {family} — the document embeds no “{style}” face, so “{used}” was used.",
+  typeSet: "Type set in {face}.",
+  cloneSourceSet: "Clone source set at {x}, {y} — paint to copy from there.",
+  brushLibrary:
+    "{name}: {count, plural, one {# brush preset} other {# brush presets}}",
+  sampledTips:
+    ", {count, plural, one {# sampled tip} other {# sampled tips}} (bitmap tips are not painted — the engine's tip is parametric)",
+  readerWarnings:
+    ", {count, plural, one {# reader warning} other {# reader warnings}}",
+  diameterIn: "diameter in {unit}",
+  unknownUnit: "an unknown unit",
+  noHardness: "hardness (the file carries none for this tip kind)",
+  spacingDisabled: "spacing (disabled in the preset)",
+  roundnessCircular: "roundness — the tip is circular",
+  angleCircular: "angle — the tip is circular",
+  brushPresetPartial: "Brush: {name} — not applied: {list}",
+  brushPreset: "Brush: {name}",
+  intoLayer: "layer “{layer}”",
+  intoEngineImage: "the engine image",
+  painted: "Painted {count, plural, one {# dab} other {# dabs}} into {where}",
+  paintedUndoable:
+    " — undoable (the stroke's tiles are journaled). The document and the source file are unchanged.",
+  paintedDestructive:
+    " (destructive, no layer stack bound — re-ingest to restore).",
+  historyWindow:
+    "History window: {steps}, {dropped} past the undo budget and now permanent.",
+  steps: "{count, plural, one {# step} other {# steps}}",
+  olderEdits: "{count, plural, one {# older edit} other {# older edits}}",
+  layerAdded:
+    "Added layer “{name}” — paint, fills and bakes land there until you pick another.",
+  layerN: "layer {index}",
+  layerRemoved: "Removed “{name}” — Undo brings it back.",
+  editingAdjustment:
+    "Editing adjustment layer “{name}” — the sliders change it directly.",
+  maskRevealAll:
+    "Added a reveal-all mask. Paint tools now edit the mask: the brush paints the foreground's grey, the eraser reveals.",
+  maskHideAll:
+    "Added a hide-all mask — the layer is hidden until you paint it back in. Paint tools now edit the mask: the brush paints the foreground's grey, the eraser reveals.",
+  theActiveLayer: "the active layer",
+  baked:
+    "Baked the adjustments into layer “{name}” (undoable) and reset the panel to identity — the chain now lives in those pixels.",
+  croppedStraightened:
+    "Cropped to {width}×{height} (straightened {angle}° — bilinear resample) (document unchanged — engine source only; Apply to recomposite).",
+  cropped:
+    "Cropped to {width}×{height} (document unchanged — engine source only; Apply to recomposite).",
+  compositedMasked:
+    "Composited {width}×{height} into the frame (adjustments masked to the selection) (document unchanged — preview layer only).",
+  composited:
+    "Composited {width}×{height} into the frame (document unchanged — preview layer only).",
+  tilesClaimed:
+    "Claimed tile resource for the frame (level-0 lane; {width}×{height}" +
+    "). The renderer pulls tiles at its current scale.",
+  selectionExpanded: "Selection expanded by {radius} px.",
+  selectionContracted: "Selection contracted by {radius} px.",
+  selectionBordered: "Selection bordered by {radius} px.",
+  selectionSmoothed: "Selection smoothed by {radius} px.",
+});
+
+/** The names of the whole-image effects and layer operations, as the
+ *  status line reports them (message keys; `applyEffect` and `layerOp`
+ *  read them through `t`). */
+const E = defineMessages("image.effect", {
+  redEye: "Red eye",
+  patch: "Patch",
+  median: "Median",
+  gradient: "Gradient",
+  fill: "Fill",
+  paintBucket: "Paint bucket",
+  gradientMap: "Gradient map",
+  emboss: "Emboss",
+  findEdges: "Find edges",
+  motionBlur: "Motion blur",
+  mosaic: "Mosaic",
+  shapeBlur: "Shape blur",
+  patternFill: "Pattern fill",
+  moveSelection: "Move selection",
+  paintDaubs: "Paint daubs",
+  posterEdges: "Poster edges",
+  glowingEdges: "Glowing edges",
+  halftone: "Halftone",
+  filmGrain: "Film grain",
+  spatter: "Spatter",
+  crosshatch: "Crosshatch",
+  basRelief: "Bas relief",
+  photocopy: "Photocopy",
+  stainedGlass: "Stained glass",
+  glass: "Glass",
+  texturizer: "Texturizer",
+  despeckle: "Despeckle",
+  dustScratches: "Dust & scratches",
+  move: "Move",
+  offset: "Offset",
+  lensBlur: "Lens blur",
+  reduceNoise: "Reduce noise",
+  smartSharpen: "Smart sharpen",
+  selectiveColour: "Selective colour",
+  addLayer: "Add layer",
+  duplicateLayer: "Duplicate layer",
+  removeLayer: "Remove layer",
+  reorderLayers: "Reorder layers",
+  layerVisibility: "Layer visibility",
+  layerOpacity: "Layer opacity",
+  layerBlend: "Layer blend",
+  maximum: "Maximum",
+  minimum: "Minimum",
+  spinBlur: "Spin blur",
+  zoomBlur: "Zoom blur",
+  distort: "Distort ({kind}" + ")",
+  colorLookup: "Color lookup",
+});
+
+/** Each selection modification's outcome. */
+const MODIFIED: Record<SelectionModifyOp, string> = {
+  expand: S.selectionExpanded,
+  contract: S.selectionContracted,
+  border: S.selectionBordered,
+  smooth: S.selectionSmoothed,
+};
+
+/** An error as the words a status line quotes. */
+const errText = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err);
+
 const CURVE_STEPS = 16;
 
 /** A cubic bezier at `t`. */
@@ -990,8 +1341,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     histogram: null,
     compositedFrame: null,
     busy: false,
-    status:
-      "Select a placed image on the page, then choose Use selected frame.",
+    status: t(S.initial),
     psd: null,
     selection: null,
     pattern: null,
@@ -1072,9 +1422,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       engine.layersSetAdjustment(index, state.params);
     } catch (err) {
-      setStatus(
-        `Adjustment edit failed: ${err instanceof Error ? err.message : err}`,
-      );
+      setStatus(t(S.adjustmentEditFailed, { error: errText(err) }));
       emit();
       return true;
     }
@@ -1114,20 +1462,18 @@ export function createImageSession(host: BundleHost): ImageSession {
     if (!marker.data?.record) return;
     const data = marker.data as CommittedMarker;
     if ((await sha256Hex(placed)) !== data.baked) {
-      state.layersNote =
-        "This frame's image was changed outside paged.image since its layers " +
-        "were stored, so it opens as one layer.";
+      state.layersNote = t(S.changedOutside);
       return;
     }
     const stored = await readSession(host.parts, data.record);
     if (!stored.ok) {
-      state.layersNote = `Stored layers could not be read (${stored.reason}); opened as one layer.`;
+      state.layersNote = t(S.storedUnreadable, { reason: stored.reason });
       return;
     }
     try {
       await engine.layersImport(stored.manifest, stored.buffers);
     } catch (err) {
-      state.layersNote = `Stored layers could not be restored (${err instanceof Error ? err.message : err}); opened as one layer.`;
+      state.layersNote = t(S.storedUnrestorable, { error: errText(err) });
       return;
     }
     state.uncommitted = false;
@@ -1163,9 +1509,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     refreshLayers();
     refreshHistogram();
     bumpTiles();
-    state.layersNote = `Reopened ${state.layers.layers.length} stored layer${
-      state.layers.layers.length === 1 ? "" : "s"
-    } (revision ${data.rev}${state.uncommitted ? "; its composite is new and will be committed" : ""}).`;
+    state.layersNote = t(state.uncommitted ? S.reopenedPending : S.reopened, {
+      count: state.layers.layers.length,
+      rev: data.rev,
+    });
   };
 
   /** True when the frame holds no placed image: an empty frame, or one
@@ -1235,10 +1582,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             host.log.debug("blend-mode registry read failed", err);
             state.blendModes = [];
           }
-          state.engineDetail = gpu
-            ? null
-            : "WebGPU unavailable — adjustments disabled (kernels are " +
-              "GPU-only; identity composite still works)";
+          state.engineDetail = gpu ? null : t(S.noGpuDetail);
           emit();
           return e;
         } catch (err) {
@@ -1354,9 +1698,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       // The stack DID change even though the fold could not run (no
       // device); show the truth rather than a stale palette.
       refreshLayers();
-      setStatus(
-        `Composite failed: ${err instanceof Error ? err.message : err}`,
-      );
+      setStatus(t(S.compositeFailed, { error: errText(err) }));
       emit();
       return false;
     }
@@ -1401,13 +1743,13 @@ export function createImageSession(host: BundleHost): ImageSession {
     mutate: () => void,
   ): Promise<boolean> => {
     if (!engine || !state.source) {
-      setStatus("Nothing ingested — ingest a placed image first.");
+      setStatus(t(S.nothingIngestedIngestAPlacedImage));
       return false;
     }
     try {
       mutate();
     } catch (err) {
-      setStatus(`${what} failed: ${err instanceof Error ? err.message : err}`);
+      setStatus(t(S.whatFailed, { what: t(what), error: errText(err) }));
       refreshLayers();
       emit();
       return false;
@@ -1431,9 +1773,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       run();
     } catch (err) {
-      setStatus(
-        `Group edit failed: ${err instanceof Error ? err.message : err}`,
-      );
+      setStatus(t(S.groupEditFailed, { error: errText(err) }));
       return false;
     }
     return finishMaskEdit();
@@ -1444,7 +1784,7 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  since a bounded journal CAN run out earlier than the user expects. */
   const historyStep = async (undo: boolean): Promise<boolean> => {
     if (!engine || !state.source) {
-      setStatus("Nothing ingested — ingest a placed image first.");
+      setStatus(t(S.nothingIngestedIngestAPlacedImage));
       return false;
     }
     // An in-flight stroke holds a base snapshot of the active layer;
@@ -1454,18 +1794,15 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       label = undo ? await engine.layersUndo() : await engine.layersRedo();
     } catch (err) {
-      setStatus(
-        `${undo ? "Undo" : "Redo"} failed: ${err instanceof Error ? err.message : err}`,
-      );
+      setStatus(t(undo ? S.undoFailed : S.redoFailed, { error: errText(err) }));
       return false;
     }
     if (!label) {
       const h = state.history;
       setStatus(
-        `Nothing to ${undo ? "undo" : "redo"}.` +
+        t(undo ? S.nothingToUndo : S.nothingToRedo) +
           (undo && h?.dropped
-            ? ` ${h.dropped} older edit${h.dropped === 1 ? " is" : "s are"} past the ` +
-              "undo budget and permanent."
+            ? ` ${t(S.droppedPermanent, { count: h.dropped })}`
             : ""),
       );
       emit();
@@ -1486,7 +1823,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       refreshSourceReadout();
     }
     const ok = await recomposite();
-    if (ok) setStatus(`${undo ? "Undid" : "Redid"} “${label}”.`);
+    if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
     return ok;
   };
 
@@ -1616,10 +1953,10 @@ export function createImageSession(host: BundleHost): ImageSession {
       const n = await engine.layersOpenFromPsd(state.source.handle, psdHandle);
       // Our composite of the layer tree, not the file's merged one.
       await engine.layersComposite();
-      state.layersNote = `Opened the PSD's own ${n} layer${n === 1 ? "" : "s"}.`;
+      state.layersNote = t(S.psdLayersOpened, { count: n });
     } catch (err) {
       const why = err instanceof Error ? err.message : String(err);
-      state.layersNote = `Layered PSD import declined — ${why}`;
+      state.layersNote = t(S.psdLayersDeclined, { why });
     }
   };
 
@@ -1974,15 +2311,17 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
-      const lane = decodePool ? " (off-thread)" : "";
       setStatus(
-        `${name} — ${info.width}×${info.height} decoded${lane}.` +
-          (state.layersNote ? ` ${state.layersNote}` : ""),
+        t(decodePool ? S.decodedOffThread : S.decoded, {
+          name,
+          width: info.width,
+          height: info.height,
+        }) + (state.layersNote ? ` ${state.layersNote}` : ""),
       );
       return true;
     } catch (err) {
       // The engine's honest unsupported/decode message (16-bit, CMYK, …).
-      setStatus(`Decode failed: ${err instanceof Error ? err.message : err}`);
+      setStatus(t(S.decodeFailed, { error: errText(err) }));
       return false;
     }
   };
@@ -2001,7 +2340,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         return;
       }
       void clearLayer();
-      setStatus("Frame deselected — in-frame preview cleared.");
+      setStatus(t(S.frameDeselectedInFramePreviewCleared));
     }
   });
 
@@ -2020,32 +2359,32 @@ export function createImageSession(host: BundleHost): ImageSession {
     async ingestSelection() {
       const ids = host.selection.get();
       if (ids.length !== 1) {
-        setStatus("Select exactly one placed image frame.");
+        setStatus(t(S.selectExactlyOnePlacedImageFrame));
         return false;
       }
       const id = elementIdOf(ids[0]);
       if (!id) {
-        setStatus("Selection carries no element id.");
+        setStatus(t(S.selectionCarriesNoElementId));
         return false;
       }
       if (!host.supports("assets.images@1")) {
-        setStatus(
-          "Host serves no placed-image bytes (assets.images@1 is false).",
-        );
+        setStatus(t(S.hostServesNoPlacedImageBytes));
         return false;
       }
       if (!(await ensureEngine())) {
-        setStatus(`Engine unavailable: ${state.engineDetail ?? "unknown"}`);
+        setStatus(
+          t(S.engineUnavailable, {
+            detail: state.engineDetail ?? t(S.unknown),
+          }),
+        );
         return false;
       }
       state.busy = true;
-      setStatus("Reading placed bytes…");
+      setStatus(t(S.readingPlacedBytes));
       try {
         const asset = await host.assets.getPlacedImage(id);
         if (!asset) {
-          setStatus(
-            "No placed image on this frame (or the link is unresolved).",
-          );
+          setStatus(t(S.noPlacedImageOnThisFrame));
           return false;
         }
         const ok = await decodeInto(
@@ -2092,7 +2431,11 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async importBytes(name, bytes) {
       if (!(await ensureEngine())) {
-        setStatus(`Engine unavailable: ${state.engineDetail ?? "unknown"}`);
+        setStatus(
+          t(S.engineUnavailable, {
+            detail: state.engineDetail ?? t(S.unknown),
+          }),
+        );
         return false;
       }
       state.busy = true;
@@ -2116,11 +2459,13 @@ export function createImageSession(host: BundleHost): ImageSession {
         const boundTo = selected.length === 1 ? elementIdOf(selected[0]) : null;
         const ok = await decodeInto(name, bytes, "import", boundTo);
         if (!ok) return false;
-        const decoded = `${name} — ${state.source?.width}×${state.source?.height} decoded`;
+        const size = {
+          name,
+          width: state.source?.width ?? 0,
+          height: state.source?.height ?? 0,
+        };
         if (!boundTo) {
-          setStatus(
-            `${decoded}. Select an image frame and Apply to composite.`,
-          );
+          setStatus(t(S.importedUnbound, size));
           return true;
         }
         // AN EMPTY FRAME RECEIVES THE IMAGE: it is placed there the way a
@@ -2137,9 +2482,11 @@ export function createImageSession(host: BundleHost): ImageSession {
           if (await api.commitToDocument()) {
             const n = state.layers.layers.length;
             setStatus(
-              `${decoded} and placed in the selected frame, ${n} layer${n === 1 ? "" : "s"} ` +
-                `stored with it (revision ${state.committedRev}). Double-click the frame ` +
-                "to edit the layers; undo in the document removes it.",
+              t(S.importedPlaced, {
+                ...size,
+                count: n,
+                rev: state.committedRev ?? 0,
+              }),
             );
             return true;
           }
@@ -2148,14 +2495,10 @@ export function createImageSession(host: BundleHost): ImageSession {
           const reason = state.status;
           sourceRef = null;
           state.committedRev = null;
-          setStatus(
-            `${decoded} into the selected frame, but not placed in it: ${reason}`,
-          );
+          setStatus(t(S.importedNotPlaced, { ...size, reason }));
           return true;
         }
-        setStatus(
-          `${decoded} into the selected frame. Apply to composite, or paint on it.`,
-        );
+        setStatus(t(S.importedPreview, size));
         return true;
       } finally {
         state.busy = false;
@@ -2181,7 +2524,7 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async applyRedEye(box, darken = 0.5) {
       if (box.w < 1 || box.h < 1) return false;
-      return api.applyEffect("Red eye", (h) =>
+      return api.applyEffect(E.redEye, (h) =>
         engine!.applyRedEye(
           h,
           box.x + box.w / 2,
@@ -2195,26 +2538,24 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async patchSelection(dx, dy) {
       if (!state.selection) {
-        setStatus(
-          "Patch needs a selection — select the area to replace, then drag it onto the source.",
-        );
+        setStatus(t(S.patchNeedsASelectionSelectThe));
         return false;
       }
       if (Math.round(dx) === 0 && Math.round(dy) === 0) return false;
-      return api.applyEffect("Patch", (h) => engine!.patchSelection(h, dx, dy));
+      return api.applyEffect(E.patch, (h) => engine!.patchSelection(h, dx, dy));
     },
 
     async applyMedian() {
-      return api.applyEffect("Median", (h) => engine!.applyMedian(h));
+      return api.applyEffect(E.median, (h) => engine!.applyMedian(h));
     },
 
     async applyMorph(kind) {
-      return api.applyEffect(kind === "max" ? "Maximum" : "Minimum", (h) =>
+      return api.applyEffect(kind === "max" ? E.maximum : E.minimum, (h) =>
         engine!.applyMorph(h, kind),
       );
     },
 
-    async applyColorLookup(cubeText, name = "Color lookup") {
+    async applyColorLookup(cubeText, name = t(E.colorLookup)) {
       let cube: Float32Array;
       try {
         cube = toKernelCube(parseCube(cubeText));
@@ -2229,7 +2570,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     async fillGradientLine(from, to) {
       const { fg, bg } = state.colors;
       const kind = state.gradientKind;
-      return api.applyEffect("Gradient", (h) =>
+      return api.applyEffect(E.gradient, (h) =>
         engine!.fillGradientLine(h, kind, fg, bg, from, to),
       );
     },
@@ -2241,20 +2582,20 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async fillForeground() {
       const fg = state.colors.fg;
-      return api.applyEffect("Fill", (h) => engine!.fillSolid(h, fg));
+      return api.applyEffect(E.fill, (h) => engine!.fillSolid(h, fg));
     },
 
     async bucketFill(at) {
       const src = state.source;
       if (!src) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       const [x, y] = [Math.floor(at[0]), Math.floor(at[1])];
       if (x < 0 || y < 0 || x >= src.width || y >= src.height) return false;
       const { tolerance, contiguous } = state.wand;
       const fg = state.colors.fg;
-      return api.applyEffect("Paint bucket", (h) =>
+      return api.applyEffect(E.paintBucket, (h) =>
         engine!.bucketFill(h, x, y, tolerance, contiguous, fg),
       );
     },
@@ -2262,7 +2603,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     async canvasOp(op, size) {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       discardStroke();
@@ -2276,7 +2617,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           size?.anchorY,
         );
       } catch (err) {
-        setStatus(`${op} failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.whatFailed, { what: op, error: errText(err) }));
         emit();
         return false;
       }
@@ -2291,8 +2632,10 @@ export function createImageSession(host: BundleHost): ImageSession {
       // (what the operation did) is the one to keep.
       if (src.elementId) await api.apply();
       setStatus(
-        `${op === "canvas" ? "Canvas size" : "Canvas"} → ${wh.width}×${wh.height}. ` +
-          "One undo step.",
+        t(op === "canvas" ? S.canvasSized : S.canvasChanged, {
+          width: wh.width,
+          height: wh.height,
+        }),
       );
       emit();
       return true;
@@ -2300,20 +2643,18 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     modifySelection(op, radius) {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       try {
         engine.selectionModify(op, radius);
       } catch (err) {
-        setStatus(`Modify failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.modifyFailed, { error: errText(err) }));
         emit();
         return false;
       }
       api.refreshSelection();
-      setStatus(
-        `Selection ${op === "border" ? "bordered" : `${op}ed`} by ${radius} px.`,
-      );
+      setStatus(t(MODIFIED[op], { radius }));
       return true;
     },
 
@@ -2329,9 +2670,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return true;
       } catch (err) {
-        setStatus(
-          `PSD edit failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.psdEditFailed, { error: errText(err) }));
         emit();
         return false;
       }
@@ -2345,9 +2684,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return true;
       } catch (err) {
-        setStatus(
-          `PSD rename failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.psdRenameFailed, { error: errText(err) }));
         emit();
         return false;
       }
@@ -2361,9 +2698,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return true;
       } catch (err) {
-        setStatus(
-          `PSD remove failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.psdRemoveFailed, { error: errText(err) }));
         emit();
         return false;
       }
@@ -2374,9 +2709,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         return { bytes: engine.psdSave(psdHandle), fileName: state.psd.name };
       } catch (err) {
-        setStatus(
-          `PSD save failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.psdSaveFailed, { error: errText(err) }));
         emit();
         return null;
       }
@@ -2385,17 +2718,15 @@ export function createImageSession(host: BundleHost): ImageSession {
     async applyToFile() {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return null;
       }
       if (!state.gpu && !isIdentity(state.params)) {
-        setStatus(
-          "WebGPU unavailable — the adjusted save-back needs a device.",
-        );
+        setStatus(t(S.webgpuUnavailableTheAdjustedSaveBack));
         return null;
       }
       state.busy = true;
-      setStatus("Compositing the full-resolution result…");
+      setStatus(t(S.compositingTheFullResolutionResult));
       try {
         // The SAME chain the canvas preview runs, at full resolution and
         // through the same selection mask — the file gets exactly what
@@ -2415,15 +2746,12 @@ export function createImageSession(host: BundleHost): ImageSession {
             bytes: engine.psdSave(psdHandle),
             fileName: `${stem}.psd`,
             mimeType: "image/vnd.adobe.photoshop",
-            note: `PSD save-back — ${shape}.`,
+            note: t(S.psdSaveBack, { shape }),
           };
         } else if (sourceFormat === "psd") {
           // A PSD whose structural parse failed (the raster lane still
           // decoded it) — say so instead of silently writing a PNG.
-          setStatus(
-            "PSD save-back unavailable — the structural parse failed on this file " +
-              "(the adjusted PNG lane is still available via Export).",
-          );
+          setStatus(t(S.psdSaveBackUnavailableTheStructural));
           return null;
         } else {
           const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
@@ -2431,24 +2759,24 @@ export function createImageSession(host: BundleHost): ImageSession {
             bytes: engine.encode(rgba, src.width, src.height, fmt),
             fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
             mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
-            note:
-              fmt === "jpeg"
-                ? "JPEG save-back — re-encoded at the fixed v0 quality (the source was a JPEG)."
-                : "PNG save-back — lossless re-encode of the adjusted pixels.",
+            note: fmt === "jpeg" ? t(S.jpegSaveBack) : t(S.pngSaveBack),
           };
         }
         state.saveBack = result;
         setStatus(
-          `${result.note} ${result.fileName}, ${result.bytes.length} bytes — ready. ` +
+          t(S.saveBackReady, {
+            note: result.note,
+            file: result.fileName,
+            bytes: result.bytes.length,
+          }) +
+            " " +
             (host.supports("shell.saveFile@1")
-              ? "Save it from the panel, or deliver it from the Export Center."
-              : "This editor version cannot save files from a panel — deliver it from the Export Center."),
+              ? t(S.saveFromPanel)
+              : t(S.noPanelSave)),
         );
         return result;
       } catch (err) {
-        setStatus(
-          `Save-back failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.saveBackFailed, { error: errText(err) }));
         return null;
       } finally {
         state.busy = false;
@@ -2460,10 +2788,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!host.supports("shell.saveFile@1")) {
         // Probed, not assumed. Without this the door's `false` would be
         // indistinguishable from a user cancel.
-        setStatus(
-          "This editor version cannot save files from a panel — use the " +
-            "Export Center.",
-        );
+        setStatus(t(S.thisEditorVersionCannotSaveFiles));
         return false;
       }
       const staged = state.saveBack ?? (await api.applyToFile());
@@ -2474,11 +2799,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         mimeType: staged.mimeType,
       });
       setStatus(
-        accepted
-          ? `${staged.fileName} handed to the host's save path ` +
-              "(a browser download cannot report a cancel, so this is " +
-              "delivery, not proof of a file on disk)."
-          : `The host declined to save ${staged.fileName}.`,
+        t(accepted ? S.savedHandedOver : S.saveDeclined, {
+          file: staged.fileName,
+        }),
       );
       return accepted;
     },
@@ -2500,7 +2823,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         try {
           const note = engine.psdSaveLayers(psdHandle);
           refreshPsdLayers();
-          setStatus(`PSD export — ${note}.`);
+          setStatus(t(S.psdExport, { note }));
           emit();
           return api.psdExport();
         } catch (err) {
@@ -2509,7 +2832,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       }
       const back = await api.applyToFile();
       if (back && layeredRefusal) {
-        setStatus(`PSD export flattened: ${layeredRefusal}. ${state.status}`);
+        setStatus(
+          `${t(S.psdExportFlattened, { reason: layeredRefusal })} ${state.status}`,
+        );
         emit();
       }
       if (back && back.mimeType === "image/vnd.adobe.photoshop") {
@@ -2525,7 +2850,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       const src = state.source;
       if (!src || !engine) return null;
       if (!state.gpu && !isIdentity(state.params)) {
-        setStatus("WebGPU unavailable — the adjusted export needs a device.");
+        setStatus(t(S.webgpuUnavailableTheAdjustedExportNeeds));
         return null;
       }
       try {
@@ -2536,7 +2861,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
         };
       } catch (err) {
-        setStatus(`Export failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.exportFailed, { error: errText(err) }));
         emit();
         return null;
       }
@@ -2548,13 +2873,15 @@ export function createImageSession(host: BundleHost): ImageSession {
      *  Sharing this is what stops a new effect from quietly acquiring
      *  different semantics from the fills. */
     async applyEffect(label, run) {
+      // A message key from this file, or a caller's own words.
+      const name = t(label);
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       if (!state.gpu) {
-        setStatus(`WebGPU unavailable — ${label} is a GPU-only kernel.`);
+        setStatus(t(S.gpuOnlyKernel, { label: name }));
         return false;
       }
       state.busy = true;
@@ -2563,9 +2890,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         out = await run(src.handle);
       } catch (err) {
-        setStatus(
-          `${label} failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.whatFailed, { what: name, error: errText(err) }));
         state.busy = false;
         emit();
         return false;
@@ -2582,19 +2907,20 @@ export function createImageSession(host: BundleHost): ImageSession {
       }
       state.busy = false;
       const ok = await recomposite();
-      if (ok) setStatus(`${label} applied.`);
+      if (ok) setStatus(t(S.applied, { label: name }));
       return ok;
     },
 
     async applyGradientMap(shadow, highlight) {
-      return this.applyEffect("Gradient map", (h) =>
+      return this.applyEffect(E.gradientMap, (h) =>
         engine!.applyGradientMap(h, shadow, highlight),
       );
     },
 
     async applyWarp(kind, amount, frequency = 1) {
-      return this.applyEffect(`Distort (${kind})`, (h) =>
-        engine!.applyWarp(h, kind, amount, frequency),
+      return this.applyEffect(
+        t(E.distort, { kind: warpKindLabel(kind) }),
+        (h) => engine!.applyWarp(h, kind, amount, frequency),
       );
     },
     // All six ride `applyEffect`, so they inherit the SAME journal
@@ -2602,30 +2928,30 @@ export function createImageSession(host: BundleHost): ImageSession {
     // has. A new effect that reached the engine directly would acquire
     // different undo semantics without anyone deciding that.
     async applyEmboss(angleDeg, height) {
-      return this.applyEffect("Emboss", (h) =>
+      return this.applyEffect(E.emboss, (h) =>
         engine!.applyEmboss(h, angleDeg, height),
       );
     },
     async applyFindEdges(strength) {
-      return this.applyEffect("Find edges", (h) =>
+      return this.applyEffect(E.findEdges, (h) =>
         engine!.applyFindEdges(h, strength),
       );
     },
     async applyMotionBlur(angleDeg, lengthPx) {
-      return this.applyEffect("Motion blur", (h) =>
+      return this.applyEffect(E.motionBlur, (h) =>
         engine!.applyMotionBlur(h, angleDeg, lengthPx),
       );
     },
     async applyRadialBlur(cx, cy, amount, spin) {
-      return this.applyEffect(spin ? "Spin blur" : "Zoom blur", (h) =>
+      return this.applyEffect(spin ? E.spinBlur : E.zoomBlur, (h) =>
         engine!.applyRadialBlur(h, cx, cy, amount, spin),
       );
     },
     async applyMosaic(cellPx) {
-      return this.applyEffect("Mosaic", (h) => engine!.applyMosaic(h, cellPx));
+      return this.applyEffect(E.mosaic, (h) => engine!.applyMosaic(h, cellPx));
     },
     async applyShapeBlur(shapeHandle, radiusPx = 8, amount = 1) {
-      return this.applyEffect("Shape blur", (h) =>
+      return this.applyEffect(E.shapeBlur, (h) =>
         engine!.applyShapeBlur(h, shapeHandle, radiusPx, amount),
       );
     },
@@ -2637,7 +2963,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       offsetY = 0,
       opacity = 1,
     ) {
-      return this.applyEffect("Pattern fill", (h) =>
+      return this.applyEffect(E.patternFill, (h) =>
         engine!.fillPattern(
           h,
           tileHandle,
@@ -2693,7 +3019,12 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (target === "fg") api.setForeground(c);
       else api.setBackground(c);
       setStatus(
-        `Sampled ${toHex(c)} at ${px}, ${py}${size > 1 ? ` (${size}×${size} average)` : ""}.`,
+        t(size > 1 ? S.sampledAverage : S.sampled, {
+          colour: toHex(c),
+          x: px,
+          y: py,
+          size,
+        }),
       );
       emit();
       return c;
@@ -2706,22 +3037,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     async commitToDocument() {
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
-        setStatus(
-          "Commit needs an image ingested from a frame in the document.",
-        );
+        setStatus(t(S.commitNeedsAnImageIngestedFrom));
         emit();
         return false;
       }
       if (!host.supports("storage.parts@1")) {
-        setStatus(
-          "This host stores no plugin data in the document (storage.parts@1 " +
-            "is false) — the layers cannot be kept, so nothing was committed.",
-        );
+        setStatus(t(S.thisHostStoresNoPluginData));
         emit();
         return false;
       }
       state.busy = true;
-      setStatus("Committing the image to the document…");
+      setStatus(t(S.committingTheImageToTheDocument));
       emit();
       try {
         // The STACK's composite — what the layers show. Pending panel
@@ -2733,9 +3059,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           !host.supports("document.mutateBinary@1")
         ) {
           setStatus(
-            `The baked image is ${(png.length / 1048576).toFixed(1)} MB; the ` +
-              "host takes at most 8 MB per image until it accepts binary " +
-              "transfers. Nothing was committed.",
+            t(S.bakedTooLarge, { size: (png.length / 1048576).toFixed(1) }),
           );
           return false;
         }
@@ -2797,14 +3121,15 @@ export function createImageSession(host: BundleHost): ImageSession {
           host.log.warn(`image: clearing old revisions failed: ${err}`),
         );
         setStatus(
-          `Committed revision ${rev}: ${state.layers.layers.length} layer` +
-            `${state.layers.layers.length === 1 ? "" : "s"} stored in the document ` +
-            `(${written} new piece${written === 1 ? "" : "s"} of layer data), the ` +
-            "composite placed in the frame. Undo in the document reverts it.",
+          t(S.committed, {
+            rev,
+            count: state.layers.layers.length,
+            pieces: t(S.pieces, { count: written }),
+          }),
         );
         return true;
       } catch (err) {
-        setStatus(`Commit failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.commitFailed, { error: errText(err) }));
         return false;
       } finally {
         state.busy = false;
@@ -2815,7 +3140,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     definePattern() {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       const sel = state.selection;
@@ -2830,15 +3155,15 @@ export function createImageSession(host: BundleHost): ImageSession {
         patternHandle = info.handle;
         state.pattern = { width: box.w, height: box.h };
         setStatus(
-          `Pattern defined — ${box.w}×${box.h} px from the ` +
-            `${sel && sel.w > 0 ? "selection's bounds" : "whole image"}.`,
+          t(sel && sel.w > 0 ? S.patternFromSelection : S.patternFromImage, {
+            w: box.w,
+            h: box.h,
+          }),
         );
         emit();
         return true;
       } catch (err) {
-        setStatus(
-          `Define pattern failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.definePatternFailed, { error: errText(err) }));
         emit();
         return false;
       }
@@ -2846,7 +3171,7 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async fillWithPattern(scale = 1, opacity = 1) {
       if (patternHandle === null) {
-        setStatus("No pattern defined — use Define pattern first.");
+        setStatus(t(S.noPatternDefinedUseDefinePattern));
         emit();
         return false;
       }
@@ -2855,9 +3180,7 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async shapeBlurWithPattern(radiusPx = 8) {
       if (patternHandle === null) {
-        setStatus(
-          "Shape blur uses the defined pattern as its shape — define one first.",
-        );
+        setStatus(t(S.shapeBlurUsesTheDefinedPattern));
         emit();
         return false;
       }
@@ -2865,17 +3188,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     async moveSelection(dx, dy, vacate = VacateMode.Transparent) {
-      return this.applyEffect("Move selection", (h) =>
+      return this.applyEffect(E.moveSelection, (h) =>
         engine!.applyMoveSelection(h, dx, dy, vacate),
       );
     },
     async galleryKuwahara(radiusPx, amount) {
-      return this.applyEffect("Paint daubs", (h) =>
+      return this.applyEffect(E.paintDaubs, (h) =>
         engine!.galleryKuwahara(h, radiusPx, amount),
       );
     },
     async galleryPosterizeEdges(levels, edgeAmount, edgeThreshold, amount) {
-      return this.applyEffect("Poster edges", (h) =>
+      return this.applyEffect(E.posterEdges, (h) =>
         engine!.galleryPosterizeEdges(
           h,
           levels,
@@ -2886,27 +3209,27 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
     async galleryGlowingEdges(intensity, smoothness, amount) {
-      return this.applyEffect("Glowing edges", (h) =>
+      return this.applyEffect(E.glowingEdges, (h) =>
         engine!.galleryGlowingEdges(h, intensity, smoothness, amount),
       );
     },
     async galleryHalftone(cellPx, angleDeg, contrast, amount) {
-      return this.applyEffect("Halftone", (h) =>
+      return this.applyEffect(E.halftone, (h) =>
         engine!.galleryHalftone(h, cellPx, angleDeg, contrast, amount),
       );
     },
     async galleryGrain(seed, sizePx, mono, amount) {
-      return this.applyEffect("Film grain", (h) =>
+      return this.applyEffect(E.filmGrain, (h) =>
         engine!.galleryGrain(h, seed, sizePx, mono, amount),
       );
     },
     async galleryDiffuse(seed, radiusPx, angleDeg, anisotropy, amount) {
-      return this.applyEffect("Spatter", (h) =>
+      return this.applyEffect(E.spatter, (h) =>
         engine!.galleryDiffuse(h, seed, radiusPx, angleDeg, anisotropy, amount),
       );
     },
     async galleryCrosshatch(angleDeg, spacingPx, strength, sets, amount) {
-      return this.applyEffect("Crosshatch", (h) =>
+      return this.applyEffect(E.crosshatch, (h) =>
         engine!.galleryCrosshatch(
           h,
           angleDeg,
@@ -2918,27 +3241,27 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
     async galleryBasRelief(angleDeg, elevationDeg, height, amount) {
-      return this.applyEffect("Bas relief", (h) =>
+      return this.applyEffect(E.basRelief, (h) =>
         engine!.galleryBasRelief(h, angleDeg, elevationDeg, height, amount),
       );
     },
     async galleryThresholdInk(threshold, softness, amount) {
-      return this.applyEffect("Photocopy", (h) =>
+      return this.applyEffect(E.photocopy, (h) =>
         engine!.galleryThresholdInk(h, threshold, softness, amount),
       );
     },
     async galleryStainedGlass(seed, cellPx, border, amount) {
-      return this.applyEffect("Stained glass", (h) =>
+      return this.applyEffect(E.stainedGlass, (h) =>
         engine!.galleryStainedGlass(h, seed, cellPx, border, amount),
       );
     },
     async galleryGlass(seed, scalePx, distortion, amount) {
-      return this.applyEffect("Glass", (h) =>
+      return this.applyEffect(E.glass, (h) =>
         engine!.galleryGlass(h, seed, scalePx, distortion, amount),
       );
     },
     async galleryTexturizer(seed, kind, scalePx, relief, angleDeg, amount) {
-      return this.applyEffect("Texturizer", (h) =>
+      return this.applyEffect(E.texturizer, (h) =>
         engine!.galleryTexturizer(
           h,
           seed,
@@ -2951,42 +3274,42 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
     async applyDespeckle(edgeThreshold, amount) {
-      return this.applyEffect("Despeckle", (h) =>
+      return this.applyEffect(E.despeckle, (h) =>
         engine!.applyDespeckle(h, edgeThreshold, amount),
       );
     },
     async applyDustScratches(radius, threshold) {
-      return this.applyEffect("Dust & scratches", (h) =>
+      return this.applyEffect(E.dustScratches, (h) =>
         engine!.applyDustScratches(h, radius, threshold),
       );
     },
     async offsetLayer(dx, dy, edge = EdgePolicy.Transparent) {
-      return this.applyEffect("Move", (h) =>
+      return this.applyEffect(E.move, (h) =>
         engine!.applyOffset(h, dx, dy, edge),
       );
     },
     async offsetFilter(dx, dy) {
-      return this.applyEffect("Offset", (h) =>
+      return this.applyEffect(E.offset, (h) =>
         engine!.applyOffset(h, dx, dy, EdgePolicy.Wrap),
       );
     },
     async applyLensBlur(radiusPx, threshold, boost) {
-      return this.applyEffect("Lens blur", (h) =>
+      return this.applyEffect(E.lensBlur, (h) =>
         engine!.applyLensBlur(h, radiusPx, threshold, boost),
       );
     },
     async applyReduceNoise(radiusPx, sigmaRange, amount) {
-      return this.applyEffect("Reduce noise", (h) =>
+      return this.applyEffect(E.reduceNoise, (h) =>
         engine!.applyReduceNoise(h, radiusPx, sigmaRange, amount),
       );
     },
     async applySmartSharpen(radiusPx, amount, threshold, clampHi) {
-      return this.applyEffect("Smart sharpen", (h) =>
+      return this.applyEffect(E.smartSharpen, (h) =>
         engine!.applySmartSharpen(h, radiusPx, amount, threshold, clampHi),
       );
     },
     async applySelectiveColor(range, cmyk, absolute) {
-      return this.applyEffect("Selective colour", (h) =>
+      return this.applyEffect(E.selectiveColour, (h) =>
         engine!.applySelectiveColor(h, range, cmyk, absolute),
       );
     },
@@ -2994,21 +3317,18 @@ export function createImageSession(host: BundleHost): ImageSession {
     async fillSelection(req) {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       // Content-aware fill is a CPU search, so it works with no device —
       // the generators do not. Gating it on WebGPU would refuse a fill
       // that has no GPU work in it.
       if (req.kind !== "contentAware" && !state.gpu) {
-        setStatus("WebGPU unavailable — the generators are GPU-only kernels.");
+        setStatus(t(S.webgpuUnavailableTheGeneratorsAreGpu));
         return false;
       }
       if (req.kind === "contentAware" && !state.selection) {
-        setStatus(
-          "Select the area to fill first — content-aware fill synthesises " +
-            "the SELECTION from the rest of the image.",
-        );
+        setStatus(t(S.selectTheAreaToFillFirst));
         return false;
       }
       state.busy = true;
@@ -3031,7 +3351,7 @@ export function createImageSession(host: BundleHost): ImageSession {
                   req.seed ?? FILL_NOISE_SEED_DEFAULT,
                 );
       } catch (err) {
-        setStatus(`Fill failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.fillFailed, { error: errText(err) }));
         state.busy = false;
         emit();
         return false;
@@ -3054,15 +3374,17 @@ export function createImageSession(host: BundleHost): ImageSession {
         }
       }
       refreshSourceReadout();
-      const where = state.selection ? "the selection" : "the whole image";
       setStatus(
-        `Filled ${where} with ${
-          req.kind === "gradient" ? `a ${req.gradient} gradient` : "noise"
-        }` +
-          (layered && layerName
-            ? ` on layer “${layerName}” — undoable.`
-            : " (destructive, no layer stack bound).") +
-          " Document unchanged; Apply to recomposite.",
+        t(state.selection ? S.filledSelection : S.filledImage, {
+          what:
+            req.kind === "gradient"
+              ? t(S.aGradient, { kind: gradientKindLabel(req.gradient) })
+              : t(S.noise),
+          how:
+            layered && layerName
+              ? t(S.onLayerUndoable, { layer: layerName })
+              : t(S.destructive),
+        }),
       );
       state.busy = false;
       emit();
@@ -3104,7 +3426,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     autoEnhance() {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return;
       }
       try {
@@ -3123,14 +3445,9 @@ export function createImageSession(host: BundleHost): ImageSession {
           },
         };
         emit();
-        setStatus(
-          "Auto-enhance set levels + white balance — click Apply to composite " +
-            "(document unchanged).",
-        );
+        setStatus(t(S.autoEnhanceSetLevelsWhiteBalance));
       } catch (err) {
-        setStatus(
-          `Auto-enhance failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.autoEnhanceFailed, { error: errText(err) }));
       }
     },
 
@@ -3150,19 +3467,17 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     selectAll() {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       try {
         engine.selectionSelectAll();
       } catch (err) {
-        setStatus(
-          `Select all failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.selectAllFailed, { error: errText(err) }));
         return false;
       }
       api.refreshSelection();
-      setStatus("Selected all — adjustments apply to the whole image.");
+      setStatus(t(S.selectedAllAdjustmentsApplyToThe));
       return true;
     },
 
@@ -3170,58 +3485,54 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!engine || !state.source) return false;
       engine.selectionClear();
       api.refreshSelection();
-      setStatus("Deselected — adjustments apply to the whole image.");
+      setStatus(t(S.deselectedAdjustmentsApplyToTheWhole));
       return true;
     },
 
     invertSelection() {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       try {
         engine.selectionInvert();
       } catch (err) {
-        setStatus(
-          `Invert selection failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.invertSelectionFailed, { error: errText(err) }));
         return false;
       }
       api.refreshSelection();
-      setStatus("Selection inverted.");
+      setStatus(t(S.selectionInverted));
       return true;
     },
 
     featherSelection(sigma = FEATHER_SIGMA_DEFAULT) {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       try {
         engine.selectionFeather(sigma);
       } catch (err) {
         // The honest miss: feather needs an explicit selection.
-        setStatus(
-          `Feather failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.featherFailed, { error: errText(err) }));
         return false;
       }
       api.refreshSelection();
-      setStatus(`Selection feathered (σ ${sigma}px).`);
+      setStatus(t(S.feathered, { sigma }));
       return true;
     },
 
     async resizeTo(w, h, filter) {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing to resize — ingest an image first.");
+        setStatus(t(S.nothingToResizeIngestAnImage));
         return false;
       }
       let resized: { handle: number; width: number; height: number };
       try {
         resized = await engine.resize(src.handle, w, h, filter);
       } catch (err) {
-        setStatus(`Resize failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.resizeFailed, { error: errText(err) }));
         emit();
         return false;
       }
@@ -3235,8 +3546,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       src.height = resized.height;
       refreshSourceReadout();
       setStatus(
-        `Resampled to ${resized.width}×${resized.height} (${filter}) — ` +
-          "document unchanged; Apply to recomposite.",
+        t(S.resampled, {
+          width: resized.width,
+          height: resized.height,
+          filter,
+        }),
       );
       emit();
       return true;
@@ -3249,7 +3563,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     selectionFromChannel(channel) {
       const src = state.source;
       if (!engine || !src) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       try {
@@ -3257,27 +3571,22 @@ export function createImageSession(host: BundleHost): ImageSession {
       } catch (err) {
         // The engine names the channel it refused; a generic failure
         // would hide a typo'd channel behind "could not select".
-        setStatus(
-          `Channel selection failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.channelSelectionFailed, { error: errText(err) }));
         return false;
       }
       api.refreshSelection();
-      setStatus(
-        `Selection loaded from the ${channel} channel — its values ARE the ` +
-          "coverage, so mid-tones select partially.",
-      );
+      setStatus(t(S.fromChannel, { channel }));
       return true;
     },
 
     async selectionToPath(threshold = 128, tolerance = 0.5) {
       const src = state.source;
       if (!engine || !src) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       if (!state.selection) {
-        setStatus("Nothing selected — select a region first.");
+        setStatus(t(S.nothingSelectedSelectARegionFirst));
         return false;
       }
       const contours = engine.selectionToPaths(threshold, tolerance);
@@ -3285,20 +3594,14 @@ export function createImageSession(host: BundleHost): ImageSession {
         // A selection that exists but covers nothing at this threshold is
         // a real state, and raising the threshold is the fix — so say
         // which threshold produced nothing rather than "no paths".
-        setStatus(
-          `Nothing traced at coverage ≥ ${threshold} — the selection is ` +
-            "empty at that cut.",
-        );
+        setStatus(t(S.nothingTraced, { threshold }));
         return false;
       }
       // Image px → page pt, through the SAME fit the paint tools use, so
       // a traced path lands exactly on top of what it traced.
       const fit = await resolveFrameFit(host, src, "selectionToPath");
       if (!fit) {
-        setStatus(
-          "The frame's geometry could not be read, so the path would land " +
-            "in the wrong place. Nothing was inserted.",
-        );
+        setStatus(t(S.theFrameSGeometryCouldNot));
         return false;
       }
       let inserted = 0;
@@ -3338,7 +3641,7 @@ export function createImageSession(host: BundleHost): ImageSession {
             // object, and String() made it "[object Object]".
             lastError =
               outcome.error == null
-                ? "the host refused the insert"
+                ? t(S.hostRefusedInsert)
                 : refusalText(outcome.error);
             host.log.debug("path insert refused", outcome.error);
           }
@@ -3349,18 +3652,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       }
       if (inserted === 0) {
         setStatus(
-          `The host refused the path insert${lastError ? `: ${lastError}` : "."}`,
+          lastError
+            ? t(S.pathInsertRefusedBecause, { error: lastError })
+            : t(S.pathInsertRefused),
         );
         return false;
       }
       const holes = contours.filter((c) => !c.outer).length;
       setStatus(
-        `Traced ${inserted} path${inserted === 1 ? "" : "s"} from the ` +
-          `selection` +
-          (holes > 0
-            ? ` (${holes} of them hole${holes === 1 ? "" : "s"}, inserted ` +
-              "separately — this engine emits one polygon per contour)"
-            : ""),
+        t(S.traced, { count: inserted }) +
+          (holes > 0 ? ` ${t(S.tracedHoles, { count: holes })}` : ""),
       );
       return true;
     },
@@ -3368,41 +3669,33 @@ export function createImageSession(host: BundleHost): ImageSession {
     async selectionFromPath() {
       const src = state.source;
       if (!engine || !src) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       const picked = host.selection
         .get()
         .filter((i) => elementIdOf(i) !== src.elementId);
       if (picked.length !== 1) {
-        setStatus(
-          "Select exactly ONE vector element (other than the image frame) " +
-            "to load its path as the selection.",
-        );
+        setStatus(t(S.selectExactlyOneVectorElementOther));
         return false;
       }
       let result;
       try {
         result = await host.document.pathAnchors(picked[0]);
       } catch (err) {
-        setStatus(
-          `Path read failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.pathReadFailed, { error: errText(err) }));
         return false;
       }
       if (!result || result.anchors.length < 3) {
         // A rectangle can legitimately carry NO PathGeometry, which the
         // contract documents as "nothing to draw" — reporting that is
         // more useful than an error the designer cannot act on.
-        setStatus(
-          "That element exposes no path with at least three anchors " +
-            "(a plain rectangle often carries none).",
-        );
+        setStatus(t(S.thatElementExposesNoPathWith));
         return false;
       }
       const fit = await resolveFrameFit(host, src, "selectionFromPath");
       if (!fit) {
-        setStatus("The image frame's geometry could not be read.");
+        setStatus(t(S.theImageFrameSGeometryCould));
         return false;
       }
       // Flatten each cubic segment. A fixed subdivision is honest here:
@@ -3433,16 +3726,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.selectionSetPolygon(flat, "replace");
       } catch (err) {
-        setStatus(
-          `Path selection failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.pathSelectionFailed, { error: errText(err) }));
         return false;
       }
       api.refreshSelection();
-      setStatus(
-        `Selection loaded from a ${a.length}-anchor path ` +
-          `(${flat.length} points after flattening).`,
-      );
+      setStatus(t(S.fromPath, { anchors: a.length, points: flat.length }));
       return true;
     },
 
@@ -3454,14 +3742,14 @@ export function createImageSession(host: BundleHost): ImageSession {
     async paintText([x, y], text, family, sizePx) {
       const src = state.source;
       if (!engine || !src) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       if (!host.supports("assets.fonts@1")) {
         // PROBED, not assumed. Without the probe an unwired asset door
         // and a font the document does not carry look identical, and
         // they need different sentences.
-        setStatus("This host serves no fonts (assets.fonts@1).");
+        setStatus(t(S.thisHostServesNoFontsAssets));
         return false;
       }
       // The STYLE axis rides the same door — the contract has taken
@@ -3473,11 +3761,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
       if (!face) {
         const asked = state.type.style ? ` ${state.type.style}` : "";
-        setStatus(
-          `The document carries no bytes for "${family}${asked}" — type ` +
-            "renders the faces the document already embeds, never a web " +
-            "fetch.",
-        );
+        setStatus(t(S.noFontBytes, { face: `${family}${asked}` }));
         return false;
       }
       // WHAT CAME BACK, not what was asked for. A host may resolve a
@@ -3531,7 +3815,7 @@ export function createImageSession(host: BundleHost): ImageSession {
               : 0,
         );
       } catch (err) {
-        setStatus(`Type failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.typeFailed, { error: errText(err) }));
         state.busy = false;
         emit();
         return false;
@@ -3540,13 +3824,16 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.busy = false;
       setStatus(
         missing > 0
-          ? `Type set in ${family} — ${missing} character${
-              missing === 1 ? " has" : "s have"
-            } no glyph in this font and ${missing === 1 ? "was" : "were"} not drawn.`
+          ? t(S.typeMissingGlyphs, { family, count: missing })
           : styleDrift
-            ? `Type set in ${family} — the document embeds no ` +
-              `"${state.type.style}" face, so "${resolvedStyle}" was used.`
-            : `Type set in ${family}${resolvedStyle ? ` ${resolvedStyle}` : ""}.`,
+            ? t(S.typeStyleDrift, {
+                family,
+                style: state.type.style ?? "",
+                used: resolvedStyle ?? "",
+              })
+            : t(S.typeSet, {
+                face: resolvedStyle ? `${family} ${resolvedStyle}` : family,
+              }),
       );
       return true;
     },
@@ -3554,10 +3841,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     setCloneSource([x, y]) {
       const aligned = state.cloneSource?.aligned ?? true;
       state.cloneSource = { x, y, aligned };
-      setStatus(
-        `Clone source set at ${Math.round(x)}, ${Math.round(y)} — ` +
-          "paint to copy from there.",
-      );
+      setStatus(t(S.cloneSourceSet, { x: Math.round(x), y: Math.round(y) }));
     },
 
     setTone(patch) {
@@ -3587,7 +3871,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     async loadBrushLibrary(name, bytes) {
       const eng = await ensureEngine();
       if (!eng) {
-        setStatus("The image engine could not start.");
+        setStatus(t(S.theImageEngineCouldNotStart));
         return false;
       }
       let library: BrushLibraryInfo;
@@ -3606,17 +3890,11 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.brushPreset = null;
       const warned = library.warnings.length;
       setStatus(
-        `${name}: ${library.presetCount} brush preset${
-          library.presetCount === 1 ? "" : "s"
-        }` +
+        t(S.brushLibrary, { name, count: library.presetCount }) +
           (library.sampleCount > 0
-            ? `, ${library.sampleCount} sampled tip${
-                library.sampleCount === 1 ? "" : "s"
-              } (bitmap tips are not painted — the engine's tip is parametric)`
+            ? t(S.sampledTips, { count: library.sampleCount })
             : "") +
-          (warned > 0
-            ? `, ${warned} reader warning${warned === 1 ? "" : "s"}`
-            : ""),
+          (warned > 0 ? t(S.readerWarnings, { count: warned }) : ""),
       );
       return true;
     },
@@ -3626,13 +3904,13 @@ export function createImageSession(host: BundleHost): ImageSession {
         // `pickFile` resolves `[]` both when the user cancels and when no
         // picker is wired at all. Probing keeps "you cancelled" from
         // masquerading as "this host cannot open files".
-        setStatus("This host wires no file picker (shell.pickFile@1).");
+        setStatus(t(S.thisHostWiresNoFilePicker));
         return false;
       }
       const picked = await host.shell.pickFile({ accept: [".abr"] });
       const file = picked[0];
       if (!file) {
-        setStatus("No brush library chosen.");
+        setStatus(t(S.noBrushLibraryChosen));
         return false;
       }
       return await this.loadBrushLibrary(file.name, file.bytes);
@@ -3641,7 +3919,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     applyBrushPreset(index) {
       const preset = state.brushLibrary?.presets.find((p) => p.index === index);
       if (!preset) {
-        setStatus("No such brush preset.");
+        setStatus(t(S.noSuchBrushPreset));
         return false;
       }
       // Apply only what the engine's tip HAS. Everything else is
@@ -3653,7 +3931,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         patch.size = Math.max(1, Math.round(preset.diameter));
       } else if (preset.diameter !== null) {
         unapplied.push(
-          `diameter in ${preset.diameterUnit ?? "an unknown unit"}`,
+          t(S.diameterIn, { unit: preset.diameterUnit ?? t(S.unknownUnit) }),
         );
       }
       if (preset.hardness !== null) {
@@ -3662,26 +3940,28 @@ export function createImageSession(host: BundleHost): ImageSession {
         // A sampled tip's softness lives in its BITMAP, which this
         // engine does not stamp; saying so beats leaving the previous
         // brush's hardness silently in force.
-        unapplied.push("hardness (the file carries none for this tip kind)");
+        unapplied.push(t(S.noHardness));
       }
       if (preset.spacing !== null && preset.spacingEnabled !== false) {
         patch.spacing = Math.max(0.01, preset.spacing);
       } else if (preset.spacing !== null) {
-        unapplied.push("spacing (disabled in the preset)");
+        unapplied.push(t(S.spacingDisabled));
       }
       if (preset.roundness !== null && Math.abs(preset.roundness - 1) > 0.001) {
-        unapplied.push("roundness — the tip is circular");
+        unapplied.push(t(S.roundnessCircular));
       }
       if (preset.angle !== null && Math.abs(preset.angle) > 0.001) {
-        unapplied.push("angle — the tip is circular");
+        unapplied.push(t(S.angleCircular));
       }
       state.brush = { ...state.brush, ...patch };
       state.brushPreset = index;
       setStatus(
-        `Brush: ${preset.name}` +
-          (unapplied.length > 0
-            ? ` — not applied: ${unapplied.join("; ")}`
-            : ""),
+        unapplied.length > 0
+          ? t(S.brushPresetPartial, {
+              name: preset.name,
+              list: unapplied.join("; "),
+            })
+          : t(S.brushPreset, { name: preset.name }),
       );
       return true;
     },
@@ -3696,13 +3976,13 @@ export function createImageSession(host: BundleHost): ImageSession {
     async brushBegin(tool) {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing to paint on — ingest a placed image first.");
+        setStatus(t(S.nothingToPaintOnIngestA));
         return false;
       }
       if (!state.gpu) {
         // No CPU blend path ships (spec §6) — the dab composite IS a
         // registered WGSL dispatch.
-        setStatus("WebGPU unavailable — painting is GPU-only.");
+        setStatus(t(S.webgpuUnavailablePaintingIsGpuOnly));
         return false;
       }
       if (state.strokeActive) return false;
@@ -3710,10 +3990,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       // broken, so it declines with the instruction instead. Photoshop
       // says the same thing in a modal; this says it in the status line.
       if (SAMPLING_TOOLS.includes(tool) && !state.cloneSource) {
-        setStatus(
-          "Alt-click to set the clone source first — a clone with no " +
-            "source has nothing to copy.",
-        );
+        setStatus(t(S.altClickToSetTheClone));
         return false;
       }
       try {
@@ -3729,7 +4006,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         }
         if (TONE_TOOLS.includes(tool)) engine.brushSetTone(state.tone);
       } catch (err) {
-        setStatus(`Paint failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.paintFailed, { error: errText(err) }));
         return false;
       }
       state.strokeActive = true;
@@ -3746,10 +4023,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!strokeTarget) {
         // The stroke still paints into the engine image — say why nothing
         // shows on the canvas rather than letting it look broken.
-        setStatus(
-          "Painting into the engine image — select the target frame to see " +
-            "the stroke in-frame.",
-        );
+        setStatus(t(S.paintingIntoTheEngineImageSelect));
       }
       emit();
       return true;
@@ -3762,7 +4036,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         rgba = await engine.brushExtend(sample.x, sample.y, sample.pressure);
       } catch (err) {
-        setStatus(`Paint failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.paintFailed, { error: errText(err) }));
         discardStroke();
         emit();
         return false;
@@ -3803,9 +4077,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         painted = await engine.brushCommit();
       } catch (err) {
-        setStatus(
-          `Paint commit failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.paintCommitFailed, { error: errText(err) }));
         discardStroke();
         emit();
         return false;
@@ -3833,19 +4105,17 @@ export function createImageSession(host: BundleHost): ImageSession {
       refreshSourceReadout();
       // Put the ADJUSTED composite back over the raw stroke preview.
       if (src.elementId) await api.apply();
-      const where = layerName ? `layer “${layerName}”` : "the engine image";
+      const where = layerName
+        ? t(S.intoLayer, { layer: layerName })
+        : t(S.intoEngineImage);
       setStatus(
-        `Painted ${dabs} dab${dabs === 1 ? "" : "s"} into ${where}` +
-          (layered
-            ? " — undoable (the stroke's tiles are journaled). The document " +
-              "and the source file are unchanged."
-            : " (destructive, no layer stack bound — re-ingest to restore).") +
+        t(S.painted, { count: dabs, where }) +
+          t(layered ? S.paintedUndoable : S.paintedDestructive) +
           (state.history?.dropped
-            ? ` History window: ${state.history.depth} step${
-                state.history.depth === 1 ? "" : "s"
-              }, ${state.history.dropped} older edit${
-                state.history.dropped === 1 ? "" : "s"
-              } past the undo budget and now permanent.`
+            ? ` ${t(S.historyWindow, {
+                steps: t(S.steps, { count: state.history.depth }),
+                dropped: t(S.olderEdits, { count: state.history.dropped }),
+              })}`
             : ""),
       );
       return true;
@@ -3854,34 +4124,29 @@ export function createImageSession(host: BundleHost): ImageSession {
     // ── THE LAYER GRAPH ─────────────────────────────────────────────
 
     async addLayer(name = "") {
-      const ok = await layerOp("Add layer", () => engine!.layerAdd(name));
+      const ok = await layerOp(E.addLayer, () => engine!.layerAdd(name));
       if (ok) {
         const l = state.layers.layers[state.layers.active];
-        setStatus(
-          `Added layer “${l?.name ?? name}” — paint, fills and bakes land ` +
-            "there until you pick another.",
-        );
+        setStatus(t(S.layerAdded, { name: l?.name ?? name }));
       }
       return ok;
     },
 
     duplicateLayer(index) {
-      return layerOp("Duplicate layer", () => engine!.layerDuplicate(index));
+      return layerOp(E.duplicateLayer, () => engine!.layerDuplicate(index));
     },
 
     async removeLayer(index) {
-      const name = state.layers.layers[index]?.name ?? `layer ${index}`;
-      const ok = await layerOp("Remove layer", () =>
-        engine!.layerRemove(index),
-      );
+      const name = state.layers.layers[index]?.name ?? t(S.layerN, { index });
+      const ok = await layerOp(E.removeLayer, () => engine!.layerRemove(index));
       if (ok) {
-        setStatus(`Removed “${name}” — Undo brings it back.`);
+        setStatus(t(S.layerRemoved, { name }));
       }
       return ok;
     },
 
     reorderLayer(from, to) {
-      return layerOp("Reorder layers", () => engine!.layerReorder(from, to));
+      return layerOp(E.reorderLayers, () => engine!.layerReorder(from, to));
     },
 
     setActiveLayer(index) {
@@ -3889,9 +4154,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetActive(index);
       } catch (err) {
-        setStatus(
-          `Select layer failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.selectLayerFailed, { error: errText(err) }));
         return false;
       }
       refreshLayers();
@@ -3901,9 +4164,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         if (!state.editingAdjustment) paramsBeforeBinding = state.params;
         state.editingAdjustment = { index, id: row.id };
         state.params = structuredClone(params);
-        setStatus(
-          `Editing adjustment layer “${row.name}” — the sliders change it directly.`,
-        );
+        setStatus(t(S.editingAdjustment, { name: row.name }));
       } else if (state.editingAdjustment) {
         state.editingAdjustment = null;
         state.params = paramsBeforeBinding ?? freshIdentityParams();
@@ -3914,19 +4175,19 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     setLayerVisible(index, visible) {
-      return layerOp("Layer visibility", () =>
+      return layerOp(E.layerVisibility, () =>
         engine!.layerSetVisible(index, visible),
       );
     },
 
     setLayerOpacity(index, opacity) {
-      return layerOp("Layer opacity", () =>
+      return layerOp(E.layerOpacity, () =>
         engine!.layerSetOpacity(index, opacity),
       );
     },
 
     setLayerBlend(index, blend) {
-      return layerOp("Layer blend", () => engine!.layerSetBlend(index, blend));
+      return layerOp(E.layerBlend, () => engine!.layerSetBlend(index, blend));
     },
 
     async layerMaskFromSelection(index) {
@@ -3936,9 +4197,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       } catch (err) {
         // The engine refuses with no selection rather than attaching an
         // all-one mask that would look like success and mask nothing.
-        setStatus(
-          `Layer mask failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.layerMaskFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -3949,9 +4208,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetMaskEnabled(index, enabled);
       } catch (err) {
-        setStatus(
-          `Layer mask toggle failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.layerMaskToggleFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -3962,7 +4219,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetClipped(index, clipped);
       } catch (err) {
-        setStatus(`Clip failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.clipFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -3975,7 +4232,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       } catch (err) {
         // The engine's refusal names its reason (out of range, already
         // grouped) — a generic message would hide which.
-        setStatus(`Group failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.groupFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -3986,9 +4243,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layersUngroup(id);
       } catch (err) {
-        setStatus(
-          `Ungroup failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.ungroupFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -4015,9 +4270,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerMakeSmart(index);
       } catch (err) {
-        setStatus(
-          `Convert to smart object failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.convertToSmartObjectFailed, { error: errText(err) }));
         return false;
       }
       refreshLayers();
@@ -4034,9 +4287,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         await engine.layerRenderSmart(index, scale);
       } catch (err) {
-        setStatus(
-          `Smart re-render failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.smartReRenderFailed, { error: errText(err) }));
         state.busy = false;
         emit();
         return false;
@@ -4057,20 +4308,12 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerAddMask(index, revealAll);
       } catch (err) {
-        setStatus(
-          `Add layer mask failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.addLayerMaskFailed, { error: errText(err) }));
         return false;
       }
       const ok = await finishMaskEdit();
       if (ok) {
-        setStatus(
-          (revealAll
-            ? "Added a reveal-all mask"
-            : "Added a hide-all mask — the layer is hidden until you paint it back in") +
-            ". Paint tools now edit the mask: the brush paints the foreground's grey, " +
-            "the eraser reveals.",
-        );
+        setStatus(t(revealAll ? S.maskRevealAll : S.maskHideAll));
       }
       return ok;
     },
@@ -4080,9 +4323,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetEditTarget(index, target);
       } catch (err) {
-        setStatus(
-          `Edit target failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.editTargetFailed, { error: errText(err) }));
         return false;
       }
       refreshLayers();
@@ -4095,9 +4336,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerClearMask(index);
       } catch (err) {
-        setStatus(
-          `Layer mask clear failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.layerMaskClearFailed, { error: errText(err) }));
         return false;
       }
       return finishMaskEdit();
@@ -4109,9 +4348,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetLocked(index, locked);
       } catch (err) {
-        setStatus(
-          `Layer lock failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.layerLockFailed, { error: errText(err) }));
         return false;
       }
       refreshLayers();
@@ -4124,7 +4361,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetName(index, name);
       } catch (err) {
-        setStatus(`Rename failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.renameFailed, { error: errText(err) }));
         return false;
       }
       refreshLayers();
@@ -4134,7 +4371,7 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async addAdjustmentLayer() {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       state.busy = true;
@@ -4147,9 +4384,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       } catch (err) {
         // Identity is the common refusal, and it is honest: a row that
         // adjusts nothing would just be clutter that looks like work.
-        setStatus(
-          `Adjustment layer failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(t(S.adjustmentLayerFailed, { error: errText(err) }));
         state.busy = false;
         emit();
         return false;
@@ -4157,17 +4392,14 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.busy = false;
       const ok = await finishMaskEdit();
       if (ok) {
-        setStatus(
-          "Adjustment layer added — it transforms everything beneath it, " +
-            "and deleting it restores the original exactly.",
-        );
+        setStatus(t(S.adjustmentLayerAddedItTransformsEverything));
       }
       return ok;
     },
 
     async bakeAdjustToLayer() {
       if (!engine || !state.source) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       state.busy = true;
@@ -4176,13 +4408,13 @@ export function createImageSession(host: BundleHost): ImageSession {
         await engine.layersBakeAdjust(state.params);
       } catch (err) {
         // Identity, a locked layer, or no device — the engine's reason.
-        setStatus(`Bake failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.bakeFailed, { error: errText(err) }));
         state.busy = false;
         emit();
         return false;
       }
       const name =
-        state.layers.layers[state.layers.active]?.name ?? "the active layer";
+        state.layers.layers[state.layers.active]?.name ?? t(S.theActiveLayer);
       state.busy = false;
       // The chain is now IN the pixels, so the panel returns to identity
       // — leaving the sliders up would apply it a second time on Apply.
@@ -4190,10 +4422,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.saveBack = null;
       const ok = await recomposite();
       if (ok) {
-        setStatus(
-          `Baked the adjustments into layer “${name}” (undoable) and reset ` +
-            "the panel to identity — the chain now lives in those pixels.",
-        );
+        setStatus(t(S.baked, { name }));
       }
       return ok;
     },
@@ -4221,9 +4450,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushCancel() {
       if (!state.strokeActive) return;
       discardStroke();
-      setStatus(
-        "Stroke cancelled — the engine pixels are exactly as they were.",
-      );
+      setStatus(t(S.strokeCancelledTheEnginePixelsAre));
       // The frame is still showing the abandoned preview; put the
       // committed composite back.
       if (state.compositedFrame && state.source?.elementId) void api.apply();
@@ -4233,7 +4460,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     async commitCrop() {
       const src = state.source;
       if (!src || !engine || !cropMachineRef) {
-        setStatus("Nothing to crop — ingest a placed image first.");
+        setStatus(t(S.nothingToCropIngestAPlaced));
         return false;
       }
       let cropped: { handle: number; width: number; height: number };
@@ -4243,7 +4470,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         // (geom.rotate_bilinear) so the rotated frame lands upright.
         cropped = await cropMachineRef.commit(engine, src.handle);
       } catch (err) {
-        setStatus(`Crop failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.cropFailed, { error: errText(err) }));
         return false;
       }
       // Swap the engine-held source to the cropped image (free the old
@@ -4257,11 +4484,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       refreshSourceReadout();
       const straightened = cropMachineRef.state().angle !== 0;
       setStatus(
-        `Cropped to ${cropped.width}×${cropped.height}` +
-          (straightened
-            ? ` (straightened ${cropMachineRef.state().angle}° — bilinear resample)`
-            : "") +
-          " (document unchanged — engine source only; Apply to recomposite).",
+        straightened
+          ? t(S.croppedStraightened, {
+              width: cropped.width,
+              height: cropped.height,
+              angle: cropMachineRef.state().angle,
+            })
+          : t(S.cropped, { width: cropped.width, height: cropped.height }),
       );
       // Re-composite the cropped pixels in-frame when a frame is targeted.
       if (src.elementId) await api.apply();
@@ -4272,7 +4501,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     async apply() {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — select an image frame and ingest first.");
+        setStatus(t(S.nothingIngestedSelectAnImageFrame));
         return false;
       }
       // An import targets the currently selected frame at Apply time.
@@ -4281,23 +4510,23 @@ export function createImageSession(host: BundleHost): ImageSession {
         const ids = host.selection.get();
         target = ids.length === 1 ? elementIdOf(ids[0]) : null;
         if (!target) {
-          setStatus("Select the target frame to composite the import into.");
+          setStatus(t(S.selectTheTargetFrameToComposite));
           return false;
         }
         src.elementId = target;
       }
       const surface = scene();
       if (!surface) {
-        setStatus("No scene channel (rendering.sceneLayer@1 is false).");
+        setStatus(t(S.noSceneChannelRenderingScenelayer1));
         return false;
       }
       if (!state.gpu && !isIdentity(state.params)) {
-        setStatus("WebGPU unavailable — only the identity composite works.");
+        setStatus(t(S.webgpuUnavailableOnlyTheIdentityComposite));
         return false;
       }
 
       state.busy = true;
-      setStatus("Adjusting…");
+      setStatus(t(S.adjusting));
       try {
         const rgba = await engine.adjust(src.handle, state.params);
         await submitLayer(
@@ -4309,16 +4538,15 @@ export function createImageSession(host: BundleHost): ImageSession {
         );
         // The engine masked the chain by the bound selection (if any) —
         // say so, honestly.
-        const sel = state.selection
-          ? " (adjustments masked to the selection)"
-          : "";
         setStatus(
-          `Composited ${src.width}×${src.height} into the frame` +
-            `${sel} (document unchanged — preview layer only).`,
+          t(state.selection ? S.compositedMasked : S.composited, {
+            width: src.width,
+            height: src.height,
+          }),
         );
         return true;
       } catch (err) {
-        setStatus(`Adjust failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(t(S.adjustFailed, { error: errText(err) }));
         return false;
       } finally {
         state.busy = false;
@@ -4329,7 +4557,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     claimTiles() {
       const src = state.source;
       if (!src || !engine) {
-        setStatus("Nothing ingested — ingest a placed image first.");
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
         return false;
       }
       // An import claims the frame it was (or will be) composited into; a
@@ -4339,15 +4567,13 @@ export function createImageSession(host: BundleHost): ImageSession {
         const ids = host.selection.get();
         target = ids.length === 1 ? elementIdOf(ids[0]) : null;
         if (!target) {
-          setStatus("Select the frame to claim tiles for.");
+          setStatus(t(S.selectTheFrameToClaimTiles));
           return false;
         }
         src.elementId = target;
       }
       if (!host.supports("rendering.resourceProvider@1")) {
-        setStatus(
-          "Host serves no tile resource (rendering.resourceProvider@1 is false).",
-        );
+        setStatus(t(S.hostServesNoTileResourceRendering));
         return false;
       }
       releaseTiles();
@@ -4369,10 +4595,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         dispose: () => claim.dispose(),
         bump: () => claim.bump(),
       };
-      setStatus(
-        `Claimed tile resource for the frame (level-0 lane; ${src.width}×${src.height}). ` +
-          "The renderer pulls tiles at its current scale.",
-      );
+      setStatus(t(S.tilesClaimed, { width: src.width, height: src.height }));
       return true;
     },
 
@@ -4388,7 +4611,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         state.source?.height ?? 0,
       );
       await clearLayer();
-      setStatus("Reset — in-frame preview cleared.");
+      setStatus(t(S.resetInFramePreviewCleared));
     },
 
     dispose() {

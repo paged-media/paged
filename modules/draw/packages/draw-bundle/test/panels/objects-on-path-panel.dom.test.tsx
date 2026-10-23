@@ -29,6 +29,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
+import { t } from "@paged-media/strings";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
@@ -120,7 +121,7 @@ describe("Objects on path panel — rendered against the engine", () => {
         "The last object you select is used as the path.",
       );
       expect(panel.get("[data-draw-onpath-note]").textContent).toBe(
-        OBJECTS_ON_PATH_PANEL_NOTE,
+        t(OBJECTS_ON_PATH_PANEL_NOTE),
       );
     });
 

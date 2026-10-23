@@ -43,6 +43,7 @@ import {
   type RampStop,
 } from "@paged-media/shell";
 import { IconButton, Segment } from "@paged-media/panel-kit";
+import { defineMessages, useStrings } from "@paged-media/strings";
 import { KitSelect } from "@paged-media/ui";
 import type {
   GradientDetail,
@@ -50,7 +51,23 @@ import type {
   SwatchSummary,
 } from "@paged-media/client";
 
+const M = defineMessages("app.gradientEditor", {
+  empty: "No gradients in this document.",
+  gradient: "Gradient",
+  linear: "Linear",
+  radial: "Radial",
+  reverseGradient: "Reverse gradient",
+  reverse: "Reverse",
+  stops: "Stops",
+  stopColour: "Stop {n} colour",
+  stopLocation: "Stop {n} location (%)",
+  removeStopN: "Remove stop {n}",
+  keepsTwo: "A gradient keeps ≥2 stops",
+  removeStop: "Remove stop",
+});
+
 export function GradientEditor() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [gradients, setGradients] = useState<GradientSummary[]>([]);
   const [swatches, setSwatches] = useState<SwatchSummary[]>([]);
@@ -199,7 +216,7 @@ export function GradientEditor() {
         className="text-xs text-muted-foreground px-1 pt-2"
         data-gradient-editor="empty"
       >
-        No gradients in this document.
+        {strings.t(M.empty)}
       </div>
     );
   }
@@ -235,7 +252,7 @@ export function GradientEditor() {
       data-gradient-editor="ready"
     >
       <KitSelect
-        aria-label="Gradient"
+        aria-label={strings.t(M.gradient)}
         data-gradient-select
         value={activeId ?? ""}
         onChange={(e) => {
@@ -275,16 +292,16 @@ export function GradientEditor() {
                     : "var(--pg-muted-fg)",
                 }}
               >
-                {t === "linear" ? "Linear" : "Radial"}
+                {t === "linear" ? strings.t(M.linear) : strings.t(M.radial)}
               </Segment>
             );
           })}
         </div>
         <IconButton
-          label="Reverse gradient"
+          label={strings.t(M.reverseGradient)}
           className="w-[30px] h-[29px] rounded-[6px] border border-input bg-background text-muted-foreground hover:text-foreground flex items-center justify-center"
           data-action="reverse-gradient"
-          title="Reverse"
+          title={strings.t(M.reverse)}
           onClick={reverse}
         >
           <Icon name="ui-return" size={14} />
@@ -304,7 +321,7 @@ export function GradientEditor() {
       />
 
       {/* The gallery STOPS rows — chip · swatch select · position %. */}
-      <div className="pg-label">Stops</div>
+      <div className="pg-label">{strings.t(M.stops)}</div>
       <div className="flex flex-col gap-1" data-gradient-stop-rows>
         {stops.map((s, i) => (
           <div
@@ -319,7 +336,7 @@ export function GradientEditor() {
               title={s.resolvedRgbHex}
             />
             <select
-              aria-label={`Stop ${i + 1} colour`}
+              aria-label={strings.t(M.stopColour, { n: i + 1 })}
               className="flex-1 min-w-0 text-xs h-[26px] px-1 rounded-[6px] border border-input bg-background"
               data-action="stop-swatch"
               value={s.stopColorRef}
@@ -337,7 +354,7 @@ export function GradientEditor() {
               max={100}
               defaultValue={Math.round(s.locationPct)}
               key={`loc-${i}-${Math.round(s.locationPct)}`}
-              aria-label={`Stop ${i + 1} location (%)`}
+              aria-label={strings.t(M.stopLocation, { n: i + 1 })}
               data-stop-location
               className="w-[52px] text-xs h-[26px] px-1 text-center rounded-[6px] border border-input bg-background pg-value"
               onKeyDown={(e) => {
@@ -357,11 +374,13 @@ export function GradientEditor() {
               }}
             />
             <IconButton
-              label={`Remove stop ${i + 1}`}
+              label={strings.t(M.removeStopN, { n: i + 1 })}
               className="w-[22px] h-[22px] rounded border-0 bg-transparent text-muted-foreground hover:text-foreground disabled:opacity-40"
               data-action="remove-stop"
               title={
-                stops.length <= 2 ? "A gradient keeps ≥2 stops" : "Remove stop"
+                stops.length <= 2
+                  ? strings.t(M.keepsTwo)
+                  : strings.t(M.removeStop)
               }
               disabled={stops.length <= 2}
               onClick={() => removeStopAt(i)}

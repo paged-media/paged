@@ -9,6 +9,25 @@ import { fromHex, toHex, type ColorPair } from "../../color-state";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
 import { color } from "@paged-media/panel-kit";
+import { defineMessages, t } from "@paged-media/strings";
+
+import { gradientKindLabel } from "../../words";
+
+const M = defineMessages("image.color", {
+  title: "Colour",
+  foreground: "Foreground",
+  background: "Background",
+  foregroundColour: "Foreground colour",
+  backgroundColour: "Background colour",
+  swap: "Swap",
+  blackWhite: "Black / white",
+  fill: "Fill",
+  gradientTool: "Gradient tool",
+  note:
+    "The brush and pencil paint the foreground. Alt-click with either takes " +
+    "the image's colour under the pointer (a 3×3 average) as the new " +
+    "foreground.",
+});
 
 const swatch = (c: Rgba01) => ({
   width: 28,
@@ -47,7 +66,9 @@ export function ColorSection({
         <HostPicker
           value={toHex(value)}
           onChange={pick(which)}
-          ariaLabel={which === "fg" ? "Foreground colour" : "Background colour"}
+          ariaLabel={t(
+            which === "fg" ? M.foregroundColour : M.backgroundColour,
+          )}
         />
       </span>
     ) : (
@@ -61,15 +82,15 @@ export function ColorSection({
     );
   return (
     <>
-      <div style={sectionTitle}>Colour</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
-        <label htmlFor="pg-image-fg">Foreground</label>
+        <label htmlFor="pg-image-fg">{t(M.foreground)}</label>
         <span style={swatch(colors.fg)} data-image-fg-swatch />
         {picker("fg", colors.fg)}
         <span style={mono}>{toHex(colors.fg)}</span>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-bg">Background</label>
+        <label htmlFor="pg-image-bg">{t(M.background)}</label>
         <span style={swatch(colors.bg)} data-image-bg-swatch />
         {picker("bg", colors.bg)}
         <span style={mono}>{toHex(colors.bg)}</span>
@@ -80,25 +101,25 @@ export function ColorSection({
           data-image-swap-colors
           onClick={() => session.swapColors()}
         >
-          Swap
+          {t(M.swap)}
         </button>
         <button
           type="button"
           data-image-reset-colors
           onClick={() => session.resetColors()}
         >
-          Black / white
+          {t(M.blackWhite)}
         </button>
         <button
           type="button"
           data-image-fill-fg
           onClick={() => void session.fillForeground()}
         >
-          Fill
+          {t(M.fill)}
         </button>
       </div>
       <div style={row}>
-        <label htmlFor="pg-image-gradient-kind">Gradient tool</label>
+        <label htmlFor="pg-image-gradient-kind">{t(M.gradientTool)}</label>
         <select
           id="pg-image-gradient-kind"
           data-image-gradient-kind
@@ -109,16 +130,12 @@ export function ColorSection({
         >
           {GRADIENT_KINDS.map((k) => (
             <option key={k} value={k}>
-              {k}
+              {gradientKindLabel(k)}
             </option>
           ))}
         </select>
       </div>
-      <div style={note}>
-        The brush and pencil paint the foreground. Alt-click with either takes
-        the image&apos;s colour under the pointer (a 3×3 average) as the new
-        foreground.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

@@ -133,6 +133,17 @@ pub enum StructuralEdit {
         after_row: u32,
         cells: Vec<String>,
     },
+    /// Insert a new `<w:p>` immediately AFTER paragraph block `after` that
+    /// is a sibling of paragraph block `source`: `source`'s `<w:pPr>` copied
+    /// verbatim (its style, its list's `w:numPr`) and one run carrying `text`
+    /// with `source`'s first run's `<w:rPr>`. A list item added this way is
+    /// an item of the same list. A `source` whose `<w:pPr>` ends a section
+    /// (`w:sectPr`) is refused: the copy would add a section.
+    CloneParagraph {
+        source: usize,
+        after: usize,
+        text: String,
+    },
     /// Insert a new `<w:p>` immediately AFTER the given paragraph block, with a
     /// single run carrying `text`.
     InsertParagraph {

@@ -41,96 +41,118 @@ import {
   PAGED_LAYOUT_SECTION,
   asPropertyFields,
 } from "@paged-media/shell";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.frameFittingComposition", {
+  frameFitting: "Frame Fitting",
+  fit: "Fit",
+  none: "None",
+  fill: "Fill",
+  content: "Content",
+  cropAutoFit: "Crop & auto-fit",
+  crop: "Crop",
+  autoFit: "Auto-fit",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const frameFittingFitComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Frame Fitting", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_TOGGLE_GROUP,
-      props: {
-        label: "Fit",
-        labelPosition: "stack",
-        options: [
-          { value: "None", label: "None" },
-          { value: "FillProportionally", label: "Fill" },
-          { value: "Proportionally", label: "Fit" },
-          { value: "FitContent", label: "Content" },
-        ],
-      },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameFittingType",
+export function frameFittingFitComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.frameFitting), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_TOGGLE_GROUP,
+        props: {
+          label: strings.t(M.fit),
+          labelPosition: "stack",
+          options: [
+            { value: "None", label: strings.t(M.none) },
+            { value: "FillProportionally", label: strings.t(M.fill) },
+            { value: "Proportionally", label: strings.t(M.fit) },
+            { value: "FitContent", label: strings.t(M.content) },
+          ],
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameFittingType",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}
 
 /** Combined tree (fit + crop/auto-fit) — the Properties panel's
  *  Image-inspector embed, where the bespoke ref-grid interleave
  *  isn't needed. */
 // Not wrapped: its children are the two migrated compositions' own
 // (already `PropertyField`s), read lazily through the getter.
-export const frameFittingComposition: CompositionNode = {
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Frame Fitting", heading: false },
-  bindings: {},
-  get children() {
-    return [
-      ...(frameFittingFitComposition.children ?? []),
-      ...(frameFittingCropComposition.children ?? []),
-    ];
-  },
-};
+export function frameFittingComposition(strings: Strings): CompositionNode {
+  return {
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.frameFitting), heading: false },
+    bindings: {},
+    get children() {
+      return [
+        ...(frameFittingFitComposition(strings).children ?? []),
+        ...(frameFittingCropComposition(strings).children ?? []),
+      ];
+    },
+  };
+}
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const frameFittingCropComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Crop & auto-fit", heading: false },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_BOUNDS,
-      props: { label: "Crop", labelPosition: "stack", layout: "row4" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameFittingCrops",
+export function frameFittingCropComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.cropAutoFit), heading: false },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_BOUNDS,
+        props: {
+          label: strings.t(M.crop),
+          labelPosition: "stack",
+          layout: "row4",
+        },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameFittingCrops",
+          },
         },
       },
-    },
-    {
-      // LIVE auto-fit flag (W2.3). Rectangle-only → em-dash on
-      // other kinds.
-      catalogId: PAGED_INPUT_TOGGLE_SWITCH,
-      props: { label: "Auto-fit" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameAutoFit",
+      {
+        // LIVE auto-fit flag (W2.3). Rectangle-only → em-dash on
+        // other kinds.
+        catalogId: PAGED_INPUT_TOGGLE_SWITCH,
+        props: { label: strings.t(M.autoFit) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameAutoFit",
+          },
         },
       },
-    },
-    // W2.4 — "Fill frame proportionally" is rendered as a bound action
-    // BUTTON in the panel (frame-fitting-panel.tsx), not a composition
-    // leaf: it writes the existing real model property
-    // `frameFittingType = "FillProportionally"` (no new op, no
-    // client-side scale hack — the fitting type IS InDesign's persisted
-    // representation of the fill-proportionally choice). The crop
-    // computation that physically reseats the image is the renderer's
-    // job against that type; the editor only authors the choice.
-  ],
-});
+      // W2.4 — "Fill frame proportionally" is rendered as a bound action
+      // BUTTON in the panel (frame-fitting-panel.tsx), not a composition
+      // leaf: it writes the existing real model property
+      // `frameFittingType = "FillProportionally"` (no new op, no
+      // client-side scale hack — the fitting type IS InDesign's persisted
+      // representation of the fill-proportionally choice). The crop
+      // computation that physically reseats the image is the renderer's
+      // job against that type; the editor only authors the choice.
+    ],
+  });
+}

@@ -29,12 +29,14 @@ import {
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { strokeComposition } from "./stroke.composition";
+import { useStrings } from "@paged-media/strings";
 
 export function StrokePanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-stroke-panel="ready">
-        <CompositionRenderer composition={strokeComposition} />
+        <CompositionRenderer composition={strokeComposition(strings)} />
       </div>
     </CatalogRegistryProvider>
   );

@@ -18,12 +18,14 @@
  */
 
 import { useState, type CSSProperties } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import {
   SCREEN_MODES,
   useScreenMode,
   type ScreenMode,
 } from "../state/screen-mode-context";
+import { SCREEN_MODE } from "./messages";
 
 // Concept 1 (T7) — the screen-mode control at the foot of the rail.
 // Cycles Normal / Preview / Bleed / Slug / Presentation. View state
@@ -38,6 +40,7 @@ const MODE_GLYPH: Record<ScreenMode, string> = {
 };
 
 export function ScreenModeSelector() {
+  const strings = useStrings();
   const { screenMode, setScreenMode } = useScreenMode();
   const [open, setOpen] = useState(false);
   const current = SCREEN_MODES.find((m) => m.mode === screenMode);
@@ -46,7 +49,9 @@ export function ScreenModeSelector() {
     <div style={{ position: "relative" }}>
       <button
         type="button"
-        title={`Screen mode: ${current?.label ?? screenMode}`}
+        title={strings.t(SCREEN_MODE.title, {
+          mode: current?.label ?? screenMode,
+        })}
         data-screen-mode={screenMode}
         aria-haspopup="menu"
         aria-expanded={open}

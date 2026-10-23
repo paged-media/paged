@@ -246,6 +246,18 @@ import {
   writeRecipeBytes,
   type RecipeHost,
 } from "../recipe-store";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.symbols", {
+  define: "Symbols: Define symbol from selection",
+  place: "Symbols: Place instance",
+  redefine: "Symbols: Redefine from selection (rebuilds every instance)",
+  breakLink: "Symbols: Break link (keep the artwork)",
+  resetTransform: "Symbols: Reset transform (re-emit the definition in place)",
+  rename: "Symbols: Rename symbol",
+  delete: "Symbols: Delete symbol (the placed artwork stays)",
+});
 export const SYMBOLS_COMMAND_CATEGORY = "Symbols";
 
 export const DEFINE_SYMBOL_COMMAND_ID = "media.paged.draw.command.defineSymbol";
@@ -1719,14 +1731,14 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: DEFINE_SYMBOL_COMMAND_ID,
-      title: "Symbols: Define symbol from selection",
+      title: M.define,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDefineSymbol(host, payloadOf(payload)).then(() => undefined),
     }),
     registerCommand(host, {
       id: PLACE_SYMBOL_COMMAND_ID,
-      title: "Symbols: Place instance",
+      title: M.place,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
@@ -1737,7 +1749,7 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: REDEFINE_SYMBOL_COMMAND_ID,
-      title: "Symbols: Redefine from selection (rebuilds every instance)",
+      title: M.redefine,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyRedefineSymbol(host, payloadOf(payload).symbolId).then(
@@ -1746,19 +1758,19 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: BREAK_SYMBOL_LINK_COMMAND_ID,
-      title: "Symbols: Break link (keep the artwork)",
+      title: M.breakLink,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: () => applyBreakSymbolLink(host).then(() => undefined),
     }),
     registerCommand(host, {
       id: RESET_SYMBOL_TRANSFORM_COMMAND_ID,
-      title: "Symbols: Reset transform (re-emit the definition in place)",
+      title: M.resetTransform,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: () => applyResetSymbolTransform(host).then(() => undefined),
     }),
     registerCommand(host, {
       id: RENAME_SYMBOL_COMMAND_ID,
-      title: "Symbols: Rename symbol",
+      title: M.rename,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
@@ -1769,7 +1781,7 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: DELETE_SYMBOL_COMMAND_ID,
-      title: "Symbols: Delete symbol (the placed artwork stays)",
+      title: M.delete,
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyDeleteSymbol(host, payloadOf(payload).symbolId).then(

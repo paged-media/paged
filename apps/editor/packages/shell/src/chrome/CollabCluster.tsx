@@ -26,15 +26,18 @@
 // that pushed the header off a 1440 px display, and taught nothing a
 // single Share seam does not. The others return with their backend.
 
-const SOON = "Sharing and collaboration are coming soon";
+import { useStrings } from "@paged-media/strings";
+
+import { COLLAB } from "./messages";
 
 export function ShareButton() {
+  const strings = useStrings();
   return (
     <button
       type="button"
       disabled
       data-collab-share
-      title={SOON}
+      title={strings.t(COLLAB.soon)}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -53,7 +56,7 @@ export function ShareButton() {
         flexShrink: 0,
       }}
     >
-      Share
+      {strings.t(COLLAB.share)}
     </button>
   );
 }
