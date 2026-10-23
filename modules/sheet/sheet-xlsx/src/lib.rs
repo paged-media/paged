@@ -45,6 +45,7 @@
 //! `(sheet, row, col)`. The consumer parses these into model
 //! `FormulaId`s on load and writes printed text back before save.
 
+pub mod chart_write;
 pub mod defined_names;
 pub mod error;
 pub mod opc;
@@ -255,6 +256,9 @@ struct ModelSheetResolver<'a> {
 impl SheetResolver for ModelSheetResolver<'_> {
     fn resolve(&self, name: &str) -> Option<SheetId> {
         self.model.sheet_id(name)
+    }
+    fn defined(&self, name: &str) -> Option<String> {
+        parts::chart::defined_reference(self.model, name)
     }
 }
 
@@ -593,7 +597,7 @@ impl XlsxDocument {
         // byte-identical on round-trip (the `<drawing>` element on the
         // worksheet is itself a captured unknown child). The resolver maps
         // `c:f` sheet names to model ids; the full model has all sheets now.
-        let mut charts: Vec<ParsedChart> = Vec::new();
+        let mut found: Vec<(ParsedChart, Option<u32>)> = Vec::new();
         let mut sparklines: BTreeMap<SheetId, Vec<sheet_chart::SparklineGroup>> = BTreeMap::new();
         {
             let resolver = ModelSheetResolver { model: &model };
@@ -653,13 +657,18 @@ impl XlsxDocument {
                                 parsed.part = Some(chart_part.clone());
                                 parsed.drawing = Some(drawing_part.clone());
                                 parsed.chartsheet = chartsheets.contains(&host_sheet);
-                                charts.push(parsed);
+                                let index = chart_write::recorded_index(&chart_bytes);
+                                found.push((parsed, index));
                             }
                         }
                     }
                 }
             }
         }
+
+        // A chart Paged wrote records its session index; the charts keep
+        // their handles across a save and reload (ADR 519).
+        let charts = chart_write::order_by_recorded_index(found);
 
         // 4.6. External-link CACHED values (M3 external-link reads, spec §13;
         // the no-network ruling §1.1). The workbook's `<externalReferences>`
