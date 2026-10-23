@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 362,
+    "command": 365,
     "keybinding": 88,
     "menu": 257,
     "panel": 122,
@@ -42,6 +42,11 @@
     },
     {
       "id": "command:media.paged.data.bindProperty",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.bindTemplateField",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -157,6 +162,16 @@
     },
     {
       "id": "command:media.paged.data.refreshDiff",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.runCatalogue",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.templateFieldTargets",
       "kind": "command",
       "owner": "media.paged.data"
     },
