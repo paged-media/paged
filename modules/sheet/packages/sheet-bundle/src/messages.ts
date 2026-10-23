@@ -291,7 +291,7 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   frozen:
     "{sheet}: frozen {rows, plural, one {# row} other {# rows}}, {cols, plural, one {# column} other {# columns}}",
   validations:
-    "{sheet}: {count, plural, one {# data validation} other {# data validations}} ({kinds}; kept but not enforced)",
+    "{sheet}: {count, plural, one {# data validation} other {# data validations}} ({kinds}; checked on entry)",
   comments:
     "{count, plural, one {# comment} other {# comments}} (read-only): {list}",
   commentAt: "{author} at {cell}",
