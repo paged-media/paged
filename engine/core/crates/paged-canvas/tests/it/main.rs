@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod address_grammar;
+mod amend_mutation;
 mod apply_style_caret;
 mod batch_composition;
 mod batch_delete_then_insert;

@@ -1,0 +1,245 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Column",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 169.55,
+      "y": 29.6
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S1",
+      "sizePt": 9.0,
+      "x": 180.55,
+      "y": 36.25
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          221.4
+        ],
+        [
+          350.0,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          177.9
+        ],
+        [
+          350.0,
+          177.9
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          134.4
+        ],
+        [
+          350.0,
+          134.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          90.9
+        ],
+        [
+          350.0,
+          90.9
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          47.4
+        ],
+        [
+          350.0,
+          47.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          36.75,
+          221.4
+        ],
+        [
+          350.0,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "1",
+      "sizePt": 9.0,
+      "x": 32.75,
+      "y": 224.55
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "10",
+      "sizePt": 9.0,
+      "x": 32.75,
+      "y": 181.05
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "100",
+      "sizePt": 9.0,
+      "x": 32.75,
+      "y": 137.55
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "1000",
+      "sizePt": 9.0,
+      "x": 32.75,
+      "y": 94.05
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "10000",
+      "sizePt": 9.0,
+      "x": 32.75,
+      "y": 50.55
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q1",
+      "sizePt": 9.0,
+      "x": 75.906,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q2",
+      "sizePt": 9.0,
+      "x": 154.219,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q3",
+      "sizePt": 9.0,
+      "x": 232.531,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "Q4",
+      "sizePt": 9.0,
+      "x": 310.844,
+      "y": 232.2
+    },
+    {
+      "fill": "#4472C4",
+      "h": 20.755,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 31.325,
+      "x": 60.244,
+      "y": 200.645
+    },
+    {
+      "fill": "#4472C4",
+      "h": 69.69,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 31.325,
+      "x": 138.556,
+      "y": 151.71
+    },
+    {
+      "fill": "#4472C4",
+      "h": 123.762,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 31.325,
+      "x": 216.869,
+      "y": 97.638
+    },
+    {
+      "fill": "#4472C4",
+      "h": 172.01,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 31.325,
+      "x": 295.181,
+      "y": 49.39
+    }
+  ],
+  "widthPt": 360.0
+}

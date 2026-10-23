@@ -48,12 +48,14 @@ pub enum Ns {
     Mc,
     /// DrawingML chart.
     C,
+    /// Office 2016 chart extensions (`cx:`, the chartEx part).
+    Cx,
     /// Anything else (or no namespace).
     Other,
 }
 
 /// The namespaces the reader knows, by URI (transitional and strict).
-const NAMESPACES: [(&[u8], Ns); 11] = [
+const NAMESPACES: [(&[u8], Ns); 12] = [
     (
         b"http://schemas.openxmlformats.org/presentationml/2006/main",
         Ns::P,
@@ -92,6 +94,10 @@ const NAMESPACES: [(&[u8], Ns); 11] = [
         Ns::C,
     ),
     (b"http://purl.oclc.org/ooxml/drawingml/chart", Ns::C),
+    (
+        b"http://schemas.microsoft.com/office/drawing/2014/chartex",
+        Ns::Cx,
+    ),
 ];
 
 fn ns_of(uri: &[u8]) -> Ns {

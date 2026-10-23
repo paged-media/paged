@@ -162,24 +162,21 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
     seen.add(h);
     out.push(h);
   };
+  // A colour that names a document swatch is referenced, never minted.
   for (const prim of geom.prims) {
     switch (prim.kind) {
       case "rect":
-        add(prim.fill);
-        add(prim.stroke);
+      case "polygon":
+      case "wedge":
+        if (!prim.fillSwatchRef) add(prim.fill);
+        if (!prim.strokeSwatchRef) add(prim.stroke);
         break;
       case "line":
-        add(prim.stroke);
+        if (!prim.strokeSwatchRef) add(prim.stroke);
         break;
-      case "polygon":
-        add(prim.fill);
-        add(prim.stroke);
+      case "text":
+        if (!prim.colorSwatchRef) add(prim.color ?? null);
         break;
-      case "wedge":
-        add(prim.fill);
-        add(prim.stroke);
-        break;
-      // text carries no fill/stroke colour in the IR.
     }
   }
   return out;

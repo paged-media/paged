@@ -131,14 +131,33 @@ const WORKBOOK_ID = "main";
 export const CHART_KINDS = [
   "column",
   "stackedColumn",
+  "percentStackedColumn",
   "bar",
   "stackedBar",
+  "percentStackedBar",
   "line",
+  "stackedLine",
+  "percentStackedLine",
   "area",
+  "stackedArea",
+  "percentStackedArea",
   "scatter",
+  "bubble",
   "pie",
   "donut",
+  "pieOfPie",
+  "barOfPie",
   "radar",
+  "filledRadar",
+  "stock",
+  "surface",
+  "waterfall",
+  "funnel",
+  "treemap",
+  "sunburst",
+  "histogram",
+  "pareto",
+  "boxWhisker",
 ] as const;
 const H_ALIGNS = [
   "general",
@@ -1950,6 +1969,15 @@ export function contributeObjectModel(
       args: struct({}),
       async handler() {
         await host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+      },
+    },
+    {
+      // Sheet ADR 510 — paste special: opens its options on the sheet bar.
+      id: C("pasteSpecial"),
+      title: "Paste special",
+      args: struct({}),
+      async handler() {
+        session.openPasteSpecial();
       },
     },
     {

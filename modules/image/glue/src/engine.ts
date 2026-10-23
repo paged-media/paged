@@ -960,10 +960,30 @@ export interface PerfCounters {
   };
 }
 
+/** How a mask polygon folds into the shape (`FilterMask.ops`). */
+export type PolygonOp = "add" | "subtract" | "intersect";
+/** How a mask's add polygons fill together (`FilterMask.fillRule`). */
+export type FillRule = "nonzero" | "evenodd";
+
+const POLYGON_OP_CODE: Record<PolygonOp, number> = {
+  add: 0,
+  subtract: 1,
+  intersect: 2,
+};
+const FILL_RULE_CODE: Record<FillRule, number> = { nonzero: 1, evenodd: 2 };
+
 /** A region filter's mask given as data (`ImageEngine.filterRegion`). */
 export interface FilterMask {
-  /** Closed polygons, `[x, y]` vertices in image pixels; unioned. */
+  /** Closed polygons, `[x, y]` vertices in image pixels. */
   polygons?: ReadonlyArray<ReadonlyArray<readonly [number, number]>>;
+  /** Each polygon's op, in order (absent: every polygon adds). The add
+   *  polygons are the shape; a subtract polygon cuts it, an intersect
+   *  polygon keeps only its overlap, in order. */
+  ops?: ReadonlyArray<PolygonOp>;
+  /** How the add polygons fill: absent, each alone and unioned;
+   *  `nonzero` / `evenodd`, together as one path, so an inner polygon
+   *  cuts a hole (non-zero: when wound the other way). */
+  fillRule?: FillRule;
   /** `width·height` coverage bytes (0 untouched … 255 filtered). */
   alpha?: Uint8Array;
   /** Gaussian feather of the mask's edge, σ in image pixels. */
@@ -987,7 +1007,7 @@ export interface ImageEngine {
    *  `initGpu` succeeded, otherwise on the CPU twins of the same
    *  kernels — the one kernel path that runs without a device. `mask`
    *  narrows the rectangle (a selection given as data): its polygons'
-   *  union, intersected with `alpha` (`width·height` coverage bytes),
+   *  shape (`ops`, `fillRule`), intersected with `alpha` (`width·height` coverage bytes),
    *  feathered by `feather` (σ px); partial coverage blends. */
   filterRegion(
     rgba: Uint8Array,
@@ -1718,6 +1738,8 @@ export interface ImageWasmModule {
     h: number,
     polygons: Float32Array,
     polygonLens: Uint32Array,
+    polygonOps: Uint8Array,
+    fillRule: number,
     alpha: Uint8Array,
     feather: number,
   ): Promise<Uint8Array>;
@@ -2320,6 +2342,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         r.h,
         Float32Array.from((mask?.polygons ?? []).flat(2)),
         Uint32Array.from((mask?.polygons ?? []).map((p) => p.length)),
+        Uint8Array.from((mask?.ops ?? []).map((o) => POLYGON_OP_CODE[o])),
+        mask?.fillRule ? FILL_RULE_CODE[mask.fillRule] : 0,
         mask?.alpha ?? new Uint8Array(0),
         mask?.feather ?? 0,
       ),

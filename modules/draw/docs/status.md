@@ -149,6 +149,21 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   objects-on-path, a live-paint group's inputs. A script or `paged-node invoke` that edits a
   path calls it afterwards with that path (`commands/recipe-update.ts`; the menu row is Draw ▸
   Update linked recipes).
+- **Recipes follow their sources.** An edit that changes a source of a pattern, repeat,
+  blend, objects-on-path or live-paint recipe (a mutation, a panel field, a drag of its
+  handles) rebuilds that recipe as part of the edit's undo step: one undo restores the source
+  and the old artwork, one redo replays both, and an undo or redo never starts a rebuild. The
+  rebuild sends its mutations with `mutate(…, { amend })` (engine ADR 1004, extensions ADR
+  337), so it neither clears the redo stack nor adds a step. Which recipes: the update keeps a
+  fingerprint of each recipe's sources (path anchors and properties) and rebuilds those whose
+  fingerprint moved; it runs once per commit, never per pointer move. When the edit is no
+  longer the last step by the time the rebuild writes, the engine refuses it and the log says
+  to run Update linked recipes. It needs `supports("document.mutate.amend@1")`; it is on by
+  default, and the bundle's storage key `recipes.autoUpdate` set to `false` turns it off
+  (`setRecipeAutoUpdate`; there is no settings panel). A script run is not followed by a
+  rebuild (its reply carries no step to join), and the recipe record a rebuild writes is a
+  container part, outside the step, as every command-lane recipe write is
+  (`commands/recipe-auto-update.ts`).
 - **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed
   update command (`updateRepeat`, `updateBlend`, `editPatternField`, `regenerateLivePaint`,
   `updateObjectsOnPath`): two undo steps, because an update mints new ids.
@@ -221,12 +236,10 @@ panel of these rows. The fields:
 
 ## Limits of what is shipped
 
-- **No construct updates itself.** Editing a source does not change a pattern, repeat,
-  blend, symbol instance or live-paint fill; a command rebuilds it (`updateLinkedRecipes`
-  finds every recipe an edited source feeds). A rebuild on every edit is not built: the
-  engine reports a change after it is committed, so the rebuild would be a second undo step
-  that clears the redo stack, and undoing the edit would trigger another rebuild. It needs a
-  write that continues after its commit in the same undo step (a contract gap). Recipe and library
+- **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
+  objects on a path and live-paint fills it feeds, in the edit's undo step (above). Symbol
+  instances do not follow a changed definition until Redefine or Reset, and a script's edits
+  are not followed (run `updateLinkedRecipes`). Recipe and library
   writes made by a COMMAND are not undoable (a make or update records the ids its own batch
   minted, so the recipe can only be written after it); writes through the object model are
   (below). Both need a host with `storage.parts@1`.

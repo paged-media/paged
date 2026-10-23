@@ -474,6 +474,38 @@ impl WorkerCore {
                     Err(error) => WorkerToMainKind::MutationFailed { error },
                 }
             }
+            // Engine ADR 1004 — the mutation joins the undo step
+            // `applied_seq` names: checked first (nothing applies when it
+            // may not), applied through the `Mutate` arm (same reply, same
+            // repaint), then folded into that step.
+            MainToWorkerKind::AmendMutation {
+                applied_seq,
+                mutation,
+            } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                let base = match model.check_amend(applied_seq) {
+                    Ok(base) => base,
+                    Err(error) => reply!(WorkerToMainKind::MutationFailed { error }),
+                };
+                let (reply, effect) = self.dispatch(
+                    MainToWorker {
+                        seq: msg_seq,
+                        protocol: PROTOCOL_VERSION,
+                        kind: MainToWorkerKind::Mutate(mutation),
+                    },
+                    clock,
+                );
+                if let WorkerToMainKind::MutationApplied { applied_seq, .. } = &reply.kind {
+                    if let Some(model) = self.model.as_mut() {
+                        model.fold_amend(base, *applied_seq);
+                    }
+                }
+                return (reply, effect);
+            }
             MainToWorkerKind::RequestPage { page_id, lod } => {
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::MutationFailed {

@@ -92,7 +92,10 @@ describe("document.onDidChange reports every committed change", () => {
         cacheStats: {},
       },
     });
-    expect(seen).toEqual([{ kind: "gestureCommitted", pageIds: ["p1", "p2"] }]);
+    expect(seen).toEqual([
+      // The step it committed, which a follow-up write may amend (ADR 337).
+      { kind: "gestureCommitted", pageIds: ["p1", "p2"], appliedSeq: 7 },
+    ]);
   });
 
   it("an older engine's script reply (no writes, no pageIds) is a change on pages it does not name", () => {
@@ -134,6 +137,7 @@ describe("document.onDidChange reports every committed change", () => {
         kind: "gestureCommitted",
         pageIds: ["p1"],
         reflow: { frameId: "f1", contentBox: [10, 10, 110, 250] },
+        appliedSeq: 8,
       },
     ]);
   });

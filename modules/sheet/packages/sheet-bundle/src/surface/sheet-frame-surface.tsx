@@ -69,7 +69,11 @@ import {
 export type FrameSurfaceSession = Pick<
   WorkbookSession,
   | "attachFrameSurface"
+  | "pasteSpecialOpen"
+  | "closePasteSpecial"
+  | "pasteAtSelection"
   | "frameView"
+  | "setFrameSheet"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -925,8 +929,11 @@ function SheetBarView({
           ? a1Of(active.row, active.col)
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
+      sheetId: st.activeSheet,
+      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
+      pasteSpecial: session.pasteSpecialOpen(),
       // ADR 510 — a window frame's lock (null: not a window frame).
       lock: session.frameView(props.elementId)?.lock ?? null,
     };
@@ -966,125 +973,285 @@ function SheetBarView({
     padding: "1px 6px",
   };
   return (
-    <div data-testid="sheet-bar" style={bar}>
-      <span
-        data-testid="sheet-bar-name"
-        style={{ ...box, minWidth: 54, textAlign: "center" }}
-      >
-        {view.name}
-      </span>
-      {view.edit ? (
-        <>
-          <button
-            type="button"
-            aria-label="Cancel"
-            style={button}
-            onClick={() => {
+    <div style={{ position: "relative" }}>
+      <div data-testid="sheet-bar" style={bar}>
+        <span
+          data-testid="sheet-bar-name"
+          style={{ ...box, minWidth: 54, textAlign: "center" }}
+        >
+          {view.name}
+        </span>
+        {view.edit ? (
+          <>
+            <button
+              type="button"
+              aria-label="Cancel"
+              style={button}
+              onClick={() => {
+                session.cancelCellEdit();
+                focusGrid();
+              }}
+            >
+              ✕
+            </button>
+            <button
+              type="button"
+              aria-label="Enter"
+              style={button}
+              onClick={() => {
+                session.commitCellEdit();
+                focusGrid();
+              }}
+            >
+              ✓
+            </button>
+          </>
+        ) : null}
+        <span
+          style={{ color: "var(--pg-muted-fg, #5b5b57)", fontStyle: "italic" }}
+        >
+          fx
+        </span>
+        <input
+          ref={inputRef}
+          data-testid="sheet-bar-formula"
+          aria-label="Formula"
+          spellCheck={false}
+          defaultValue={view.input}
+          style={{ ...box, flex: 1, minWidth: 180 }}
+          onFocus={() => {
+            if (!session.cellEditState()) session.beginCellEdit(null, "edit");
+          }}
+          onInput={(e) => session.setCellEditText(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              session.setCellEditText(e.currentTarget.value);
+              session.handleGridKey({ key: "Enter", shiftKey: e.shiftKey });
+              focusGrid();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
               session.cancelCellEdit();
               focusGrid();
-            }}
-          >
-            ✕
-          </button>
-          <button
-            type="button"
-            aria-label="Enter"
-            style={button}
-            onClick={() => {
-              session.commitCellEdit();
-              focusGrid();
-            }}
-          >
-            ✓
-          </button>
-        </>
-      ) : null}
-      <span
-        style={{ color: "var(--pg-muted-fg, #5b5b57)", fontStyle: "italic" }}
-      >
-        fx
-      </span>
-      <input
-        ref={inputRef}
-        data-testid="sheet-bar-formula"
-        aria-label="Formula"
-        spellCheck={false}
-        defaultValue={view.input}
-        style={{ ...box, flex: 1, minWidth: 180 }}
-        onFocus={() => {
-          if (!session.cellEditState()) session.beginCellEdit(null, "edit");
-        }}
-        onInput={(e) => session.setCellEditText(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            session.setCellEditText(e.currentTarget.value);
-            session.handleGridKey({ key: "Enter", shiftKey: e.shiftKey });
-            focusGrid();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            session.cancelCellEdit();
-            focusGrid();
-          }
-        }}
-      />
-      {view.stats && view.stats.count > 0 ? (
-        <span
-          data-testid="sheet-bar-stats"
-          style={{ color: "var(--pg-muted-fg, #5b5b57)", whiteSpace: "nowrap" }}
-        >
-          {view.stats.numbers > 0
-            ? `Sum ${view.stats.sumDisplay} · Average ${view.stats.averageDisplay} · `
-            : ""}
-          Count {view.stats.count}
-        </span>
-      ) : null}
-      <span
-        data-testid="sheet-bar-sheet"
-        style={{ ...box, whiteSpace: "nowrap" }}
-      >
-        {view.sheet}
-      </span>
-      {view.lock !== null ? (
-        <button
-          type="button"
-          data-testid="sheet-bar-lock"
-          aria-label="Lock view"
-          aria-pressed={view.lock}
-          title={
-            view.lock
-              ? "View locked: leaving the frame keeps this window"
-              : "Lock view: keep the page on this window when you leave"
-          }
-          style={{
-            ...button,
-            ...(view.lock
-              ? { background: "var(--pg-accent-bg, #e6eefc)" }
-              : null),
+            }
           }}
-          onClick={() => {
-            session.setFrameViewLock(!view.lock, props.elementId);
+        />
+        {view.stats && view.stats.count > 0 ? (
+          <span
+            data-testid="sheet-bar-stats"
+            style={{
+              color: "var(--pg-muted-fg, #5b5b57)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {view.stats.numbers > 0
+              ? `Sum ${view.stats.sumDisplay} · Average ${view.stats.averageDisplay} · `
+              : ""}
+            Count {view.stats.count}
+          </span>
+        ) : null}
+        <select
+          data-testid="sheet-bar-sheet"
+          aria-label="Sheet"
+          value={view.sheetId ?? ""}
+          style={{ ...box, whiteSpace: "nowrap" }}
+          onChange={(e) => {
+            session.setFrameSheet(Number(e.currentTarget.value));
             requestAnimationFrame(focusGrid);
           }}
         >
-          {view.lock ? "🔒" : "🔓"}
+          {view.sheetList.map((sh) => (
+            <option key={sh.id} value={sh.id}>
+              {sh.name}
+            </option>
+          ))}
+        </select>
+        {view.lock !== null ? (
+          <button
+            type="button"
+            data-testid="sheet-bar-lock"
+            aria-label="Lock view"
+            aria-pressed={view.lock}
+            title={
+              view.lock
+                ? "View locked: leaving the frame keeps this window"
+                : "Lock view: keep the page on this window when you leave"
+            }
+            style={{
+              ...button,
+              ...(view.lock
+                ? { background: "var(--pg-accent-bg, #e6eefc)" }
+                : null),
+            }}
+            onClick={() => {
+              session.setFrameViewLock(!view.lock, props.elementId);
+              requestAnimationFrame(focusGrid);
+            }}
+          >
+            {view.lock ? "🔒" : "🔓"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-label="Full screen"
+          title="Full screen"
+          style={button}
+          onClick={() => {
+            props.requestPresentation(
+              props.presentation === "fullscreen" ? "frame" : "fullscreen",
+            );
+            // The grid keeps the keys, as after any bar button.
+            requestAnimationFrame(focusGrid);
+          }}
+        >
+          ⤢
         </button>
+      </div>
+      {view.pasteSpecial ? (
+        <PasteSpecialCard
+          session={session}
+          style={bar}
+          button={button}
+          done={() => requestAnimationFrame(focusGrid)}
+        />
       ) : null}
-      <button
-        type="button"
-        aria-label="Full screen"
-        title="Full screen"
-        style={button}
-        onClick={() => {
-          props.requestPresentation(
-            props.presentation === "fullscreen" ? "frame" : "fullscreen",
-          );
-          // The grid keeps the keys, as after any bar button.
-          requestAnimationFrame(focusGrid);
-        }}
-      >
-        ⤢
-      </button>
+    </div>
+  );
+}
+
+// ── paste special: the options card under the bar ─────────────────────
+
+type PasteWhat = "all" | "formulas" | "values";
+type PasteOperation = "none" | "add" | "subtract" | "multiply" | "divide";
+
+const PASTE_WHAT: [PasteWhat, string][] = [
+  ["all", "All"],
+  ["formulas", "Formulas"],
+  ["values", "Values"],
+];
+const PASTE_OPERATIONS: [PasteOperation, string][] = [
+  ["none", "None"],
+  ["add", "Add"],
+  ["subtract", "Subtract"],
+  ["multiply", "Multiply"],
+  ["divide", "Divide"],
+];
+
+function PasteSpecialCard({
+  session,
+  style,
+  button,
+  done,
+}: {
+  session: FrameSurfaceSession;
+  style: CSSProperties;
+  button: CSSProperties;
+  done: () => void;
+}) {
+  const [what, setWhat] = useState<PasteWhat>("all");
+  const [operation, setOperation] = useState<PasteOperation>("none");
+  const [skipBlanks, setSkipBlanks] = useState(false);
+  const [transpose, setTranspose] = useState(false);
+  const paste = () => {
+    void session
+      .pasteAtSelection({ what, operation, skipBlanks, transpose })
+      .then(done);
+  };
+  const cancel = () => {
+    session.closePasteSpecial();
+    done();
+  };
+  const group: CSSProperties = {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    flexWrap: "wrap",
+  };
+  return (
+    <div
+      data-testid="sheet-paste-special"
+      role="dialog"
+      aria-label="Paste special"
+      style={{
+        ...style,
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        left: 0,
+        minWidth: 300,
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 8,
+        padding: 10,
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          paste();
+        }
+      }}
+    >
+      <div role="radiogroup" aria-label="Paste" style={group}>
+        <strong>Paste</strong>
+        {PASTE_WHAT.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="paste-what"
+              checked={what === value}
+              onChange={() => setWhat(value)}
+            />{" "}
+            {label}
+          </label>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="Operation" style={group}>
+        <strong>Operation</strong>
+        {PASTE_OPERATIONS.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="paste-operation"
+              checked={operation === value}
+              onChange={() => setOperation(value)}
+            />{" "}
+            {label}
+          </label>
+        ))}
+      </div>
+      <div style={group}>
+        <label>
+          <input
+            type="checkbox"
+            checked={skipBlanks}
+            onChange={(e) => setSkipBlanks(e.currentTarget.checked)}
+          />{" "}
+          Skip blanks
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={transpose}
+            onChange={(e) => setTranspose(e.currentTarget.checked)}
+          />{" "}
+          Transpose
+        </label>
+      </div>
+      <div style={{ ...group, justifyContent: "flex-end" }}>
+        <button type="button" style={button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-paste-special-ok"
+          style={button}
+          onClick={paste}
+        >
+          OK
+        </button>
+      </div>
     </div>
   );
 }

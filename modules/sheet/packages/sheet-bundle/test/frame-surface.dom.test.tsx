@@ -69,7 +69,20 @@ function fakeSession() {
     for (const l of listeners) l();
   };
   let lock = false;
+  let pasteCard = false;
+  let activeSheet = 0;
   const session: FrameSurfaceSession = {
+    pasteSpecialOpen: () => pasteCard,
+    closePasteSpecial: () => {
+      pasteCard = false;
+      changed();
+    },
+    pasteAtSelection: async (options) => {
+      calls.push(["paste", options]);
+      pasteCard = false;
+      changed();
+      return { ok: true as const, rows: 1, cols: 1 };
+    },
     frameView: () => ({ topLeft: "A1", lock }),
     setFrameViewLock: (next) => {
       calls.push(["lock", next]);
@@ -133,10 +146,24 @@ function fakeSession() {
     functionList: () => [
       { name: "SUM", family: "math", minArgs: 1, maxArgs: null },
     ],
-    sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
-    state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
+    sheets: () => [
+      { id: 0, name: "Sheet1", rows: 3, cols: 3 },
+      { id: 1, name: "Prices", rows: 3, cols: 3 },
+    ],
+    state: () =>
+      ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    setFrameSheet: (id) => {
+      calls.push(["sheet", id]);
+      activeSheet = id;
+      changed();
+      return true;
+    },
   };
-  return { session, calls };
+  const openPaste = () => {
+    pasteCard = true;
+    changed();
+  };
+  return { session, calls, openPaste };
 }
 
 function props(over: Partial<FrameSurfaceProps> = {}): FrameSurfaceProps {
@@ -273,6 +300,40 @@ describe("sheet frame surface", () => {
     expect(calls).toContainEqual(["lock", true]);
     expect(r.getByTestId("sheet-bar-lock").getAttribute("aria-pressed")).toBe(
       "true",
+    );
+  });
+
+  it("paste special's card pastes with the chosen options", () => {
+    const { session, calls, openPaste } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    expect(r.queryByTestId("sheet-paste-special")).toBeNull();
+    act(() => openPaste());
+    const card = r.getByTestId("sheet-paste-special");
+    fireEvent.click(r.getByLabelText("Values"));
+    fireEvent.click(r.getByLabelText("Add"));
+    fireEvent.click(r.getByLabelText("Transpose"));
+    fireEvent.click(r.getByTestId("sheet-paste-special-ok"));
+    expect(calls).toContainEqual([
+      "paste",
+      { what: "values", operation: "add", skipBlanks: false, transpose: true },
+    ]);
+    // The paste closes the card.
+    expect(card.isConnected).toBe(false);
+  });
+
+  it("the bar's sheet menu switches the frame to another sheet", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    const select = r.getByTestId("sheet-bar-sheet") as HTMLSelectElement;
+    expect(select.value).toBe("0");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(calls).toContainEqual(["sheet", 1]);
+    expect((r.getByTestId("sheet-bar-sheet") as HTMLSelectElement).value).toBe(
+      "1",
     );
   });
 

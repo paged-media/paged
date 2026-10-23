@@ -1,0 +1,102 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Pie",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 114.3
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Q1",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 120.95
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 126.9
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Q2",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 133.55
+    },
+    {
+      "fill": "#A5A5A5",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 139.5
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "Q3",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 146.15
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 60.0,
+      "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 180.0,
+      "fill": "#ED7D31",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 60.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 360.0,
+      "fill": "#A5A5A5",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 180.0,
+      "stroke": "#FFFFFF"
+    }
+  ],
+  "widthPt": 360.0
+}

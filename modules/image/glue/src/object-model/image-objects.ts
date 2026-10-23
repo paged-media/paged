@@ -122,12 +122,53 @@ export interface ImageCodec {
 }
 
 /** The editor session's selection for a frame, as `filterRegion`'s
- *  `selection: true` reads it: the coverage bytes at the session image's
- *  size, or why there is none to use. Absent headless. */
+ *  `selection: true` reads it: the coverage bytes at the size of the
+ *  image it was made on (the open image's live selection, or the one the
+ *  session kept when that frame's image closed), or why there is none
+ *  to use. Absent headless. */
 export type SelectionSource = (
   frameId: string,
 ) =>
   { width: number; height: number; coverage: Uint8Array } | { refused: string };
+
+const MASK_KEYS = ["polygons", "ops", "fillRule", "alpha", "feather"];
+
+/** A selection's coverage at the canvas size. The same size: as is. The
+ *  same image at another resolution (the aspect agrees within a pixel):
+ *  resampled bilinearly at pixel centres, as resizing an image resizes
+ *  its selection. Another aspect is another crop of the image, and where
+ *  the selection lies on this canvas is not known: refused. */
+export function coverageAt(
+  sel: { width: number; height: number; coverage: Uint8Array },
+  W: number,
+  H: number,
+): Uint8Array {
+  const { width: sw, height: sh, coverage } = sel;
+  if (sw === W && sh === H) return coverage;
+  if (Math.abs(sh * W - H * sw) > Math.max(sw, W))
+    throw new Refused(
+      `the editor's selection is on a ${sw}×${sh} image, the canvas is ${W}×${H}: ` +
+        "another crop of the image, so where the selection lies on it is not known",
+    );
+  const out = new Uint8Array(W * H);
+  const at = (x: number, y: number) => coverage[y * sw + x]!;
+  for (let y = 0; y < H; y++) {
+    const fy = Math.min(Math.max(((y + 0.5) * sh) / H - 0.5, 0), sh - 1);
+    const y0 = Math.floor(fy);
+    const y1 = Math.min(y0 + 1, sh - 1);
+    const ty = fy - y0;
+    for (let x = 0; x < W; x++) {
+      const fx = Math.min(Math.max(((x + 0.5) * sw) / W - 0.5, 0), sw - 1);
+      const x0 = Math.floor(fx);
+      const x1 = Math.min(x0 + 1, sw - 1);
+      const tx = fx - x0;
+      const top = at(x0, y0) * (1 - tx) + at(x1, y0) * tx;
+      const bottom = at(x0, y1) * (1 - tx) + at(x1, y1) * tx;
+      out[y * W + x] = Math.round(top * (1 - ty) + bottom * ty);
+    }
+  }
+  return out;
+}
 
 /** The `filter` row's value type, and `filterRegion`'s fields beside
  *  `layer`: the chain, a rectangle, a mask given as data, the live
@@ -142,6 +183,16 @@ export const FILTER_FIELDS = {
       polygons: {
         kind: "list",
         of: { kind: "list", of: { kind: "point" } },
+        optional: true,
+      },
+      ops: {
+        kind: "list",
+        of: { kind: "enum", members: ["add", "subtract", "intersect"] },
+        optional: true,
+      },
+      fillRule: {
+        kind: "enum",
+        members: ["nonzero", "evenodd"],
         optional: true,
       },
       alpha: { kind: "bytes", optional: true },
@@ -366,11 +417,16 @@ const LAYER_ROWS: PropertySchema[] = [
       "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths " +
       "(blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] " +
       "in image pixels; the whole canvas when absent), narrowed by `mask` (a selection as data: " +
-      "`polygons` of [x, y] image pixels, unioned; `alpha`, one coverage byte per canvas pixel or an " +
-      "encoded image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with " +
-      "`selection: true`, by the editor's live selection (refused headless). Partial coverage blends " +
-      "filtered and original pixels. On the GPU where one exists, otherwise on the CPU twins of the " +
-      "same kernels (ADR 465). Reads nothing.",
+      "`polygons` of [x, y] image pixels, each filled alone and unioned, or with `fillRule` " +
+      "(`evenodd`, `nonzero`) filled together, so an inner polygon cuts a hole; `ops`, one of " +
+      "`add`, `subtract`, `intersect` per polygon, folds the subtract and intersect polygons into " +
+      "the add polygons' shape in order; `alpha`, one coverage byte per canvas pixel or an encoded " +
+      "image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with " +
+      "`selection: true`, by the editor's selection of that frame (the open image's live selection, " +
+      "or the one it kept when the frame closed, resampled when the canvas is the same image at " +
+      "another size; refused where there is none). Partial coverage blends filtered and original " +
+      "pixels. On the GPU where one exists, otherwise on the CPU twins of the same kernels " +
+      "(ADR 465). Reads nothing.",
   },
   {
     path: "pixelSource",
@@ -1071,12 +1127,14 @@ export function createImageObjects(
     const out: FilterMask = {};
     if (mask !== undefined && mask !== null) {
       if (typeof mask !== "object" || Array.isArray(mask))
-        throw new Refused("a mask is { polygons?, alpha?, feather? }");
+        throw new Refused(
+          "a mask is { polygons?, ops?, fillRule?, alpha?, feather? }",
+        );
       const m = mask as Record<string, unknown>;
       for (const k of Object.keys(m))
-        if (!["polygons", "alpha", "feather"].includes(k))
+        if (!MASK_KEYS.includes(k))
           throw new Refused(
-            `a mask has no "${k}" (it takes polygons, alpha, feather)`,
+            `a mask has no "${k}" (it takes ${MASK_KEYS.join(", ")})`,
           );
       if (m["polygons"] !== undefined) {
         const polys = m["polygons"];
@@ -1100,6 +1158,29 @@ export function createImageObjects(
           });
         });
       }
+      if (m["ops"] !== undefined) {
+        const ops = m["ops"];
+        const n = out.polygons?.length ?? 0;
+        if (!Array.isArray(ops) || ops.length !== n)
+          throw new Refused(
+            `mask.ops names one op per polygon (${n}): "add", "subtract" or "intersect"`,
+          );
+        out.ops = ops.map((o, i) => {
+          if (o !== "add" && o !== "subtract" && o !== "intersect")
+            throw new Refused(
+              `mask.ops[${i}] is "add", "subtract" or "intersect"`,
+            );
+          return o;
+        });
+      }
+      if (m["fillRule"] !== undefined) {
+        const r = m["fillRule"];
+        if (r !== "nonzero" && r !== "evenodd")
+          throw new Refused('mask.fillRule is "nonzero" or "evenodd"');
+        if (!out.polygons)
+          throw new Refused("mask.fillRule needs polygons to fill");
+        out.fillRule = r;
+      }
       if (m["alpha"] !== undefined)
         out.alpha = alphaCoverage(c, m["alpha"], W, H);
       if (m["feather"] !== undefined) {
@@ -1116,13 +1197,10 @@ export function createImageObjects(
         );
       const live = selection(s.frame.frameId);
       if ("refused" in live) throw new Refused(live.refused);
-      if (live.width !== W || live.height !== H)
-        throw new Refused(
-          `the editor's selection is ${live.width}×${live.height}, the canvas ${W}×${H}`,
-        );
+      const cov = coverageAt(live, W, H);
       out.alpha = out.alpha
-        ? out.alpha.map((a, i) => Math.min(a, live.coverage[i]!))
-        : live.coverage;
+        ? out.alpha.map((a, i) => Math.min(a, cov[i]!))
+        : cov;
     } else if (useSelection !== undefined && useSelection !== false)
       throw new Refused("selection is true or false");
     return out.polygons || out.alpha ? out : undefined;

@@ -504,16 +504,17 @@ mod wasm {
             to_js(&self.session.list_sheets()).unwrap_or(JsValue::NULL)
         }
 
-        /// Enumerate the workbook's charts (M2, spec §8.4):
-        /// `[{index,hostSheet,kind,title,seriesCount}]`.
+        /// Enumerate the workbook's charts (spec §8.4, W4):
+        /// `[{index,hostSheet,kind,title,seriesCount,flattened3d,source,
+        /// chartsheet,combo}]`.
         pub fn list_charts(&self) -> JsValue {
             to_js(&self.session.list_charts()).unwrap_or(JsValue::NULL)
         }
 
-        /// The chart-kind tags `add_chart` accepts, in panel order —
-        /// `["column","stackedColumn","bar","stackedBar","line","area",
-        /// "scatter","pie","donut","radar"]`. The panel READS the set
-        /// rather than hard-coding it, so a kind can never be offered
+        /// The chart-kind tags `add_chart` accepts, in panel order (one per
+        /// kind and grouping: `column`, `stackedColumn`,
+        /// `percentStackedColumn`, … `boxWhisker`). The panel READS the
+        /// set rather than hard-coding it, so a kind can never be offered
         /// that the engine refuses (all chart semantics stay in Rust).
         pub fn chart_kinds(&self) -> JsValue {
             to_js(&crate::core::CHART_KIND_TAGS.to_vec()).unwrap_or(JsValue::NULL)
@@ -525,8 +526,7 @@ mod wasm {
         /// values COLUMN, `"rows"` one per ROW — the same cells read the
         /// other way round, never a rewrite of the user's data. Returns
         /// the new chart index — the same handle the geometry/lowering
-        /// lanes take. Publishing-first: authored charts are PAGE-side
-        /// only (the xlsx writer never re-derives chart parts).
+        /// lanes take. The chart is written into the xlsx on save.
         pub fn add_chart(
             &mut self,
             sheet: u16,
@@ -539,6 +539,32 @@ mod wasm {
             self.session
                 .add_chart(sheet, values, categories, kind, title, series_in)
                 .map_err(map_err)
+        }
+
+        /// The chartsheets (a tab that is one chart): `[{sheet,name,chart}]`.
+        pub fn list_chartsheets(&self) -> JsValue {
+            to_js(&self.session.list_chartsheets()).unwrap_or(JsValue::NULL)
+        }
+
+        /// The sparklines of `sheet`: `[{sheet,row,col,kind,data}]`.
+        pub fn list_sparklines(&self, sheet: u16) -> JsValue {
+            to_js(&self.session.list_sparklines(sheet)).unwrap_or(JsValue::NULL)
+        }
+
+        /// The primitives of the sparkline in a cell, drawn in a
+        /// `w_pt × h_pt` box (null when the cell has none).
+        pub fn sparkline_geometry(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            w_pt: f64,
+            h_pt: f64,
+        ) -> JsValue {
+            match self.session.sparkline_geometry(sheet, row, col, w_pt, h_pt) {
+                Some(p) => to_js(&p).unwrap_or(JsValue::NULL),
+                None => JsValue::NULL,
+            }
         }
 
         /// Enumerate the worksheets with a FROZEN PANE (spec §8.1):
@@ -880,8 +906,11 @@ mod wasm {
 
         /// Every chart with its series ranges and options:
         /// `[{index, hostSheet, kind, title?, legend, series:[{name?, values,
-        /// categories?, color?}], categoryAxisTitle?, valueAxisTitle?,
-        /// valueAxisMin?, valueAxisMax?}]`.
+        /// categories?, color?, colorSwatch?, kind, secondary, xValues?,
+        /// sizes?}], categoryAxisTitle?, valueAxisTitle?, valueAxisMin?,
+        /// valueAxisMax?, valueAxisLogBase?, valueAxisFormat?,
+        /// legendPosition?, dataLabels, style?, flattened3d,
+        /// titleParagraphStyle?}]`.
         pub fn chart_specs(&self) -> Result<JsValue, JsValue> {
             to_js(&self.session.chart_specs())
         }
@@ -889,7 +918,7 @@ mod wasm {
         /// Patch chart `index` (`{kind?, title?, legend?, series?,
         /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?}`;
         /// `null` clears a nullable field). Validated whole first.
-        /// Page-side only, like `add_chart`.
+        /// Written into the chart part on save.
         pub fn update_chart(&mut self, index: u32, patch: JsValue) -> Result<(), JsValue> {
             let patch: crate::core::ChartPatch = serde_wasm_bindgen::from_value(patch)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
