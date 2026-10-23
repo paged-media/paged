@@ -94,6 +94,14 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   `sheet-lower/src/table_band.rs` (the style under the cell's own, folded by the shared
   `CellStyler` through `SheetCondFmt::tables`), `sheet-js/src/core/tables.rs`,
   `sheet-conformance/tests/it/w2_tables.rs`.
+- What-if: `sheet-xlsx/src/parts/worksheet.rs` (`DataTableDef`), `sheet-xlsx/src/patch.rs` (a data
+  table's `<f>` kept on its cell), `sheet-js/src/core/whatif.rs`,
+  `sheet-conformance/oracle/excel/whatif.applescript` and `recorded/whatif.excel.xlsx` (Excel
+  built the tables and ran the seeks), `sheet-conformance/tests/it/excel_whatif.rs`.
+- External links were already evaluated from their caches before this record: a formula over
+  `[n]Sheet!A1` reads the read-only shadow sheets `SheetModel::external_sheets` (no AST variant
+  was needed). A defined name of another workbook (`[1]!Name`) is still not parsed; such a
+  formula keeps its cached value.
 
 **Frozen type amendment (filter criteria).** `sheet_core::FilterCriterion` gains `DateGroups`,
 `Custom`, `Dynamic`, `Color` and `Icon` (with `FilterOp`, `CustomCondition`, `DateGroup`);

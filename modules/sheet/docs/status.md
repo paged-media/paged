@@ -84,6 +84,17 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **What-if** (ADR 517). Data tables (`<f t="dataTable">`, one variable in a column or a row,
+  two variables) are evaluated: on load and after every write in automatic calculation (not in
+  "automatic except tables" or manual, where `calculateDataTables` does it), each result cell
+  substitutes its row and column values into the input cells, reads the formula, and the inputs
+  are put back; the save keeps each table's `<f>`. `goalSeek` sets a constant so a formula reaches
+  a target (secant, then bisection over a bracket; at most 100 iterations, within 0.001), keeps
+  the found value as an entry and returns the old input. Recorded from Excel 16, which built the
+  data tables and ran the seeks itself (`oracle/excel/whatif.applescript`,
+  `recorded/whatif.excel.xlsx`): every table result agrees on load and after an input edit, and
+  every seek lands within 0.1% of Excel's value. Data tables cannot be authored yet, and a row or
+  column insert does not move a data table's `ref`/`r1`/`r2`.
 - **Tables, editable** (ADR 517). `createTable` makes a range a table (its part, the worksheet
   relationship, the content type and `<tablePart>`; blank and repeated headers made unique as
   Excel makes them; without headers the data moves down under a `Column1…` row), `resizeTable`

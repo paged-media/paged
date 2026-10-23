@@ -685,6 +685,7 @@ impl XlsxDocument {
         shift(&mut self.freeze_panes, sheet_id);
         shift(&mut self.data_validations, sheet_id);
         shift(&mut self.comments, sheet_id);
+        shift(&mut self.data_tables, sheet_id);
         let ft = std::mem::take(&mut self.formula_texts);
         for ((s, r, c), t) in ft {
             if s < sheet_id {
