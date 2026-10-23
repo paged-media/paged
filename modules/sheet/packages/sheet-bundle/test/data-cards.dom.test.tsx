@@ -13,6 +13,7 @@ import type { DataToolsApi, EntryAlert } from "../src/data-tools";
 import type {
   FilterColumnValues,
   FilterCriterion,
+  SortSpec,
   ValidationRuleArg,
 } from "../src/engine-w2";
 import {
@@ -452,5 +453,70 @@ describe("AutoFilter buttons and menu [sheet.filter.dropdown]", () => {
     fireEvent.click(bar.getByTestId("sheet-filter-sort-desc"));
     expect(fake.sorted).toEqual([[1, { descending: true }]]);
     expect(bar.queryByTestId("sheet-filter-menu")).toBeNull();
+  });
+});
+
+describe("Sort card [sheet.sort.multikey]", () => {
+  it("builds levels by header and hands the keys to the session", () => {
+    let open = true;
+    const sorts: [SortSpec, string | undefined][] = [];
+    const fake = fakeSession({
+      dataCard: () => (open ? { kind: "sort" } : null),
+      closeDataCard: () => {
+        open = false;
+        fake.changed();
+      },
+      sortDialogInfo: () => ({
+        range: "A1:C9",
+        hasHeader: true,
+        columns: [
+          { index: 0, label: "Column A", header: "Team" },
+          { index: 1, label: "Column B", header: "Score" },
+          { index: 2, label: "Column C", header: "Rank" },
+        ],
+      }),
+      sortWith: (spec, range) => {
+        sorts.push([spec, range]);
+        return { ok: true };
+      },
+    });
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    const keys = () =>
+      r.getAllByTestId("sheet-sort-key") as HTMLSelectElement[];
+    expect([...keys()[0]!.options].map((o) => o.textContent)).toEqual([
+      "Team",
+      "Score",
+      "Rank",
+    ]);
+    fireEvent.click(r.getByTestId("sheet-sort-add"));
+    expect(keys()).toHaveLength(2);
+    fireEvent.change(keys()[1]!, { target: { value: "1" } });
+    const orders = r.getAllByTestId("sheet-sort-order");
+    fireEvent.change(orders[1]!, { target: { value: "desc" } });
+    fireEvent.change(orders[0]!, { target: { value: "custom" } });
+    fireEvent.change(r.getByTestId("sheet-sort-custom-list"), {
+      target: { value: "Low, High" },
+    });
+    // Unticking headers labels the columns by letter.
+    fireEvent.click(r.getByTestId("sheet-sort-header"));
+    expect(keys()[0]!.options[0]!.textContent).toBe("Column A");
+    fireEvent.click(r.getByTestId("sheet-sort-ok"));
+    expect(sorts).toEqual([
+      [
+        {
+          keys: [
+            { index: 0, descending: false, customList: ["Low", "High"] },
+            { index: 1, descending: true },
+          ],
+          hasHeader: false,
+          leftToRight: false,
+          caseSensitive: false,
+        },
+        "A1:C9",
+      ],
+    ]);
+    expect(r.queryByTestId("sheet-sort-card")).toBeNull();
   });
 });
