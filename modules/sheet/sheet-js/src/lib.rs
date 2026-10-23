@@ -909,6 +909,12 @@ mod wasm {
             self.session.update_chart(index, patch).map_err(map_err)
         }
 
+        /// Delete chart `index` (its slot stays, so other charts keep their
+        /// indices). Page-side only, like `add_chart`.
+        pub fn delete_chart(&mut self, index: u32) -> Result<(), JsValue> {
+            self.session.delete_chart(index).map_err(map_err)
+        }
+
         /// Resolve a range argument (A1, `Sheet!A1:B2`, a defined name or a
         /// table name) as seen from `sheet`: `{sheet, range}` (range in A1).
         pub fn resolve_range(&self, sheet: u16, text: &str) -> Result<JsValue, JsValue> {

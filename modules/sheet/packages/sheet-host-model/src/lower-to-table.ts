@@ -396,6 +396,25 @@ export function tableDecorOps(
     }
   }
 
+  // A frame page printed without gridlines (ADR 510): every edge is
+  // written as no line. Left to the engine, a cell edge takes the document
+  // default stroke — a visible border that also makes each row taller than
+  // the frame was fitted to. Style borders still win below.
+  if (content.noGridlines) {
+    const rowsN = content.rows.length;
+    const colsN = content.cols.length;
+    for (let r = 0; r < rowsN; r++) {
+      for (let c = 0; c < colsN; c++) {
+        // The same edges the grid rules address: the first row's top and
+        // the first column's left, every cell's bottom and right.
+        if (r === 0) putEdge(r, c, "cellTopEdgeStrokeWeight", 0);
+        if (c === 0) putEdge(r, c, "cellLeftEdgeStrokeWeight", 0);
+        putEdge(r, c, "cellBottomEdgeStrokeWeight", 0);
+        putEdge(r, c, "cellRightEdgeStrokeWeight", 0);
+      }
+    }
+  }
+
   const fills: Mutation[] = [];
   const styleByKey = new Map((content.styles ?? []).map((s) => [s.key, s]));
   content.rows.forEach((row, r) => {

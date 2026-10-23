@@ -41,10 +41,12 @@ import type {
   PageSummary,
 } from "@paged-media/plugin-api";
 import {
+  BINDING_KEY,
   chartGeometryToMutations,
   labelAutoSizeOp,
   labelStyleOps,
   makeBinding,
+  parseBinding,
   type ChartGeometry,
   type ChartPlacement,
   type ChartTextLabel,
@@ -132,7 +134,7 @@ export interface ChartLowerOptions {
  *  paths and text frames alike). `withGroup: false` skips the dissolve, for a
  *  chart whose group the user has already taken apart. */
 export function chartRemovalOps(
-  placed: PlacedChart,
+  placed: ChartElements,
   withGroup = true,
 ): Mutation[] {
   return [
@@ -167,6 +169,63 @@ export async function removePlacedChart(
   if (!r.applied)
     host.log.warn("chart refresh: removing the old chart was rejected", r);
   return r.applied;
+}
+
+/** What removing a placed chart needs: its group and its members. */
+export type ChartElements = Pick<PlacedChart, "elementIds" | "groupId">;
+
+/**
+ * Plan G4 — the placed copies of chart `chartIndex`, read off the scene
+ * tree: every item carrying this plugin's binding with the range
+ * `chart:<index>` (the binding rides a chart's first element), with the
+ * group it sits in and every member of that group. One tree read (its rows
+ * carry the items' plugin metadata); a chart placed in an earlier session
+ * is found as well as this session's. An item outside a group is the only
+ * element found for its chart (the rest cannot be told apart from other
+ * art). Empty when the tree cannot be read or carries no metadata.
+ */
+export async function placedChartsOnPage(
+  host: BundleHost,
+  chartIndex: number,
+): Promise<ChartElements[]> {
+  type Node = Awaited<ReturnType<BundleHost["document"]["tree"]>>[number];
+  let roots: Node[];
+  try {
+    roots = await host.document.tree();
+  } catch (err) {
+    host.log.debug("placed charts: scene tree read failed", err);
+    return [];
+  }
+  const want = `chart:${chartIndex}`;
+  const isChart = (n: Node): boolean => {
+    const entry = n.pluginMetadata?.find((m) => m.key === BINDING_KEY);
+    if (!entry) return false;
+    try {
+      return parseBinding(JSON.parse(entry.value))?.data.range === want;
+    } catch {
+      return false;
+    }
+  };
+  const found: ChartElements[] = [];
+  const walk = (nodes: readonly Node[], parent: Node | null) => {
+    for (const n of nodes) {
+      if (n.id && n.id.kind !== "group" && isChart(n)) {
+        if (parent?.id?.kind === "group") {
+          const groupId = parent.id.id;
+          if (!found.some((f) => f.groupId === groupId))
+            found.push({
+              groupId,
+              elementIds: (parent.children ?? [])
+                .map((c) => c.id)
+                .filter((id): id is ElementId => !!id && id.kind !== "group"),
+            });
+        } else found.push({ groupId: null, elementIds: [n.id] });
+      }
+      if (n.children) walk(n.children, n);
+    }
+  };
+  walk(roots, null);
+  return found;
 }
 
 /** The within-batch handle the chart's group is named by. */
