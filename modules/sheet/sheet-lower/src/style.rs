@@ -166,6 +166,15 @@ impl VisualAttrs {
 pub trait VisualStyleSource {
     /// The visual attributes for a resolved `StyleId`, or `None` (default).
     fn visual(&self, id: StyleId) -> Option<VisualAttrs>;
+
+    /// The `#RRGGBB` a number format's colour bracket names (`[Red]`,
+    /// `[Color12]`): the workbook palette's entry when it overrides the
+    /// default (`<indexedColors>`), else the default palette's. The default
+    /// method knows only the default palette.
+    fn format_color_rgb(&self, color: sheet_format::FormatColor) -> String {
+        let (r, g, b) = color.default_rgb();
+        format!("#{r:02X}{g:02X}{b:02X}")
+    }
 }
 
 /// Any `Fn(StyleId) -> Option<VisualAttrs>` is a source — a caller that does

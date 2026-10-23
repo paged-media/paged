@@ -102,6 +102,9 @@ export interface GridCell {
    *  column its text may spill into (empty neighbours, within the window
    *  and the pane). The painter clips the text there. */
   overflowTo?: number;
+  /** The number format's repeat-fill character; `text` then holds a TAB
+   *  where it stands (see `LoweredCell.fill`). */
+  fill?: string;
 }
 
 /** One merged area as shown in a viewport pane (mirror of Rust
@@ -124,6 +127,8 @@ export interface GridMerge {
   styleKey: number;
   wrap?: boolean;
   vAlign?: string;
+  /** The anchor's repeat-fill character (see `GridCell.fill`). */
+  fill?: string;
 }
 
 /** A selection rectangle anchored at `(anchorRow, anchorCol)`, spanning
@@ -386,6 +391,13 @@ export function colBand(
   return bandOf(vp.colIndices, vp.firstCol, vp.cols, start, count);
 }
 
+/** A cell's text with its repeat fill written once (the views that do not
+ *  measure text: the SVG and scene-layer renderers). `text` carries a TAB
+ *  where the fill stands (`GridCell.fill`). */
+export function fillOnce(text: string, fill: string | undefined): string {
+  return fill === undefined ? text : text.replace("\t", fill);
+}
+
 /** The viewport-local rect `[x, y, w, h]` of the shown cell `(row, col)`,
  *  or `null` when its row or column is not shown. */
 export function cellRect(
@@ -531,6 +543,7 @@ function cellTexts(
   const parts: string[] = [];
   const texts: {
     text: string;
+    fill?: string;
     align: Align;
     styleKey?: number;
     r: number[];
@@ -558,7 +571,7 @@ function cellTexts(
       `<text x="${x}" y="${y}" font-size="${size}" ` +
         `font-family="${xmlEscape(family)}" fill="${xmlEscape(color)}" ` +
         `text-anchor="${anchorFor(cell.align)}"${weight}${italic}>` +
-        `${xmlEscape(cell.text)}</text>`,
+        `${xmlEscape(fillOnce(cell.text, cell.fill))}</text>`,
     );
   }
   return parts.join("");
@@ -859,10 +872,19 @@ export function gridSceneToSceneLayer(
   }[] = [];
   for (const cell of scene.cells) {
     const r = cellRect(vp, cell.row, cell.col);
-    if (r) boxes.push({ r, text: cell.text, styleKey: cell.styleKey });
+    if (r)
+      boxes.push({
+        r,
+        text: fillOnce(cell.text, cell.fill),
+        styleKey: cell.styleKey,
+      });
   }
   for (const m of scene.merges ?? []) {
-    boxes.push({ r: [m.x, m.y, m.w, m.h], text: m.text, styleKey: m.styleKey });
+    boxes.push({
+      r: [m.x, m.y, m.w, m.h],
+      text: fillOnce(m.text, m.fill),
+      styleKey: m.styleKey,
+    });
   }
 
   // 1 — cell background fills.

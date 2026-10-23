@@ -15,7 +15,7 @@
 
 - id: sheet.format.fractions
   title: Fraction formats (# ?/?, # ??/??) — denominator fitting
-  ruling: "The fitted form fits the best n/d minimizing |frac - n/d| over 1<=d<=10^den_digits-1, preferring the SMALLER denominator on ties (Excel behavior). The fixed form (# ?/16) reduces to the literal denominator, not lowest terms. A numerator that rounds up to the denominator carries into the integer (# ??/?? of 2.96 -> 2 24/25). ? slots space-pad to their width, a documented T0 alignment approximation (# ??/?? of 2/3 -> '  2/ 3'); a zero fraction with an integer part blanks the slot to spaces (# ?/? of 4 -> '4    ')."
+  ruling: "The fitted form shows the LAST continued-fraction convergent of the fraction whose denominator fits 10^den_digits-1 — not the best rational approximation (Excel 16, recorded in the display lane: 3.14159 under # ??/?? shows 3 1/7, although 14/99 is closer). The fixed form (# ?/16) reduces to the literal denominator, not lowest terms. A numerator that rounds up to the denominator carries into the integer (# ??/?? of 2.96 -> 2 24/25). ? slots space-pad to their width, a documented T0 alignment approximation (# ??/?? of 2/3 -> '  2/ 3'); a zero fraction with an integer part blanks the slot to spaces (# ?/? of 4 -> '4    ')."
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (fraction codes)"]
   tests:
@@ -33,7 +33,7 @@
 
 - id: sheet.format.color-brackets
   title: Color brackets ([Red], [Blue], [Color12]) carried through to the lowered style
-  ruling: "The eight named colors ([Black][Blue][Cyan][Green][Magenta][Red][White][Yellow]) are a SIDECAR: a color bracket never changes the rendered glyphs, only the cell color. The frozen format_value DROPS the color (string byte-identical to M0); the new format_value_styled(v, fmt, ctx) -> (String, Option<FormatColor>) surfaces it. The reported color follows section selection ([Red]0.0;[Blue]0.0 colors negatives blue). Indexed [ColorN] palette entries (1..56) are NOT modeled — dropped like an unknown bracket, so only the eight named colors land."
+  ruling: "The eight named colors ([Black][Blue][Cyan][Green][Magenta][Red][White][Yellow]) are a SIDECAR: a color bracket never changes the rendered glyphs, only the cell color. The frozen format_value DROPS the color (string byte-identical to M0); the new format_value_styled(v, fmt, ctx) -> (String, Option<FormatColor>) surfaces it. The reported color follows section selection ([Red]0.0;[Blue]0.0 colors negatives blue). [ColorN] (1..56) names the workbook palette at slot N+7, and the eight names are palette entries too ([Black]=[Color1] … [Cyan]=[Color8]), so a workbook <indexedColors> override recolours them. The lowering folds the colour into the cell's text colour on the page table and the live grid alike (a conditional format's font colour still wins)."
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (color codes)"]
   tests:
@@ -42,7 +42,7 @@
 
 - id: sheet.format.padding
   title: Repeat/skip-width tokens (* and _) — fill-to-width and skip-a-char-width padding
-  ruling: "The *x repeat-fill char fills a column to its width in Excel; the engine has NO column width (the typeset lane sets width downstream), so T0 emits the fill char EXACTLY ONCE at its token position. The companion _x (skip a char width) is approximated as a single space (already an M0 behavior)."
+  ruling: "The *x repeat-fill char fills a column to its width in Excel. The string APIs (TEXT, format_value) emit the fill char EXACTLY ONCE at its token position, as Excel's TEXT does; format_value_display reports its position (FillSpec), and the lowering splits the cell text there with a tab: the live grid repeats the character across the free width, the page table carries a right tab stop at the cell's inner width with the character as its leader. The companion _x (skip a char width) is approximated as a single space (already an M0 behavior)."
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (* and _ tokens)"]
   tests:
@@ -57,3 +57,11 @@
   tests:
     rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_locale_currency_token"]
     corpus: ["corpus/format-corpus/currency.golden.tsv"]
+
+- id: sheet.format.system-formats
+  title: System long date / long time ([$-F800], [$-F400], [$-x-sysdate], [$-x-systime])
+  ruling: "A section carrying the system-format locale id renders the display locale's own long-date or long-time pattern and ignores the pattern written after the bracket (Excel stores the pattern it showed at save time; it displays the system's). en-US: dddd, mmmm d, yyyy and h:mm:ss AM/PM."
+  status: implemented
+  provenance: ["ECMA-376 §18.8.31 (locale ids in number formats)", "Microsoft Office number-format documentation (system date/time ids)"]
+  tests:
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_system_formats"]
