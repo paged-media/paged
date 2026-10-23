@@ -48,8 +48,8 @@
 use crate::condfmt::SheetCondFmt;
 use crate::style::{NoStyles, VisualStyleSource};
 use crate::{
-    databar_rect, lower_cell, BorderLines, CellStyler, DataBarRect, LoweredCell, LoweredCol,
-    LoweredContent, LoweredRow, LoweredStyle, MergeSpan, Rule, RuleSet, CHAR_TO_PT,
+    databar_rect, lower_cell_display, BorderLines, CellStyler, DataBarRect, LoweredCell,
+    LoweredCol, LoweredContent, LoweredRow, LoweredStyle, MergeSpan, Rule, RuleSet, CHAR_TO_PT,
     DEFAULT_COL_CHARS, DEFAULT_ROW_PT,
 };
 use sheet_core::{Align, SheetId, SheetModel, Worksheet};
@@ -260,7 +260,7 @@ pub fn lower_tracks_styled(
     let mut cache = FormatCache::default();
     let mut styler = CellStyler::new(visual, cf, ws);
     let mut databars: Vec<DataBarRect> = Vec::new();
-    let mut anchors: HashMap<usize, (String, Align, u32)> = HashMap::new();
+    let mut anchors: HashMap<usize, (String, Align, u32, Option<String>)> = HashMap::new();
     let mut grid: Vec<Vec<LoweredCell>> = Vec::with_capacity(n_rows);
     for (dr, &r) in rows.iter().enumerate() {
         let mut line = Vec::with_capacity(n_cols);
@@ -270,9 +270,11 @@ pub fn lower_tracks_styled(
                 text: String::new(),
                 align: Align::General,
                 style_key: 0,
+                fill: None,
             };
             if let Some(cell) = ws.and_then(|w| w.cell(r, c)) {
-                let key = styler.key_for_cell(r, c, cell);
+                let d = lower_cell_display(model, cell, &mut cache, &ctx);
+                let key = styler.key_for_display(r, c, cell, d.color);
                 if let Some((frac, rgb)) = styler.databar(r, c, cell) {
                     let (x0, y0) = (x_offsets[dc + hd], y_offsets[dr + hd]);
                     databars.push(databar_rect(
@@ -286,17 +288,18 @@ pub fn lower_tracks_styled(
                         rgb,
                     ));
                 }
-                let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
+                let fill = d.fill.map(String::from);
                 match covered.get(&(dr, dc)).map(|&fi| frags[fi]) {
                     Some(f) => {
                         if (r, c) == (f.area.0, f.area.1) {
-                            anchors.insert(f.merge, (text, align, key));
+                            anchors.insert(f.merge, (d.text, d.align, key, fill));
                         }
                     }
                     None => {
-                        out.text = text;
-                        out.align = align;
+                        out.text = d.text;
+                        out.align = d.align;
                         out.style_key = key;
+                        out.fill = fill;
                     }
                 }
             }
@@ -313,22 +316,23 @@ pub fn lower_tracks_styled(
             }
             let entry = match ws.cell(f.area.0, f.area.1) {
                 Some(cell) => {
-                    let key = styler.key_for_cell(f.area.0, f.area.1, cell);
-                    let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
-                    (text, align, key)
+                    let d = lower_cell_display(model, cell, &mut cache, &ctx);
+                    let key = styler.key_for_display(f.area.0, f.area.1, cell, d.color);
+                    (d.text, d.align, key, d.fill.map(String::from))
                 }
-                None => (String::new(), Align::General, 0),
+                None => (String::new(), Align::General, 0, None),
             };
             anchors.insert(f.merge, entry);
         }
     }
     // Every fragment's shown corner carries its anchor.
     for f in &frags {
-        if let Some((text, align, key)) = anchors.get(&f.merge) {
+        if let Some((text, align, key, fill)) = anchors.get(&f.merge) {
             let cell = &mut grid[f.dr0][f.dc0];
             cell.text = text.clone();
             cell.align = *align;
             cell.style_key = *key;
+            cell.fill = fill.clone();
         }
     }
     let mut styles = styler.into_styles();
@@ -341,6 +345,7 @@ pub fn lower_tracks_styled(
         text,
         align: Align::Center,
         style_key: heading_key,
+        fill: None,
     };
 
     // ---- Assemble rows / cols (headings first). ----

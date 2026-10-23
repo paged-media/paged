@@ -331,6 +331,7 @@ proptest! {
         for g in &scene.cells {
             let (pc, _, _) = cell_at(g.row, g.col);
             prop_assert_eq!(&g.text, &pc.text);
+            prop_assert_eq!(&g.fill, &pc.fill);
             prop_assert_eq!(g.align, pc.align);
             prop_assert_eq!(g.style_key, pc.style_key);
         }
@@ -351,6 +352,7 @@ proptest! {
             let pc = &page.rows[dr].cells[dc];
             prop_assert_eq!(&gm.text, &pc.text);
             prop_assert_eq!(gm.style_key, pc.style_key);
+            prop_assert_eq!(&gm.fill, &pc.fill);
             corners.insert((dr, dc));
         }
         // Every other page cell with content is a grid cell.
