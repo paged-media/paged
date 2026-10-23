@@ -57,6 +57,7 @@ import {
   type CalcSettingsInfo,
   type CellEditRecord,
   type CellStylePatch,
+  type DocSwatch,
   type EdgeStyle,
   type NameInfo,
   type SheetLayoutInfo,
@@ -450,6 +451,17 @@ export interface WorkbookSession {
     family: string,
     style?: string,
   ): Promise<{ bytes: Uint8Array; family: string; style?: string } | null>;
+  /** A document swatch as a cell colour reference (sheet ADR 518): its
+   *  colour model and the sRGB the document shows it as, the fallback an
+   *  xlsx reader sees. Null when the document has no such swatch. */
+  documentSwatchRef(id: string): Promise<DocSwatch | null>;
+  /** How document swatches `ids` show on screen now (`#rrggbb`, colour
+   *  managed), for the grid to draw referenced colours as the canvas does.
+   *  Unknown ids are left out. */
+  documentSwatchColors(ids: readonly string[]): Promise<Map<string, string>>;
+  /** Bumps whenever the document's swatches may have changed (a swatch
+   *  edit, an undo): the grid re-reads `documentSwatchColors`. */
+  documentStyleRevision(): number;
   /** The face and size text takes on the page when a cell names none: the
    *  document's basic paragraph style (P7 — the grid draws un-styled cells
    *  in it, as the placed table prints them). Null when unreadable. */
@@ -2679,6 +2691,10 @@ export function createWorkbookSession(
   }
   const foreignChangeSub = host.document.onDidChange((e) => {
     if (e.kind === "mutationApplied" && ownWrites > 0) return;
+    // P7 — a swatch or style the cells reference may have changed: the
+    // grid re-reads the document's colours (debounced with the rest).
+    docStyleRevision += 1;
+    scheduleStyleNotice();
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
     // ADR 510 (P6) — a window frame's box is its window: a resize shows
     // what fits now. The engine names the resized frame's content box; a
@@ -2757,6 +2773,18 @@ export function createWorkbookSession(
   }
   /** The last frame box seen per window frame (`rereadWindowBoxes`). */
   const resizedBoxes = new Map<string, string>();
+
+  /** P7 — the document style revision the grid follows. */
+  let docStyleRevision = 0;
+  let styleNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleStyleNotice(): void {
+    if (!inFrameActive) return;
+    if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
+    styleNoticeTimer = setTimeout(() => {
+      styleNoticeTimer = null;
+      emitter.emit();
+    }, REFRESH_DEBOUNCE_MS);
+  }
 
   /** P6 — continuation frame → the chain's head (a window frame). */
   const chainHeadOf = new Map<string, string>();
@@ -3809,6 +3837,47 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    async documentSwatchColors(ids) {
+      const out = new Map<string, string>();
+      if (ids.length === 0 || !host.supports("document.swatchDisplay@1"))
+        return out;
+      try {
+        for (const shown of await host.document.swatchDisplay(ids))
+          out.set(shown.id, shown.rgbHex);
+      } catch (err) {
+        host.log.debug("documentSwatchColors: read failed", err);
+      }
+      return out;
+    },
+
+    documentStyleRevision() {
+      return docStyleRevision;
+    },
+
+    async documentSwatchRef(id) {
+      if (!host.supports("document.swatchDisplay@1")) return null;
+      try {
+        const [shown] = await host.document.swatchDisplay([id]);
+        if (!shown) return null;
+        const m = shown.model.toLowerCase();
+        const model: DocSwatch["model"] = m.includes("spot")
+          ? "spot"
+          : m.includes("lab")
+            ? "lab"
+            : shown.cmyk
+              ? "cmyk"
+              : "rgb";
+        return {
+          id,
+          model,
+          fallbackRgb: `#${shown.rgbHex.replace(/^#/, "").toUpperCase()}`,
+        };
+      } catch (err) {
+        host.log.debug(`documentSwatchRef: ${id} unreadable`, err);
+        return null;
+      }
     },
 
     async documentTextDefault() {
@@ -5444,6 +5513,7 @@ export function createWorkbookSession(
       historySub.dispose();
       foreignChangeSub.dispose();
       if (chainTimer !== null) clearTimeout(chainTimer);
+      if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).
