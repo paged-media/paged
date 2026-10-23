@@ -116,5 +116,13 @@ that looks as the grid did.
 - **Lock.** `session.setFrameViewLock` / the bar's lock button pin the window where it stands;
   the binding records the lock with the next page write. Reopened documents read view, print
   options and sizing from the binding and the box from the frame's geometry.
-- **Not yet.** Resizing a frame does not re-window it; chains and several frames on one window
-  follow (P6).
+- **Resize (P6).** A window frame's box is its window: a resize the engine reports (`reflow`)
+  shows what fits now; a gesture that resized without naming the frame re-reads the window
+  frames' geometry.
+- **Chains (P6).** A window frame whose story is linked to more frames becomes one window over
+  all of them: the head owns the view, and the window takes the head's columns and the rows that
+  fill each frame in turn as the engine splits the one native table (whole rows per frame, the
+  frozen rows repeated as header rows on each continuation). Entering a continuation frame starts
+  its grid at the rows it holds; scrolling there and leaving scrolls the chain. Links are read
+  (debounced) after document changes; unlinking returns to a single frame.
+- **Several frames** may each show their own window of one sheet: each carries its own binding.
