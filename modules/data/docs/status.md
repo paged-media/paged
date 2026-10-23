@@ -216,6 +216,26 @@ Not done:
   still reports the query's derived `recordCount` as a difference after a record field is
   filled (it compares derived rows).
 
+- **Catalogues** ([ADR 560](adr/560-template-fields-are-binding-targets.md), plan F8;
+  `src/catalogue.ts`). A template's own text, picture and visibility fields are binding
+  targets: the Bindings panel's "Template fields" section, or the typed command
+  `bindTemplateField { field, query, expr, invert? }`, binds one to an expression over a
+  query (checked against the query; kept in the session part as `catalogue`).
+  `runCatalogue { query?, template?, mode?, by? }` (the panel's "Make catalogue") copies the
+  template page once per record (`perRecord`) or per group of `by` (`perGroup`) and fills
+  every copy's fields from its record: the engine decides each value (`plan_catalogue`,
+  typed by the field's kind, refused when the template's `required` or `maxLength` forbids
+  it, which refuses the whole run before anything is written), and the bundle writes them as
+  the template form does. A second run replaces the copies of the first; the template page
+  holds the first instance. Two undo steps when pages change (pages, then fields).
+  `templateFieldTargets` lists the fields with their bindings. A filler may run it where the
+  author's page policy opens the template page (`{ "allow": ["document.pages"] }`): the
+  engine asks `document.pages` of the page removed or duplicated, and the copies inherit
+  the grant; the first run is an author's (it marks the template page with this plugin's
+  page label). Not yet: a page whose stories hold a table, an anchored object or a footnote
+  cannot be copied; module fields are not catalogue targets; the editor's Template panel
+  has no control for the page grant.
+
 - **Inspection commands** (plan G4). Typed, read-only: `previewQuery { sql, limit }`,
   `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the
   variable set's `captureEveryRecord`, `exportVariableLibrary` and `importVariableLibrary`,

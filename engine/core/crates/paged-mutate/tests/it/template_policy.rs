@@ -356,3 +356,109 @@ fn a_module_field_opens_its_own_plugins_document_label() {
         "document.metadata",
     );
 }
+
+fn first_page(doc: &Document) -> String {
+    doc.spreads[0].spread.pages[0]
+        .self_id
+        .clone()
+        .expect("page id")
+}
+
+fn page_ids(doc: &Document) -> Vec<String> {
+    doc.spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter().filter_map(|p| p.self_id.clone()))
+        .collect()
+}
+
+/// Data ADR 560: a page's own policy may grant `document.pages`, so a filler
+/// may copy that page and remove its copies (a catalogue's product pages)
+/// while every other page stays closed, and adding a page anywhere still
+/// needs the document's grant.
+#[test]
+fn a_page_policy_opens_that_page_and_its_copies_and_no_other() {
+    let (mut doc, _photo, _logo) = template();
+    let filler = session(Role::Filler);
+    let source = first_page(&doc);
+    // A copy made before the page was opened is closed like any page.
+    apply_checked(
+        &mut doc,
+        &Operation::DuplicatePage {
+            page: source.clone(),
+            clone_spread_json: None,
+        },
+        &session(Role::Author),
+    )
+    .expect("the author copies the page");
+    let closed = page_ids(&doc)
+        .into_iter()
+        .find(|p| *p != source)
+        .expect("the copy");
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::DuplicatePage {
+                page: source.clone(),
+                clone_spread_json: None,
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
+    let open = ItemPolicy {
+        allow: vec![Permission::DocumentPages],
+        ..Default::default()
+    };
+    apply(
+        &mut doc,
+        &label(&NodeId::Page(source.clone()), open.to_label()),
+    )
+    .expect("page policy");
+
+    apply_checked(
+        &mut doc,
+        &Operation::DuplicatePage {
+            page: source.clone(),
+            clone_spread_json: None,
+        },
+        &filler,
+    )
+    .expect("a filler copies the open page");
+    let copy = page_ids(&doc)
+        .into_iter()
+        .find(|p| *p != source && *p != closed)
+        .expect("the filler's copy");
+    apply_checked(
+        &mut doc,
+        &Operation::RemovePage {
+            page_id: copy.clone(),
+        },
+        &filler,
+    )
+    .expect("the copy carries the page's policy, so a filler removes it");
+    assert!(!page_ids(&doc).contains(&copy));
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::RemovePage {
+                page_id: closed.clone(),
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::InsertPage {
+                after_page_id: Some(source.clone()),
+                master_id: None,
+                spread_self_id: None,
+                page_self_id: None,
+                restore_spread_json: None,
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
+}

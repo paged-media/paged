@@ -102,3 +102,16 @@ the template's own label stays the author's.
 
 A story on a path has no text frame. Its permissions are decided by the page item whose
 `<TextPath>` carries it, so a field on that item reaches the story's text.
+
+## Amendment — 2026-10-23: a page's own policy
+
+Removing a page (`RemovePage`) and duplicating one (`DuplicatePage`) ask for `document.pages`
+on that page instead of on the document. A page's policy is its `x-paged:template` label, kept
+on its spread under the page's id, which the policy index already reads like an item's: the
+document's defaults still apply, and a page that allows `document.pages` lets a filler copy it
+and remove it. A copy carries its source's labels, so the copies of an open page are open too;
+inserting a page still needs the document's grant. This is how a data catalogue lets a filler
+change its product pages and nothing else (data
+[ADR 560](../../../../modules/data/docs/adr/560-template-fields-are-binding-targets.md)).
+Evidence: `crates/paged-mutate/tests/it/template_policy.rs`
+`a_page_policy_opens_that_page_and_its_copies_and_no_other`.

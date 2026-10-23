@@ -89,6 +89,11 @@ import {
   withBase,
 } from "./doc-label";
 import { propertyMethods, type PropertyMethods } from "./property-session";
+import {
+  catalogueMethods,
+  emptyCatalogueState,
+  type CatalogueMethods,
+} from "./catalogue";
 import { objectsOf } from "./property-lane";
 import { readTextVariableFields, textVariablesOn } from "./text-variables";
 import { contentPatch, type PayloadJson } from "./labels";
@@ -539,7 +544,8 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 }
 
 /** The session API the panels + commands drive. */
-export interface DataSourceSession extends ReviewSession, PropertyMethods {
+export interface DataSourceSession
+  extends ReviewSession, PropertyMethods, CatalogueMethods {
   getState(): SessionState;
   /** host.objects (ADR 323): the document ops of a definition change made
    *  with `{ labels: "defer" }` — the element labels the recipe asks for,
@@ -1079,6 +1085,8 @@ export function createSession(
   const previewAt = new Map<string, number>();
   /** The data set last applied to the document (saved with the session). */
   let appliedSet: string | null = null;
+  // ADR 560: template fields bound to the data, and the catalogues made.
+  const catalogue = emptyCatalogueState();
   /** Keep how many records a query delivered (and a stepped-to record
    *  within them). */
   function keepRecordCount(queryId: string, n: number): number {
@@ -1316,6 +1324,14 @@ export function createSession(
       refresh: Object.fromEntries(refreshPolicies),
       ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
       ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(catalogue.fields.length > 0 || Object.keys(catalogue.runs).length > 0
+        ? {
+            catalogue: {
+              fields: catalogue.fields.map((f) => ({ ...f })),
+              runs: { ...catalogue.runs },
+            },
+          }
+        : {}),
     };
   }
 
@@ -2137,6 +2153,8 @@ export function createSession(
     recordCounts.clear();
     previewAt.clear();
     appliedSet = null;
+    catalogue.fields.length = 0;
+    for (const k of Object.keys(catalogue.runs)) delete catalogue.runs[k];
     bindingKinds.clear();
     visibilityTargets.clear();
     imageTargets.clear();
@@ -2351,6 +2369,8 @@ export function createSession(
     for (const [q, n] of Object.entries(saved.preview ?? {}))
       previewAt.set(q, n);
     appliedSet = saved.dataSet ?? null;
+    catalogue.fields.push(...(saved.catalogue?.fields ?? []));
+    Object.assign(catalogue.runs, saved.catalogue?.runs ?? {});
 
     for (const [name, p] of Object.entries(saved.refresh ?? {})) {
       const policy = readPolicy(p);
@@ -2555,6 +2575,20 @@ export function createSession(
         labelMutation(hash, labelKey(rawHost), labelRecipe ?? undefined),
       ];
     },
+    ...catalogueMethods({
+      host,
+      state: catalogue,
+      ensureEngine,
+      queryIds: () => Array.from(queries.keys()),
+      recordCount: (q) => self.recordCount(q),
+      refreshData: () => self.refreshData(),
+      checkExpression: (expr, q) => self.checkExpression(expr, q),
+      markDirty,
+      emit,
+      setMessage: (message) => {
+        state.message = message;
+      },
+    }),
     ...reviewMethods({
       host,
       ensureEngine,
