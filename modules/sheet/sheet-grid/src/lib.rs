@@ -60,7 +60,7 @@ use sheet_lower::{CellStyler, LoweredStyle, NoStyles, Rule, RuleSet, VisualStyle
 
 // Re-use the page-lowering geometry rulings so a column is the same width on
 // both surfaces (spec §8.2 — character-unit columns, point rows).
-use sheet_lower::{CHAR_TO_PT, DATABAR_INSET_PT, DEFAULT_COL_CHARS, DEFAULT_ROW_PT};
+use sheet_lower::{DATABAR_INSET_PT, DEFAULT_ROW_PT};
 
 // ---- The grid scene IR (wire shape; serde camelCase). ----
 
@@ -958,20 +958,94 @@ fn push_broken_rule(
     }
 }
 
-/// Column width in pt: explicit `col_widths` (xlsx chars × `CHAR_TO_PT`) or
-/// the xlsx default. Mirrors the page lowering so a column matches on both
-/// surfaces.
+/// Column width in pt — the page lowering's own rule
+/// ([`sheet_lower::col_width_pt`]), so a column matches on both surfaces.
 fn col_width_pt(ws: Option<&sheet_core::Worksheet>, col: u32) -> f64 {
-    let chars = ws
-        .and_then(|w| w.col_widths.get(&col).copied())
-        .unwrap_or(DEFAULT_COL_CHARS);
-    chars * CHAR_TO_PT
+    sheet_lower::col_width_pt(ws, col)
 }
 
-/// Row height in pt: explicit `row_heights` (already pt) or the default.
+/// Row height in pt — the page lowering's own rule.
 fn row_height_pt(ws: Option<&sheet_core::Worksheet>, row: u32) -> f64 {
-    ws.and_then(|w| w.row_heights.get(&row).copied())
-        .unwrap_or(DEFAULT_ROW_PT)
+    sheet_lower::row_height_pt(ws, row)
+}
+
+// ---- The page side of the window (ADR 510, render on leave). ----
+
+/// What the page table of a frame prints besides the cells.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub struct PagePrint {
+    /// The heading row (A, B, C, …) and heading column (1, 2, 3, …).
+    pub headings: bool,
+    /// Gridlines at every track boundary.
+    pub gridlines: bool,
+}
+
+/// The page table of a sheet frame: [`frame_window`] for `spec`, lowered by
+/// [`sheet_lower::lower_tracks_styled`] with the workbook's styles and
+/// conditional formats. Without printed headings the window is the one the
+/// live grid shows for the same `spec` (the grid takes its heading strips
+/// off the box before asking); with them, the heading row and column are
+/// taken off `spec`'s box first, so the printed table still fits the frame.
+/// The frozen rows become the table's header rows.
+pub fn frame_page(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    print: PagePrint,
+    cf: &SheetCondFmt,
+    visual: &impl VisualStyleSource,
+) -> sheet_lower::LoweredContent {
+    let win = frame_page_window(model, sheet, spec, print.headings);
+    let opts = sheet_lower::TrackOptions {
+        print_headings: print.headings,
+        print_gridlines: print.gridlines,
+        header_rows: win.frozen_rows,
+        frozen_cols: win.frozen_cols,
+    };
+    sheet_lower::lower_tracks_styled(model, sheet, &win.rows, &win.cols, &opts, visual, cf)
+}
+
+/// The window a frame's page table shows: `spec`'s box, less the printed
+/// heading row and column when `headings` is set. The heading column's
+/// width depends on the largest row number shown, so the window is asked
+/// again (at most twice more) until that width is stable.
+pub fn frame_page_window(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    headings: bool,
+) -> FrameWindow {
+    if !headings {
+        return frame_window(model, sheet, spec);
+    }
+    let mut heading_w = sheet_lower::heading_col_width_pt(spec.top_row + 1);
+    let mut win = FrameWindow {
+        rows: Vec::new(),
+        cols: Vec::new(),
+        row_heights_pt: Vec::new(),
+        col_widths_pt: Vec::new(),
+        frozen_rows: 0,
+        frozen_cols: 0,
+        width_pt: 0.0,
+        height_pt: 0.0,
+        partial_row: None,
+        partial_col: None,
+    };
+    for _ in 0..3 {
+        let inner = FrameWindowSpec {
+            width_pt: (spec.width_pt - heading_w).max(0.0),
+            height_pt: (spec.height_pt - DEFAULT_ROW_PT).max(0.0),
+            ..*spec
+        };
+        win = frame_window(model, sheet, &inner);
+        let need =
+            sheet_lower::heading_col_width_pt(win.rows.iter().map(|r| r + 1).max().unwrap_or(1));
+        if need <= heading_w {
+            break;
+        }
+        heading_w = need;
+    }
+    win
 }
 
 #[cfg(test)]

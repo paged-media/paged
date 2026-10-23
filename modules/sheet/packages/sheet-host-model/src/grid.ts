@@ -219,6 +219,29 @@ export interface FrameWindowSpec {
   freezeCols?: number;
 }
 
+/** A frame's page-table request (ADR 510 render on leave; mirrors Rust
+ *  `sheet_js::core::FramePageSpec`): the frame window spec plus what the
+ *  page prints. An absent frozen split means the workbook's stored one (as
+ *  for the grid scene). `printHeadings` adds the heading row and column
+ *  (taken off the box first); `printGridlines` the gridlines. */
+export interface FramePageSpec extends FrameWindowSpec {
+  printHeadings?: boolean;
+  printGridlines?: boolean;
+}
+
+/** Explicit tracks to lower for the page (mirrors Rust
+ *  `sheet_js::core::TracksSpec`): sheet indices in display order (frozen
+ *  first, gaps allowed) — usually a `FrameWindow`'s `rows`/`cols`, with
+ *  `headerRows = frozenRows` and `frozenCols`. */
+export interface TracksSpec {
+  rows: number[];
+  cols: number[];
+  headerRows?: number;
+  frozenCols?: number;
+  printHeadings?: boolean;
+  printGridlines?: boolean;
+}
+
 /** The tracks a sheet frame shows (ADR 510; mirrors Rust
  *  `sheet_grid::FrameWindow`): sheet row and column indices in display
  *  order (frozen tracks first, hidden rows skipped), their pt sizes, and

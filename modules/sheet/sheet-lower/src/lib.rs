@@ -96,8 +96,14 @@ pub use styler::CellStyler;
 // differential format into the lowered style (no `sheet-calc` / `sheet-xlsx`
 // dep — the xlsx side converts its parsed cf model into these mirror types).
 pub mod condfmt;
+// ---- Lowering over EXPLICIT tracks (ADR 510: the page side of a frame window). ----
+pub mod tracks;
 pub use condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, DataBar, ScaleStop, SheetCondFmt,
+};
+pub use tracks::{
+    col_width_pt, heading_col_width_pt, lower_tracks, lower_tracks_styled, row_height_pt,
+    TrackOptions, HEADING_INDEX,
 };
 
 // ---- T0 geometry rulings (spec §8.2). ----
@@ -150,6 +156,16 @@ pub struct LoweredContent {
     /// empty (data bars come only from [`lower_range_condfmt`]). Additive on
     /// the wire (the TS mirror keeps it optional).
     pub databars: Vec<DataBarRect>,
+    /// How many leading rows are table HEADER rows (they repeat on every
+    /// continuation frame of a threaded table): the frozen rows a frame
+    /// window shows, plus the printed column-heading row. Only
+    /// [`lower_tracks`] sets it; omitted on the wire when 0 (additive).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub header_rows: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// One column's geometry: its range-relative index and lowered width (pt).
@@ -581,6 +597,7 @@ pub fn lower_range_condfmt(
         // `[LoweredStyle::default_key0()]` (the frozen-`lower_range` table).
         styles: styler.into_styles(),
         databars,
+        header_rows: 0,
     }
 }
 
@@ -590,7 +607,7 @@ pub fn lower_range_condfmt(
 /// cell (not touching the grid rules). A `frac` of 0 still emits a zero-width
 /// rect (deterministic; the host draws nothing visible). `rgb` → `#RRGGBB`.
 #[allow(clippy::too_many_arguments)]
-fn databar_rect(
+pub(crate) fn databar_rect(
     row: u32,
     col: u32,
     cell_x: f64,
