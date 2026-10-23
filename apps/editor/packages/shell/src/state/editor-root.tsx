@@ -23,6 +23,7 @@
 // the portal container below) — and its keyboard is the keys typed inside
 // it, so a host's own shortcuts and inputs around the editor stay the
 // host's, and two editors on a page each answer only their own keys.
+// Nothing of the editor's is written on the page's <html> or <body>.
 //
 // KEYS. The editor's keyboard listeners stay on `window`, where they always
 // were (their order against each other and against the widgets' own
@@ -54,6 +55,7 @@ import {
   useScoped,
   type EditorScope,
 } from "./editor-scope";
+import { useOptionalTheme } from "./theme-context";
 
 const ROOT = scoped("editorRoot", () => ({
   element: null as HTMLElement | null,
@@ -194,6 +196,9 @@ export function EditorRoot({
   children: ReactNode;
 }) {
   const scope = useEditorScope();
+  // The theme is the editor's: the `.dark` class on its root, not the
+  // page's <html> (styles/theme.css).
+  const dark = useOptionalTheme()?.theme === "dark";
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [portals, setPortals] = useState<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -201,7 +206,13 @@ export function EditorRoot({
     return attachRoot(scope, root, ownsPage);
   }, [root, scope, ownsPage]);
   return (
-    <div ref={setRoot} data-paged-editor="" tabIndex={-1} style={rootStyle}>
+    <div
+      ref={setRoot}
+      data-paged-editor=""
+      className={dark ? "dark" : undefined}
+      tabIndex={-1}
+      style={rootStyle}
+    >
       {root && portals && (
         <RootContext.Provider value={root}>
           <PortalContext.Provider value={portals}>

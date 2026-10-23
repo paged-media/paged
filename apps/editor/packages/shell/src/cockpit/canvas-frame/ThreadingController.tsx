@@ -428,7 +428,8 @@ export function ThreadingController() {
   // frame's own out-port turning magenta — an 18px square the user's
   // hand is usually covering.
   //
-  // Written on documentElement rather than a React style, because the
+  // Written on the editor's root element rather than a React style
+  // (the page's <html> only for a shell without one), because the
   // pointer may be over any part of the app (panels, rails, the menu
   // bar) and every one of those subtrees sets its own cursor. `!important`
   // for the same reason. Restored on unload, including when the effect
@@ -436,16 +437,16 @@ export function ThreadingController() {
   // copy cursor would be a worse bug than the one being fixed.
   useEffect(() => {
     if (!cursorLoaded) return;
-    const root = document.documentElement;
-    const previous = root.style.getPropertyValue("cursor");
-    const previousPriority = root.style.getPropertyPriority("cursor");
-    root.style.setProperty("cursor", "copy", "important");
+    const element = root ?? document.documentElement;
+    const previous = element.style.getPropertyValue("cursor");
+    const previousPriority = element.style.getPropertyPriority("cursor");
+    element.style.setProperty("cursor", "copy", "important");
     return () => {
       if (previous)
-        root.style.setProperty("cursor", previous, previousPriority);
-      else root.style.removeProperty("cursor");
+        element.style.setProperty("cursor", previous, previousPriority);
+      else element.style.removeProperty("cursor");
     };
-  }, [cursorLoaded]);
+  }, [cursorLoaded, root]);
 
   useEffect(() => {
     if (!cursorLoaded) return;

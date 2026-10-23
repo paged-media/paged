@@ -150,6 +150,9 @@ export interface ShellAccess {
   readonly client: CanvasClient;
   /** Switches the editor between its dark and light theme. */
   readonly setThemeMode: (mode: "dark" | "light") => void;
+  /** The editor's root element (`[data-paged-editor]`): its tokens, its
+   *  theme class and its popovers are there, never on the page. */
+  readonly root: HTMLElement;
 }
 
 /** The session's role, changeable while the editor runs (`setRole`). */

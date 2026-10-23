@@ -81,6 +81,7 @@ import {
   setAssistantOpener,
   resolveProfile,
   type EditorProfile,
+  useEditorRoot,
   useOptionalTheme,
 } from "@paged-media/shell";
 import {
@@ -1497,17 +1498,19 @@ function InstanceBridge() {
   const client = useCanvasClient();
   const theme = useOptionalTheme();
   const setThemeMode = theme?.setTheme;
+  const root = useEditorRoot();
   const handed = useRef(false);
   useEffect(() => {
-    if (handed.current || !instance.onShell) return;
+    if (handed.current || !instance.onShell || !root) return;
     handed.current = true;
     instance.onShell({
       paged,
       registries,
       client,
       setThemeMode: (mode) => setThemeMode?.(mode),
+      root,
     });
-  }, [instance, paged, registries, client, setThemeMode]);
+  }, [instance, paged, registries, client, setThemeMode, root]);
   return null;
 }
 

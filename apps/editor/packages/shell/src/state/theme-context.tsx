@@ -30,9 +30,10 @@ import {
 // Design system — the editor theme. DARK is the primary surface
 // ("long design sessions"); light ships as the toggle for colour /
 // proof judgement. Both themes are ONE token set (styles/theme.css
-// `:root` + `.dark`) — switching is just the `dark` class on
-// <html>, so tokens cascade into portals (radix popovers, dockview
-// floating groups) that render outside the React root.
+// `:root, [data-paged-editor]` + `.dark`) — switching is just the
+// `dark` class on the editor's root element (state/editor-root.tsx,
+// plan task E1), never on the host's <html>; the editor's popovers
+// portal inside that root, so the tokens cascade into them.
 
 export type EditorTheme = "dark" | "light";
 
@@ -59,10 +60,8 @@ const Context = createContext<ThemeValue | null>(null);
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [theme, setTheme] = useState<EditorTheme>(loadInitialTheme);
 
-  // Apply on <html> so EVERYTHING (portals, dockview overlays,
-  // body background) inherits; persist the choice.
+  // The root element applies it (`EditorRoot`); persist the choice.
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {

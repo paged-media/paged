@@ -318,7 +318,9 @@ test.describe("gestures.md TH — text-frame threading ports", () => {
 
     const rootCursor = () =>
       page.evaluate(() =>
-        document.documentElement.style.getPropertyValue("cursor"),
+        document
+          .querySelector<HTMLElement>("[data-paged-editor]")!
+          .style.getPropertyValue("cursor"),
       );
     const idle = await rootCursor();
 

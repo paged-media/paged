@@ -36,7 +36,7 @@
 // promise is the whole feature, and a second copy of the threading
 // machinery would be more code that can disagree with itself.
 //
-// THE CURSOR IS SET WITH `!important` ON THE ROOT for the reason
+// THE CURSOR IS SET WITH `!important` ON THE EDITOR'S ROOT for the reason
 // ThreadingController documents at its own call site: the canvas, the
 // panels and the menu bar each set their own cursor, so anything less
 // specific loses over most of the window and the copy cursor appears
@@ -70,8 +70,8 @@ export interface PlacementOptions {
 const DRAG_THRESHOLD_PX = 4;
 
 /** Marks the armed state for specs and for anything that wants to react
- *  to it. `documentElement` rather than a React node so it survives a
- *  dock re-layout mid-gesture. */
+ *  to it. On the editor's root element rather than a React node so it
+ *  survives a dock re-layout mid-gesture. */
 const ARMED_ATTR = "data-paged-placement";
 
 /** The armed placement's cancel, per editor (null: none armed). */
@@ -102,7 +102,9 @@ export function awaitPlacementPoint(
 ): Promise<PlacementPoint | null> {
   const armed = scope.get(ARMED);
   return new Promise<PlacementPoint | null>((resolve) => {
-    const root = document.documentElement;
+    // The editor's root element (the page's <html> for a shell without
+    // one): what the editor writes, it writes on itself (plan task E1).
+    const root = editorRootOf(scope) ?? document.documentElement;
     const previous = root.style.getPropertyValue("cursor");
     const previousPriority = root.style.getPropertyPriority("cursor");
 

@@ -92,7 +92,8 @@ export interface EditorHandle {
    * The editor's look: its dark or light theme, and design tokens
    * (`--paged-*`, `--chrome-*`, … from apps/editor/docs/theme-tokens.json)
    * the host overrides with its brand. A token set to null returns to the
-   * editor's own.
+   * editor's own. Both are set on the editor's root element
+   * (`[data-paged-editor]`), never on the host's page.
    */
   setTheme(theme: {
     mode?: "dark" | "light";
@@ -243,9 +244,10 @@ export async function createEditor(
     },
     setTheme({ mode, tokens }) {
       if (mode) shell.setThemeMode(mode);
-      // On the root, not the editor's element: the editor's popovers and
-      // floating panels render outside it and read the same tokens.
-      const root = document.documentElement.style;
+      // On the editor's root element: its popovers and floating panels
+      // portal inside it and read the same tokens; the host's page keeps
+      // its own.
+      const root = shell.root.style;
       for (const [name, value] of Object.entries(tokens ?? {})) {
         if (!name.startsWith("--"))
           throw new Error(`setTheme: "${name}" is not a token (--name)`);
@@ -266,8 +268,7 @@ export async function createEditor(
     dispose() {
       offClient();
       listeners.clear();
-      for (const name of themed)
-        document.documentElement.style.removeProperty(name);
+      for (const name of themed) shell.root.style.removeProperty(name);
       mounted.dispose();
     },
   };
