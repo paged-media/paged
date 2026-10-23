@@ -157,6 +157,7 @@ export {
   type HeadingStyle,
   type PaintContext,
   type PaintOptions,
+  hiddenBoundaries,
 } from "./grid-paint";
 
 export {

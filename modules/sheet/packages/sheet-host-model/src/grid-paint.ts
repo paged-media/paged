@@ -799,4 +799,41 @@ export function paintGridScene(
     ctx.lineTo(ox, oy + ys[i]);
   }
   ctx.stroke();
+
+  // Hidden tracks: where the shown indices skip, Excel marks the boundary
+  // in the heading with a double rule (the place to unhide).
+  ctx.strokeStyle = h.text;
+  ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  for (const i of hiddenBoundaries(vp.colIndices, vp.frozenCols ?? 0)) {
+    const x = ox + xs[i];
+    ctx.moveTo(x - 1, 1);
+    ctx.lineTo(x - 1, oy - 1);
+    ctx.moveTo(x + 1, 1);
+    ctx.lineTo(x + 1, oy - 1);
+  }
+  for (const i of hiddenBoundaries(vp.rowIndices, vp.frozenRows ?? 0)) {
+    const y = oy + ys[i];
+    ctx.moveTo(1, y - 1);
+    ctx.lineTo(ox - 1, y - 1);
+    ctx.moveTo(1, y + 1);
+    ctx.lineTo(ox - 1, y + 1);
+  }
+  ctx.stroke();
+}
+
+/** The display positions `i` (1-based boundaries between track i-1 and i)
+ *  where the shown sheet indices skip — hidden tracks lie between. The
+ *  frozen/scrolled seam is a scroll, not a hide, and is left out. */
+export function hiddenBoundaries(
+  indices: readonly number[] | undefined,
+  frozen: number,
+): number[] {
+  if (!indices) return [];
+  const out: number[] = [];
+  for (let i = 1; i < indices.length; i++) {
+    if (i === frozen) continue;
+    if (indices[i]! - indices[i - 1]! > 1) out.push(i);
+  }
+  return out;
 }

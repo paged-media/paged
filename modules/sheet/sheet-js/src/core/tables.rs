@@ -168,6 +168,31 @@ fn rename_refs(e: &mut Expr, f: &impl Fn(&mut StructuredRef)) {
     }
 }
 
+/// `formula` with every in-table `[@Col]` (a structured reference without
+/// a table name) given the name of the table holding `(row, col)`, as the
+/// file stores it (`Sales[[#This Row],[Col]]`). `None` when nothing needs
+/// naming.
+pub(crate) fn qualify_this_row(
+    model: &SheetModel,
+    sheet: u16,
+    row: u32,
+    col: u32,
+    formula: &Formula,
+) -> Option<Formula> {
+    let table = model.sheet(sheet)?.tables.iter().find(|t| {
+        let n = t.range.normalized();
+        n.start.row <= row && row <= n.end.row && n.start.col <= col && col <= n.end.col
+    })?;
+    let mut g = formula.clone();
+    let name = table.name.clone();
+    rename_refs(&mut g.root, &|s: &mut StructuredRef| {
+        if s.table.is_empty() {
+            s.table = name.clone();
+        }
+    });
+    (&g != formula).then_some(g)
+}
+
 /// Apply `f` to every formula of the model (cells and defined names that
 /// hold an expression).
 fn rewrite_all_formulas(model: &mut SheetModel, f: &impl Fn(&mut StructuredRef)) {
@@ -852,7 +877,13 @@ impl SheetSession {
                     model,
                     current: sheet,
                 };
-                let f = parse(t, &ctx).map_err(|e| SessionError(format!("{text:?}: {e}")))?;
+                let mut f = parse(t, &ctx).map_err(|e| SessionError(format!("{text:?}: {e}")))?;
+                let tname = def.name();
+                rename_refs(&mut f.root, &|s: &mut StructuredRef| {
+                    if s.table.is_empty() {
+                        s.table = tname.as_str().into();
+                    }
+                });
                 Some(print_ooxml(&f, sheet, &ModelSheetNames { model }))
             }
         };

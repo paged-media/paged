@@ -550,6 +550,7 @@ impl XlsxDocument {
             sheet_id,
             part_name: part,
             captured: CapturedSubtrees::default(),
+            data_tables: Vec::new(),
         });
         self.container.dirty = true;
         Ok(())
