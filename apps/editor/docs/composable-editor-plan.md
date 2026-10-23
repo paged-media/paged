@@ -1053,6 +1053,12 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
   permission for "change the product list" is a session override (`document.pages` allowed for
   flow-generated pages only), decided in the data ADR.
 - **ADR.** `modules/data` **560**, "Template fields are binding targets".
+- **Done** (2026-10-23): [data ADR 560](../../../modules/data/docs/adr/560-template-fields-are-binding-targets.md).
+  The filler permission is a page policy rather than a session override: the engine asks
+  `document.pages` of the page removed or duplicated (engine ADR 1000's amendment of
+  2026-10-23), so a template that opens its catalogue page opens its copies and no other page.
+  Typed commands `media.paged.data.templateFieldTargets`, `bindTemplateField` and
+  `runCatalogue`.
 
 ---
 

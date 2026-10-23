@@ -1696,3 +1696,17 @@ impl DataSession {
         Ok(data_lower::merge::plan_merge(spec, records))
     }
 }
+
+impl DataSession {
+    /// Plan a catalogue (ADR 560): the template's fields, each with its
+    /// bound expression, filled once per record (or per group) of a query's
+    /// result. The bundle duplicates the template's pages and writes the
+    /// values. Errors when the query has no ingested result.
+    pub fn plan_catalogue(
+        &self,
+        query_id: &QueryId,
+        spec: &data_bind::catalogue::CatalogueSpec,
+    ) -> Result<data_bind::catalogue::CataloguePlan, SessionError> {
+        Ok(self.engine.resolve_catalogue(query_id, spec)?)
+    }
+}

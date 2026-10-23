@@ -52,6 +52,7 @@ import type {
 import { defineBinding } from "../object-model";
 import { hasDocumentsDoors } from "../session";
 import { DiagnosticsList } from "./diagnostics";
+import { TemplateFieldsSection } from "./template-fields-section";
 import { useSessionSnapshot } from "./use-session";
 import { color, font, space, status } from "@paged-media/panel-kit";
 import { t as tActive, useStrings } from "@paged-media/strings";
@@ -1227,6 +1228,11 @@ export function makeBindingsPanel(
                 {mergeMsg}
               </p>
             )}
+            <TemplateFieldsSection
+              session={session}
+              pickQuery={ensurePicked}
+              version={snapshot}
+            />
             <div style={row}>
               <button
                 type="button"

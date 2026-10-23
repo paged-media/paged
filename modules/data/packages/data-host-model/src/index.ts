@@ -147,3 +147,17 @@ export {
   textVariableName,
   valueOfContents,
 } from "./text-variables";
+
+export {
+  catalogueFieldKind,
+  catalogueFillOps,
+  fieldValueOps,
+  type CatalogueCopy,
+  type CatalogueFieldKind,
+  type CatalogueFieldValue,
+  type CatalogueFill,
+  type CatalogueInstance,
+  type CataloguePlan,
+  type CatalogueValue,
+  type TemplateFieldRow,
+} from "./catalogue";
