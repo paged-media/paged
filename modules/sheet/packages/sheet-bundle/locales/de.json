@@ -300,7 +300,7 @@
   "sheet.workbook.ascending": "Aufsteigend",
   "sheet.workbook.bootError": "Die Tabellen-Engine konnte nicht starten: {error}.",
   "sheet.workbook.chainFirst": "Wählen Sie zuerst einen Textrahmen einer Rahmenkette aus",
-  "sheet.workbook.chartCreated": "Diagramm erstellt. Platzieren Sie es über die Liste unten auf der Seite; es wird nicht in die .xlsx-Datei gespeichert.",
+  "sheet.workbook.chartCreated": "Diagramm erstellt. Platzieren Sie es über die Liste unten auf der Seite; es wird mit der Arbeitsmappe in die .xlsx-Datei gespeichert.",
   "sheet.workbook.chartSeries": "{count, plural, one {# Datenreihe} other {# Datenreihen}}",
   "sheet.workbook.chartType": "Diagrammtyp",
   "sheet.workbook.chartsSection": "Diagramme",

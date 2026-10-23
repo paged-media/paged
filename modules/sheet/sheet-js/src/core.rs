@@ -848,6 +848,16 @@ impl SheetSession {
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
         };
+        // A chart slot a save left empty (a deleted chart) stays deleted, so
+        // every other chart keeps its index (ADR 519).
+        session.removed_charts = session
+            .doc
+            .charts
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.removed)
+            .map(|(i, _)| i as u32)
+            .collect();
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
         Ok(session)
@@ -904,6 +914,12 @@ impl SheetSession {
         // Every spilling formula is written as Excel writes a dynamic array:
         // an array formula over its spill area, flagged dynamic. Without the
         // flag the area's cached values would reload as cells blocking it.
+        // Charts authored, edited or deleted in the session are written
+        // into the package (ADR 519): generated, spliced or removed.
+        self.doc
+            .write_charts(model, &self.removed_charts)
+            .map_err(|e| SessionError(e.to_string()))?;
+
         let spills = spill_areas(engine);
         let bytes = self
             .doc

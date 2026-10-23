@@ -71,6 +71,22 @@ In the corpus 17 of 172 charts were drawn as the wrong kind.
    in a cell box; a workbook sheet whose relationship is a chartsheet is flagged and its chart
    marked `chartsheet`.
 
+8. **Charts are written back** (amends [503](503-xlsx-patched-not-regenerated.md)). The
+   shared `dml_chart::write` describes a chart module-neutrally (`ChartOut`, `ChartExOut`) and
+   generates `c:chartSpace` / `cx:chartSpace` parts in schema order, plus the primitives that
+   patch a part as read (`put_child` in schema order, the paged extension). paged.sheet splices
+   an edited chart (only the changed roles), generates an authored one with its anchor and
+   relationships, and removes a deleted one. A chartEx part is written with the `cs:chartStyle`
+   and `cs:colorStyle` parts Excel requires before it opens one. Colours are written as their
+   concrete value (`a:srgbClr`, or `a:schemeClr` with `lumMod`/`lumOff` for a theme-sourced
+   role); text roles as `a:latin`, size, bold and italic in `c:txPr`. Document references ride
+   in a paged `c:extLst` extension and are restored on import only while the concrete value is
+   unchanged. The extension also records each chart's session index, and a load places such a
+   chart at that index (the others fill the remaining slots in file order), so placements,
+   journals and template fields keep naming the right chart after a save and reload; a deleted
+   chart's slot stays empty. Excel writes a chartEx part's data as hidden `_xlchart.v1.N`
+   defined names; the reader resolves them.
+
 ## Consequences
 
 - The corpus lane `chart_corpus` (opt-in, private corpus) checks that every chart renders

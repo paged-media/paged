@@ -9,6 +9,7 @@ mod calc_order;
 mod calc_rewrite;
 mod chart;
 mod chart_corpus;
+mod chart_write;
 mod coerce;
 mod comments;
 mod condfmt;

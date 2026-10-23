@@ -181,7 +181,7 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   sorted: "Sorted.",
   valuesFirst: "Enter a values range (for example B2:C8) first.",
   chartCreated:
-    "Chart created. Place it on the page from the list below; it is not saved into the .xlsx.",
+    "Chart created. Place it on the page from the list below; it is saved into the .xlsx with the workbook.",
   noClipboard: "Copying isn't available here; type {name}( in a cell.",
   fnCopied: "{name}() copied; paste it into a cell.",
   fnCopyFailed: "Couldn't copy {name}: {error}.",

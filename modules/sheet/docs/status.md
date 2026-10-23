@@ -266,7 +266,11 @@ each published canary added is under [Releases](#releases).
   crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
   Colour and text roles carry document swatch and style references, which the page uses.
   Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
-  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  render with their real kind. Charts are written back into the xlsx: an edited chart is
+  spliced into its part, an authored one generated (with its drawing anchor, relationships and,
+  for the Office 2016 kinds, the style parts Excel needs), a deleted one removed; every chart
+  keeps its index across a save. Excel opens all of them without a repair and reports the chart
+  type Paged wrote (the open-check lane). Charts are placed as vector paths and labelled text frames in
   one document write, grouped as one object, and replaced in one write when their data
   changes. Each label frame is sized to its text (measured with the document's font metrics,
   or sized by the frame when a document style sets the label), justified to its anchor, inside
@@ -357,9 +361,8 @@ ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the 
   and one undo step; a `host.objects` delete of `chart/<n>` does the same in its batch.
   `apps/cli/test/cli-sheet.spec.ts` runs both through `paged-node invoke`. Not a placement
   kind yet: a frame's view and sizing (`sizing: "window"`, print headings and gridlines, ADR
-  510), whose page side is not wired to placement; a print area of several ranges; a chart read
-  from the workbook stays in the saved xlsx (the writer never re-derives chart parts) and is
-  deleted again from the journal when the version is loaded.
+  510), whose page side is not wired to placement; a print area of several ranges. A deleted
+  chart leaves the saved xlsx (ADR 519).
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
@@ -368,9 +371,8 @@ ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the 
 
 - **Object model.** The version label is the document's, not a frame's:
   core keeps one label per plugin per host, and a frame's already holds the placement binding.
-  The page refresh after a write is a second document step. Charts the object model creates or
-  changes are kept as a chart-op journal next to each version; charts authored in the panel are
-  not.
+  The page refresh after a write is a second document step. Charts live in each version's xlsx
+  (ADR 519); a version saved before the engine wrote charts still replays its chart-op journal.
 - **Engines before protocol 66.** Placing a range takes two writes and so two undo steps (frame
   and table, then content), because one write needs the engine to resolve a table handle inside
   a batch; and each in-frame grid change invalidates every page cache. Core v0.66.0 and later

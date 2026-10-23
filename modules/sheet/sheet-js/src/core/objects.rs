@@ -500,7 +500,7 @@ impl SheetSession {
             m.style = v.filter(|s| (1..=48).contains(s));
         }
         if let Some(v) = patch.title_paragraph_style {
-            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t)).map(Into::into);
+            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t));
         }
         Ok(())
     }
@@ -515,10 +515,9 @@ impl SheetSession {
 
     /// Delete chart `index`. Its slot stays, so every other chart keeps its
     /// index; it is no longer listed (`list_charts`, `chart_specs`), drawn or
-    /// patched. Page-side only, like `add_chart`: a chart read from the
-    /// workbook keeps its parts in the saved xlsx (the writer never
-    /// re-derives chart parts), so a caller that reloads the bytes replays
-    /// the delete (the object model's chart journal does).
+    /// patched. A save removes its part, anchor and relationship from the
+    /// xlsx, and records the indexes of the charts after it so a reload finds
+    /// them where they were (ADR 519).
     pub fn delete_chart(&mut self, index: u32) -> Result<(), SessionError> {
         let count = self.doc.charts.len();
         if index as usize >= count {

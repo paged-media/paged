@@ -39,8 +39,10 @@
 // WRITES (rule 2, the label-hash pattern). The workbook lives in the
 // engine; a write applies there, then saves the workbook as a
 // content-addressed VERSION — `versions/<hash>.xlsx` plus
-// `versions/<hash>.json` (name + the chart-op journal, since authored and
-// patched charts are page-side only and never reach the xlsx) — and the
+// `versions/<hash>.json` (the name; since the engine writes authored,
+// patched and deleted charts into the xlsx (sheet ADR 519) a version's
+// journal is empty and flagged `chartsInXlsx`, while an older version's
+// chart-op journal is still replayed on load) — and the
 // LABEL `x-paged:media.paged.sheet = {v:1,data:{wb:<hash>}}` names it. The
 // label is the DOCUMENT's (`doc`, the designmap Label InDesign keeps), not a
 // frame's: the workbook is document-scoped (one per document), and core
@@ -483,6 +485,9 @@ interface VersionMeta {
   v: 1;
   name: string;
   chartOps: ChartOp[];
+  /** The version's xlsx holds its charts (sheet ADR 519): nothing to
+   *  replay. Absent in versions saved before the engine wrote charts. */
+  chartsInXlsx?: true;
 }
 
 // ------------------------------------------------------------ the model
@@ -1329,7 +1334,8 @@ export function contributeObjectModel(
     const meta: VersionMeta = {
       v: 1,
       name: session.state().fileName ?? "workbook.xlsx",
-      chartOps,
+      chartOps: [],
+      chartsInXlsx: true,
     };
     const metaBytes = enc.encode(JSON.stringify(meta));
     const all = new Uint8Array(bytes.length + 1 + metaBytes.length);
@@ -1576,7 +1582,9 @@ export function contributeObjectModel(
     }
     if (!bridge.loadVersion(v.bytes, v.meta.name)) return false;
     const engine = bridge.engine()!;
-    for (const op of v.meta.chartOps) {
+    // A version written since the engine saves charts holds them already.
+    const replay = v.meta.chartsInXlsx ? [] : v.meta.chartOps;
+    for (const op of replay) {
       try {
         if (op.op === "add")
           engine.addChart(
@@ -1592,7 +1600,7 @@ export function contributeObjectModel(
         host.log.warn("object model: a chart op did not replay", err);
       }
     }
-    chartOps = [...v.meta.chartOps];
+    chartOps = [...replay];
     loadedHash = hash;
     return true;
   }
