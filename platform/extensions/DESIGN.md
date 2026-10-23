@@ -2709,7 +2709,8 @@ over the frame's content box while the context is active on it (editor ADR 281).
 
 - **Shape.** `contribute.frameSurface({ contextType, render })`; the component gets
   `FrameSurfaceProps`: `elementId`, `widthPt` / `heightPt` (its own CSS size), `pxPerPt`,
-  `presentation` (`"frame"` | `"fullscreen"`), `toContentPt(clientX, clientY)`,
+  `presentation` (`"frame"` | `"fullscreen"`), `frameBoxPt` (the frame's content box in either
+  presentation), `toContentPt(clientX, clientY)`,
   `requestPresentation(p)` and `exit({ commit })`.
 - **Bar.** An optional `bar` component the host shows as a floating, upright, unscaled card
   attached above the frame (below when there is no room), with the same props.

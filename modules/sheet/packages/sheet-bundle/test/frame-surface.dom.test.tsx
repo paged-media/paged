@@ -138,6 +138,7 @@ function props(over: Partial<FrameSurfaceProps> = {}): FrameSurfaceProps {
     heightPt: 200,
     pxPerPt: 1,
     presentation: "frame",
+    frameBoxPt: { widthPt: 300, heightPt: 200 },
     // The client position IS the content point in this test.
     toContentPt: (x, y) => [x, y],
     requestPresentation: () => {},

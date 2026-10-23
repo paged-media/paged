@@ -42,7 +42,9 @@ mounts as DOM exactly over the frame's content box while that context is active 
   code outside the component, end the bundle's own active context, running `onCommit` or
   `onCancel` first. A bundle can never end another bundle's context.
 - **Presentation.** `presentation` is `"frame"` or `"fullscreen"`; `requestPresentation` asks
-  for full screen, which a host may refuse (probe `editContext.frameSurface.fullscreen@1`).
+  for full screen, which a host may refuse (probe `editContext.frameSurface.fullscreen@1`, set
+  when the host's registry says `fullscreen: true`). `frameBoxPt` is the frame's content box in
+  either presentation, so a full-screen surface can mark what lands on the page (editor ADR 283).
 - **Probes.** `contribute.frameSurface@1` (the door exists), `editContext.frameSurface@1` (the
   host wires a registry and will mount surfaces), `shell.exitEditContext@1`.
 

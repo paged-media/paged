@@ -306,6 +306,21 @@ function SheetFrameSurfaceView({
       }
       ctx.restore();
     }
+    // Full screen shows more than the frame: a dashed outline marks the
+    // frame-sized window that lands on the page when the frame is left.
+    if (props.presentation === "fullscreen") {
+      ctx.save();
+      ctx.strokeStyle = "#2b6cb0";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(
+        headW,
+        headH,
+        props.frameBoxPt.widthPt,
+        props.frameBoxPt.heightPt,
+      );
+      ctx.restore();
+    }
     if (resizeGhost) {
       ctx.strokeStyle = "#2b6cb0";
       ctx.lineWidth = 1;
@@ -324,6 +339,9 @@ function SheetFrameSurfaceView({
   }, [
     scene,
     headH,
+    props.presentation,
+    props.frameBoxPt.widthPt,
+    props.frameBoxPt.heightPt,
     props.pxPerPt,
     props.widthPt,
     props.heightPt,
@@ -678,10 +696,13 @@ function SheetFrameSurfaceView({
       if (session.handleGridKey(e)) e.preventDefault();
       return;
     }
-    // No edit open: Esc leaves the frame (Excel's second Esc).
+    // No edit open: Esc leaves full screen, else the frame (Excel's
+    // second Esc; one level per press).
     if (e.key === "Escape") {
       e.preventDefault();
-      props.exit({ commit: true });
+      if (props.presentation === "fullscreen")
+        props.requestPresentation("frame");
+      else props.exit({ commit: true });
       return;
     }
     // A printable key starts an edit through the text field (input event).
@@ -1025,11 +1046,13 @@ function SheetBarView({
         aria-label="Full screen"
         title="Full screen"
         style={button}
-        onClick={() =>
+        onClick={() => {
           props.requestPresentation(
             props.presentation === "fullscreen" ? "frame" : "fullscreen",
-          )
-        }
+          );
+          // The grid keeps the keys, as after any bar button.
+          requestAnimationFrame(focusGrid);
+        }}
       >
         ⤢
       </button>
