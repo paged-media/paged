@@ -61,7 +61,8 @@ pub mod protect;
 pub mod sort;
 pub mod validation;
 pub use format::{
-    EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
+    DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
+    ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };
 pub use objects::{ChartPatch, ChartSpec, RawValue, SeriesArg, SeriesSpec, TableInfo};
 pub use ops::{CalcSettingsInfo, FramePageSpec, StructuralEdit, TracksSpec};
