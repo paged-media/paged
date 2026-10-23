@@ -32,6 +32,7 @@
 //! order therefore produce the same keys and the same table — which is how
 //! the grid's style keys equal the page lowering's for the same window.
 
+use crate::cfdraw::{BarDraw, CellCf, CellCfSource, IconDraw, VisualDelta};
 use crate::condfmt::{self, CfRange, SheetCondFmt};
 use crate::style::{StyleKeyless, VisualAttrs, VisualStyleSource};
 use crate::LoweredStyle;
@@ -56,6 +57,11 @@ pub struct CellStyler<'a, S: VisualStyleSource> {
     by_style_id: HashMap<u32, u32>,
     /// cf range -> the numeric `(min, max)` of its cells, memoized.
     domains: HashMap<CfRange, Option<(f64, f64)>>,
+    /// The evaluated conditional formatting (W2.4, `sheet_calc::cf`); when
+    /// set it replaces the static rules of `cf.blocks` (tables stay).
+    src: Option<&'a dyn CellCfSource>,
+    /// The last cell's outcome (key, bar, icon and text ask for the same).
+    last: Option<((u32, u32), Option<CellCf>)>,
 }
 
 impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
@@ -70,7 +76,79 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
             dedup: HashMap::new(),
             by_style_id: HashMap::new(),
             domains: HashMap::new(),
+            src: None,
+            last: None,
         }
+    }
+
+    /// Evaluate conditional formatting through `src` (the session's
+    /// evaluator) instead of the static rules.
+    pub fn with_cf_source(mut self, src: Option<&'a dyn CellCfSource>) -> Self {
+        self.src = src;
+        self
+    }
+
+    /// Whether any conditional format is on the sheet.
+    fn has_cf(&self) -> bool {
+        match self.src {
+            Some(s) => !s.is_empty(),
+            None => !self.cf.is_empty(),
+        }
+    }
+
+    /// The cell's conditional formatting (memoized for the last cell).
+    pub fn cf_outcome(&mut self, row: u32, col: u32, cell: &Cell) -> Option<CellCf> {
+        if !self.has_cf() {
+            return None;
+        }
+        if let Some((at, out)) = &self.last {
+            if *at == (row, col) {
+                return out.clone();
+            }
+        }
+        let out = match self.src {
+            Some(s) => s.cell_cf(row, col, &cell.value),
+            None => self.static_cf(row, col, &cell.value),
+        };
+        self.last = Some(((row, col), out.clone()));
+        out
+    }
+
+    /// The static rules' outcome (the 2006 subset `condfmt` evaluates).
+    fn static_cf(&mut self, row: u32, col: u32, value: &CellValue) -> Option<CellCf> {
+        let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
+        let over = condfmt::override_for(cf, row, col, value, &mut |rng| domain(ws, rng, domains));
+        let bar = condfmt::databar_for(cf, row, col, value, &mut |rng| domain(ws, rng, domains));
+        if over.is_none() && bar.is_none() {
+            return None;
+        }
+        let delta = over.map(|o| VisualDelta {
+            bold: o.bold.then_some(true),
+            italic: o.italic.then_some(true),
+            underline: o.underline.then_some(true),
+            strike: o.strike.then_some(true),
+            font_size_pt: o.font_size_pt,
+            font_name: o.font_name.clone(),
+            text: o.text_rgb.clone().map(|t| (t, o.text_swatch.clone())),
+            fill: o.fill_rgb.is_some().then(|| Box::new(o.clone())),
+            border: None,
+        });
+        Some(CellCf {
+            delta,
+            bar: bar.map(|(frac, rgb)| BarDraw {
+                start: 0.0,
+                end: frac,
+                negative: false,
+                color: rgb,
+                color_swatch: None,
+                border: None,
+                gradient: false,
+                axis: None,
+                axis_color: (0, 0, 0),
+                show_value: true,
+            }),
+            ..CellCf::default()
+        })
     }
 
     /// The `style_key` of the cell at sheet `(row, col)`.
@@ -90,7 +168,7 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         format_color: Option<FormatColor>,
     ) -> u32 {
         let table = self.table_attrs(row, col);
-        if self.cf.is_empty() && format_color.is_none() && table.is_none() {
+        if !self.has_cf() && format_color.is_none() && table.is_none() {
             return self.key_for_style(cell.style);
         }
         let mut base = self.visual.visual(cell.style).unwrap_or_default();
@@ -100,16 +178,9 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         if let Some(c) = format_color {
             base.text_rgb = Some(self.visual.format_color_rgb(c));
         }
-        let effective = if self.cf.is_empty() {
-            base
-        } else {
-            let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
-            match condfmt::override_for(cf, row, col, &cell.value, &mut |rng| {
-                domain(ws, rng, domains)
-            }) {
-                Some(over) => condfmt::fold_override(&base, &over),
-                None => base,
-            }
+        let effective = match self.cf_outcome(row, col, cell) {
+            Some(o) => o.apply(&base),
+            None => base,
         };
         self.intern(effective)
     }
@@ -123,10 +194,28 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
     /// style when a table covers it (Excel bands empty table cells too),
     /// else the default key 0.
     pub fn key_for_empty(&mut self, row: u32, col: u32) -> u32 {
-        match self.table_attrs(row, col) {
-            Some(t) => self.intern(t),
-            None => 0,
+        let table = self.table_attrs(row, col);
+        // A conditional format paints empty cells too (blanks, `= 0`).
+        let cf = if self.has_cf() {
+            match self.src {
+                Some(src) => src.cell_cf(row, col, &CellValue::Empty),
+                None => self.static_cf(row, col, &CellValue::Empty),
+            }
+        } else {
+            None
+        };
+        let base = table.unwrap_or_default();
+        match cf {
+            Some(o) => self.intern(o.apply(&base)),
+            None if base.is_default() => 0,
+            None => self.intern(base),
         }
+    }
+
+    /// Whether empty cells can carry a style (a table or a conditional
+    /// format on the sheet): a surface that skips empty cells asks first.
+    pub fn styles_empty_cells(&self) -> bool {
+        !self.cf.tables.is_empty() || self.has_cf()
     }
 
     /// The key of a bare `StyleId` (no format colour, no cf).
@@ -156,15 +245,11 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         }
         let base = self.visual.visual(cell.style).unwrap_or_default();
         let runs = self.visual.rich_runs(sheet, row, col, text, &base)?;
-        if !self.cf.is_empty() {
-            let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
-            if condfmt::override_for(cf, row, col, &cell.value, &mut |rng| {
-                domain(ws, rng, domains)
-            })
-            .is_some()
-            {
-                return None;
-            }
+        if self
+            .cf_outcome(row, col, cell)
+            .is_some_and(|o| o.delta.is_some() || o.scale.is_some())
+        {
+            return None;
         }
         Some(
             runs.into_iter()
@@ -176,16 +261,25 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         )
     }
 
-    /// The data bar to draw in the cell at sheet `(row, col)`, if any:
-    /// `(fill_fraction, rgb)` (see [`condfmt::databar_for`]).
-    pub fn databar(&mut self, row: u32, col: u32, cell: &Cell) -> Option<(f64, (u8, u8, u8))> {
-        if self.cf.is_empty() {
-            return None;
-        }
-        let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
-        condfmt::databar_for(cf, row, col, &cell.value, &mut |rng| {
-            domain(ws, rng, domains)
-        })
+    /// The data bar to draw in the cell at sheet `(row, col)`, if any.
+    pub fn databar(&mut self, row: u32, col: u32, cell: &Cell) -> Option<BarDraw> {
+        self.cf_outcome(row, col, cell).and_then(|o| o.bar)
+    }
+
+    /// The icon to draw in the cell at sheet `(row, col)`, if any.
+    pub fn icon(&mut self, row: u32, col: u32, cell: &Cell) -> Option<IconDraw> {
+        self.cf_outcome(row, col, cell).and_then(|o| o.icon)
+    }
+
+    /// A differential number format the cell's text renders through.
+    pub fn cf_num_fmt(&mut self, row: u32, col: u32, cell: &Cell) -> Option<String> {
+        self.cf_outcome(row, col, cell).and_then(|o| o.num_fmt)
+    }
+
+    /// The cell's value is hidden ("show bar / icon only").
+    pub fn hides_value(&mut self, row: u32, col: u32, cell: &Cell) -> bool {
+        self.cf_outcome(row, col, cell)
+            .is_some_and(|o| o.hides_value())
     }
 
     /// The finished styles table (index == key; entry 0 is the default).

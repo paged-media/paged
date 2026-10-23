@@ -305,6 +305,11 @@ impl SheetSession {
         if series.is_empty() {
             return Err(SessionError("a chart needs at least one series".into()));
         }
+        // Waterfall, funnel, treemap, sunburst, histogram and pareto draw one
+        // series (Excel's chartEx layouts); box & whisker draws them all.
+        if kind.is_chart_ex() && kind != ChartKind::BoxWhisker {
+            series.truncate(1);
+        }
         let mut model = ChartModel::single(kind, grouping, series);
         let first = model.plots.first_mut().expect("one plot");
         if matches!(

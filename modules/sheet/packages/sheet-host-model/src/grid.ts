@@ -49,7 +49,15 @@ import type {
   ScenePathSeg,
 } from "@paged-media/plugin-api";
 
-import type { Align, LoweredRun, LoweredStyle, Rule, Rules } from "./lowered";
+import type {
+  Align,
+  DataBarRect,
+  IconRect,
+  LoweredRun,
+  LoweredStyle,
+  Rule,
+  Rules,
+} from "./lowered";
 
 /** The viewport window (mirror of Rust `sheet_grid::GridViewport`): the
  *  displayed tracks and the cumulative viewport-local pt boundaries along
@@ -174,16 +182,7 @@ export interface GridCommentMarker {
  *  computed — the panel just draws a filled rect (the SAME bar the page lowering
  *  emits, so it reads identically on both surfaces). Mirror of the Rust
  *  `sheet_grid::GridDataBar`. */
-export interface GridDataBar {
-  row: number;
-  col: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  fillFraction: number;
-  fill: string;
-}
+export type GridDataBar = DataBarRect;
 
 /** The complete grid scene for one viewport (spec §8.1): the windowed
  *  geometry, the visible populated cells, the style table, the gridlines
@@ -207,6 +206,8 @@ export interface GridScene {
    *  `dataBar` rule covers (spec §8.2/§10.4 — drawn geometry, not a fill).
    *  Absent/empty when none. */
   databars?: GridDataBar[];
+  /** W2.4 — conditional-format icons of the visible cells. */
+  icons?: IconRect[];
   /** Merged areas intersecting the window (one rect per pane). */
   merges?: GridMerge[];
   /** Wave 5 — the target of a fill-handle drag in progress (drawn as an

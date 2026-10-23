@@ -260,6 +260,20 @@ each published canary added is under [Releases](#releases).
   its colours and a gradient as its mean colour, dashed and double borders as solid lines of
   their weight, shrink-to-fit and the double underlines (the table model has no such
   properties).
+- **Conditional formatting, every rule kind** (W2.4, ADR 523). The evaluator in the calc engine
+  runs cell-value rules with formula operands, expressions, top/bottom N and N %, above/below
+  the average (with standard deviations), duplicate/unique, the text tests, time periods (on the
+  engine's clock), blanks and errors, colour scales over every threshold kind, data bars (the
+  2010 negative bars, axis, direction, border and solid fill) and every icon set with custom
+  icons; rules stack by priority with `stopIfTrue`, differential formats merge (number formats
+  included) and empty cells are painted too. Page and grid draw the same outcome: styles through
+  the shared styler, bars and icons from one geometry (icons as vector shapes). Every
+  conditional format of the private corpus reads and lowers (1,483 blocks, 10 kinds, none
+  preserve-only). Recorded from Excel 16 (the conditional-format display lane, 194 cells of a
+  fixture with one rule kind per column: text, font and fill colour) and replayed in CI: 192
+  agree, two colour-scale cells differ by one level (a recorded divergence). A 1,000,000-cell
+  sheet with 20 rules: 0.7 ms per grid viewport, 46 ms for the first frame after an edit. Not on
+  the page: gradient data bars (solid), bars and icons on a paginated chain.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -307,7 +321,11 @@ each published canary added is under [Releases](#releases).
   crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
   Colour and text roles carry document swatch and style references, which the page uses.
   Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
-  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  render with their real kind. Charts are written back into the xlsx: an edited chart is
+  spliced into its part, an authored one generated (with its drawing anchor, relationships and,
+  for the Office 2016 kinds, the style parts Excel needs), a deleted one removed; every chart
+  keeps its index across a save. Excel opens all of them without a repair and reports the chart
+  type Paged wrote (the open-check lane). Charts are placed as vector paths and labelled text frames in
   one document write, grouped as one object, and replaced in one write when their data
   changes. Each label frame is sized to its text (measured with the document's font metrics,
   or sized by the frame when a document style sets the label), justified to its anchor, inside
@@ -444,9 +462,8 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 
 - **Object model.** The version label is the document's, not a frame's:
   core keeps one label per plugin per host, and a frame's already holds the placement binding.
-  The page refresh after a write is a second document step. Charts the object model creates or
-  changes are kept as a chart-op journal next to each version; charts authored in the panel are
-  not.
+  The page refresh after a write is a second document step. Charts live in each version's xlsx
+  (ADR 519); a version saved before the engine wrote charts still replays its chart-op journal.
 - **Engines before protocol 66.** Placing a range takes two writes and so two undo steps (frame
   and table, then content), because one write needs the engine to resolve a table handle inside
   a batch; and each in-frame grid change invalidates every page cache. Core v0.66.0 and later

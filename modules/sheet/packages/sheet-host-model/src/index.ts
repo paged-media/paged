@@ -32,6 +32,7 @@ export {
   type BorderLine,
   type BorderLines,
   type FillGradient,
+  type IconRect,
   type FillPattern,
   type LoweredRun,
   type Merge,
@@ -258,4 +259,4 @@ export {
 } from "./cell-orientation";
 
 // Wave 9 — conditional-format data bars on the native placed table.
-export { tableDataBarOps, tableDataBars } from "./table-databars";
+export { tableDataBarOps, tableDataBars, tableIcons } from "./table-databars";

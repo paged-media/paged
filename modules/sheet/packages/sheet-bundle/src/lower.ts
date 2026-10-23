@@ -553,7 +553,8 @@ async function barOps(
   at: BarPlacement | undefined,
 ): Promise<Mutation[]> {
   if (!at) return [];
-  const bars = (content.databars ?? []).length > 0;
+  const bars =
+    (content.databars ?? []).length > 0 || (content.icons ?? []).length > 0;
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);

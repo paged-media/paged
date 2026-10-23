@@ -958,7 +958,7 @@ mod wasm {
         }
 
         /// Delete chart `index` (its slot stays, so other charts keep their
-        /// indices). Page-side only, like `add_chart`.
+        /// indices). A save removes it from the xlsx.
         pub fn delete_chart(&mut self, index: u32) -> Result<(), JsValue> {
             self.session.delete_chart(index).map_err(map_err)
         }
