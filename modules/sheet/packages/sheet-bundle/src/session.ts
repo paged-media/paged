@@ -64,6 +64,7 @@ import {
   type FindMatch,
   type FindOptions,
   type Restyle,
+  type RangeStats,
   type SheetEngine,
   type SheetInfo,
   type StructuralEditKind,
@@ -170,6 +171,9 @@ export interface SessionNotice {
 
 export type SessionChange =
   | { kind: "selection" }
+  /** The in-frame cell edit opened, changed, committed or was cancelled
+   *  (the formula bar and the frame surface's editor follow it). */
+  | { kind: "edit" }
   | { kind: "cells"; regions: readonly CellRegion[] }
   | { kind: "other" };
 
@@ -247,7 +251,8 @@ class Emitter {
     };
   }
   emit(change: SessionChange = OTHER_CHANGE): void {
-    this.beforeEmit?.();
+    // The cell-edit buffer is not engine state: no cached read goes stale.
+    if (change.kind !== "edit") this.beforeEmit?.();
     for (const l of [...this.listeners]) l(change);
   }
   clear(): void {
@@ -384,6 +389,26 @@ export interface WorkbookSession {
   /** K-1 — abandon the in-frame cell edit (Esc): drop the buffer + re-render
    *  the committed value. */
   cancelCellEdit(): void;
+  /** The open in-frame cell edit: its cell, its text and how it began
+   *  (`"enter"`: typing replaced the value, arrows commit and move;
+   *  `"edit"`: F2 or a click into the text, arrows move the caret). */
+  /** Ctrl+X: copy the selection and empty it when its paste lands. */
+  cutSelection(): void;
+  /** Status-bar statistics of the selection (Sum, Average, Count), or null
+   *  without a selection or an engine that cannot say. */
+  selectionStats(): RangeStats | null;
+  cellEditState(): {
+    row: number;
+    col: number;
+    text: string;
+    mode: "enter" | "edit";
+  } | null;
+  /** Open an edit on the active cell: with `text` it replaces the value
+   *  (typing), with `null` it starts from the cell's input (F2). */
+  beginCellEdit(text: string | null, mode: "enter" | "edit"): boolean;
+  /** Replace the open edit's text (a text field owns the caret); opens an
+   *  `"enter"` edit on the active cell when none is open. */
+  setCellEditText(text: string): boolean;
   /** Clear the in-frame grid layer (the frame returns to its native
    *  lowered content). */
   hideGridInFrame(): void;
@@ -955,6 +980,8 @@ export function createWorkbookSession(
   };
 
   let sceneSurface: SceneLayerSurface | null = null;
+  // Ctrl+X: the cut range, cleared when its paste lands (Excel moves it).
+  let cutPending: GridSelection | null = null;
   // Extensions ADR 334 — the mounted frame surface's sink and cell area;
   // while set, the grid goes there instead of the scene layer.
   let surfaceSink: ((scene: GridScene) => void) | null = null;
@@ -1412,6 +1439,7 @@ export function createWorkbookSession(
     } else {
       cellEdit = { ...cellEdit, text: cellEdit.text + ch };
     }
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1430,6 +1458,7 @@ export function createWorkbookSession(
       cellEditMode = "edit";
     }
     cellEdit = { ...cellEdit, text: cellEdit.text.slice(0, -1) };
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1448,6 +1477,7 @@ export function createWorkbookSession(
     }
     cellEdit = { row: at.row, col: at.col, text };
     cellEditMode = "edit";
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1476,6 +1506,7 @@ export function createWorkbookSession(
   function cancelEdit(): void {
     if (!cellEdit) return;
     cellEdit = null;
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
   }
 
@@ -1910,6 +1941,153 @@ export function createWorkbookSession(
         return api.undoCellEdit();
       case "redo":
         return api.redoCellEdit();
+      case "jump": {
+        if (!m || !state.engine?.dataEdge || state.activeSheet === null)
+          return false;
+        const from = a.extend ? m.focus : m.active;
+        let target: [number, number];
+        try {
+          target = state.engine.dataEdge(
+            state.activeSheet,
+            from.row,
+            from.col,
+            a.dRow,
+            a.dCol,
+          );
+        } catch (err) {
+          host.log.debug("jump: engine refused", err);
+          return false;
+        }
+        const cell = { row: target[0], col: target[1] };
+        applyModel(a.extend ? extendTo(m, cell) : collapsed(cell));
+        return true;
+      }
+      case "lastCell": {
+        const info = api.sheets().find((x) => x.id === state.activeSheet);
+        if (!info) return false;
+        applyModel(
+          collapsed({
+            row: Math.max(0, info.rows - 1),
+            col: Math.max(0, info.cols - 1),
+          }),
+        );
+        return true;
+      }
+      case "selectRow":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: m.active.row, col: 0 },
+          focus: { row: m.active.row, col: 16_383 },
+          active: m.active,
+        });
+        return true;
+      case "selectColumn":
+        if (!m) return false;
+        applyModel({
+          anchor: { row: 0, col: m.active.col },
+          focus: { row: 1_048_575, col: m.active.col },
+          active: m.active,
+        });
+        return true;
+      case "insertNow": {
+        // ISO text, which typed entry reads as a date / a time in every
+        // locale; the cell stays in edit mode, as in Excel.
+        const now = new Date(Date.now());
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const text =
+          a.what === "date"
+            ? `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+            : `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+        if (cellEdit) return api.setCellEditText(cellEdit.text + text);
+        return api.beginCellEdit(text, "enter");
+      }
+      case "commitFill": {
+        if (!cellEdit) return false;
+        const sel = state.gridSelection;
+        const engine = state.engine;
+        const sheet = state.activeSheet;
+        if (
+          !sel ||
+          !engine ||
+          sheet === null ||
+          (sel.rows === 1 && sel.cols === 1)
+        ) {
+          commitEdit();
+          return true;
+        }
+        const text = cellEdit.text;
+        cellEdit = null;
+        const targets: CellEditRecord[] = [];
+        const rows = Math.min(sel.rows, 10_000);
+        const cols = Math.min(sel.cols, 256);
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < cols; c++)
+            targets.push({
+              sheet,
+              row: sel.anchorRow + r,
+              col: sel.anchorCol + c,
+              prevInput: "",
+              nextInput: text,
+            });
+        const { written, journaled } = writeTargets(
+          engine,
+          targets,
+          "commitFill",
+        );
+        if (journaled) journalBatch(written);
+        else markEdited();
+        emitter.emit({ kind: "edit" });
+        emitter.emit({ kind: "cells", regions: regionsOf(written) });
+        void submitInFrameGrid();
+        return true;
+      }
+      case "cut":
+        cutPending = state.gridSelection ? { ...state.gridSelection } : null;
+        void api.copySelection().then((r) => {
+          if (!r.ok) {
+            cutPending = null;
+            host.log.warn(`cut: ${r.message}`);
+          }
+        });
+        return true;
+      case "toggleStyle": {
+        const st = api.styleAtTarget();
+        const r = api.setStyle({ [a.style]: !st?.[a.style] });
+        if (!r.ok) host.log.warn(`${a.style}: ${r.message}`);
+        return true;
+      }
+      case "formatCells":
+        void host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+        return true;
+      case "calculate": {
+        try {
+          state.engine?.calculateNow?.();
+        } catch (err) {
+          host.log.warn("calculate: engine refused", err);
+        }
+        emitter.emit();
+        void submitInFrameGrid();
+        return true;
+      }
+      case "pageAcross": {
+        if (!m) return false;
+        const cols =
+          lastGridScene && lastGridWindow
+            ? fullyVisible(
+                lastGridScene,
+                lastGridWindow.wPt,
+                lastGridWindow.hPt,
+              ).cols
+            : 8;
+        if (lastGridWindow) {
+          lastGridWindow = {
+            ...lastGridWindow,
+            firstCol: Math.max(0, lastGridWindow.firstCol + a.dir * cols),
+          };
+        }
+        applyModel(moveBy(m, 0, a.dir * cols, a.extend));
+        return true;
+      }
       case "none":
         return false;
     }
@@ -3156,6 +3334,49 @@ export function createWorkbookSession(
       cancelEdit();
     },
 
+    cutSelection() {
+      runGridAction({ kind: "cut" });
+    },
+
+    selectionStats() {
+      const t = formatTarget();
+      if (!t || !state.engine?.rangeStats) return null;
+      try {
+        return state.engine.rangeStats(t.sheet, t.range);
+      } catch (err) {
+        host.log.debug("selectionStats: engine refused", err);
+        return null;
+      }
+    },
+
+    cellEditState() {
+      return cellEdit ? { ...cellEdit, mode: cellEditMode } : null;
+    },
+
+    beginCellEdit(text, mode) {
+      if (text === null) {
+        const ok = openEdit();
+        if (ok) cellEditMode = mode;
+        return ok;
+      }
+      const at = activeOf();
+      if (!at) return false;
+      cellEdit = { row: at.row, col: at.col, text };
+      cellEditMode = mode;
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
+    },
+
+    setCellEditText(text) {
+      if (!cellEdit) return api.beginCellEdit(text, "enter");
+      if (cellEdit.text === text) return true;
+      cellEdit = { ...cellEdit, text };
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
+    },
+
     attachFrameSurface(sink, cellArea) {
       surfaceSink = sink;
       surfaceArea = {
@@ -3504,6 +3725,32 @@ export function createWorkbookSession(
       );
       if (edits.length === 0) {
         return { ok: false as const, message: "the paste wrote no cells" };
+      }
+      // A cut moves: the source cells outside the paste are emptied in the
+      // same undo step.
+      if (cutPending) {
+        const src = cutPending;
+        cutPending = null;
+        const inPaste = (r: number, c: number) =>
+          r >= area.anchorRow &&
+          r < area.anchorRow + area.rows &&
+          c >= area.anchorCol &&
+          c < area.anchorCol + area.cols;
+        const clears: CellEditRecord[] = [];
+        for (let r = src.anchorRow; r < src.anchorRow + src.rows; r++)
+          for (let c = src.anchorCol; c < src.anchorCol + src.cols; c++)
+            if (!inPaste(r, c))
+              clears.push({
+                sheet,
+                row: r,
+                col: c,
+                prevInput: "",
+                nextInput: "",
+              });
+        if (clears.length > 0) {
+          const cleared = writeTargets(engine, clears, "cut");
+          edits.push(...cleared.written);
+        }
       }
       if (journaled)
         journalBatch(edits); // one grouped Cmd-Z undoes the whole paste

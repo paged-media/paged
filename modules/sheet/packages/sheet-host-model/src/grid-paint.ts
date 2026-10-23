@@ -129,6 +129,8 @@ export interface PaintOptions {
 /** One text box to draw: a cell or a merged area. */
 interface TextBox {
   text: string;
+  /** The repeat-fill character (`text` holds a TAB where it stands). */
+  fill?: string;
   align: Align;
   styleKey: number;
   wrap: boolean;
@@ -172,6 +174,36 @@ function wrapLines(ctx: PaintContext, text: string, width: number): string[] {
     lines.push(line);
   }
   return lines;
+}
+
+/** One line of a repeat-filled cell (`*x` in its number format): `head` at
+ *  the left edge, `tail` right-aligned at the right edge, `fill` repeated in
+ *  the free width between (as many whole copies as fit, as Excel draws). */
+function paintFilled(
+  ctx: PaintContext,
+  b: TextBox,
+  fill: string,
+  y: number,
+  pad: number,
+): void {
+  const tab = b.text.indexOf("\t");
+  const head = b.text.slice(0, tab);
+  const tail = b.text.slice(tab + 1);
+  const x0 = b.x0 + pad;
+  const x1 = b.x1 - pad;
+  ctx.textAlign = "left";
+  ctx.fillText(head, x0, y);
+  ctx.textAlign = "right";
+  ctx.fillText(tail, x1, y);
+  const measure = ctx.measureText?.bind(ctx);
+  if (!measure || fill === " ") return;
+  const unit = measure(fill).width;
+  const from = x0 + measure(head).width;
+  const to = x1 - measure(tail).width;
+  if (unit <= 0 || to - from < unit) return;
+  const n = Math.floor((to - from) / unit);
+  ctx.textAlign = "left";
+  ctx.fillText(fill.repeat(n), from, y);
 }
 
 /** Draw `scene` onto `ctx` in frame-content points. */
@@ -229,6 +261,7 @@ export function paintGridScene(
     }
     boxes.push({
       text: cell.text,
+      fill: cell.fill,
       align: cell.align,
       styleKey: cell.styleKey ?? 0,
       wrap: cell.wrap ?? false,
@@ -244,6 +277,7 @@ export function paintGridScene(
   for (const m of scene.merges ?? []) {
     boxes.push({
       text: m.text,
+      fill: m.fill,
       align: m.align,
       styleKey: m.styleKey,
       wrap: m.wrap ?? false,
@@ -355,6 +389,13 @@ export function paintGridScene(
     ctx.beginPath();
     ctx.rect(b.clipX0, b.y0, b.clipX1 - b.clipX0, b.y1 - b.y0);
     ctx.clip();
+    if (b.fill !== undefined && b.text.includes("\t")) {
+      // A repeat fill (`*x`): the part before the fill at the left edge, the
+      // part after at the right edge, the character repeated between.
+      paintFilled(ctx, b, b.fill, firstY, g.pad);
+      ctx.restore();
+      continue;
+    }
     lines.forEach((line, i) => {
       const ty = firstY + i * lead;
       ctx.fillText(line, tx, ty);

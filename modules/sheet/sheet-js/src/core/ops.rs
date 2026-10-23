@@ -524,6 +524,7 @@ impl SheetSession {
     /// ADD a worksheet at the end (empty `name` = the next free `SheetN`).
     /// Returns its id. The new sheet is written as its own worksheet part.
     pub fn add_sheet(&mut self, name: &str) -> Result<u16, SessionError> {
+        self.guard_structure()?;
         let name = if name.trim().is_empty() {
             self.default_sheet_name()
         } else {
@@ -546,6 +547,7 @@ impl SheetSession {
     /// are unaffected; their stored TEXT (and defined names) is re-printed
     /// with the new name on save.
     pub fn rename_sheet(&mut self, sheet: u16, name: &str) -> Result<(), SessionError> {
+        self.guard_structure()?;
         self.validate_sheet(sheet)?;
         validate_sheet_name(name)?;
         let old = self.engine().model().sheets[sheet as usize]
@@ -615,6 +617,7 @@ impl SheetSession {
     /// down one id. Refused when it is the last sheet, or when the workbook
     /// carries charts (their series ranges are not re-pointed yet).
     pub fn delete_sheet(&mut self, sheet: u16) -> Result<SetCellResult, SessionError> {
+        self.guard_structure()?;
         self.validate_sheet(sheet)?;
         if self.engine().model().sheets.len() <= 1 {
             return Err(SessionError(
@@ -762,6 +765,15 @@ impl SheetSession {
         if n == 0 {
             return Err(SessionError("count must be at least 1".into()));
         }
+        self.guard_allow(
+            sheet,
+            match kind {
+                StructuralEdit::InsertRows => super::protect::Allow::InsertRows,
+                StructuralEdit::DeleteRows => super::protect::Allow::DeleteRows,
+                StructuralEdit::InsertCols => super::protect::Allow::InsertColumns,
+                StructuralEdit::DeleteCols => super::protect::Allow::DeleteColumns,
+            },
+        )?;
         let (limit, axis) = match kind {
             StructuralEdit::InsertRows | StructuralEdit::DeleteRows => (1_048_576u32, "row"),
             StructuralEdit::InsertCols | StructuralEdit::DeleteCols => (16_384u32, "column"),

@@ -154,6 +154,12 @@ pub struct StylePatch {
     /// Excel's quote prefix (`<xf quotePrefix="1">`): the cell's text was
     /// entered after a leading `'` (ruling `sheet.edit.typed-entry`).
     pub quote_prefix: Option<bool>,
+    /// `<protection locked>`: a locked cell refuses an entry while its sheet
+    /// is protected (Excel's default is locked; sheet ADR 517).
+    pub locked: Option<bool>,
+    /// `<protection hidden>`: the formula is not shown while the sheet is
+    /// protected.
+    pub formula_hidden: Option<bool>,
 }
 
 impl StylePatch {
@@ -690,6 +696,27 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
         xf.set("quotePrefix", q.then(|| "1".to_string()));
     }
 
+    if p.locked.is_some() || p.formula_hidden.is_some() {
+        let mut pr = xf
+            .child("protection")
+            .cloned()
+            .unwrap_or_else(|| Elem::new(format!("{prefix}protection")));
+        if let Some(l) = p.locked {
+            // Locked is the default: only an unlocked cell says so.
+            pr.set("locked", (!l).then(|| "0".to_string()));
+        }
+        if let Some(h) = p.formula_hidden {
+            pr.set("hidden", h.then(|| "1".to_string()));
+        }
+        xf.remove_children("protection");
+        if !pr.attrs.is_empty() {
+            // CT_Xf: alignment, protection, extLst.
+            let at = usize::from(xf.child("alignment").is_some());
+            xf.children.insert(at, pr);
+        }
+        xf.set("applyProtection", Some("1".into()));
+    }
+
     find_or_append(xml, "cellXfs", "xf", &xf, &prefix)
 }
 
@@ -877,12 +904,49 @@ impl XlsxDocument {
                 xf.attr("quotePrefix")
                     .is_some_and(|q| q == "1" || q == "true"),
             ),
+            locked: Some(
+                !xf.child("protection")
+                    .and_then(|p| p.attr("locked"))
+                    .is_some_and(|v| v == "0" || v == "false"),
+            ),
+            formula_hidden: Some(
+                xf.child("protection")
+                    .and_then(|p| p.attr("hidden"))
+                    .is_some_and(|v| v == "1" || v == "true"),
+            ),
         })
     }
 
     /// The style ids (`cellXfs` indices) carrying Excel's quote prefix
     /// (`quotePrefix="1"`) — what typed entry reads to clear the attribute
     /// when a cell is re-typed without a leading `'`.
+    /// The style ids (`cellXfs` indices) whose cells are NOT locked
+    /// (`<protection locked="0">`) and those whose formulas are hidden
+    /// (`hidden="1"`): what sheet protection reads (sheet ADR 517). Every
+    /// other style is locked, Excel's default.
+    pub fn protection_styles(&self) -> Result<(BTreeSet<u32>, BTreeSet<u32>), XlsxError> {
+        let xml = self.styles_bytes();
+        let (mut unlocked, mut hidden) = (BTreeSet::new(), BTreeSet::new());
+        let Some(sec) = section(&xml, "cellXfs")? else {
+            return Ok((unlocked, hidden));
+        };
+        for (i, sp) in records(&xml, &sec, "xf")?.iter().enumerate() {
+            if sp.empty {
+                continue;
+            }
+            let xf = parse_elem(&xml[sp.start..sp.end])?;
+            if let Some(p) = xf.child("protection") {
+                if matches!(p.attr("locked").as_deref(), Some("0" | "false")) {
+                    unlocked.insert(i as u32);
+                }
+                if matches!(p.attr("hidden").as_deref(), Some("1" | "true")) {
+                    hidden.insert(i as u32);
+                }
+            }
+        }
+        Ok((unlocked, hidden))
+    }
+
     pub fn quote_prefixed_styles(&self) -> Result<BTreeSet<u32>, XlsxError> {
         let xml = self.styles_bytes();
         let mut out = BTreeSet::new();

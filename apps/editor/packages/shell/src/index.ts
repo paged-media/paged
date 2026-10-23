@@ -501,7 +501,13 @@ export {
 
 // ── Chrome ─────────────────────────────────────────────────────
 export { CommandPalette } from "./chrome/CommandPalette";
-export { MenuBar, CORE_MENUS, nativeKey, prettyKey } from "./chrome/MenuBar";
+export {
+  MenuBar,
+  CONTEXT_MENU_ROOT,
+  CORE_MENUS,
+  nativeKey,
+  prettyKey,
+} from "./chrome/MenuBar";
 
 // ── Icons (Concept 1 — shared tool + panel glyph resolver) ─────
 export {

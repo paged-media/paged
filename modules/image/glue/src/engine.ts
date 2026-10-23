@@ -971,6 +971,18 @@ export interface ImageEngine {
    *  are GPU-only; identity adjusts still work, nothing else). */
   initGpu(): Promise<boolean>;
   gpuReady(): boolean;
+  /** A filter on a region (ADR 465): the adjustment chain given as an
+   *  adjustment layer's wire block, applied to the rectangle of a
+   *  straight RGBA8 image; resolves the whole image. On the GPU when
+   *  `initGpu` succeeded, otherwise on the CPU twins of the same
+   *  kernels — the one kernel path that runs without a device. */
+  filterRegion(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    wire: Float32Array,
+    rect: { x: number; y: number; w: number; h: number },
+  ): Promise<Uint8Array>;
   /** Decode PSD/PNG/JPEG bytes (magic-sniffed) to an engine-held RGBA8
    *  image. Throws with the engine's honest message on unsupported
    *  inputs (16-bit, CMYK, ZIP composites, …). */
@@ -1681,6 +1693,16 @@ export interface ImageWasmModule {
   perf_counters_reset(): void;
   init_gpu(): Promise<void>;
   gpu_ready(): boolean;
+  filter_region_rgba8(
+    width: number,
+    height: number,
+    rgba: Uint8Array,
+    wire: Float32Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Promise<Uint8Array>;
   decode_image(bytes: Uint8Array): DecodedHandleWasm;
   ingest_rgba8(
     width: number,
@@ -2268,6 +2290,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       }
     },
     gpuReady: () => wasm.gpu_ready(),
+    filterRegion: (rgba, width, height, wire, r) =>
+      wasm.filter_region_rgba8(width, height, rgba, wire, r.x, r.y, r.w, r.h),
     decode(bytes) {
       const h = wasm.decode_image(bytes);
       const info = {

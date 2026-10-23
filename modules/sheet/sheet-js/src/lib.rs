@@ -45,6 +45,9 @@
 pub mod core;
 
 #[cfg(target_arch = "wasm32")]
+mod wasm_w2;
+
+#[cfg(target_arch = "wasm32")]
 mod wasm {
     use crate::core::{
         CellInput, FindOptions, FrameBoxArg, GridSceneOptions, LowerOptions, PaginateOptionsArg,
@@ -57,7 +60,7 @@ mod wasm {
     /// forwards; nothing computes here (semantics live in the Rust crates).
     #[wasm_bindgen]
     pub struct SheetEngine {
-        session: SheetSession,
+        pub(crate) session: SheetSession,
     }
 
     #[wasm_bindgen]
@@ -456,6 +459,29 @@ mod wasm {
                 .get_frame_window(sheet, spec)
                 .map_err(map_err)?;
             to_js(&window)
+        }
+
+        /// Where Ctrl+arrow lands: `[row, col]`.
+        pub fn data_edge(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            d_row: i32,
+            d_col: i32,
+        ) -> Result<Vec<u32>, JsValue> {
+            let (r, c) = self
+                .session
+                .data_edge(sheet, row, col, d_row, d_col)
+                .map_err(map_err)?;
+            Ok(vec![r, c])
+        }
+
+        /// Status-bar statistics of a range: `{count, numbers, sum, average,
+        /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
+        pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+            let stats = self.session.range_stats(sheet, range).map_err(map_err)?;
+            to_js(&stats)
         }
 
         /// Record the sheets-mode selection rectangle (consumed by the next
@@ -873,13 +899,13 @@ mod wasm {
 
     /// Map a session error to a JS string error. Calc errors (`#DIV/0!`) are
     /// NOT boundary errors — they are display strings, never reach here.
-    fn map_err(e: crate::core::SessionError) -> JsValue {
+    pub(crate) fn map_err(e: crate::core::SessionError) -> JsValue {
         JsValue::from_str(&e.to_string())
     }
 
     /// Serialise a serde value to a `JsValue` (camelCase shapes are decided in
     /// the serde derives, matching the TS contract).
-    fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 

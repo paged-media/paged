@@ -79,6 +79,8 @@ describe("sheet_plugin_manifest_valid", () => {
       "media.paged.sheet.command.clearCells",
       "media.paged.sheet.command.findInSheet",
       "media.paged.sheet.command.findNext",
+      "media.paged.sheet.command.cutSelection",
+      "media.paged.sheet.command.formatCells",
     ]);
   });
 

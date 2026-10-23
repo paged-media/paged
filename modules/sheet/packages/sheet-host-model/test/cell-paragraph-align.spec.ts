@@ -103,3 +103,36 @@ describe("cell alignment → paragraph styles [sheet.lower.page]", () => {
     expect([...cellsNeedingRealign(prev, next)].sort()).toEqual(["0:0", "0:1"]);
   });
 });
+
+describe("repeat fills → a right tab stop with a leader [sheet.format.engine]", () => {
+  it("mints a content-addressed style with the tab at the cell's inner width", () => {
+    const c: LoweredContent = {
+      cols: [{ index: 0, widthPt: 60 }],
+      rows: [
+        {
+          index: 0,
+          heightPt: 15,
+          cells: [{ col: 0, text: "Total\t", align: "left", fill: "." }],
+        },
+      ],
+      rules: { h: [], v: [] },
+      merges: [],
+    };
+    expect(needsAlignStyles(c)).toBe(true);
+    const ops = loose(cellAlignStyleMints(c, new Set()));
+    expect(ops.map((o) => o.op)).toEqual([
+      "createParagraphStyle",
+      "setStyleProperty",
+    ]);
+    expect(ops[1].args.value).toEqual({
+      type: "tabStops",
+      value: [{ position: 59, alignment: "RightAlign", leader: "." }],
+    });
+    const id = ops[0].args.selfId as string;
+    expect(id.startsWith("ParagraphStyle/paged.sheet ")).toBe(true);
+    const applies = loose(cellAlignApplies(c, "S", "t"));
+    expect(applies[0].args.style).toBe(id);
+    // A number with a fill ignores its right alignment (the fill decides).
+    expect(id).not.toBe(RIGHT);
+  });
+});

@@ -459,6 +459,24 @@ export function activate(host: BundleHost): BundleHandle {
         host.log.info("findNext: no match (or no search yet)");
     },
   });
+  // Sheet ADR 510 — Excel's cut: copy now, empty the source when the paste
+  // lands; and the Format Cells door (the Sheet properties panel).
+  host.contribute.command({
+    id: "media.paged.sheet.command.cutSelection",
+    title: t(COMMANDS.cutSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => session.cutSelection(),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.formatCells",
+    title: t(COMMANDS.formatCells),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      void host.shell?.openPanel?.(PROPERTIES_PANEL_ID);
+    },
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
@@ -595,7 +613,7 @@ export function activate(host: BundleHost): BundleHandle {
     if (host.supports("editContext.frameSurface@1")) {
       host.contribute.frameSurface({
         contextType: "sheet",
-        render: makeSheetFrameSurface(session),
+        ...makeSheetFrameSurface(session),
       });
     }
 

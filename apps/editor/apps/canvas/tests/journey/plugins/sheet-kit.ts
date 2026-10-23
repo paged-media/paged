@@ -355,15 +355,17 @@ export async function expectGridSurfaceDrawn(
       async () => {
         const withGrid = await page.screenshot({ clip });
         await page.evaluate(() => {
+          // The surface itself, not its bar (both carry the attribute).
           const el = document.querySelector<HTMLElement>(
-            "[data-paged-frame-surface]",
+            '[data-testid="frame-surface"]',
           );
           if (el) el.style.visibility = "hidden";
         });
         const without = await page.screenshot({ clip });
         await page.evaluate(() => {
+          // The surface itself, not its bar (both carry the attribute).
           const el = document.querySelector<HTMLElement>(
-            "[data-paged-frame-surface]",
+            '[data-testid="frame-surface"]',
           );
           if (el) el.style.visibility = "";
         });

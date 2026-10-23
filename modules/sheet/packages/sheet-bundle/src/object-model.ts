@@ -1519,7 +1519,8 @@ export function contributeObjectModel(
   }
 
   const changeSub = session.onDidChange((c) => {
-    if (c.kind === "selection" || published.size === 0) return;
+    if (c.kind === "selection" || c.kind === "edit" || published.size === 0)
+      return;
     const revision = revisionNow();
     for (const p of published.values()) {
       if (p.revision === revision) continue;
@@ -1747,6 +1748,24 @@ export function contributeObjectModel(
     structural("deleteColumns", "Delete columns", "deleteCols"),
     fill("fillDown", "Fill down", true),
     fill("fillRight", "Fill right", false),
+    {
+      // Sheet ADR 510 — Excel's cut on the grid's selection.
+      id: C("cutSelection"),
+      title: "Cut sheet selection",
+      args: struct({}),
+      async handler() {
+        session.cutSelection();
+      },
+    },
+    {
+      // Sheet ADR 510 — Ctrl+1: the cell format panel.
+      id: C("formatCells"),
+      title: "Format cells",
+      args: struct({}),
+      async handler() {
+        await host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+      },
+    },
     {
       id: C("clearCells"),
       title: "Clear cells",
