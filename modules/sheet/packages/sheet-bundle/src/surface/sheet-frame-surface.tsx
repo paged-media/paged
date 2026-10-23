@@ -795,6 +795,7 @@ function SheetFrameSurfaceView({
     facesLoaded,
     textDefault,
     swatchColors,
+    session,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
@@ -1645,7 +1646,11 @@ function SheetBarView({
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
       sheetId: st.activeSheet,
-      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
+      sheetList: session.sheets().map((x) => ({
+        id: x.id,
+        name: x.name,
+        chart: x.kind === "chartsheet",
+      })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
@@ -1796,7 +1801,8 @@ function SheetBarView({
           }}
         >
           {view.sheetList.map((sh) => (
-            <option key={sh.id} value={sh.id}>
+            // A chart sheet holds a chart, not cells: a frame cannot show it.
+            <option key={sh.id} value={sh.id} disabled={sh.chart}>
               {sh.name}
             </option>
           ))}
