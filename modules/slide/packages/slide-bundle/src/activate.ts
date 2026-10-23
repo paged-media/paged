@@ -50,7 +50,11 @@ import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
 import { DECK, NOTES, SLIDES } from "./messages.js";
-import { contributeSlideObjectModel } from "./object-model.js";
+import {
+  contributeSlideObjectModel,
+  parseLabel,
+  type DeckLabel,
+} from "./object-model.js";
 import { slidePanels } from "./panels.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
@@ -260,6 +264,19 @@ export function activate(host: BundleHost): BundleHandle {
     );
   }
 
+  // The deck's own name (the document label's `deck.name`): an opened deck
+  // document can have no name, since the native open door carries none.
+  async function deckName(): Promise<string> {
+    try {
+      const label = parseLabel<DeckLabel>(
+        await host.document.getDocumentMetadata(),
+      );
+      return (label?.deck?.name ?? "").replace(/[\\/:*?"<>|]/g, "").trim();
+    } catch {
+      return "";
+    }
+  }
+
   // PPTX export: the deck the document was imported from, rewritten for
   // the document's slides (order, duplicates, deletions, hidden, notes).
   async function exportDeck() {
@@ -295,6 +312,7 @@ export function activate(host: BundleHost): BundleHandle {
     const meta = await host.document.meta();
     const name =
       (meta as { documentName?: string }).documentName?.trim() ||
+      (await deckName()) ||
       "presentation";
     return {
       bytes: out.bytes,
