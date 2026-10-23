@@ -273,7 +273,12 @@ export function activate(host: BundleHost): BundleHandle {
     id: "media.paged.sheet.command.sortRange",
     title: t(COMMANDS.sortRange),
     category: "Sheet",
-    handler: () => host.shell.openPanel(PANEL_ID),
+    // In an entered sheet frame: the Sort card under the sheet bar (sheet
+    // ADR 517); elsewhere the workbook panel's sort.
+    handler: () => {
+      if (!session.isInFrameActive() || !session.openDataCard({ kind: "sort" }))
+        host.shell.openPanel(PANEL_ID);
+    },
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findReplace",

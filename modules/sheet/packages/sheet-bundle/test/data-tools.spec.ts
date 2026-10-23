@@ -331,3 +331,40 @@ describe.skipIf(!built)(
     });
   },
 );
+
+describe.skipIf(!built)("the Sort card's sort [sheet.sort.multikey]", () => {
+  it("offers the region's columns by header and sorts by two keys as one undo step", async () => {
+    const s = await open([
+      [0, 0, "Team"],
+      [0, 1, "Score"],
+      [1, 0, "b"],
+      [1, 1, "2"],
+      [2, 0, "a"],
+      [2, 1, "5"],
+      [3, 0, "b"],
+      [3, 1, "7"],
+    ]);
+    s.selectCell(2, 1);
+    expect(s.openDataCard({ kind: "sort" })).toBe(true);
+    const info = s.sortDialogInfo()!;
+    expect(info.range).toBe("A1:B4");
+    expect(info.hasHeader).toBe(true);
+    expect(info.columns.map((c) => c.header)).toEqual(["Team", "Score"]);
+    const r = s.sortWith({
+      keys: [{ index: 0 }, { index: 1, descending: true }],
+      hasHeader: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(s.dataCard()).toBeNull();
+    expect([1, 2, 3].map((row) => input(s, row, 1))).toEqual(["5", "7", "2"]);
+    expect(s.undoCellEdit()).toBe(true);
+    expect([1, 2, 3].map((row) => input(s, row, 1))).toEqual(["2", "5", "7"]);
+  });
+
+  it("a refused sort answers the engine's reason", async () => {
+    const s = await open([[0, 0, "x"]]);
+    s.selectCell(0, 0);
+    const r = s.sortWith({ keys: [{ index: 5 }] }, "A1:A3");
+    expect(r.ok).toBe(false);
+  });
+});
