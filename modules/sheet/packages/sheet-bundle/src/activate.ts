@@ -477,6 +477,13 @@ export function activate(host: BundleHost): BundleHandle {
       void host.shell?.openPanel?.(PROPERTIES_PANEL_ID);
     },
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.pasteSpecial",
+    title: t(COMMANDS.pasteSpecial),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => session.openPasteSpecial(),
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
