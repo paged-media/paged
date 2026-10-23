@@ -28,11 +28,21 @@
 //                                         document as IDML with its links
 //                                         pointed into Links/, every linked
 //                                         file, the fonts it sets in, a
-//                                         report and instructions
+//                                         report and instructions, and the
+//                                         document as .paged (--no-paged
+//                                         leaves it out)
 //
 // The package follows the Rust `paged package` (engine/core
 // crates/paged-cli/src/package.rs): the folder holds `<name>.idml`,
-// `Links/`, `Document fonts/`, `Instructions.txt` and `<name> Report.txt`.
+// `Links/`, `Document fonts/`, `Instructions.txt` and `<name> Report.txt`,
+// and `<name>.paged`: the whole document, with the module content (a
+// sheet, a drawing, a web frame, data bindings: the container's `paged/`
+// parts) that an IDML cannot carry. It is written by default because a
+// package is the document's archive, and leaving the only lossless copy
+// out would make the report's "not carried" list a loss, not a note; a
+// package for a printer who wants the IDML alone passes --no-paged. Its
+// links keep the spelling the document had; the IDML's are the ones
+// rebased into Links/.
 // The engine does no I/O, so this host collects: the engine answers the IDML
 // with its links rebased and each link's bytes (or the URI to copy from),
 // and the document's fonts and inks. An IDML carries no font binaries: a
@@ -253,8 +263,22 @@ async function engineFaces(
   return out;
 }
 
+/** The container's own native model part: not module content. */
+const CORE_PARTS = "paged/core/";
+
+/** The `paged/` parts of the document that hold module content. */
+async function moduleParts(s: CliSession): Promise<string[]> {
+  const r = (await s.driver.editor.client.send({
+    kind: "listPagedParts",
+    payload: { prefix: "paged/" },
+  } as never)) as unknown as { kind: string; payload: { paths?: string[] } };
+  return r.kind === "pagedPartList"
+    ? (r.payload.paths ?? []).filter((p) => !p.startsWith(CORE_PARTS))
+    : [];
+}
+
 /** The report as a plain text file a printer reads (the Rust CLI's). */
-function reportText(name: string, report: PackageReport): string {
+export function reportText(name: string, report: PackageReport): string {
   const lines = [`Package report — ${name}`, ""];
   lines.push(`Fonts: ${report.fonts.length} used`);
   for (const f of report.fonts) {
@@ -272,17 +296,36 @@ function reportText(name: string, report: PackageReport): string {
     lines.push(
       `  ${String(i["name"] ?? "")}${i["convertToProcess"] === true ? " (converted to process)" : ""}`,
     );
+  const kept = report.paged ? ` (kept in ${basename(report.paged)})` : "";
   if (report.lost.length) {
-    lines.push("", `Not carried by IDML: ${report.lost.length}`);
+    lines.push("", `Not carried by IDML: ${report.lost.length}${kept}`);
     for (const l of report.lost) lines.push(`  ${l}`);
   }
+  if (report.moduleParts.length) {
+    lines.push(
+      "",
+      report.paged
+        ? `Module content: ${report.moduleParts.length} part(s), in ${basename(report.paged)} (IDML does not carry them)`
+        : `Module content not carried by IDML: ${report.moduleParts.length} part(s) (left out: --no-paged)`,
+    );
+    for (const p of report.moduleParts) lines.push(`  ${p}`);
+  }
+  if (report.paged)
+    lines.push(
+      "",
+      `Paged document: ${basename(report.paged)} (the whole document)`,
+    );
   if (report.pdf) lines.push("", `PDF: ${basename(report.pdf.path)}`);
   return `${lines.join("\n")}\n`;
 }
 
-interface PackageReport {
+export interface PackageReport {
   package: string;
   document: string;
+  /** `<name>.paged`, the whole document; null with --no-paged. */
+  paged: string | null;
+  /** The container parts holding module content IDML cannot carry. */
+  moduleParts: string[];
   links: Array<{
     fileName: string;
     sourceUri: string;
@@ -296,13 +339,13 @@ interface PackageReport {
 }
 
 const INSTRUCTIONS =
-  "Open the .idml in this folder. Its images link into Links/; install the faces in Document fonts/ (or make them available to the application) before opening. A font this package lists as missing or restricted was not collected: obtain it under its own licence.\n";
+  "Open the .idml in this folder. Its images link into Links/; install the faces in Document fonts/ (or make them available to the application) before opening. A font this package lists as missing or restricted was not collected: obtain it under its own licence. The .paged file is the whole document, with the module content an IDML cannot carry; open it in paged.\n";
 
 export const packageVerb: Verb = {
   name: "package",
   usage: "<doc>",
   summary:
-    "InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt and a report, into a new folder or a .zip",
+    "InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt, a report and the document as .paged (with the module content IDML cannot carry), into a new folder or a .zip",
   min: 1,
   max: 1,
   options: [
@@ -321,6 +364,10 @@ export const packageVerb: Verb = {
     {
       name: "pdf",
       help: "also write <name>.pdf (through the typed exporter when installed)",
+    },
+    {
+      name: "no-paged",
+      help: "leave out <name>.paged (the whole document, with the module content IDML cannot carry)",
     },
     {
       name: "instructions",
@@ -380,6 +427,11 @@ export const packageVerb: Verb = {
         `package: the IDML export failed: ${reply.payload.error ?? reply.kind}`,
       );
     put(`${name}.idml`, Uint8Array.from(reply.payload.idmlBytes ?? []));
+
+    // The whole document, module content and all (see the header).
+    const withPaged = !flagBool(args, "no-paged");
+    if (withPaged) put(`${name}.paged`, (await s.exportBytes("paged")).bytes);
+    const parts = await moduleParts(s);
 
     const links: PackageReport["links"] = [];
     for (const link of reply.payload.links ?? []) {
@@ -470,6 +522,8 @@ export const packageVerb: Verb = {
     const report: PackageReport = {
       package: out,
       document: join(root, `${name}.idml`),
+      paged: withPaged ? join(root, `${name}.paged`) : null,
+      moduleParts: parts,
       links,
       fonts,
       inks,
