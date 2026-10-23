@@ -28,7 +28,11 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactElement } from "react";
 
-import type { Derivation, DerivedField } from "@paged-media/client";
+import type {
+  Derivation,
+  DerivedField,
+  TemplateFieldSummary,
+} from "@paged-media/client";
 import {
   FocusScope,
   useOptionalCanvasClient,
@@ -62,6 +66,11 @@ const M = defineMessages("app.openAsTemplate", {
   answered: "The engine answered {kind}.",
   cancel: "Cancel",
   apply: "{count, plural, one {Make # field} other {Make # fields}}",
+  statusNew: "new",
+  statusSame: "already a field",
+  statusChanged: "now a {kind} field",
+  untagged:
+    "{count, plural, one {Kept, though no tag names it:} other {Kept, though no tag names them:}}",
 });
 
 // The menu's segment and the command's category stay English (they are
@@ -143,6 +152,8 @@ function OpenAsTemplateForm(): ReactElement {
   const role = useSessionRole();
   const setRole = useSetSessionRole();
   const [derivation, setDerivation] = useState<Derivation | null>(null);
+  // The fields the document has already: re-deriving lists what changes.
+  const [existing, setExisting] = useState<readonly TemplateFieldSummary[]>([]);
   const [skipped, setSkipped] = useState<readonly string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const close = () => setOpen(false);
@@ -157,6 +168,9 @@ function OpenAsTemplateForm(): ReactElement {
       .then((d) => {
         if (live) setDerivation(d);
       });
+    void client?.templateFields().then((rows) => {
+      if (live) setExisting(rows);
+    });
     return () => {
       live = false;
     };
@@ -170,6 +184,19 @@ function OpenAsTemplateForm(): ReactElement {
   }, []);
 
   const fields = derivation?.fields ?? [];
+  const before = new Map(existing.map((r) => [r.field.name, r.field.kind]));
+  const status = (f: DerivedField) => {
+    const was = before.get(f.field.name);
+    if (was === undefined) return strings.t(M.statusNew);
+    if (was === f.field.kind) return strings.t(M.statusSame);
+    return strings.t(M.statusChanged, {
+      kind: KIND_NAMES[f.field.kind]
+        ? strings.t(KIND_NAMES[f.field.kind]!)
+        : f.field.kind,
+    });
+  };
+  const derivedNames = new Set(fields.map((f) => f.field.name));
+  const untagged = existing.filter((r) => !derivedNames.has(r.field.name));
   const chosen = fields
     .map((f) => f.field.name)
     .filter((n) => !skipped.includes(n));
@@ -276,12 +303,27 @@ function OpenAsTemplateForm(): ReactElement {
                         ? strings.t(KIND_NAMES[f.field.kind]!)
                         : f.field.kind}{" "}
                       — {targetText(f, strings.t)}
+                    </span>{" "}
+                    <span
+                      data-open-as-template-status={f.field.name}
+                      style={{ color: color.mutedFg, fontStyle: "italic" }}
+                    >
+                      ({status(f)})
                     </span>
                   </label>
                 </li>
               ))}
             </ul>
           )}
+          {untagged.length ? (
+            <div
+              data-open-as-template-untagged=""
+              style={{ margin: "8px 0 0", fontSize: 11 }}
+            >
+              {strings.t(M.untagged, { count: untagged.length })}{" "}
+              {untagged.map((r) => r.field.label ?? r.field.name).join(", ")}
+            </div>
+          ) : null}
           {derivation?.skipped.length ? (
             <ul
               data-open-as-template-skipped=""
