@@ -2102,7 +2102,11 @@ impl SheetSession {
                 found.unwrap_or(if forward { max } else { 0 })
             }
         };
-        Ok(if d_row != 0 { (target, col) } else { (row, target) })
+        Ok(if d_row != 0 {
+            (target, col)
+        } else {
+            (row, target)
+        })
     }
 
     /// The status-bar statistics of a range (sheet ADR 510): how many cells
