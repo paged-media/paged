@@ -3,12 +3,13 @@ $ paged-node package --help
 # stdout
 paged-node package <doc>
 
-InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt and a report, into a new folder or a .zip
+InDesign's File ▸ Package: the document as IDML with its linked files in Links/, the fonts it sets in, Instructions.txt, a report and the document as .paged (with the module content IDML cannot carry), into a new folder or a .zip
 
 options:
   -o, --out <dir|x.zip>              the package: a new (or empty) folder, or a .zip that unpacks into <name>/ beside it (required)
   --fonts <dir|file>                 font files to collect the document's faces from (an IDML carries no font binaries) (repeatable)
   --pdf                              also write <name>.pdf (through the typed exporter when installed)
+  --no-paged                         leave out <name>.paged (the whole document, with the module content IDML cannot carry)
   --instructions <text>              the text of Instructions.txt, instead of the default note
   --format <json|text>               output style (default json)
   --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them

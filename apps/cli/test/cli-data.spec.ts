@@ -357,7 +357,7 @@ describe("paged generate — a batch per record or per group (planBatch)", () =>
 });
 
 describe("paged apply", () => {
-  it("interim property bindings: one record's fields → typed properties in ONE write", async () => {
+  it("field property bindings: one record's fields → typed properties in ONE write", async () => {
     const csv = join(tmp.dir, "apply.csv");
     writeFileSync(
       csv,
@@ -459,21 +459,29 @@ describe("paged apply", () => {
     expect(r.json.error.message).toMatch(/frameStrokeWeight.*expected length/);
   });
 
-  it("expression property bindings wait for Wave 5 (universal Binding::Property)", async () => {
-    const csv = join(tmp.dir, "w5.csv");
-    writeFileSync(csv, "a\n1\n");
-    const bindings = join(tmp.dir, "w5.json");
+  it("expression property bindings go through paged.data's defineProperty and apply", async () => {
+    const csv = join(tmp.dir, "expr.csv");
+    writeFileSync(csv, "a,name\n1,One\n4,Four\n");
+    const bindings = join(tmp.dir, "expr.json");
     writeFileSync(
       bindings,
       JSON.stringify([
         {
+          id: "weight",
           kind: "property",
           target: "rectangle:urect",
           path: "frameStrokeWeight",
-          expr: "MM(a)",
+          expr: "PT(a * 2)",
+        },
+        {
+          kind: "property",
+          target: "story",
+          path: "content",
+          field: "name",
         },
       ]),
     );
+    const out = join(tmp.dir, "expr.paged");
     const r = await cli([
       "apply",
       fx.paged,
@@ -481,11 +489,75 @@ describe("paged apply", () => {
       csv,
       "--bindings",
       bindings,
-      "--no-save",
+      "--record",
+      "1",
+      "-o",
+      out,
       DATA,
     ]);
-    expect(r.code).toBe(1);
-    expect(r.json.error.message).toMatch(/needs Wave 5/);
+    expect(r.code, r.out).toBe(0);
+    expect(r.json).toMatchObject({
+      records: 2,
+      record: 1,
+      sessionBindings: ["weight"],
+      property: { ops: 1 },
+    });
+    expect(
+      (
+        await cli([
+          "get",
+          out,
+          "rectangle:urect",
+          "frameStrokeWeight",
+          "--no-plugins",
+        ])
+      ).json.value,
+    ).toBe(8);
+    expect(
+      (await cli(["get", out, "story", "content", "--no-plugins"])).json
+        .results[0].value,
+    ).toBe("Four");
+  });
+
+  it("an expression property binding the engine refuses fails by its index", async () => {
+    const csv = join(tmp.dir, "expr-bad.csv");
+    writeFileSync(csv, "a\n1\n");
+    for (const [binding, message] of [
+      [
+        {
+          kind: "property",
+          target: "rectangle:urect",
+          path: "noSuchProperty",
+          expr: "PT(a)",
+        },
+        /bindings\[0\] \(property\): .*no property "noSuchProperty"/,
+      ],
+      [
+        {
+          kind: "property",
+          target: "rectangle:urect",
+          path: "frameStrokeWeight",
+          expr: "PT(a)",
+          field: "a",
+        },
+        /"expr" or "field", not both/,
+      ],
+    ] as const) {
+      const bindings = join(tmp.dir, "expr-bad.json");
+      writeFileSync(bindings, JSON.stringify([binding]));
+      const r = await cli([
+        "apply",
+        fx.paged,
+        "--data",
+        csv,
+        "--bindings",
+        bindings,
+        "--no-save",
+        DATA,
+      ]);
+      expect(r.code).not.toBe(0);
+      expect(r.json.error.message).toMatch(message);
+    }
   });
 });
 

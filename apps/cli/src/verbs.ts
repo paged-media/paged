@@ -852,7 +852,7 @@ const apply: Verb = {
     {
       name: "bindings",
       value: "b.json",
-      help: '{ "bindings": [ { "kind": "property", "target", "path", "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }',
+      help: '{ "bindings": [ { "kind": "property", "target", "path", "expr" | "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }',
     },
     {
       name: "record",
