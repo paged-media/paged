@@ -189,6 +189,14 @@ pub struct LoweredCell {
     /// styles arrive with the style-map track in Phase B). serde camelCase
     /// → `styleKey`.
     pub style_key: u32,
+    /// The number format's repeat-fill character (`*x`, ruling
+    /// `sheet.format.padding`). When set, `text` holds a TAB where the fill
+    /// stands: the part before it sits at the cell's left edge, the part after
+    /// at its right edge, and the character repeats between (the page puts a
+    /// right tab stop with this leader at the cell's inner width; the grid
+    /// painter repeats it). Omitted when the format has no fill.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 /// One visual cell style (IR v2, M1 style-map track). A flat, host-ready
@@ -499,11 +507,11 @@ pub fn lower_range_condfmt(
             if ws.is_some_and(|w| w.col_hidden(c)) {
                 continue;
             }
-            let (text, align, style_key) = match ws.and_then(|w| w.cell(r, c)) {
+            let (text, align, style_key, fill) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
-                    let (text, align) = lower_cell(model, cell, &mut cache, &ctx);
+                    let d = lower_cell_display(model, cell, &mut cache, &ctx);
                     // cf evaluates at the cell's MODEL (absolute) coordinates.
-                    let key = styler.key_for_cell(r, c, cell);
+                    let key = styler.key_for_display(r, c, cell, d.color);
                     // Data-bar geometry (the page-draw lane): a separate pass
                     // from the style override — a cell can carry both a dxf
                     // style and a drawn bar (Excel layers them).
@@ -521,15 +529,16 @@ pub fn lower_range_condfmt(
                             rgb,
                         ));
                     }
-                    (text, align, key)
+                    (d.text, d.align, key, d.fill.map(String::from))
                 }
-                None => (String::new(), Align::General, 0),
+                None => (String::new(), Align::General, 0, None),
             };
             cells.push(LoweredCell {
                 col: c - left,
                 text,
                 align,
                 style_key,
+                fill,
             });
         }
 
@@ -636,6 +645,52 @@ pub fn lower_cell(
     let style_align = model.styles.style(cell.style).align;
     let align = resolve_align(style_align, &cell.value);
     (text, align)
+}
+
+/// One cell as it displays: its text (a TAB where a repeat fill stands), its
+/// alignment, the number format's colour and the fill character. What both
+/// surfaces render a cell's text from ([`lower_cell`] is its text and
+/// alignment with the fill character written once).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellDisplay {
+    pub text: String,
+    pub align: Align,
+    pub color: Option<sheet_format::FormatColor>,
+    pub fill: Option<char>,
+}
+
+/// [`lower_cell`] with the number format's colour and repeat fill
+/// (rulings `sheet.format.color-brackets`, `sheet.format.padding`).
+pub fn lower_cell_display(
+    model: &SheetModel,
+    cell: &Cell,
+    cache: &mut FormatCache,
+    ctx: &FormatCtx,
+) -> CellDisplay {
+    let code = model.styles.num_fmt_of(cell.style);
+    let (text, color, fill) = match cache.get(code) {
+        Ok(fmt) => {
+            let d = sheet_format::format_value_display(&cell.value, fmt, ctx);
+            match d.fill {
+                Some(f) => {
+                    let mut t = String::with_capacity(d.text.len());
+                    for (i, ch) in d.text.chars().enumerate() {
+                        t.push(if i == f.at { '\t' } else { ch });
+                    }
+                    (t, d.color, Some(f.ch))
+                }
+                None => (d.text, d.color, None),
+            }
+        }
+        Err(_) => (sheet_format::format_general(&cell.value), None, None),
+    };
+    let style_align = model.styles.style(cell.style).align;
+    CellDisplay {
+        text,
+        align: resolve_align(style_align, &cell.value),
+        color,
+        fill,
+    }
 }
 
 /// Excel-default alignment (T0 ruling): an explicit non-`General` style
@@ -1123,12 +1178,65 @@ mod tests {
     }
 
     #[test]
+    #[allow(non_snake_case)]
+    fn format_colour_and_fill_reach_the_lowered_cell__feat__sheet_format_engine() {
+        let mut m = SheetModel::new();
+        let s = m.add_sheet("S");
+        let red_blue = m.styles.intern_num_fmt("[Red]0;[Blue]-0");
+        let red_blue = m.styles.intern_style(CellStyle {
+            num_fmt: red_blue,
+            ..Default::default()
+        });
+        let acct = m.styles.intern_num_fmt("$* #,##0");
+        let acct = m.styles.intern_style(CellStyle {
+            num_fmt: acct,
+            ..Default::default()
+        });
+        let ws = m.sheet_mut(s).unwrap();
+        for (c, n, style) in [(0, 5.0, red_blue), (1, -5.0, red_blue), (2, 1234.0, acct)] {
+            ws.set_cell(
+                0,
+                c,
+                Cell {
+                    value: CellValue::Number(n),
+                    style,
+                    ..Default::default()
+                },
+            );
+        }
+        let lc = lower_range_styled(
+            &m,
+            s,
+            CellRange {
+                r0: 0,
+                c0: 0,
+                r1: 0,
+                c1: 2,
+            },
+            &ViewOptions::default(),
+            &NoStyles,
+        );
+        let cells = &lc.rows[0].cells;
+        let rgb = |k: u32| lc.styles[k as usize].text_rgb.clone();
+        assert_eq!(cells[0].text, "5");
+        assert_eq!(rgb(cells[0].style_key).as_deref(), Some("#FF0000"));
+        assert_eq!(cells[1].text, "-5");
+        assert_eq!(rgb(cells[1].style_key).as_deref(), Some("#0000FF"));
+        // The accounting fill: a TAB where the fill stands, the character
+        // carried beside it.
+        assert_eq!(cells[2].text, "$\t1,234");
+        assert_eq!(cells[2].fill.as_deref(), Some(" "));
+        assert_eq!(cells[2].style_key, 0);
+    }
+
+    #[test]
     fn align_serializes_lowercase() {
         let cell = LoweredCell {
             col: 0,
             text: "x".into(),
             align: Align::Right,
             style_key: 0,
+            fill: None,
         };
         let json = serde_json::to_string(&cell).unwrap();
         // camelCase keys + lowercase align variant + the additive styleKey.

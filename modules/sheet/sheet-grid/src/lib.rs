@@ -35,7 +35,7 @@
 //! - **How a cell looks** — every populated cell goes through
 //!   [`sheet_lower::CellStyler`], the same per-cell resolver the page
 //!   lowering uses (base visual style + conditional formatting folded on
-//!   top), and its text through [`sheet_lower::lower_cell`]. A cell's
+//!   top), and its text through [`sheet_lower::lower_cell_display`]. A cell's
 //!   `style_key` and style equal what the page lowering gives the same cell
 //!   when it lowers the same window.
 //! - **Merges** — merged areas intersecting the window become
@@ -224,6 +224,10 @@ pub struct GridCell {
     /// Omitted when the immediate neighbour is occupied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overflow_to: Option<u32>,
+    /// The number format's repeat-fill character; `text` then holds a TAB
+    /// where it stands (see `sheet_lower::LoweredCell::fill`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 /// One merged area as shown in a viewport pane. `row` / `col` /
@@ -251,6 +255,9 @@ pub struct GridMerge {
     pub wrap: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub v_align: Option<String>,
+    /// The anchor's repeat-fill character (see [`GridCell::fill`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<String>,
 }
 
 /// A selection rectangle, anchored at `(anchor_row, anchor_col)` and
@@ -689,7 +696,8 @@ pub fn grid_scene_styled(
     let mut meta: Vec<(usize, usize, bool)> = Vec::new();
     let mut databars: Vec<GridDataBar> = Vec::new();
     // merge index -> (text, align, style key) of its anchor, once seen.
-    let mut anchors: std::collections::HashMap<usize, (String, Align, u32)> =
+    #[allow(clippy::type_complexity)]
+    let mut anchors: std::collections::HashMap<usize, (String, Align, u32, Option<String>)> =
         std::collections::HashMap::new();
     if let Some(ws) = ws {
         for (dr, &r) in win.rows.iter().enumerate() {
@@ -699,7 +707,8 @@ pub fn grid_scene_styled(
                     let Some(dc) = col_pos(c) else {
                         continue; // a hidden column inside the pane's span
                     };
-                    let key = styler.key_for_cell(r, c, cell);
+                    let d = sheet_lower::lower_cell_display(model, cell, &mut cache, &ctx);
+                    let key = styler.key_for_display(r, c, cell, d.color);
                     if let Some((frac, rgb)) = styler.databar(r, c, cell) {
                         let cell_x = x_offsets[dc];
                         let cell_w = x_offsets[dc + 1] - cell_x;
@@ -719,14 +728,14 @@ pub fn grid_scene_styled(
                             fill: format!("#{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2),
                         });
                     }
-                    let (text, align) = sheet_lower::lower_cell(model, cell, &mut cache, &ctx);
+                    let (text, align, fill) = (d.text, d.align, d.fill.map(String::from));
                     let covering = frags_by_row[dr]
                         .iter()
                         .map(|&fi| frags[fi])
                         .find(|f| dc >= f.dc0 && dc < f.dc1);
                     if let Some(f) = covering {
                         if (r, c) == (f.area.0, f.area.1) {
-                            anchors.insert(f.merge, (text, align, key));
+                            anchors.insert(f.merge, (text, align, key, fill));
                         }
                         continue;
                     }
@@ -743,6 +752,7 @@ pub fn grid_scene_styled(
                         wrap: false,
                         v_align: None,
                         overflow_to: None,
+                        fill,
                     });
                 }
             }
@@ -755,11 +765,11 @@ pub fn grid_scene_styled(
             }
             let entry = match ws.cell(f.area.0, f.area.1) {
                 Some(cell) => {
-                    let key = styler.key_for_cell(f.area.0, f.area.1, cell);
-                    let (text, align) = sheet_lower::lower_cell(model, cell, &mut cache, &ctx);
-                    (text, align, key)
+                    let d = sheet_lower::lower_cell_display(model, cell, &mut cache, &ctx);
+                    let key = styler.key_for_display(f.area.0, f.area.1, cell, d.color);
+                    (d.text, d.align, key, d.fill.map(String::from))
                 }
-                None => (String::new(), Align::General, 0),
+                None => (String::new(), Align::General, 0, None),
             };
             anchors.insert(f.merge, entry);
         }
@@ -792,7 +802,7 @@ pub fn grid_scene_styled(
         for i in start..end {
             let (_, dc, is_text) = meta[i];
             let cell = &cells[i];
-            if !is_text || cell.wrap || cell.text.is_empty() {
+            if !is_text || cell.wrap || cell.text.is_empty() || cell.fill.is_some() {
                 continue;
             }
             let (seg_lo, seg_hi) = if dc < fc { (0, fc) } else { (fc, n_cols) };
@@ -822,11 +832,11 @@ pub fn grid_scene_styled(
     let merges: Vec<GridMerge> = frags
         .iter()
         .map(|f| {
-            let (text, align, key) =
+            let (text, align, key, fill) =
                 anchors
                     .get(&f.merge)
                     .cloned()
-                    .unwrap_or((String::new(), Align::General, 0));
+                    .unwrap_or((String::new(), Align::General, 0, None));
             let s = style_of(key);
             GridMerge {
                 row: f.area.0,
@@ -842,6 +852,7 @@ pub fn grid_scene_styled(
                 style_key: key,
                 wrap: s.wrap,
                 v_align: s.v_align.clone(),
+                fill,
             }
         })
         .collect();

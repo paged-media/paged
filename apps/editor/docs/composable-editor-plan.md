@@ -1229,8 +1229,15 @@ Per module:
   a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
   recipe an edited source feeds. A rebuild on every edit is left out: it would be a second
   undo step after the edit's own (`modules/draw/docs/status.md`).
-- **image:** targeted crop, rotate, flip and canvas size; a typed `applyAdjustment`; filters with
-  a region; the session-only commands refuse headless with a code instead of doing nothing.
+- **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
+  `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
+  session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
+  region: the typed `filterRegion { layer, params, region? }` runs the adjustment chain (blur,
+  sharpen, hue, invert and the adjustment paths) on a rectangle of a pixel layer, on the GPU where
+  one exists and headless on shipped CPU twins of the same kernels, held to the GPU's tolerance
+  (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it through `paged-node invoke`. A region
+  is a rectangle: filtering within a selection stays the editor's Apply
+  (`modules/image/docs/status.md`).
 - **sheet:** a placement kind (range, view, print, sizing) with `paginateToChain` and
   `placeName`; merge, borders, column widths and row heights; `importCsv`; chart delete.
 - **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per

@@ -1,0 +1,108 @@
+# ADR 465 — Where no GPU exists, a region filter runs on shipped CPU twins
+
+- **Status:** Accepted, 2026-10-23. An exception to [ADR 450](450-gpu-only-kernels.md), which it amends.
+- **Scope:** `image-kernels` (feature `cpu`, `src/cpu.rs`), `image-js/src/region_filter.rs` and the
+  chain it shares with the GPU (`ingest.rs`, `adjust_stages`), the wasm export
+  `filter_region_rgba8`, the object model's layer `filter` row and the typed command
+  `filterRegion` (`glue/src/object-model/`), `image-conformance/tests/it/cpu_twins.rs`, and the
+  dependency guard in `.github/workflows/image-ci.yml`
+
+## Context
+
+ADR 450 ships no CPU path for a kernel: without a GPU device every call that dispatches one
+returns an error. The object model made most of an image editable without a device anyway: a
+layer stack is read and written as its stored manifest, canvas operations move pixels without
+computing any, and a stack whose composite would need a kernel is stored `pending` until a GPU
+realm bakes it.
+
+A filter is different: its result is new pixels, and nothing can store it `pending` the way a
+composite is, because the filtered pixels are the layer itself. The Node CLI (`paged-node`) and
+the SDK's headless host have no `navigator.gpu`, so a script or a CLI call could not blur,
+sharpen or adjust part of an image at all. The composable-editor plan names this gap for the
+module: "filters with a region".
+
+The scalar twins needed already exist as test references for every kernel of the adjustment
+chain ([ADR 451](451-one-kernel-definition.md)), and the conformance suite already measures the
+shader against them ([ADR 453](453-tolerance-not-golden-bytes.md)).
+
+## Decision
+
+The scalar twins of the kernels the adjustment chain dispatches ship as a CPU path, used only
+where no GPU device exists.
+
+- **Which kernels.** The nineteen the chain can dispatch, listed in `image_kernels::cpu::CPU_KERNELS`:
+  `adjust.exposure`, `white_balance`, `levels`, `levels_rgb`, `brightness_contrast`,
+  `color_balance`, `photo_filter`, `channel_mixer`, `vibrance`, `saturation`, `black_white`,
+  `posterize`, `threshold`, `hue_rotate`, `hue_saturation` and `invert_rgb`, and
+  `conv.gaussian_h`, `conv.gaussian_v` and `conv.unsharp`. Blur and sharpen are among them; the
+  curves pass already ran on the CPU. No other kernel gets a twin through this record: a kernel
+  joins the list only with its twin and its test.
+- **Where they live.** `image-kernels` gains a feature `cpu`, separate from `reference`. It
+  compiles `src/cpu.rs` (handwritten twins of the module kernels, each mirroring its WGSL term for
+  term), the `Px` pixel type and the `kernel_family!` twin of `adjust.invert_rgb`. `image-js`
+  turns `cpu` on. The `reference` feature stays test-only, enabled only by `image-conformance`.
+- **One chain.** The chain's stages and their order are listed once (`adjust_stages`). The GPU
+  pipeline and the CPU path both consume that list, so they cannot run different chains.
+- **The CPU path models the GPU path.** Input is bridged to f16 as the pipeline does (`v / 255`),
+  every stage's output is stored as f16, every stage is masked by the region (`mix(a, result, m)`
+  with `m` 1 inside and 0 outside), a window repeats the image's edge pixel, and the result
+  leaves through the sink's round.
+- **When it runs.** `filter_region_rgba8` uses the GPU whenever `init_gpu` succeeded in the realm,
+  and the CPU twins only when it did not. In the editor, where the session requests a device, the
+  GPU stays the path. No other entry point reaches the twins: an adjustment preview, an Apply, the
+  layer fold and every other kernel still return an error without a device.
+- **Tolerance.** A twin is held to the same tolerance as the GPU: its kernel's declared
+  `gpu_tolerance` against the test-only reference, over the conformance stimulus, in every lane
+  (no device needed), and against the shader itself on the GPU lanes. The two region-filter
+  paths must agree within one 8-bit level per channel on the GPU lanes.
+- **The guard.** The CI guard on `image-js`'s wasm32 tree still fails on `image-conformance` and
+  `proptest`, and now also fails when `image-kernels`'s `reference` feature is reached from
+  `image-js`.
+
+## Evidence
+
+- `image-kernels/Cargo.toml` — the `cpu` feature beside `reference`; `image-kernels/src/lib.rs`,
+  `src/family.rs`, `src/reference_prelude.rs` — what each feature compiles
+- `image-kernels/src/cpu.rs` — the twins and `CPU_KERNELS`
+- `image-js/src/ingest.rs` (`AdjustStage`, `adjust_stages`, `build_adjust_chain`) — the one chain
+- `image-js/src/region_filter.rs` — the CPU path and the GPU path over a region
+- `image-js/src/lib.rs` (`filter_region_rgba8`) — the choice of path
+- `glue/src/object-model/image-objects.ts` (`filterRegion`), `contribute.ts` — the layer `filter`
+  row and the typed command
+- `image-conformance/tests/it/cpu_twins.rs` — the tolerance tests
+- `glue/test/region-filter.spec.ts`, `apps/cli/test/cli-image.spec.ts` — the filter headless and
+  through `paged-node invoke`
+- `.github/workflows/image-ci.yml` — the guard
+
+## Alternatives considered
+
+- **Store the filter `pending`** and run it when a GPU realm opens the frame. The layer's pixels
+  would be wrong in every export made before that, and a script reading the layer back would not
+  get what it wrote.
+- **A software GPU adapter in Node.** It would keep one execution path, but Node has no WebGPU in
+  the realm the plugin runs in, and shipping an adapter means shipping a driver.
+- **Move the test references into the shipped crate** and test the GPU against them only. Then
+  the CPU path and its reference would be one function, and nothing would hold the shipped code
+  to the reference by test; the references stay test-only and independent.
+
+## Consequences
+
+A script, the SDK's headless host and `paged-node invoke` can filter a region of a pixel layer:
+`filterRegion { layer, params, region? }`, where `params` are adjustment-layer paths. The write
+is one undo step; a one-layer stack bakes into the frame at once.
+
+There are now two shipped implementations of nineteen kernels, the WGSL and the CPU twin, and a
+third, the test reference. The tests above bind them; a change to a covered kernel's WGSL has
+to change its twin too, or the GPU lanes fail.
+
+The CPU path is slower than the GPU path, roughly linearly in the region's area and, for blur,
+in its radius. It runs on the region only, grown by the widest window.
+
+The selection is a session concept; headless there is none, so a headless region is a rectangle.
+Filtering within a selection stays the editor's Apply.
+
+## Related
+
+- [ADR 450](450-gpu-only-kernels.md) — the rule this is an exception to
+- [ADR 451](451-one-kernel-definition.md) — where the twins come from
+- [ADR 453](453-tolerance-not-golden-bytes.md) — the tolerance they are held to

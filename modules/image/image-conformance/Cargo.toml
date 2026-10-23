@@ -15,7 +15,7 @@ workspace = true
 # activate image-kernels' `reference` feature (spec §4 dep rule 2; CI
 # proves no production crate reaches it via cargo-tree).
 image-core = { path = "../image-core" }
-image-kernels = { path = "../image-kernels", features = ["reference"] }
+image-kernels = { path = "../image-kernels", features = ["reference", "cpu"] }
 image-gpu = { path = "../image-gpu", features = ["test-support"] }
 image-pipeline = { path = "../image-pipeline" }
 image-codecs = { path = "../image-codecs" }

@@ -45,7 +45,7 @@ each published canary added is under [Releases](#releases).
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
   locales. Expected values are recorded from Excel and replayed in CI: 5,156 of 5,222 function
-  cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
+  cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
   structured references (including `[#Headers],[#Data]` and `[#Data],[#Totals]`), whole-column
@@ -84,6 +84,17 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Outline, hidden rows, columns and sheets, protection** (ADR 517). Rows and columns group
+  and ungroup (up to seven levels), groups collapse and expand (a nested collapsed group stays
+  collapsed when its parent expands), Excel's outline-level buttons, hide and unhide rows, columns
+  and sheet tabs (never the last visible one); `outline` reports the groups and hidden tracks for
+  the grid. The save writes the row and column attributes, `<sheetFormatPr outlineLevelRow/Col>`
+  and `<sheet state>`. A protected sheet refuses an entry into a locked cell at every write door
+  (entry, batch, sort, fill, replace) and the actions its `allow*` flags do not allow (format
+  cells, rows, columns; insert and delete rows and columns; sort); a protected workbook structure
+  refuses adding, deleting, renaming and hiding sheets. Passwords are checked against the stored
+  SHA-512 spin hash or the legacy 16-bit hash; new ones are stored as SHA-512 with 100,000 spins.
+  Format Cells ▸ Protection (locked, hidden) is a style patch. No UI calls these doors yet.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
@@ -120,8 +131,22 @@ each published canary added is under [Releases](#releases).
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
   painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
-  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
+  like hidden rows. Still open: a merged area clipped by the page window does not carry its anchor's
   text onto the page.
+- **Number formats as a cell shows them** (W2.1). A section's colour (`[Red]`, the other seven
+  names and `[Color1]`–`[Color56]`, read through the workbook's own palette when it overrides
+  the default) colours the number on the page table and in the live grid alike; a conditional
+  format's font colour wins over it, and a text value keeps its font colour, as in Excel.
+  Conditional sections, fractions (the last continued-fraction convergent that fits, as Excel
+  picks it), elapsed time, `@` (a number under a text section shows as General) and the system
+  long date and time (`[$-F800]`, `[$-F400]`, `[$-x-sysdate]`, `[$-x-systime]`) render; a General
+  cell fits 11 characters as in Excel (`1.23457E+14`, `3.141592654`), while `&` and `CONCAT` keep
+  15 digits. A repeat fill (`*x`, the accounting formats' `* `) splits the cell: the grid
+  repeats the character across the free width, the page table puts a right tab stop at the
+  cell's inner width with the character as its leader. Recorded from Excel 16 (the display lane,
+  `recorded/display.tsv`: the text and the font colour of 190 cells) and replayed in CI: all 190
+  agree. Not modelled: General narrowing to a column narrower than 11 characters, `_x` as the
+  exact width of `x` (it is one space).
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -182,7 +207,7 @@ each published canary added is under [Releases](#releases).
   outlined columns, row styles, outline levels and the `collapsed`/`thickTop`/`thickBot` flags
   are read into the model (`RowMeta`, `ColMeta`) and written back; hidden columns are skipped
   by the page lowering and the frame window like hidden rows. `listSheets` reports each tab's
-  `state` (`visible`, `hidden`, `veryHidden`), read-only. A rich-text string can be appended to
+  `state` (`visible`, `hidden`, `veryHidden`). A rich-text string can be appended to
   the shared-string table without renumbering it (`XlsxDocument::append_shared_string`); no
   editing surface writes one yet.
 
@@ -285,8 +310,7 @@ size? }` (no size clears it), each one workbook version and one undo step. Delet
   digits.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
 - **Saving an edited sheet** writes a new or changed literal text cell as an inline string
-  (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
-  Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
+  (`t="inlineStr"`), not into the shared-string table. Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
   corpus): the members of a legacy array formula (`{=MINVERSE(…)}`) are not kept as cells, so
   their cached values are not written; and a pre-dynamic-array formula that returns an array
   (`MMULT` in one cell) is written back as a dynamic array.

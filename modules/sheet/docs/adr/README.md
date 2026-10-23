@@ -17,7 +17,7 @@ it stood, for decisions made earlier; their status says so.
 | [501](501-f64-numbers.md) | Numbers are f64 because Excel's are; exact decimal stays behind a seam | Accepted, recorded retroactively 2026-10-02 |
 | [502](502-recalculation-and-spill.md) | Recalculation: a range-keyed graph, deterministic order, spill by fixpoint | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-15, 2026-10-22) |
 | [503](503-xlsx-patched-not-regenerated.md) | XLSX is patched, never regenerated | Accepted, recorded retroactively 2026-10-02; amended 2026-10-22 (worksheets patched row by row) |
-| [504](504-publishing-first-scope.md) | Publishing-first scope: pivots, validation and macros are preserved and never interpreted | Accepted, recorded retroactively 2026-10-02 |
+| [504](504-publishing-first-scope.md) | Publishing-first scope: pivots, validation and macros are preserved and never interpreted | Accepted, recorded retroactively 2026-10-02; amended 2026-10-23 by 517 |
 | [505](505-native-table-and-edit-grid.md) | A sheet on the page is a native table; editing happens in a scene-layer grid | Accepted, recorded retroactively 2026-10-02 |
 | [506](506-workbook-in-a-container-part.md) | The workbook is stored whole in a container part | Accepted, recorded retroactively 2026-10-02 |
 | [507](507-golden-corpora-coverage-gate.md) | Verification: authored goldens tied to the registry by a coverage gate | Accepted, recorded retroactively 2026-10-02 |
@@ -30,6 +30,7 @@ it stood, for decisions made earlier; their status says so.
 | [514](514-circular-references.md) | Circular references: a cycle member keeps its last value | Accepted 2026-10-22; supersedes 502's `#REF!` |
 | [515](515-structural-edits-shift-preserved-content.md) | A row or column insert or delete shifts the preserved content | Accepted 2026-10-22; extends 503 |
 | [516](516-function-library-w3.md) | The function library towards Excel's full set: recorded expected values, numeric agreement, the document-name amendment | Accepted 2026-10-23; extends 507 |
+| [517](517-interactive-workbook-features.md) | Validation, what-if, external links, outline and protection are interpreted; pivots stay preserved | Accepted 2026-10-23; amends 504 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed
