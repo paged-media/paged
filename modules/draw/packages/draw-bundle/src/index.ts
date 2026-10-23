@@ -1415,3 +1415,12 @@ export {
   type RecipeKind,
   type RecipeRef,
 } from "./commands/recipe-update";
+export {
+  RECIPE_AUTO_UPDATE_FEATURE,
+  RECIPE_AUTO_UPDATE_KEY,
+  contributeRecipeAutoUpdate,
+  recipeAutoUpdateEnabled,
+  recipeAutoUpdateOf,
+  setRecipeAutoUpdate,
+  type RecipeAutoUpdate,
+} from "./commands/recipe-auto-update";

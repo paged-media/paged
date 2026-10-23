@@ -218,7 +218,10 @@ mod wasm {
     /// to_wire`) applied to the rectangle `x, y, w, h` of a straight
     /// RGBA8 image, narrowed by a mask given as data; returns the whole
     /// image. The mask: `polygons` (flat `x, y` pairs in image pixels,
-    /// `polygon_lens` points each; unioned), `alpha` (`width · height`
+    /// `polygon_lens` points each), their ops (`polygon_ops`, one byte
+    /// per polygon or empty: 0 add, 1 subtract, 2 intersect) and how the
+    /// add polygons fill (`fill_rule`: 0 each alone, unioned; 1 non-zero;
+    /// 2 even–odd), `alpha` (`width · height`
     /// coverage bytes, empty for none; intersected) and `feather` (σ px,
     /// 0 for none) — `region_filter::mask_coverage`. Partial coverage
     /// blends filtered and original pixels. On the GPU when `init_gpu`
@@ -238,11 +241,14 @@ mod wasm {
         h: u32,
         polygons: Vec<f32>,
         polygon_lens: Vec<u32>,
+        polygon_ops: Vec<u8>,
+        fill_rule: u8,
         alpha: Vec<u8>,
         feather: f32,
     ) -> Result<js_sys::Uint8Array, JsValue> {
         use crate::region_filter::{
-            filter_masked_cpu, filter_masked_gpu, mask_coverage, PixelRect, RegionMask,
+            filter_masked_cpu, filter_masked_gpu, mask_coverage, FillRule, PixelRect, PolygonOp,
+            RegionMask,
         };
         let params =
             AdjustParams::from_wire(&wire).map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -260,12 +266,24 @@ mod wasm {
                 polygons.len()
             )));
         }
+        let ops = polygon_ops
+            .iter()
+            .map(|&o| PolygonOp::from_u8(o))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| {
+                JsValue::from_str("a polygon op is 0 (add), 1 (subtract) or 2 (intersect)")
+            })?;
+        let fill_rule = FillRule::from_u8(fill_rule).ok_or_else(|| {
+            JsValue::from_str("a fill rule is 0 (union), 1 (non-zero) or 2 (even-odd)")
+        })?;
         let mut pts = polygons.as_chunks::<2>().0.iter().map(|&[x, y]| (x, y));
         let mask = RegionMask {
             polygons: polygon_lens
                 .iter()
                 .map(|&n| pts.by_ref().take(n as usize).collect())
                 .collect(),
+            ops,
+            fill_rule,
             feather,
             alpha: (!alpha.is_empty()).then_some(alpha),
         };
