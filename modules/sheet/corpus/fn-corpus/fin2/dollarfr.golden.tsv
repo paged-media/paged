@@ -1,0 +1,15 @@
+# DOLLARFR(decimal_dollar,fraction).
+# id	formula	setup	expected
+dfr-0	=DOLLARFR(1.125,16)	-	1.02
+dfr-1	=DOLLARFR(1.125,32)	-	1.04
+dfr-2	=DOLLARFR(1.125,8)	-	1.1
+dfr-3	=DOLLARFR(-1.125,16)	-	-1.02
+dfr-4	=DOLLARFR(1.125,16.9)	-	1.02
+dfr-5	=DOLLARFR(1.125,0)	-	#DIV/0!
+dfr-6	=DOLLARFR(1.125,-1)	-	#NUM!
+dfr-7	=DOLLARFR(1.125,0.5)	-	#DIV/0!
+dfr-8	=DOLLARFR(1.5,100)	-	1.5
+dfr-9	=DOLLARFR(1.5,3)	-	1.15
+dfr-10	=DOLLARFR("x",16)	-	#VALUE!
+dfr-11	=DOLLARFR(1.125,1)	-	1.125
+dfr-12	=DOLLARFR(2.9,12)	-	2.108

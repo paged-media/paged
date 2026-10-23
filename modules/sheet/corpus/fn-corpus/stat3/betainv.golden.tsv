@@ -1,0 +1,10 @@
+# BETAINV(probability,alpha,beta,[A],[B]) - legacy.
+# id	formula	setup	expected
+bil-0	=BETAINV(0.685470581,8,10,1,3)	-	1.99999999996314
+bil-1	=BETAINV(0.5,2,3)	-	0.38572756813239
+bil-2	=BETAINV(0.05,2,3)	-	0.097611462886414
+bil-3	=BETAINV(0.999,0.5,0.5)	-	0.999997532600929
+bil-4	=BETAINV(1,2,3)	-	#NUM!
+bil-5	=BETAINV(0,2,3)	-	#NUM!
+bil-6	=BETAINV(0.5,-1,3)	-	#NUM!
+bil-7	=BETAINV("x",2,3)	-	#VALUE!

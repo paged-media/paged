@@ -307,6 +307,7 @@ fn package() {
         .golden("paged package", "report-text");
     for f in [
         "pkg/doc.idml",
+        "pkg/doc.paged",
         "pkg/Links/u5.png",
         "pkg/Instructions.txt",
         "pkg/doc Report.txt",

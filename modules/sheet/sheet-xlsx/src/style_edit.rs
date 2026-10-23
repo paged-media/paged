@@ -1305,7 +1305,9 @@ impl XlsxDocument {
         let mut table = StyleTable::new();
         let colors = ColorContext::new(&xml, self.theme_palette());
         let parsed = crate::parts::styles::parse_with_colors(&xml, &mut table, &colors)?;
-        self.visual_styles = parsed.visual;
+        let mut visual = parsed.visual;
+        visual.take_rich_from(&mut self.visual_styles);
+        self.visual_styles = visual;
         self.dxfs = parsed.dxfs;
         self.dxf_models = parsed.dxf_models;
 
