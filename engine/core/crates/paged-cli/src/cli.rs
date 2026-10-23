@@ -116,8 +116,9 @@ pub enum Command {
     /// every linked file there, copies the faces of each used family
     /// from those given with `--fonts` / `--font-family` / `--font` into
     /// `Document fonts/` (a face whose licence restricts copying is
-    /// listed, not copied), and writes `Instructions.txt` and
-    /// `<name> Report.txt`. OUT must not exist or be empty.
+    /// listed, not copied), and writes `Instructions.txt`,
+    /// `<name> Report.txt` and `<name>.paged`, the whole document with the
+    /// module content IDML cannot carry. OUT must not exist or be empty.
     Package {
         /// IDML or `.paged` document.
         doc: PathBuf,
@@ -127,6 +128,10 @@ pub enum Command {
         /// Text for `Instructions.txt`, instead of the default note.
         #[arg(long)]
         instructions: Option<String>,
+        /// Leave out `<name>.paged` (the whole document, with the module
+        /// content IDML cannot carry).
+        #[arg(long)]
+        no_paged: bool,
         /// Print the report as JSON instead of text.
         #[arg(long)]
         json: bool,

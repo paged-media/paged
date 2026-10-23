@@ -723,12 +723,16 @@ export interface ImageSession {
   /** Re-read the engine's selection stats into `state().selection` and
    *  notify (the machines call this after every committed change). */
   refreshSelection(): void;
-  /** The live selection over `frameId`'s image as coverage bytes (one per
-   *  image pixel, row-major) — what `filterRegion { selection: true }`
-   *  filters within — or why there is none to use: no image open, another
-   *  frame open, nothing selected (the editor's "no selection" means
-   *  everything to an adjustment; a script asking for THE selection is
-   *  told there is none instead). */
+  /** The selection over `frameId`'s image as coverage bytes (one per
+   *  image pixel, row-major, at the size of the image it was made on) —
+   *  what `filterRegion { selection: true }` filters within. While the
+   *  frame's image is open, its live selection; once it closed (another
+   *  image opened), the selection it had then, which the session keeps
+   *  for the last few frames of the open document. Otherwise why there
+   *  is none to use: nothing selected, or never selected in this
+   *  session (the editor's "no selection" means everything to an
+   *  adjustment; a script asking for THE selection is told there is none
+   *  instead). */
   liveSelection(
     frameId: string,
   ):
@@ -1856,7 +1860,33 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushMachineRef?.cancel();
   };
 
+  // The selection of each frame whose image closed, kept so a script can
+  // still filter within it (`liveSelection`). A few frames, newest last;
+  // a frame that opens again takes its live selection instead, and a
+  // document that opens drops them all (frame ids are per document).
+  const keptSelections = new Map<
+    string,
+    { width: number; height: number; coverage: Uint8Array }
+  >();
+  const KEEP_SELECTIONS = 4;
+  const keepSelection = () => {
+    const src = state.source;
+    if (!engine || !src?.elementId) return;
+    keptSelections.delete(src.elementId);
+    if (!engine.selectionStats()) return;
+    keptSelections.set(src.elementId, {
+      width: src.width,
+      height: src.height,
+      coverage: engine.selectionCoverageBytes().slice(),
+    });
+    for (const k of keptSelections.keys()) {
+      if (keptSelections.size <= KEEP_SELECTIONS) break;
+      keptSelections.delete(k);
+    }
+  };
+
   const freeSource = () => {
+    keepSelection();
     // A stroke holds the OLD handle's base snapshot — a re-ingest under
     // one would commit into pixels that no longer exist.
     discardStroke();
@@ -2308,6 +2338,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         display: info.display,
         depthReduced: info.depthReduced,
       };
+      // The open frame's selection is its live one now.
+      if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
       state.saveBack = null;
       // The PSD structural session rides EVERY PSD ingest (the K-2
@@ -2340,6 +2372,11 @@ export function createImageSession(host: BundleHost): ImageSession {
   // Clear-on-deselect (the M4 contract): when the composited frame
   // leaves the selection, the in-frame layer clears — the preview is
   // session-scoped, the document untouched.
+  // Frame ids are per document: another document's frames are not these.
+  const openSub = host.supports("document.onDidOpen@1")
+    ? host.document.onDidOpen(() => keptSelections.clear())
+    : null;
+
   const selectionSub = host.selection.onDidChange((ids) => {
     if (!state.compositedFrame) return;
     const still = ids.some((id) => elementIdOf(id) === state.compositedFrame);
@@ -3478,14 +3515,15 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     liveSelection(frameId) {
       const src = state.source;
-      if (!engine || !src)
+      if (!engine || !src || src.elementId !== frameId) {
+        const kept = keptSelections.get(frameId);
+        if (kept) return { ...kept, coverage: kept.coverage.slice() };
         return {
-          refused: "no image is open in the editor, so there is no selection",
+          refused: !src
+            ? `no image is open in the editor and no selection was made on ${frameId}, so there is no selection`
+            : `the editor's open image is ${src.elementId ?? "an import"}, and no selection was made on ${frameId}`,
         };
-      if (src.elementId !== frameId)
-        return {
-          refused: `the editor's selection is on another image (${src.elementId ?? "an import"}), not ${frameId}`,
-        };
+      }
       if (!engine.selectionStats())
         return { refused: "nothing is selected in the editor" };
       return {
@@ -4648,6 +4686,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       disposed = true;
       if (settleTimer) clearTimeout(settleTimer);
       selectionSub.dispose();
+      openSub?.dispose();
       discardStroke();
       releaseTiles();
       // K-3 — terminate the decode pool's workers (the host ALSO

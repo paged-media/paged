@@ -1,0 +1,18 @@
+# AVERAGEA - text and FALSE count 0, TRUE 1 in references; Excel-recorded.
+# id	formula	setup	expected
+averagea-mix	=AVERAGEA(A1:A8)	A1=10;A2=text:abc;A3=TRUE;A4=4;A6=FALSE;A7=7;A8=text:5	3.14285714285714
+averagea-nums	=AVERAGEA(A1:A10)	A1=3;A2=7;A3=1;A4=9;A5=4;A6=4;A7=8;A8=2;A9=6;A10=5;B1=2.5;B2=6.1;B3=1.2;B4=8.8;B5=3.9;B6=4.4;B7=7.7;B8=2.2;B9=5.5;B10=5.1	4.9
+averagea-scalars	=AVERAGEA(1,2,TRUE,4)	-	2
+averagea-numtext	=AVERAGEA(1,"3",5)	-	3
+averagea-badtext	=AVERAGEA(1,"x")	-	#VALUE!
+averagea-err	=AVERAGEA(A1:A3)	A1=1;A2=#N/A;A3=3	#N/A
+averagea-allblank	=AVERAGEA(A1:A3)	-	#DIV/0!
+averagea-onlytext	=AVERAGEA(A1:A2)	A1=text:a;A2=text:b	0
+averagea-single	=AVERAGEA(5)	-	5
+averagea-array	=AVERAGEA({1,"a",TRUE,4})	-	1.66666666666667
+averagea-bools	=AVERAGEA(A1:A3)	A1=TRUE;A2=TRUE;A3=FALSE	0.666666666666667
+averagea-neg	=AVERAGEA(-3,-7,A1)	A1=text:z	-3.33333333333333
+averagea-arrtext	=AVERAGEA({1,"a",4})	-	1.66666666666667
+averagea-arrbool	=AVERAGEA({1,TRUE,4})	-	2.5
+averagea-arrneg	=AVERAGEA({-1,"a",TRUE})	-	-0.5
+averagea-reftrue	=AVERAGEA(A1,2)	A1=TRUE	1.5

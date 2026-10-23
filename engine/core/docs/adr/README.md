@@ -144,6 +144,7 @@ is not written yet.
 | [1001](1001-the-session-has-a-role-and-refusals-are-typed.md) | The session has a role; permissions are checked at three doors; refusals are typed | Accepted 2026-10-22 |
 | [1002](1002-xml-tags-carry-template-fields.md) | XML tags carry template fields, and the XML structure is written | Accepted 2026-10-23 |
 | [1003](1003-a-placed-pdf-shows-the-page-the-document-names.md) | A placed PDF shows the page the document names | Accepted 2026-10-23 |
+| [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

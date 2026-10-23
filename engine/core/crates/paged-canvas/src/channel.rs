@@ -717,6 +717,10 @@ export type WorkerToMain = WorkerToMainKind & {
 //   → `DerivedTemplateFields { derivation }`; `OpenAsTemplate { options,
 //   only }` (replies as `SetTemplateFields` does); `XmlElementSummary.range`.
 //   New message kinds an older worker cannot answer, hence the bump.
+//   Rides v76 (unreleased) — engine ADR 1004: `AmendMutation { appliedSeq,
+//   mutation }` applies a mutation INTO the undo step `appliedSeq` names
+//   (the reply is a mutation's), refused with `WorkerError::NotAmendable`
+//   once that step is no longer the last one or an undo/redo ran since.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -1135,6 +1139,19 @@ pub enum MainToWorkerKind {
     /// (NotImplemented). The message exists so the JS side can plumb
     /// it end-to-end now.
     Mutate(Mutation),
+    /// v76 (engine ADR 1004) — apply `mutation` as part of the undo step
+    /// `applied_seq` names (the `appliedSeq` of the `MutationApplied` /
+    /// `GestureCommitted` reply that committed it) instead of as a step of
+    /// its own: one undo reverts both, one redo replays both. The write a
+    /// change provokes — a rebuild of what an edit invalidated — joins the
+    /// edit. Allowed only while that step is the last in the undo history
+    /// and no undo or redo has run since; otherwise the reply is
+    /// `MutationFailed` with `NotAmendable` and nothing is applied. Reply as
+    /// for `Mutate`; its `appliedSeq` names the amended step from then on.
+    AmendMutation {
+        applied_seq: u64,
+        mutation: Mutation,
+    },
     /// Request the per-page display list. Worker replies with
     /// `DisplayListReady` carrying a small descriptor (page id +
     /// command count + generation counters). Phase 1 does not stream
@@ -4388,6 +4405,12 @@ pub enum WorkerError {
     /// `NotImplemented` with the apply layer's sentence.
     #[error("{node} is locked — unlock it to {action}")]
     Locked { node: String, action: String },
+    /// v76 (engine ADR 1004) — an `amendMutation` named an undo entry it
+    /// may no longer join: `applied_seq` is the entry asked for, `reason`
+    /// why (a newer step, an undo or a redo came after it). Nothing was
+    /// applied.
+    #[error("cannot amend step {applied_seq}: {reason}")]
+    NotAmendable { applied_seq: u64, reason: String },
 }
 
 #[cfg(test)]

@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 383,
+    "command": 387,
     "keybinding": 88,
-    "menu": 277,
+    "menu": 281,
     "panel": 122,
     "tool": 72
   },
@@ -1021,6 +1021,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.circleInvalid",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.clearCells",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1032,6 +1037,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.cutSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.dataValidation",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1141,6 +1151,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.pasteSpecial",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.place",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1182,6 +1197,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.styleFromCell",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.toggleFilter",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2386,6 +2406,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Context/Circle invalid data",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Clear contents",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -2401,12 +2426,22 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Context/Data validation…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Delete columns",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
     {
       "id": "menu:Context/Delete rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Filter",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
@@ -2427,6 +2462,11 @@
     },
     {
       "id": "menu:Context/Paste",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Paste special…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },

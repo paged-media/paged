@@ -202,6 +202,11 @@ pub struct XlsxDocument {
     /// comments part has no entry.
     pub comments: BTreeMap<SheetId, parts::comments::SheetComments>,
 
+    /// What-if data tables per sheet (`<f t="dataTable">`, sheet ADR 517),
+    /// in document order. The result cells hold their values like any cell;
+    /// the consumer recomputes them.
+    pub data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>>,
+
     /// The shared strings as read (`t="s"` indexes): a saved cell whose text
     /// is still its shared string keeps the index, and with it any rich-text
     /// runs (patch.rs).
@@ -318,6 +323,15 @@ impl XlsxDocument {
             .and_then(|p| parts::metadata::parse(p.bytes()).ok())
             .unwrap_or_default();
 
+        // Shared strings with formatted runs (W2.2): what a rich-text cell
+        // renders; an unreadable part degrades to plain text.
+        let rich_strings = shared_part
+            .as_ref()
+            .and_then(|name| container.part(name))
+            .and_then(|p| parts::shared_strings::rich_strings(p.bytes()).ok())
+            .unwrap_or_default();
+        let mut rich_cells: BTreeMap<(SheetId, u32, u32), Vec<sheet_core::RichRunVisual>> =
+            BTreeMap::new();
         let shared_strings = match &shared_part {
             Some(name) => match container.part(name) {
                 Some(p) => parts::shared_strings::parse(p.bytes())?,
@@ -410,6 +424,8 @@ impl XlsxDocument {
             parts::conditional_format::SheetConditionalFormats,
         > = BTreeMap::new();
         let mut freeze_panes: BTreeMap<SheetId, parts::freeze::FreezePanes> = BTreeMap::new();
+        let mut data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>> =
+            BTreeMap::new();
         let mut data_validations: BTreeMap<SheetId, parts::data_validation::SheetDataValidations> =
             BTreeMap::new();
         let mut comments: BTreeMap<SheetId, parts::comments::SheetComments> = BTreeMap::new();
@@ -446,6 +462,9 @@ impl XlsxDocument {
                 ws.row_meta = parsed_ws.row_meta;
                 ws.col_meta = parsed_ws.col_meta;
                 ws.state = sref.state;
+                if !parsed_ws.data_tables.is_empty() {
+                    data_tables.insert(sid, parsed_ws.data_tables.clone());
+                }
                 // The sheet-level `<autoFilter>` is a captured (verbatim)
                 // worksheet child; read its criteria into the model too.
                 ws.filters = parsed_ws
@@ -477,6 +496,12 @@ impl XlsxDocument {
                     .unwrap_or(StyleId(0));
                 if let Some(ftext) = pc.formula {
                     formula_texts.insert((sid, pc.row, pc.col), ftext);
+                }
+                if let Some(rich) = pc.shared_index.and_then(|i| rich_strings.get(&i)) {
+                    rich_cells.insert(
+                        (sid, pc.row, pc.col),
+                        parts::style_model::rich_runs_visual(rich),
+                    );
                 }
                 cells.insert(
                     (pc.row, pc.col),
@@ -722,7 +747,7 @@ impl XlsxDocument {
         Ok(XlsxDocument {
             model,
             formula_texts,
-            visual_styles,
+            visual_styles: visual_styles.with_rich(rich_cells),
             dxfs,
             dxf_models,
             conditional_formats,
@@ -733,6 +758,7 @@ impl XlsxDocument {
             external_links,
             freeze_panes,
             data_validations,
+            data_tables,
             comments,
             shared_strings,
             shared_part,

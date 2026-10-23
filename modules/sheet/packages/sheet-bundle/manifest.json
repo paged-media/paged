@@ -11,6 +11,7 @@
     },
     "rendering": ["hitTest", "sceneLayer"],
     "network": false,
+    "assets": ["fonts"],
     "dataProviders": {
       "consume": ["dataset"],
       "publish": ["dataset"]
@@ -63,7 +64,11 @@
       "media.paged.sheet.command.findInSheet",
       "media.paged.sheet.command.findNext",
       "media.paged.sheet.command.cutSelection",
-      "media.paged.sheet.command.formatCells"
+      "media.paged.sheet.command.formatCells",
+      "media.paged.sheet.command.pasteSpecial",
+      "media.paged.sheet.command.dataValidation",
+      "media.paged.sheet.command.circleInvalid",
+      "media.paged.sheet.command.toggleFilter"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -406,6 +411,38 @@
         {
           "id": "media.paged.sheet.command.formatCells",
           "title": "Format cells",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.pasteSpecial",
+          "title": "Paste special",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.dataValidation",
+          "title": "Data validation",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.circleInvalid",
+          "title": "Circle invalid data",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.toggleFilter",
+          "title": "Toggle filter",
           "args": {
             "kind": "struct",
             "fields": {}

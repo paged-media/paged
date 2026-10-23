@@ -88,8 +88,9 @@ pub mod style;
 /// The per-cell styler both the page lowering and the grid scene call.
 pub mod styler;
 pub use style::{
-    resolve_delta, resolve_visual, BorderLine, BorderLines, FillGradient, FillGradientStop,
-    FillPattern, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource, INDENT_LEVEL_PT,
+    resolve_delta, resolve_visual, run_attrs, BorderLine, BorderLines, FillGradient,
+    FillGradientStop, FillPattern, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource,
+    INDENT_LEVEL_PT,
 };
 pub use styler::CellStyler;
 
@@ -217,6 +218,31 @@ pub struct LoweredCell {
     /// painter repeats it). Omitted when the format has no fill.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fill: Option<String>,
+    /// A rich-text cell's runs (W2.2): each run's text and style key; their
+    /// texts spell `text`. Omitted for plain text.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runs: Option<Vec<LoweredRun>>,
+}
+
+/// One run of a rich-text cell: its text and its style (a key into the same
+/// styles table).
+#[derive(serde::Serialize, PartialEq, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredRun {
+    pub text: String,
+    pub style_key: u32,
+}
+
+/// Excel's stacked text (`textRotation="255"`): one character per line.
+pub fn stack_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    for (i, ch) in text.chars().filter(|c| *c != '\n').enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        out.push(ch);
+    }
+    out
 }
 
 /// One visual cell style (IR v2, M1 style-map track). A flat, host-ready
@@ -584,11 +610,16 @@ pub fn lower_range_condfmt(
             if ws.is_some_and(|w| w.col_hidden(c)) {
                 continue;
             }
-            let (text, align, style_key, fill) = match ws.and_then(|w| w.cell(r, c)) {
+            let (text, align, style_key, fill, runs) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
                     let d = lower_cell_display(model, cell, &mut cache, &ctx);
                     // cf evaluates at the cell's MODEL (absolute) coordinates.
                     let key = styler.key_for_display(r, c, cell, d.color);
+                    let runs = styler.runs(sheet, r, c, cell, &d.text).map(|rs| {
+                        rs.into_iter()
+                            .map(|(text, style_key)| LoweredRun { text, style_key })
+                            .collect()
+                    });
                     // Data-bar geometry (the page-draw lane): a separate pass
                     // from the style override — a cell can carry both a dxf
                     // style and a drawn bar (Excel layers them).
@@ -606,12 +637,13 @@ pub fn lower_range_condfmt(
                             rgb,
                         ));
                     }
-                    (d.text, d.align, key, d.fill.map(String::from))
+                    (d.text, d.align, key, d.fill.map(String::from), runs)
                 }
                 None => (
                     String::new(),
                     Align::General,
                     styler.key_for_empty(r, c),
+                    None,
                     None,
                 ),
             };
@@ -621,6 +653,7 @@ pub fn lower_range_condfmt(
                 align,
                 style_key,
                 fill,
+                runs,
             });
         }
 
@@ -662,15 +695,31 @@ pub fn lower_range_condfmt(
     // ---- Merges: intersect the range, clip, re-base to range-relative. ----
     let merges = lower_merges(ws, sheet, top, left, bottom, right);
 
+    // The deduped IR-v2 styles table the cells' `style_key`s index into.
+    // With `NoStyles` and no cf this is exactly
+    // `[LoweredStyle::default_key0()]` (the frozen-`lower_range` table).
+    let styles = styler.into_styles();
+    // Stacked text (`textRotation="255"`): one character per line, on both
+    // surfaces (the grid applies the same `stack_text`).
+    for row in &mut rows {
+        for cell in &mut row.cells {
+            if styles
+                .get(cell.style_key as usize)
+                .is_some_and(|s| s.rotation == Some(sheet_core::visual::ROTATION_STACKED))
+            {
+                cell.text = stack_text(&cell.text);
+                cell.runs = None;
+                cell.fill = None;
+            }
+        }
+    }
+
     LoweredContent {
         cols,
         rows,
         rules,
         merges,
-        // The deduped IR-v2 styles table the cells' `style_key`s index into.
-        // With `NoStyles` and no cf this is exactly
-        // `[LoweredStyle::default_key0()]` (the frozen-`lower_range` table).
-        styles: styler.into_styles(),
+        styles,
         databars,
         header_rows: 0,
     }
@@ -1320,6 +1369,7 @@ mod tests {
             align: Align::Right,
             style_key: 0,
             fill: None,
+            runs: None,
         };
         let json = serde_json::to_string(&cell).unwrap();
         // camelCase keys + lowercase align variant + the additive styleKey.

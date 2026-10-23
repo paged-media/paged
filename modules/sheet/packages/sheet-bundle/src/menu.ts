@@ -46,6 +46,7 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Cut", "cutSelection", "clipboard"],
   ["Context/Copy", "copySelection", "clipboard"],
   ["Context/Paste", "pasteSelection", "clipboard"],
+  ["Context/Paste special…", "pasteSpecial", "clipboard"],
   ["Context/Insert rows", "insertRows", "structure"],
   ["Context/Insert columns", "insertColumns", "structure"],
   ["Context/Delete rows", "deleteRows", "structure"],
@@ -53,6 +54,9 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Clear contents", "clearCells", "clear"],
   ["Context/Sort…", "sortRange", "data"],
   ["Context/Format cells…", "formatCells", "format"],
+  ["Context/Data validation…", "dataValidation", "data"],
+  ["Context/Circle invalid data", "circleInvalid", "data"],
+  ["Context/Filter", "toggleFilter", "data"],
 ];
 
 /** Register every entry; one Disposable drops them all. */

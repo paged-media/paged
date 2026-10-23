@@ -970,6 +970,28 @@ export type MutationOutcome =
     }
   | { applied: false; error: unknown };
 
+/** Options of {@link DocumentSurface.mutate}. */
+export interface MutateOptions {
+  /**
+   * Engine ADR 1004 — apply the mutation INTO the undo step this number
+   * names instead of as a step of its own: one undo reverts both, one redo
+   * replays both. The number is the `appliedSeq` of the change that
+   * committed that step ({@link DocumentChangeEvent.appliedSeq}, or a
+   * previous {@link MutationOutcome}'s `appliedSeq`). The write a change
+   * provokes — rebuilding what an edit invalidated — joins the edit this
+   * way, so it neither clears the redo stack nor needs an undo of its own.
+   *
+   * Refused (`applied: false`, nothing applied; `error` is the engine's
+   * `{ error: { kind: "notAmendable", details } }`) once that step is no longer the last in the undo
+   * history, or an undo or a redo ran since. The outcome's `appliedSeq`
+   * names the amended step from then on: a further write amends THAT
+   * number. Probe `supports("document.mutate.amend@1")` first: an older
+   * host does not know the option and would apply the mutation as a step
+   * of its own.
+   */
+  amend?: number;
+}
+
 /** Options of {@link DocumentSurface.mutateWithBytes}. */
 export interface MutateWithBytesOptions {
   /** Hand the buffer to the host instead of copying it; it may be detached
@@ -1025,6 +1047,15 @@ export interface DocumentChangeEvent {
    *  gesture commit on an older engine, so a consumer that follows frame
    *  sizes there re-reads geometry on a gesture commit. */
   reflow?: { frameId: string; contentBox: [number, number, number, number] };
+  /** Engine ADR 1004 — the engine's number of the undo step this change
+   *  committed: present on a `mutationApplied` and a `gestureCommitted`
+   *  where the host knows it (`supports("document.mutate.amend@1")`),
+   *  absent on an undo, a redo and a script run. Pass it as
+   *  `mutate(…, { amend })` to make a follow-up write part of the same
+   *  step. A change with `kind` `undoApplied` / `redoApplied` moved the
+   *  history: a listener that rebuilds on edits leaves those alone, since
+   *  the undo or redo already restored what the rebuild had written. */
+  appliedSeq?: number;
 }
 
 /** W-22 — what `document.onDidOpen` reports: the new document's page
@@ -1184,7 +1215,10 @@ export interface DocumentSurface {
    *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
    *  hasn't absorbed yet (see mutations.ts). Widening an accepted
    *  input is additive: every `Mutation` still passes. */
-  mutate(mutation: MutationInput): Promise<MutationOutcome>;
+  mutate(
+    mutation: MutationInput,
+    options?: MutateOptions,
+  ): Promise<MutationOutcome>;
   /**
    * Protocol 66 — the same write door as {@link mutate}, with image bytes
    * that cross as a `Uint8Array` instead of a JSON `number[]`. `bytes` goes

@@ -195,6 +195,90 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect((await bindingOf(frame))?.view.topLeft).toBe("A4");
   });
 
+  it("switching the frame's sheet puts that sheet on the page", async () => {
+    const { s, frame } = await placed();
+    expect(s.addSheet("Prices").ok).toBe(true);
+    const id = s.sheets().find((x) => x.name === "Prices")?.id;
+    expect(id).toBeDefined();
+    s.editCell(id!, 0, 0, "price");
+    await s.refreshPlacements();
+    await settle();
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    expect(s.setFrameSheet(id!)).toBe(true);
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.sheet).toBe("Prices");
+    expect(b?.view.topLeft).toBe("A1");
+    const tables = await exportedTableCells(h);
+    expect(tables).toHaveLength(1);
+    expect(tables[0].get("0:0")).toBe("price");
+  });
+
+  it("the document's basic paragraph face is the grid's default (P7)", async () => {
+    const session = createWorkbookSession(host);
+    s = session;
+    const made = await host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "createParagraphStyle",
+            args: {
+              selfId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              name: "$ID/NormalParagraphStyle",
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontFamily",
+              value: { type: "text", value: "Minion Pro" },
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontSize",
+              value: { type: "length", value: 9 },
+            },
+          },
+        ],
+      },
+    });
+    expect(made.applied).toBe(true);
+    expect(await session.documentTextDefault()).toEqual({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    });
+  });
+
+  it("a document swatch and paragraph style set on a cell reach the page lowering (P7)", async () => {
+    const { s } = await placed();
+    s.selectCell(1, 1);
+    const r = s.setStyle({
+      fontSwatch: { id: "Color/Brand", model: "spot", fallbackRgb: "#C8102E" },
+      docParaStyle: "ParagraphStyle/Table body",
+    });
+    expect(r.ok).toBe(true);
+    const engine = s.state().engine!;
+    const sheet = s.sheets()[0]!.id;
+    const page = engine.getRangePage!(sheet, "B2:B2", {
+      includeGridRules: true,
+    });
+    const key = page.rows[0]?.cells[0]?.styleKey ?? 0;
+    const st = page.styles?.find((x) => x.key === key);
+    expect(st?.textSwatch).toBe("Color/Brand");
+    expect(st?.docParaStyle).toBe("ParagraphStyle/Table body");
+    expect(st?.textRgb?.toUpperCase()).toBe("#C8102E");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);

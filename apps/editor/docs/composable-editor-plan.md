@@ -1227,19 +1227,25 @@ Per module:
 - **draw:** done. The tool-only operations have typed twins (`knife`, `scissorsAt`,
   `shapeBuild`); the width profile is a typed command (`widthProfile { targets, widths }`) and
   a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
-  recipe an edited source feeds. A rebuild on every edit is left out: it would be a second
-  undo step after the edit's own (`modules/draw/docs/status.md`).
+  recipe an edited source feeds, and an edit of a source rebuilds those recipes on its own, in
+  the edit's undo step (`mutate(…, { amend })`, engine ADR 1004, extensions ADR 337; the
+  command stays for a host without it; `modules/draw/docs/status.md`).
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
-  region: the typed `filterRegion { layer, params, region? }` runs the adjustment chain (blur,
-  sharpen, hue, invert and the adjustment paths) on a rectangle of a pixel layer, on the GPU where
-  one exists and headless on shipped CPU twins of the same kernels, held to the GPU's tolerance
-  (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it through `paged-node invoke`. A
-  selection is data there: `mask { polygons?, alpha?, feather? }` (polygons in image pixels, an
-  8-bit coverage as bytes or an image, a feather) narrows the region, partial coverage blending,
-  on both paths alike; in the editor `selection: true` filters within the live selection, and
-  headless it is refused with the reason (`modules/image/docs/status.md`).
+  region: the typed `filterRegion { layer, params, region?, mask?, selection? }` runs the
+  adjustment chain (blur, sharpen, hue, invert and the adjustment paths) on a rectangle of a
+  pixel layer, on the GPU where one exists and headless on shipped CPU twins of the same
+  kernels, held to the GPU's tolerance (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it
+  through `paged-node invoke`. A selection is data there: `mask { polygons?, ops?, fillRule?,
+alpha?, feather? }` (polygons in image pixels, filled together by an even–odd or non-zero rule
+  or folded in by per-polygon add / subtract / intersect, so a polygon cuts a hole; an 8-bit
+  coverage as bytes or an image; a feather) narrows the region, partial coverage blending, on
+  both paths alike. In the editor `selection: true` filters within the frame's selection: the
+  live one, or the one the session kept when that frame's image closed, resampled when the
+  canvas is the same image at another size; another crop or no selection is refused with the
+  reason, as it is headless. A Playwright spec makes a marquee selection and checks that only
+  its pixels change and one undo restores them (`modules/image/docs/status.md`).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) or a sheet's
@@ -1251,7 +1257,8 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   window (sheet ADR 510) to be wired to placement (`modules/sheet/docs/status.md`).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
-  `defineBinding` (the session binding kinds), `apply`, and `merge` (now with `imageBase`,
+  `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
+  `expr`, so expression bindings apply), `apply`, and `merge` (now with `imageBase`,
   `imageFields` and the undo steps it took). `generate <template> --per record|group [--by …]`
   is the batch verb: paged.data's `planBatch` splits the records, each unit is merged, written
   and undone. Read-only inspection commands: `previewQuery`, `checkExpression`, `refreshDiff`,
@@ -1273,7 +1280,9 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
   (exit 1 on an error finding). `paged-node package <doc> -o <dir|x.zip>`, InDesign's
   package as the Rust `paged package` lays it out: the IDML with its links rebased into
-  `Links/`, the linked files, the fonts, instructions and a report. Fonts are collected only
+  `Links/`, the linked files, the fonts, instructions and a report, and the document as
+  `.paged` with the module content IDML cannot carry (the report lists those parts;
+  `--no-paged` leaves it out; the Rust `paged package` the same). Fonts are collected only
   from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
   whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
 
