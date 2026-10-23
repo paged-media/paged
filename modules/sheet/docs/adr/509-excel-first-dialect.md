@@ -97,3 +97,11 @@ formula that calls an unknown function keeps its cached value (it may be a funct
 Excel knew), and an unknown `_xlfn.` function keeps its prefix. The dialect also gains `@`
 (stored `_xlfn.SINGLE(…)`) and 3D references `First:Last!A1`. An unknown sheet is still a
 `ParseError`.
+
+## Amendment — 2026-10-23
+
+The formula bar and the cell editor gain a display dialect ([ADR 521](521-files-and-formula-dialect.md)):
+R1C1 references when the workbook is in R1C1 mode, and German function names, `;` between
+arguments and `,` decimals when the host language is German, from a data table
+(`sheet-parser/src/dialect/de.txt`). The parser still reads one dialect: the display text is
+translated to the canonical en-US A1 text before it parses, and stored formulas never change.

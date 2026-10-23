@@ -525,6 +525,69 @@ fn excel_workbooks_take_structural_edits_and_one_cell_edits() {
     assert!(unexpected.is_empty(), "{unexpected:#?}");
 }
 
+/// W2.4 acceptance (sheet ADR 523): every conditional-format rule in the
+/// corpus reads into a known kind (no `Unknown` outside an unknown x14
+/// extension), and the session evaluates and lowers every block — the page
+/// lowering of each block's first rows and columns, through the evaluator.
+#[test]
+#[ignore = "corpus: xlsx"]
+#[allow(non_snake_case)]
+fn every_conditional_format_in_the_corpus_evaluates__feat__sheet_lower_condfmt() {
+    use sheet_core::condfmt::CfKind;
+    let Some(files) = corpus_files() else {
+        return;
+    };
+    let mut kinds: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut unknown = Vec::new();
+    let mut lowered = 0usize;
+    for path in files {
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(doc) = XlsxDocument::open(&bytes) else {
+            continue;
+        };
+        if doc.cf_models.is_empty() {
+            continue;
+        }
+        for (sheet, cf) in &doc.cf_models {
+            for b in &cf.blocks {
+                for r in &b.rules {
+                    let name = match &r.kind {
+                        CfKind::Unknown { name } => {
+                            unknown.push(format!("{}: {name}", path.display()));
+                            "unknown".to_string()
+                        }
+                        k => serde_json::to_value(k).unwrap()["type"]
+                            .as_str()
+                            .unwrap_or("?")
+                            .to_string(),
+                    };
+                    *kinds.entry(name).or_default() += 1;
+                }
+            }
+            let Ok(s) = sheet_js::core::SheetSession::load_xlsx(&bytes) else {
+                continue;
+            };
+            for b in &cf.blocks {
+                for &(r0, c0, r1, c1) in &b.ranges {
+                    let range = format!(
+                        "{}:{}",
+                        sheet_core::format_a1(r0, c0, false, false),
+                        sheet_core::format_a1(r1.min(r0 + 40), c1.min(c0 + 12), false, false)
+                    );
+                    s.get_range_page(*sheet, &range, sheet_js::core::LowerOptions::default())
+                        .unwrap_or_else(|e| panic!("{}: {range}: {e}", path.display()));
+                    lowered += 1;
+                }
+            }
+        }
+    }
+    println!("conditional formats by kind: {kinds:?}; blocks lowered: {lowered}");
+    assert!(unknown.is_empty(), "rules of an unknown kind: {unknown:#?}");
+    assert!(lowered > 0);
+}
+
 /// ADR 517 on real workbooks: a zero-edit save through the session (with the
 /// filter, table, validation, protection and data-table reads a load now
 /// does) writes every part byte for byte, `calcChain.xml` excepted; and the

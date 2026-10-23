@@ -14,6 +14,7 @@ import {
   cellFillSwatchOps,
   cellRotationOps,
   styleProps,
+  tableDataBarOps,
   tableDecorOps,
   tableDiagonalOps,
   tableRotation,
@@ -183,5 +184,65 @@ describe("rich text, rotation and diagonals [sheet.format.cell-style]", () => {
     expect(ops.some((o) => o.args.path === "frameStrokeWeight")).toBe(true);
     // Its colour is one of the table's own stroke mints.
     expect(cellFillSwatchOps(c, new Set())).toHaveLength(1);
+  });
+});
+
+describe("conditional-format bars and icons on the page [sheet.lower.condfmt]", () => {
+  it("draws icons as filled paths over the table and mints their colours", () => {
+    const c: LoweredContent = {
+      ...content({}),
+      icons: [
+        {
+          row: 0,
+          col: 0,
+          x: 1.5,
+          y: 4,
+          size: 11,
+          set: "3Arrows",
+          index: 2,
+          shapes: [
+            {
+              points: [
+                [2, 5],
+                [8, 5],
+                [5, 12],
+              ],
+              fill: "#3E9E47",
+            },
+          ],
+        },
+      ],
+    };
+    const ops = loose(tableDataBarOps(c, [100], "P1", [10, 20], new Set()));
+    expect(ops[0].op).toBe("createSwatch");
+    const path = ops.find((o) => o.op === "insertPath");
+    const anchors = path?.args.anchors as { anchor: [number, number] }[];
+    // Shifted by the frame origin [top 10, left 20].
+    expect(anchors[0].anchor).toEqual([22, 15]);
+    expect(ops.some((o) => o.args.path === "frameFillColor")).toBe(true);
+  });
+
+  it("strokes a bar's border and draws its axis", () => {
+    const c: LoweredContent = {
+      ...content({}),
+      databars: [
+        {
+          row: 0,
+          col: 0,
+          x: 30,
+          y: 1.5,
+          w: 20,
+          h: 17,
+          fillFraction: 0.35,
+          fill: "#638EC6",
+          border: "#638EC6",
+          axisX: 30,
+          axisColor: "#000000",
+        },
+      ],
+    };
+    const ops = loose(tableDataBarOps(c, [60], "P1", [0, 0], new Set()));
+    expect(ops.filter((o) => o.op === "insertPath")).toHaveLength(2);
+    expect(ops.some((o) => o.args.path === "frameStrokeColor")).toBe(true);
   });
 });

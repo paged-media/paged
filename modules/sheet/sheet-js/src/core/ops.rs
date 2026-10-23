@@ -32,7 +32,7 @@ use sheet_core::ast::{Expr, LitValue};
 use sheet_core::names::{NameDef, NameScope, NameTable, NameTarget};
 use sheet_core::{CellError, DateSystem, SheetId, SheetModel};
 use sheet_format::{FormatCache, FormatCtx};
-use sheet_lower::{lower_range_condfmt, ViewOptions};
+use sheet_lower::ViewOptions;
 use sheet_parser::{print, Edit};
 use sheet_xlsx::structure::{quote_sheet, rewrite_sheet_refs};
 
@@ -325,13 +325,15 @@ impl SheetSession {
             header_rows: opts.header_rows.unwrap_or(0),
         };
         let cf = self.doc.lowered_conditional_formats(sheet);
-        Ok(lower_range_condfmt(
+        let eval = self.eval_cf(sheet);
+        Ok(sheet_lower::lower_range_cf(
             self.engine().model(),
             sheet,
             cell_range,
             &view,
             &self.doc.visual_styles,
             &cf,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         ))
     }
 
@@ -355,7 +357,8 @@ impl SheetSession {
             frozen_cols: spec.frozen_cols,
         };
         let cf = self.doc.lowered_conditional_formats(sheet);
-        Ok(sheet_lower::lower_tracks_styled(
+        let eval = self.eval_cf(sheet);
+        Ok(sheet_lower::lower_tracks_cf(
             self.engine().model(),
             sheet,
             &spec.rows,
@@ -363,6 +366,7 @@ impl SheetSession {
             &opts,
             &self.doc.visual_styles,
             &cf,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         ))
     }
 
@@ -391,7 +395,8 @@ impl SheetSession {
         let win = sheet_grid::frame_page_window(model, sheet, &window, spec.print_headings);
         check_area(win.rows.len(), win.cols.len())?;
         let cf = self.doc.lowered_conditional_formats(sheet);
-        Ok(sheet_grid::frame_page(
+        let eval = self.eval_cf(sheet);
+        Ok(sheet_grid::frame_page_cf(
             model,
             sheet,
             &window,
@@ -401,6 +406,7 @@ impl SheetSession {
             },
             &cf,
             &self.doc.visual_styles,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         ))
     }
 

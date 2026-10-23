@@ -1248,13 +1248,18 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   its pixels change and one undo restores them (`modules/image/docs/status.md`).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
-chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) or a sheet's
-  print area in a new frame or paginates it across a frame chain; a typed `deleteChart` that
-  removes the chart and every placed copy of it. Each is one undo step (the chain's first
-  pagination is one batch on a host with in-batch handles); `apps/cli/test/cli-sheet.spec.ts`
-  runs placement and chart delete through `paged-node invoke`. A frame's view and sizing
-  (`sizing: "window"`, printed headings and gridlines) wait for the page side of the frame
-  window (sheet ADR 510) to be wired to placement (`modules/sheet/docs/status.md`).
+chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a defined name
+  (kept by name) or a sheet's print area in a new frame or paginates it across a frame chain. A
+  frame is placed with its view (sheet ADR 510, 522): `sizing: "window" | "fixed" | "fit"`, a
+  fixed `box`, the window's top-left cell and lock, printed headings and gridlines. A print area
+  of several ranges places one table per area in order, or paginates them in sequence across a
+  chain. A typed `deleteChart` removes the chart and every placed copy of it; a chart read from
+  the xlsx leaves the saved file (only the parts the delete touches change), its slot kept so the
+  other charts keep their indices, and placed charts are tracked from the page after an undo or
+  redo and on open, so the art an undone delete restored refreshes with later edits. Each is one
+  undo step (the chain's first pagination is one batch on a host with in-batch handles; each area
+  of a print area placed without a chain is one step); `apps/cli/test/cli-sheet.spec.ts` runs
+  placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
   `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
@@ -1268,7 +1273,8 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
   heading anchor (`{ heading: n }`); a `.docx` opens standalone headless (the SDK's headless
   host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
-  table cells are saved back on export.
+  table cells are saved back on export, paragraphs added or removed in a cell included, and a
+  placed document's tables are found by their content after the story around them changed.
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

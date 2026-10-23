@@ -37,7 +37,9 @@ import {
 import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
+  withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
+import { dataToolsStub } from "./data-tools-stub";
 
 afterEach(cleanup);
 
@@ -72,6 +74,8 @@ function fakeSession(shown: GridScene = scene) {
   let pasteCard = false;
   let activeSheet = 0;
   const session: FrameSurfaceSession = {
+    ...dataToolsStub(),
+    undoCellEdit: () => false,
     pasteSpecialOpen: () => pasteCard,
     closePasteSpecial: () => {
       pasteCard = false;
@@ -152,6 +156,32 @@ function fakeSession(shown: GridScene = scene) {
     ],
     state: () =>
       ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    documentSwatchColors: async (ids) =>
+      new Map(ids.map((id) => [id, "#123456"] as [string, string])),
+    documentStyleRevision: () => 0,
+    documentStyleChoices: async () => ({
+      paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
+      swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
+    }),
+    applyDocumentSwatch: async (target, id) => {
+      calls.push(["swatch", target, id]);
+      return { ok: true as const };
+    },
+    styleAtTarget: () => null,
+    grabAt: () => "cell" as const,
+    scrollInFrame: (dRows, dCols) => (
+      calls.push(["scroll", dRows, dCols]),
+      true
+    ),
+    setStyle: (patch) => {
+      calls.push(["style", patch]);
+      return { ok: true as const };
+    },
+    documentTextDefault: async () => ({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    }),
     documentFontFace: async (family, style) => {
       calls.push(["face", family, style]);
       return null;
@@ -209,7 +239,7 @@ describe("sheet frame surface", () => {
       shiftKey: true,
     });
     fireEvent.pointerUp(root, { button: 0, clientX: hw + 10, clientY: hh + 5 });
-    expect(calls).toContainEqual(["down", 10, 5, { shift: true }]);
+    expect(calls).toContainEqual(["down", 10, 5, { shift: true, copy: false }]);
     expect(calls).toContainEqual(["up", 10, 5]);
   });
 
@@ -379,10 +409,90 @@ describe("sheet frame surface", () => {
         await Promise.resolve();
       });
       expect(calls).toContainEqual(["face", "Minion Pro", "Bold"]);
+      // The document's default face is asked for too (un-styled cells).
+      expect(calls).toContainEqual(["face", "Minion Pro", "Regular"]);
     } finally {
       if (!hadFontFace) delete g.FontFace;
       if (!hadFonts) delete doc.fonts;
     }
+  });
+
+  it("draws referenced document swatches in the document's current colours", () => {
+    const styled: GridScene = {
+      ...scene,
+      styles: [
+        {
+          key: 1,
+          bold: false,
+          italic: false,
+          borderTop: false,
+          borderRight: false,
+          borderBottom: true,
+          borderLeft: false,
+          fillRgb: "#FF0000",
+          fillSwatch: "Color/Brand",
+          textRgb: "#000000",
+          borderLines: {
+            bottom: {
+              style: "thin",
+              weightPt: 0.5,
+              rgb: "#000000",
+              swatch: "Color/Ink",
+            },
+          },
+        },
+      ],
+    };
+    const shown = withSwatchColors(
+      styled,
+      new Map([
+        ["Color/Brand", "#c8102e"],
+        ["Color/Ink", "#222222"],
+      ]),
+    );
+    expect(shown.styles[0]?.fillRgb).toBe("#c8102e");
+    // A plain colour (no reference) stays as the workbook has it.
+    expect(shown.styles[0]?.textRgb).toBe("#000000");
+    expect(shown.styles[0]?.borderLines?.bottom?.rgb).toBe("#222222");
+  });
+
+  it("the bar applies a document paragraph style and a document swatch", async () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.change(r.getByTestId("sheet-bar-style"), {
+      target: { value: "ParagraphStyle/Cells" },
+    });
+    expect(calls).toContainEqual([
+      "style",
+      { docParaStyle: "ParagraphStyle/Cells" },
+    ]);
+    fireEvent.click(r.getByTestId("sheet-bar-fill"));
+    const picker = r.getByTestId("sheet-swatch-picker");
+    fireEvent.click(picker.querySelector('[data-swatch="Color/Brand"]')!);
+    expect(calls).toContainEqual(["swatch", "fill", "Color/Brand"]);
+    expect(r.queryByTestId("sheet-swatch-picker")).toBeNull();
+  });
+
+  it("overlay scrollbars show the window and a thumb drag scrolls it", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
+    const thumb = r.getByTestId("sheet-scrollbar-row");
+    expect(thumb.getAttribute("aria-valuenow")).toBe("0");
+    fireEvent.pointerDown(thumb, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(thumb, { clientX: 0, clientY: 10 });
+    fireEvent.pointerUp(thumb, { clientX: 0, clientY: 10 });
+    const scrolls = calls.filter((c) => c[0] === "scroll");
+    expect(scrolls.length).toBeGreaterThan(0);
+    expect(scrolls[0]![1]).toBeGreaterThan(0);
+    // The thumb's press is not a cell press.
+    expect(calls.some((c) => c[0] === "down")).toBe(false);
   });
 
   it("detaches on unmount", () => {

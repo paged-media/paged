@@ -980,3 +980,126 @@ export function bodyRunLocation(
     text: texts[run]!,
   };
 }
+
+/** A native table as the canvas holds it now: its id, the story it is in
+ *  (index in {@link sectionBlocks} order), its ordinal among that story's
+ *  tables, its shape and its cells' text (paragraphs joined by `\n`) keyed
+ *  `"row,col"` — a cell that could not be read is absent. */
+export interface LiveTable {
+  id: string;
+  story: number;
+  ordinal: number;
+  rows: number;
+  cols: number;
+  cells: Readonly<Record<string, string>>;
+}
+
+/** The text the pour wrote into each cell of a lowered table, keyed
+ *  `"row,col"` (its paragraphs joined by `\n`, as the engine reads a cell). */
+export function pouredCellTexts(table: LoweredTable): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const c of table.cells)
+    out[`${c.row},${c.col}`] = c.paragraphs
+      .map((p) => p.runs.map((r) => r.text).join(""))
+      .join("\n");
+  return out;
+}
+
+/**
+ * Which native table each natively poured table block became, found again
+ * on a canvas whose stories may have changed since the pour (paragraphs
+ * and tables added, moved or deleted, cells edited). Pure.
+ *
+ * A table and a live table can pair only when their shapes (rows, columns)
+ * agree. Pairs are taken by signature first — how many non-empty cells
+ * still read as the pour wrote them, most first; then the same story, then
+ * the nearest ordinal — so a table survives being moved and its neighbours
+ * being deleted. A table every cell of which was edited pairs by its place
+ * instead: with the first free live table of its shape between the live
+ * tables its matched neighbours (in pour order) became. A table with no
+ * pair is absent from the answer: it truly cannot be found.
+ */
+export function matchTables(
+  ir: LoweredDoc,
+  live: readonly LiveTable[],
+): Map<number, string> {
+  const poured: Array<{
+    block: number;
+    story: number;
+    ordinal: number;
+    table: LoweredTable;
+    texts: Record<string, string>;
+  }> = [];
+  ir.story.blocks.forEach((b, block) => {
+    if (b.kind !== "table") return;
+    const at = tableLocation(ir, block);
+    if (!at) return;
+    poured.push({
+      block,
+      story: at.story,
+      ordinal: at.table,
+      table: b,
+      texts: pouredCellTexts(b),
+    });
+  });
+  const fits = (p: (typeof poured)[number], l: LiveTable) =>
+    p.table.rows === l.rows && p.table.cols === l.cols;
+  const score = (p: (typeof poured)[number], l: LiveTable) =>
+    Object.entries(p.texts).filter(([k, t]) => t !== "" && l.cells[k] === t)
+      .length;
+
+  const out = new Map<number, string>();
+  const taken = new Set<string>();
+  // Pour index → the live table it pairs with.
+  const pairOf = new Map<number, LiveTable>();
+  const candidates: Array<{ p: number; l: LiveTable; score: number }> = [];
+  poured.forEach((p, i) => {
+    for (const l of live) {
+      if (!fits(p, l)) continue;
+      const s = score(p, l);
+      if (s > 0) candidates.push({ p: i, l, score: s });
+    }
+  });
+  candidates.sort((a, b) => {
+    const pa = poured[a.p]!;
+    const pb = poured[b.p]!;
+    return (
+      b.score - a.score ||
+      Number(a.l.story !== pa.story) - Number(b.l.story !== pb.story) ||
+      Math.abs(a.l.ordinal - pa.ordinal) - Math.abs(b.l.ordinal - pb.ordinal) ||
+      a.p - b.p
+    );
+  });
+  for (const c of candidates) {
+    if (pairOf.has(c.p) || taken.has(c.l.id)) continue;
+    pairOf.set(c.p, c.l);
+    taken.add(c.l.id);
+  }
+  // By place: between the live tables of the matched neighbours.
+  poured.forEach((p, i) => {
+    if (pairOf.has(i)) return;
+    let lo = -1;
+    let hi = Infinity;
+    poured.forEach((q, j) => {
+      const l = pairOf.get(j);
+      if (!l || q.story !== p.story || l.story !== p.story) return;
+      if (q.ordinal < p.ordinal) lo = Math.max(lo, l.ordinal);
+      else if (q.ordinal > p.ordinal) hi = Math.min(hi, l.ordinal);
+    });
+    const l = live
+      .filter(
+        (x) =>
+          x.story === p.story &&
+          !taken.has(x.id) &&
+          fits(p, x) &&
+          x.ordinal > lo &&
+          x.ordinal < hi,
+      )
+      .sort((a, b) => a.ordinal - b.ordinal)[0];
+    if (!l) return;
+    pairOf.set(i, l);
+    taken.add(l.id);
+  });
+  for (const [i, l] of pairOf) out.set(poured[i]!.block, l.id);
+  return out;
+}
