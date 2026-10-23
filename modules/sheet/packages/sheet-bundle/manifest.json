@@ -67,7 +67,8 @@
       "media.paged.sheet.command.formatCells",
       "media.paged.sheet.command.pasteSpecial",
       "media.paged.sheet.command.dataValidation",
-      "media.paged.sheet.command.circleInvalid"
+      "media.paged.sheet.command.circleInvalid",
+      "media.paged.sheet.command.toggleFilter"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -434,6 +435,14 @@
         {
           "id": "media.paged.sheet.command.circleInvalid",
           "title": "Circle invalid data",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.toggleFilter",
+          "title": "Toggle filter",
           "args": {
             "kind": "struct",
             "fields": {}

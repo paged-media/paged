@@ -68,6 +68,16 @@ function typeInto(s: WorkbookSession, row: number, col: number, text: string) {
 }
 
 describe("data tool keys [sheet.grid.keyboard]", () => {
+  it("Ctrl+Shift+L toggles the filter (not while editing)", () => {
+    expect(
+      gridKeyAction({ key: "L", ctrlKey: true, shiftKey: true }, null),
+    ).toEqual({ kind: "toggleFilter" });
+    expect(gridKeyAction({ key: "l", ctrlKey: true }, null).kind).toBe("none");
+    expect(
+      gridKeyAction({ key: "L", ctrlKey: true, shiftKey: true }, "enter").kind,
+    ).toBe("none");
+  });
+
   it("Alt+Down opens the cell's dropdown", () => {
     expect(gridKeyAction({ key: "ArrowDown", altKey: true }, null)).toEqual({
       kind: "dropdown",
@@ -252,3 +262,72 @@ describe.skipIf(!built)("protection in the grid [sheet.protect.sheet]", () => {
     expect(input(s, 0, 1)).toBe("free");
   });
 });
+
+describe.skipIf(!built)(
+  "AutoFilter in the grid [sheet.filter.dropdown]",
+  () => {
+    const table: [number, number, string][] = [
+      [0, 0, "Fruit"],
+      [0, 1, "Qty"],
+      [1, 0, "apple"],
+      [1, 1, "3"],
+      [2, 0, "pear"],
+      [2, 1, "9"],
+      [3, 0, "apple"],
+      [3, 1, "1"],
+    ];
+
+    it("Ctrl+Shift+L filters the data around the cell; the header has buttons", async () => {
+      const s = await open(table);
+      s.selectCell(1, 0);
+      expect(s.handleGridKey({ key: "L", ctrlKey: true, shiftKey: true })).toBe(
+        true,
+      );
+      expect(s.filterButtons()).toEqual({
+        row: 0,
+        left: 0,
+        right: 1,
+        filtered: [],
+      });
+      // Alt+Down on a header cell opens its filter menu.
+      s.selectCell(0, 1);
+      expect(s.openCellDropdown()).toBe(true);
+      expect(s.dataCard()).toEqual({ kind: "filter", col: 1 });
+      s.closeDataCard();
+      const v = s.filterValues(0)!;
+      expect(v.items.map((i) => [i.text, i.count])).toEqual([
+        ["apple", 2],
+        ["pear", 1],
+      ]);
+      expect(s.applyFilter(0, { kind: "values", values: ["pear"] }).ok).toBe(
+        true,
+      );
+      expect(s.filterButtons()!.filtered).toEqual([0]);
+      expect(s.state().engine!.filterState!(0)!.hiddenRows).toEqual([1, 3]);
+      expect(s.applyFilter(0, null).ok).toBe(true);
+      expect(s.state().engine!.filterState!(0)!.hiddenRows).toEqual([]);
+      expect(
+        s.applyFilter(1, {
+          kind: "custom",
+          and: true,
+          conditions: [{ op: "greaterThan", val: "2" }],
+        }).ok,
+      ).toBe(true);
+      expect(s.state().engine!.filterState!(0)!.hiddenRows).toEqual([3]);
+      // Off again: every row shows.
+      s.handleGridKey({ key: "L", ctrlKey: true, shiftKey: true });
+      expect(s.filterButtons()).toBeNull();
+    });
+
+    it("the menu's sort orders the filtered range under its header; one undo step", async () => {
+      const s = await open(table);
+      s.selectCell(0, 0);
+      s.toggleAutofilter();
+      expect(s.sortFilterColumn(1, { descending: true }).ok).toBe(true);
+      expect([1, 2, 3].map((r) => input(s, r, 1))).toEqual(["9", "3", "1"]);
+      expect(input(s, 0, 1)).toBe("Qty");
+      expect(s.undoCellEdit()).toBe(true);
+      expect([1, 2, 3].map((r) => input(s, r, 1))).toEqual(["3", "9", "1"]);
+    });
+  },
+);

@@ -64,6 +64,7 @@ export const COMMANDS = defineMessages("sheet.command", {
   pasteSpecial: "Paste special…",
   dataValidation: "Data validation…",
   circleInvalid: "Circle invalid data",
+  toggleFilter: "Filter",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
   defaultStyleName: "Cell style",

@@ -2132,6 +2132,11 @@ export function createWorkbookSession(
         if (m && !data.api.entryAlert())
           applyModel(moveBy(m, a.dRow, a.dCol, false));
         return true;
+      case "toggleFilter": {
+        const r = data.api.toggleAutofilter();
+        if (!r.ok) host.log.warn(`filter: ${r.message}`);
+        return true;
+      }
       case "dropdown":
         return data.api.openCellDropdown();
 
