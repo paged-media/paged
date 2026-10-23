@@ -190,4 +190,34 @@ describe("Template panel", () => {
     );
     expect(problem.textContent).toContain("“photo” is a picture field");
   });
+
+  test("This page: the author lets a filler copy the page (data ADR 560)", async () => {
+    covers("panel:paged.template");
+    const h = await mount();
+    await h.click(q(h, '[data-template-role="author"]')!);
+    await h.settle();
+    const pageId = h.handle!.pageIds[0]!;
+    // A filler may not copy a page the template does not open.
+    await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+    const closed = await h.mutate({
+      op: "duplicatePage",
+      args: { page: pageId },
+    } as never);
+    expect(closed.kind).toBe("mutationFailed");
+    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    const box = (await until(
+      h,
+      "[data-template-page-copies]",
+    )) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await h.click(box);
+    await h.settle();
+    expect(q(h, "[data-template-page-problem]")).toBeNull();
+    await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+    const opened = await h.mutate({
+      op: "duplicatePage",
+      args: { page: pageId },
+    } as never);
+    expect(opened.kind).toBe("mutationApplied");
+  });
 });

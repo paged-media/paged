@@ -146,4 +146,7 @@ export const PANEL = defineMessages("templatePanel", {
   selectedItem: "Selected item",
   field: "Field",
   selectOne: "Select one item to make it a field.",
+  thisPage: "This page",
+  pageCopies:
+    "A filler may copy this page and remove its copies (the pages of a catalogue)",
 });

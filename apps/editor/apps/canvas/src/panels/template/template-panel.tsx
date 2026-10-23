@@ -43,6 +43,7 @@ import {
 import {
   useCanvasClient,
   useCollection,
+  useDocumentMeta,
   useObjectModel,
   useSelection,
   useSessionRole,
@@ -486,6 +487,55 @@ function DocumentDefaults({ version }: { version: unknown }): ReactElement {
   );
 }
 
+/** The page's own policy (data ADR 560): whether a filler may copy the
+ *  page and remove its copies, as a catalogue's pages need. */
+function PageGrant({ version }: { version: unknown }): ReactElement | null {
+  const strings = useStrings();
+  const client = useCanvasClient();
+  const meta = useDocumentMeta();
+  const pages = useCollection<{ selfId: string }>("pages");
+  // The page in view; the first page where nothing reports one.
+  const page = meta?.activePage ?? pages?.[0]?.selfId ?? null;
+  const raw = useLabel(page ? `page:${page}` : null, version);
+  const [message, setMessage] = useState<string | null>(null);
+  if (!page) return null;
+  const current = parse<{ allow?: string[]; deny?: string[] }>(raw) ?? {};
+  const allow = current.allow ?? [];
+  const open = allow.includes("document.pages");
+  const toggle = async (on: boolean) => {
+    const next = {
+      ...current,
+      allow: on
+        ? [...allow, "document.pages"]
+        : allow.filter((p) => p !== "document.pages"),
+    };
+    const reply = await client.mutate({
+      op: "setPageMetadata",
+      args: { page, key: KEY, value: envelope(next) },
+    } as never);
+    setMessage(
+      reply.kind === "mutationFailed" ? refusalText(reply.payload.error) : null,
+    );
+  };
+  return (
+    <section style={{ display: "grid", gap: space[1] }}>
+      <h3 style={{ margin: 0, fontSize: 12 }}>{strings.t(PANEL.thisPage)}</h3>
+      <label style={{ fontSize: 11.5 }}>
+        <input
+          type="checkbox"
+          data-template-page-copies
+          checked={open}
+          onChange={(e) => void toggle(e.currentTarget.checked)}
+        />{" "}
+        {strings.t(PANEL.pageCopies)}
+      </label>
+      <StatusLine tone="error" attr="data-template-page-problem">
+        {message}
+      </StatusLine>
+    </section>
+  );
+}
+
 /** What is wrong with the template before anyone fills it (plan F3). */
 function Problems(): ReactElement | null {
   const strings = useStrings();
@@ -602,6 +652,7 @@ export function TemplatePanel(): ReactElement {
         </section>
       ) : null}
       {role === "author" ? <Problems /> : null}
+      {role === "author" ? <PageGrant version={rows} /> : null}
       {role === "author" ? <DocumentDefaults version={rows} /> : null}
     </div>
   );
