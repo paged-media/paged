@@ -93,7 +93,13 @@ export type FakeEditorEvent =
       id: string;
       value: unknown;
     }
-  | { channel: "mutation"; mutation: Mutation; reply: WorkerToMain }
+  | {
+      channel: "mutation";
+      mutation: Mutation;
+      reply: WorkerToMain;
+      /** Engine ADR 1004 — the step an `amendMutation` joined. */
+      amend?: number;
+    }
   | { channel: "history"; action: "undo" | "redo"; reply: WorkerToMain }
   | {
       channel: "gesture";
@@ -317,6 +323,9 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
   // The undo stack: `done` steps behind the cursor, `undone` ahead of it.
   let done = 0;
   let undone = 0;
+  // Engine ADR 1004 — the step a follow-up write may still join: the top
+  // one, while no undo or redo ran since it was committed.
+  let amendable: number | null = null;
   let seq = 1;
   let minted = 0;
   let handle = 0;
@@ -357,6 +366,7 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
     }
     done++;
     undone = 0;
+    amendable = done;
     const kind = mintedKindOf(mutation);
     const createdId = kind
       ? ({ kind, id: `fake-${++minted}` } as ElementId)
@@ -376,7 +386,43 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
     );
   };
 
+  /** An `amendMutation`: the mutation joins step `target` (no new step),
+   *  or is refused as the engine refuses it. */
+  const amendMutation = (
+    mutation: Mutation,
+    target: number,
+    s: number,
+  ): WorkerToMain => {
+    if (amendable === null || amendable !== target || done !== target) {
+      return envelope(
+        {
+          kind: "mutationFailed",
+          payload: {
+            error: {
+              kind: "notAmendable",
+              details: {
+                appliedSeq: target,
+                reason:
+                  "it is not the last step, or an undo or a redo ran since",
+              },
+            },
+          },
+        },
+        s,
+      );
+    }
+    const reply = applyMutation(mutation, s);
+    if (reply.kind === "mutationApplied") {
+      // Folded into the step it amends: the depth stays.
+      done--;
+      amendable = done;
+      (reply.payload as { appliedSeq: number }).appliedSeq = done;
+    }
+    return reply;
+  };
+
   const history = (action: "undo" | "redo", s: number): WorkerToMain => {
+    amendable = null;
     if (action === "undo" && done > 0) {
       done--;
       undone++;
@@ -436,6 +482,7 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
       case "commitGesture":
         done++;
         undone = 0;
+        amendable = done;
         return envelope(
           {
             kind: "gestureCommitted",
@@ -580,6 +627,15 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
         mutation: m.payload as Mutation,
         reply,
       });
+    } else if (m.kind === "amendMutation") {
+      const { appliedSeq, mutation } = m.payload as {
+        appliedSeq: number;
+        mutation: Mutation;
+      };
+      reply = scripted
+        ? envelope(scripted as WorkerToMainKindLike, s)
+        : amendMutation(mutation, appliedSeq, s);
+      events.push({ channel: "mutation", mutation, reply, amend: appliedSeq });
     } else if (m.kind === "undo" || m.kind === "redo") {
       reply = scripted
         ? envelope(scripted as WorkerToMainKindLike, s)

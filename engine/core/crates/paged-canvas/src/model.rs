@@ -1920,6 +1920,11 @@ pub struct CanvasModel {
     /// by `redo()`. Cleared when a new mutation lands (standard
     /// editor convention).
     redo_log: Vec<AppliedRecord>,
+    /// Engine ADR 1004 — the `applied_seq` of the undo entry a follow-up
+    /// write may still join (`amend_with`): set by every forward push onto
+    /// `applied_log`, cleared by an undo and a redo. An entry a redo put
+    /// back, or one an undo uncovered, is never amendable.
+    amend_anchor: Option<u64>,
     /// Phase 4 Step 1 — persistent per-paragraph layout cache.
     /// Installed on every rebuild via `paged_text::cache::with_layout_cache`
     /// so unchanged paragraphs short-circuit Knuth-Plass on
@@ -2673,6 +2678,7 @@ impl CanvasModel {
             next_gesture_handle: 0,
             applied_log: Vec::new(),
             redo_log: Vec::new(),
+            amend_anchor: None,
             layout_cache,
             story_pages,
             // Perf-S — cache populated by the initial build_document
@@ -5939,6 +5945,7 @@ impl CanvasModel {
     /// unified log.
     pub fn undo(&mut self) -> Option<UndoOutcome> {
         let rec = self.applied_log.pop()?;
+        self.amend_anchor = None;
         let mut invalidation = Invalidation::Everything;
         let affected_story_id = match &rec.kind {
             LoggedMutation::Text { op: _, inverse } => {
@@ -5998,6 +6005,7 @@ impl CanvasModel {
     /// — handles both text and frame variants.
     pub fn redo(&mut self) -> Option<UndoOutcome> {
         let rec = self.redo_log.pop()?;
+        self.amend_anchor = None;
         let mut invalidation = Invalidation::Everything;
         let (new_kind, affected_story_id) = match &rec.kind {
             LoggedMutation::Text { op, inverse: _ } => {
@@ -6053,6 +6061,9 @@ impl CanvasModel {
             applied_seq: redone_seq,
             kind: new_kind,
         });
+        // Engine ADR 1004 — history moved: the replayed entry is not one a
+        // follow-up write may join.
+        self.amend_anchor = None;
         Some(UndoOutcome {
             undone_seq: redone_seq,
             applied_seq,
@@ -6113,6 +6124,75 @@ impl CanvasModel {
         }
         flush(&mut self.applied_log, &mut run);
         n - (self.applied_log.len() - start)
+    }
+
+    /// Engine ADR 1004 — may a write still join the undo entry
+    /// `applied_seq`? Only while that entry is the top of the undo log, it
+    /// was put there by a forward write (not by a redo), and no undo or redo
+    /// has run since. Answers the log length the amending write starts from
+    /// ([`Self::fold_amend`] takes it back).
+    pub fn check_amend(&self, applied_seq: u64) -> Result<usize, crate::channel::WorkerError> {
+        let refuse = |reason: &str| crate::channel::WorkerError::NotAmendable {
+            applied_seq,
+            reason: reason.to_string(),
+        };
+        let Some(top) = self.applied_log.last() else {
+            return Err(refuse("the undo history is empty"));
+        };
+        if top.applied_seq != applied_seq {
+            return Err(refuse(
+                "it is no longer the last step in the undo history (a newer step, or an undo, came after it)",
+            ));
+        }
+        if self.amend_anchor != Some(applied_seq) {
+            return Err(refuse("an undo or a redo ran since it was committed"));
+        }
+        Ok(self.applied_log.len())
+    }
+
+    /// Engine ADR 1004 — fold what an amending write logged into the entry
+    /// it amends: the entry below `base` and every record from `base` on
+    /// become ONE `Composite`, numbered `applied_seq` (the amending write's
+    /// own), which stays amendable. A write that logged nothing only
+    /// renumbers the entry, so the seq its reply carries always names the
+    /// top of the log.
+    pub fn fold_amend(&mut self, base: usize, applied_seq: u64) {
+        if base == 0 || base > self.applied_log.len() {
+            return;
+        }
+        let records: Vec<AppliedRecord> = self.applied_log.drain(base - 1..).collect();
+        let mut children = Vec::new();
+        for rec in records {
+            match rec.kind {
+                LoggedMutation::Composite(inner) => children.extend(inner),
+                other => children.push(other),
+            }
+        }
+        let kind = if children.len() == 1 {
+            children.pop().expect("one child")
+        } else {
+            LoggedMutation::Composite(children)
+        };
+        self.applied_log.push(AppliedRecord { applied_seq, kind });
+        self.redo_log.clear();
+        self.amend_anchor = Some(applied_seq);
+    }
+
+    /// Engine ADR 1004 — apply `mutation` as part of the undo entry
+    /// `applied_seq` instead of as a step of its own: one undo reverts
+    /// both, one redo replays both. Refused (`NotAmendable`, nothing
+    /// applied) when [`Self::check_amend`] refuses. The outcome's
+    /// `applied_seq` names the amended entry from then on, so a further
+    /// write can amend it again.
+    pub fn apply_mutation_amending(
+        &mut self,
+        mutation: &Mutation,
+        applied_seq: u64,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        let base = self.check_amend(applied_seq)?;
+        let outcome = self.apply_mutation(mutation)?;
+        self.fold_amend(base, outcome.applied_seq);
+        Ok(outcome)
     }
 
     /// Read-only inspection of the most recently logged mutation.
@@ -13245,6 +13325,9 @@ impl CanvasModel {
     /// in-session undo, bounded by the same cap, so it needs no
     /// separate cap.
     fn push_applied(&mut self, rec: AppliedRecord) {
+        // Engine ADR 1004 — a forward push is the entry a follow-up write
+        // may join; `redo` clears this again after its own push.
+        self.amend_anchor = Some(rec.applied_seq);
         self.applied_log.push(rec);
         // C-79 — a batch collecting its children holds the cap; it is
         // applied to the collapsed entry when the batch is done.

@@ -1117,6 +1117,89 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.runCommand("media.paged.draw.command.releaseLivePaint");
   });
 
+  // ── 8b. a recipe follows its source, in the edit's undo step ──────
+
+  test("editing a repeat's source rebuilds it, and one undo restores both @feat:plugin-draw.repeats @level:happy", async ({
+    page,
+  }) => {
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    const seed = await designer.drawRectangle({
+      x0: 260,
+      y0: 120,
+      x1: 320,
+      y1: 170,
+    });
+    await designer.applyFill("rectangle", seed);
+    await designer.selectElement("rectangle", seed);
+    await designer.runCommand("media.paged.draw.command.makeRadialRepeat");
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).length, {
+        timeout: 12_000,
+      })
+      .toBeGreaterThan(0);
+    // Let the update take its first look at the new recipe.
+    await page.waitForTimeout(500);
+    const made = (await idsOfKind(page, "polygon")).join(",");
+
+    const client = async (verb: "undo" | "redo") =>
+      page.evaluate(async (v) => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: { client: Record<string, () => Promise<unknown>> };
+          }
+        ).__canvas.client;
+        await c[v]!();
+      }, verb);
+    const opacity = (value: number) =>
+      page.evaluate(
+        async (v) => {
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: { mutate: (m: unknown) => Promise<unknown> };
+              };
+            }
+          ).__canvas.client;
+          return c.mutate({
+            op: "setElementProperty",
+            args: {
+              elementId: { kind: "rectangle", id: v.seed },
+              path: "frameOpacity",
+              value: { type: "length", value: v.value },
+            },
+          });
+        },
+        { seed, value },
+      );
+
+    // An edit of the source: the instances are rebuilt (new ids)…
+    await opacity(40);
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).join(","), {
+        timeout: 12_000,
+      })
+      .not.toBe(made);
+    const rebuilt = (await idsOfKind(page, "polygon")).join(",");
+
+    // …and ONE undo brings back the old instances with the old source.
+    await client("undo");
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).join(","), {
+        timeout: 8_000,
+      })
+      .toBe(made);
+    // Nothing rebuilt on the undo: the redo replays edit and rebuild.
+    await page.waitForTimeout(500);
+    await client("redo");
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).join(","), {
+        timeout: 8_000,
+      })
+      .toBe(rebuilt);
+  });
+
   // ── 9. pattern + objects-on-path ──────────────────────────────────
 
   test("a pattern field bakes from the selection and objects distribute onto a path @feat:plugin-draw.pattern-bake @feat:plugin-draw.objects-on-path @level:happy", async ({
