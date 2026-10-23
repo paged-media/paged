@@ -51,6 +51,7 @@ import {
   nameBox,
   openContextMenu,
   type SheetContext,
+  workbookPart,
 } from "./sheet-context-driver";
 
 const C = "media.paged.sheet.command";
@@ -104,7 +105,7 @@ test.describe.serial("plugin menus — paged.sheet right-click rows", () => {
       .toBe(true);
     await fitFirstPage(page);
     await page.waitForTimeout(300);
-    const frame = await importAndPlace(page, "A1:D8");
+    const frame = await importAndPlace(page, "A1:G14");
     sheet = await enterSheet(page, frame, 5, 4);
   });
   test.afterAll(async () => {
@@ -225,7 +226,7 @@ test.describe.serial("plugin menus — paged.sheet right-click rows", () => {
     expect(await inputOf(page, sheet, 0, 0)).toBe("2");
   });
 
-  test("Context/Sort… — raises the Workbook panel with its sort control", async () => {
+  test("Context/Sort… — opens the Sort card under the sheet bar, on the data around the cell", async () => {
     covers("menu:Context/Sort…");
     const out = await clickContextRow(
       page,
@@ -234,10 +235,13 @@ test.describe.serial("plugin menus — paged.sheet right-click rows", () => {
       "Sort…",
       `${C}.sortRange`,
     );
-    expect(out.shell).toEqual([
-      { door: "openPanel", arg: "media.paged.sheet.panel.workbook" },
-    ]);
-    await expect(page.locator("[data-sheet-sort]")).toBeVisible();
+    // Inside the frame the card is the sheet's own; no panel is raised.
+    expect(out.shell).toEqual([]);
+    const card = page.locator('[data-testid="sheet-sort-card"]');
+    await expect(card).toBeVisible();
+    await expect(page.locator('[data-testid="sheet-sort-ok"]')).toBeVisible();
+    await card.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(card).toHaveCount(0);
   });
 
   test("Context/Format cells… — raises the Sheet properties panel", async () => {
@@ -346,22 +350,23 @@ test.describe.serial("plugin menus — paged.sheet right-click rows", () => {
     await expect.poll(atSecondRow).toBe("A2");
   });
 
-  test("Context/Group — the right-clicked row is grouped: the grid draws its outline", async () => {
+  /** Row 2's outline level in the workbook as exported (0: none). The
+   *  frame's grid draws no outline bar, so the file is where a group shows. */
+  const secondRowLevel = async () => {
+    const xml = await workbookPart(page, "xl/worksheets/sheet1.xml");
+    const row = /<row\b[^>]*\br="2"[^>]*>/.exec(xml)?.[0] ?? "";
+    return Number(/outlineLevel="(\d+)"/.exec(row)?.[1] ?? 0);
+  };
+
+  test("Context/Group — the right-clicked row is grouped: the workbook carries its outline level", async () => {
     covers("menu:Context/Group");
-    await clickCell(page, sheet, 1, 0);
-    const before = await sheet.surface.screenshot();
+    expect(await secondRowLevel()).toBe(0);
     await clickContextRow(page, sheet, [1, 0], "Group", `${C}.groupSelection`);
-    await expect
-      .poll(async () => (await sheet.surface.screenshot()).equals(before), {
-        message: "the outline of the group is drawn",
-      })
-      .toBe(false);
+    await expect.poll(secondRowLevel).toBe(1);
   });
 
-  test("Context/Ungroup — the group goes and the grid is as before", async () => {
+  test("Context/Ungroup — the group goes again", async () => {
     covers("menu:Context/Ungroup");
-    await clickCell(page, sheet, 1, 0);
-    const grouped = await sheet.surface.screenshot();
     await clickContextRow(
       page,
       sheet,
@@ -369,11 +374,7 @@ test.describe.serial("plugin menus — paged.sheet right-click rows", () => {
       "Ungroup",
       `${C}.ungroupSelection`,
     );
-    await expect
-      .poll(async () => (await sheet.surface.screenshot()).equals(grouped), {
-        message: "the outline is gone",
-      })
-      .toBe(false);
+    await expect.poll(secondRowLevel).toBe(0);
   });
 
   test("Context/Goal Seek… — opens the Goal Seek card", async () => {

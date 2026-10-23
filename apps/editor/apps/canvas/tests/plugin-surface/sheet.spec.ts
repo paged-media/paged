@@ -836,7 +836,8 @@ test.describe("plugin surface · paged.sheet", () => {
     }, XLSX_MIME);
 
     expect(wiring.entry).not.toBeNull();
-    expect(wiring.entry!.ext).toEqual([".xlsx"]);
+    // The xlsx family (macro-enabled and template variants open too).
+    expect(wiring.entry!.ext).toContain(".xlsx");
     expect(wiring.entry!.mime).toContain(XLSX_MIME);
     // Extension resolution is case-insensitive; both spellings a user
     // can produce reach the plugin.
