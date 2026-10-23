@@ -1,13 +1,15 @@
 $ paged-node template --help
 # exit 0
 # stdout
-paged-node template fields <doc> | kinds | fill <template> | check <template> <filled>
+paged-node template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>
 
-template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields
+template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template
 
 options:
   --values <json|file>               the field values: a JSON list of {name, value}, an object of name → text, or a file holding either
-  -o, --out <file>                   fill: write the result here
+  -o, --out <file>                   fill, ingest: write the result here
+  --names                            ingest: untagged items with a name become fields too
+  --placeholders                     ingest: plugin placeholders become fields too
   --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
   --no-plugins                       load no plugin bundles (core objects only)
   --font <file.ttf>                  fallback face for text no registered font answers for (default: the bundled Inter)

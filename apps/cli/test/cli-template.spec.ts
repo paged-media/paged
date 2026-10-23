@@ -219,3 +219,117 @@ describe("paged template", () => {
     ).toBe(true);
   });
 });
+
+/** A document tagged the way an InDesign template is (engine ADR 1002): a
+ *  text frame's story tagged `Letter`, "Ada" in it tagged `Name` (labelled),
+ *  and a graphic frame tagged `Photo`, saved as IDML. */
+async function writeTagged(dir: string): Promise<string> {
+  const h = await createHeadlessHost({
+    console: silent,
+    ...(await engineOptions()),
+  });
+  try {
+    const send = (kind: string, payload: unknown) =>
+      h.host.editor.client.send({ kind, payload } as never) as Promise<{
+        kind: string;
+        payload: { createdId?: { id: string } };
+      }>;
+    const [pageId] = await h.load(minimalIdml());
+    await send("setSessionPolicy", { policy: { role: "author" } });
+    const mutate = (m: unknown) => send("mutate", m);
+    const text = await mutate({
+      op: "insertTextFrame",
+      args: { pageId, bounds: [10, 10, 60, 200] },
+    });
+    const photo = await mutate({
+      op: "insertFrame",
+      args: { pageId, bounds: [80, 10, 140, 120] },
+    });
+    const stories = (await h.host.editor.client.collection(
+      "stories" as never,
+    )) as { selfId: string }[];
+    const storyId = stories[stories.length - 1]!.selfId;
+    await mutate({
+      op: "insertText",
+      args: { storyId, offset: 0, text: "Dear Ada, welcome." },
+    });
+    await mutate({
+      op: "tagItem",
+      args: { item: text.payload.createdId!.id, tag: "Letter" },
+    });
+    await mutate({
+      op: "tagRange",
+      args: { storyId, start: 5, end: 8, tag: "Name", selfId: "dxName" },
+    });
+    await mutate({
+      op: "setXmlAttribute",
+      args: { element: "dxName", name: "label", value: "First name" },
+    });
+    await mutate({
+      op: "tagItem",
+      args: { item: photo.payload.createdId!.id, tag: "Photo" },
+    });
+    const { bytes } = await h.exportDocument("idml");
+    const path = join(dir, "tagged.idml");
+    writeFileSync(path, bytes);
+    return path;
+  } finally {
+    h.dispose();
+  }
+}
+
+describe("paged template ingest", () => {
+  it("opens a tagged document as a template and writes it", async () => {
+    const tagged = await writeTagged(tmp.dir);
+    const out = join(tmp.dir, "ingested.paged");
+    const r = await cli(["template", "ingest", tagged, "-o", out, NP]);
+    expect(r.code).toBe(0);
+    const rows = r.json.fields as {
+      field: { name: string; kind: string; label?: string };
+      value: unknown;
+    }[];
+    expect(rows.map((f) => [f.field.name, f.field.kind])).toEqual([
+      ["Name", "textRun"],
+      ["Photo", "image"],
+    ]);
+    expect(rows[0]!.field.label).toBe("First name");
+    expect(rows[0]!.value).toEqual({ kind: "text", text: "Ada" });
+    expect(r.json.skipped).toEqual([
+      expect.objectContaining({
+        tag: "Letter",
+        reason: "its tagged ranges are the fields",
+      }),
+    ]);
+    // The written template fills like any other.
+    const filled = join(tmp.dir, "ingested-filled.paged");
+    const fill = await cli([
+      "template",
+      "fill",
+      out,
+      "--values",
+      JSON.stringify({ Name: "Grace" }),
+      "-o",
+      filled,
+      NP,
+    ]);
+    expect(fill.code).toBe(0);
+    const got = await cli(["template", "fields", filled, NP]);
+    const name = (
+      got.json.fields as { field: { name: string }; value: unknown }[]
+    ).find((f) => f.field.name === "Name");
+    expect(name?.value).toEqual({ kind: "text", text: "Grace" });
+  });
+
+  it("refuses a document with nothing tagged", async () => {
+    const r = await cli([
+      "template",
+      "ingest",
+      templatePath,
+      "-o",
+      join(tmp.dir, "never.paged"),
+      NP,
+    ]);
+    expect(r.code).toBe(1);
+    expect(r.out + r.err).toContain("nothing in the document is a field");
+  });
+});

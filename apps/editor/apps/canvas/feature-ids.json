@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 362,
+    "command": 363,
     "keybinding": 88,
-    "menu": 257,
+    "menu": 258,
     "panel": 122,
     "tool": 72
   },
@@ -1761,6 +1761,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.template.openAsTemplate",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.tool.activate.*",
       "kind": "command",
       "owner": "editor"
@@ -2787,6 +2792,11 @@
     },
     {
       "id": "menu:File/Open PDF…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:File/Open as template…",
       "kind": "menu",
       "owner": "editor"
     },
