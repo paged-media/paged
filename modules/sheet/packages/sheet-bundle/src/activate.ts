@@ -498,6 +498,16 @@ export function activate(host: BundleHost): BundleHandle {
     when: workbookIsOpen,
     handler: () => void session.toggleInvalidCircles(),
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.toggleFilter",
+    title: t(COMMANDS.toggleFilter),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.toggleAutofilter();
+      if (!r.ok) host.log.warn(`toggleFilter: ${r.message}`);
+    },
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context

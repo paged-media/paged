@@ -1241,6 +1241,13 @@ function CellChrome({
     e.preventDefault();
     e.stopPropagation();
   };
+  const buttons: { col: number; box: [number, number, number, number] }[] = [];
+  if (filter) {
+    for (let col = filter.left; col <= filter.right; col++) {
+      const box = cellRect(scene, filter.row, col);
+      if (box) buttons.push({ col, box });
+    }
+  }
   const rect = active ? cellRect(scene, active.row, active.col) : null;
   const items = prompt?.items ?? null;
   const onHeader =
@@ -1262,6 +1269,33 @@ function CellChrome({
   };
   return (
     <>
+      {buttons.map(({ col, box }) => {
+        const size = Math.min(12, Math.max(6, box[3] - box[1] - 2));
+        const filtered = filter!.filtered.includes(col);
+        return (
+          <button
+            key={col}
+            type="button"
+            data-testid="sheet-filter-button"
+            data-col={col}
+            aria-label={filtered ? "Filtered: change the filter" : "Filter"}
+            tabIndex={-1}
+            style={{
+              ...btn,
+              left: headW + box[2] - size - 1,
+              top: headH + box[3] - size - 1,
+              width: size,
+              height: size,
+            }}
+            onPointerDown={stop}
+            onClick={() => {
+              session.openDataCard({ kind: "filter", col });
+            }}
+          >
+            <FilterGlyph filtered={filtered} />
+          </button>
+        );
+      })}
       {rect && items && !onHeader ? (
         <button
           type="button"

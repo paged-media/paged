@@ -1999,6 +1999,16 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 517 — toggle filter in the grid.
+      id: C("toggleFilter"),
+      title: "Toggle filter",
+      args: struct({}),
+      async handler() {
+        const r = session.toggleAutofilter();
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),
