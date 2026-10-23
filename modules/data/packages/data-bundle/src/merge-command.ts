@@ -56,6 +56,10 @@ export interface MergeCommandArgs {
   /** The template page (default: the active page). */
   pageId?: string;
   documentName?: string;
+  /** Where a relative image reference resolves (default: none). */
+  imageBase?: string;
+  /** Image placeholders: rectangle id → field (`photo` or `@photo`). */
+  imageFields?: Record<string, string>;
 }
 
 /** The typed command's arguments as the session's merge options. */
@@ -85,6 +89,10 @@ export function mergeOptionsOf(
     ...(a.destination ? { destination: a.destination } : {}),
     ...(a.pageId ? { pageId: a.pageId } : {}),
     ...(a.documentName ? { documentName: a.documentName } : {}),
+    ...(a.imageBase ? { imageBase: a.imageBase } : {}),
+    ...(a.imageFields && Object.keys(a.imageFields).length
+      ? { imageFields: a.imageFields }
+      : {}),
   };
 }
 
@@ -95,6 +103,11 @@ export interface MergeCommandResult {
   records: number;
   pages: number;
   overset: number;
+  /** The records that did not fit (0-based), when any. */
+  oversetRecords: number[];
+  /** The undo steps the merge took: undoing that many takes the document
+   *  back to the template (a batch merges record after record this way). */
+  undoSteps: number;
   message: string;
   diagnostics: string[];
 }
@@ -109,6 +122,8 @@ export function mergeCommandResult(
       records: 0,
       pages: 0,
       overset: 0,
+      oversetRecords: [],
+      undoSteps: 0,
       message: NO_QUERY_TO_MERGE,
       diagnostics: [NO_QUERY_TO_MERGE],
     };
@@ -117,6 +132,8 @@ export function mergeCommandResult(
     records: r.records.length,
     pages: r.pages.length,
     overset: r.overset.length,
+    oversetRecords: [...r.overset],
+    undoSteps: r.mutateCalls,
     message: session.getState().message,
     diagnostics: r.diagnostics,
   };
