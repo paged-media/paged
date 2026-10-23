@@ -16,7 +16,7 @@ it stood, for decisions made earlier; their status says so.
 | [500](500-own-calculation-engine.md) | The calculation engine is own-built and clean-room | Accepted, recorded retroactively 2026-10-02 |
 | [501](501-f64-numbers.md) | Numbers are f64 because Excel's are; exact decimal stays behind a seam | Accepted, recorded retroactively 2026-10-02 |
 | [502](502-recalculation-and-spill.md) | Recalculation: a range-keyed graph, deterministic order, spill by fixpoint | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-15, 2026-10-22) |
-| [503](503-xlsx-patched-not-regenerated.md) | XLSX is patched, never regenerated | Accepted, recorded retroactively 2026-10-02; amended 2026-10-22 (worksheets patched row by row) |
+| [503](503-xlsx-patched-not-regenerated.md) | XLSX is patched, never regenerated | Accepted, recorded retroactively 2026-10-02; amended 2026-10-22 (worksheets patched row by row), 2026-10-23 (chart parts patched or generated, ADR 519) |
 | [504](504-publishing-first-scope.md) | Publishing-first scope: pivots, validation and macros are preserved and never interpreted | Accepted, recorded retroactively 2026-10-02; amended 2026-10-23 by 517 |
 | [505](505-native-table-and-edit-grid.md) | A sheet on the page is a native table; editing happens in a scene-layer grid | Accepted, recorded retroactively 2026-10-02 |
 | [506](506-workbook-in-a-container-part.md) | The workbook is stored whole in a container part | Accepted, recorded retroactively 2026-10-02 |
@@ -33,6 +33,9 @@ it stood, for decisions made earlier; their status says so.
 | [517](517-interactive-workbook-features.md) | Validation, what-if, external links, outline and protection are interpreted; pivots stay preserved | Accepted 2026-10-23; amends 504 |
 | [518](518-cell-visual-model-and-colour-references.md) | The cell visual model: colour and text-style references, one resolver | Accepted 2026-10-23; amends the frozen style types, extends 503, 508 |
 | [519](519-charts-excel-parity.md) | Charts as Excel draws them: plots, every kind, style roles, written back | Accepted 2026-10-23; amends 016, 503 |
+| [520](520-document-styles-in-the-frame.md) | The document's styles inside the sheet frame: host panels assign them, the grid draws them | Accepted 2026-10-23 |
+| [521](521-files-and-formula-dialect.md) | Files and the formula dialect: macro workbooks, templates, ODS read, CSV export, R1C1 and localized function names | Accepted 2026-10-23; amends 509 |
+| [522](522-placement-views-print-areas-and-chart-delete.md) | Placement kinds: a frame's view and sizing, print areas of several ranges, a deleted chart leaves the file | Accepted 2026-10-23; extends 510, 503 |
 | [523](523-conditional-formatting-evaluated-in-the-engine.md) | Conditional formatting: one model, evaluated in the calc engine, drawn the same on both surfaces | Accepted 2026-10-23; amends the frozen types |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the

@@ -163,3 +163,20 @@ still written as an inline string. Evidence: `sheet-conformance/tests/it/xlsx_sa
 only its own row and `<dimension>` across every round-trip fixture), the re-recorded golden
 `sheet-conformance/tests/golden/zip-container/02-formulas.edited.xlsx` (the untouched rows of
 an edited sheet keep `t="n"` and their shared strings).
+
+## Amendment 2026-10-23 — chart parts ([ADR 519](519-charts-excel-parity.md))
+
+**Existing parts are patched; parts Paged creates are generated.** A chart part read from the
+workbook and edited in Paged is spliced: the part is parsed into an element tree, the edited
+model is compared with the model the part reads as, and only the children whose role changed
+are replaced in place, in schema order (a series' `c:f` and caches, its fill, labels, marker,
+trendlines and error bars; the title; the legend; an axis' scaling, title, number format and
+gridlines; a plot element on a kind change; the plot area's plots and axes when the axis family
+changes; a series added by copying the last one's subtree). An unedited chart part is still
+written back byte for byte. A chart authored in Paged has no part to patch, so its part, its
+drawing anchor (and the drawing, its relationship and the worksheet's `<drawing>` when the
+sheet had none), the chartEx style parts, the relationships and the content-type overrides
+are generated. A deleted chart's anchor, relationship, part and override are removed.
+Evidence: `sheet-conformance/tests/it/chart_write.rs`, and the open-check lane's `chart-*`
+cases (`excel_opencheck.rs`: Excel opens each without a repair and reports the chart type
+Paged wrote; its re-save reads back to the same charts).

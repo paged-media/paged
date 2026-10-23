@@ -56,6 +56,8 @@ import {
   type GridScene,
 } from "../../../sheet-host-model/src";
 import type { WorkbookSession } from "../session";
+import type { DataToolsApi } from "../data-tools";
+import { DataCards } from "./data-cards";
 import {
   REF_COLORS,
   a1Of,
@@ -75,9 +77,17 @@ export type FrameSurfaceSession = Pick<
   | "frameView"
   | "setFrameSheet"
   | "documentFontFace"
+  | "documentTextDefault"
+  | "documentSwatchColors"
+  | "documentStyleChoices"
+  | "applyDocumentSwatch"
+  | "styleAtTarget"
+  | "setStyle"
+  | "documentStyleRevision"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
+  | "grabAt"
   | "pointerUpInFrame"
   | "wheelInFrame"
   | "handleGridKey"
@@ -98,6 +108,8 @@ export type FrameSurfaceSession = Pick<
   | "functionList"
   | "sheets"
   | "state"
+  | "undoCellEdit"
+  | keyof DataToolsApi
 >;
 
 const MAX_ROW = 1_048_575;
@@ -228,12 +240,124 @@ function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
   };
 }
 
+/** The document swatch ids a scene's styles reference. */
+function swatchIdsOf(scene: GridScene): string[] {
+  const ids = new Set<string>();
+  for (const st of scene.styles) {
+    if (st.fillSwatch) ids.add(st.fillSwatch);
+    if (st.textSwatch) ids.add(st.textSwatch);
+    for (const line of Object.values(st.borderLines ?? {}))
+      if (line?.swatch) ids.add(line.swatch);
+  }
+  return [...ids].sort();
+}
+
+/** `scene` with every referenced document swatch drawn in the colour the
+ *  document shows it in now (P7): a swatch edited in the document recolours
+ *  the grid, as it recolours the placed table. */
+export function withSwatchColors(
+  scene: GridScene,
+  colors: ReadonlyMap<string, string>,
+): GridScene {
+  if (colors.size === 0) return scene;
+  const pick = (
+    id: string | null | undefined,
+    rgb: string | null | undefined,
+  ) => (id ? colors.get(id) : undefined) ?? rgb ?? null;
+  return {
+    ...scene,
+    styles: scene.styles.map((st) => {
+      if (!st.fillSwatch && !st.textSwatch && !st.borderLines) return st;
+      const lines = st.borderLines
+        ? Object.fromEntries(
+            Object.entries(st.borderLines).map(([edge, line]) => [
+              edge,
+              line?.swatch
+                ? { ...line, rgb: pick(line.swatch, line.rgb) }
+                : line,
+            ]),
+          )
+        : undefined;
+      return {
+        ...st,
+        fillRgb: st.fillSwatch ? pick(st.fillSwatch, st.fillRgb) : st.fillRgb,
+        textRgb: st.textSwatch ? pick(st.textSwatch, st.textRgb) : st.textRgb,
+        ...(lines ? { borderLines: lines } : {}),
+      };
+    }),
+  };
+}
+
+/** The document's current colours for the swatches `scene` references,
+ *  re-read when the document's styles may have changed. */
+function useSwatchColors(
+  session: FrameSurfaceSession,
+  scene: GridScene | null,
+): ReadonlyMap<string, string> {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [colors, setColors] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const key = scene ? swatchIdsOf(scene).join("\u0000") : "";
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    void session.documentSwatchColors(key.split("\u0000")).then((next) => {
+      if (live) setColors(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, key, revision]);
+  return colors;
+}
+
+/** The document's default text face per session (asked once). */
+const textDefaults = new WeakMap<
+  FrameSurfaceSession,
+  Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>
+>();
+
+/** The face and size the page gives text that names none (the document's
+ *  basic paragraph style), or null until known / when unreadable. */
+function useDocumentTextDefault(
+  session: FrameSurfaceSession,
+): { family: string; style: string | null; sizePt: number | null } | null {
+  const [value, setValue] = useState<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    let pending = textDefaults.get(session);
+    if (!pending) {
+      pending = session.documentTextDefault().catch(() => null);
+      textDefaults.set(session, pending);
+    }
+    void pending.then((d) => {
+      if (live) setValue(d);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session]);
+  return value;
+}
+
 /** Load the document's faces for the families `scene` names into the
  *  page's font set; answers a counter that moves whenever one arrived, so
  *  the grid repaints in it. */
 function useDocumentFaces(
   session: FrameSurfaceSession,
   scene: GridScene | null,
+  defaultFamily: string | null,
 ): number {
   const [loaded, setLoaded] = useState(0);
   useEffect(() => {
@@ -246,8 +370,14 @@ function useDocumentFaces(
       requestedFaces.set(session, asked);
     }
     let live = true;
-    for (const st of scene.styles) {
-      const family = st.fontName;
+    const wanted = [
+      ...scene.styles,
+      ...(defaultFamily
+        ? [{ fontName: defaultFamily, bold: false, italic: false }]
+        : []),
+    ];
+    for (const st of wanted) {
+      const family = st.fontName ?? defaultFamily;
       if (!family) continue;
       const face = faceOfStyle(st);
       const key = `${family}|${face.name}`;
@@ -274,7 +404,7 @@ function useDocumentFaces(
     return () => {
       live = false;
     };
-  }, [session, scene]);
+  }, [session, scene, defaultFamily]);
   return loaded;
 }
 
@@ -287,8 +417,23 @@ function SheetFrameSurfaceView({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [scene, setScene] = useState<GridScene | null>(null);
-  const facesLoaded = useDocumentFaces(session, scene);
+  const textDefault = useDocumentTextDefault(session);
+  const swatchColors = useSwatchColors(session, scene);
+  const facesLoaded = useDocumentFaces(
+    session,
+    scene,
+    textDefault?.family ?? null,
+  );
   const edit = useSessionView(session, () => session.cellEditState());
+  // Sheet ADR 517 — what sits on the cells: the active cell's input
+  // message and list, the AutoFilter's buttons, the invalid-data circles.
+  const data = useSessionView(session, () => ({
+    prompt: session.cellPrompt(),
+    listOpen: session.validationListOpen(),
+    filter: session.filterButtons(),
+    circles: session.invalidCircles(),
+  }));
+  const [listIndex, setListIndex] = useState(0);
   const [completion, setCompletion] = useState<{
     items: FunctionEntry[];
     index: number;
@@ -322,6 +467,14 @@ function SheetFrameSurfaceView({
     | { kind: "heading-row"; anchor: number }
     | null
   >(null);
+  const [cursor, setCursor] = useState<"cell" | "move" | "crosshair">("cell");
+  const lastDrag = useRef<[number, number] | null>(null);
+  const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopAutoScroll = () => {
+    if (autoScroll.current !== null) clearInterval(autoScroll.current);
+    autoScroll.current = null;
+  };
+  useEffect(() => stopAutoScroll, []);
   const [resizeGhost, setResizeGhost] = useState<{
     axis: "col" | "row";
     at: number;
@@ -371,7 +524,16 @@ function SheetFrameSurfaceView({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    paintGridScene(ctx, scene, {
+    paintGridScene(ctx, withSwatchColors(scene, swatchColors), {
+      // P7 — un-styled cells in the face the page prints them in.
+      ...(textDefault
+        ? {
+            grid: {
+              fontFamily: `"${textDefault.family}", sans-serif`,
+              ...(textDefault.sizePt ? { fontSizePt: textDefault.sizePt } : {}),
+            },
+          }
+        : {}),
       headings: true,
       rowHeadingWidthPt: headW,
       widthPt: props.widthPt,
@@ -390,6 +552,31 @@ function SheetFrameSurfaceView({
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.25;
         ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      }
+      ctx.restore();
+    }
+    // Circle invalid data: a red ellipse around each cell breaking its rule.
+    if (data.circles && data.circles.length > 0) {
+      ctx.save();
+      ctx.translate(headW, headH);
+      ctx.strokeStyle = "#d62020";
+      ctx.lineWidth = 1.25;
+      for (const c of data.circles) {
+        const box = cellRect(scene, c.row, c.col);
+        if (!box) continue;
+        const rx = (box[2] - box[0]) / 2 + 2;
+        const ry = (box[3] - box[1]) / 2 + 1.5;
+        ctx.beginPath();
+        ctx.ellipse(
+          box[0] + rx - 2,
+          box[1] + ry - 1.5,
+          rx,
+          ry,
+          0,
+          0,
+          2 * Math.PI,
+        );
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -435,7 +622,10 @@ function SheetFrameSurfaceView({
     headW,
     edit?.text,
     resizeGhost,
+    data.circles,
     facesLoaded,
+    textDefault,
+    swatchColors,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
@@ -576,12 +766,24 @@ function SheetFrameSurfaceView({
       }
     }
     gesture.current = { kind: "cells" };
-    session.pointerDownInFrame(cx, cy, { shift: e.shiftKey });
+    // Excel: Ctrl (Option on a Mac) while dragging the border copies.
+    session.pointerDownInFrame(cx, cy, {
+      shift: e.shiftKey,
+      copy: e.ctrlKey || e.altKey,
+    });
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const p = contentPoint(e.clientX, e.clientY);
+    if (!g && p && scene && p[0] >= headW && p[1] >= headH) {
+      // The pointer says what a press would grab (Excel's move grip on
+      // the selection border, the fill handle's crosshair).
+      const grab = session.grabAt(p[0] - headW, p[1] - headH);
+      const next =
+        grab === "move" ? "move" : grab === "fill" ? "crosshair" : "cell";
+      if (next !== cursor) setCursor(next);
+    }
     if (!g || !p || !scene) return;
     const [x, y] = p;
     const vp = scene.viewport;
@@ -615,11 +817,24 @@ function SheetFrameSurfaceView({
       return;
     }
     session.pointerMoveInFrame(x - headW, y - headH);
+    // Past the cell area's edge the window keeps scrolling while the
+    // pointer stays there (Excel's auto-scroll).
+    lastDrag.current = [x - headW, y - headH];
+    const outside =
+      x - headW < 0 || y - headH < 0 || x > props.widthPt || y > props.heightPt;
+    if (outside && autoScroll.current === null) {
+      autoScroll.current = setInterval(() => {
+        const at = lastDrag.current;
+        if (!at || gesture.current?.kind !== "cells") return;
+        session.pointerMoveInFrame(at[0], at[1]);
+      }, 70);
+    } else if (!outside) stopAutoScroll();
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     gesture.current = null;
+    stopAutoScroll();
     if (!g) return;
     const p = contentPoint(e.clientX, e.clientY);
     if (g.kind === "resize-col") {
@@ -712,6 +927,28 @@ function SheetFrameSurfaceView({
     if (composing.current || e.nativeEvent.isComposing) return;
     const el = e.currentTarget;
     const open = session.cellEditState();
+    // An open validation list owns the arrows, Enter and Esc.
+    const listItems = data.listOpen ? (data.prompt?.items ?? null) : null;
+    if (!open && listItems && listItems.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = listItems.length;
+        setListIndex((listIndex + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        session.chooseListItem(
+          listItems[Math.min(listIndex, listItems.length - 1)]!,
+        );
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        session.openCellDropdown(false);
+        return;
+      }
+    }
     // The suggestion list owns the arrows, Tab and Enter while it shows.
     if (open && completion) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -811,7 +1048,8 @@ function SheetFrameSurfaceView({
     if (composing.current) return;
     const el = e.currentTarget;
     if (session.cellEditState()) session.setCellEditText(el.value);
-    else session.beginCellEdit(el.value, "enter");
+    // A refused edit (a locked cell) leaves nothing typed behind.
+    else if (!session.beginCellEdit(el.value, "enter")) el.value = "";
     updateCompletion(el.value, el.selectionEnd ?? el.value.length);
   };
 
@@ -868,7 +1106,7 @@ function SheetFrameSurfaceView({
         position: "relative",
         width: "100%",
         height: "100%",
-        cursor: "cell",
+        cursor,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -975,7 +1213,221 @@ function SheetFrameSurfaceView({
           ))}
         </ul>
       ) : null}
+      <CellChrome
+        session={session}
+        scene={scene}
+        headW={headW}
+        headH={headH}
+        active={active}
+        editing={edit !== null}
+        prompt={data.prompt}
+        listOpen={data.listOpen}
+        listIndex={listIndex}
+        filter={data.filter}
+        onListOpen={() => setListIndex(0)}
+        focusEditor={() => editorRef.current?.focus({ preventScroll: true })}
+      />
     </div>
+  );
+}
+
+/** A small funnel / arrow, drawn in the button's own pt box. */
+function FilterGlyph({ filtered }: { filtered: boolean }) {
+  return (
+    <svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true">
+      {filtered ? (
+        <path d="M1 2h8L6 5.5V9L4 8V5.5z" fill="#2b6cb0" />
+      ) : (
+        <path d="M2 3.5h6L5 7z" fill="#3a3a38" />
+      )}
+    </svg>
+  );
+}
+
+/** What sits on cells, in frame points (sheet ADR 517): the AutoFilter's
+ *  header buttons, the active cell's list button and list, and its input
+ *  message. */
+function CellChrome({
+  session,
+  scene,
+  headW,
+  headH,
+  active,
+  editing,
+  prompt,
+  listOpen,
+  listIndex,
+  filter,
+  onListOpen,
+  focusEditor,
+}: {
+  session: FrameSurfaceSession;
+  scene: GridScene | null;
+  headW: number;
+  headH: number;
+  active: { row: number; col: number } | null;
+  editing: boolean;
+  prompt: ReturnType<FrameSurfaceSession["cellPrompt"]>;
+  listOpen: boolean;
+  listIndex: number;
+  filter: ReturnType<FrameSurfaceSession["filterButtons"]>;
+  onListOpen: () => void;
+  focusEditor: () => void;
+}) {
+  if (!scene) return null;
+  const stop = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const buttons: { col: number; box: [number, number, number, number] }[] = [];
+  if (filter) {
+    for (let col = filter.left; col <= filter.right; col++) {
+      const box = cellRect(scene, filter.row, col);
+      if (box) buttons.push({ col, box });
+    }
+  }
+  const rect = active ? cellRect(scene, active.row, active.col) : null;
+  const items = prompt?.items ?? null;
+  const onHeader =
+    !!filter &&
+    !!active &&
+    active.row === filter.row &&
+    active.col >= filter.left &&
+    active.col <= filter.right;
+  const btn: CSSProperties = {
+    position: "absolute",
+    padding: 0,
+    margin: 0,
+    border: "1px solid #a8a8a4",
+    borderRadius: 1,
+    background: "#f3f3f1",
+    cursor: "pointer",
+    boxSizing: "border-box",
+    zIndex: 1,
+  };
+  return (
+    <>
+      {buttons.map(({ col, box }) => {
+        const size = Math.min(12, Math.max(6, box[3] - box[1] - 2));
+        const filtered = filter!.filtered.includes(col);
+        return (
+          <button
+            key={col}
+            type="button"
+            data-testid="sheet-filter-button"
+            data-col={col}
+            aria-label={filtered ? "Filtered: change the filter" : "Filter"}
+            tabIndex={-1}
+            style={{
+              ...btn,
+              left: headW + box[2] - size - 1,
+              top: headH + box[3] - size - 1,
+              width: size,
+              height: size,
+            }}
+            onPointerDown={stop}
+            onClick={() => {
+              session.openDataCard({ kind: "filter", col });
+            }}
+          >
+            <FilterGlyph filtered={filtered} />
+          </button>
+        );
+      })}
+      {rect && items && !onHeader ? (
+        <button
+          type="button"
+          data-testid="sheet-list-button"
+          aria-label="Choose from list"
+          aria-expanded={listOpen}
+          tabIndex={-1}
+          style={{
+            ...btn,
+            left: headW + rect[2] + 1,
+            top: headH + rect[1],
+            width: Math.min(14, rect[3] - rect[1]),
+            height: rect[3] - rect[1],
+          }}
+          onPointerDown={stop}
+          onClick={() => {
+            if (editing) session.commitCellEdit();
+            if (!listOpen) onListOpen();
+            session.openCellDropdown(!listOpen);
+            focusEditor();
+          }}
+        >
+          <FilterGlyph filtered={false} />
+        </button>
+      ) : null}
+      {rect && items && listOpen ? (
+        <ul
+          data-testid="sheet-list"
+          role="listbox"
+          style={{
+            position: "absolute",
+            left: headW + rect[0],
+            top: headH + rect[3] + 1,
+            minWidth: rect[2] - rect[0] + 14,
+            maxHeight: 8 * 13,
+            overflowY: "auto",
+            margin: 0,
+            padding: 1,
+            listStyle: "none",
+            background: "#ffffff",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            zIndex: 2,
+          }}
+        >
+          {items.map((it, i) => (
+            <li
+              key={`${i}:${it}`}
+              role="option"
+              aria-selected={i === listIndex}
+              style={{
+                padding: "1px 4px",
+                whiteSpace: "nowrap",
+                background: i === listIndex ? "#dfe7f1" : "transparent",
+              }}
+              onPointerDown={(e) => {
+                stop(e);
+                session.chooseListItem(it);
+                focusEditor();
+              }}
+            >
+              {it === "" ? "\u00a0" : it}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {rect && prompt && (prompt.title || prompt.message) && !listOpen ? (
+        <div
+          data-testid="sheet-input-message"
+          role="note"
+          style={{
+            position: "absolute",
+            left: headW + rect[2] + (items ? 16 : 4),
+            top: headH + rect[3] + 2,
+            maxWidth: 160,
+            padding: "3px 5px",
+            background: "#ffffe1",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            whiteSpace: "pre-wrap",
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        >
+          {prompt.title ? <strong>{prompt.title}</strong> : null}
+          {prompt.title && prompt.message ? <br /> : null}
+          {prompt.message}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -998,7 +1450,7 @@ function SheetBarView({
       input: edit
         ? edit.text
         : active
-          ? session.cellInputAt(active.row, active.col)
+          ? formulaShown(session, active.row, active.col)
           : "",
       name: sel
         ? a1Of(
@@ -1016,6 +1468,18 @@ function SheetBarView({
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
+      // P7 — the document references on the active cell.
+      docStyle: (() => {
+        const cs = session.styleAtTarget();
+        return {
+          para: cs?.docParaStyle ?? "",
+          fill: cs?.fillSwatch?.id ?? null,
+          text: cs?.fontSwatch?.id ?? null,
+        };
+      })(),
+      alert: session.entryAlert(),
+      card: session.dataCard(),
+      filterHeader: filterHeaderText(session),
       // ADR 510 — a window frame's lock (null: not a window frame).
       lock: session.frameView(props.elementId)?.lock ?? null,
     };
@@ -1118,6 +1582,14 @@ function SheetBarView({
             }
           }}
         />
+        <DocumentStylePickers
+          session={session}
+          current={view.docStyle}
+          box={box}
+          button={button}
+          card={bar}
+          done={() => requestAnimationFrame(focusGrid)}
+        />
         {view.stats && view.stats.count > 0 ? (
           <span
             data-testid="sheet-bar-stats"
@@ -1189,6 +1661,17 @@ function SheetBarView({
           ⤢
         </button>
       </div>
+      <DataCards
+        session={session}
+        chrome={{
+          style: bar,
+          button,
+          done: () => requestAnimationFrame(focusGrid),
+        }}
+        card={view.card}
+        alert={view.alert}
+        filterHeader={view.filterHeader}
+      />
       {view.pasteSpecial ? (
         <PasteSpecialCard
           session={session}
@@ -1198,6 +1681,192 @@ function SheetBarView({
         />
       ) : null}
     </div>
+  );
+}
+
+/** The bar's formula: the cell's input, or nothing for a hidden formula on
+ *  a protected sheet (sheet ADR 517). */
+function formulaShown(
+  session: FrameSurfaceSession,
+  row: number,
+  col: number,
+): string {
+  const p = session.cellProtectionAt(row, col);
+  if (p?.sheetProtected && p.formulaHidden) return "";
+  return session.cellInputAt(row, col);
+}
+
+/** The header text of the column the filter menu is open on. */
+function filterHeaderText(session: FrameSurfaceSession): string {
+  const card = session.dataCard();
+  const fb = session.filterButtons();
+  if (card?.kind !== "filter" || !fb) return "";
+  return session.cellInputAt(fb.row, card.col);
+}
+
+// ── document styles on the bar: paragraph style, fill and text swatch ──
+
+type StyleChoices = {
+  paragraphStyles: { id: string; name: string }[];
+  swatches: { id: string; name: string; rgbHex: string }[];
+};
+
+/** The document's choices, re-read when its styles may have changed. */
+function useStyleChoices(session: FrameSurfaceSession): StyleChoices {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [choices, setChoices] = useState<StyleChoices>({
+    paragraphStyles: [],
+    swatches: [],
+  });
+  useEffect(() => {
+    let live = true;
+    void session.documentStyleChoices().then((c) => {
+      if (live) setChoices(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, revision]);
+  return choices;
+}
+
+function DocumentStylePickers({
+  session,
+  current,
+  box,
+  button,
+  card,
+  done,
+}: {
+  session: FrameSurfaceSession;
+  current: { para: string; fill: string | null; text: string | null };
+  box: CSSProperties;
+  button: CSSProperties;
+  card: CSSProperties;
+  done: () => void;
+}) {
+  const choices = useStyleChoices(session);
+  const [open, setOpen] = useState<"fill" | "text" | null>(null);
+  const colorOf = (id: string | null) =>
+    choices.swatches.find((x) => x.id === id)?.rgbHex ?? null;
+  const chip = (rgb: string | null): CSSProperties => ({
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    border: "1px solid var(--pg-border, #c9c9c4)",
+    background:
+      rgb ??
+      "linear-gradient(to top right, transparent 45%, #d33 45%, #d33 55%, transparent 55%)",
+    verticalAlign: "middle",
+  });
+  const pick = (id: string | null) => {
+    const target = open;
+    setOpen(null);
+    if (!target) return;
+    void session.applyDocumentSwatch(target, id).then(done);
+  };
+  return (
+    <span style={{ position: "relative", display: "inline-flex", gap: 4 }}>
+      <select
+        data-testid="sheet-bar-style"
+        aria-label="Paragraph style"
+        title="Paragraph style (document)"
+        value={current.para}
+        style={{ ...box, maxWidth: 140 }}
+        onChange={(e) => {
+          session.setStyle({ docParaStyle: e.currentTarget.value });
+          done();
+        }}
+      >
+        <option value="">No paragraph style</option>
+        {choices.paragraphStyles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        data-testid="sheet-bar-fill"
+        aria-label="Cell fill"
+        title="Cell fill (document swatch)"
+        aria-expanded={open === "fill"}
+        style={button}
+        onClick={() => setOpen(open === "fill" ? null : "fill")}
+      >
+        <span style={chip(colorOf(current.fill))} /> ▾
+      </button>
+      <button
+        type="button"
+        data-testid="sheet-bar-text-color"
+        aria-label="Text colour"
+        title="Text colour (document swatch)"
+        aria-expanded={open === "text"}
+        style={button}
+        onClick={() => setOpen(open === "text" ? null : "text")}
+      >
+        A <span style={chip(colorOf(current.text))} />
+      </button>
+      {open ? (
+        <div
+          data-testid="sheet-swatch-picker"
+          role="listbox"
+          aria-label={open === "fill" ? "Cell fill" : "Text colour"}
+          style={{
+            ...card,
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            minWidth: 0,
+            width: 196,
+            flexWrap: "wrap",
+            gap: 4,
+            padding: 8,
+            zIndex: 1,
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setOpen(null);
+              done();
+            }
+          }}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={
+              (open === "fill" ? current.fill : current.text) === null
+            }
+            title="None"
+            data-swatch=""
+            style={{ ...button, padding: 2 }}
+            onClick={() => pick(null)}
+          >
+            <span style={chip(null)} />
+          </button>
+          {choices.swatches.map((sw) => (
+            <button
+              key={sw.id}
+              type="button"
+              role="option"
+              aria-selected={
+                (open === "fill" ? current.fill : current.text) === sw.id
+              }
+              title={sw.name}
+              data-swatch={sw.id}
+              style={{ ...button, padding: 2 }}
+              onClick={() => pick(sw.id)}
+            >
+              <span style={chip(sw.rgbHex)} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
   );
 }
 

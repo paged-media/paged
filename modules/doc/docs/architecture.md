@@ -155,7 +155,12 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
   story read-back holds no table), boots the engine, loads the original bytes again and calls
   `save_edited_from_content` with both: lower again as the baseline; overlay the read-back
   onto it (the cells through `overlay_cells`, which patches a cell paragraph's changed span
-  into its existing runs);
+  into its existing runs, and for a cell whose paragraph count changed aligns its paragraphs
+  by text — `align_cell_paragraphs`, which the differ repeats — so an added paragraph becomes
+  a `CloneCellParagraph` of its neighbour and a removed one a `DeleteCellParagraph`, never of
+  the cell's last `<w:p>`). Which native table each lowered table became is found by
+  signature (`src/tables.ts`, `matchTables`): shape, then unchanged cells, then story and
+  ordinal, then place between matched neighbours;
   diff the two lowerings into an `EditSet` in lowered `(block, run)` coordinates; resolve
   those through `DocxBindings` to source ordinals; patch the main document part.
 - `splice.rs` uses `quick-xml` only to find byte ranges in one streaming pass and copies

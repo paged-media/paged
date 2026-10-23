@@ -43,10 +43,13 @@ import {
   ABSENT_PATHS,
   SERVED_PATHS,
   VALUED_PATHS,
+  WRITABLE_PATHS,
   collapseCells,
   makeTextBindingProvider,
+  patchForWrite,
   stylesOfRange,
 } from "../src/binding-provider/text-provider";
+import type { CellStylePatch } from "../src/engine";
 
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
@@ -109,21 +112,107 @@ function providerOver(
 const SELECTION = { kind: "selection", scope: "content" } as const;
 
 describe("paged.sheet text provider — the declaration", () => {
-  it("declares the WHOLE Character/Paragraph surface, and writes NONE of it", () => {
+  it("declares the WHOLE Character/Paragraph surface; without a write door it writes NONE of it", async () => {
     const p = providerOver([DEFAULT, BIG], [[1]]);
     // Owning the selection means owning the whole panel surface — see
     // the module header. A path left undeclared would DECLINE, and a
     // decline falls through to core.
     expect(p.provides.paths).toEqual(SERVED_PATHS);
     expect(SERVED_PATHS.length).toBe(VALUED_PATHS.length + ABSENT_PATHS.length);
-    // The read/write split: everything read, nothing written. The
-    // engine has no cell-style write API, and DECLARING that is what
-    // keeps the host's controls read-only instead of fake-interactive.
+    // A source without `applyStyle` is a read-only readout, and says so.
     expect(p.provides.writablePaths).toEqual([]);
-    // No `writeProperty` lane either: neither of this repo's providers
-    // implements one, and an unimplemented lane is not declared.
-    expect("writeProperty" in p).toBe(false);
+    const w = await p.writeProperty!({
+      path: "characterFontSize",
+      target: SELECTION,
+      value: { type: "length", value: 12 },
+    });
+    expect(w).toMatchObject({ kind: "applied", outcome: { applied: false } });
     expect(p.applyMutation).toBeUndefined();
+  });
+
+  it("with a write door (P7) the valued paths write the selected cells", async () => {
+    const patches: CellStylePatch[] = [];
+    const p = makeTextBindingProvider(silentHost, {
+      textSelectionRange: () => ({ sheet: 0, range: "A1" }),
+      lowerRange: () => content([DEFAULT], [[0]]),
+      applyStyle: (patch) => {
+        patches.push(patch);
+        return { ok: true };
+      },
+      swatchRef: async (id) =>
+        id === "Color/Brand"
+          ? { id, model: "spot", fallbackRgb: "#C8102E" }
+          : null,
+    }).provider;
+    expect(p.provides.writablePaths).toEqual(WRITABLE_PATHS);
+    const write = (path: string, value: unknown) =>
+      p.writeProperty!({ path, target: SELECTION, value } as never);
+    expect(
+      await write("appliedParagraphStyle", {
+        type: "text",
+        value: "ParagraphStyle/Table body",
+      }),
+    ).toMatchObject({ kind: "applied", outcome: { applied: true } });
+    await write("characterFillColor", {
+      type: "colorRef",
+      value: "Color/Brand",
+    });
+    await write("characterFontStyle", { type: "text", value: "Bold Italic" });
+    await write("paragraphJustification", {
+      type: "text",
+      value: "CenterAlign",
+    });
+    await write("frameFillColor", { type: "colorRef", value: "Color/Brand" });
+    expect(patches).toEqual([
+      { docParaStyle: "ParagraphStyle/Table body" },
+      {
+        fontSwatch: {
+          id: "Color/Brand",
+          model: "spot",
+          fallbackRgb: "#C8102E",
+        },
+      },
+      { bold: true, italic: true },
+      { hAlign: "center" },
+      {
+        fillSwatch: {
+          id: "Color/Brand",
+          model: "spot",
+          fallbackRgb: "#C8102E",
+        },
+      },
+    ]);
+    // A swatch the document lacks is refused, not guessed.
+    expect(
+      await write("characterFillColor", {
+        type: "colorRef",
+        value: "Color/None",
+      }),
+    ).toMatchObject({ kind: "applied", outcome: { applied: false } });
+  });
+
+  it("maps a cleared text colour and the positions to patches", async () => {
+    expect(
+      await patchForWrite(
+        "characterFillColor",
+        { type: "colorRef", value: null },
+        undefined,
+      ),
+    ).toEqual({ fontColor: "", fontSwatch: null });
+    expect(
+      await patchForWrite(
+        "characterPosition",
+        { type: "text", value: "Subscript" },
+        undefined,
+      ),
+    ).toEqual({ vertAlign: "subscript" });
+    expect(
+      await patchForWrite(
+        "characterLeading",
+        { type: "length", value: 12 },
+        undefined,
+      ),
+    ).toMatch(/no "characterLeading"/);
   });
 
   it("serves NO collections and NO ops — this is not a second Swatches provider", () => {
@@ -132,15 +221,33 @@ describe("paged.sheet text provider — the declaration", () => {
     expect(p.provides.ops).toBeUndefined();
   });
 
-  it("`characterFillColor` is DECLARED but not VALUED — nothing mints the swatch it names", () => {
-    // Since `c321642` the value is EXPRESSIBLE (a minted swatch id, not
-    // the raw hex that used to name nothing and render as the default
-    // text colour). It stays absent because nothing applies the
-    // emission that mints it: a colour chip for a swatch no document
-    // carries is the same lie the Swatches slice marked
-    // `data-swatch-preview="unresolved"` from the other side.
-    expect(VALUED_PATHS).not.toContain("characterFillColor");
-    expect(ABSENT_PATHS).toContain("characterFillColor");
+  it("`characterFillColor` answers only a DOCUMENT swatch (P7)", async () => {
+    // A plain workbook colour names no swatch the document carries (the
+    // page mints one only when it lowers); a document swatch reference
+    // does, so only that is a value.
+    expect(VALUED_PATHS).toContain("characterFillColor");
+    const plain = providerOver([style(0, { textRgb: "#FF0000" })], [[0]]);
+    expect(
+      (
+        await plain.readProperty!({
+          path: "characterFillColor",
+          target: SELECTION,
+        })
+      ).kind,
+    ).toBe("absent");
+    const doc = providerOver(
+      [style(0, { textRgb: "#C8102E", textSwatch: "Color/Brand" })],
+      [[0]],
+    );
+    expect(
+      await doc.readProperty!({
+        path: "characterFillColor",
+        target: SELECTION,
+      }),
+    ).toEqual({
+      kind: "value",
+      value: { type: "colorRef", value: "Color/Brand" },
+    });
   });
 });
 
@@ -160,7 +267,11 @@ describe("paged.sheet text provider — reads", () => {
 
   it("cells that DISAGREE are MIXED — never the first one, never a winner", async () => {
     const p = providerOver([DEFAULT, BIG, SMALL], [[1, 2]]);
-    for (const path of VALUED_PATHS) {
+    for (const path of [
+      "characterFontFamily",
+      "characterFontStyle",
+      "characterFontSize",
+    ] as const) {
       expect(await p.readProperty!({ path, target: SELECTION })).toEqual({
         kind: "mixed",
       });

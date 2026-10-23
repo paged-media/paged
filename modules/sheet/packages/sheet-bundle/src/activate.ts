@@ -46,13 +46,19 @@ import { t } from "@paged-media/strings";
 
 import manifest from "../manifest.json";
 
+import { defaultCsvOptions } from "./engine-files";
 import { COMMANDS, FILES, PANELS } from "./messages";
 
 import {
   DELIMITED_MIMES,
   importBytes,
+  ODS_EXTENSIONS,
+  ODS_MIMES,
   pickAndImport,
   placeIntoNewDocument,
+  XLSM_MIME,
+  XLSX_FAMILY_EXTENSIONS,
+  XLSX_FAMILY_MIMES,
   XLSX_MIME,
 } from "./import-xlsx";
 import { makeSwatchesBindingProvider } from "./binding-provider/swatches-provider";
@@ -219,6 +225,39 @@ export function activate(host: BundleHost): BundleHandle {
     // the panel's own input when no picker is wired).
     handler: () => void pickAndImport(host, session, PANEL_ID),
   });
+  // Sheet ADR 521 — the active sheet as CSV through the host's save door;
+  // the R1C1 reference style (kept in the workbook).
+  host.contribute.command({
+    id: "media.paged.sheet.command.exportCsv",
+    title: t(COMMANDS.exportCsv),
+    category: "Sheet",
+    handler: async () => {
+      const out = session.exportCsv(defaultCsvOptions());
+      if (!out) {
+        host.log.warn("exportCsv: no workbook / sheet to export");
+        return;
+      }
+      if (!host.supports("shell.saveFile@1")) {
+        host.log.warn("exportCsv: the host has no save door");
+        return;
+      }
+      await host.shell.saveFile({
+        suggestedName: out.fileName,
+        bytes: out.bytes,
+        mimeType: "text/csv",
+      });
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.toggleR1C1",
+    title: t(COMMANDS.toggleR1C1),
+    category: "Sheet",
+    handler: () => {
+      const now = session.formulaDisplay();
+      if (!now) return;
+      session.setFormulaDisplay({ r1c1: !now.r1c1 });
+    },
+  });
   host.contribute.command({
     id: "media.paged.sheet.command.lowerToFrame",
     title: t(COMMANDS.lowerToFrame),
@@ -273,7 +312,12 @@ export function activate(host: BundleHost): BundleHandle {
     id: "media.paged.sheet.command.sortRange",
     title: t(COMMANDS.sortRange),
     category: "Sheet",
-    handler: () => host.shell.openPanel(PANEL_ID),
+    // In an entered sheet frame: the Sort card under the sheet bar (sheet
+    // ADR 517); elsewhere the workbook panel's sort.
+    handler: () => {
+      if (!session.isInFrameActive() || !session.openDataCard({ kind: "sort" }))
+        host.shell.openPanel(PANEL_ID);
+    },
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findReplace",
@@ -484,6 +528,77 @@ export function activate(host: BundleHost): BundleHandle {
     when: workbookIsOpen,
     handler: () => session.openPasteSpecial(),
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.dataValidation",
+    title: t(COMMANDS.dataValidation),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "validation" }),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.circleInvalid",
+    title: t(COMMANDS.circleInvalid),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.toggleInvalidCircles(),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.toggleFilter",
+    title: t(COMMANDS.toggleFilter),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.toggleAutofilter();
+      if (!r.ok) host.log.warn(`toggleFilter: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.hideSelection",
+    title: t(COMMANDS.hideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(true);
+      if (!r.ok) host.log.warn(`hideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.unhideSelection",
+    title: t(COMMANDS.unhideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(false);
+      if (!r.ok) host.log.warn(`unhideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.groupSelection",
+    title: t(COMMANDS.groupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(true);
+      if (!r.ok) host.log.warn(`groupSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.ungroupSelection",
+    title: t(COMMANDS.ungroupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(false);
+      if (!r.ok) host.log.warn(`ungroupSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.goalSeek",
+    title: t(COMMANDS.goalSeek),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "goalSeek" }),
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context
@@ -662,6 +777,13 @@ export function activate(host: BundleHost): BundleHandle {
                 includeGridRules: false,
               });
             },
+            // P7 — the host's Character / Paragraph / style panels write
+            // the selected cells (sheet ADR 518 `setStyle`).
+            applyStyle: (patch) => {
+              const r = session.setStyle(patch);
+              return r.ok ? { ok: true } : { ok: false, message: r.message };
+            },
+            swatchRef: (id) => session.documentSwatchRef(id),
           }).provider,
         )
       : null;
@@ -685,8 +807,11 @@ export function activate(host: BundleHost): BundleHandle {
     host.contribute.importer({
       id: "media.paged.sheet.importer.xlsx",
       title: t(FILES.spreadsheet),
-      extensions: [".xlsx"],
-      mimeTypes: [XLSX_MIME],
+      // Sheet ADR 521 — the macro-enabled workbook and the templates are
+      // the same package (macros kept, never run; a template opens as a
+      // new workbook).
+      extensions: XLSX_FAMILY_EXTENSIONS,
+      mimeTypes: XLSX_FAMILY_MIMES,
       import: async ({ name, bytes, newDocument }) => {
         await session.import(bytes, name);
         await placeIntoNewDocument(session, newDocument);
@@ -706,6 +831,18 @@ export function activate(host: BundleHost): BundleHandle {
         host.shell.openPanel(PANEL_ID);
       },
     });
+    // Sheet ADR 521 — OpenDocument spreadsheets, read (converted in Rust).
+    host.contribute.importer({
+      id: "media.paged.sheet.importer.ods",
+      title: t(FILES.ods),
+      extensions: ODS_EXTENSIONS,
+      mimeTypes: ODS_MIMES,
+      import: async ({ name, bytes, newDocument }) => {
+        await importBytes(session, bytes, name);
+        await placeIntoNewDocument(session, newDocument);
+        host.shell.openPanel(PANEL_ID);
+      },
+    });
   }
   // K-2 / S-06 — register the .xlsx EXPORTER: the Export Center pulls the
   // workbook bytes on demand (the host owns blob→download). Preservation-
@@ -716,7 +853,25 @@ export function activate(host: BundleHost): BundleHandle {
       title: t(FILES.xlsx),
       extension: ".xlsx",
       mimeType: XLSX_MIME,
-      export: () => session.saveWorkbook(),
+      // A macro workbook saved as .xlsx leaves its VBA project out (Excel
+      // refuses an .xlsx with one); the .xlsm exporter keeps it.
+      export: () => session.saveWorkbookAs("xlsx"),
+    });
+    // Sheet ADR 521 — the macro-enabled workbook, and the active sheet as
+    // CSV (UTF-8 with a BOM, the host language's list separator).
+    host.contribute.exporter({
+      id: "media.paged.sheet.exporter.xlsm",
+      title: t(FILES.xlsm),
+      extension: ".xlsm",
+      mimeType: XLSM_MIME,
+      export: () => session.saveWorkbookAs("xlsm"),
+    });
+    host.contribute.exporter({
+      id: "media.paged.sheet.exporter.csv",
+      title: t(FILES.csv),
+      extension: ".csv",
+      mimeType: "text/csv",
+      export: () => session.exportCsv(defaultCsvOptions()),
     });
   }
 

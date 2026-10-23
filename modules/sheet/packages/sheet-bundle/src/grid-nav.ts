@@ -241,6 +241,13 @@ export type GridKeyAction =
   | { kind: "pasteSpecial" }
   /** F9: recalculate (manual calculation mode). */
   | { kind: "calculate" }
+  /** Ctrl+Shift+L: AutoFilter on or off (sheet ADR 517). */
+  | { kind: "toggleFilter" }
+  /** Alt+Down: the active cell's dropdown (a validation list, a filter
+   *  menu). */
+  | { kind: "dropdown" }
+  /** Alt+Shift+Right / Alt+Shift+Left: group / ungroup the selection. */
+  | { kind: "group"; on: boolean }
   /** Alt+PageDown / Alt+PageUp: a screen to the right / left. */
   | { kind: "pageAcross"; dir: 1 | -1; extend: boolean }
   | { kind: "none" };
@@ -296,6 +303,8 @@ export function gridKeyAction(
           : { kind: "toggleStyle", style: "underline" };
       case "1":
         return editing ? { kind: "none" } : { kind: "formatCells" };
+      case "l":
+        return editing || !shift ? { kind: "none" } : { kind: "toggleFilter" };
       case "z":
         return shift ? { kind: "redo" } : { kind: "undo" };
       case "y":
@@ -336,6 +345,9 @@ export function gridKeyAction(
     if (key.length === 1) return { kind: "type", ch: key };
     return { kind: "none" };
   }
+  if (e.altKey && key === "ArrowDown" && !shift) return { kind: "dropdown" };
+  if (e.altKey && shift && (key === "ArrowRight" || key === "ArrowLeft"))
+    return { kind: "group", on: key === "ArrowRight" };
   if (key in ARROWS) {
     const [dRow, dCol] = ARROWS[key];
     return { kind: "move", dRow, dCol, extend: shift };

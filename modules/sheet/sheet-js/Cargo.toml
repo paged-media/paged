@@ -21,7 +21,7 @@ sheet-parser = { path = "../sheet-parser" }
 sheet-calc = { path = "../sheet-calc" }
 sheet-fn = { path = "../sheet-fn" }
 sheet-format = { path = "../sheet-format" }
-sheet-xlsx = { path = "../sheet-xlsx" }
+sheet-xlsx = { path = "../sheet-xlsx", default-features = false }
 sheet-lower = { path = "../sheet-lower" }
 sheet-grid = { path = "../sheet-grid" }
 # The M2 charts track (spec §8.4): sheet-js resolves a parsed chart's series
@@ -40,6 +40,10 @@ serde-wasm-bindgen.workspace = true
 console_error_panic_hook.workspace = true
 
 [features]
+# The OpenDocument spreadsheet import (`loadOds`, sheet ADR 521). On in the
+# shipped wasm; a build without it drops the ODS reader.
+default = ["ods"]
+ods = ["sheet-xlsx/ods"]
 # Exposes `perfCounters()` / `resetPerfCounters()` on the wasm (the
 # sheet-calc work counters). OFF in the shipped wasm: scripts/build-wasm.sh
 # builds with no features; scripts/build-wasm-perf.sh builds this one into

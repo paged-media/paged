@@ -68,8 +68,13 @@ describe.skipIf(!ENGINE_BUILT)(
     it("the .xlsx importer opens the workbook, every sheet and value, and shows the workbook panel", async () => {
       covers("importer:media.paged.sheet.importer.xlsx");
       const imp = env.importer("media.paged.sheet.importer.xlsx");
-      expect(imp.extensions).toEqual([".xlsx"]);
-      expect(imp.mimeTypes).toEqual([XLSX]);
+      expect(imp.extensions).toEqual([".xlsx", ".xlsm", ".xltx", ".xltm"]);
+      expect(imp.mimeTypes).toEqual([
+        XLSX,
+        "application/vnd.ms-excel.sheet.macroEnabled.12",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+        "application/vnd.ms-excel.template.macroEnabled.12",
+      ]);
       expect(workbookOpen(env)).toBe(false);
       const bytes = await authorWorkbook(
         3,
