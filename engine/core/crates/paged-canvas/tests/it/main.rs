@@ -132,4 +132,5 @@ mod w3a0_read_surface;
 mod web_bake_one_batch;
 mod wire_robustness;
 mod wire_vocabulary;
+mod xml_tags_wire;
 mod xref_ops;

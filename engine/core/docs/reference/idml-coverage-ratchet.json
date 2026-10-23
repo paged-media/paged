@@ -18,9 +18,9 @@
       "value": 0.485924
     },
     "weightedExport": {
-      "covered": 92130,
+      "covered": 95004,
       "total": 633952,
-      "value": 0.145326
+      "value": 0.14986
     },
     "misplacedReads": 30,
     "unseenReads": 405,
@@ -2076,6 +2076,16 @@
     "Stories|TextVariableInstance@AssociatedTextVariable|attr",
     "Stories|TextVariableInstance@ResultText|attr",
     "Stories|idPkg:Story@DOMVersion|attr",
+    "XML|CharacterStyleRange@AppliedCharacterStyle|attr",
+    "XML|ParagraphStyleRange@AppliedParagraphStyle|attr",
+    "XML|XMLElement@MarkupTag|attr",
+    "XML|XMLElement@Self|attr",
+    "XML|XMLTag@Name|attr",
+    "XML|XMLTag@Self|attr",
+    "XML|XmlStory@Self|attr",
+    "XML|XmlStory@UserText|attr",
+    "XML|idPkg:BackingStory@DOMVersion|attr",
+    "XML|idPkg:Tags@DOMVersion|attr",
     "designmap|Bookmark@Destination|attr",
     "designmap|Bookmark@Name|attr",
     "designmap|Bookmark@Self|attr",

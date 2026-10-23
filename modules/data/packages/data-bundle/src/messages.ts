@@ -27,7 +27,7 @@
 
 import { defineMessages, defineTranslations } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 /** Panel titles, runtime command titles, the importer. */
 export const COMMANDS = defineMessages("data.commands", {
@@ -458,6 +458,46 @@ export const TEMPLATE = defineMessages("data.template", {
   variableUndefined: `The variable "{name}" is not defined.`,
   variableUnbound: `The variable "{name}" is bound to nothing here.`,
   variableIsContent: `The variable "{name}" fills a text or a picture: open that frame as a text or image field.`,
+});
+
+/** Catalogues (ADR 560): a template's fields as binding targets, the
+ *  template repeated per record or group. */
+export const CATALOGUE = defineMessages("data.catalogue", {
+  section: "Template fields",
+  sectionTitle:
+    "Bind the template's own fields to the data, then repeat the template once per record or group",
+  noFields:
+    "This document has no text, picture or visibility fields: make a template first.",
+  field: "Field",
+  expr: "Expression",
+  bind: "Bind",
+  unbind: "Unbind",
+  invert: "Hide when true",
+  perRecord: "One page per record",
+  perGroup: "One page per group of",
+  run: "Make catalogue",
+  runTitle:
+    "Copy the template's page once per record (or group) and fill its fields; a second run replaces the copies",
+  bound: `Field "{field}" ← {expr}`,
+  noSuchField: `The template has no field "{field}".`,
+  notFillable: `The field "{field}" is a {kind} field: a catalogue fills text, picture and visibility fields.`,
+  queryUndefined: `The query "{query}" is not defined.`,
+  exprInvalid: `The expression does not work: {error}`,
+  unknownColumns: "The query has no column {columns}.",
+  noBindings: "No template field is bound to the data yet.",
+  noFieldsOnPage: "None of the bound fields is on the template page {page}.",
+  engineTooOld: "This data engine cannot plan a catalogue: rebuild it.",
+  noPage: "The template page {page} is not in the document.",
+  required: "a value is required",
+  tooLong: "longer than {max} characters",
+  error: "the expression gives {detail}",
+  problem: `{label}, field "{field}": {problem}`,
+  refused: "The catalogue was not made: {reason}.",
+  done: "Catalogue: {instances} page(s) from {records} record(s).",
+  emptied: "Catalogue: the query has no records; its copies were removed.",
+  notMarked:
+    "the template page is not marked as a catalogue yet: an author makes the catalogue once",
+  missingFields: "{count} field(s) were not on a copy and stay as they are.",
 });
 
 /** The session's status line (every panel shows it). */

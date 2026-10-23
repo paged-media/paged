@@ -156,10 +156,9 @@ A template can open four parts of a drawing to a filler (extensions ADR 335; cod
 - **symbolChoice** re-shapes the instance leaf in place (path, paint and link, one batch),
   so the element and its field label survive. Only one-piece symbols can be chosen: a
   rebuild would mint new elements, which a filler may not, and drop the field's label.
-- **textOnPath** reads and writes the story on the path. The engine decides a story's
-  permissions by the text frame that hosts it, and a story on a path has none: a filler's
-  write is refused unless the template grants `text.edit` document-wide (a core change
-  would let the path's own grant reach its story).
+- **textOnPath** reads and writes the story on the path. A story on a path has no text frame;
+  the engine decides it by the item that carries the path, so the field's `text.edit` reaches
+  it (engine ADR 1000, amendment of 2026-10-23).
 
 ### Illustrator variables
 

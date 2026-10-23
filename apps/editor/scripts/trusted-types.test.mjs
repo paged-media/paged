@@ -29,7 +29,10 @@ test("the policy requires Trusted Types for script and reports to the report rou
 
 test("public/_headers ships the module's policy, enforced, as a policy of its own", () => {
   const headers = readFileSync(resolve(canvas, "public", "_headers"), "utf8");
-  const policies = headers
+  // The site-wide block (`/*`); embed.html's own block follows it.
+  const [site, embed = ""] = headers.split(/^\/embed\.html$/m);
+  assert.match(embed, /Content-Security-Policy: frame-ancestors 'self'/);
+  const policies = site
     .split("\n")
     .filter((l) => /^\s*Content-Security-Policy:/.test(l))
     .map((l) => l.replace(/^\s*Content-Security-Policy:\s*/, ""));

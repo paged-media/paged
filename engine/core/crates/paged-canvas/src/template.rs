@@ -117,6 +117,69 @@ impl CanvasModel {
         Some(text)
     }
 
+    /// A run field's story, and its placeholder run (offset and display
+    /// text) when the field is one, else its tagged range's text.
+    fn run_field(&self, key: &str) -> Option<(String, Option<u32>, String)> {
+        let story_id = paged_template::story_of_run(&self.scene, key)?;
+        let story = &self
+            .scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)?
+            .story;
+        let mut at = 0u32;
+        let mut found: Option<(u32, String, bool)> = None;
+        for run in story.paragraphs.iter().flat_map(|p| p.runs.iter()) {
+            if let Some(p) = run.placeholder.as_ref().filter(|p| p.key == key) {
+                let ours = p.plugin == paged_model::TEMPLATE_PLACEHOLDER_PLUGIN;
+                if found
+                    .as_ref()
+                    .is_none_or(|(_, _, was_ours)| ours && !was_ours)
+                {
+                    found = Some((at, run.text.clone(), ours));
+                }
+            }
+            at += run.text.chars().count() as u32;
+        }
+        if let Some((offset, text, _)) = found {
+            return Some((story_id.to_string(), Some(offset), text));
+        }
+        let range = story
+            .xml_elements
+            .iter()
+            .find_map(|e| e.find(key))
+            .and_then(|e| e.range)?;
+        let text: String = story
+            .flat_text()
+            .chars()
+            .skip(range.start as usize)
+            .take((range.end - range.start) as usize)
+            .collect();
+        Some((story_id.to_string(), None, text))
+    }
+
+    fn story_paragraphs(&self, story_id: &str) -> &[paged_model::Paragraph] {
+        self.scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)
+            .map_or(&[], |s| s.story.paragraphs.as_slice())
+    }
+
+    /// The tagged range of the element `element` in `story_id`.
+    fn range_of(&self, story_id: &str, element: &str) -> Option<(u32, u32)> {
+        self.scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)?
+            .story
+            .xml_elements
+            .iter()
+            .find_map(|e| e.find(element))
+            .and_then(|e| e.range)
+            .map(|r| (r.start, r.end))
+    }
+
     fn story_of_frame(&self, frame_id: &str) -> Option<String> {
         self.scene
             .text_frame(frame_id)
@@ -168,10 +231,12 @@ impl CanvasModel {
             .map(|(target_id, field)| {
                 let node = self.resolve_frame_node_id(target_id);
                 let element_id = node.as_ref().and_then(element_of);
+                let run = (field.kind == TemplateFieldKind::TextRun)
+                    .then(|| self.run_field(target_id))
+                    .flatten();
                 let story_id = match field.kind {
-                    TemplateFieldKind::Text | TemplateFieldKind::TextRun => {
-                        self.story_of_frame(target_id)
-                    }
+                    TemplateFieldKind::Text => self.story_of_frame(target_id),
+                    TemplateFieldKind::TextRun => run.as_ref().map(|(s, _, _)| s.clone()),
                     _ => None,
                 };
                 let value = match field.kind {
@@ -195,9 +260,11 @@ impl CanvasModel {
                         .as_ref()
                         .and_then(|e| self.visible_of(e))
                         .map(|visible| FieldValue::Visible { visible }),
+                    // A run's value is its placeholder's text, or the text
+                    // of the range its element tags (engine ADR 1002).
+                    TemplateFieldKind::TextRun => run.map(|(_, _, text)| FieldValue::Text { text }),
                     // A module field's value is its module's to read.
-                    TemplateFieldKind::TextRun
-                    | TemplateFieldKind::Choice
+                    TemplateFieldKind::Choice
                     | TemplateFieldKind::Data
                     | TemplateFieldKind::Module => None,
                 };
@@ -322,12 +389,61 @@ impl CanvasModel {
                         value: paged_mutate::Value::Bool(*visible),
                     });
                 }
-                (
-                    TemplateFieldKind::TextRun
-                    | TemplateFieldKind::Choice
-                    | TemplateFieldKind::Data,
-                    _,
-                ) => {
+                (TemplateFieldKind::TextRun, FieldValue::Text { text }) => {
+                    if row.field.required && text.trim().is_empty() {
+                        problem("required");
+                        continue;
+                    }
+                    if c.max_length
+                        .is_some_and(|max| text.chars().count() as u32 > max)
+                    {
+                        problem("longer than the field allows");
+                        continue;
+                    }
+                    let Some((story_id, placeholder, old)) = self.run_field(&row.target_id) else {
+                        problem("the field's run is not in the document");
+                        continue;
+                    };
+                    match placeholder {
+                        // The placeholder is the field: its value is set.
+                        Some(offset) => ops.push(Mutation::SetFieldValue {
+                            story_id,
+                            offset,
+                            value: Some(text.clone()),
+                        }),
+                        // A tagged range not yet a placeholder (an IDML
+                        // reopened): its text is replaced, deleted first so
+                        // the emptied range takes the new text.
+                        None => {
+                            let Some((start, _)) = self.range_of(&story_id, &row.target_id) else {
+                                problem("the field's run is not in the document");
+                                continue;
+                            };
+                            let old_len = old.chars().count() as u32;
+                            let paragraphs = self.story_paragraphs(&story_id);
+                            let cs = crate::mutate::char_to_content_offset(paragraphs, start);
+                            let ce =
+                                crate::mutate::char_to_content_offset(paragraphs, start + old_len);
+                            if ce > cs {
+                                ops.push(Mutation::DeleteRange {
+                                    story_id: story_id.clone(),
+                                    start: cs,
+                                    end: ce,
+                                    cell: None,
+                                });
+                            }
+                            if !text.is_empty() {
+                                ops.push(Mutation::InsertText {
+                                    story_id,
+                                    offset: cs,
+                                    text: text.clone(),
+                                    cell: None,
+                                });
+                            }
+                        }
+                    }
+                }
+                (TemplateFieldKind::Choice | TemplateFieldKind::Data, _) => {
                     problem("this kind of field cannot be set yet");
                 }
                 (TemplateFieldKind::Module, _) => {
@@ -341,5 +457,145 @@ impl CanvasModel {
         } else {
             Err(problems)
         }
+    }
+}
+
+impl CanvasModel {
+    /// The fields the document's XML tags describe (engine ADR 1002, task
+    /// C9). Reads only.
+    pub fn derived_template_fields(
+        &self,
+        opts: paged_template::DeriveOptions,
+    ) -> paged_template::Derivation {
+        paged_template::derive_fields(&self.scene, opts)
+    }
+
+    /// "Open as template" (task F5): the derived fields, those named in
+    /// `only` when it is given, written as the template's policy, and each
+    /// tagged range made a placeholder run of the template's plugin keyed
+    /// by its element (the element stays and wraps it). ONE batch, so one
+    /// undo step; it writes the template's labels, which only an author's
+    /// session may. Nothing is applied here.
+    pub fn lower_open_as_template(
+        &self,
+        opts: paged_template::DeriveOptions,
+        only: Option<&[String]>,
+    ) -> Result<Mutation, Vec<TemplateFieldProblem>> {
+        use paged_template::{DerivedTarget, ItemPolicy, TEMPLATE_KEY};
+        let derived: Vec<paged_template::DerivedField> = self
+            .derived_template_fields(opts)
+            .fields
+            .into_iter()
+            .filter(|f| only.is_none_or(|names| names.contains(&f.field.name)))
+            .collect();
+        if derived.is_empty() {
+            return Err(vec![TemplateFieldProblem {
+                name: String::new(),
+                problem: "nothing in the document is tagged as a field".into(),
+            }]);
+        }
+        let (index, _) = PolicyIndex::build(&self.scene);
+        let mut document = index.document().cloned().unwrap_or_default();
+        let mut ops = Vec::new();
+
+        // The ranges become placeholders, last first in each story, so the
+        // offsets of the ones before stay true within the batch.
+        let mut ranges: Vec<(&str, &str, u32, u32, &str)> = derived
+            .iter()
+            .filter_map(|f| match &f.target {
+                DerivedTarget::Range {
+                    story_id,
+                    element_id,
+                    start,
+                    end,
+                    text,
+                } if end > start => Some((
+                    story_id.as_str(),
+                    element_id.as_str(),
+                    *start,
+                    *end,
+                    text.as_str(),
+                )),
+                _ => None,
+            })
+            .collect();
+        ranges.sort_by(|a, b| a.0.cmp(b.0).then(b.2.cmp(&a.2)));
+        for (story_id, element_id, start, end, text) in ranges {
+            let paragraphs = self.story_paragraphs(story_id);
+            let cs = crate::mutate::char_to_content_offset(paragraphs, start);
+            let ce = crate::mutate::char_to_content_offset(paragraphs, end);
+            let inserted = text.len() as u32;
+            ops.push(Mutation::InsertField {
+                story_id: story_id.to_string(),
+                offset: start,
+                field: paged_mutate::FieldKind::Placeholder {
+                    plugin: paged_model::TEMPLATE_PLACEHOLDER_PLUGIN.to_string(),
+                    key: element_id.to_string(),
+                    value: Some(text.to_string()),
+                },
+                content_offset: None,
+            });
+            ops.push(Mutation::DeleteRange {
+                story_id: story_id.to_string(),
+                start: cs + inserted,
+                end: ce + inserted,
+                cell: None,
+            });
+        }
+
+        for f in &derived {
+            let item = match &f.target {
+                DerivedTarget::Item { item_id } => item_id,
+                DerivedTarget::Story { frame_id, .. } => frame_id,
+                DerivedTarget::Range { element_id, .. } => {
+                    document.runs.insert(element_id.clone(), f.field.clone());
+                    continue;
+                }
+                DerivedTarget::Placeholder { key, .. } => {
+                    document.runs.insert(key.clone(), f.field.clone());
+                    continue;
+                }
+            };
+            let Some(element_id) = self
+                .resolve_frame_node_id(item)
+                .as_ref()
+                .and_then(element_of)
+            else {
+                continue;
+            };
+            let mut policy: ItemPolicy = index.item(item).cloned().unwrap_or_default();
+            policy.field = Some(f.field.clone());
+            ops.push(Mutation::SetPluginMetadata {
+                element_id: element_id.clone(),
+                key: TEMPLATE_KEY.to_string(),
+                value: Some(policy.to_label()),
+                caller: None,
+            });
+            // The item carries its field's name, as the Template panel's
+            // Make field does, when it has none.
+            let named = self
+                .scene
+                .spreads
+                .iter()
+                .any(|p| p.spread.item_names.contains_key(item.as_str()));
+            if !named {
+                ops.push(Mutation::SetElementProperty {
+                    element_id,
+                    path: paged_mutate::PropertyPath::ItemName,
+                    value: paged_mutate::Value::Text(f.field.name.clone()),
+                });
+            }
+        }
+        for f in &derived {
+            if !document.order.contains(&f.field.name) {
+                document.order.push(f.field.name.clone());
+            }
+        }
+        ops.push(Mutation::SetDocumentMetadata {
+            key: TEMPLATE_KEY.to_string(),
+            value: Some(document.to_label()),
+            caller: None,
+        });
+        Ok(Mutation::Batch { ops })
     }
 }

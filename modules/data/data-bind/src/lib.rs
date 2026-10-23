@@ -31,6 +31,7 @@
 //! - **diffs** by record identity ([`diff`]) so a refresh yields minimal row
 //!   deltas (insert/update/remove), keeping pagination stable and undo granular.
 
+pub mod catalogue;
 pub mod diff;
 pub mod mapping;
 pub mod property;

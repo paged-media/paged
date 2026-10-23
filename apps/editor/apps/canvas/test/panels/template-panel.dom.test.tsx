@@ -96,6 +96,14 @@ describe("Template panel", () => {
       constraints: { maxLength: 30 },
     });
     await until(h, '[data-template-field-row="headline"]');
+    // Engine ADR 1002 — the item is tagged after its field, the field's
+    // metadata mirrored, so a tag-based tool sees the template.
+    const elements = (await h.client.collection("xmlElements")) as {
+      tag: string;
+      attributes: [string, string][];
+    }[];
+    const tag = elements.find((e) => e.tag === "headline");
+    expect(tag?.attributes).toEqual([["maxLength", "30"]]);
 
     // A document default: a filler may select any item.
     await h.click(q(h, '[data-template-default="select"]')!);

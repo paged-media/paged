@@ -421,12 +421,16 @@ pub(crate) fn apply_inner(
             offset,
             field,
             content_offset,
-        } => apply_insert_field(doc, story_id, *offset, field, *content_offset),
+        } => xml::keeping_ranges(doc, story_id, xml::TextChange::Insert, |doc| {
+            apply_insert_field(doc, story_id, *offset, field, *content_offset)
+        }),
         Operation::DeleteField {
             story_id,
             offset,
             field,
-        } => apply_delete_field(doc, story_id, *offset, field),
+        } => xml::keeping_ranges(doc, story_id, xml::TextChange::Delete, |doc| {
+            apply_delete_field(doc, story_id, *offset, field)
+        }),
         Operation::InsertAnchoredFrame {
             story_id,
             offset,
@@ -637,7 +641,9 @@ pub(crate) fn apply_inner(
             story_id,
             offset,
             value,
-        } => apply_set_field_value(doc, story_id, *offset, value.as_deref()),
+        } => xml::keeping_ranges(doc, story_id, xml::TextChange::ReplaceRun(*offset), |doc| {
+            apply_set_field_value(doc, story_id, *offset, value.as_deref())
+        }),
         Operation::PlaceImage {
             frame,
             image_uri,
@@ -768,6 +774,24 @@ pub(crate) fn apply_inner(
         Operation::DeleteTextVariable { variable_id } => {
             layer::apply_delete_text_variable(doc, variable_id)
         }
+        Operation::CreateXmlTag { name, color } => xml::apply_create_xml_tag(doc, name, color),
+        Operation::DeleteXmlTag { name } => xml::apply_delete_xml_tag(doc, name),
+        Operation::TagItem { item, tag, self_id } => xml::apply_tag_item(doc, item, tag, self_id),
+        Operation::UntagItem { item } => xml::apply_untag_item(doc, item),
+        Operation::TagRange {
+            story_id,
+            start,
+            end,
+            tag,
+            self_id,
+        } => xml::apply_tag_range(doc, story_id, *start, *end, tag, self_id),
+        Operation::UntagRange { element } => xml::apply_untag_range(doc, element),
+        Operation::SetXmlAttribute {
+            element,
+            name,
+            value,
+        } => xml::apply_set_xml_attribute(doc, element, name, value),
+        Operation::RestoreXmlStructure { state } => xml::apply_restore_xml_structure(doc, state),
         Operation::SetRowHeight {
             story_id,
             table_id,
@@ -1137,6 +1161,7 @@ mod lock;
 mod note;
 pub mod permit;
 mod tracked_change;
+pub mod xml;
 /// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
 /// virtual path on a swatch, gradient or numbering list is an edit of the
 /// whole spec, read here, merged and written back.

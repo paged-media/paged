@@ -97,6 +97,12 @@ pub enum OperationError {
     #[error("not permitted: {permission} on {target}")]
     NotPermitted { permission: String, target: String },
 
+    /// Engine ADR 1002 — an XML structure edit that would not leave a
+    /// structure InDesign reads (a tag in use, a range cutting across
+    /// another, an element that is not there).
+    #[error("XML structure: {reason}")]
+    InvalidXmlStructure { reason: String },
+
     #[error("batch failed at index {failed_at}: {source}")]
     BatchFailed {
         failed_at: usize,

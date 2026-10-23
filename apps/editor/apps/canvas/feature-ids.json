@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 362,
+    "command": 366,
     "keybinding": 88,
-    "menu": 257,
+    "menu": 258,
     "panel": 122,
     "tool": 72
   },
@@ -42,6 +42,11 @@
     },
     {
       "id": "command:media.paged.data.bindProperty",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.bindTemplateField",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -157,6 +162,16 @@
     },
     {
       "id": "command:media.paged.data.refreshDiff",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.runCatalogue",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.templateFieldTargets",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -1761,6 +1776,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.template.openAsTemplate",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.tool.activate.*",
       "kind": "command",
       "owner": "editor"
@@ -2787,6 +2807,11 @@
     },
     {
       "id": "menu:File/Open PDF…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:File/Open as template…",
       "kind": "menu",
       "owner": "editor"
     },

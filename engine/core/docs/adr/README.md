@@ -142,6 +142,7 @@ is not written yet.
 | [209](209-a-picture-is-sampled-in-image-space.md) | A picture is sampled in image space, not where the atlas put it | Accepted 2026-10-21 |
 | [1000](1000-a-template-policy-lives-in-labels.md) | A template policy lives in labels, and operations are checked against it | Accepted 2026-10-22; amended 2026-10-23 (module fields) |
 | [1001](1001-the-session-has-a-role-and-refusals-are-typed.md) | The session has a role; permissions are checked at three doors; refusals are typed | Accepted 2026-10-22 |
+| [1002](1002-xml-tags-carry-template-fields.md) | XML tags carry template fields, and the XML structure is written | Accepted 2026-10-23 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

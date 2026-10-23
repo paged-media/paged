@@ -113,6 +113,11 @@
 // AC-E2E-CAPS-COVER named three new Mutation ops — set,
 // createTextVariable, deleteTextVariable — each probed with real args.
 //
+// 2026-10-23: protocol 76 (engine ADR 1002) named seven new Mutation ops —
+// createXmlTag, deleteXmlTag, tagItem, untagItem, tagRange, untagRange,
+// setXmlAttribute — each probed with real args on the `text` fixture as the
+// template's author (tagging is an author's write).
+//
 // 2026-10-17: the pin moved to canvas-wasm 0.71.13 (additive on protocol
 // 71). AC-E2E-CAPS-COVER named five new Mutation ops from core's v73 wire
 // (ADRs 163–165): insertFootnote, deleteFootnote, deleteHyperlink,
@@ -421,6 +426,41 @@ export const CAPABILITIES: Capability[] = [
     op: "deleteTextVariable",
     status: "supported",
     note: "proto 71; {variableId}; probed on a scratch variable; Text Variables panel ▸ Delete",
+  },
+  {
+    op: "createXmlTag",
+    status: "supported",
+    note: "proto 76 (engine ADR 1002); {name, color?}; a tag definition",
+  },
+  {
+    op: "deleteXmlTag",
+    status: "supported",
+    note: "proto 76; {name}; probed on a scratch tag",
+  },
+  {
+    op: "tagItem",
+    status: "supported",
+    note: "proto 76; {item, tag, selfId?}; a template-author write (the probe takes the author role); Template panel ▸ Make field",
+  },
+  {
+    op: "untagItem",
+    status: "supported",
+    note: "proto 76; {item}; probed on an item the probe tags first",
+  },
+  {
+    op: "tagRange",
+    status: "supported",
+    note: "proto 76; {storyId, start, end, tag, selfId?}; story characters; an untagged story is tagged Story first",
+  },
+  {
+    op: "untagRange",
+    status: "supported",
+    note: "proto 76; {element}; probed on a range the probe tags first",
+  },
+  {
+    op: "setXmlAttribute",
+    status: "supported",
+    note: "proto 76; {element, name, value?}; element by id or by the item it tags; Template panel ▸ Make field mirrors label/maxLength/required",
   },
   {
     op: "onMaster",

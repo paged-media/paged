@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/canvas-wasm",
-  "version": "0.75.0-dev",
+  "version": "0.76.0-dev",
   "private": true,
   "description": "The paged engine for the browser: the editing canvas (wire types, document model, WebGPU rendering), plus the engine's introspection (./introspect) and the document repository (./repo).",
   "type": "module",

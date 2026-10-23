@@ -545,6 +545,65 @@
           }
         },
         {
+          "id": "media.paged.data.templateFieldTargets",
+          "title": "List the template fields data can fill",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.data.bindTemplateField",
+          "title": "Bind a template field to the data",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "field": {
+                "kind": "text"
+              },
+              "query": {
+                "kind": "text"
+              },
+              "expr": {
+                "kind": "text"
+              },
+              "invert": {
+                "kind": "bool",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.runCatalogue",
+          "title": "Make a catalogue from the template",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "query": {
+                "kind": "text",
+                "optional": true
+              },
+              "template": {
+                "kind": "text",
+                "optional": true
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["perRecord", "perGroup"],
+                "optional": true
+              },
+              "by": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                },
+                "optional": true
+              }
+            }
+          }
+        },
+        {
           "id": "media.paged.data.previewQuery",
           "title": "Preview a query's rows",
           "args": {

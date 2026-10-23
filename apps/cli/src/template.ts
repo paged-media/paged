@@ -25,6 +25,7 @@
 //   paged template fill <template> --values <json> -o <out>
 //                                                    fill as a filler; write .paged, .idml or .pdf
 //   paged template check <template> <filled>         is <filled> the template with only its fields changed?
+//   paged template ingest <doc> -o <out>             open a tagged document as a template (engine ADR 1002)
 //
 // `fill` runs in a filler session, so a value the template does not permit
 // is refused here as it is in the browser. `check` refills the template with
@@ -41,7 +42,7 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
-import { flagStr, type OptionSpec } from "./args";
+import { flagBool, flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
 import type { CliSession } from "./session";
 import type { Verb } from "./verbs";
@@ -301,11 +302,51 @@ const VALUES: OptionSpec = {
   help: "the field values: a JSON list of {name, value}, an object of name → text, or a file holding either",
 };
 
+interface Derivation {
+  fields: {
+    field: { name: string; kind: string };
+    target: Record<string, unknown> & { kind: string };
+  }[];
+  skipped: { elementId: string; tag: string; reason: string }[];
+}
+
+/** `ingest`: the fields the document's XML tags describe, written as the
+ *  template's policy in an author's session, tagged ranges made placeholder
+ *  runs (engine ADR 1002), the same message the editor's File ▸ Open as
+ *  template sends. */
+async function ingest(
+  s: CliSession,
+  options: { includeNames: boolean; includePlaceholders: boolean },
+): Promise<Derivation> {
+  const role = await send(s, "setSessionPolicy", {
+    policy: { role: "author" },
+  });
+  if (role.kind !== "sessionPolicyApplied")
+    throw new CliError(
+      EXIT.failed,
+      `the engine did not take the session role (${role.kind})`,
+    );
+  const derived = await send(s, "requestDerivedTemplateFields", { options });
+  if (derived.kind !== "derivedTemplateFields")
+    throw new CliError(EXIT.failed, `the engine answered ${derived.kind}`);
+  const derivation = derived.payload["derivation"] as Derivation;
+  const reply = await send(s, "openAsTemplate", { options, only: null });
+  if (reply.kind === "templateFieldsRefused")
+    throw new CliError(EXIT.failed, "nothing in the document is a field", {
+      problems: reply.payload.problems ?? [],
+      skipped: derivation.skipped,
+    });
+  if (reply.kind !== "mutationApplied")
+    throw new CliError(EXIT.failed, `ingest refused: ${refusal(reply)}`);
+  return derivation;
+}
+
 export const template: Verb = {
   name: "template",
-  usage: "fields <doc> | kinds | fill <template> | check <template> <filled>",
+  usage:
+    "fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>",
   summary:
-    "template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields",
+    "template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template",
   min: 1,
   max: 3,
   options: [
@@ -314,7 +355,15 @@ export const template: Verb = {
       name: "out",
       short: "o",
       value: "file",
-      help: "fill: write the result here",
+      help: "fill, ingest: write the result here",
+    },
+    {
+      name: "names",
+      help: "ingest: untagged items with a name become fields too",
+    },
+    {
+      name: "placeholders",
+      help: "ingest: plugin placeholders become fields too",
     },
   ],
   reaches: ["templateFieldKinds", "readTemplateField", "writeTemplateField"],
@@ -367,6 +416,26 @@ export const template: Verb = {
         text: `wrote ${saved.path}`,
       };
     }
+    if (sub === "ingest") {
+      const out = flagStr(args, "out");
+      if (!out)
+        throw new CliError(EXIT.usage, "template ingest needs -o <file>");
+      const s = await session(doc);
+      const derivation = await ingest(s, {
+        includeNames: flagBool(args, "names"),
+        includePlaceholders: flagBool(args, "placeholders"),
+      });
+      const saved = await s.save(out);
+      const rows = await fields(s);
+      return {
+        json: { ...saved, fields: rows, skipped: derivation.skipped },
+        text: [
+          `wrote ${saved.path}`,
+          ...rows.map((r) => `${r.field.name}\t${r.field.kind}`),
+          ...derivation.skipped.map((t) => `skipped ${t.tag}: ${t.reason}`),
+        ].join("\n"),
+      };
+    }
     if (sub === "check") {
       if (!other)
         throw new CliError(
@@ -396,7 +465,7 @@ export const template: Verb = {
     }
     throw new CliError(
       EXIT.usage,
-      `template: unknown subcommand "${sub}" (fields, kinds, fill, check)`,
+      `template: unknown subcommand "${sub}" (fields, kinds, fill, check, ingest)`,
     );
   },
 };

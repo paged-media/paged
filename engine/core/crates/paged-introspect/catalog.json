@@ -484,6 +484,55 @@
       "summary": "Remove a text variable definition (refused while an instance is in the text)."
     },
     {
+      "name": "paged.createXmlTag",
+      "params": "(name, color?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Define an XML tag (color: a tag colour such as \"Red\")."
+    },
+    {
+      "name": "paged.deleteXmlTag",
+      "params": "(name)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Remove an XML tag (refused while an element uses it)."
+    },
+    {
+      "name": "paged.tagItem",
+      "params": "(itemId, tag, elementId?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Tag a page item or a story with an XML tag (a text frame's element tags its story); the tag and the root are made when missing."
+    },
+    {
+      "name": "paged.untagItem",
+      "params": "(itemId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Remove the element tagging a page item or a story."
+    },
+    {
+      "name": "paged.tagRange",
+      "params": "(storyId, start, end, tag, elementId?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Tag the story characters [start, end) with an XML tag (an untagged story is tagged Story first)."
+    },
+    {
+      "name": "paged.untagRange",
+      "params": "(elementId)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Remove the element tagging a text range; the ranges inside it stay tagged."
+    },
+    {
+      "name": "paged.setXmlAttribute",
+      "params": "(elementId, name, value?)",
+      "returns": "bool",
+      "kind": "author",
+      "summary": "Set an XML element's attribute; no value removes it. label, maxLength and required are a template field's metadata."
+    },
+    {
       "name": "paged.setFieldValue",
       "params": "(storyId, offset, value?)",
       "returns": "bool",
@@ -1761,6 +1810,13 @@
     "setDocumentMetadata",
     "createTextVariable",
     "deleteTextVariable",
+    "createXmlTag",
+    "deleteXmlTag",
+    "tagItem",
+    "untagItem",
+    "tagRange",
+    "untagRange",
+    "setXmlAttribute",
     "pathPointCurveType",
     "pathPointSet",
     "batch",

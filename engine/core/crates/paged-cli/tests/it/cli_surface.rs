@@ -39,7 +39,8 @@
 //! bridge added `HostObjectsResult`, which only a host with an object
 //! registry sends; 40 of 71 with ADR 193's `paged read snippet` →
 //! `ExportElements`; 42 of 73 with `paged template`, which sends
-//! `SetSessionPolicy` and `SetTemplateFields`); what
+//! `SetSessionPolicy` and `SetTemplateFields`; 42 of 75 with v76's two
+//! template-ingest kinds, which the Node CLI sends); what
 //! remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
@@ -142,10 +143,14 @@ const UNREACHED: &[(&str, &str)] = &[
      "no CLI verb: every subcommand builds a fresh `Session`, so a new process IS the reset this kind performs"),
     ("HostObjectsResult",
      "the answer half of the ADR 323 script host bridge: only a host with an object registry (the editor, the SDK's headless host, the Node CLI) can answer for plugin objects; the Rust CLI sends `executeScript` without `hostObjects`, so its scripts never suspend and a `plugin:` address throws noHost"),
+    ("RequestDerivedTemplateFields",
+     "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
+    ("OpenAsTemplate",
+     "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 31;
+const UNREACHED_COUNT: usize = 33;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -279,9 +284,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_42_of_73() {
+fn the_cli_reaches_42_of_75() {
     assert_eq!(kinds_the_cli_sends().len(), 42);
-    assert_eq!(every_kind().len(), 73);
+    assert_eq!(every_kind().len(), 75);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names

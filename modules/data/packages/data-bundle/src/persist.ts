@@ -52,6 +52,7 @@ import type {
   RuleTarget,
   VisibilityTargetKind,
 } from "../../data-host-model/src";
+import type { CatalogueDef, TemplateFieldBinding } from "./catalogue";
 import type { ImportFormat } from "./query/import";
 import type { RefreshPolicy } from "./refresh";
 import type { RemoteFormat } from "./remote";
@@ -136,6 +137,12 @@ export interface PersistedSession {
   preview?: Record<string, number>;
   /** The data set last applied to the document, if any. */
   dataSet?: string;
+  /** ADR 560: the template fields bound to the data, and the catalogues
+   *  made (by template page). Absent when there are none. */
+  catalogue?: {
+    fields: TemplateFieldBinding[];
+    runs: Record<string, CatalogueDef>;
+  };
 }
 
 export function emptyTargets(): PersistedTargets {
@@ -282,5 +289,24 @@ export function decodeSession(
         }
       : {}),
     ...(typeof p.dataSet === "string" ? { dataSet: p.dataSet } : {}),
+    ...(p.catalogue && typeof p.catalogue === "object"
+      ? {
+          catalogue: {
+            fields: Array.isArray(p.catalogue.fields)
+              ? p.catalogue.fields.filter(
+                  (f) =>
+                    !!f &&
+                    typeof f.field === "string" &&
+                    typeof f.query === "string" &&
+                    typeof f.expr === "string",
+                )
+              : [],
+            runs:
+              p.catalogue.runs && typeof p.catalogue.runs === "object"
+                ? p.catalogue.runs
+                : {},
+          },
+        }
+      : {}),
   };
 }
