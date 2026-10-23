@@ -396,6 +396,8 @@ export interface SheetEngineW2 {
   ): GoalSeekResult;
   calculateDataTables?(): [number, number, number][];
   listDataTables?(): [number, string][];
+  tableFilterColumnValues?(name: string, col: number): FilterColumnValues;
+  clearTableFilter?(name: string): FilterOutcome;
 }
 
 /** The snake_case wasm methods behind it. */
@@ -524,6 +526,8 @@ export interface SheetWasmEngineW2 {
   ): GoalSeekResult;
   calculate_data_tables?(): [number, number, number][];
   list_data_tables?(): [number, string][];
+  table_filter_column_values?(name: string, col: number): FilterColumnValues;
+  clear_table_filter?(name: string): FilterOutcome;
 }
 
 type Need = <K extends keyof SheetWasmEngineW2>(
@@ -637,5 +641,9 @@ export function wrapW2(need: Need, tick: () => void): Required<SheetEngineW2> {
       "calculate_data_tables",
     ),
     listDataTables: read<[number, string][]>("list_data_tables"),
+    tableFilterColumnValues: read<FilterColumnValues>(
+      "table_filter_column_values",
+    ),
+    clearTableFilter: write<FilterOutcome>("clear_table_filter"),
   };
 }

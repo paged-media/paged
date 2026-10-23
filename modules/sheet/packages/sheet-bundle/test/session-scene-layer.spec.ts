@@ -183,10 +183,14 @@ describe("sheet_scene_layer_in_frame: K-1 click-to-select", () => {
     expect(shown).toBe(true);
     expect(submits).toHaveLength(1);
     expect(submits[0].elementId).toBe("frame-1");
-    // The first render carries no selection (no fillPath wash).
-    expect(submits[0].layer.items.some((i) => i.kind === "fillPath")).toBe(
-      false,
-    );
+    // Entering selects the view's top-left cell (Excel always has an
+    // active cell), so the first render already carries a selection.
+    expect(session.state().gridSelection).toEqual({
+      anchorRow: 0,
+      anchorCol: 0,
+      rows: 1,
+      cols: 1,
+    });
 
     // A content-space point in col1 (x∈[40,80)) row0 (y∈[0,20)).
     const hit = session.selectCellInFrame(50, 10);
@@ -297,12 +301,13 @@ describe("sheet_scene_layer_in_frame: K-1 cell editor", () => {
     expect(session.isCellEditing()).toBe(false);
   });
 
-  it("typing with no selected cell is a no-op", async () => {
+  it("entering selects the view's top-left cell, so typing edits it at once", async () => {
     const { engine } = fakeEngine();
     const { host } = fakeHost();
     const session = bootedSession(host, engine);
-    await session.showGridInFrame("frame-1"); // grid shown, nothing selected
-    expect(session.typeCellChar("x")).toBe(false);
-    expect(session.isCellEditing()).toBe(false);
+    await session.showGridInFrame("frame-1"); // entered with no click point
+    expect(session.activeCell()).toEqual({ row: 0, col: 0 });
+    expect(session.typeCellChar("x")).toBe(true);
+    expect(session.isCellEditing()).toBe(true);
   });
 });
