@@ -88,6 +88,7 @@ export type FrameSurfaceSession = Pick<
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
   | "grabAt"
+  | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
   | "handleGridKey"
@@ -210,6 +211,128 @@ export function makeSheetFrameSurface(
     <SheetBarView {...props} link={link} />
   );
   return { render: SheetFrameSurface, bar: SheetBar };
+}
+
+// ── overlay scrollbars: where the window is in the sheet ───────────────
+
+/** The scroll extent along one axis: the used range, the window's far
+ *  edge and a little room past it, so a scrollbar always has somewhere
+ *  to go (Excel grows the scroll range as you move). */
+export function scrollExtent(
+  first: number,
+  shown: number,
+  used: number,
+): number {
+  return Math.max(used, first + shown) + Math.max(4, Math.ceil(shown / 2));
+}
+
+function OverlayScrollbars({
+  session,
+  scene,
+  left,
+  top,
+  widthPt,
+  heightPt,
+}: {
+  session: FrameSurfaceSession;
+  scene: GridScene;
+  left: number;
+  top: number;
+  widthPt: number;
+  heightPt: number;
+}) {
+  const vp = scene.viewport;
+  const sheet = session
+    .sheets()
+    .find((x) => x.id === session.state().activeSheet);
+  const drag = useRef<{
+    axis: "row" | "col";
+    start: number;
+    applied: number;
+    perPt: number;
+  } | null>(null);
+  const BAR = 6;
+  const bar = (axis: "row" | "col") => {
+    const first = axis === "row" ? vp.firstRow : vp.firstCol;
+    const shown = axis === "row" ? vp.rows : vp.cols;
+    const used = (axis === "row" ? sheet?.rows : sheet?.cols) ?? 0;
+    const total = scrollExtent(first, shown, used);
+    const track = axis === "row" ? heightPt - top - BAR : widthPt - left - BAR;
+    if (track <= 24) return null;
+    const size = Math.max(16, (shown / total) * track);
+    const at = Math.min(track - size, (first / total) * track);
+    const perPt = total / track;
+    const thumb: CSSProperties =
+      axis === "row"
+        ? { left: widthPt - BAR - 1, top: top + at, width: BAR, height: size }
+        : {
+            left: left + at,
+            top: heightPt - BAR - 1,
+            width: size,
+            height: BAR,
+          };
+    return (
+      <div
+        key={axis}
+        data-testid={`sheet-scrollbar-${axis}`}
+        role="scrollbar"
+        aria-orientation={axis === "row" ? "vertical" : "horizontal"}
+        aria-valuenow={first}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        style={{
+          position: "absolute",
+          ...thumb,
+          borderRadius: BAR / 2,
+          background: "rgba(80, 80, 80, 0.35)",
+          cursor: "default",
+        }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          drag.current = {
+            axis,
+            start: axis === "row" ? e.clientY : e.clientX,
+            applied: 0,
+            perPt,
+          };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d || d.axis !== axis) return;
+          e.stopPropagation();
+          // Screen px over the thumb's own CSS scale: the bounding box
+          // says how many screen px one pt of track is.
+          const box = e.currentTarget.getBoundingClientRect();
+          const pxPerPt =
+            axis === "row"
+              ? box.height / Math.max(1, size)
+              : box.width / Math.max(1, size);
+          const moved =
+            ((axis === "row" ? e.clientY : e.clientX) - d.start) /
+            Math.max(0.01, pxPerPt);
+          const want = Math.round(moved * d.perPt);
+          const step = want - d.applied;
+          if (step !== 0) {
+            d.applied = want;
+            if (axis === "row") session.scrollInFrame(step, 0);
+            else session.scrollInFrame(0, step);
+          }
+        }}
+        onPointerUp={(e) => {
+          e.stopPropagation();
+          drag.current = null;
+        }}
+      />
+    );
+  };
+  return (
+    <>
+      {bar("row")}
+      {bar("col")}
+    </>
+  );
 }
 
 // ── document faces: the grid draws in the fonts the page uses ─────────
@@ -1150,6 +1273,16 @@ function SheetFrameSurfaceView({
           height: props.heightPt,
         }}
       />
+      {scene ? (
+        <OverlayScrollbars
+          session={session}
+          scene={scene}
+          left={headW}
+          top={headH}
+          widthPt={props.widthPt}
+          heightPt={props.heightPt}
+        />
+      ) : null}
       <textarea
         ref={editorRef}
         data-testid="sheet-cell-editor"
