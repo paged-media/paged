@@ -842,15 +842,10 @@ test.describe("plugin surface · paged.slide", () => {
     ]);
     expect(ok.length).toBeGreaterThan(1000);
 
-    // KNOWN DEFECT — the file is not named after the deck. The exporter
-    // names it from the document's `documentName`, falling back to
-    // "presentation". In the editor the importer opens the deck through
-    // `host.nativeDocument.open(idml)`, which takes no name (only the
-    // headless `documents.open` door carries one), so the document has
-    // none and every deck exports as "presentation.pptx" — while the
-    // bundle itself knows the deck is "slide-deck" (its deck object says
-    // so). Flip to "slide-deck.pptx" when the export falls back to the
-    // deck's name, or the native door carries one.
+    // The file is named after the deck. In the editor the importer opens
+    // the deck through `host.nativeDocument.open(idml)`, which takes no
+    // name, so the document has none; the exporter then falls back to the
+    // deck's own name (the document label's `deck.name`).
     const names = await page.evaluate(async (deckKind) => {
       const c = (globalThis as unknown as CanvasGlobal).__canvas;
       const o = c.objects!;
@@ -867,22 +862,10 @@ test.describe("plugin surface · paged.slide", () => {
       };
     }, KIND("deck"));
     expect(names.deck, "the deck knows its own name").toBe("slide-deck");
-    expect(
-      names.documentName,
-      "KNOWN DEFECT: the opened deck document has no name",
-    ).toBe("");
-    expect(
-      ok.fileName,
-      "KNOWN DEFECT: so it exports under the fallback name",
-    ).toBe("presentation.pptx");
-    test.info().annotations.push({
-      type: "surface-finding",
-      description:
-        "KNOWN DEFECT: an opened deck exports as 'presentation.pptx'. The importer opens it via " +
-        "host.nativeDocument.open(idml), which carries no name, and exportDeck names the file " +
-        "from documentName with a 'presentation' fallback, although the deck object's name is " +
-        "'slide-deck'.",
-    });
+    expect(names.documentName, "the opened deck document has no name").toBe("");
+    expect(ok.fileName, "so it exports under the deck's name").toBe(
+      "slide-deck.pptx",
+    );
   });
 
   // ── 5. THE SORTER'S VERBS ────────────────────────────────────────

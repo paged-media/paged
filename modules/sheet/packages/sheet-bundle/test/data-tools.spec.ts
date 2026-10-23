@@ -331,3 +331,129 @@ describe.skipIf(!built)(
     });
   },
 );
+
+describe.skipIf(!built)("the Sort card's sort [sheet.sort.multikey]", () => {
+  it("offers the region's columns by header and sorts by two keys as one undo step", async () => {
+    const s = await open([
+      [0, 0, "Team"],
+      [0, 1, "Score"],
+      [1, 0, "b"],
+      [1, 1, "2"],
+      [2, 0, "a"],
+      [2, 1, "5"],
+      [3, 0, "b"],
+      [3, 1, "7"],
+    ]);
+    s.selectCell(2, 1);
+    expect(s.openDataCard({ kind: "sort" })).toBe(true);
+    const info = s.sortDialogInfo()!;
+    expect(info.range).toBe("A1:B4");
+    expect(info.hasHeader).toBe(true);
+    expect(info.columns.map((c) => c.header)).toEqual(["Team", "Score"]);
+    const r = s.sortWith({
+      keys: [{ index: 0 }, { index: 1, descending: true }],
+      hasHeader: true,
+    });
+    expect(r.ok).toBe(true);
+    expect(s.dataCard()).toBeNull();
+    expect([1, 2, 3].map((row) => input(s, row, 1))).toEqual(["5", "7", "2"]);
+    expect(s.undoCellEdit()).toBe(true);
+    expect([1, 2, 3].map((row) => input(s, row, 1))).toEqual(["2", "5", "7"]);
+  });
+
+  it("a refused sort answers the engine's reason", async () => {
+    const s = await open([[0, 0, "x"]]);
+    s.selectCell(0, 0);
+    const r = s.sortWith({ keys: [{ index: 5 }] }, "A1:A3");
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe("outline keys [sheet.outline.group]", () => {
+  it("Alt+Shift+Right groups, Alt+Shift+Left ungroups", () => {
+    expect(
+      gridKeyAction({ key: "ArrowRight", altKey: true, shiftKey: true }, null),
+    ).toEqual({ kind: "group", on: true });
+    expect(
+      gridKeyAction({ key: "ArrowLeft", altKey: true, shiftKey: true }, null),
+    ).toEqual({ kind: "group", on: false });
+  });
+});
+
+describe.skipIf(!built)(
+  "hide and unhide in the grid [sheet.outline.hide]",
+  () => {
+    it("hides the selected rows, or whole columns; one undo step each", async () => {
+      const s = await open([[0, 0, "a"]]);
+      const e = s.state().engine!;
+      s.selectCell(2, 0);
+      s.extendSelection(3, 0);
+      expect(s.hideSelection(true).ok).toBe(true);
+      expect(e.outline!(0).hiddenRows).toEqual([2, 3]);
+      // Whole columns selected (a column heading): the columns hide.
+      s.selectCell(0, 4);
+      s.extendSelection(1_048_575, 4);
+      expect(s.hideSelection(true).ok).toBe(true);
+      expect(e.outline!(0).hiddenCols).toEqual([4]);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(e.outline!(0).hiddenCols).toEqual([]);
+      // Unhide over a span keeps what was hidden before it on undo.
+      s.selectCell(1, 0);
+      s.extendSelection(4, 0);
+      expect(s.hideSelection(false).ok).toBe(true);
+      expect(e.outline!(0).hiddenRows).toEqual([]);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(e.outline!(0).hiddenRows).toEqual([2, 3]);
+    });
+  },
+);
+
+describe.skipIf(!built)(
+  "group and ungroup in the grid [sheet.outline.group]",
+  () => {
+    it("Alt+Shift+Right groups the selected rows; undo ungroups", async () => {
+      const s = await open([[0, 0, "a"]]);
+      const e = s.state().engine!;
+      s.selectCell(1, 0);
+      s.extendSelection(3, 0);
+      expect(
+        s.handleGridKey({ key: "ArrowRight", altKey: true, shiftKey: true }),
+      ).toBe(true);
+      expect(e.outline!(0).rows).toHaveLength(1);
+      expect(e.outline!(0).maxRowLevel).toBe(1);
+      expect(s.groupSelection(false).ok).toBe(true);
+      expect(e.outline!(0).rows).toHaveLength(0);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(e.outline!(0).rows).toHaveLength(1);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(e.outline!(0).rows).toHaveLength(0);
+    });
+  },
+);
+
+describe.skipIf(!built)(
+  "Goal Seek from the grid [sheet.whatif.goalseek]",
+  () => {
+    it("finds the input that makes the formula reach the target; one undo step", async () => {
+      const s = await open([
+        [0, 0, "2"],
+        [0, 1, "=A1*A1"],
+      ]);
+      expect(s.canGoalSeek()).toBe(true);
+      expect(s.openDataCard({ kind: "goalSeek" })).toBe(true);
+      const r = s.goalSeek("B1", 49, "A1");
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.found).toBe(true);
+      expect(Math.abs(Number(input(s, 0, 0)) - 7)).toBeLessThan(0.01);
+      expect(s.undoCellEdit()).toBe(true);
+      expect(input(s, 0, 0)).toBe("2");
+    });
+
+    it("refuses a target that is not a number, or a set cell without a formula", async () => {
+      const s = await open([[0, 0, "2"]]);
+      expect(s.goalSeek("B1", Number.NaN, "A1").ok).toBe(false);
+      expect(s.goalSeek("A1", 3, "A1").ok).toBe(false);
+    });
+  },
+);

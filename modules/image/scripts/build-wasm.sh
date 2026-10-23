@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 
 OUT=glue/wasm
 bash ../../tooling/rust/build-wasm.sh \
-  --package image-js --artifact image_js \
+  --package image-js --artifact image_js --profile wasm-release \
   --out "$OUT" \
   --source-hash image --hash-env IMAGE_JS_SOURCE_HASH
 

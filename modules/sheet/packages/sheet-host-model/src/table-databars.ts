@@ -33,9 +33,14 @@
 
 import type { Mutation, PageId } from "@paged-media/plugin-api";
 
-import type { DataBarRect, LoweredContent } from "./lowered";
+import type { DataBarRect, IconRect, LoweredContent } from "./lowered";
 import { columnOrder } from "./lower-to-table";
-import { barSwatchOps, dataBarOps } from "./lower-to-mutations";
+import {
+  barSwatchOps,
+  dataBarAxisOps,
+  dataBarOps,
+  iconOps,
+} from "./lower-to-mutations";
 import type { KnownSwatchIds } from "./palette";
 
 /** The bars mapped onto the native table's geometry, in frame-content pt. */
@@ -74,9 +79,44 @@ export function tableDataBars(
       ...bar,
       x: tX[c] + (bar.x - irX[c]) * k,
       w: bar.w * k,
+      ...(bar.axisX != null ? { axisX: tX[c] + (bar.axisX - irX[c]) * k } : {}),
     });
   }
   return out;
+}
+
+/** The icons mapped onto the native table: each keeps its offset from its
+ *  cell's left edge (W2.4). */
+export function tableIcons(
+  content: LoweredContent,
+  widths: readonly number[],
+): IconRect[] {
+  const icons = content.icons ?? [];
+  if (icons.length === 0) return [];
+  const order = columnOrder(content);
+  const irW = new Map(content.cols.map((c) => [c.index, c.widthPt]));
+  const shift = new Map<number, number>();
+  let ix = 0;
+  let tx = 0;
+  order.forEach((m, i) => {
+    shift.set(m, tx - ix);
+    ix += irW.get(m) ?? 0;
+    tx += widths[i] ?? irW.get(m) ?? 0;
+  });
+  return icons.flatMap((icon) => {
+    const dx = shift.get(icon.col);
+    if (dx === undefined) return [];
+    return [
+      {
+        ...icon,
+        x: icon.x + dx,
+        shapes: icon.shapes.map((sh) => ({
+          ...sh,
+          points: sh.points.map(([x, y]) => [x + dx, y] as [number, number]),
+        })),
+      },
+    ];
+  });
 }
 
 /** The ops that draw a native table's data bars on its page: the bar-colour
@@ -91,10 +131,11 @@ export function tableDataBarOps(
   known?: KnownSwatchIds,
 ): Mutation[] {
   const bars = tableDataBars(content, widths);
-  if (bars.length === 0) return [];
+  const icons = tableIcons(content, widths);
+  if (bars.length === 0 && icons.length === 0) return [];
   const [top, left] = origin;
   const ops: Mutation[] = [
-    ...barSwatchOps({ ...content, databars: bars }, known),
+    ...barSwatchOps({ ...content, databars: bars, icons }, known),
   ];
   bars.forEach((bar, i) => {
     const drawn = dataBarOps(bar, pageId, top, left);
@@ -112,6 +153,10 @@ export function tableDataBarOps(
         to: "backward",
       },
     });
+    // W2.4: the axis of a range with negative values, over the bar.
+    ops.push(...dataBarAxisOps(bar, pageId, top, left));
   });
+  // W2.4: icon sets, drawn over the table.
+  for (const icon of icons) ops.push(...iconOps(icon, pageId, top, left));
   return ops;
 }

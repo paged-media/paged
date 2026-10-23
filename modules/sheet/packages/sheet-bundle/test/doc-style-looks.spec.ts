@@ -16,7 +16,10 @@ const scene = (styles: GridScene["styles"]): GridScene =>
 
 describe("document style looks in the grid [sheet.format.doc-style-map]", () => {
   const looks = new Map([
-    ["P/H1", { family: "Minion Pro", style: "Bold", sizePt: 18, color: "#112233" }],
+    [
+      "P/H1",
+      { family: "Minion Pro", style: "Bold", sizePt: 18, color: "#112233" },
+    ],
     ["C/Em", { style: "Italic" }],
   ]);
 

@@ -63,8 +63,7 @@ export function withDocumentStyles(
         fontSizePt: st.fontSizePt ?? look.sizePt ?? null,
         bold: st.bold || /bold|black|heavy|semibold/i.test(face),
         italic: st.italic || /italic|oblique/i.test(face),
-        textRgb:
-          st.textRgb ?? (st.textSwatch ? null : (look.color ?? null)),
+        textRgb: st.textRgb ?? (st.textSwatch ? null : (look.color ?? null)),
       };
     }),
   };

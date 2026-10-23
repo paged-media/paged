@@ -277,6 +277,89 @@ describe.skipIf(!built)(
         cols: 2,
       });
     });
+
+    it("dragging the selection's border moves the cells; Ctrl copies them", async () => {
+      const { s } = await open([
+        [0, 0, "1"],
+        [1, 0, "=A1*2"],
+      ]);
+      const at = await inFrame(s);
+      s.selectCell(0, 0);
+      s.extendSelection(1, 0);
+      await tick();
+      // The left edge of A1:A2, halfway down A1.
+      const [, y0] = at(0, 0);
+      const edge: [number, number] = [0.5, y0];
+      expect(s.grabAt(...edge)).toBe("move");
+      expect(s.pointerDownInFrame(...edge)).toBe(true);
+      expect(s.pointerMoveInFrame(...at(2, 2))).toBe(true);
+      expect(s.pointerUpInFrame(...at(2, 2))).toBe(true);
+      // Moved to C3:C4: the formula keeps its reference (Excel moves it
+      // as it is), the source is empty, and the target is selected.
+      expect([input(s, 2, 2), input(s, 3, 2)]).toEqual(["1", "=A1*2"]);
+      expect([input(s, 0, 0), input(s, 1, 0)]).toEqual(["", ""]);
+      expect(s.state().gridSelection).toMatchObject({
+        anchorRow: 2,
+        anchorCol: 2,
+      });
+      // One undo step brings it back.
+      expect(s.undoCellEdit()).toBe(true);
+      expect([input(s, 0, 0), input(s, 1, 0)]).toEqual(["1", "=A1*2"]);
+      expect(input(s, 2, 2)).toBe("");
+
+      // Ctrl-drag copies: the source stays, the copy is re-addressed.
+      s.selectCell(1, 0);
+      await tick();
+      const [, y1] = at(1, 0);
+      expect(s.pointerDownInFrame(0.5, y1, { copy: true })).toBe(true);
+      s.pointerMoveInFrame(...at(1, 1));
+      s.pointerUpInFrame(...at(1, 1));
+      expect(input(s, 1, 0)).toBe("=A1*2");
+      expect(input(s, 1, 1)).toBe("=B1*2");
+    });
+
+    it("Ctrl/Cmd-click adds areas; formatting and clearing reach every area in one step; copy refuses", async () => {
+      const { s } = await open([
+        [0, 0, "a"],
+        [2, 2, "c"],
+      ]);
+      const at = await inFrame(s);
+      s.pointerDownInFrame(...at(0, 0));
+      s.pointerUpInFrame(...at(0, 0));
+      s.pointerDownInFrame(...at(2, 2), { add: true });
+      s.pointerUpInFrame(...at(2, 2));
+      expect(s.selectionAreas()).toEqual([
+        { anchorRow: 0, anchorCol: 0, rows: 1, cols: 1 },
+        { anchorRow: 2, anchorCol: 2, rows: 1, cols: 1 },
+      ]);
+      expect(s.setStyle({ bold: true }).ok).toBe(true);
+      const engine = s.state().engine!;
+      expect(engine.getStyle!(0, 0, 0)?.bold).toBe(true);
+      expect(engine.getStyle!(0, 2, 2)?.bold).toBe(true);
+      expect(engine.getStyle!(0, 1, 1)?.bold).toBe(false);
+      // One undo step takes both back.
+      expect(s.undoCellEdit()).toBe(true);
+      expect(engine.getStyle!(0, 0, 0)?.bold).toBe(false);
+      expect(engine.getStyle!(0, 2, 2)?.bold).toBe(false);
+      expect((await s.copySelection()).ok).toBe(false);
+      expect(s.clearSelection().ok).toBe(true);
+      expect([input(s, 0, 0), input(s, 2, 2)]).toEqual(["", ""]);
+      // A plain click starts over with one area.
+      s.pointerDownInFrame(...at(1, 1));
+      s.pointerUpInFrame(...at(1, 1));
+      expect(s.selectionAreas()).toHaveLength(1);
+    });
+
+    it("a drag past the bottom edge scrolls the window and extends the selection", async () => {
+      const { s } = await open([]);
+      const at = await inFrame(s);
+      s.pointerDownInFrame(...at(0, 0));
+      const visibleRows = s.gridScene(0, 0, 400, 200)!.viewport.rows;
+      for (let i = 0; i < 40; i++) s.pointerMoveInFrame(10, 100_000);
+      s.pointerUpInFrame(10, 100_000);
+      // The selection reaches past the rows the window first showed.
+      expect(s.state().gridSelection!.rows).toBeGreaterThan(visibleRows);
+    });
   },
 );
 

@@ -17,7 +17,10 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { createWorkbookSession, type WorkbookSession } from "../src";
-import { defaultDocStyleEntries, missingDocReferences } from "../src/doc-styles";
+import {
+  defaultDocStyleEntries,
+  missingDocReferences,
+} from "../src/doc-styles";
 
 import {
   ENGINE_BUILT,
@@ -60,7 +63,10 @@ async function cellParagraphStyles(
 describe("document styles — pure helpers [sheet.format.doc-style-map]", () => {
   const lists = {
     paragraph: [
-      { id: "ParagraphStyle/$ID/NormalParagraphStyle", name: "[Basic Paragraph]" },
+      {
+        id: "ParagraphStyle/$ID/NormalParagraphStyle",
+        name: "[Basic Paragraph]",
+      },
       { id: "ParagraphStyle/H1", name: "heading 1" },
     ],
     character: [],
@@ -185,9 +191,10 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(info.enabled).toBe(true);
       const id = info.entries["Heading 1"]?.para;
       expect(id).toBeDefined();
-      const rows = await host.document.collection<{ selfId: string; name: string }>(
-        "paragraphStyles",
-      );
+      const rows = await host.document.collection<{
+        selfId: string;
+        name: string;
+      }>("paragraphStyles");
       expect(rows.some((p) => p.selfId === id && p.name === "Heading 1")).toBe(
         true,
       );
@@ -213,8 +220,9 @@ describe.skipIf(!ENGINE_BUILT)(
       const read = await session.documentStyleLists();
       expect(read?.missing.map((m) => m.id)).toContain("ParagraphStyle/Gone");
       const basic = read!.lists.paragraph[0].id;
-      expect((await session.remapDocReference("ParagraphStyle/Gone", basic)).ok)
-        .toBe(true);
+      expect(
+        (await session.remapDocReference("ParagraphStyle/Gone", basic)).ok,
+      ).toBe(true);
       expect(session.docStyles()?.entries["Heading 1"]?.para).toBe(basic);
       expect((await session.documentStyleLists())?.missing).toEqual([]);
     });

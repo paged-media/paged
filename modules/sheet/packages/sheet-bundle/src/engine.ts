@@ -37,6 +37,11 @@
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 
 import {
+  wrapFiles,
+  type SheetEngineFiles,
+  type SheetWasmEngineFiles,
+} from "./engine-files";
+import {
   wrapW2,
   type SheetEngineW2,
   type SheetWasmEngineW2,
@@ -307,7 +312,7 @@ export interface FunctionInfo {
 /** The stable engine contract the bundle codes against. Every method is
  *  a forward to the wasm surface; the facade only renames + shapes. */
 export interface SheetEngine
-  extends SheetEngineW2, SheetEngineDocStyles {
+  extends SheetEngineW2, SheetEngineFiles, SheetEngineDocStyles {
   /** Parse XLSX bytes into the in-memory model (preservation-first; the
    *  bytes round-trip on save — spec §10). */
   loadXlsx(bytes: Uint8Array): void;
@@ -679,11 +684,32 @@ export interface SheetEngine
   listTables?(): TableInfo[];
   /** ADR 323 — every chart with its series ranges and options. */
   chartSpecs?(): ChartSpec[];
-  /** ADR 323 — patch one chart (validated whole; page-side only). */
+  /** ADR 323 — patch one chart (validated whole; spliced into its part
+   *  on save, sheet ADR 519). */
   updateChart?(index: number, patch: ChartPatch): void;
   /** Plan G4 — delete one chart (its slot stays: the other charts keep
-   *  their indices; page-side only, like `addChart`). */
+   *  their indices). A chart read from the file leaves the package on the
+   *  next save; its slot is then a tombstone (`chartTombstones`). */
   deleteChart?(index: number): void;
+  /** Plan G4 — the chart slots the saved bytes no longer carry (charts read
+   *  from the file, deleted since); stored with the bytes and handed to
+   *  `restoreChartSlots` after the next load of them. */
+  chartTombstones?(): number[];
+  /** Plan G4 — re-open those slots right after a load, before any chart op
+   *  replays, so every other chart keeps its index. */
+  restoreChartSlots?(slots: number[]): void;
+  /** Plan G4 — a sheet's print area, one range per area in definition
+   *  order (a print area of several ranges is stored as one formula). */
+  printAreas?(sheet: number): ResolvedRange[];
+  /** Plan G4 — paginate several ranges of one sheet in sequence across a
+   *  chain: each range's pages in turn (`area` names the range), the next
+   *  range starting in the room the one before it left. */
+  paginateAreas?(
+    sheet: number,
+    ranges: string[],
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
 }
 
 /** One computed cell value (no number format applied). */
@@ -974,7 +1000,7 @@ export const SYSTEM_CLOCK: HostClock = {
  *  only the members the bundle drives. The artifact lands in Phase 2;
  *  this shape is the contract the facade maps over. */
 export interface SheetWasmEngine
-  extends SheetWasmEngineW2, SheetWasmEngineDocStyles {
+  extends SheetWasmEngineW2, SheetWasmEngineFiles, SheetWasmEngineDocStyles {
   load_xlsx(bytes: Uint8Array): void;
   save_xlsx(): Uint8Array;
   set_cell(
@@ -1162,6 +1188,15 @@ export interface SheetWasmEngine
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
   delete_chart?(index: number): void;
+  chart_tombstones?(): Uint32Array | number[];
+  restore_chart_slots?(slots: Uint32Array): void;
+  print_areas?(sheet: number): ResolvedRange[];
+  paginate_areas?(
+    sheet: number,
+    ranges: string[],
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
 }
 
 /** The module shape the wasm-bindgen `--target web` glue exports. */
@@ -1390,9 +1425,20 @@ export function wrapEngine(
     deleteChart: (index) => {
       need("delete_chart")(index);
     },
+    chartTombstones: () => [
+      ...(need("chart_tombstones")() as Uint32Array | number[]),
+    ],
+    restoreChartSlots: (slots) => {
+      need("restore_chart_slots")(Uint32Array.from(slots));
+    },
+    printAreas: (sheet) => need("print_areas")(sheet) as ResolvedRange[],
+    paginateAreas: (sheet, ranges, frames, opts) =>
+      need("paginate_areas")(sheet, ranges, frames, opts) as Page[],
     // Sheet ADR 517 — outline, protection, tables, sort/filter, validation,
     // what-if (src/engine-w2.ts).
     ...wrapW2(need as Parameters<typeof wrapW2>[0], tick),
+    // Sheet ADR 521 — files and dialect (src/engine-files.ts).
+    ...wrapFiles(need as Parameters<typeof wrapFiles>[0], tick),
     // Sheet ADR 524 — the document-style mapping (src/engine-docstyles.ts).
     ...wrapDocStyles(need as Parameters<typeof wrapDocStyles>[0]),
   };

@@ -65,8 +65,15 @@ export const COMMANDS = defineMessages("sheet.command", {
   dataValidation: "Data validation…",
   circleInvalid: "Circle invalid data",
   toggleFilter: "Filter",
+  hideSelection: "Hide",
+  unhideSelection: "Unhide",
+  groupSelection: "Group",
+  ungroupSelection: "Ungroup",
+  goalSeek: "Goal Seek…",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
+  exportCsv: "Export sheet as CSV…",
+  toggleR1C1: "R1C1 reference style",
   defaultStyleName: "Cell style",
 });
 
@@ -94,6 +101,8 @@ defineMessages("menu", {
   "Paste into sheet": "Paste into sheet",
   "Style from cell": "Style from cell",
   "New sheet from dataset": "New sheet from dataset",
+  "Export sheet as CSV…": "Export sheet as CSV…",
+  "R1C1 reference style": "R1C1 reference style",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled
@@ -107,6 +116,9 @@ export const FILES = defineMessages("sheet.files", {
   spreadsheet: "Spreadsheet",
   delimited: "Delimited text (CSV/TSV)",
   xlsx: "Workbook (.xlsx)",
+  xlsm: "Macro-enabled workbook (.xlsm)",
+  ods: "OpenDocument spreadsheet (.ods)",
+  csv: "Active sheet as CSV (.csv)",
 });
 
 /** The Sheet properties panel's sections. */
@@ -185,7 +197,7 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   sorted: "Sorted.",
   valuesFirst: "Enter a values range (for example B2:C8) first.",
   chartCreated:
-    "Chart created. Place it on the page from the list below; it is not saved into the .xlsx.",
+    "Chart created. Place it on the page from the list below; it is saved into the .xlsx with the workbook.",
   noClipboard: "Copying isn't available here; type {name}( in a cell.",
   fnCopied: "{name}() copied; paste it into a cell.",
   fnCopyFailed: "Couldn't copy {name}: {error}.",
@@ -521,7 +533,8 @@ export const DOC_STYLES = defineMessages("sheet.docStyles", {
   section: "Document styles",
   useDocumentStyles: "Use document styles",
   note: "Excel cell styles take the layout document's paragraph, character and cell styles; the workbook keeps its own values for Excel.",
-  offer: "This workbook uses its own Excel look. Use the document's styles instead?",
+  offer:
+    "This workbook uses its own Excel look. Use the document's styles instead?",
   excelStyle: "Excel style",
   paragraphStyle: "Paragraph style",
   characterStyle: "Character style",

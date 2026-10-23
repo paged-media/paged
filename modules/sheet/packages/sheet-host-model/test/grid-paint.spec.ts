@@ -24,6 +24,7 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  hiddenBoundaries,
   columnLetters,
   paintGridScene,
   rowHeadingWidthPt,
@@ -304,5 +305,15 @@ describe("sheet_grid_paint: the cell visual model [sheet.format.cell-style]", ()
     expect(texts.map((c) => c.args[0])).toEqual(["A", "b"]);
     expect(texts[0].fillStyle).toBe("#C00000");
     expect(texts[1].args[1]).toBe((texts[0].args[1] as number) + 5);
+  });
+});
+
+describe("hidden track markers", () => {
+  it("marks the boundaries where shown indices skip, not the frozen seam", () => {
+    // Rows 0 (frozen), then 5, 6, 9: the seam 0→5 is a scroll; 6→9 hides
+    // rows 7 and 8.
+    expect(hiddenBoundaries([0, 5, 6, 9], 1)).toEqual([3]);
+    expect(hiddenBoundaries([2, 3, 4], 0)).toEqual([]);
+    expect(hiddenBoundaries(undefined, 0)).toEqual([]);
   });
 });

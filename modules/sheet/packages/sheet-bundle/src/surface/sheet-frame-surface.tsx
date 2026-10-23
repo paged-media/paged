@@ -80,11 +80,18 @@ export type FrameSurfaceSession = Pick<
   | "documentFontFace"
   | "documentTextDefault"
   | "documentSwatchColors"
+  | "documentStyleChoices"
+  | "applyDocumentSwatch"
+  | "styleAtTarget"
+  | "setStyle"
   | "documentStyleRevision"
   | "documentStyleLooks"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
+  | "grabAt"
+  | "selectionAreas"
+  | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
   | "handleGridKey"
@@ -207,6 +214,128 @@ export function makeSheetFrameSurface(
     <SheetBarView {...props} link={link} />
   );
   return { render: SheetFrameSurface, bar: SheetBar };
+}
+
+// ── overlay scrollbars: where the window is in the sheet ───────────────
+
+/** The scroll extent along one axis: the used range, the window's far
+ *  edge and a little room past it, so a scrollbar always has somewhere
+ *  to go (Excel grows the scroll range as you move). */
+export function scrollExtent(
+  first: number,
+  shown: number,
+  used: number,
+): number {
+  return Math.max(used, first + shown) + Math.max(4, Math.ceil(shown / 2));
+}
+
+function OverlayScrollbars({
+  session,
+  scene,
+  left,
+  top,
+  widthPt,
+  heightPt,
+}: {
+  session: FrameSurfaceSession;
+  scene: GridScene;
+  left: number;
+  top: number;
+  widthPt: number;
+  heightPt: number;
+}) {
+  const vp = scene.viewport;
+  const sheet = session
+    .sheets()
+    .find((x) => x.id === session.state().activeSheet);
+  const drag = useRef<{
+    axis: "row" | "col";
+    start: number;
+    applied: number;
+    perPt: number;
+  } | null>(null);
+  const BAR = 6;
+  const bar = (axis: "row" | "col") => {
+    const first = axis === "row" ? vp.firstRow : vp.firstCol;
+    const shown = axis === "row" ? vp.rows : vp.cols;
+    const used = (axis === "row" ? sheet?.rows : sheet?.cols) ?? 0;
+    const total = scrollExtent(first, shown, used);
+    const track = axis === "row" ? heightPt - top - BAR : widthPt - left - BAR;
+    if (track <= 24) return null;
+    const size = Math.max(16, (shown / total) * track);
+    const at = Math.min(track - size, (first / total) * track);
+    const perPt = total / track;
+    const thumb: CSSProperties =
+      axis === "row"
+        ? { left: widthPt - BAR - 1, top: top + at, width: BAR, height: size }
+        : {
+            left: left + at,
+            top: heightPt - BAR - 1,
+            width: size,
+            height: BAR,
+          };
+    return (
+      <div
+        key={axis}
+        data-testid={`sheet-scrollbar-${axis}`}
+        role="scrollbar"
+        aria-orientation={axis === "row" ? "vertical" : "horizontal"}
+        aria-valuenow={first}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        style={{
+          position: "absolute",
+          ...thumb,
+          borderRadius: BAR / 2,
+          background: "rgba(80, 80, 80, 0.35)",
+          cursor: "default",
+        }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          e.currentTarget.setPointerCapture?.(e.pointerId);
+          drag.current = {
+            axis,
+            start: axis === "row" ? e.clientY : e.clientX,
+            applied: 0,
+            perPt,
+          };
+        }}
+        onPointerMove={(e) => {
+          const d = drag.current;
+          if (!d || d.axis !== axis) return;
+          e.stopPropagation();
+          // Screen px over the thumb's own CSS scale: the bounding box
+          // says how many screen px one pt of track is.
+          const box = e.currentTarget.getBoundingClientRect();
+          const pxPerPt =
+            axis === "row"
+              ? box.height / Math.max(1, size)
+              : box.width / Math.max(1, size);
+          const moved =
+            ((axis === "row" ? e.clientY : e.clientX) - d.start) /
+            Math.max(0.01, pxPerPt);
+          const want = Math.round(moved * d.perPt);
+          const step = want - d.applied;
+          if (step !== 0) {
+            d.applied = want;
+            if (axis === "row") session.scrollInFrame(step, 0);
+            else session.scrollInFrame(0, step);
+          }
+        }}
+        onPointerUp={(e) => {
+          e.stopPropagation();
+          drag.current = null;
+        }}
+      />
+    );
+  };
+  return (
+    <>
+      {bar("row")}
+      {bar("col")}
+    </>
+  );
 }
 
 // ── document faces: the grid draws in the fonts the page uses ─────────
@@ -470,6 +599,28 @@ function SheetFrameSurfaceView({
     | { kind: "heading-row"; anchor: number }
     | null
   >(null);
+  const [cursor, setCursor] = useState<"cell" | "move" | "crosshair">("cell");
+  const lastDrag = useRef<[number, number] | null>(null);
+  const autoScroll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopAutoScroll = () => {
+    if (autoScroll.current !== null) clearInterval(autoScroll.current);
+    autoScroll.current = null;
+  };
+  useEffect(() => stopAutoScroll, []);
+  // Entering: the grid fades in over the page's table (180 ms; none with
+  // reduced motion), so the switch from page to grid is not a jump.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof el.animate !== "function") return;
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 180,
+      easing: "ease-out",
+    });
+  }, []);
   const [resizeGhost, setResizeGhost] = useState<{
     axis: "col" | "row";
     at: number;
@@ -534,6 +685,29 @@ function SheetFrameSurfaceView({
       widthPt: props.widthPt,
       heightPt: props.heightPt,
     });
+    // The other areas of a multi-area selection (the current one is the
+    // scene's own selection).
+    const areas = session.selectionAreas();
+    if (areas.length > 1) {
+      ctx.save();
+      ctx.translate(headW, headH);
+      for (const a of areas.slice(0, -1)) {
+        const box = rangeRect(
+          scene,
+          a.anchorRow,
+          a.anchorCol,
+          a.anchorRow + a.rows - 1,
+          a.anchorCol + a.cols - 1,
+        );
+        if (!box) continue;
+        ctx.fillStyle = "rgba(31, 79, 138, 0.14)";
+        ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+        ctx.strokeStyle = "rgba(31, 79, 138, 0.8)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      }
+      ctx.restore();
+    }
     // Excel colours each reference of the formula being typed.
     if (edit?.text.startsWith("=")) {
       ctx.save();
@@ -761,12 +935,26 @@ function SheetFrameSurfaceView({
       }
     }
     gesture.current = { kind: "cells" };
-    session.pointerDownInFrame(cx, cy, { shift: e.shiftKey });
+    // Excel: Ctrl (Option on a Mac) while dragging the border copies.
+    session.pointerDownInFrame(cx, cy, {
+      shift: e.shiftKey,
+      copy: e.ctrlKey || e.altKey,
+      // Ctrl-click (Cmd-click on a Mac) adds an area.
+      add: e.metaKey || (e.ctrlKey && !e.altKey),
+    });
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     const p = contentPoint(e.clientX, e.clientY);
+    if (!g && p && scene && p[0] >= headW && p[1] >= headH) {
+      // The pointer says what a press would grab (Excel's move grip on
+      // the selection border, the fill handle's crosshair).
+      const grab = session.grabAt(p[0] - headW, p[1] - headH);
+      const next =
+        grab === "move" ? "move" : grab === "fill" ? "crosshair" : "cell";
+      if (next !== cursor) setCursor(next);
+    }
     if (!g || !p || !scene) return;
     const [x, y] = p;
     const vp = scene.viewport;
@@ -800,11 +988,24 @@ function SheetFrameSurfaceView({
       return;
     }
     session.pointerMoveInFrame(x - headW, y - headH);
+    // Past the cell area's edge the window keeps scrolling while the
+    // pointer stays there (Excel's auto-scroll).
+    lastDrag.current = [x - headW, y - headH];
+    const outside =
+      x - headW < 0 || y - headH < 0 || x > props.widthPt || y > props.heightPt;
+    if (outside && autoScroll.current === null) {
+      autoScroll.current = setInterval(() => {
+        const at = lastDrag.current;
+        if (!at || gesture.current?.kind !== "cells") return;
+        session.pointerMoveInFrame(at[0], at[1]);
+      }, 70);
+    } else if (!outside) stopAutoScroll();
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     const g = gesture.current;
     gesture.current = null;
+    stopAutoScroll();
     if (!g) return;
     const p = contentPoint(e.clientX, e.clientY);
     if (g.kind === "resize-col") {
@@ -1076,7 +1277,7 @@ function SheetFrameSurfaceView({
         position: "relative",
         width: "100%",
         height: "100%",
-        cursor: "cell",
+        cursor,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -1120,6 +1321,16 @@ function SheetFrameSurfaceView({
           height: props.heightPt,
         }}
       />
+      {scene ? (
+        <OverlayScrollbars
+          session={session}
+          scene={scene}
+          left={headW}
+          top={headH}
+          widthPt={props.widthPt}
+          heightPt={props.heightPt}
+        />
+      ) : null}
       <textarea
         ref={editorRef}
         data-testid="sheet-cell-editor"
@@ -1438,6 +1649,15 @@ function SheetBarView({
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
+      // P7 — the document references on the active cell.
+      docStyle: (() => {
+        const cs = session.styleAtTarget();
+        return {
+          para: cs?.docParaStyle ?? "",
+          fill: cs?.fillSwatch?.id ?? null,
+          text: cs?.fontSwatch?.id ?? null,
+        };
+      })(),
       alert: session.entryAlert(),
       card: session.dataCard(),
       filterHeader: filterHeaderText(session),
@@ -1542,6 +1762,14 @@ function SheetBarView({
               focusGrid();
             }
           }}
+        />
+        <DocumentStylePickers
+          session={session}
+          current={view.docStyle}
+          box={box}
+          button={button}
+          card={bar}
+          done={() => requestAnimationFrame(focusGrid)}
         />
         {view.stats && view.stats.count > 0 ? (
           <span
@@ -1655,6 +1883,172 @@ function filterHeaderText(session: FrameSurfaceSession): string {
   const fb = session.filterButtons();
   if (card?.kind !== "filter" || !fb) return "";
   return session.cellInputAt(fb.row, card.col);
+}
+
+// ── document styles on the bar: paragraph style, fill and text swatch ──
+
+type StyleChoices = {
+  paragraphStyles: { id: string; name: string }[];
+  swatches: { id: string; name: string; rgbHex: string }[];
+};
+
+/** The document's choices, re-read when its styles may have changed. */
+function useStyleChoices(session: FrameSurfaceSession): StyleChoices {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [choices, setChoices] = useState<StyleChoices>({
+    paragraphStyles: [],
+    swatches: [],
+  });
+  useEffect(() => {
+    let live = true;
+    void session.documentStyleChoices().then((c) => {
+      if (live) setChoices(c);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, revision]);
+  return choices;
+}
+
+function DocumentStylePickers({
+  session,
+  current,
+  box,
+  button,
+  card,
+  done,
+}: {
+  session: FrameSurfaceSession;
+  current: { para: string; fill: string | null; text: string | null };
+  box: CSSProperties;
+  button: CSSProperties;
+  card: CSSProperties;
+  done: () => void;
+}) {
+  const choices = useStyleChoices(session);
+  const [open, setOpen] = useState<"fill" | "text" | null>(null);
+  const colorOf = (id: string | null) =>
+    choices.swatches.find((x) => x.id === id)?.rgbHex ?? null;
+  const chip = (rgb: string | null): CSSProperties => ({
+    display: "inline-block",
+    width: 12,
+    height: 12,
+    borderRadius: 2,
+    border: "1px solid var(--pg-border, #c9c9c4)",
+    background:
+      rgb ??
+      "linear-gradient(to top right, transparent 45%, #d33 45%, #d33 55%, transparent 55%)",
+    verticalAlign: "middle",
+  });
+  const pick = (id: string | null) => {
+    const target = open;
+    setOpen(null);
+    if (!target) return;
+    void session.applyDocumentSwatch(target, id).then(done);
+  };
+  return (
+    <span style={{ position: "relative", display: "inline-flex", gap: 4 }}>
+      <select
+        data-testid="sheet-bar-style"
+        aria-label="Paragraph style"
+        title="Paragraph style (document)"
+        value={current.para}
+        style={{ ...box, maxWidth: 140 }}
+        onChange={(e) => {
+          session.setStyle({ docParaStyle: e.currentTarget.value });
+          done();
+        }}
+      >
+        <option value="">No paragraph style</option>
+        {choices.paragraphStyles.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        data-testid="sheet-bar-fill"
+        aria-label="Cell fill"
+        title="Cell fill (document swatch)"
+        aria-expanded={open === "fill"}
+        style={button}
+        onClick={() => setOpen(open === "fill" ? null : "fill")}
+      >
+        <span style={chip(colorOf(current.fill))} /> ▾
+      </button>
+      <button
+        type="button"
+        data-testid="sheet-bar-text-color"
+        aria-label="Text colour"
+        title="Text colour (document swatch)"
+        aria-expanded={open === "text"}
+        style={button}
+        onClick={() => setOpen(open === "text" ? null : "text")}
+      >
+        A <span style={chip(colorOf(current.text))} />
+      </button>
+      {open ? (
+        <div
+          data-testid="sheet-swatch-picker"
+          role="listbox"
+          aria-label={open === "fill" ? "Cell fill" : "Text colour"}
+          style={{
+            ...card,
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            minWidth: 0,
+            width: 196,
+            flexWrap: "wrap",
+            gap: 4,
+            padding: 8,
+            zIndex: 1,
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setOpen(null);
+              done();
+            }
+          }}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={
+              (open === "fill" ? current.fill : current.text) === null
+            }
+            title="None"
+            data-swatch=""
+            style={{ ...button, padding: 2 }}
+            onClick={() => pick(null)}
+          >
+            <span style={chip(null)} />
+          </button>
+          {choices.swatches.map((sw) => (
+            <button
+              key={sw.id}
+              type="button"
+              role="option"
+              aria-selected={
+                (open === "fill" ? current.fill : current.text) === sw.id
+              }
+              title={sw.name}
+              data-swatch={sw.id}
+              style={{ ...button, padding: 2 }}
+              onClick={() => pick(sw.id)}
+            >
+              <span style={chip(sw.rgbHex)} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </span>
+  );
 }
 
 // ── paste special: the options card under the bar ─────────────────────

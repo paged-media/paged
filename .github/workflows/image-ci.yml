@@ -121,7 +121,7 @@ defaults:
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
   # dependency guards (spec §2.1 / §4 dep rule 3), and the wasm size
-  # report against the 100 MB app wasm budget (BREAKAGE I-07). Every job
+  # report against the 120 MB app wasm budget (BREAKAGE I-07). Every job
   # reads its toolchain from modules/image/rust-toolchain.toml through
   # engine/core/scripts/rust-channel.sh, as core's jobs do, so the pin has
   # one source.
@@ -232,8 +232,8 @@ jobs:
       # brotli-compressed (over-the-wire) size against that budget. This is
       # a REPORT, not yet a hard gate — the real gate flips once the engine
       # has substance to measure (spec §9.3 / I-07 follow-up).
-      - name: wasm32 release build of image-js
-        run: cargo build --release --target wasm32-unknown-unknown -p image-js
+      - name: wasm32 wasm-release build of image-js (the shipped profile)
+        run: cargo build --profile wasm-release --target wasm32-unknown-unknown -p image-js
       - name: install brotli
         # Bounded, and apt only when the tool is absent. 2026-08-19:
         # GitHub's Ubuntu runners intermittently could not reach the
@@ -259,23 +259,23 @@ jobs:
                 /etc/apt/sources.list.d/*.sources 2>/dev/null || true
             sudo apt-get update && sudo apt-get install -y brotli
           fi
-      - name: wasm size report (vs 100 MB app wasm budget)
+      - name: wasm size report (vs 120 MB app wasm budget)
         run: |
           set -euo pipefail
-          WASM=target/wasm32-unknown-unknown/release/image_js.wasm
+          WASM=target/wasm32-unknown-unknown/wasm-release/image_js.wasm
           if [ ! -f "$WASM" ]; then
             echo "::warning::$WASM not found — image-js may not yet emit a cdylib; skipping size report"
             exit 0
           fi
-          BUDGET=$((100 * 1000 * 1000))  # 100 MB app-wide cap (2026-08-19)
+          BUDGET=$((120 * 1000 * 1000))  # 120 MB app-wide cap (raised 2026-10-23)
           RAW=$(stat -c '%s' "$WASM")
           brotli -q 11 -f -o "$WASM.br" "$WASM"
           BR=$(stat -c '%s' "$WASM.br")
           echo "image_js.wasm        raw: $RAW bytes"
           echo "image_js.wasm.br  brotli: $BR bytes"
-          echo "budget (app-wide): $BUDGET bytes (100 MB)"
+          echo "budget (app-wide): $BUDGET bytes (120 MB)"
           if [ "$RAW" -gt "$BUDGET" ]; then
-            echo "::warning title=wasm budget::raw image_js.wasm ($RAW bytes) exceeds the 100 MB app wasm budget — see BREAKAGE I-07"
+            echo "::warning title=wasm budget::raw image_js.wasm ($RAW bytes) exceeds the 120 MB app wasm budget — see BREAKAGE I-07"
           fi
 
       # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),

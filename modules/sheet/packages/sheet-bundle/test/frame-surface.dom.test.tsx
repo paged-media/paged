@@ -160,6 +160,25 @@ function fakeSession(shown: GridScene = scene) {
       new Map(ids.map((id) => [id, "#123456"] as [string, string])),
     documentStyleRevision: () => 0,
     documentStyleLooks: async () => new Map(),
+    documentStyleChoices: async () => ({
+      paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
+      swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
+    }),
+    applyDocumentSwatch: async (target, id) => {
+      calls.push(["swatch", target, id]);
+      return { ok: true as const };
+    },
+    styleAtTarget: () => null,
+    grabAt: () => "cell" as const,
+    selectionAreas: () => [],
+    scrollInFrame: (dRows, dCols) => (
+      calls.push(["scroll", dRows, dCols]),
+      true
+    ),
+    setStyle: (patch) => {
+      calls.push(["style", patch]);
+      return { ok: true as const };
+    },
     documentTextDefault: async () => ({
       family: "Minion Pro",
       style: null,
@@ -222,7 +241,12 @@ describe("sheet frame surface", () => {
       shiftKey: true,
     });
     fireEvent.pointerUp(root, { button: 0, clientX: hw + 10, clientY: hh + 5 });
-    expect(calls).toContainEqual(["down", 10, 5, { shift: true }]);
+    expect(calls).toContainEqual([
+      "down",
+      10,
+      5,
+      { shift: true, copy: false, add: false },
+    ]);
     expect(calls).toContainEqual(["up", 10, 5]);
   });
 
@@ -437,6 +461,45 @@ describe("sheet frame surface", () => {
     // A plain colour (no reference) stays as the workbook has it.
     expect(shown.styles[0]?.textRgb).toBe("#000000");
     expect(shown.styles[0]?.borderLines?.bottom?.rgb).toBe("#222222");
+  });
+
+  it("the bar applies a document paragraph style and a document swatch", async () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.change(r.getByTestId("sheet-bar-style"), {
+      target: { value: "ParagraphStyle/Cells" },
+    });
+    expect(calls).toContainEqual([
+      "style",
+      { docParaStyle: "ParagraphStyle/Cells" },
+    ]);
+    fireEvent.click(r.getByTestId("sheet-bar-fill"));
+    const picker = r.getByTestId("sheet-swatch-picker");
+    fireEvent.click(picker.querySelector('[data-swatch="Color/Brand"]')!);
+    expect(calls).toContainEqual(["swatch", "fill", "Color/Brand"]);
+    expect(r.queryByTestId("sheet-swatch-picker")).toBeNull();
+  });
+
+  it("overlay scrollbars show the window and a thumb drag scrolls it", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
+    const thumb = r.getByTestId("sheet-scrollbar-row");
+    expect(thumb.getAttribute("aria-valuenow")).toBe("0");
+    fireEvent.pointerDown(thumb, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(thumb, { clientX: 0, clientY: 10 });
+    fireEvent.pointerUp(thumb, { clientX: 0, clientY: 10 });
+    const scrolls = calls.filter((c) => c[0] === "scroll");
+    expect(scrolls.length).toBeGreaterThan(0);
+    expect(scrolls[0]![1]).toBeGreaterThan(0);
+    // The thumb's press is not a cell press.
+    expect(calls.some((c) => c[0] === "down")).toBe(false);
   });
 
   it("detaches on unmount", () => {

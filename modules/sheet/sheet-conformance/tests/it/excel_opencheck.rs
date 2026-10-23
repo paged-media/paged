@@ -40,7 +40,7 @@
 
 use std::path::PathBuf;
 
-use sheet_js::core::{SheetSession, StructuralEdit};
+use sheet_js::core::{ChartPatch, SeriesArg, SheetSession, StructuralEdit, CHART_KIND_TAGS};
 
 fn corpus(name: &str) -> Vec<u8> {
     let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -100,6 +100,197 @@ fn scenarios() -> Vec<(&'static str, &'static str, Step)> {
                 .unwrap();
         }),
     ];
+    // W2.6–W2.8 and ADR 517: what Paged authors, Excel must open unrepaired.
+    v.push(("w2-table-create", "01-minimal.xlsx", |s| {
+        fill_sales(s);
+        s.set_cell(0, 9, 3, "Total").unwrap();
+        s.create_table(0, "A10:D14", true, Some("TableStyleMedium9"), Some("Sales"))
+            .unwrap();
+        s.set_calculated_column("Sales", "Total", Some("=[@Units]*[@Price]"))
+            .unwrap();
+        s.set_table_totals("Sales", true).unwrap();
+        s.set_totals_function("Sales", "Units", "average", None)
+            .unwrap();
+        s.set_table_style(
+            "Sales",
+            sheet_js::core::tables::TableStyleArg {
+                banded_columns: Some(true),
+                first_column: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("w2-table-edit", "07-tables.xlsx", |s| {
+        let t = s.list_table_details()[0].clone();
+        s.rename_table(&t.name, "Renamed").unwrap();
+        s.set_table_totals("Renamed", !t.totals_row).unwrap();
+    }));
+    v.push(("w2-validation", "01-minimal.xlsx", |s| {
+        use sheet_js::core::validation::ValidationRuleArg;
+        s.set_validation(
+            0,
+            "D2:D9",
+            ValidationRuleArg {
+                kind: "list".into(),
+                list_items: Some(vec!["Yes".into(), "No".into()]),
+                prompt_title: Some("Pick".into()),
+                prompt: Some("Yes or no".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_validation(
+            0,
+            "E2:E9",
+            ValidationRuleArg {
+                kind: "whole".into(),
+                operator: Some("between".into()),
+                formula1: Some("1".into()),
+                formula2: Some("=$A$1+10".into()),
+                error_style: Some("warning".into()),
+                error_title: Some("Range".into()),
+                error: Some("1 to A1+10".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_validation(
+            0,
+            "F2",
+            ValidationRuleArg {
+                kind: "custom".into(),
+                formula1: Some("=ISNUMBER(F2)".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("w2-validation-edit", "12-datavalidation.xlsx", |s| {
+        use sheet_js::core::validation::ValidationRuleArg;
+        s.update_validation(
+            0,
+            0,
+            ValidationRuleArg {
+                error_style: Some("information".into()),
+                prompt: Some("edited".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.clear_validation(0, "Z1:Z5").unwrap();
+    }));
+    v.push(("w2-protection", "01-minimal.xlsx", |s| {
+        s.set_style(
+            0,
+            "B2:B4",
+            sheet_js::core::StylePatchArg {
+                locked: Some(false),
+                formula_hidden: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.protect_sheet(
+            0,
+            sheet_js::core::protect::ProtectOptions {
+                password: Some("pw".into()),
+                format_rows: Some(true),
+                sort: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.protect_workbook("book", true, false).unwrap();
+    }));
+    v.push(("w2-sort-filter", "01-minimal.xlsx", |s| {
+        use sheet_js::core::filter::{ConditionArg, CriterionArg};
+        use sheet_js::core::sort::{SortKeyArg, SortSpec};
+        fill_sales(s);
+        s.set_style(
+            0,
+            "A12",
+            sheet_js::core::StylePatchArg {
+                fill: Some("#FFC000".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_autofilter(0, "A10:C14").unwrap();
+        s.sort_range_by(
+            0,
+            "A10:C14",
+            SortSpec {
+                keys: vec![
+                    SortKeyArg {
+                        index: 0,
+                        sort_by: Some("cellColor".into()),
+                        color: Some("#FFC000".into()),
+                        ..Default::default()
+                    },
+                    SortKeyArg {
+                        index: 1,
+                        descending: true,
+                        ..Default::default()
+                    },
+                ],
+                has_header: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_filter_column(
+            0,
+            "A10:C14",
+            1,
+            Some(CriterionArg::Custom {
+                and: true,
+                conditions: vec![
+                    ConditionArg {
+                        op: "greaterThan".into(),
+                        val: "1".into(),
+                    },
+                    ConditionArg {
+                        op: "lessThan".into(),
+                        val: "100".into(),
+                    },
+                ],
+            }),
+        )
+        .unwrap();
+        s.set_filter_column(
+            0,
+            "A10:C14",
+            2,
+            Some(CriterionArg::Top {
+                n: 3.0,
+                percent: false,
+                top: true,
+            }),
+        )
+        .unwrap();
+        s.set_filter_column(
+            0,
+            "A10:C14",
+            0,
+            Some(CriterionArg::Dynamic {
+                dynamic: "aboveAverage".into(),
+            }),
+        )
+        .unwrap();
+        s.set_filter_column(0, "A10:C14", 0, None).unwrap();
+    }));
+    v.push(("w2-outline", "01-minimal.xlsx", |s| {
+        use sheet_js::core::outline::Axis;
+        fill_sales(s);
+        s.group(0, Axis::Rows, 11, 13).unwrap();
+        s.set_group_collapsed(0, Axis::Rows, 12, true).unwrap();
+        s.group(0, Axis::Cols, 1, 2).unwrap();
+        s.set_hidden(0, Axis::Cols, 6, 6, true).unwrap();
+        s.add_sheet("Hidden").unwrap();
+        s.set_cell(1, 0, 0, "x").unwrap();
+        s.set_sheet_state(1, "hidden").unwrap();
+    }));
     for f in [
         "01-minimal.xlsx",
         "02-formulas.xlsx",
@@ -120,7 +311,127 @@ fn scenarios() -> Vec<(&'static str, &'static str, Step)> {
                 .unwrap();
         }));
     }
+    // Charts (W4.3, ADR 519): authored charts generated, a read chart
+    // spliced, a kind change, a delete.
+    v.push(("chart-authored-classic", "01-minimal.xlsx", |s| {
+        chart_data(s);
+        for tag in CHART_KIND_TAGS.iter().filter(|t| !chart_ex_tag(t)) {
+            s.add_chart(0, "B12:D16", "A12:A16", tag, tag, "").unwrap();
+        }
+    }));
+    v.push(("chart-authored-chartex", "01-minimal.xlsx", |s| {
+        chart_data(s);
+        for tag in CHART_KIND_TAGS.iter().filter(|t| chart_ex_tag(t)) {
+            s.add_chart(0, "B12:D16", "A12:A16", tag, tag, "").unwrap();
+        }
+    }));
+    v.push(("chart-edited", "16-structure.xlsx", |s| {
+        let spec = s.chart_specs()[0].clone();
+        let first = &spec.series[0];
+        s.update_chart(
+            0,
+            ChartPatch {
+                title: Some(Some("Edited in Paged".into())),
+                series: Some(vec![SeriesArg {
+                    values: first.values.clone(),
+                    categories: first.categories.clone().unwrap_or_default(),
+                    name: "Renamed".into(),
+                    color: "#00A0E0".into(),
+                    color_swatch: "Color/Brand".into(),
+                    ..Default::default()
+                }]),
+                value_axis_max: Some(Some(1000.0)),
+                legend_position: Some("b".into()),
+                data_labels: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // Charts authored beside it go into the sheet's existing drawing.
+        for (kind, title) in [("line", "Added line"), ("funnel", "Added funnel")] {
+            let i = s
+                .add_chart(spec.host_sheet, "A1:A2", "", kind, title, "")
+                .unwrap();
+            s.update_chart(
+                i,
+                ChartPatch {
+                    series: Some(vec![SeriesArg {
+                        values: first.values.clone(),
+                        categories: first.categories.clone().unwrap_or_default(),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+    }));
+    v.push(("chart-kind-change", "16-structure.xlsx", |s| {
+        s.update_chart(
+            0,
+            ChartPatch {
+                kind: Some("stackedArea".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("chart-kind-pie", "16-structure.xlsx", |s| {
+        s.update_chart(
+            0,
+            ChartPatch {
+                kind: Some("pie".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("chart-deleted", "16-structure.xlsx", |s| {
+        s.delete_chart(0).unwrap();
+    }));
     v
+}
+
+fn chart_ex_tag(t: &str) -> bool {
+    matches!(
+        t,
+        "waterfall" | "funnel" | "treemap" | "sunburst" | "histogram" | "pareto" | "boxWhisker"
+    )
+}
+
+/// A block of numbers with labels at A11:D16 for the authored charts.
+fn chart_data(s: &mut SheetSession) {
+    let rows = [
+        ["", "North", "South", "East"],
+        ["Q1", "10", "4", "3"],
+        ["Q2", "20", "6", "5"],
+        ["Q3", "15", "9", "4"],
+        ["Q4", "25", "7", "6"],
+        ["Q5", "18", "8", "7"],
+    ];
+    for (r, row) in rows.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            if !v.is_empty() {
+                s.set_cell(0, 10 + r as u32, c as u32, v).unwrap();
+            }
+        }
+    }
+}
+
+/// A small table of sales at A10:C14 (header first).
+fn fill_sales(s: &mut SheetSession) {
+    let rows = [
+        ["Region", "Units", "Price"],
+        ["West", "5", "2"],
+        ["East", "9", "3"],
+        ["North", "7", "4"],
+        ["South", "2", "8"],
+    ];
+    for (r, row) in rows.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            s.set_cell(0, 9 + r as u32, c as u32, v).unwrap();
+        }
+    }
 }
 
 /// A package Excel must repair: rows out of order.
@@ -196,23 +507,54 @@ fn inventory(bytes: &[u8]) -> String {
             }
         }
     }
-    format!("cf={cf} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}")
+    // The charts: count, then each one's kind, series count and title.
+    let charts: Vec<String> = s
+        .list_charts()
+        .iter()
+        .map(|c| {
+            format!(
+                "{}:{}:{}",
+                c.kind,
+                c.series_count,
+                c.title.as_deref().unwrap_or("")
+            )
+        })
+        .collect();
+    let charts = if charts.is_empty() {
+        String::new()
+    } else {
+        format!(" charts={}[{}]", charts.len(), charts.join("|"))
+    };
+    // ADR 517: protection, filters, outline and hidden tracks and sheets.
+    let mut prot = 0;
+    let mut af = 0;
+    let mut hidden = 0;
+    for i in 0..sheets.len() as u16 {
+        prot += usize::from(doc.sheet_protection(i).is_some_and(|p| p.on));
+        af += usize::from(doc.ws_child(i, "autoFilter").is_some());
+        let o = s.outline(i).unwrap();
+        hidden += o.hidden_rows.len() + o.hidden_cols.len() + o.rows.len() + o.cols.len();
+    }
+    let wbp = usize::from(doc.workbook_protection().is_some_and(|w| w.lock_structure));
+    let states: String = sheets.iter().map(|x| &x.state[..1]).collect();
+    format!(
+        "cf={cf} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}{charts} prot={prot} wbp={wbp} af={af} outline={hidden} states={states}"
+    )
 }
 
 #[test]
 #[ignore = "maintainer: records the open-check lane after drive.sh"]
 fn record_what_excel_made_of_them() {
     let dir = build_dir();
-    let mut rows = vec!["case\topened\trepaired\tbaseline\tpaged\texcel".to_string()];
+    let mut rows =
+        vec!["case\topened\trepaired\tbaseline\tpaged\texcel\texcel-chart-types".to_string()];
     // Whether Excel opened the fixture a case was made from, as generated.
     let baseline = |case: &str| -> &'static str {
-        let fixture = if case.starts_with("saveloss-") {
-            "15-saveloss".to_string()
-        } else if case.starts_with("structure-") {
-            "16-structure".to_string()
-        } else {
-            case.to_string()
-        };
+        let fixture = scenarios()
+            .iter()
+            .find(|(n, _, _)| *n == case)
+            .map(|(_, f, _)| f.trim_end_matches(".xlsx").to_string())
+            .unwrap_or_else(|| case.to_string());
         let meta =
             std::fs::read_to_string(dir.join(format!("orig-{fixture}.meta"))).unwrap_or_default();
         if meta.contains(" OK name=") {
@@ -250,8 +592,15 @@ fn record_what_excel_made_of_them() {
         } else {
             baseline(case)
         };
+        // The chart types Excel itself reports, in sheet and anchor order.
+        let types = meta
+            .split(" charts=")
+            .nth(1)
+            .map(|t| t.trim().trim_end_matches(';').to_string())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| "-".into());
         rows.push(format!(
-            "{case}\t{}\t{}\t{base}\t{paged_inv}\t{excel_inv}",
+            "{case}\t{}\t{}\t{base}\t{paged_inv}\t{excel_inv}\t{types}",
             if opened { "yes" } else { "no" },
             if repaired { "yes" } else { "no" }
         ));
@@ -286,5 +635,79 @@ fn excel_opens_what_paged_saves_without_repair__feat__sheet_calc_rewrite_structu
         assert_eq!(paged, excel, "{case}");
     }
     assert!(control, "the broken control was not recorded");
-    assert!(paged_cases >= 16, "{paged_cases} cases");
+    assert!(paged_cases >= 29, "{paged_cases} cases");
+}
+
+/// The chart type Excel reports for a Paged kind tag (Excel's AppleScript
+/// names), as a prefix: a line or radar may carry its markers.
+fn excel_type_of(kind: &str) -> &'static str {
+    match kind {
+        "column" => "column clustered",
+        "stackedColumn" => "column stacked",
+        "percentStackedColumn" => "column stacked 100",
+        "bar" => "bar clustered",
+        "stackedBar" => "bar stacked",
+        "percentStackedBar" => "bar stacked 100",
+        "line" => "line",
+        "stackedLine" => "line",
+        "percentStackedLine" => "line",
+        "area" => "area chart",
+        "stackedArea" => "area stacked",
+        "percentStackedArea" => "area stacked 100",
+        "scatter" => "xyscatter",
+        "bubble" => "bubble",
+        "pie" => "pie chart",
+        "donut" => "doughnut",
+        "pieOfPie" => "pie of pie",
+        "barOfPie" => "bar of pie",
+        "radar" => "radar",
+        "filledRadar" => "radar filled",
+        "stock" => "stock",
+        "surface" => "surface",
+        "waterfall" => "waterfall",
+        "funnel" => "funnel",
+        "treemap" => "treemap",
+        "sunburst" => "sunburst",
+        "histogram" => "histogram",
+        "pareto" => "pareto",
+        "boxWhisker" => "boxwhisker",
+        _ => "?",
+    }
+}
+
+/// CI: Excel opens every chart Paged wrote (authored, spliced, re-kinded,
+/// deleted) without a repair, sees as many charts as Paged wrote, each of
+/// the type Paged wrote; and its re-save reads back to the same charts.
+#[test]
+fn excel_opens_the_charts_paged_writes__feat__sheet_chart_writer() {
+    let text = std::fs::read_to_string(recorded()).expect("recorded/opencheck.tsv");
+    let mut cases = 0;
+    for line in text.lines().skip(1) {
+        let f: Vec<&str> = line.split('\t').collect();
+        let case = f[0];
+        if !case.starts_with("chart-") {
+            continue;
+        }
+        cases += 1;
+        assert_eq!((f[1], f[2]), ("yes", "no"), "{case}: {line}");
+        assert_eq!(f[4], f[5], "{case}: Excel's re-save reads back the same");
+        let kinds: Vec<&str> = f[4]
+            .split("charts=")
+            .nth(1)
+            .and_then(|c| {
+                c.split_once('[')
+                    .map(|(_, rest)| rest.trim_end_matches(']'))
+            })
+            .map(|c| c.split('|').map(|e| e.split(':').next().unwrap()).collect())
+            .unwrap_or_default();
+        let types: Vec<&str> = match f.get(6) {
+            Some(&"-") | None => Vec::new(),
+            Some(t) => t.split(';').collect(),
+        };
+        assert_eq!(kinds.len(), types.len(), "{case}: chart count");
+        for (k, t) in kinds.iter().zip(&types) {
+            assert!(t.starts_with(excel_type_of(k)), "{case}: {k} opened as {t}");
+        }
+    }
+    assert!(cases >= 6, "{cases} chart cases");
 }

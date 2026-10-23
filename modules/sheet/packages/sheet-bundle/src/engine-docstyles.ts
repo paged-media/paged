@@ -105,10 +105,7 @@ function plainMap(m: unknown): DocStyleMap {
   return { enabled: raw?.enabled === true, entries };
 }
 
-
-export function wrapDocStyles(
-  need: Need,
-): Required<SheetEngineDocStyles> {
+export function wrapDocStyles(need: Need): Required<SheetEngineDocStyles> {
   return {
     docStyleMap: () => plainMap(need("doc_style_map")()),
     setDocStyleMap: (map) => {

@@ -49,7 +49,15 @@ import type {
   ScenePathSeg,
 } from "@paged-media/plugin-api";
 
-import type { Align, LoweredRun, LoweredStyle, Rule, Rules } from "./lowered";
+import type {
+  Align,
+  DataBarRect,
+  IconRect,
+  LoweredRun,
+  LoweredStyle,
+  Rule,
+  Rules,
+} from "./lowered";
 
 /** The viewport window (mirror of Rust `sheet_grid::GridViewport`): the
  *  displayed tracks and the cumulative viewport-local pt boundaries along
@@ -174,16 +182,7 @@ export interface GridCommentMarker {
  *  computed — the panel just draws a filled rect (the SAME bar the page lowering
  *  emits, so it reads identically on both surfaces). Mirror of the Rust
  *  `sheet_grid::GridDataBar`. */
-export interface GridDataBar {
-  row: number;
-  col: number;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  fillFraction: number;
-  fill: string;
-}
+export type GridDataBar = DataBarRect;
 
 /** The complete grid scene for one viewport (spec §8.1): the windowed
  *  geometry, the visible populated cells, the style table, the gridlines
@@ -207,6 +206,8 @@ export interface GridScene {
    *  `dataBar` rule covers (spec §8.2/§10.4 — drawn geometry, not a fill).
    *  Absent/empty when none. */
   databars?: GridDataBar[];
+  /** W2.4 — conditional-format icons of the visible cells. */
+  icons?: IconRect[];
   /** Merged areas intersecting the window (one rect per pane). */
   merges?: GridMerge[];
   /** Wave 5 — the target of a fill-handle drag in progress (drawn as an
@@ -655,6 +656,26 @@ export function hitFillHandle(scene: GridScene, x: number, y: number): boolean {
     y >= r[1] - tol &&
     y <= r[1] + r[3] + tol
   );
+}
+
+/** Whether `(x, y)` is on the selection's border (Excel's move grip):
+ *  within `tol` pt of an edge of the selection rect, not deep inside it,
+ *  and not on the fill handle. */
+export function hitSelectionBorder(
+  scene: GridScene,
+  x: number,
+  y: number,
+  tol = 3,
+): boolean {
+  const r = selectionRect(scene);
+  if (!r || hitFillHandle(scene, x, y)) return false;
+  const [rx, ry, rw, rh] = r;
+  const inX = x >= rx - tol && x <= rx + rw + tol;
+  const inY = y >= ry - tol && y <= ry + rh + tol;
+  if (!inX || !inY) return false;
+  const nearV = Math.abs(x - rx) <= tol || Math.abs(x - (rx + rw)) <= tol;
+  const nearH = Math.abs(y - ry) <= tol || Math.abs(y - (ry + rh)) <= tol;
+  return nearV || nearH;
 }
 
 /** The fill-drag target outline rect (clamped to the window), or null. */

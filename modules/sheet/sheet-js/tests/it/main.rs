@@ -5,6 +5,7 @@
 
 mod doc_style_map;
 mod w2_visual;
+mod w5_files;
 mod wave4_features;
 mod wave6_format;
 mod wave9_colors;
