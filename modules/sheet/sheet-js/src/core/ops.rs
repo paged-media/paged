@@ -250,7 +250,11 @@ fn shrink_span(
 impl SheetSession {
     /// Run `f` on the model taken out of the engine, then rebuild the engine
     /// (the `save_xlsx` dance). `recalc` re-evaluates every formula after.
-    fn with_model<R>(&mut self, recalc: bool, f: impl FnOnce(&mut SheetModel) -> R) -> R {
+    pub(crate) fn with_model<R>(
+        &mut self,
+        recalc: bool,
+        f: impl FnOnce(&mut SheetModel) -> R,
+    ) -> R {
         let engine = self.engine.take().expect("engine present outside save");
         let mut model = engine.into_model();
         let out = f(&mut model);

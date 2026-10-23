@@ -59,6 +59,7 @@ mod ops;
 pub mod outline;
 pub mod protect;
 pub mod sort;
+pub mod tables;
 pub mod validation;
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
@@ -962,6 +963,8 @@ impl SheetSession {
 
         // Record the entered cell as edited (for save re-printing).
         self.edited.insert((sheet, row, col));
+        // A header cell renames its table column (sheet ADR 517).
+        self.table_sync_headers(&[(sheet, row, col)])?;
 
         // Build the changed list with each cell's formatted display.
         let engine = self.engine();
@@ -1087,6 +1090,8 @@ impl SheetSession {
             res.changed.extend(more.changed);
         }
         self.edited.extend(written.iter().copied());
+        let header_check: Vec<(u16, u32, u32)> = written.iter().copied().collect();
+        self.table_sync_headers(&header_check)?;
         let mut changed = written;
         changed.extend(res.changed.iter().map(|c| (c.sheet, c.row, c.col)));
         Ok(SetCellsResult {

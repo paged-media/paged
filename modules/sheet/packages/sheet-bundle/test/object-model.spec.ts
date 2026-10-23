@@ -753,7 +753,7 @@ describe.skipIf(!ENGINE_BUILT)(
 
 describe.skipIf(!ENGINE_BUILT)("paged.sheet tables [sheet.objects]", () => {
   setDefaultTimeout(60_000);
-  it("reads a structured table; writes are refused (the part re-emits verbatim)", async () => {
+  it("reads a structured table and edits it (ADR 517)", async () => {
     const h = await openHost();
     try {
       await h.load(blankPageIdml());
@@ -769,7 +769,18 @@ describe.skipIf(!ENGINE_BUILT)("paged.sheet tables [sheet.objects]", () => {
       expect(typeof val(await h.objects.get(t, "range"))).toBe("string");
       expect(typeof val(await h.objects.get(t, "totalsRow"))).toBe("boolean");
       const w = await h.objects.set(t, "name", "Renamed");
-      expect(w.applied).toBe(false);
+      expect(w.applied).toBe(true);
+      const renamed = await h.objects.query(`${P}/table`);
+      expect(
+        await Promise.all(
+          renamed.map(async (a) => val(await h.objects.get(a, "name"))),
+        ),
+      ).toContain("Renamed");
+      const r = renamed.find((a) => a.endsWith("/Renamed"))!;
+      expect((await h.objects.set(r, "bandedColumns", true)).applied).toBe(
+        true,
+      );
+      expect(val(await h.objects.get(r, "bandedColumns"))).toBe(true);
       om.dispose();
       s.dispose();
     } finally {
