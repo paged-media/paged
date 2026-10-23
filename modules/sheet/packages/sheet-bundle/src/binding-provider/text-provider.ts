@@ -168,6 +168,9 @@ export const VALUED_PATHS: readonly PropertyPath[] = [
   "appliedCharacterStyle",
   "appliedParagraphStyle",
   "appliedCellStyle",
+  // The fill/stroke control's container fill: inside an entered sheet
+  // frame it is the selected cells' fill (a document swatch).
+  "frameFillColor",
 ];
 
 /** The paths a style write reaches (`CellTextSource.applyStyle`). */
@@ -300,6 +303,10 @@ export function cellValueOf(
       return style.textSwatch
         ? { type: "colorRef", value: style.textSwatch }
         : undefined;
+    case "frameFillColor":
+      return style.fillSwatch
+        ? { type: "colorRef", value: style.fillSwatch }
+        : undefined;
     case "characterStrikethru":
       return style.strike ? { type: "bool", value: true } : undefined;
     case "characterPosition":
@@ -400,6 +407,15 @@ export async function patchForWrite(
       const ref = await swatchRef(value.value);
       return ref
         ? { fontSwatch: ref }
+        : `no swatch "${value.value}" in the document`;
+    }
+    case "frameFillColor": {
+      if (value.type !== "colorRef") return "a cell fill is a swatch";
+      if (value.value === null) return { fill: "", fillSwatch: null };
+      if (!swatchRef) return "the document's swatches cannot be read";
+      const ref = await swatchRef(value.value);
+      return ref
+        ? { fillSwatch: ref }
         : `no swatch "${value.value}" in the document`;
     }
     case "appliedCharacterStyle":
