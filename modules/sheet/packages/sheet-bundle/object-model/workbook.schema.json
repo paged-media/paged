@@ -42,5 +42,40 @@
     "access": "derived",
     "title": "Dataset",
     "nullable": true
+  },
+  {
+    "path": "chartStyle",
+    "type": {
+      "kind": "struct",
+      "fields": {
+        "roles": {
+          "kind": "map",
+          "of": {
+            "kind": "struct",
+            "fields": {
+              "swatch": {
+                "kind": "text",
+                "optional": true
+              },
+              "paragraphStyle": {
+                "kind": "text",
+                "optional": true
+              },
+              "characterStyle": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        "seriesColorGroup": {
+          "kind": "text",
+          "optional": true
+        }
+      }
+    },
+    "title": "Chart style",
+    "nullable": true,
+    "summary": "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document colour group for the series. Null clears it."
   }
 ]

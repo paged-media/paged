@@ -49,6 +49,7 @@ use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, Vi
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
 use sheet_xlsx::XlsxDocument;
 
+mod chart_style;
 mod charts;
 pub mod csv;
 pub mod files;
@@ -63,6 +64,9 @@ pub mod sort;
 pub mod tables;
 pub mod validation;
 pub mod whatif;
+pub use chart_style::{
+    ChartStyleIn, ChartStyleOut, PaletteIn, PaletteOut, RoleIn, RoleOut, SwatchIn,
+};
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,

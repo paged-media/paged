@@ -110,6 +110,40 @@
     "nullable": true
   },
   {
+    "path": "roles",
+    "type": {
+      "kind": "map",
+      "of": {
+        "kind": "struct",
+        "fields": {
+          "swatch": {
+            "kind": "text",
+            "optional": true
+          },
+          "paragraphStyle": {
+            "kind": "text",
+            "optional": true
+          },
+          "characterStyle": {
+            "kind": "text",
+            "optional": true
+          }
+        }
+      }
+    },
+    "title": "Style roles",
+    "summary": "The chart's own document-style overrides: chartArea, plotArea, axisLine, gridlines (a swatch); text, title, axisTitle, tickLabels, legend, dataLabels (paragraph style, character style, swatch). A write replaces them; a role left out follows the workbook chart style."
+  },
+  {
+    "path": "seriesColorGroup",
+    "type": {
+      "kind": "text"
+    },
+    "title": "Series colours",
+    "nullable": true,
+    "summary": "A document colour group the series take their colours from, in order; null = the workbook chart style's."
+  },
+  {
     "path": "sheet",
     "type": {
       "kind": "text"

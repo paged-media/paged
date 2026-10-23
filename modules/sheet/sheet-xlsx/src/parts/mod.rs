@@ -22,6 +22,7 @@
 
 pub mod autofilter;
 pub mod chart;
+pub mod chart_style;
 pub mod comments;
 pub mod conditional_format;
 pub mod data_validation;

@@ -33,9 +33,13 @@
 use serde::{Deserialize, Deserializer};
 use sheet_core::{CellRef, RangeRef, SheetId, SheetModel};
 
+use super::chart_style::{
+    palette, palette_out, role_out, role_style, PaletteIn, PaletteOut, RoleIn, RoleOut, SwatchIn,
+};
 use super::charts::{chart_kind_from_tag, chart_kind_tag, CHART_KIND_TAGS};
 use super::{SessionError, SheetSession};
 use sheet_chart::model::{ColorRef, ConcreteColor, DataLabels, Legend, LegendPosition, Series};
+use std::collections::BTreeMap;
 
 /// One structured table (ListObject).
 #[derive(serde::Serialize, Debug, Clone, PartialEq)]
@@ -91,6 +95,11 @@ pub struct ChartSpec {
     pub style: Option<u32>,
     pub flattened3d: bool,
     pub title_paragraph_style: Option<String>,
+    /// The chart's own document-style overrides by role (sheet ADR 524);
+    /// a role absent here follows the workbook default.
+    pub roles: BTreeMap<String, RoleOut>,
+    /// The chart's own series palette (a document colour group).
+    pub series_palette: Option<PaletteOut>,
 }
 
 /// A series argument of [`ChartPatch::series`]; empty strings mean none.
@@ -102,8 +111,9 @@ pub struct SeriesArg {
     pub name: String,
     /// `#RRGGBB`; empty = automatic.
     pub color: String,
-    /// A document swatch id the fill names (`Color/…`).
-    pub color_swatch: String,
+    /// The document swatch the fill names: `{id, model, fallbackRgb}` or a
+    /// bare id (`Color/…`).
+    pub color_swatch: Option<SwatchIn>,
     /// This series' kind tag in a combo (empty = the chart's kind).
     pub kind: String,
     pub secondary: bool,
@@ -142,6 +152,14 @@ pub struct ChartPatch {
     /// A document paragraph style for the title (`ParagraphStyle/…`).
     #[serde(deserialize_with = "present")]
     pub title_paragraph_style: Option<Option<String>>,
+    /// Sheet ADR 524 — per-role document-style overrides, merged: a role
+    /// given `null` gives its override up (the workbook default applies).
+    pub roles: Option<BTreeMap<String, Option<RoleIn>>>,
+    /// Give every override up first (roles, series swatches, palette).
+    pub reset_roles: Option<bool>,
+    /// The chart's own series palette; `null` = the workbook default's.
+    #[serde(deserialize_with = "present")]
+    pub series_palette: Option<Option<PaletteIn>>,
 }
 
 /// A field that is present (even as `null`) is `Some(..)`; `default` makes
@@ -327,6 +345,12 @@ impl SheetSession {
                         .doc_para_style
                         .as_ref()
                         .map(|t| t.to_string()),
+                    roles: sheet_chart::style::overrides(m)
+                        .roles
+                        .iter()
+                        .map(|(k, r)| (k.clone(), role_out(r)))
+                        .collect(),
+                    series_palette: m.palette.as_ref().map(palette_out),
                 }
             })
             .collect()
@@ -398,12 +422,22 @@ impl SheetSession {
                     };
                     s.name = non_empty(&a.name).map(Into::into);
                     let mut fill = non_empty(&a.color).and_then(|c| ColorRef::from_hex(&c));
-                    if let Some(sw) = non_empty(&a.color_swatch) {
-                        // A swatch named without a colour paints automatic
-                        // until the document resolves it.
-                        let base = fill.unwrap_or_else(ColorRef::auto);
-                        let fallback = sheet_chart::model::rgb_of(&base).unwrap_or(0x808080);
-                        fill = Some(base.with_doc(sheet_chart::model::doc_swatch(&sw, fallback)));
+                    match &a.color_swatch {
+                        Some(SwatchIn::Id(sw)) if !sw.trim().is_empty() => {
+                            // A swatch named without a colour paints automatic
+                            // until the document resolves it.
+                            let base = fill.unwrap_or_else(ColorRef::auto);
+                            let fallback = sheet_chart::model::rgb_of(&base).unwrap_or(0x808080);
+                            fill = Some(
+                                base.with_doc(sheet_chart::model::doc_swatch(sw.trim(), fallback)),
+                            );
+                        }
+                        Some(r @ SwatchIn::Ref(_)) => {
+                            if let Some(d) = r.to_ref()? {
+                                fill = Some(sheet_chart::style::swatch_color(&d));
+                            }
+                        }
+                        _ => {}
                     }
                     s.fill = fill;
                     if let Some(k) = non_empty(&a.kind) {
@@ -426,8 +460,33 @@ impl SheetSession {
                 )))
             }
         };
+        let mut roles = Vec::new();
+        for (role, r) in patch.roles.iter().flatten() {
+            let style = match r {
+                None => {
+                    role_style(role, &RoleIn::default())?;
+                    None
+                }
+                Some(r) => Some(role_style(role, r)?).filter(|x| !x.is_empty()),
+            };
+            roles.push((role.clone(), style));
+        }
+        let new_palette = match &patch.series_palette {
+            None => None,
+            Some(None) => Some(None),
+            Some(Some(p)) => Some(palette(p)?),
+        };
         let chart = &mut self.doc.charts[index as usize];
         chart.dirty = true;
+        if patch.reset_roles == Some(true) {
+            sheet_chart::style::clear_overrides(&mut chart.model);
+        }
+        for (role, style) in &roles {
+            sheet_chart::style::set_role(&mut chart.model, role, style.as_ref());
+        }
+        if let Some(p) = new_palette {
+            chart.model.palette = p;
+        }
         let m = &mut chart.model;
         if let Some(s) = series {
             let (k, g) = kind.unwrap_or((m.kind(), m.grouping()));
