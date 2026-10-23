@@ -28,6 +28,8 @@ import {
 } from "react";
 
 import type { HitResult, PageId, SnapLine } from "@paged-media/client";
+import { useEditorScope } from "./editor-scope";
+import { debugHandlesEnabled, setDebugHandle } from "./debug-handles";
 
 /**
  * Result of a click hit-test, kept for the overlay's click-marker
@@ -287,21 +289,14 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
   // Dev hook. PagedShell builds `__canvas` ABOVE this provider, so it
   // can't reach the overlay signals; tests that drive a preview straight
   // into the overlay (B-07 path/cubic preview spec) read the writer here
-  // off `__overlaySignals`. Stripped from production via Vite's PROD
-  // constant; typed loosely so shell's tsconfig (no Vite ambient types)
-  // still passes.
+  // off `__overlaySignals`, which the page entry publishes from the
+  // editor's debug handles. Dev and demo builds only.
+  const scope = useEditorScope();
   useEffect(() => {
-    const isProd =
-      (import.meta as unknown as { env?: { PROD?: boolean } }).env?.PROD ===
-      true;
-    if (isProd) return;
-    (globalThis as unknown as { __overlaySignals?: unknown }).__overlaySignals =
-      value;
-    return () => {
-      delete (globalThis as unknown as { __overlaySignals?: unknown })
-        .__overlaySignals;
-    };
-  }, [value]);
+    if (!debugHandlesEnabled()) return;
+    setDebugHandle(scope, "overlaySignals", value);
+    return () => setDebugHandle(scope, "overlaySignals", undefined);
+  }, [scope, value]);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

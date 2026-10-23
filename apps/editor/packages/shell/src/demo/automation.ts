@@ -127,6 +127,8 @@ export interface AutomationOptions {
   /** When true, demo.* narration/pacing is suppressed (used by the session's
    *  silent replay/fast-forward when seeking to a chapter). */
   isSilent?: () => boolean;
+  /** The live handle, read on every call; absent, `window.__canvas`. */
+  live?: () => CanvasHandleLike | undefined;
 }
 
 /** The engine's refusal in words: its own message where it has one,
@@ -152,13 +154,15 @@ export function buildAutomation(
   opts: AutomationOptions = {},
 ): DemoGlobals {
   const silent = () => opts.isSilent?.() ?? false;
-  // `window.__canvas` is republished on every render (PagedShell), so the
-  // object a script was started with goes stale: after `paged.file.new` its
+  // The editor's `__canvas` handle is republished on every render
+  // (PagedShell), so the object a script was started with goes stale: after `paged.file.new` its
   // `handle` still names no document and `editor.pageIds()` stays empty. Every
   // read goes to the live publication, falling back to the handle given (a
   // host without the global, or a test double).
   const live = (): CanvasHandleLike =>
-    (globalThis as { __canvas?: CanvasHandleLike }).__canvas ?? handle;
+    opts.live?.() ??
+    (globalThis as { __canvas?: CanvasHandleLike }).__canvas ??
+    handle;
   const commandInvoke = (id: string, payload?: unknown): Promise<unknown> => {
     const c = live().registries.commands;
     const fn = c.invoke ?? c.execute ?? c.run;

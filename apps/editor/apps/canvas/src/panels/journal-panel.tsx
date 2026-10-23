@@ -55,7 +55,12 @@ import {
   pullWorkerJournal,
 } from "../journal-sink";
 import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import {
+  debugHandlesOf,
+  FocusScope,
+  useEditorScope,
+  type EditorScope,
+} from "@paged-media/shell";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 // The panel's words. The entries themselves (codes, data, origins) and the
@@ -475,6 +480,7 @@ function UncapturedSection({
  * shown cannot drift from what is written.
  */
 function ExportDialog({ onClose }: { onClose: () => void }) {
+  const scope = useEditorScope();
   const strings = useStrings();
   const [includeCrash, setIncludeCrash] = useState(false);
   const [includeShape, setIncludeShape] = useState(false);
@@ -482,7 +488,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   const options = {
     // Both sections are OPT-IN and default OFF. Stack traces embed the
     // user's disk paths; document shape carries font families.
-    crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
+    crash: includeCrash ? { stacks: readCrashStacks(scope) } : undefined,
     documentShape: includeShape ? getDocumentShape() : undefined,
   };
 
@@ -625,10 +631,10 @@ const buttonStyle: React.CSSProperties = {
   padding: "5px 12px",
 };
 
-/** The shell's error boundary stashes the last crash on a global (the
- *  `__pagedCrash` affordance). That is the only stack the app retains, and it
- *  is read ONLY when the user ticks the box. */
-function readCrashStacks(): string[] {
-  const stash = (globalThis as { __pagedCrash?: string }).__pagedCrash;
+/** The shell's error boundary keeps the editor's last crash in its debug
+ *  handles (the `__pagedCrash` affordance). That is the only stack the app
+ *  retains, and it is read ONLY when the user ticks the box. */
+function readCrashStacks(scope: EditorScope): string[] {
+  const stash = debugHandlesOf(scope).crash;
   return stash ? [stash] : [];
 }

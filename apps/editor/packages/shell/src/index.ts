@@ -45,6 +45,12 @@ export {
   type ScopedKey,
   type ValueStore,
 } from "./state/editor-scope";
+export {
+  debugHandlesEnabled,
+  debugHandlesOf,
+  setDebugHandle,
+  type DebugHandles,
+} from "./state/debug-handles";
 
 export {
   CanvasClientProvider,

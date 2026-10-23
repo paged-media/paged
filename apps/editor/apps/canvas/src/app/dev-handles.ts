@@ -18,14 +18,16 @@
  */
 
 // The `__*` test handles of one editor (plan task E1). Playwright specs and
-// the demo playground reach the editor's doors through them: the consent
-// and secret prompts, the documents door, the binding providers, the bundle
-// lane, the plugin host's doors. Each reads the instance it was published
-// for, at the moment it is read.
+// the demo playground reach the editor's doors through them: the shell's
+// automation handle (`__canvas`), the consent and secret prompts, the
+// documents door, the binding providers, the bundle lane, the plugin host's
+// doors. Each reads the instance it was published for, at the moment it is
+// read. Only the page entry publishes them (entry.tsx, dev and demo builds);
+// `mountEditor` never does, so an embedding host's page gets none.
 
 import moduleManifest from "virtual:paged-modules";
 
-import { replacePrompts } from "@paged-media/shell";
+import { debugHandlesOf, replacePrompts } from "@paged-media/shell";
 
 import type { EditorInstance } from "./instance";
 
@@ -92,7 +94,18 @@ export function publishDevHandles(instance: EditorInstance): () => void {
     __willSave: willSave,
   };
   // Live: they exist once the bundles' host options do.
+  const debug = () => debugHandlesOf(instance.scope);
   const live: Record<string, () => unknown> = {
+    // The shell's automation handle, refreshed after every commit, and the
+    // demo runner over it (PagedShell).
+    __canvas: () => debug().canvas,
+    __demo: () => debug().demo,
+    // The overlay-signal writer (the overlay preview specs).
+    __overlaySignals: () => debug().overlaySignals,
+    // The last canvas pointer event built (the stylus plumbing spec).
+    __canvasPointer: () => debug().pointer,
+    // The last crash the shell's boundary caught.
+    __pagedCrash: () => debug().crash,
     // The aggregate PagedEditor handle every bundle host's `getEditor()`
     // returns: specs probe the members capability flags gate on.
     __paged: () => objects.editor() ?? undefined,
