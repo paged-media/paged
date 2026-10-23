@@ -98,9 +98,10 @@ each published canary added is under [Releases](#releases).
   series, row and column attributes. What the delete removes entirely goes with its cells, as
   in Excel. Still refused, with the reason: a pivot table on the sheet or a pivot cache over it,
   and an extension Paged does not know that holds cell references. Over the Excel-written
-  workbooks of the private corpus, 1778 inserts and deletes: none refused. Excel 16 opens what
+  workbooks of the private corpus, 1778 inserts and deletes: the 24 refused are on protected
+  sheets that do not allow them (ADR 517). Excel 16 opens what
   Paged saves after these edits without a repair and keeps what it holds (the open-check lane,
-  `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
+  `recorded/opencheck.tsv`: 23 cases, seven of them what ADR 517 authors — tables, validations, protection, sort and filter, outline; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
 - **What-if** (ADR 517). Data tables (`<f t="dataTable">`, one variable in a column or a row,
@@ -260,6 +261,20 @@ each published canary added is under [Releases](#releases).
   its colours and a gradient as its mean colour, dashed and double borders as solid lines of
   their weight, shrink-to-fit and the double underlines (the table model has no such
   properties).
+- **Conditional formatting, every rule kind** (W2.4, ADR 523). The evaluator in the calc engine
+  runs cell-value rules with formula operands, expressions, top/bottom N and N %, above/below
+  the average (with standard deviations), duplicate/unique, the text tests, time periods (on the
+  engine's clock), blanks and errors, colour scales over every threshold kind, data bars (the
+  2010 negative bars, axis, direction, border and solid fill) and every icon set with custom
+  icons; rules stack by priority with `stopIfTrue`, differential formats merge (number formats
+  included) and empty cells are painted too. Page and grid draw the same outcome: styles through
+  the shared styler, bars and icons from one geometry (icons as vector shapes). Every
+  conditional format of the private corpus reads and lowers (1,483 blocks, 10 kinds, none
+  preserve-only). Recorded from Excel 16 (the conditional-format display lane, 194 cells of a
+  fixture with one rule kind per column: text, font and fill colour) and replayed in CI: 192
+  agree, two colour-scale cells differ by one level (a recorded divergence). A 1,000,000-cell
+  sheet with 20 rules: 0.7 ms per grid viewport, 46 ms for the first frame after an edit. Not on
+  the page: gradient data bars (solid), bars and icons on a paginated chain.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

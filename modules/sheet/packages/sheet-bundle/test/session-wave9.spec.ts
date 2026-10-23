@@ -816,8 +816,9 @@ describe.skipIf(!ENGINE_BUILT)(
     it("bars are drawn under the table; a refresh redraws them in the same undo step", async () => {
       const session = await placeBars(raw);
       let order = await stack();
-      // D1 is the domain minimum (a zero-length bar); D2..D5 draw.
-      expect(order.filter((x) => x.startsWith("Polygon"))).toHaveLength(4);
+      // Every value draws: a 2006 data bar is at least 10 % long, so the
+      // domain minimum D1 shows its shortest bar too (W2.4, as in Excel).
+      expect(order.filter((x) => x.startsWith("Polygon"))).toHaveLength(5);
       expect(order[order.length - 1]).toMatch(/^TextFrame/); // the table's frame on top
       expect(await spread()).toContain("Color/uPagedSheetDataBar638EC6");
       const before = await spread();
@@ -826,7 +827,7 @@ describe.skipIf(!ENGINE_BUILT)(
       await session.refreshPlacements();
       await settle();
       order = await stack();
-      expect(order.filter((x) => x.startsWith("Polygon"))).toHaveLength(4); // D1 now draws, D2 does not
+      expect(order.filter((x) => x.startsWith("Polygon"))).toHaveLength(5); // the new minimum too
       expect(order[order.length - 1]).toMatch(/^TextFrame/);
       expect(await spread()).not.toBe(before);
 
@@ -848,7 +849,7 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(tally.work.count("document.tree")).toBe(0);
       expect(
         (await stack()).filter((x) => x.startsWith("Polygon")),
-      ).toHaveLength(4);
+      ).toHaveLength(5);
     });
   },
 );

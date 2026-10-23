@@ -260,7 +260,9 @@ impl SheetSession {
         let model = self.engine().model();
         let ws = model.sheet(sheet);
         let cf = self.doc.lowered_conditional_formats(sheet);
-        let mut styler = sheet_lower::CellStyler::new(&self.doc.visual_styles, &cf, ws);
+        let eval = self.eval_cf(sheet);
+        let mut styler = sheet_lower::CellStyler::new(&self.doc.visual_styles, &cf, ws)
+            .with_cf_source(eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource));
         let (mut cache, ctx) = self.filter_ctx();
         let mut keys = Vec::new();
         for &r in rows {

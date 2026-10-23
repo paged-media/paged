@@ -553,7 +553,8 @@ async function barOps(
   at: BarPlacement | undefined,
 ): Promise<Mutation[]> {
   if (!at) return [];
-  const bars = (content.databars ?? []).length > 0;
+  const bars =
+    (content.databars ?? []).length > 0 || (content.icons ?? []).length > 0;
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
@@ -1095,6 +1096,48 @@ function chainWindow(
     range: windowRange(content),
     chainStarts,
   };
+}
+
+/** The view a window frame keeps when the user leaves its grid (sheet ADR
+ *  510): what the grid showed must be on the page, and the page window
+ *  moves only as far as that needs — the grid's headings take room, so a
+ *  step that scrolled the grid by a row need not move the page. `page` is
+ *  the page window's body tracks (sheet indices), `grid` the grid's. */
+export function viewToContain(
+  view: { row: number; col: number },
+  page: { rows: readonly number[]; cols: readonly number[] },
+  grid: { rows: readonly number[]; cols: readonly number[] },
+): { row: number; col: number } {
+  const axis = (first: number, p: readonly number[], g: readonly number[]) => {
+    if (p.length === 0 || g.length === 0)
+      return g.length > 0 ? Math.min(...g) : first;
+    const gFirst = Math.min(...g);
+    const gLast = Math.max(...g);
+    const pLast = Math.max(...p);
+    if (gFirst >= first && gLast <= pLast) return first;
+    if (gFirst < first) return gFirst;
+    return Math.min(gFirst, first + (gLast - pLast));
+  };
+  return {
+    row: axis(view.row, page.rows, grid.rows),
+    col: axis(view.col, page.cols, grid.cols),
+  };
+}
+
+/** A frame page's body tracks (sheet indices): the printed heading and
+ *  the frozen header rows / columns left out. */
+export function pageBodyTracks(content: LoweredContent): {
+  rows: number[];
+  cols: number[];
+} {
+  const rows = content.rows
+    .slice(content.headerRows ?? 0)
+    .map((r) => r.index)
+    .filter((i) => i !== HEADING_INDEX);
+  const cols = content.cols
+    .map((c) => c.index)
+    .filter((i) => i !== HEADING_INDEX);
+  return { rows, cols };
 }
 
 /** Column letters of a 0-based column index (`0` -> `A`, `27` -> `AB`). */

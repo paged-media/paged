@@ -69,6 +69,9 @@ export interface PaintContext {
   measureText?(text: string): { width: number };
   /** Dash pattern for dashed/dotted borders (a real canvas has it). */
   setLineDash?(segments: number[]): void;
+  /** Filled polygons (W2.4 icons; without them icons are not drawn). */
+  fill?(): void;
+  closePath?(): void;
   /** Rotated text (W2.2; without it rotated text is drawn upright). */
   rotate?(angle: number): void;
   /** Gradient fills (W2.2; without them the mean colour is drawn). */
@@ -588,10 +591,50 @@ export function paintGridScene(
     ctx.fillRect(x, y, w, hh);
   }
 
-  // Data bars under the text.
+  // Data bars under the text: solid or gradient, with their border and,
+  // when the range holds negatives, the axis (W2.4).
   for (const bar of scene.databars ?? []) {
-    ctx.fillStyle = bar.fill;
+    let paint: string | CanvasGradient = bar.fill;
+    if (bar.gradient && ctx.createLinearGradient && bar.w > 0) {
+      const grad = bar.negative
+        ? ctx.createLinearGradient(bar.x + bar.w, 0, bar.x, 0)
+        : ctx.createLinearGradient(bar.x, 0, bar.x + bar.w, 0);
+      grad.addColorStop(0, bar.fill);
+      grad.addColorStop(1, "#ffffff");
+      paint = grad;
+    }
+    ctx.fillStyle = paint;
     ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
+    if (bar.border && bar.w > 0) {
+      ctx.strokeStyle = bar.border;
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
+    }
+    if (bar.axisX != null) {
+      ctx.strokeStyle = bar.axisColor ?? "#000000";
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash?.([1, 1]);
+      ctx.beginPath();
+      ctx.moveTo(bar.axisX, bar.y);
+      ctx.lineTo(bar.axisX, bar.y + bar.h);
+      ctx.stroke();
+      ctx.setLineDash?.([]);
+    }
+  }
+
+  // Icon sets: the engine's polygons, filled (W2.4).
+  if (ctx.fill) {
+    for (const icon of scene.icons ?? []) {
+      for (const sh of icon.shapes) {
+        if (sh.points.length < 3) continue;
+        ctx.fillStyle = sh.fill;
+        ctx.beginPath();
+        ctx.moveTo(sh.points[0][0], sh.points[0][1]);
+        for (const [x, y] of sh.points.slice(1)) ctx.lineTo(x, y);
+        ctx.closePath?.();
+        ctx.fill();
+      }
+    }
   }
 
   // Sparklines (sheet ADR 519): the engine's primitives, at their cell.
@@ -777,4 +820,41 @@ export function paintGridScene(
     ctx.lineTo(ox, oy + ys[i]);
   }
   ctx.stroke();
+
+  // Hidden tracks: where the shown indices skip, Excel marks the boundary
+  // in the heading with a double rule (the place to unhide).
+  ctx.strokeStyle = h.text;
+  ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  for (const i of hiddenBoundaries(vp.colIndices, vp.frozenCols ?? 0)) {
+    const x = ox + xs[i];
+    ctx.moveTo(x - 1, 1);
+    ctx.lineTo(x - 1, oy - 1);
+    ctx.moveTo(x + 1, 1);
+    ctx.lineTo(x + 1, oy - 1);
+  }
+  for (const i of hiddenBoundaries(vp.rowIndices, vp.frozenRows ?? 0)) {
+    const y = oy + ys[i];
+    ctx.moveTo(1, y - 1);
+    ctx.lineTo(ox - 1, y - 1);
+    ctx.moveTo(1, y + 1);
+    ctx.lineTo(ox - 1, y + 1);
+  }
+  ctx.stroke();
+}
+
+/** The display positions `i` (1-based boundaries between track i-1 and i)
+ *  where the shown sheet indices skip — hidden tracks lie between. The
+ *  frozen/scrolled seam is a scroll, not a hide, and is left out. */
+export function hiddenBoundaries(
+  indices: readonly number[] | undefined,
+  frozen: number,
+): number[] {
+  if (!indices) return [];
+  const out: number[] = [];
+  for (let i = 1; i < indices.length; i++) {
+    if (i === frozen) continue;
+    if (indices[i]! - indices[i - 1]! > 1) out.push(i);
+  }
+  return out;
 }

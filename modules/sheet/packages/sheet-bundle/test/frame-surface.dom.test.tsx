@@ -169,6 +169,10 @@ function fakeSession(shown: GridScene = scene) {
     },
     styleAtTarget: () => null,
     grabAt: () => "cell" as const,
+    scrollInFrame: (dRows, dCols) => (
+      calls.push(["scroll", dRows, dCols]),
+      true
+    ),
     setStyle: (patch) => {
       calls.push(["style", patch]);
       return { ok: true as const };
@@ -472,6 +476,23 @@ describe("sheet frame surface", () => {
     fireEvent.click(picker.querySelector('[data-swatch="Color/Brand"]')!);
     expect(calls).toContainEqual(["swatch", "fill", "Color/Brand"]);
     expect(r.queryByTestId("sheet-swatch-picker")).toBeNull();
+  });
+
+  it("overlay scrollbars show the window and a thumb drag scrolls it", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
+    const thumb = r.getByTestId("sheet-scrollbar-row");
+    expect(thumb.getAttribute("aria-valuenow")).toBe("0");
+    fireEvent.pointerDown(thumb, { button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(thumb, { clientX: 0, clientY: 10 });
+    fireEvent.pointerUp(thumb, { clientX: 0, clientY: 10 });
+    const scrolls = calls.filter((c) => c[0] === "scroll");
+    expect(scrolls.length).toBeGreaterThan(0);
+    expect(scrolls[0]![1]).toBeGreaterThan(0);
+    // The thumb's press is not a cell press.
+    expect(calls.some((c) => c[0] === "down")).toBe(false);
   });
 
   it("detaches on unmount", () => {
