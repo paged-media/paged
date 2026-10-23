@@ -53,6 +53,7 @@ import { font, IconButton } from "@paged-media/panel-kit";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { TOOL_RAIL } from "./messages";
+import { useEditorRoot, usePortalContainer } from "../state/editor-root";
 
 // Concept 1 (T4) — the left tool rail. Shell CHROME, rendered as a
 // sibling of the dockview container, NOT a dock panel: fixed, not
@@ -279,6 +280,7 @@ export function ToolRail({
    *  no tool is treated as a plugin's (nothing is hidden). */
   hostToolIds?: ReadonlySet<string>;
 }) {
+  const portalContainer = usePortalContainer();
   const strings = useStrings();
   const registries = useRegistries();
   const chrome = useChromeRegions();
@@ -550,7 +552,7 @@ export function ToolRail({
             onMove={(p) => moveTearOff(group, p)}
             onClose={() => closeTearOff(group)}
           />,
-          document.body,
+          portalContainer ?? document.body,
         );
       })}
     </nav>
@@ -668,6 +670,8 @@ function ToolSlot({
   onHint?: (tool: ToolContribution, anchor: RailAnchor) => void;
   onUnhint?: () => void;
 }) {
+  const portalContainer = usePortalContainer();
+  const root = useEditorRoot();
   const strings = useStrings();
   const [flyoutOpen, setFlyoutOpen] = useState(false);
   // Flyout is portalled to <body> so it escapes the rail's overflow
@@ -734,7 +738,7 @@ function ToolSlot({
     // A pointer click hands focus back to the document (ADR 234): the
     // next arrow nudges, as it did before the rail was a toolbar. Enter
     // or Space on a focused tool (`detail` 0) keeps focus on the rail.
-    if (e.detail > 0) focusCanvasViewport({ engaged: true });
+    if (e.detail > 0) focusCanvasViewport({ engaged: true, root });
     // Alt+click cycles the slot through its group's hidden tools —
     // the non-conflicting form of "cycle within a group" (the
     // Shift+key combos are real tool shortcuts of their own).
@@ -950,7 +954,8 @@ function ToolSlot({
                     if (memberPlanned) return;
                     setFlyoutOpen(false);
                     onPick(member);
-                    if (e.detail > 0) focusCanvasViewport({ engaged: true });
+                    if (e.detail > 0)
+                      focusCanvasViewport({ engaged: true, root });
                     else buttonRef.current?.focus();
                   }}
                   style={{
@@ -978,7 +983,7 @@ function ToolSlot({
               );
             })}
           </div>,
-          document.body,
+          portalContainer ?? document.body,
         )}
 
       {optionsOpen &&
@@ -1001,7 +1006,7 @@ function ToolSlot({
               }}
             />
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </div>
   );
@@ -1039,6 +1044,7 @@ interface RailHint {
 /** One tooltip for the whole rail: delayed on first hover, immediate
  *  while the pointer moves from slot to slot. */
 function useRailTooltip() {
+  const portalContainer = usePortalContainer();
   const [hint, setHint] = useState<RailHint | null>(null);
   const timer = useRef<number | null>(null);
   const visible = useRef(false);
@@ -1077,7 +1083,10 @@ function useRailTooltip() {
   useEffect(() => clear, []);
 
   const node = hint
-    ? createPortal(<RailTooltip hint={hint} />, document.body)
+    ? createPortal(
+        <RailTooltip hint={hint} />,
+        portalContainer ?? document.body,
+      )
     : null;
   return { show, hide, node };
 }

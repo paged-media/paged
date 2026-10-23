@@ -70,6 +70,10 @@
     },
     "packages/shell/src/lib/file-chooser.ts": {
       "pending": "The transient file inputs a picker is waiting on, each settled by its own change event: page DOM, owned by the pick that made it, gone when it settles."
+    },
+    "packages/shell/src/state/editor-root.tsx": {
+      "active": "Which editor gets the keys typed with nothing focused (the page's <body>): the one last pointed at or focused, or the one that owns the page. The page has one keyboard, so this is the page's by nature.",
+      "roots": "The editors' roots on the page, each with whether it owns the page: what decides which editor a key on the page belongs to. The page's by nature, like `active`."
     }
   }
 }

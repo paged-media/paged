@@ -70,6 +70,7 @@ import {
   useEditorScope,
   useOptionalTool,
   useSelection,
+  useEditorKeys,
 } from "@paged-media/shell";
 import {
   DirectSelectSession,
@@ -83,6 +84,7 @@ import { useProblems } from "../panels/problems-store";
 export const PATH_EDIT_DIAGNOSTIC_SOURCE = "paged.pathEdit";
 
 export function usePathEditMode() {
+  const keys = useEditorKeys();
   const problemsSink = useProblems();
   const {
     activeTool,
@@ -219,9 +221,9 @@ export function usePathEditMode() {
       }
       pathEditSession?.key(e);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return keys.listen("keydown", onKey);
   }, [
+    keys,
     pathEditMode,
     pathEditSession,
     elementSelection,

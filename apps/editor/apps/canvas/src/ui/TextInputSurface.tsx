@@ -35,7 +35,11 @@
 import { useState, type CSSProperties } from "react";
 
 import type { Camera, CaretGeometry, PageId } from "@paged-media/client";
-import { CANVAS_SURFACE_ATTR, useContentSelection } from "@paged-media/shell";
+import {
+  CANVAS_SURFACE_ATTR,
+  queryEditor,
+  useContentSelection,
+} from "@paged-media/shell";
 
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -51,10 +55,13 @@ export interface TextInputSurfaceProps {
   pageRects: ReadonlyArray<PageRect>;
 }
 
-/** The surface's element, while one is mounted. */
-export function textInputSurface(): HTMLTextAreaElement | null {
-  if (typeof document === "undefined") return null;
-  return document.querySelector<HTMLTextAreaElement>(
+/** The surface's element in the editor whose root is `root` (the page's
+ *  without one), while one is mounted. */
+export function textInputSurface(
+  root: HTMLElement | null = null,
+): HTMLTextAreaElement | null {
+  return queryEditor<HTMLTextAreaElement>(
+    root,
     `textarea[${CANVAS_SURFACE_ATTR}="text"]`,
   );
 }

@@ -43,6 +43,8 @@
 // only in the gaps.
 
 import { scoped, type EditorScope } from "./editor-scope";
+import { queryEditor } from "./editor-dom";
+import { editorRootOf } from "./editor-root";
 
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
@@ -143,7 +145,10 @@ export function awaitPlacementPoint(
       // placement armed must open the File menu, not silently disarm
       // into nothing. So: no preventDefault, no stopPropagation, and the
       // placement quietly stands down.
-      const viewport = document.querySelector("[data-paged-viewport]");
+      const viewport = queryEditor(
+        editorRootOf(scope),
+        "[data-paged-viewport]",
+      );
       const target = e.target as Node | null;
       if (!viewport || !target || !viewport.contains(target)) {
         finish(null);

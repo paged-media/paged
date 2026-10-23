@@ -45,6 +45,7 @@ import { useSelection } from "./selection-context";
 import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
+import { useEditorKeys } from "./editor-root";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -57,6 +58,7 @@ const MODIFIER_KEYS = new Set([
 ]);
 
 export function EditContextController() {
+  const keys = useEditorKeys();
   const scope = useEditorScope();
   const cockpitActions = useCockpitActions();
   const { active, activeContribution, commit, cancel, isActiveDirty, exitAll } =
@@ -173,10 +175,10 @@ export function EditContextController() {
       onContentKey(e);
       if (e.defaultPrevented) e.stopPropagation();
     };
-    // Capture so we win these keys while a context is active.
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [commit, cancel]);
+    // Capture so we win these keys while a context is active (this
+    // editor's keys only).
+    return keys.listen("keydown", onKey, true);
+  }, [commit, cancel, keys]);
 
   // On the active frame ENTER → emphasize panels + focus the first tool.
   // Keyed by the frame identity (type + scope root) so re-running only

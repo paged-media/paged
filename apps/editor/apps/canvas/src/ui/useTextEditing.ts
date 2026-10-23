@@ -111,6 +111,8 @@ import {
   TEXT_TOOL_ID,
   ZOOM_TOOL_ID,
   useOptionalTool,
+  useEditorKeys,
+  useEditorRoot,
 } from "@paged-media/shell";
 
 import { textInputSurface } from "./TextInputSurface";
@@ -175,6 +177,8 @@ export function toolEndsTextEditing(toolId: string): boolean {
 }
 
 export function useTextEditing(ctx: TextEditingContext) {
+  const root = useEditorRoot();
+  const keys = useEditorKeys();
   // Shift-extend anchor: the offset that stays fixed while the focus
   // end moves. Reset to the caret offset on any non-extending move so a
   // fresh Shift+arrow grows from the current caret, not a stale anchor.
@@ -405,7 +409,7 @@ export function useTextEditing(ctx: TextEditingContext) {
         e.preventDefault();
         anchorRef.current = null;
         enqueue((sel, c) => insertAt(c, sel, key, setSel));
-        focusTextSurface();
+        focusTextSurface(root);
         return;
       }
 
@@ -589,26 +593,25 @@ export function useTextEditing(ctx: TextEditingContext) {
       queueMicrotask(() => {
         if (!selRef.current || !document.hasFocus()) return;
         const active = document.activeElement;
-        if (active === null || active === document.body) focusTextSurface();
+        if (active === null || active === document.body || active === root)
+          focusTextSurface(root);
       });
     };
 
-    // Capture phase — preempt the bubble-phase page-nav shortcuts.
-    window.addEventListener("keydown", onKey, true);
-    window.addEventListener("paste", onPaste, true);
-    window.addEventListener("beforeinput", onBeforeInput, true);
-    window.addEventListener("compositionend", onCompositionEnd, true);
-    window.addEventListener("input", onInput, true);
-    window.addEventListener("focusout", onFocusOut, true);
+    // Capture phase — preempt the bubble-phase page-nav shortcuts. Only
+    // this editor's events (its root's, `useEditorKeys`).
+    const offs = [
+      keys.listen("keydown", onKey, true),
+      keys.listen("paste", onPaste, true),
+      keys.listen("beforeinput", onBeforeInput, true),
+      keys.listen("compositionend", onCompositionEnd, true),
+      keys.listen("input", onInput, true),
+      keys.listen("focusout", onFocusOut, true),
+    ];
     return () => {
-      window.removeEventListener("keydown", onKey, true);
-      window.removeEventListener("paste", onPaste, true);
-      window.removeEventListener("beforeinput", onBeforeInput, true);
-      window.removeEventListener("compositionend", onCompositionEnd, true);
-      window.removeEventListener("input", onInput, true);
-      window.removeEventListener("focusout", onFocusOut, true);
+      for (const off of offs) off();
     };
-  }, []);
+  }, [keys, root]);
 
   // Keyboard focus follows the caret: a caret placed in a story takes
   // focus for the text input surface when nothing else holds it (the
@@ -617,7 +620,7 @@ export function useTextEditing(ctx: TextEditingContext) {
   // from Find/Change does not steal it.
   const hasCaret = ctx.selection !== null;
   useEffect(() => {
-    const surface = textInputSurface();
+    const surface = textInputSurface(root);
     if (!surface) return;
     const active = document.activeElement;
     if (hasCaret) {
@@ -625,6 +628,7 @@ export function useTextEditing(ctx: TextEditingContext) {
       if (
         active === null ||
         active === document.body ||
+        active === root ||
         isCanvasSurface(active)
       ) {
         surface.focus({ preventScroll: true });
@@ -635,9 +639,9 @@ export function useTextEditing(ctx: TextEditingContext) {
       // blur the caretless textarea kept focus and ate the arrows and
       // Backspace that are the selected frame's again (AC-OBJ-24).
       surface.blur();
-      focusCanvasViewport();
+      focusCanvasViewport({ root });
     }
-  }, [hasCaret, ctx.selection]);
+  }, [hasCaret, ctx.selection, root]);
 }
 
 /** Insert `text` at the caret, or replace the range with it, and move
@@ -831,9 +835,9 @@ function isPrintable(e: KeyboardEvent): boolean {
   return [...e.key].length === 1;
 }
 
-/** Put keyboard focus on the text input surface, if one is mounted. */
-function focusTextSurface(): void {
-  const surface = textInputSurface();
+/** Put keyboard focus on `root`'s text input surface, if one is mounted. */
+function focusTextSurface(root: HTMLElement | null): void {
+  const surface = textInputSurface(root);
   if (surface && document.activeElement !== surface) {
     surface.focus({ preventScroll: true });
   }

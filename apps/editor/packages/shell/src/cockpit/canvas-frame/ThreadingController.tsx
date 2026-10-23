@@ -67,6 +67,7 @@ import { useOptionalOverlaySignals } from "../../state/overlay-signals-context";
 import { useSelection } from "../../state/selection-context";
 import { useThreading, type LoadedCursor } from "../../state/threading-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
+import { queryEditor, useEditorRoot } from "../../state/editor-root";
 
 /** Default size (pt) of a frame drawn by a plain CLICK on empty canvas
  *  (no drag): its top-left corner sits at the click and it is kept on
@@ -266,6 +267,7 @@ async function chainStateOf(
   }
 }
 export function ThreadingController() {
+  const root = useEditorRoot();
   const client = useCanvasClient();
   const { camera } = useCamera();
   const { handle } = useDocument();
@@ -292,7 +294,7 @@ export function ThreadingController() {
    *  tags the wrapper). */
   const clientToDoc = useEffectEvent(
     (clientX: number, clientY: number): [number, number] | null => {
-      const wrap = document.querySelector("[data-paged-viewport]");
+      const wrap = queryEditor(root, "[data-paged-viewport]");
       if (!wrap) return null;
       const r = wrap.getBoundingClientRect();
       if (camera.scale <= 0) return null;

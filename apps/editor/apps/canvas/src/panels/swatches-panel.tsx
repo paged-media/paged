@@ -86,6 +86,7 @@ import { swatchesComposition } from "./swatches.composition";
 import { SwatchRow } from "./swatch-row";
 import { BUNDLED_LIBRARIES } from "../assets/libraries";
 import { defineMessages, useStrings } from "@paged-media/strings";
+import { usePortalContainer } from "@paged-media/shell";
 
 const M = defineMessages("app.swatchesPanel", {
   newSwatchName: "New swatch",
@@ -335,6 +336,7 @@ function SwatchCollection() {
 // into the document while the panel is showing a plugin's palette would
 // be the same lie, just louder.
 function LibrariesMenu({ enabled }: { enabled: boolean }) {
+  const portalContainer = usePortalContainer();
   const strings = useStrings();
   const client = useCanvasClient();
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
@@ -444,7 +446,7 @@ function LibrariesMenu({ enabled }: { enabled: boolean }) {
               </div>
             </div>
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </>
   );
