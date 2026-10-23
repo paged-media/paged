@@ -74,6 +74,7 @@ import type {
   ObjectModelHandle,
   ObjectOp,
   ObjectValue,
+  Mutation,
   ObjectWrite,
   PartChange,
   PropertySchema,
@@ -96,6 +97,11 @@ import type {
   SheetEngine,
   StructuralEditKind,
 } from "./engine";
+import {
+  chartRemovalOps,
+  placedChartsOnPage,
+  type ChartElements,
+} from "./lower-chart";
 import type { CellRegion, ObjectBridge, WorkbookSession } from "./session";
 
 export const PLUGIN_ID = manifest.id;
@@ -436,7 +442,7 @@ const refusedValue = (
 // --------------------------------------------------------- the version
 
 interface ChartOp {
-  op: "add" | "update";
+  op: "add" | "update" | "delete";
   index?: number;
   sheet?: number;
   values?: string;
@@ -1184,6 +1190,19 @@ export function contributeObjectModel(
         const n = namedRangeOf(engine, id);
         return (e) => e.deleteName!(n.scope ?? 0, n.name, n.scope ?? null);
       }
+      case "chart": {
+        // Plan G4: the chart goes from the workbook (its slot stays, so the
+        // other charts keep their indices) and the journal, so a stored
+        // version replays the delete; its placed copies go in the same
+        // document write (`chartPageRemovals`).
+        const c = chartOf(engine, id);
+        return (e) => {
+          if (!e.deleteChart)
+            throw new Refuse("engine wasm predates delete_chart");
+          e.deleteChart(c.index);
+          chartOps.push({ op: "delete", index: c.index });
+        };
+      }
       case "cell":
       case "range": {
         const r = resolveRef(engine, id, kind === "cell");
@@ -1331,21 +1350,61 @@ export function contributeObjectModel(
     return raw as SheetKind;
   }
 
+  /** Plan G4 — the mutations that take chart `index`'s placed copies off
+   *  the page: what the scene tree shows bound to it (earlier sessions'
+   *  placements too) and what this session placed, each once. */
+  async function chartPageRemovals(index: number): Promise<ChartElements[]> {
+    const tracked = bridge.takeChartPlacements(index);
+    const found: ChartElements[] = await placedChartsOnPage(host, index);
+    const ids = (c: ChartElements) => c.elementIds.map((x) => String(x.id));
+    for (const t of tracked) {
+      if (t.elementIds.length === 0) continue;
+      const mine = new Set(ids(t));
+      const seen = found.some(
+        (f) =>
+          (f.groupId !== null && f.groupId === t.groupId) ||
+          ids(f).some((x) => mine.has(x)),
+      );
+      if (!seen) found.push(t);
+    }
+    return found;
+  }
+
   /** The PLUGIN-level planner (SDK 0.2.43): every op of a batch, across all
    *  seven kinds, in batch order — one engine pass, one saved version, one
    *  doc-hosted `state` write. */
   async function batchWrite(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
+    const deletedCharts: number[] = [];
     const r = await write((engine) =>
       ops.map((op) => {
         const kind = kindOf(op);
         if (op.op === "set")
           return planSet(engine, kind, op.address, op.path, op.value);
         if (op.op === "create") return planCreate(engine, kind, op.props ?? {});
-        if (op.op === "delete") return planDelete(engine, kind, op.address);
+        if (op.op === "delete") {
+          if (kind === "chart")
+            deletedCharts.push(
+              chartOf(engine, idOf(op.address, kind) ?? "").index,
+            );
+          return planDelete(engine, kind, op.address);
+        }
         throw new Refuse(`"${op.op}" is not a write`);
       }),
     );
     if (!r.ok) return { kind: "rejected", reason: r.reason };
+    const mutations: Mutation[] = [];
+    for (const index of deletedCharts)
+      for (const c of await chartPageRemovals(index))
+        mutations.push(...chartRemovalOps(c));
+    if (mutations.length > 0)
+      return {
+        kind: "both",
+        mutations: mutations as never,
+        parts: r.parts,
+        host: "doc",
+        labelKey: VERSION_SUB_KEY,
+        labelValue: JSON.stringify(r.hash),
+      };
     return {
       kind: "state",
       parts: r.parts,
@@ -1361,6 +1420,7 @@ export function contributeObjectModel(
    *  bundle's own doors (the parts, then the label as ONE mutation). */
   async function commandWrite(
     apply: (engine: SheetEngine, p: Pending) => void,
+    pageOps?: () => Promise<readonly Mutation[]>,
   ): Promise<void> {
     const r = await write(() => [apply]);
     if (!r.ok) throw new Error(r.reason);
@@ -1369,9 +1429,24 @@ export function contributeObjectModel(
     // step: an empty one would make the next undo take back nothing
     // (finding SHT-2).
     if (!r.changed) return;
-    const outcome = await host.document.mutate(
-      (await labelMutation(r.hash)) as never,
-    );
+    const label = await labelMutation(r.hash);
+    // Page changes that belong to the write (a deleted chart's placed
+    // copies) ride the label's mutation: one document undo step.
+    const page = (await pageOps?.()) ?? [];
+    let outcome =
+      page.length > 0
+        ? await host.document.mutate({
+            op: "batch",
+            args: { ops: [...page, label] },
+          } as never)
+        : await host.document.mutate(label as never);
+    if (page.length > 0 && !(outcome as { applied?: boolean }).applied) {
+      host.log.warn(
+        "object model: the page part of the write was refused — the workbook changed, the page did not",
+        outcome,
+      );
+      outcome = await host.document.mutate(label as never);
+    }
     if (!(outcome as { applied?: boolean }).applied) {
       host.log.warn(
         "object model: the version label was refused — the change is not an undo step",
@@ -1411,6 +1486,7 @@ export function contributeObjectModel(
             op.title ?? "",
           );
         else if (op.op === "update") engine.updateChart?.(op.index!, op.patch!);
+        else if (op.op === "delete") engine.deleteChart?.(op.index!);
       } catch (err) {
         host.log.warn("object model: a chart op did not replay", err);
       }
@@ -1676,6 +1752,34 @@ export function contributeObjectModel(
       result: bool,
       async handler(_ctx, a) {
         return session.lowerChart((a as { chart: number }).chart);
+      },
+    },
+    {
+      // Plan G4 — the chart, its journal entry and every placed copy, one
+      // workbook version and one document undo step.
+      id: C("deleteChart"),
+      title: "Delete a chart",
+      args: struct({ chart: int }),
+      result: int,
+      async handler(_ctx, a) {
+        await session.ensureRestored();
+        const index = (a as { chart: number }).chart;
+        let removed = 0;
+        await commandWrite(
+          (engine) => {
+            const c = chartOf(engine, String(index));
+            if (!engine.deleteChart)
+              throw new Error("engine wasm predates delete_chart");
+            engine.deleteChart(c.index);
+            chartOps.push({ op: "delete", index: c.index });
+          },
+          async () => {
+            const copies = await chartPageRemovals(index);
+            removed = copies.length;
+            return copies.flatMap((c) => chartRemovalOps(c));
+          },
+        );
+        return removed;
       },
     },
     {

@@ -633,6 +633,9 @@ export interface SheetEngine extends SheetEngineW2 {
   chartSpecs?(): ChartSpec[];
   /** ADR 323 — patch one chart (validated whole; page-side only). */
   updateChart?(index: number, patch: ChartPatch): void;
+  /** Plan G4 — delete one chart (its slot stays: the other charts keep
+   *  their indices; page-side only, like `addChart`). */
+  deleteChart?(index: number): void;
 }
 
 /** One computed cell value (no number format applied). */
@@ -973,6 +976,7 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
   list_tables?(): TableInfo[];
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
+  delete_chart?(index: number): void;
 }
 
 /** The module shape the wasm-bindgen `--target web` glue exports. */
@@ -1190,6 +1194,9 @@ export function wrapEngine(
     chartSpecs: () => need("chart_specs")() as ChartSpec[],
     updateChart: (index, patch) => {
       need("update_chart")(index, patch);
+    },
+    deleteChart: (index) => {
+      need("delete_chart")(index);
     },
     // Sheet ADR 517 — outline, protection, tables, sort/filter, validation,
     // what-if (src/engine-w2.ts).
