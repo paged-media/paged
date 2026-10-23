@@ -329,7 +329,9 @@ each published canary added is under [Releases](#releases).
   equation, fitted as LINEST fits), error bars, logarithmic, reversed and date axes, axis
   crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
   Colour and text roles carry document swatch and style references, which the page uses.
-  Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
+  Sparklines (line, column, win/loss) are read and drawn in the grid (the frame surface and the
+  scene layer), not yet on the page; a chartsheet is a tab kind (the workbook panel labels it,
+  its chart is listed, drawn and written back like any chart); 172 of 172 corpus charts
   render with their real kind. Charts are written back into the xlsx: an edited chart is
   spliced into its part, an authored one generated (with its drawing anchor, relationships and,
   for the Office 2016 kinds, the style parts Excel needs), a deleted one removed; every chart
@@ -504,7 +506,8 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 - **One workbook** is stored at a time; importing another replaces it.
 - **Icon criteria.** Sorting by a conditional-format icon is refused and an icon filter keeps
   every row (`filterState` reports it as not applied): the styler does not compute icon sets yet.
-  Tables' own AutoFilters are read and kept; the filter doors work on the sheet's AutoFilter.
+  A filter over a range inside a table goes into the table's own AutoFilter (its part);
+  `tableFilterColumnValues` and `clearTableFilter` are its dropdown and clear.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
