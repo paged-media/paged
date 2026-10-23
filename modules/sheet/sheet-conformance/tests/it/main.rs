@@ -70,6 +70,7 @@ mod spill_roundtrip;
 mod stylemap;
 mod tables;
 mod w2_outline_protect;
+mod w2_validation;
 mod w3_golden;
 mod whole_refs;
 mod xlsx_recalc_corpus;

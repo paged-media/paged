@@ -25,6 +25,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::core::outline::Axis;
 use crate::core::protect::ProtectOptions;
+use crate::core::validation::ValidationRuleArg;
 use crate::wasm::{map_err, to_js, SheetEngine};
 
 fn axis(s: &str) -> Result<Axis, JsValue> {
@@ -187,5 +188,103 @@ impl SheetEngine {
             formula_hidden,
             sheet_protected,
         })
+    }
+
+    // ── data validation (ADR 517) ───────────────────────────────────────
+
+    /// Every rule of the sheet `[{index, sqref, type, operator, formula1,
+    /// formula2, allowBlank, inCellDropdown, showInput, promptTitle, prompt,
+    /// showError, errorStyle, errorTitle, error}]`.
+    pub fn list_validation_rules(&self, sheet: u16) -> Result<JsValue, JsValue> {
+        to_js(&self.session.list_validation_rules(sheet).map_err(map_err)?)
+    }
+
+    /// `{rule, listItems?}` at a cell, or `undefined`.
+    pub fn validation_at(&self, sheet: u16, row: u32, col: u32) -> Result<JsValue, JsValue> {
+        match self
+            .session
+            .validation_at(sheet, row, col)
+            .map_err(map_err)?
+        {
+            Some(v) => to_js(&v),
+            None => Ok(JsValue::UNDEFINED),
+        }
+    }
+
+    /// `{valid, alert?}` — would `input` pass? Nothing changes.
+    pub fn check_entry(
+        &mut self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        input: &str,
+    ) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .check_entry(sheet, row, col, input)
+                .map_err(map_err)?,
+        )
+    }
+
+    /// A typed entry, validated: `{applied, alert?, result?}`.
+    pub fn enter_cell(
+        &mut self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        input: &str,
+        confirmed: bool,
+    ) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .enter_cell(sheet, row, col, input, confirmed)
+                .map_err(map_err)?,
+        )
+    }
+
+    /// Circle Invalid Data: `[{row, col, rule}]`.
+    pub fn invalid_cells(&self, sheet: u16) -> Result<JsValue, JsValue> {
+        to_js(&self.session.invalid_cells(sheet).map_err(map_err)?)
+    }
+
+    pub fn set_validation(
+        &mut self,
+        sheet: u16,
+        range: &str,
+        rule: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let rule: ValidationRuleArg = arg(rule)?;
+        to_js(
+            &self
+                .session
+                .set_validation(sheet, range, rule)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn update_validation(
+        &mut self,
+        sheet: u16,
+        index: u32,
+        rule: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let rule: ValidationRuleArg = arg(rule)?;
+        to_js(
+            &self
+                .session
+                .update_validation(sheet, index, rule)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn clear_validation(&mut self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .clear_validation(sheet, range)
+                .map_err(map_err)?,
+        )
     }
 }

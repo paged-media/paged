@@ -111,12 +111,10 @@ export interface FreezeInfo {
   cols: number;
 }
 
-/** One worksheet's DATA-VALIDATION inventory (spec §1.1/§11/T∞ — PRESERVE-
- *  ONLY). Data validation round-trips preserved but is NEVER enforced,
- *  evaluated, or rendered as a runtime dropdown; this inventory exists ONLY so
- *  the panel can SHOW that the workbook carries validations Paged preserves but
- *  does not enforce. `count` is the headline number; `kinds` the distinct
- *  validation types present (display only). */
+/** One worksheet's DATA-VALIDATION inventory: `count` is the headline
+ *  number; `kinds` the distinct validation types present. The rules
+ *  themselves, their enforcement on entry (`enterCell`), list items and
+ *  authoring are the ADR 517 doors in `engine-w2.ts`. */
 export interface DataValidationInfo {
   sheet: number;
   count: number;
