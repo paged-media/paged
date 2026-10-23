@@ -304,6 +304,10 @@ export interface Page {
   /** `true` when this frame holds a single block/row taller than the whole
    *  frame — the spec's pathological case, placed alone and flagged. */
   oversize: boolean;
+  /** Which range of a sequence this page shows (`paginate_areas`, a print
+   *  area of several ranges); 0 for a single range. Absent from an older
+   *  engine. */
+  area?: number;
 }
 
 /** Total content width (pt) — the sum of column widths. Pure geometry,

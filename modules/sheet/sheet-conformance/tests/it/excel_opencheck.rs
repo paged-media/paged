@@ -40,7 +40,7 @@
 
 use std::path::PathBuf;
 
-use sheet_js::core::{SheetSession, StructuralEdit};
+use sheet_js::core::{ChartPatch, SeriesArg, SheetSession, StructuralEdit, CHART_KIND_TAGS};
 
 fn corpus(name: &str) -> Vec<u8> {
     let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -120,7 +120,111 @@ fn scenarios() -> Vec<(&'static str, &'static str, Step)> {
                 .unwrap();
         }));
     }
+    // Charts (W4.3, ADR 519): authored charts generated, a read chart
+    // spliced, a kind change, a delete.
+    v.push(("chart-authored-classic", "01-minimal.xlsx", |s| {
+        chart_data(s);
+        for tag in CHART_KIND_TAGS.iter().filter(|t| !chart_ex_tag(t)) {
+            s.add_chart(0, "B12:D16", "A12:A16", tag, tag, "").unwrap();
+        }
+    }));
+    v.push(("chart-authored-chartex", "01-minimal.xlsx", |s| {
+        chart_data(s);
+        for tag in CHART_KIND_TAGS.iter().filter(|t| chart_ex_tag(t)) {
+            s.add_chart(0, "B12:D16", "A12:A16", tag, tag, "").unwrap();
+        }
+    }));
+    v.push(("chart-edited", "16-structure.xlsx", |s| {
+        let spec = s.chart_specs()[0].clone();
+        let first = &spec.series[0];
+        s.update_chart(
+            0,
+            ChartPatch {
+                title: Some(Some("Edited in Paged".into())),
+                series: Some(vec![SeriesArg {
+                    values: first.values.clone(),
+                    categories: first.categories.clone().unwrap_or_default(),
+                    name: "Renamed".into(),
+                    color: "#00A0E0".into(),
+                    color_swatch: "Color/Brand".into(),
+                    ..Default::default()
+                }]),
+                value_axis_max: Some(Some(1000.0)),
+                legend_position: Some("b".into()),
+                data_labels: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // Charts authored beside it go into the sheet's existing drawing.
+        for (kind, title) in [("line", "Added line"), ("funnel", "Added funnel")] {
+            let i = s
+                .add_chart(spec.host_sheet, "A1:A2", "", kind, title, "")
+                .unwrap();
+            s.update_chart(
+                i,
+                ChartPatch {
+                    series: Some(vec![SeriesArg {
+                        values: first.values.clone(),
+                        categories: first.categories.clone().unwrap_or_default(),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+    }));
+    v.push(("chart-kind-change", "16-structure.xlsx", |s| {
+        s.update_chart(
+            0,
+            ChartPatch {
+                kind: Some("stackedArea".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("chart-kind-pie", "16-structure.xlsx", |s| {
+        s.update_chart(
+            0,
+            ChartPatch {
+                kind: Some("pie".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("chart-deleted", "16-structure.xlsx", |s| {
+        s.delete_chart(0).unwrap();
+    }));
     v
+}
+
+fn chart_ex_tag(t: &str) -> bool {
+    matches!(
+        t,
+        "waterfall" | "funnel" | "treemap" | "sunburst" | "histogram" | "pareto" | "boxWhisker"
+    )
+}
+
+/// A block of numbers with labels at A11:D16 for the authored charts.
+fn chart_data(s: &mut SheetSession) {
+    let rows = [
+        ["", "North", "South", "East"],
+        ["Q1", "10", "4", "3"],
+        ["Q2", "20", "6", "5"],
+        ["Q3", "15", "9", "4"],
+        ["Q4", "25", "7", "6"],
+        ["Q5", "18", "8", "7"],
+    ];
+    for (r, row) in rows.iter().enumerate() {
+        for (c, v) in row.iter().enumerate() {
+            if !v.is_empty() {
+                s.set_cell(0, 10 + r as u32, c as u32, v).unwrap();
+            }
+        }
+    }
 }
 
 /// A package Excel must repair: rows out of order.
@@ -196,19 +300,44 @@ fn inventory(bytes: &[u8]) -> String {
             }
         }
     }
-    format!("cf={cf} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}")
+    // The charts: count, then each one's kind, series count and title.
+    let charts: Vec<String> = s
+        .list_charts()
+        .iter()
+        .map(|c| {
+            format!(
+                "{}:{}:{}",
+                c.kind,
+                c.series_count,
+                c.title.as_deref().unwrap_or("")
+            )
+        })
+        .collect();
+    let charts = if charts.is_empty() {
+        String::new()
+    } else {
+        format!(" charts={}[{}]", charts.len(), charts.join("|"))
+    };
+    format!(
+        "cf={cf} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}{charts}"
+    )
 }
 
 #[test]
 #[ignore = "maintainer: records the open-check lane after drive.sh"]
 fn record_what_excel_made_of_them() {
     let dir = build_dir();
-    let mut rows = vec!["case\topened\trepaired\tbaseline\tpaged\texcel".to_string()];
+    let mut rows =
+        vec!["case\topened\trepaired\tbaseline\tpaged\texcel\texcel-chart-types".to_string()];
     // Whether Excel opened the fixture a case was made from, as generated.
     let baseline = |case: &str| -> &'static str {
         let fixture = if case.starts_with("saveloss-") {
             "15-saveloss".to_string()
         } else if case.starts_with("structure-") {
+            "16-structure".to_string()
+        } else if case.starts_with("chart-authored") {
+            "01-minimal".to_string()
+        } else if case.starts_with("chart-") {
             "16-structure".to_string()
         } else {
             case.to_string()
@@ -250,8 +379,15 @@ fn record_what_excel_made_of_them() {
         } else {
             baseline(case)
         };
+        // The chart types Excel itself reports, in sheet and anchor order.
+        let types = meta
+            .split(" charts=")
+            .nth(1)
+            .map(|t| t.trim().trim_end_matches(';').to_string())
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(|| "-".into());
         rows.push(format!(
-            "{case}\t{}\t{}\t{base}\t{paged_inv}\t{excel_inv}",
+            "{case}\t{}\t{}\t{base}\t{paged_inv}\t{excel_inv}\t{types}",
             if opened { "yes" } else { "no" },
             if repaired { "yes" } else { "no" }
         ));
@@ -287,4 +423,78 @@ fn excel_opens_what_paged_saves_without_repair__feat__sheet_calc_rewrite_structu
     }
     assert!(control, "the broken control was not recorded");
     assert!(paged_cases >= 16, "{paged_cases} cases");
+}
+
+/// The chart type Excel reports for a Paged kind tag (Excel's AppleScript
+/// names), as a prefix: a line or radar may carry its markers.
+fn excel_type_of(kind: &str) -> &'static str {
+    match kind {
+        "column" => "column clustered",
+        "stackedColumn" => "column stacked",
+        "percentStackedColumn" => "column stacked 100",
+        "bar" => "bar clustered",
+        "stackedBar" => "bar stacked",
+        "percentStackedBar" => "bar stacked 100",
+        "line" => "line",
+        "stackedLine" => "line",
+        "percentStackedLine" => "line",
+        "area" => "area chart",
+        "stackedArea" => "area stacked",
+        "percentStackedArea" => "area stacked 100",
+        "scatter" => "xyscatter",
+        "bubble" => "bubble",
+        "pie" => "pie chart",
+        "donut" => "doughnut",
+        "pieOfPie" => "pie of pie",
+        "barOfPie" => "bar of pie",
+        "radar" => "radar",
+        "filledRadar" => "radar filled",
+        "stock" => "stock",
+        "surface" => "surface",
+        "waterfall" => "waterfall",
+        "funnel" => "funnel",
+        "treemap" => "treemap",
+        "sunburst" => "sunburst",
+        "histogram" => "histogram",
+        "pareto" => "pareto",
+        "boxWhisker" => "boxwhisker",
+        _ => "?",
+    }
+}
+
+/// CI: Excel opens every chart Paged wrote (authored, spliced, re-kinded,
+/// deleted) without a repair, sees as many charts as Paged wrote, each of
+/// the type Paged wrote; and its re-save reads back to the same charts.
+#[test]
+fn excel_opens_the_charts_paged_writes__feat__sheet_chart_writer() {
+    let text = std::fs::read_to_string(recorded()).expect("recorded/opencheck.tsv");
+    let mut cases = 0;
+    for line in text.lines().skip(1) {
+        let f: Vec<&str> = line.split('\t').collect();
+        let case = f[0];
+        if !case.starts_with("chart-") {
+            continue;
+        }
+        cases += 1;
+        assert_eq!((f[1], f[2]), ("yes", "no"), "{case}: {line}");
+        assert_eq!(f[4], f[5], "{case}: Excel's re-save reads back the same");
+        let kinds: Vec<&str> = f[4]
+            .split("charts=")
+            .nth(1)
+            .and_then(|c| {
+                c.split_once('[')
+                    .map(|(_, rest)| rest.trim_end_matches(']'))
+            })
+            .map(|c| c.split('|').map(|e| e.split(':').next().unwrap()).collect())
+            .unwrap_or_default();
+        let types: Vec<&str> = match f.get(6) {
+            Some(&"-") | None => Vec::new(),
+            Some(t) => t.split(';').collect(),
+        };
+        assert_eq!(kinds.len(), types.len(), "{case}: chart count");
+        for (k, t) in kinds.iter().zip(&types) {
+            assert!(t.starts_with(excel_type_of(k)), "{case}: {k} opened as {t}");
+        }
+    }
+    assert!(cases >= 6, "{cases} chart cases");
 }

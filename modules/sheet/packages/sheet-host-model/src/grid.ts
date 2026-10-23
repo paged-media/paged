@@ -658,6 +658,26 @@ export function hitFillHandle(scene: GridScene, x: number, y: number): boolean {
   );
 }
 
+/** Whether `(x, y)` is on the selection's border (Excel's move grip):
+ *  within `tol` pt of an edge of the selection rect, not deep inside it,
+ *  and not on the fill handle. */
+export function hitSelectionBorder(
+  scene: GridScene,
+  x: number,
+  y: number,
+  tol = 3,
+): boolean {
+  const r = selectionRect(scene);
+  if (!r || hitFillHandle(scene, x, y)) return false;
+  const [rx, ry, rw, rh] = r;
+  const inX = x >= rx - tol && x <= rx + rw + tol;
+  const inY = y >= ry - tol && y <= ry + rh + tol;
+  if (!inX || !inY) return false;
+  const nearV = Math.abs(x - rx) <= tol || Math.abs(x - (rx + rw)) <= tol;
+  const nearH = Math.abs(y - ry) <= tol || Math.abs(y - (ry + rh)) <= tol;
+  return nearV || nearH;
+}
+
 /** The fill-drag target outline rect (clamped to the window), or null. */
 function fillPreviewRect(
   scene: GridScene,

@@ -127,6 +127,7 @@ export {
   FILL_HANDLE_PT,
   fillHandleRect,
   hitFillHandle,
+  hitSelectionBorder,
   gridSceneToSceneLayer,
   gridSceneToSvg,
   hitCell,

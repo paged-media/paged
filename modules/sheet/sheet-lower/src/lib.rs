@@ -77,7 +77,9 @@ use sheet_format::{FormatCache, FormatCtx};
 // a tall range across an ordered list of frame content-boxes (S-05: the chain
 // TOPOLOGY is still an SDK gap, so the caller supplies the ordered frames).
 pub mod paginate;
-pub use paginate::{paginate, paginate_lowered, FrameBox, Page, PaginateOptions};
+pub use paginate::{
+    paginate, paginate_lowered, paginate_sequence, FrameBox, Page, PaginateOptions,
+};
 
 // ---- Style resolution (IR v2, M1 style-map track; spec §8.3). ----
 //

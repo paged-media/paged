@@ -391,6 +391,63 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       void at;
     });
 
+    test("AC-ENTER-1 — Enter on a selected sheet frame enters its grid, as a double-click does @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B3");
+      // The placed frame is selected; focus the canvas without a click
+      // that could change the selection.
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement)?.blur(),
+      );
+      const at = await elementScreenCenter(page, frame);
+      await page.mouse.click(at.x, at.y);
+      await page.waitForTimeout(300);
+      expect((await selectedElement(page))?.kind).toBe(frame.kind);
+      await page.keyboard.press("Enter");
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(
+        page.locator('[data-testid="sheet-frame-surface"]'),
+      ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test("AC-STYLES-1 — in an entered sheet frame the Paragraph Styles panel applies a document style to the selected cell @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B3");
+      await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="sheet-frame-surface"]');
+      await expect(surface).toBeVisible({ timeout: 10_000 });
+      await surface.click();
+      // A document paragraph style to apply.
+      const made = await page.evaluate(async () => {
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: { mutate: (m: unknown) => Promise<{ kind: string }> };
+            };
+          }
+        ).__canvas;
+        const r = await c.client.mutate({
+          op: "createParagraphStyle",
+          args: { selfId: "ParagraphStyle/Cells", name: "Cells" },
+        });
+        return r.kind;
+      });
+      expect(made).not.toBe("mutationFailed");
+      await openPanel(page, "paged.paragraph-styles");
+      const item = page.locator('[data-apply-item="ParagraphStyle/Cells"]');
+      await expect(item).toBeVisible({ timeout: 10_000 });
+      await item.click();
+      // The applied mark comes back from the sheet's provider, which read
+      // it off the workbook: the write went to the cell, not to core.
+      await expect(item).toHaveAttribute("data-applied", "true", {
+        timeout: 10_000,
+      });
+    });
+
     test("AC-SURFACE-2 — Excel in the frame: typing edits in place, a click inserts a reference, the bar shows the formula, a heading selects its column @feat:sheet.grid.inframe @feat:sheet.grid.keyboard @level:gesture", async ({
       page,
     }) => {
