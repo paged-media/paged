@@ -194,6 +194,7 @@ export {
   estimateLabelMetrics,
   labelBox,
   labelJustification,
+  labelAutoSizeOp,
   labelStyleOps,
   LABEL_FIT_ALLOWANCE_PT,
   LABEL_SLACK_PT,

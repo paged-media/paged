@@ -1228,7 +1228,7 @@ Per module:
   `shapeBuild`); the width profile is a typed command (`widthProfile { targets, widths }`) and
   a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
   recipe an edited source feeds, and an edit of a source rebuilds those recipes on its own, in
-  the edit's undo step (`mutate(…, { amend })`, engine ADR 1004, extensions ADR 336; the
+  the edit's undo step (`mutate(…, { amend })`, engine ADR 1004, extensions ADR 337; the
   command stays for a host without it; `modules/draw/docs/status.md`).
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the

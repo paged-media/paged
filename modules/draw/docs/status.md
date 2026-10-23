@@ -154,7 +154,7 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   handles) rebuilds that recipe as part of the edit's undo step: one undo restores the source
   and the old artwork, one redo replays both, and an undo or redo never starts a rebuild. The
   rebuild sends its mutations with `mutate(…, { amend })` (engine ADR 1004, extensions ADR
-  336), so it neither clears the redo stack nor adds a step. Which recipes: the update keeps a
+  337), so it neither clears the redo stack nor adds a step. Which recipes: the update keeps a
   fingerprint of each recipe's sources (path anchors and properties) and rebuilds those whose
   fingerprint moved; it runs once per commit, never per pointer move. When the edit is no
   longer the last step by the time the rebuild writes, the engine refuses it and the log says

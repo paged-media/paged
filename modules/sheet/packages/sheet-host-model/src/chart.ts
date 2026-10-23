@@ -72,6 +72,7 @@ import type {
   ElementId,
   Mutation,
   PageId,
+  PropertyPath,
   Value,
 } from "@paged-media/plugin-api";
 
@@ -103,6 +104,10 @@ export interface RectPrim {
   fill: string | null;
   stroke: string | null;
   strokeW: number;
+  /** The document swatch the fill names (W4 style roles): referenced
+   *  instead of a minted chart swatch. */
+  fillSwatchRef?: string;
+  strokeSwatchRef?: string;
 }
 
 /** A polyline (line-chart series, axis rules). At least two points. */
@@ -111,6 +116,9 @@ export interface LinePrim {
   pts: [number, number][];
   stroke: string;
   strokeW: number;
+  strokeSwatchRef?: string;
+  /** `a:prstDash` of the line (`dash`, `sysDot`, …). */
+  dash?: string;
 }
 
 /** A closed polygon (area fills, scatter diamond markers). */
@@ -120,6 +128,8 @@ export interface PolygonPrim {
   fill: string | null;
   stroke: string | null;
   strokeW: number;
+  fillSwatchRef?: string;
+  strokeSwatchRef?: string;
 }
 
 /** A pie/donut wedge: center (cx,cy), radius r, angular span in degrees
@@ -133,6 +143,10 @@ export interface WedgePrim {
   endDeg: number;
   fill: string | null;
   stroke: string | null;
+  /** A ring segment's inner radius (donut rings, sunburst). */
+  innerR?: number;
+  fillSwatchRef?: string;
+  strokeSwatchRef?: string;
 }
 
 /** A text label (title, axis ticks, legend entries). */
@@ -143,6 +157,18 @@ export interface TextPrim {
   s: string;
   sizePt: number;
   anchor: TextAnchor;
+  /** The text role's colour, and the document swatch it names. */
+  color?: string;
+  colorSwatchRef?: string;
+  bold?: boolean;
+  italic?: boolean;
+  font?: string;
+  /** Document paragraph / character styles the role names: applied to the
+   *  label, whose frame then sizes itself to the styled text. */
+  paragraphStyle?: string;
+  characterStyle?: string;
+  /** `title`, `axisTitle`, `tick`, `dataLabel`, `legend`, `note`. */
+  role?: string;
 }
 
 /** One chart-geometry primitive (the tagged union). */
@@ -155,6 +181,8 @@ export interface ChartGeometry {
   widthPt: number;
   heightPt: number;
   prims: ChartPrimitive[];
+  /** A 3-D chart drawn as its 2-D kind. */
+  flattened3d?: boolean;
 }
 
 // ── Placement + result ──────────────────────────────────────────────────────
@@ -183,6 +211,14 @@ export interface ChartTextLabel {
   /** The page-local frame box `[top, left, bottom, right]` the label's
    *  `insertTextFrame` was given. */
   bounds: [number, number, number, number];
+  /** The role's colour as a colorRef swatch id (a document swatch, or the
+   *  minted chart swatch of its hex). */
+  colorRef?: string;
+  bold?: boolean;
+  italic?: boolean;
+  font?: string;
+  paragraphStyle?: string;
+  characterStyle?: string;
 }
 
 /** One label's measured extent at its own size: what the driver reads off
@@ -244,21 +280,78 @@ export function labelStyleOps(
     kind: "storyRange",
     id: { story_id: storyId, start: 0, end: label.text.length },
   };
+  const set = (path: PropertyPath, value: Value): Mutation => ({
+    op: "setElementProperty",
+    args: { elementId: range, path, value },
+  });
+  const ops: Mutation[] = [];
+  // A document paragraph style names the label's look (size, face, colour
+  // come from the style); the chart's own size applies only without one.
+  if (label.paragraphStyle) {
+    ops.push(
+      set("appliedParagraphStyle", {
+        type: "text",
+        value: label.paragraphStyle,
+      }),
+    );
+  } else {
+    ops.push(set("characterFontSize", { type: "length", value: label.sizePt }));
+  }
+  if (label.characterStyle) {
+    ops.push(
+      set("appliedCharacterStyle", {
+        type: "text",
+        value: label.characterStyle,
+      }),
+    );
+  }
+  if (!label.paragraphStyle && !label.characterStyle) {
+    if (label.font) {
+      ops.push(set("characterFontFamily", { type: "text", value: label.font }));
+    }
+    if (label.bold || label.italic) {
+      ops.push(
+        set("characterFontStyle", {
+          type: "text",
+          value:
+            label.bold && label.italic
+              ? "Bold Italic"
+              : label.bold
+                ? "Bold"
+                : "Italic",
+        }),
+      );
+    }
+    if (label.colorRef) {
+      ops.push(
+        set("characterFillColor", { type: "colorRef", value: label.colorRef }),
+      );
+    }
+  }
+  ops.push(
+    set("paragraphJustification", {
+      type: "text",
+      value: labelJustification(label.anchor),
+    }),
+  );
+  return ops;
+}
+
+/** The op that lets a styled label's frame size itself to its text
+ *  (`textFrameAutoSizing`), for a label whose paragraph or character style
+ *  the chart cannot measure. `frameId` is the frame's id or `$h:` handle. */
+export function labelAutoSizeOp(
+  frameId: string,
+  label: ChartTextLabel,
+): Mutation[] {
+  if (!label.paragraphStyle && !label.characterStyle) return [];
   return [
     {
       op: "setElementProperty",
       args: {
-        elementId: range,
-        path: "characterFontSize",
-        value: { type: "length", value: label.sizePt },
-      },
-    },
-    {
-      op: "setElementProperty",
-      args: {
-        elementId: range,
-        path: "paragraphJustification",
-        value: { type: "text", value: labelJustification(label.anchor) },
+        elementId: { kind: "textFrame", id: frameId },
+        path: "textFrameAutoSizing",
+        value: { type: "text", value: "HeightAndWidth" },
       },
     },
   ];
@@ -334,10 +427,19 @@ function wedgeRing(w: WedgePrim): [number, number][] {
   const isFull = Math.abs(span - 360) < 1e-6 || Math.abs(span) >= 360;
   const steps = Math.max(1, Math.ceil(Math.abs(span) / ARC_STEP_DEG));
   const pts: [number, number][] = [];
-  if (!isFull) pts.push([w.cx, w.cy]);
+  const inner = w.innerR ?? 0;
+  if (!isFull && inner <= 0) pts.push([w.cx, w.cy]);
   for (let i = 0; i <= steps; i++) {
     const deg = w.startDeg + (span * i) / steps;
     pts.push(arcPoint(w.cx, w.cy, w.r, deg));
+  }
+  // A ring segment returns along its inner arc (a full ring is drawn as
+  // the outer circle and the inner circle traced back, one closed path).
+  if (inner > 0) {
+    for (let i = steps; i >= 0; i--) {
+      const deg = w.startDeg + (span * i) / steps;
+      pts.push(arcPoint(w.cx, w.cy, inner, deg));
+    }
   }
   return pts;
 }
@@ -442,27 +544,33 @@ function styleOps(
   fill: string | null,
   stroke: string | null,
   strokeW: number,
+  fillSwatchRef?: string,
+  strokeSwatchRef?: string,
 ): Mutation[] {
   const ops: Mutation[] = [];
   const fillHex = fill == null ? null : normalizeHex(fill);
-  if (fillHex != null) {
+  const fillRef =
+    fillSwatchRef ?? (fillHex != null ? swatchIdForHex(fillHex) : null);
+  if (fillRef != null) {
     ops.push({
       op: "setElementProperty",
       args: {
         elementId: CREATED_POLYGON,
         path: "frameFillColor",
-        value: colorRefValue(swatchIdForHex(fillHex)),
+        value: colorRefValue(fillRef),
       },
     });
   }
   const strokeHex = stroke == null ? null : normalizeHex(stroke);
-  if (strokeHex != null) {
+  const strokeRef =
+    strokeSwatchRef ?? (strokeHex != null ? swatchIdForHex(strokeHex) : null);
+  if (strokeRef != null) {
     ops.push({
       op: "setElementProperty",
       args: {
         elementId: CREATED_POLYGON,
         path: "frameStrokeColor",
-        value: colorRefValue(swatchIdForHex(strokeHex)),
+        value: colorRefValue(strokeRef),
       },
     });
     if (strokeW > 0) {
@@ -556,13 +664,31 @@ export function chartGeometryToMutations(
     switch (prim.kind) {
       case "rect":
         ops.push(insertPath(pageId, left, top, rectRing(prim), false));
-        afterCreate("polygon", styleOps(prim.fill, prim.stroke, prim.strokeW));
+        afterCreate(
+          "polygon",
+          styleOps(
+            prim.fill,
+            prim.stroke,
+            prim.strokeW,
+            prim.fillSwatchRef,
+            prim.strokeSwatchRef,
+          ),
+        );
         break;
       case "line":
         if (prim.pts.length >= 2) {
           ops.push(insertPath(pageId, left, top, prim.pts, true));
           // A polyline has no fill — only the series stroke.
-          afterCreate("polygon", styleOps(null, prim.stroke, prim.strokeW));
+          afterCreate(
+            "polygon",
+            styleOps(
+              null,
+              prim.stroke,
+              prim.strokeW,
+              undefined,
+              prim.strokeSwatchRef,
+            ),
+          );
         }
         break;
       case "polygon":
@@ -570,7 +696,13 @@ export function chartGeometryToMutations(
           ops.push(insertPath(pageId, left, top, prim.pts, false));
           afterCreate(
             "polygon",
-            styleOps(prim.fill, prim.stroke, prim.strokeW),
+            styleOps(
+              prim.fill,
+              prim.stroke,
+              prim.strokeW,
+              prim.fillSwatchRef,
+              prim.strokeSwatchRef,
+            ),
           );
         }
         break;
@@ -580,7 +712,16 @@ export function chartGeometryToMutations(
           ops.push(insertPath(pageId, left, top, ring, false));
           // A wedge carries no stroke weight in the IR; a hairline default
           // applies when a stroke colour is present.
-          afterCreate("polygon", styleOps(prim.fill, prim.stroke, 0));
+          afterCreate(
+            "polygon",
+            styleOps(
+              prim.fill,
+              prim.stroke,
+              0,
+              prim.fillSwatchRef,
+              prim.strokeSwatchRef,
+            ),
+          );
         }
         break;
       }
@@ -603,12 +744,21 @@ export function chartGeometryToMutations(
         // A text frame carries no fill/stroke style; it may still be the
         // FIRST created element (a text-only chart) and thus the binding host.
         afterCreate("textFrame", []);
+        const colorHex = prim.color == null ? null : normalizeHex(prim.color);
         texts.push({
           text: prim.s,
           at: [left + prim.x, top + prim.y],
           sizePt: prim.sizePt,
           anchor: prim.anchor,
           bounds,
+          colorRef:
+            prim.colorSwatchRef ??
+            (colorHex != null ? swatchIdForHex(colorHex) : undefined),
+          bold: prim.bold,
+          italic: prim.italic,
+          font: prim.font,
+          paragraphStyle: prim.paragraphStyle,
+          characterStyle: prim.characterStyle,
         });
         break;
       }

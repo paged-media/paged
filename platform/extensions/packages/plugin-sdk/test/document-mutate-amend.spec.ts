@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// `mutate(m, { amend })` (engine ADR 1004, extensions ADR 336): a write
+// `mutate(m, { amend })` (engine ADR 1004, extensions ADR 337): a write
 // joins the undo step a change committed, so a rebuild an edit provokes is
 // undone and redone with the edit. Covered on the fake editor (the flag,
 // the wire message, the step count, the refusal) and on the real engine

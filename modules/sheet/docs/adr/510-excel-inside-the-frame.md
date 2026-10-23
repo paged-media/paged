@@ -95,3 +95,34 @@ that looks as the grid did.
   the header band grows and shrinks at its top (`insertHeaderRow` / `removeHeaderRow`); when more
   than 60 % of the cells would be re-poured it answers `replace`, and the caller writes a new
   table instead.
+
+## Amendment (2026-10-23): render on leave in the session
+
+- **New placements are windows.** Placing a range writes a `sizing: "window"` frame whose view
+  starts at the range's top-left. Its first table is the range's tracks lowered as a frame page
+  (`getTracksPage`), the same shape every later refresh produces, so the first edit re-pours one
+  cell. The window's box is the range's own size in sheet tracks (plus half a point of slack);
+  the frame itself is fitted to the table the engine lays out.
+- **Widths.** A window frame keeps the sheet's column widths and widens a column only where its
+  text would wrap (a table cell cannot let text spill into the next cell as Excel does); the
+  frame widens with it.
+- **No gridlines means no lines.** A frame page without gridlines is marked `noGridlines`, and
+  the table writes every cell edge as no line instead of leaving it to the document's default
+  stroke (which drew a border and made rows taller than the frame was fitted to).
+- **Leaving.** The view moves to the grid's top-left cell unless the view is locked; a refresh
+  then runs even when no cell changed. A view change that leaves the cells as they were
+  re-stamps the binding alone. A scroll that would re-pour most of the table writes a new table
+  (`replace`); an edit never does.
+- **Lock.** `session.setFrameViewLock` / the bar's lock button pin the window where it stands;
+  the binding records the lock with the next page write. Reopened documents read view, print
+  options and sizing from the binding and the box from the frame's geometry.
+- **Resize (P6).** A window frame's box is its window: a resize the engine reports (`reflow`)
+  shows what fits now; a gesture that resized without naming the frame re-reads the window
+  frames' geometry.
+- **Chains (P6).** A window frame whose story is linked to more frames becomes one window over
+  all of them: the head owns the view, and the window takes the head's columns and the rows that
+  fill each frame in turn as the engine splits the one native table (whole rows per frame, the
+  frozen rows repeated as header rows on each continuation). Entering a continuation frame starts
+  its grid at the rows it holds; scrolling there and leaving scrolls the chain. Links are read
+  (debounced) after document changes; unlinking returns to a single frame.
+- **Several frames** may each show their own window of one sheet: each carries its own binding.

@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 sheet-core = { path = "../sheet-core" }
 sheet-format = { path = "../sheet-format" }
+# Trendlines fit with the function library's least-squares solver (the one
+# behind LINEST), so a trendline equals LINEST on its data.
+sheet-fn = { path = "../sheet-fn" }
 serde = { workspace = true }
 compact_str = { workspace = true }
 # The chart-layout engine: plotters drives the axis/scale/segmented-category

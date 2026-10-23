@@ -44,6 +44,8 @@ import type {
   SelectionMode,
   SnapPointQuery,
   SnapPointResult,
+  StyleCollection,
+  StyleProperties,
 } from "./wire.js";
 import type {
   CommandContribution,
@@ -1196,6 +1198,18 @@ export interface PlanarRegionsResult {
   reason?: string | null;
 }
 
+/** One swatch's on-screen colour (`DocumentSurface.swatchDisplay`). */
+export interface SwatchDisplay {
+  id: string;
+  /** Display colour, `#rrggbb`, after the document's colour management. */
+  rgbHex: string;
+  /** The swatch's IDML colour model (`process`, `spot`, …). */
+  model: string;
+  /** CMYK percent when the swatch is CMYK or has a CMYK alternate. */
+  cmyk: [number, number, number, number] | null;
+  outOfGamut: boolean;
+}
+
 export interface DocumentSurface {
   /** The single write door. Accepts `MutationInput` — the vendored
    *  `Mutation` union PLUS the protocol-ahead ops the vendored wire
@@ -1250,6 +1264,25 @@ export interface DocumentSurface {
    *  against). Retires the v0 `host.editor.client.send` escape hatch
    *  the draw fill panel used. `null` for an unknown element. */
   elementProperties(id: ElementId): Promise<ElementProperties | null>;
+  /**
+   * A document style's properties as the engine resolves them (extensions
+   * ADR 336): its own entries plus what it inherits through `BasedOn`, the
+   * same snapshot the host's style panels read. A bundle that shows
+   * content in a document style draws with these. `null` for an unknown
+   * style. Probe `supports("document.styleProperties@1")`.
+   */
+  styleProperties(
+    collection: StyleCollection,
+    styleId: string,
+  ): Promise<StyleProperties | null>;
+  /**
+   * How document swatches look on screen (extensions ADR 336): each id's
+   * display colour after the document's colour management, so CMYK, spot
+   * and Lab swatches show as the canvas shows them, plus the out-of-gamut
+   * verdict. Unknown ids are left out. Re-read after a `swatches` change
+   * (`document.onDidChange`). Probe `supports("document.swatchDisplay@1")`.
+   */
+  swatchDisplay(swatchIds: readonly string[]): Promise<SwatchDisplay[]>;
   /**
    * B-22 (protocol v57) — the planar-REGION read door: resolve the faces
    * of the arrangement `elementIds` forms (the areas the overlapping
