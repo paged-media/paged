@@ -71,8 +71,15 @@ pub(crate) struct PatchInput<'a> {
 #[derive(Clone, Debug, PartialEq)]
 enum FKind {
     Normal,
-    Shared { si: u32 },
-    Array { area: (u32, u32) },
+    Shared {
+        si: u32,
+    },
+    Array {
+        area: (u32, u32),
+    },
+    /// A what-if data table's `<f t="dataTable">` (sheet ADR 517): kept on
+    /// its cell whatever the cell's value becomes.
+    DataTable,
 }
 
 /// One `<c>` of the part as read.
@@ -231,6 +238,7 @@ fn scan_rows(xml: &[u8], sheet_data: &Span) -> Result<(Vec<ORow>, Vec<Span>), Xl
                                 Some(si) => FKind::Shared { si },
                                 None => FKind::Normal,
                             },
+                            Some("dataTable") => FKind::DataTable,
                             Some("array") => FKind::Array {
                                 area: attr_local(&fa, "ref")
                                     .as_deref()
@@ -490,6 +498,13 @@ fn render_cell(
                 Form::None => format!("<{prefix}f>{}</{prefix}f>", escape_text(text)),
             },
         };
+    }
+    if formula.is_none() {
+        if let Some((span, FKind::DataTable)) = o.and_then(|o| o.f.as_ref()) {
+            if o.is_some_and(|o| (o.row, o.col) == (r, c)) {
+                f_xml = String::from_utf8_lossy(&xml[span.start..span.end]).into_owned();
+            }
+        }
     }
     // `cm`: the dynamic-array marker follows the model; any other cell
     // metadata the cell carried stays.

@@ -201,6 +201,11 @@ pub struct XlsxDocument {
     /// comments part has no entry.
     pub comments: BTreeMap<SheetId, parts::comments::SheetComments>,
 
+    /// What-if data tables per sheet (`<f t="dataTable">`, sheet ADR 517),
+    /// in document order. The result cells hold their values like any cell;
+    /// the consumer recomputes them.
+    pub data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>>,
+
     /// The shared strings as read (`t="s"` indexes): a saved cell whose text
     /// is still its shared string keeps the index, and with it any rich-text
     /// runs (patch.rs).
@@ -415,6 +420,8 @@ impl XlsxDocument {
             parts::conditional_format::SheetConditionalFormats,
         > = BTreeMap::new();
         let mut freeze_panes: BTreeMap<SheetId, parts::freeze::FreezePanes> = BTreeMap::new();
+        let mut data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>> =
+            BTreeMap::new();
         let mut data_validations: BTreeMap<SheetId, parts::data_validation::SheetDataValidations> =
             BTreeMap::new();
         let mut comments: BTreeMap<SheetId, parts::comments::SheetComments> = BTreeMap::new();
@@ -451,6 +458,9 @@ impl XlsxDocument {
                 ws.row_meta = parsed_ws.row_meta;
                 ws.col_meta = parsed_ws.col_meta;
                 ws.state = sref.state;
+                if !parsed_ws.data_tables.is_empty() {
+                    data_tables.insert(sid, parsed_ws.data_tables.clone());
+                }
                 // The sheet-level `<autoFilter>` is a captured (verbatim)
                 // worksheet child; read its criteria into the model too.
                 ws.filters = parsed_ws
@@ -739,6 +749,7 @@ impl XlsxDocument {
             external_links,
             freeze_panes,
             data_validations,
+            data_tables,
             comments,
             shared_strings,
             shared_part,

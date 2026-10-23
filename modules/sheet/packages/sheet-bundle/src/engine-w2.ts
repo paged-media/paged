@@ -263,6 +263,15 @@ export interface TableStyleArg {
   bandedColumns?: boolean;
 }
 
+/** What Goal Seek found (ADR 517). */
+export interface GoalSeekResult {
+  found: boolean;
+  value: number;
+  result: number;
+  iterations: number;
+  prevInput: string;
+}
+
 /** The camelCase W2 facade (spread into `SheetEngine`). */
 export interface SheetEngineW2 {
   outline?(sheet: number): OutlineInfo;
@@ -376,6 +385,17 @@ export interface SheetEngineW2 {
     formula: string | null,
   ): TableDetail;
   setTableStyle?(name: string, arg: TableStyleArg): TableDetail;
+  goalSeek?(
+    sheet: number,
+    setRow: number,
+    setCol: number,
+    target: number,
+    changingSheet: number,
+    changingRow: number,
+    changingCol: number,
+  ): GoalSeekResult;
+  calculateDataTables?(): [number, number, number][];
+  listDataTables?(): [number, string][];
 }
 
 /** The snake_case wasm methods behind it. */
@@ -493,6 +513,17 @@ export interface SheetWasmEngineW2 {
     formula: string,
   ): TableDetail;
   set_table_style?(name: string, arg: TableStyleArg): TableDetail;
+  goal_seek?(
+    sheet: number,
+    set_row: number,
+    set_col: number,
+    target: number,
+    changing_sheet: number,
+    changing_row: number,
+    changing_col: number,
+  ): GoalSeekResult;
+  calculate_data_tables?(): [number, number, number][];
+  list_data_tables?(): [number, string][];
 }
 
 type Need = <K extends keyof SheetWasmEngineW2>(
@@ -601,5 +632,10 @@ export function wrapW2(need: Need, tick: () => void): Required<SheetEngineW2> {
       ) as TableDetail;
     },
     setTableStyle: read<TableDetail>("set_table_style"),
+    goalSeek: write<GoalSeekResult>("goal_seek"),
+    calculateDataTables: write<[number, number, number][]>(
+      "calculate_data_tables",
+    ),
+    listDataTables: read<[number, string][]>("list_data_tables"),
   };
 }
