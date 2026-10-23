@@ -19,7 +19,7 @@
 //! `xl/charts/chartN.xml` and `xl/charts/chartExN.xml` — DrawingML charts
 //! (ECMA-376 §21.2) and Office 2016 chartEx parts, read by the shared reader
 //! (`dml_chart`, which paged.slide reads its charts with too) and folded
-//! into the [`sheet_chart::ChartModel`] (W4, ADR 518).
+//! into the [`sheet_chart::ChartModel`] (W4, ADR 519).
 //!
 //! ## What we read
 //!
@@ -152,7 +152,7 @@ pub fn color_of(el: &El) -> Option<ColorRef> {
     let concrete = match el.local.as_str() {
         "srgbClr" => {
             let v = u32::from_str_radix(el.attr("val")?.trim(), 16).ok()?;
-            ColorValue::Rgb(sheet_chart::colors::apply_tint(v, mods(el)))
+            color_rgb(sheet_chart::colors::apply_tint(v, mods(el)))
         }
         "sysClr" => {
             let v = el
@@ -163,7 +163,7 @@ pub fn color_of(el: &El) -> Option<ColorRef> {
                 } else {
                     0
                 });
-            ColorValue::Rgb(sheet_chart::colors::apply_tint(v, mods(el)))
+            color_rgb(sheet_chart::colors::apply_tint(v, mods(el)))
         }
         "schemeClr" => {
             let idx = match el.attr("val")? {
@@ -179,14 +179,11 @@ pub fn color_of(el: &El) -> Option<ColorRef> {
                 "accent6" => 9,
                 "hlink" => 10,
                 "folHlink" => 11,
-                _ => return Some(ColorRef::default()),
+                _ => return Some(ColorRef::auto()),
             };
-            ColorValue::Theme {
-                index: idx,
-                tint: mods(el),
-            }
+            color_scheme(idx, mods(el))
         }
-        "prstClr" => ColorValue::Rgb(match el.attr("val")? {
+        "prstClr" => color_rgb(match el.attr("val")? {
             "black" => 0x000000,
             "white" => 0xFFFFFF,
             "red" => 0xFF0000,
@@ -204,14 +201,11 @@ pub fn color_of(el: &El) -> Option<ColorRef> {
                         ((v / 100_000.0).clamp(0.0, 1.0) * 255.0).round() as u32
                     })
             };
-            ColorValue::Rgb((c("r") << 16) | (c("g") << 8) | c("b"))
+            color_rgb((c("r") << 16) | (c("g") << 8) | c("b"))
         }
         _ => return None,
     };
-    Some(ColorRef {
-        concrete,
-        doc: None,
-    })
+    Some(concrete)
 }
 
 /// The colour of a `a:solidFill` (or the first colour child of `el`).
@@ -230,7 +224,7 @@ fn grad_first(el: &El) -> Option<ColorRef> {
 
 impl dml_chart::Props for ExcelProfile {
     type Shape = ShapeProps;
-    type Text = TextConcrete;
+    type Text = FontSpec;
     fn shape(&self, sp: &El) -> ShapeProps {
         let line = sp.child(Ns::A, "ln").map(|ln| LineStyle {
             color: solid(ln),
@@ -251,29 +245,30 @@ impl dml_chart::Props for ExcelProfile {
             line,
         }
     }
-    fn text(&self, rp: &El) -> TextConcrete {
-        TextConcrete {
-            font: rp
+    fn text(&self, rp: &El) -> FontSpec {
+        FontSpec {
+            name: rp
                 .child(Ns::A, "latin")
                 .and_then(|l| l.attr("typeface"))
                 .filter(|t| !t.starts_with('+'))
-                .map(CompactString::new),
-            size_pt: rp
+                .map(str::to_string),
+            size: rp
                 .attr("sz")
                 .and_then(|s| s.parse::<f64>().ok())
                 .map(|s| s / 100.0),
-            bold: rp.attr_bool("b"),
-            italic: rp.attr_bool("i"),
+            bold: rp.attr_bool("b").unwrap_or(false),
+            italic: rp.attr_bool("i").unwrap_or(false),
             color: solid(rp),
+            ..FontSpec::default()
         }
     }
     const CACHES: bool = false;
     const AXES_AND_LABELS: bool = true;
 }
 
-fn text_ref(t: Option<&TextConcrete>) -> TextStyleRef {
+fn text_ref(t: Option<&FontSpec>) -> TextStyleRef {
     TextStyleRef {
-        concrete: t.cloned().unwrap_or_default(),
+        font: t.cloned().unwrap_or_default(),
         ..TextStyleRef::default()
     }
 }
@@ -317,9 +312,9 @@ pub fn parse(
     })
 }
 
-type DChart = dml_chart::Chart<ShapeProps, TextConcrete>;
-type DPlot = dml_chart::Plot<ShapeProps, TextConcrete>;
-type DAxis = dml_chart::Axis<ShapeProps, TextConcrete>;
+type DChart = dml_chart::Chart<ShapeProps, FontSpec>;
+type DPlot = dml_chart::Plot<ShapeProps, FontSpec>;
+type DAxis = dml_chart::Axis<ShapeProps, FontSpec>;
 
 /// The kind a plot element is drawn as, and whether it was flattened.
 pub fn kind_of(plot: &DPlot) -> (ChartKind, Grouping, bool) {
@@ -589,7 +584,7 @@ fn fold(chart: &DChart, host: SheetId, resolver: &impl SheetResolver) -> ChartMo
     model
 }
 
-fn labels_of(d: &dml_chart::DataLabels<TextConcrete>) -> DataLabels {
+fn labels_of(d: &dml_chart::DataLabels<FontSpec>) -> DataLabels {
     DataLabels {
         show_value: d.show_value,
         show_category: d.show_category,
@@ -604,7 +599,7 @@ fn labels_of(d: &dml_chart::DataLabels<TextConcrete>) -> DataLabels {
 }
 
 fn series_of(
-    s: &DmlSeries<ShapeProps, TextConcrete>,
+    s: &DmlSeries<ShapeProps, FontSpec>,
     kind: ChartKind,
     markers_off: bool,
     range: &impl Fn(&Option<String>) -> Option<RangeRef>,
@@ -866,9 +861,10 @@ pub fn text_roles(model: &mut ChartModel) -> Vec<(String, &mut TextStyleRef)> {
 /// a reference on a theme colour is kept while the slot and tint match).
 pub fn concrete_rgb(c: &ColorRef) -> Option<u32> {
     match c.concrete {
-        ColorValue::Rgb(v) => Some(v),
-        ColorValue::Theme { index, tint } => Some(sheet_chart::colors::apply_tint(
-            sheet_chart::colors::OFFICE_THEME[index as usize % 12],
+        ConcreteColor::Rgb { .. } => rgb_of(c),
+        ConcreteColor::Theme { index, tint } => Some(sheet_chart::colors::apply_tint(
+            sheet_chart::colors::OFFICE_THEME
+                [usize::from(dml_to_sheet_index(index.min(11) as u8)) % 12],
             tint,
         )),
         _ => None,
@@ -888,8 +884,8 @@ fn apply_paged_refs(root: &El, model: &mut ChartModel) {
         };
         let Some(sw) = &r.swatch else { continue };
         if let Some(c) = slot.as_mut() {
-            if concrete_rgb(c) == r.rgb {
-                c.doc = Some(CompactString::new(sw));
+            if let Some(rgb) = concrete_rgb(c).filter(|v| Some(*v) == r.rgb) {
+                c.doc = Some(doc_swatch(sw, rgb));
             }
         }
     }
@@ -899,10 +895,10 @@ fn apply_paged_refs(root: &El, model: &mut ChartModel) {
         };
         // A text reference holds while the run colour written is unchanged
         // (or none was recorded).
-        let now = t.concrete.color.as_ref().and_then(concrete_rgb);
+        let now = t.font.color.as_ref().and_then(concrete_rgb);
         if r.rgb.is_none() || r.rgb == now {
-            t.doc_paragraph = r.paragraph.as_deref().map(CompactString::new);
-            t.doc_character = r.character.as_deref().map(CompactString::new);
+            t.doc_para_style = r.paragraph.clone();
+            t.doc_char_style = r.character.clone();
         }
     }
 }

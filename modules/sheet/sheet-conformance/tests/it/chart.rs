@@ -91,7 +91,7 @@ fn sheet_chart_model() {
     assert_eq!(m.series_count(), 1);
     let s = m.series().next().unwrap();
     assert_eq!(s.values.rows(), 3);
-    assert_eq!(s.fill, Some(ColorRef::rgb(0x3366CC)));
+    assert_eq!(s.fill, Some(sheet_chart::model::color_rgb(0x3366CC)));
     assert!(m.legend.is_some());
     assert_eq!(m.val_axis.min, Some(0.0));
 }
@@ -120,7 +120,7 @@ fn sheet_chart_xlsx_part() {
     assert_eq!(m.series_count(), 1);
     let s = m.series().next().unwrap();
     assert_eq!(s.name.as_deref(), Some("Revenue"));
-    assert_eq!(s.fill, Some(ColorRef::rgb(0x3366CC)));
+    assert_eq!(s.fill, Some(sheet_chart::model::color_rgb(0x3366CC)));
     assert_eq!(
         (s.values.start.row, s.values.start.col, s.values.end.row),
         (1, 1, 3)

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The chart MODEL (spec §8.4; W4.1, ADR 518). What a chart IS, bound to the
+//! The chart MODEL (spec §8.4; W4.1, ADR 519). What a chart IS, bound to the
 //! workbook: one or more [`Plot`]s (a combo chart is several, each with its
 //! own kind, grouping and axis group), their [`Series`] bound to live ranges,
 //! the axes, the legend, the title and the chart's style. The geometry
@@ -32,10 +32,8 @@
 //! concrete run properties beside optional document paragraph and character
 //! style ids. The geometry carries the swatch id next to the resolved colour,
 //! so the page lowering references the document's swatch (edit the swatch,
-//! the chart recolours) and the xlsx writer writes the concrete value. These
-//! two types mirror the cell-style `ColorRef` / `TextStyleRef` of the
-//! document-styles program field for field, so the chart roles switch to
-//! the shared types without a shape change.
+//! the chart recolours) and the xlsx writer writes the concrete value. They
+//! are the cell visual model's own types (sheet-core `visual`, ADR 518).
 //!
 //! These types hold [`RangeRef`] series bindings (resolved against the
 //! workbook on every geometry call), so they deliberately do NOT derive
@@ -157,81 +155,60 @@ impl Grouping {
 
 // ── style roles ─────────────────────────────────────────────────────────────
 
-/// A concrete colour as a workbook states it.
-#[derive(Copy, Clone, Debug, PartialEq, Default)]
-pub enum ColorValue {
-    /// `0xRRGGBB`.
-    Rgb(u32),
-    /// A theme slot (0 dk1, 1 lt1, 2 dk2, 3 lt2, 4–9 accent1–6, 10 hlink,
-    /// 11 folHlink) with an Excel tint in −1..1 (negative darkens).
-    Theme { index: u8, tint: f64 },
-    /// A legacy palette index.
-    Indexed(u8),
-    /// The application's automatic colour for the role.
-    #[default]
-    Auto,
+// The colour and text roles are the document-styles program's own types
+// (sheet-core `visual`, sheet ADR 518): a chart role and a cell role are
+// the same kind of reference.
+pub use sheet_core::visual::{
+    ColorRef, ConcreteColor, DocColorModel, DocSwatchRef, FontSpec, TextStyleRef,
+};
+
+/// An sRGB colour role from `0xRRGGBB`.
+pub fn color_rgb(v: u32) -> ColorRef {
+    ColorRef::rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
 }
 
-/// A colour role: the concrete value beside an optional document swatch id.
-/// The geometry paints the concrete value and names the swatch; the page
-/// lowering references the swatch when there is one.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct ColorRef {
-    pub concrete: ColorValue,
-    /// A document swatch id (`Color/<name>`: RGB, CMYK, spot or Lab).
-    pub doc: Option<CompactString>,
+/// A theme colour role from a DrawingML scheme slot (0 dk1, 1 lt1, 2 dk2,
+/// 3 lt2, 4–9 accent1–6, 10 hlink, 11 folHlink) with an Excel tint. The
+/// shared type counts the spreadsheet way (lt1, dk1, lt2, dk2 first), so the
+/// first four slots swap in pairs.
+pub fn color_scheme(slot: u8, tint: f64) -> ColorRef {
+    ColorRef::theme(u32::from(dml_to_sheet_index(slot)), tint)
 }
 
-impl ColorRef {
-    pub fn rgb(rgb: u32) -> ColorRef {
-        ColorRef {
-            concrete: ColorValue::Rgb(rgb & 0xFF_FFFF),
-            doc: None,
+/// DrawingML scheme slot → SpreadsheetML theme index (and back: the map is
+/// its own inverse).
+pub fn dml_to_sheet_index(slot: u8) -> u8 {
+    match slot {
+        0 => 1,
+        1 => 0,
+        2 => 3,
+        3 => 2,
+        s => s,
+    }
+}
+
+/// The `0xRRGGBB` of a concrete RGB colour.
+pub fn rgb_of(c: &ColorRef) -> Option<u32> {
+    match c.concrete {
+        ConcreteColor::Rgb { r, g, b } => {
+            Some((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
         }
-    }
-    pub fn theme(index: u8, tint: f64) -> ColorRef {
-        ColorRef {
-            concrete: ColorValue::Theme { index, tint },
-            doc: None,
-        }
-    }
-    /// Parse `#RRGGBB` / `RRGGBB`.
-    pub fn from_hex(hex: &str) -> Option<ColorRef> {
-        let h = hex.trim().trim_start_matches('#');
-        if h.len() != 6 {
-            return None;
-        }
-        u32::from_str_radix(h, 16).ok().map(ColorRef::rgb)
-    }
-    pub fn with_doc(mut self, swatch: impl Into<CompactString>) -> ColorRef {
-        self.doc = Some(swatch.into());
-        self
-    }
-    pub fn is_auto(&self) -> bool {
-        matches!(self.concrete, ColorValue::Auto) && self.doc.is_none()
+        _ => None,
     }
 }
 
-/// The concrete run properties of a text role. `None` = the chart default.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct TextConcrete {
-    pub font: Option<CompactString>,
-    pub size_pt: Option<f64>,
-    pub bold: Option<bool>,
-    pub italic: Option<bool>,
-    pub color: Option<ColorRef>,
-}
-
-/// A text role: the concrete run properties beside optional document
-/// paragraph and character style ids. The page lowering applies the styles
-/// (and auto-sizes the label frame) when there are any.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct TextStyleRef {
-    pub concrete: TextConcrete,
-    /// A document paragraph style id (`ParagraphStyle/<name>`).
-    pub doc_paragraph: Option<CompactString>,
-    /// A document character style id (`CharacterStyle/<name>`).
-    pub doc_character: Option<CompactString>,
+/// A document swatch reference with the sRGB a reader without the document
+/// shows.
+pub fn doc_swatch(id: &str, fallback: u32) -> DocSwatchRef {
+    DocSwatchRef {
+        id: id.to_string(),
+        model: DocColorModel::Rgb,
+        fallback_rgb: (
+            (fallback >> 16) as u8,
+            (fallback >> 8) as u8,
+            fallback as u8,
+        ),
+    }
 }
 
 /// A line role (series line, axis line, gridline, outline).
@@ -1009,7 +986,7 @@ impl Default for SparklineGroup {
         SparklineGroup {
             kind: SparklineKind::Line,
             sparklines: Vec::new(),
-            series: ColorRef::rgb(0x37_6092),
+            series: color_rgb(0x37_6092),
             negative: None,
             axis: None,
             markers: None,
@@ -1076,10 +1053,7 @@ mod tests {
         assert_eq!(m.kind(), ChartKind::Column);
         assert_eq!(m.series_count(), 1);
         assert_eq!(m.series().next().unwrap().values.rows(), 3);
-        assert_eq!(
-            m.series().next().unwrap().fill,
-            Some(ColorRef::rgb(0x3366CC))
-        );
+        assert_eq!(m.series().next().unwrap().fill, Some(color_rgb(0x3366CC)));
     }
 
     #[test]

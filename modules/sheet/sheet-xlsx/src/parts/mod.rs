@@ -31,6 +31,7 @@ pub mod metadata;
 pub mod protection;
 pub mod shared_strings;
 pub mod sparkline;
+pub mod style_model;
 pub mod styles;
 pub mod tables;
 pub mod theme;

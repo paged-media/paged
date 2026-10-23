@@ -345,13 +345,14 @@ fn fixtures() -> Vec<(&'static str, ChartModel, PlotData)> {
         data(vec![vec![3.0, 40.0, 700.0, 9000.0]]),
     ));
     let mut refs = chart(ChartKind::Column, Grouping::Standard, 2);
-    refs.plots[0].series[0].fill = Some(ColorRef::rgb(0x00A0E0).with_doc("Color/Brand Blue"));
-    refs.title_style.doc_paragraph = Some("ParagraphStyle/Chart Title".into());
+    refs.plots[0].series[0].fill =
+        Some(color_rgb(0x00A0E0).with_doc(doc_swatch("Color/Brand Blue", 0x00A0E0)));
+    refs.title_style.doc_para_style = Some("ParagraphStyle/Chart Title".into());
     refs.plots[0].labels = Some(DataLabels {
         show_value: true,
         ..Default::default()
     });
-    refs.plot_area.fill = Some(ColorRef::theme(3, 0.0).with_doc("Color/Paper"));
+    refs.plot_area.fill = Some(color_scheme(3, 0.0).with_doc(doc_swatch("Color/Paper", 0xE7E6E6)));
     v.push(("column-style-refs", refs, two()));
     v
 }
@@ -630,7 +631,7 @@ fn sparklines_draw_in_their_cell__feat__sheet_chart_sparklines() {
     let g = SparklineGroup {
         kind: SparklineKind::Column,
         show_negative: true,
-        negative: Some(ColorRef::rgb(0xFF0000)),
+        negative: Some(color_rgb(0xFF0000)),
         ..Default::default()
     };
     let prims = sparkline(&g, &[1.0, -1.0, 2.0], 40.0, 12.0, None);

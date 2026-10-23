@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The chart GEOMETRY IR (spec §8.4; ADR 016, W4 ADR 518): the PURE
+//! The chart GEOMETRY IR (spec §8.4; ADR 016, W4 ADR 519): the PURE
 //! projection of a [`ChartModel`] plus resolved [`PlotData`] into vector
 //! [`Primitive`]s in **chart-content pt space** (origin top-left, y DOWN —
 //! the frame-content coordinate system, spec §8.5). The page lowering turns
@@ -315,32 +315,32 @@ impl TextSpec {
         role: &'static str,
         theme: &Theme,
     ) -> TextSpec {
-        let c = &style.concrete;
-        let b = &base.concrete;
+        let c = &style.font;
+        let b = &base.font;
         TextSpec {
             size: c
-                .size_pt
-                .or(b.size_pt.filter(|_| role != "title"))
+                .size
+                .or(b.size.filter(|_| role != "title"))
                 .unwrap_or(size),
             anchor,
-            bold: c.bold.or(b.bold).unwrap_or(role == "title" && false),
-            italic: c.italic.or(b.italic).unwrap_or(false),
-            font: c.font.as_ref().or(b.font.as_ref()).map(|f| f.to_string()),
+            bold: c.bold || b.bold,
+            italic: c.italic || b.italic,
+            font: c.name.as_ref().or(b.name.as_ref()).cloned(),
             color: c
                 .color
                 .as_ref()
                 .or(b.color.as_ref())
                 .map(|r| theme.paint(r, TEXT_GREY)),
             paragraph: style
-                .doc_paragraph
+                .doc_para_style
                 .as_ref()
-                .or(base.doc_paragraph.as_ref())
-                .map(|s| s.to_string()),
+                .or(base.doc_para_style.as_ref())
+                .cloned(),
             character: style
-                .doc_character
+                .doc_char_style
                 .as_ref()
-                .or(base.doc_character.as_ref())
-                .map(|s| s.to_string()),
+                .or(base.doc_char_style.as_ref())
+                .cloned(),
             role,
         }
     }

@@ -20,9 +20,10 @@
 // SDK's createHeadlessHost) and the REAL docx-js wasm, the bundle activated
 // as the editor activates it. A Word document is opened the way the
 // standalone open does it — the engine's page skeleton loaded as the
-// document, then the bundle's own pour, styles and label (`finishStandalone`)
-// — because the headless host has no native-open door (the skeleton load IS
-// what that door does).
+// document, then the bundle's own pour, styles and label (`finishStandalone`),
+// which hands back the opening's story ids. The importer's own standalone
+// open through the headless host's native-open door is
+// `headless/standalone-open.spec.ts`.
 //
 // The docx-js artifact is built by scripts/build-wasm.sh (gitignored).
 // Without it these suites skip with a reason; REQUIRE_REAL_DOCX=1 (CI after
@@ -46,7 +47,7 @@ import { fileURLToPath } from "node:url";
 // Without an anchor the headless harness resolves it from plugin-sdk's
 // install location, which in the root Bun workspace is whichever version the
 // store hoists, not the one this package pins.
-const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+export const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const WASM = new URL("../../bin/docx_js_bg.wasm", import.meta.url);
 

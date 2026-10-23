@@ -52,6 +52,7 @@ import {
   type DiscoveryProblem,
 } from "./plugins";
 import { installNodeShims } from "./node-shims";
+import { findingLine, pdfCommand, typedPdf } from "./pdf";
 import { CliError, EXIT } from "./errors";
 
 /** `import`: a file a loaded module's importer opens (.docx, .pptx, .pdf,
@@ -104,7 +105,9 @@ export interface CliSession {
   readonly pluginProblems: readonly DiscoveryProblem[];
   plugin(id: string): LoadedPlugin | undefined;
   /** Serialise the document in `format` (core exporters, or a plugin
-   *  exporter by id / extension). */
+   *  exporter by id / extension). A PDF goes through the typed exporter
+   *  (paged.publish's `exportPdf`) when one is installed, as `export` does,
+   *  unless `options` asks for core's door. */
   exportBytes(
     format: string,
     options?: ExportOptions,
@@ -113,18 +116,27 @@ export interface CliSession {
     format: string;
     diagnostics: string[];
     lost?: string[];
+    /** The typed exporter command that wrote it. */
+    via?: string;
   }>;
   /** Write the document to `out` (format from its extension), or back to
    *  the file it was opened from. */
-  save(
-    out?: string,
-  ): Promise<{ path: string; format: string; bytes: number; lost?: string[] }>;
+  save(out?: string): Promise<{
+    path: string;
+    format: string;
+    bytes: number;
+    lost?: string[];
+    via?: string;
+  }>;
   dispose(): void;
 }
 
 export interface ExportOptions {
+  /** Core's PDF options; given, the PDF is core's (`via: "core"`). */
   pdf?: Record<string, unknown>;
   linkBase?: string | null;
+  /** `core`: core's door even when a typed PDF exporter is installed. */
+  via?: "core";
 }
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
@@ -468,6 +480,22 @@ export async function openSession(
     plugin: (id) => plugins.find((p) => p.id === id),
     async exportBytes(fmt, exportOptions = {}) {
       const f = fmt.replace(/^\./, "").toLowerCase();
+      if (
+        f === "pdf" &&
+        exportOptions.via !== "core" &&
+        exportOptions.pdf === undefined
+      ) {
+        const typed = await pdfCommand(session, undefined);
+        if (typed) {
+          const r = await typedPdf(session, typed);
+          return {
+            bytes: r.bytes,
+            format: "pdf",
+            diagnostics: r.findings.map(findingLine),
+            via: typed.id,
+          };
+        }
+      }
       if (f === "paged" || f === "idml" || f === "pdf") {
         // Plugins settle their pending state first, as File ▸ Save does.
         if (f !== "pdf") await h.willSave.fire();
@@ -520,6 +548,7 @@ export async function openSession(
         format: done.format,
         bytes: done.bytes.byteLength,
         ...(done.lost?.length ? { lost: done.lost } : {}),
+        ...(done.via ? { via: done.via } : {}),
       };
     },
     dispose() {

@@ -62,8 +62,8 @@ mod special;
 
 pub use geometry::{generate, ChartGeometry, PlotData, Primitive, TextAnchor};
 pub use model::{
-    Axis, AxisKind, ChartKind, ChartModel, ColorRef, ColorValue, DataLabels, ErrorBars, Grouping,
-    Legend, LegendPosition, Marker, MarkerSymbol, Plot, Series, SparklineGroup, SparklineKind,
-    TextStyleRef, TrendKind, Trendline,
+    Axis, AxisKind, ChartKind, ChartModel, ColorRef, ConcreteColor, DataLabels, ErrorBars,
+    Grouping, Legend, LegendPosition, Marker, MarkerSymbol, Plot, Series, SparklineGroup,
+    SparklineKind, TextStyleRef, TrendKind, Trendline,
 };
 pub use sparkline::sparkline;

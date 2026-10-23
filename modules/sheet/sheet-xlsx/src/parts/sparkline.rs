@@ -22,9 +22,8 @@
 //! and round-trips byte-identical; the groups are drawn in the grid and on
 //! the page.
 //!
-//! Colours: `rgb` (ARGB) or `theme` + `tint`. A SpreadsheetML theme index
-//! counts lt1, dk1, lt2, dk2 first; the chart model counts DrawingML's dk1,
-//! lt1, dk2, lt2, so the first four are swapped in pairs.
+//! Colours: `rgb` (ARGB) or `theme` + `tint`, as the shared `ColorRef`
+//! (sheet ADR 518), whose theme index counts the spreadsheet way.
 
 use paged_ooxml::tree::El;
 use sheet_chart::model::{Blanks, ColorRef, SparklineGroup, SparklineKind};
@@ -35,23 +34,18 @@ use super::chart::{parse_f_ref, SheetResolver};
 fn color(el: Option<&El>) -> Option<ColorRef> {
     let el = el?;
     if let Some(rgb) = el.attr("rgb") {
-        let v = u32::from_str_radix(rgb.trim(), 16).ok()?;
-        return Some(ColorRef::rgb(v & 0xFF_FFFF));
+        return ColorRef::from_hex(rgb.trim());
     }
     if let Some(t) = el.attr("theme").and_then(|t| t.parse::<u8>().ok()) {
-        const MAP: [u8; 4] = [1, 0, 3, 2];
-        let idx = MAP.get(t as usize).copied().unwrap_or(t);
+        // Both count the spreadsheet way: the index is the shared type's.
         let tint = el
             .attr("tint")
             .and_then(|v| v.parse::<f64>().ok())
             .unwrap_or(0.0);
-        return Some(ColorRef::theme(idx, tint));
+        return Some(ColorRef::theme(u32::from(t), tint));
     }
     if let Some(i) = el.attr("indexed").and_then(|t| t.parse::<u8>().ok()) {
-        return Some(ColorRef {
-            concrete: sheet_chart::model::ColorValue::Indexed(i),
-            doc: None,
-        });
+        return Some(ColorRef::indexed(u32::from(i)));
     }
     None
 }
@@ -188,12 +182,12 @@ mod tests {
         assert_eq!(g.blanks, Blanks::Zero);
         assert!(g.show_high && g.show_negative);
         assert_eq!(g.max, Some(10.0));
-        assert_eq!(g.series, ColorRef::rgb(0x376092));
+        assert_eq!(g.series, ColorRef::rgb(0x37, 0x60, 0x92));
         assert_eq!(g.negative, Some(ColorRef::theme(5, -0.25)));
         assert_eq!(g.sparklines.len(), 2);
         assert_eq!((g.sparklines[1].1.row, g.sparklines[1].1.col), (2, 5));
         assert_eq!(g.sparklines[0].0.end.col, 4);
         assert_eq!(gs[1].kind, SparklineKind::WinLoss);
-        assert_eq!(gs[1].series, ColorRef::theme(0, 0.0), "theme 1 is dk1");
+        assert_eq!(gs[1].series, ColorRef::theme(1, 0.0), "theme 1 is dk1");
     }
 }
