@@ -68,6 +68,30 @@ interface DefaultPolicyFactory {
   defaultPolicy?: unknown;
 }
 
+/**
+ * The Trusted Types policy names the editor creates, for a host page that
+ * enforces Trusted Types with a `trusted-types` directive (the embedding
+ * docs cite this list): the host's directive must allow each of them.
+ *
+ *   - `default` — installed by the editor once per page, unless the page
+ *     already has a default policy (the host's then decides; the editor's
+ *     worker and script URLs are the page's origin, a blob it made, or the
+ *     module host). Without it, the host's own policy must admit them.
+ *   - `paged-code-highlight`, `paged-plugin-glyph`, `paged-demo-script`,
+ *     `paged-sheet-grid`, `paged-web-preview` — the named policies of the
+ *     places that make markup or script on purpose
+ *     (`@paged-media/helpers` trustedHtml / trustedScript), each created
+ *     once per page on first use.
+ */
+export const TRUSTED_TYPES_POLICY_NAMES = [
+  "default",
+  "paged-code-highlight",
+  "paged-plugin-glyph",
+  "paged-demo-script",
+  "paged-sheet-grid",
+  "paged-web-preview",
+] as const;
+
 /** The default policy: a worker or a script element given a plain string
  *  (Vite's `new Worker(new URL(…, import.meta.url))`, a module's kernel)
  *  is allowed when the URL is the editor's own; a `new Function` when its
@@ -81,10 +105,22 @@ export function installDefaultPolicy(
 ): void {
   const tt = (globalThis as { trustedTypes?: DefaultPolicyFactory })
     .trustedTypes;
+  // Once per page: a page that already has a default policy (the host's,
+  // or a second editor's) keeps it.
   if (!tt || tt.defaultPolicy) return;
-  tt.createPolicy("default", {
-    createScriptURL: (url) =>
-      allowedScriptUrl(url, globalThis.location.href) ? url : null,
-    createScript: (source) => (isApprovedScript(source) ? source : null),
-  });
+  try {
+    tt.createPolicy("default", {
+      createScriptURL: (url) =>
+        allowedScriptUrl(url, globalThis.location.href) ? url : null,
+      createScript: (source) => (isApprovedScript(source) ? source : null),
+    });
+  } catch (err) {
+    // The host's `trusted-types` directive does not allow `default`: its
+    // own policy decides the editor's script URLs then.
+    console.warn(
+      "paged editor: the page's Trusted Types do not allow the editor's " +
+        "default policy; the host's policy must admit its worker URLs.",
+      err,
+    );
+  }
 }
