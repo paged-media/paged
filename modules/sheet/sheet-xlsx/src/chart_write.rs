@@ -1662,10 +1662,13 @@ fn patch_axes(
     Ok(())
 }
 
+/// What a written chart records: its session index and the deleted slots.
+pub type Recorded = (Option<u32>, Vec<u32>);
+
 /// A chart's recorded session index and the deleted slots recorded with
 /// it, read back on load (the paged extension), for
 /// [`order_by_recorded_index`].
-pub fn recorded_index(xml: &[u8]) -> (Option<u32>, Vec<u32>) {
+pub fn recorded_index(xml: &[u8]) -> Recorded {
     let Ok(root) = paged_ooxml::tree::parse(xml) else {
         return (None, Vec::new());
     };
@@ -1695,9 +1698,7 @@ pub fn recorded_index(xml: &[u8]) -> (Option<u32>, Vec<u32>) {
 /// Put charts with a recorded index at that index; a recorded deleted slot
 /// is a placeholder marked `removed` (read from the file); the other charts
 /// fill the remaining slots in discovery order.
-pub fn order_by_recorded_index(
-    charts: Vec<(ParsedChart, (Option<u32>, Vec<u32>))>,
-) -> Vec<ParsedChart> {
+pub fn order_by_recorded_index(charts: Vec<(ParsedChart, Recorded)>) -> Vec<ParsedChart> {
     if charts.iter().all(|(_, (i, _))| i.is_none()) {
         return charts.into_iter().map(|(c, _)| c).collect();
     }
