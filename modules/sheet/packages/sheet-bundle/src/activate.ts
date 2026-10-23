@@ -589,8 +589,10 @@ export function activate(host: BundleHost): BundleHandle {
     // Sheet ADR 510 / extensions ADR 334 — while the frame is entered the
     // grid is a FRAME SURFACE: a main-thread surface over the frame with
     // headings, native pointer and key input, no render-worker round trip
-    // per keystroke. A host without frame surfaces keeps the scene layer.
-    if (host.supports("contribute.frameSurface@1")) {
+    // per keystroke. A host without frame surfaces keeps the scene layer:
+    // the probe is the DYNAMIC flag (a host that mounts them), not the
+    // static door every SDK has.
+    if (host.supports("editContext.frameSurface@1")) {
       host.contribute.frameSurface({
         contextType: "sheet",
         render: makeSheetFrameSurface(session),
