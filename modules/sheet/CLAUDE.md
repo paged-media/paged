@@ -125,10 +125,12 @@ Rules for every code change in this repo:
   serial 60, 15-significant-digit display — each adopted defect is an
   explicit registry ruling with provenance. Oracle disagreements get
   recorded rulings.
-- **PUBLISHING-FIRST SCOPE (§1, permanent).** Pivot tables, data
-  validation, what-if, external links, VBA execution are NEVER
-  interpreted — they round-trip preserved. This is a product decision,
-  not a deferral; don't "helpfully" implement them.
+- **PUBLISHING-FIRST SCOPE (§1, amended by ADR 517).** Pivot tables,
+  slicers, GETPIVOTDATA, VBA execution, Scenario Manager and Solver are
+  NEVER interpreted — they round-trip preserved. This is a product
+  decision, not a deferral; don't "helpfully" implement them. Data
+  validation, data tables and Goal Seek, external links (from their cached
+  values, never followed), outline and protection ARE interpreted (ADR 517).
 - **A MINT INSIDE A BATCH IS NOT IDEMPOTENT, however idempotent it
   looks.** paged.sheet mints document swatches at deterministic,
   content-addressed ids, so re-running a lowering asks for ids the

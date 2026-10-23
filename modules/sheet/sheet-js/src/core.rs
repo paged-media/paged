@@ -57,6 +57,8 @@ mod fill;
 mod format;
 mod objects;
 mod ops;
+pub mod outline;
+pub mod protect;
 pub use format::{
     EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };
@@ -435,6 +437,8 @@ pub struct SheetSession {
     /// A workbook-structure change (sheet added/renamed/deleted, calc
     /// settings) is pending a save.
     structure_changed: bool,
+    /// Bumped for every new password salt (sheet ADR 517).
+    salt_counter: u64,
 }
 
 /// The T0 cap on cells materialized by a single [`SheetSession::get_range_lowered`]
@@ -699,6 +703,7 @@ impl SheetSession {
             selection: None,
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
+            salt_counter: 0,
         }
     }
 
@@ -825,6 +830,7 @@ impl SheetSession {
             selection: None,
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
+            salt_counter: 0,
         })
     }
 
@@ -917,6 +923,8 @@ impl SheetSession {
             )));
         }
 
+        // A locked cell on a protected sheet refuses (sheet ADR 517).
+        self.guard_cells([(sheet, row, col)])?;
         // Typed entry (ruling `sheet.edit.typed-entry`): the value Excel
         // would store plus the format the text implies, applied as ONE edit.
         let typed = self
@@ -991,8 +999,15 @@ impl SheetSession {
     /// the same cell wins). Returns the slim [`SetCellsResult`] with each
     /// input's prior input for the caller's undo journal.
     pub fn set_cells(&mut self, inputs: &[CellInput]) -> Result<SetCellsResult, SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if let Some(c) = inputs.iter().find(|c| (c.sheet as usize) >= sheet_count) {
+            return Err(SessionError(format!(
+                "sheet id {} out of range ({sheet_count} sheets)",
+                c.sheet
+            )));
+        }
+        self.guard_cells(inputs.iter().map(|c| (c.sheet, c.row, c.col)))?;
         let engine = self.engine();
-        let sheet_count = engine.model().sheets.len();
         let mut parsed = Vec::with_capacity(inputs.len());
         let mut typed_pending = Vec::new();
         for c in inputs {
@@ -1201,6 +1216,10 @@ impl SheetSession {
         if first_data >= bottom {
             return Ok(SortResult::default()); // 0 or 1 movable rows — no-op
         }
+        self.guard_allow(sheet, protect::Allow::Sort)?;
+        self.guard_cells(
+            (first_data..=bottom).flat_map(|r| (left..=right).map(move |c| (sheet, r, c))),
+        )?;
 
         // ── boundary scan: refuse formulas / spill-owned cells (never
         //    silently corrupt references — see the doc comment).
@@ -1761,6 +1780,15 @@ impl SheetSession {
                     row: cand.row,
                     col: cand.col,
                     reason: "spilled cell — edit the anchor formula".to_string(),
+                });
+                continue;
+            }
+            if let Err(e) = self.guard_cells([(cand.sheet, cand.row, cand.col)]) {
+                result.skipped.push(SkippedCell {
+                    sheet: cand.sheet,
+                    row: cand.row,
+                    col: cand.col,
+                    reason: e.0,
                 });
                 continue;
             }
@@ -2641,7 +2669,7 @@ fn cell_input_text(model: &SheetModel, sheet: SheetId, row: u32, col: u32) -> St
 // ───────────────────────────────────── bulk-edit helpers (sort / find)
 
 /// A1 label for a 0-based `(row, col)` — error-message formatting only.
-fn a1_of(row: u32, col: u32) -> String {
+pub(crate) fn a1_of(row: u32, col: u32) -> String {
     let mut n = col as i64;
     let mut label = String::new();
     loop {
