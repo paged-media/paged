@@ -1108,8 +1108,7 @@ fn non_patchable_target_is_skipped_not_errored() {
 /// The cell patcher: a native table's cells read back (the engine's cell
 /// `text`) next to the story, as the bundle forwards them, patch their edits
 /// into the cells' `<w:t>`s; the runs, their properties and the merge field
-/// stay. A cell whose paragraph count changed keeps its Word text and is
-/// reported. The body reads back as the engine holds it: a paragraph's runs
+/// stay. A paragraph added in a cell is added to the Word cell. The body reads back as the engine holds it: a paragraph's runs
 /// of one style joined into one.
 #[test]
 #[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
@@ -1186,10 +1185,10 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
     let (saved, skips) = session
         .save_edited_from_content_and_cells(&story, &edited)
         .unwrap();
-    assert_eq!(skips.len(), 1, "{skips:?}");
-    assert!(skips[0].contains("cell 0"), "{skips:?}");
+    assert!(skips.is_empty(), "{skips:?}");
     let after = DocSession::load(&saved).unwrap().lowered();
     let mut want = before.clone();
+    want[0] = "Item\nSecond".into();
     want[2] = "Green Apples".into();
     want[4] = "Line one\nLine 2".into();
     want[5] = "Für «Name»".into();
@@ -1198,4 +1197,132 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
     // The bold run and the merge field are still there.
     assert!(xml.contains("<w:b/></w:rPr><w:t>les</w:t>"), "{xml}");
     assert_eq!(xml.matches("MERGEFIELD Name").count(), 2, "{xml}");
+}
+
+/// Structural cell save-back: paragraphs added on the canvas become new
+/// `<w:p>`s cloned from their neighbour (its `<w:pPr>`, and the `<w:rPr>` of
+/// the run they continue), removed ones are dropped — never the cell's last
+/// `<w:p>`, which takes the last text instead — and text typed into a Word
+/// paragraph without a run gets a run. Everything else stays byte-identical.
+#[test]
+#[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
+fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object_model() {
+    use docx_conformance::cell_paragraphs_docx;
+    use docx_export::{CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn};
+    use docx_lower::ir::LoweredBlock;
+
+    let source = cell_paragraphs_docx();
+    let session = DocSession::load(&source).unwrap();
+    let base = session.lowered();
+    let story = StoryContentIn {
+        self_id: "s".into(),
+        paragraphs: base
+            .story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    paragraph_style: p.para_style_id.clone(),
+                    runs: vec![RunContentIn {
+                        text: p.runs.iter().map(|r| r.text.as_str()).collect(),
+                        character_style: None,
+                    }],
+                }),
+                LoweredBlock::Table(_) => None,
+            })
+            .collect(),
+    };
+    let cell = |cell: usize, text: &str| CellContentIn {
+        block: 1,
+        cell,
+        text: text.into(),
+    };
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+    let src_xml = doc_xml(&source);
+    let save = |cells: &[CellContentIn]| {
+        let (saved, skips) = session
+            .save_edited_from_content_and_cells(&story, cells)
+            .unwrap();
+        assert!(skips.is_empty(), "{skips:?}");
+        (doc_xml(&saved), saved)
+    };
+    let cells_after = |saved: &[u8]| -> Vec<String> {
+        let d = DocSession::load(saved).unwrap().lowered();
+        let LoweredBlock::Table(t) = &d.story.blocks[1] else {
+            panic!("block 1 is the table")
+        };
+        t.cells
+            .iter()
+            .map(|c| {
+                c.paragraphs
+                    .iter()
+                    .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect()
+    };
+
+    // A paragraph added after the bold run's paragraph continues it: the
+    // right-aligned `<w:pPr>` and the bold `<w:rPr>`; one added in the
+    // middle is a copy of "One"'s (its italic run). The cells around stay.
+    let (xml, saved) = save(&[cell(0, "One\nOne and a half\nTwo\nThree bold\nFour")]);
+    assert_eq!(
+        cells_after(&saved)[0],
+        "One\nOne and a half\nTwo\nThree bold\nFour"
+    );
+    assert!(
+        xml.contains(r#"<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Four</w:t></w:r></w:p>"#),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">One and a half</w:t></w:r></w:p>"#),
+        "{xml}"
+    );
+    // Only the two new paragraphs were added.
+    let added = r#"<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">One and a half</w:t></w:r></w:p>"#;
+    let four = r#"<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Four</w:t></w:r></w:p>"#;
+    assert_eq!(xml.replace(added, "").replace(four, ""), src_xml);
+
+    // A paragraph added before the first continues the first run.
+    let (_, saved) = save(&[cell(0, "Zero\nOne\nTwo\nThree bold")]);
+    assert_eq!(cells_after(&saved)[0], "Zero\nOne\nTwo\nThree bold");
+
+    // A middle paragraph removed: exactly its `<w:p>` goes.
+    let (xml, saved) = save(&[cell(0, "One\nThree bold")]);
+    assert_eq!(cells_after(&saved)[0], "One\nThree bold");
+    assert_eq!(
+        xml,
+        src_xml.replace(
+            r#"<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>Two</w:t></w:r></w:p>"#,
+            ""
+        )
+    );
+
+    // The last paragraph removed: the cell keeps its last `<w:p>`, which
+    // takes the last text read back; the paragraph that held it goes.
+    let (xml, saved) = save(&[cell(0, "One\nTwo")]);
+    assert_eq!(cells_after(&saved)[0], "One\nTwo");
+    assert!(xml.contains(r#"<w:jc w:val="right"/>"#), "{xml}");
+    assert!(xml.contains("</w:p></w:tc>"), "{xml}");
+
+    // Two empty-ish cells: text typed into the empty `<w:p/>` and into the
+    // run-less paragraph gets a run; a paragraph added after `<w:p/>`.
+    let (xml, saved) = save(&[cell(1, "Top\nBelow\nMore"), cell(2, "Typed")]);
+    assert_eq!(cells_after(&saved)[1..], ["Top\nBelow\nMore", "Typed"]);
+    assert!(
+        xml.contains(r#"<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:t xml:space="preserve">Typed</w:t></w:r></w:p>"#),
+        "{xml}"
+    );
+
+    // Read back unchanged: byte-identical.
+    let (xml, _) = save(&[
+        cell(0, "One\nTwo\nThree bold"),
+        cell(1, "Top\n"),
+        cell(2, ""),
+    ]);
+    assert_eq!(xml, src_xml);
 }

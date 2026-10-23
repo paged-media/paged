@@ -111,6 +111,12 @@ import {
 } from "./lower-chart";
 import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
 import {
+  csvBytes,
+  type CsvExportOptions,
+  type FormulaDisplay,
+  type WorkbookKind,
+} from "./engine-files";
+import {
   advance,
   collapsed,
   extendTo,
@@ -727,6 +733,25 @@ export interface WorkbookSession extends DataToolsApi {
    *  lazy-verbatim re-emit, §10.2). Returns the bytes + a suggested file
    *  name, or null when there is no workbook (nothing to export). */
   saveWorkbook(): { bytes: Uint8Array; fileName: string } | null;
+  /** Sheet ADR 521 — the workbook as another package kind (`.xlsx` from a
+   *  macro workbook leaves the VBA project out; the open workbook keeps
+   *  it). Null when there is no workbook or the engine refuses. */
+  saveWorkbookAs(
+    kind: WorkbookKind,
+  ): { bytes: Uint8Array; fileName: string } | null;
+  /** Sheet ADR 521 — the active sheet (or `opts.range`) as CSV, UTF-8
+   *  encoded, with a suggested `.csv` name. Null when there is no workbook
+   *  / sheet or the engine refuses (the reason is logged). */
+  exportCsv(
+    opts?: CsvExportOptions,
+  ): { bytes: Uint8Array; fileName: string } | null;
+  /** Sheet ADR 521 — how formulas are shown and typed (R1C1, language);
+   *  null when there is no workbook or the engine predates the door. */
+  formulaDisplay(): FormulaDisplay | null;
+  /** Change the formula display: `r1c1` is kept in the workbook (an edit),
+   *  `lang` is a language tag for this session (`"de"`; no table →
+   *  English). Whether the engine took it. */
+  setFormulaDisplay(opts: { r1c1?: boolean; lang?: string }): boolean;
   /** S-15 — enumerate the governed datasets the platform offers in the
    *  `"dataset"` category (`host.dataProviders.discover`), schema + revision
    *  only, NO rows. The datasets panel lists these so the author can source
@@ -790,6 +815,9 @@ export interface WorkbookSession extends DataToolsApi {
    *  language types numbers and dates; `name`'s extension picks the
    *  delimiter (.tsv → tab), otherwise it is sniffed. */
   importCsv(text: string, name: string): Promise<void>;
+  /** Sheet ADR 521 — import an OpenDocument spreadsheet (`.ods`, `.ots`) as
+   *  a workbook (converted in Rust; saved as `.xlsx`). */
+  importOds(bytes: Uint8Array, name: string): Promise<void>;
   /** Add a worksheet (empty name = next free `SheetN`) and make it active. */
   addSheet(name?: string): SessionResult;
   /** Rename a worksheet. */
@@ -1060,6 +1088,63 @@ export function createWorkbookSession(
   // grid scene, re-list the sheets and re-read the selected cell's input
   // through the wasm boundary.
   const readCache = new Map<string, unknown>();
+
+  // ── Sheet ADR 521 — the formula display dialect ─────────────────────
+  //
+  // The formula bar and the cell editor show and take formulas in the
+  // display dialect (R1C1 when the workbook asks for it, function names in
+  // the host language); every journal, clipboard and object-model read
+  // stays canonical. The language follows the host's until set; each new
+  // engine is told once.
+  let formulaLang =
+    (typeof navigator !== "undefined" && navigator.language) || "en";
+  /** The dialect learned for one engine and workbook load: `canonical`
+   *  (A1, English) needs no engine call to translate. */
+  let dialectSeen: {
+    engine: SheetEngine;
+    epoch: number;
+    canonical: boolean;
+  } | null = null;
+  const englishLang = (tag: string) => !/^de\b/i.test(tag);
+  function dialectEngine(): SheetEngine | null {
+    const e = state.engine;
+    if (!e?.formulaToDisplay || !e.formulaFromDisplay || !e.formulaDisplay)
+      return null;
+    if (dialectSeen?.engine !== e || dialectSeen.epoch !== loadEpoch) {
+      let canonical = true;
+      try {
+        const r1c1 = e.formulaDisplay().r1c1;
+        // The engine starts in English; tell it only another language.
+        if (!englishLang(formulaLang)) e.setFormulaDisplay?.(r1c1, formulaLang);
+        canonical = !r1c1 && englishLang(formulaLang);
+      } catch (err) {
+        host.log.warn("formula display: engine refused the language", err);
+      }
+      dialectSeen = { engine: e, epoch: loadEpoch, canonical };
+    }
+    return e;
+  }
+  /** Canonical input → what the formula bar shows. */
+  function toDisplay(row: number, col: number, input: string): string {
+    const e = dialectEngine();
+    if (!e || dialectSeen?.canonical || !input.startsWith("=")) return input;
+    try {
+      return e.formulaToDisplay!(row, col, input);
+    } catch {
+      return input;
+    }
+  }
+  /** What the formula bar took → canonical input. */
+  function fromDisplay(row: number, col: number, input: string): string {
+    const e = dialectEngine();
+    if (!e || dialectSeen?.canonical || !input.startsWith("=")) return input;
+    try {
+      return e.formulaFromDisplay!(row, col, input);
+    } catch {
+      return input;
+    }
+  }
+
   function cachedRead<T>(key: string, read: () => T): T {
     if (readCache.has(key)) return readCache.get(key) as T;
     const v = read();
@@ -1823,7 +1908,11 @@ export function createWorkbookSession(
     if (!data.mayEdit(at.row, at.col)) return false;
     let text = "";
     try {
-      text = state.engine.getCellInput(state.activeSheet, at.row, at.col) ?? "";
+      text = toDisplay(
+        at.row,
+        at.col,
+        state.engine.getCellInput(state.activeSheet, at.row, at.col) ?? "",
+      );
     } catch {
       text = cellDisplay(at.row, at.col);
     }
@@ -1844,7 +1933,7 @@ export function createWorkbookSession(
     if (state.engine && sheet !== null) {
       // Sheet ADR 517 — protection and validation decide; a held-back
       // entry waits on its alert (Retry / Yes / OK reopen or apply it).
-      if (!data.enterTyped(sheet, row, col, text)) {
+      if (!data.enterTyped(sheet, row, col, fromDisplay(row, col, text))) {
         emitter.emit({ kind: "edit" });
         void submitInFrameGrid();
         return false;
@@ -3545,6 +3634,14 @@ export function createWorkbookSession(
 
   /** Make `engine` the session's workbook (a blank or CSV one): the old
    *  one is freed, placements and journal forgotten, persisted as an edit. */
+  /** The workbook's file name without its spreadsheet extension. */
+  function baseName(): string {
+    return (state.fileName ?? "workbook").replace(
+      /\.(xlsx|xlsm|xltx|xltm)$/i,
+      "",
+    );
+  }
+
   function adoptWorkbook(engine: SheetEngine, name: string): void {
     if (state.engine && state.engine !== engine) {
       try {
@@ -3557,6 +3654,7 @@ export function createWorkbookSession(
     forgetPlacements();
     loadEpoch += 1;
     state.engine = engine;
+    dialectEngine(); // learn the formula display while loading
     state.fileName = name;
     state.gridSelection = null;
     state.dataSource = null;
@@ -3657,6 +3755,7 @@ export function createWorkbookSession(
       // CELL("filename") reads the workbook's name (sheet ADR 516).
       state.engine.setDocumentName?.(name);
       loadEpoch += 1;
+      dialectEngine(); // learn the formula display while loading
       state.fileName = name;
       state.gridSelection = null;
       forgetPlacements(); // the prior placements belonged to the old workbook
@@ -3868,6 +3967,8 @@ export function createWorkbookSession(
       }
       state.fileName = name;
       readCache.clear();
+      dialectSeen = null; // the load reset the engine's formula language
+      dialectEngine();
       revision += 1;
       editJournal = [];
       journalCursor = 0;
@@ -4681,7 +4782,8 @@ export function createWorkbookSession(
         host.log.warn("editCell: no workbook / sheet");
         return false;
       }
-      if (!journaledSetCell(sheet, row, col, input)) return false;
+      if (!journaledSetCell(sheet, row, col, fromDisplay(row, col, input)))
+        return false;
       // The dirty cut recomputed in Rust; refresh the panel (it re-requests
       // the windowed scene on the next render).
       emitter.emit({
@@ -4697,7 +4799,7 @@ export function createWorkbookSession(
       const engine = state.engine;
       const sheet = state.activeSheet;
       if (!engine || sheet === null) return "";
-      return cachedRead(`input:${sheet}:${row}:${col}`, () => {
+      const input = cachedRead(`input:${sheet}:${row}:${col}`, () => {
         try {
           return engine.getCellInput(sheet, row, col) ?? "";
         } catch (err) {
@@ -4705,6 +4807,8 @@ export function createWorkbookSession(
           return "";
         }
       });
+      // The cache keeps the canonical input (the journal reads it too).
+      return toDisplay(row, col, input);
     },
 
     async copySelection() {
@@ -5328,6 +5432,7 @@ export function createWorkbookSession(
       loadEpoch += 1; // a new workbook: its version history starts here
       forgetPlacements();
       state.engine = engine;
+      dialectEngine(); // learn the formula display while loading
       state.activeSheet = 0;
       state.fileName = providerId;
       state.gridSelection = null;
@@ -5400,11 +5505,69 @@ export function createWorkbookSession(
       }
       try {
         const bytes = state.engine.saveXlsx();
-        const base = (state.fileName ?? "workbook").replace(/\.xlsx$/i, "");
-        return { bytes, fileName: `${base}.xlsx` };
+        const kind = state.engine.workbookKind?.() ?? "xlsx";
+        return { bytes, fileName: `${baseName()}.${kind}` };
       } catch (err) {
         host.log.error("saveWorkbook: engine save failed", err);
         return null;
+      }
+    },
+
+    saveWorkbookAs(kind) {
+      const e = state.engine;
+      if (!e) return null;
+      try {
+        const bytes = e.saveAs ? e.saveAs(kind) : e.saveXlsx();
+        return { bytes, fileName: `${baseName()}.${kind}` };
+      } catch (err) {
+        host.log.error(`saveWorkbookAs(${kind}) failed`, err);
+        return null;
+      }
+    },
+
+    exportCsv(opts) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.exportCsv || sheet === null) return null;
+      try {
+        const text = e.exportCsv(sheet, opts);
+        const sheetName =
+          e.listSheets().find((s) => s.id === sheet)?.name ?? "Sheet1";
+        const many = e.listSheets().length > 1;
+        const name = many ? `${baseName()} - ${sheetName}` : baseName();
+        return { bytes: csvBytes(text), fileName: `${name}.csv` };
+      } catch (err) {
+        host.log.error("exportCsv failed", err);
+        return null;
+      }
+    },
+
+    formulaDisplay() {
+      const e = dialectEngine();
+      if (!e?.formulaDisplay) return null;
+      try {
+        return e.formulaDisplay();
+      } catch {
+        return null;
+      }
+    },
+
+    setFormulaDisplay(opts) {
+      if (opts.lang !== undefined) formulaLang = opts.lang;
+      const e = dialectEngine();
+      if (!e?.setFormulaDisplay || !e.formulaDisplay) return false;
+      try {
+        const before = e.formulaDisplay().r1c1;
+        const r1c1 = opts.r1c1 ?? before;
+        e.setFormulaDisplay(r1c1, formulaLang);
+        dialectSeen = null; // learn it again
+        // The reference style lives in the workbook: an edit to save.
+        if (r1c1 !== before) markEdited();
+        emitter.emit();
+        return true;
+      } catch (err) {
+        host.log.warn("setFormulaDisplay failed", err);
+        return false;
       }
     },
 
@@ -5489,6 +5652,29 @@ export function createWorkbookSession(
         return;
       }
       adoptWorkbook(engine, "Book1.xlsx");
+    },
+
+    async importOds(bytes, name) {
+      let engine: SheetEngine;
+      try {
+        engine = await bootEmptyEngine();
+        state.bootError = null;
+      } catch (err) {
+        state.bootError = err instanceof Error ? err.message : ENGINE_NOT_BUILT;
+        host.log.warn("importOds: engine boot failed", err);
+        emitter.emit();
+        return;
+      }
+      const base = name.replace(/\.[^.]*$/, "");
+      try {
+        if (!engine.loadOds) throw new Error("engine wasm predates load_ods");
+        engine.loadOds(bytes);
+      } catch (err) {
+        host.log.error("OpenDocument import failed", err);
+        engine.dispose();
+        return;
+      }
+      adoptWorkbook(engine, `${base}.xlsx`);
     },
 
     async importCsv(text, name) {

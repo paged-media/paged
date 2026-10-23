@@ -26,7 +26,9 @@
 //! Isolation-clean: this mirrors the core wire shape as a plugin-local type
 //! (deserialized from the JSON the bundle forwards) — no core dependency.
 
-use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredRun};
+use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun};
+
+use crate::diff::Align;
 use serde::{Deserialize, Serialize};
 
 /// Plugin-local twin of the core `StoryContent` wire struct (camelCase JSON).
@@ -169,9 +171,17 @@ pub struct CellContentIn {
 /// at the start and at the end — goes into the run it starts in; the runs it
 /// covered further on lose their covered text. Run count and run properties
 /// stay, so `diff` reports run text edits that patch the cell's `<w:t>`s in
-/// place. A cell whose paragraph count changed, a table poured as text, or a
-/// cell that is not in the lowering is left as it was and reported in the
-/// returned ledger (structural cell edits are not saved back).
+/// place. A paragraph with no run that gains text gets one run.
+///
+/// A cell whose paragraph count changed on the canvas (paragraphs added or
+/// removed) is aligned paragraph by paragraph by text
+/// (`align_cell_paragraphs`, the alignment `diff` makes again): a kept
+/// paragraph is patched as above, an added one is a copy of its neighbour —
+/// the paragraph before it, or the one after it at the cell's start — with
+/// one run carrying its text, and a removed one is dropped (never the cell's
+/// last: Word requires it). `diff` turns these into cell paragraph clones
+/// and deletes. A table poured as text, or a cell that is not in the
+/// lowering, is left as it was and reported in the returned ledger.
 pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<String> {
     let mut skips = Vec::new();
     for c in cells {
@@ -193,16 +203,13 @@ pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<St
             skips.push(format!("block {}: no cell {}", c.block, c.cell));
             continue;
         };
-        let texts: Vec<&str> = c.text.split('\n').collect();
+        let texts: Vec<String> = c.text.split('\n').map(str::to_string).collect();
         if texts.len() != cell.paragraphs.len() {
-            skips.push(format!(
-                "block {} cell {}: its paragraphs were added or removed on the canvas; the cell keeps its Word text",
-                c.block, c.cell
-            ));
+            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts);
             continue;
         }
-        for (k, (p, new)) in cell.paragraphs.iter_mut().zip(texts).enumerate() {
-            if let Err(why) = patch_runs(&mut p.runs, new) {
+        for (k, (p, new)) in cell.paragraphs.iter_mut().zip(&texts).enumerate() {
+            if let Err(why) = patch_paragraph(p, new) {
                 skips.push(format!(
                     "block {} cell {} paragraph {k}: {why}",
                     c.block, c.cell
@@ -211,6 +218,72 @@ pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<St
         }
     }
     skips
+}
+
+/// Patch `new` into one cell paragraph's runs ([`patch_runs`]); a paragraph
+/// with no run that gains text gets one (`diff` adds it as a run).
+fn patch_paragraph(p: &mut LoweredParagraph, new: &str) -> Result<(), String> {
+    if p.runs.is_empty() && !new.is_empty() {
+        p.runs.push(LoweredRun {
+            text: new.to_string(),
+            ..Default::default()
+        });
+        return Ok(());
+    }
+    patch_runs(&mut p.runs, new)
+}
+
+/// A cell's paragraphs once the read-back `texts` (a different count) are
+/// aligned onto them — see [`overlay_cells`].
+fn restructure_cell(paras: &[LoweredParagraph], texts: &[String]) -> Vec<LoweredParagraph> {
+    let old: Vec<String> = paras
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
+        .collect();
+    let steps = crate::diff::align_cell_paragraphs(&old, texts);
+    let first_match = steps.iter().find_map(|s| match s {
+        Align::Match(b, _) => Some(*b),
+        _ => None,
+    });
+    let mut out: Vec<LoweredParagraph> = Vec::with_capacity(texts.len());
+    let mut anchor: Option<usize> = None;
+    for step in steps {
+        match step {
+            Align::Match(b, e) => {
+                anchor = Some(b);
+                let mut p = paras[b].clone();
+                // A run-less paragraph gains its run; `patch_runs` cannot fail
+                // otherwise.
+                let _ = patch_paragraph(&mut p, &texts[e]);
+                out.push(p);
+            }
+            Align::Del(_) => {}
+            Align::Ins(e) => {
+                let (from, last) = match (anchor, first_match) {
+                    (Some(a), _) => (&paras[a], true),
+                    (None, Some(f)) => (&paras[f], false),
+                    (None, None) => continue,
+                };
+                let run = if last {
+                    from.runs.last()
+                } else {
+                    from.runs.first()
+                };
+                out.push(LoweredParagraph {
+                    para_style_id: from.para_style_id.clone(),
+                    list: from.list,
+                    source_index: from.source_index,
+                    runs: vec![LoweredRun {
+                        text: texts[e].clone(),
+                        char_style_id: run.and_then(|r| r.char_style_id.clone()),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Two run lists carry the same styles in the same order once neighbouring
