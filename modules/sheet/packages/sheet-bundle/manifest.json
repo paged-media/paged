@@ -39,6 +39,8 @@
     ],
     "commands": [
       "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.exportCsv",
+      "media.paged.sheet.command.toggleR1C1",
       "media.paged.sheet.command.lowerToFrame",
       "media.paged.sheet.command.lowerChartToFrame",
       "media.paged.sheet.command.openGrid",
@@ -67,9 +69,14 @@
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
-      "media.paged.sheet.importer.csv"
+      "media.paged.sheet.importer.csv",
+      "media.paged.sheet.importer.ods"
     ],
-    "exporters": ["media.paged.sheet.exporter.xlsx"],
+    "exporters": [
+      "media.paged.sheet.exporter.xlsx",
+      "media.paged.sheet.exporter.xlsm",
+      "media.paged.sheet.exporter.csv"
+    ],
     "editContexts": [
       {
         "type": "sheet",
@@ -560,6 +567,87 @@
           },
           "result": {
             "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.importOds",
+          "title": "Import OpenDocument spreadsheet (.ods)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "bytes": {
+                "kind": "bytes",
+                "mime": ["application/vnd.oasis.opendocument.spreadsheet"]
+              },
+              "name": {
+                "kind": "text",
+                "default": "workbook.ods"
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.exportCsv",
+          "title": "Export a sheet as CSV",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text",
+                "optional": true
+              },
+              "range": {
+                "kind": "text",
+                "optional": true
+              },
+              "delimiter": {
+                "kind": "enum",
+                "members": [",", ";", "tab"],
+                "default": ","
+              },
+              "formatted": {
+                "kind": "bool",
+                "default": true
+              },
+              "bom": {
+                "kind": "bool",
+                "default": false
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.toggleR1C1",
+          "title": "R1C1 reference style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "r1c1": {
+                "kind": "bool",
+                "optional": true
+              },
+              "lang": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "r1c1": {
+                "kind": "bool"
+              },
+              "lang": {
+                "kind": "text"
+              }
+            }
           }
         },
         {

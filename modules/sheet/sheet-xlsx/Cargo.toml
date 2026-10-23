@@ -60,3 +60,10 @@ flate2.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true
 compact_str.workspace = true
+
+[features]
+default = ["ods"]
+# The OpenDocument spreadsheet import (`ods::ods_to_xlsx`, sheet ADR 521): on
+# by default; `default-features = false` drops it from a build that wants the
+# smallest wasm.
+ods = []

@@ -51,6 +51,7 @@ use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, 
 use sheet_xlsx::{XlsxChart, XlsxDocument};
 
 pub mod csv;
+pub mod files;
 mod fill;
 pub mod filter;
 mod format;
@@ -464,6 +465,9 @@ pub struct SheetSession {
     removed_charts: BTreeSet<u32>,
     /// Named filter views (criteria saved beside the workbook, ADR 517).
     filter_views: Vec<filter::FilterViewInfo>,
+    /// The language formulas are shown and typed in (sheet ADR 521); the
+    /// reference style is the workbook's own (`<calcPr refMode>`).
+    formula_lang: sheet_parser::dialect::FormulaLang,
 }
 
 /// The T0 cap on cells materialized by a single [`SheetSession::get_range_lowered`]
@@ -731,6 +735,7 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            formula_lang: Default::default(),
         }
     }
 
@@ -753,6 +758,11 @@ impl SheetSession {
             ..EngineConfig::default()
         };
         let mut doc = XlsxDocument::open(bytes).map_err(|e| SessionError(e.to_string()))?;
+        let template = doc.kind().is_template();
+        if template {
+            doc.set_kind(doc.kind().instantiated())
+                .map_err(|e| SessionError(e.to_string()))?;
+        }
         let mut model = std::mem::take(&mut doc.model);
         model.external_sheets = external_sheets(&doc.external_links);
 
@@ -860,7 +870,10 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            formula_lang: Default::default(),
         };
+        // A template opens as a new workbook (sheet ADR 521), unsaved.
+        session.structure_changed = template;
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
         Ok(session)
