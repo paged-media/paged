@@ -73,6 +73,15 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   saved and reloaded, SUBTOTAL 109 over collapsed rows, hidden columns and sheets, locked cells
   refused and unlocked ones accepted, allow flags, workbook structure, wrong passwords).
 
+- Data validation: `sheet-xlsx/src/parts/validation.rs` (the rule model, `sqref` arithmetic,
+  the write that keeps each untouched rule's element), `sheet-js/src/core/validation.rs`,
+  `sheet-calc/src/adhoc.rs` (`Engine::eval_formula_at` / `eval_formula_block_at` /
+  `eval_reference_at`: a formula evaluated as if it stood in a cell, nothing stored),
+  `sheet-conformance/tests/it/w2_validation.rs` (every kind, the three alert styles, inline and
+  dynamic lists, custom rules with the entry in place, Circle Invalid Data, authoring that moves
+  cells between rules, the round trip, the corpus workbook's own rules enforced and its zero-edit
+  save unchanged).
+
 ## Consequences
 
 The workbook panel's "preserved, not enforced" line for validations goes away when validation

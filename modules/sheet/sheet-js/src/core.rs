@@ -59,6 +59,7 @@ mod objects;
 mod ops;
 pub mod outline;
 pub mod protect;
+pub mod validation;
 pub use format::{
     EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };

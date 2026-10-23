@@ -50,4 +50,25 @@ describe.skipIf(!built)("W2 engine doors (real wasm)", () => {
     expect(() => e.addSheet!("New")).toThrow(/protected/);
     e.dispose();
   });
+
+  it("validates entries and lists dropdown items", async () => {
+    const e = await engine();
+    e.setValidation!(0, "A1:A3", { type: "list", listItems: ["Yes", "No"] });
+    expect(e.validationAt!(0, 1, 0)?.listItems).toEqual(["Yes", "No"]);
+    const bad = e.enterCell!(0, 0, 0, "Maybe");
+    expect(bad.applied).toBe(false);
+    expect(bad.alert?.style).toBe("stop");
+    expect(e.enterCell!(0, 0, 0, "no").applied).toBe(true);
+    e.setValidation!(0, "B1", {
+      type: "whole",
+      operator: "lessThan",
+      formula1: "10",
+      errorStyle: "warning",
+    });
+    expect(e.checkEntry!(0, 0, 1, "12").valid).toBe(false);
+    expect(e.enterCell!(0, 0, 1, "12", true).applied).toBe(true);
+    expect(e.invalidCells!(0)).toEqual([{ row: 0, col: 1, rule: 1 }]);
+    expect(e.listValidationRules!(0)).toHaveLength(2);
+    e.dispose();
+  });
 });
