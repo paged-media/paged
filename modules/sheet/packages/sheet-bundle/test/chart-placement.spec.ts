@@ -25,7 +25,7 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { chartBoxOnPage, type ChartPage } from "../src/lower-chart";
+import { chartBoxOnPage, followBox, type ChartPage } from "../src/lower-chart";
 import { selectionIsInView } from "../src/lower";
 
 // A Letter page with 36 pt margins: the margin box is 36..576 × 36..756.
@@ -147,5 +147,34 @@ describe("selectionIsInView [sheet.chart.engine]", () => {
     expect(
       selectionIsInView([{ selfId: "p12" }, { selfId: "p40" }], "p12", "p40"),
     ).toBe(true);
+  });
+});
+
+describe("followBox — a chart's box follows its art (ADR 522 amendment)", () => {
+  const box: [number, number, number, number] = [100, 50, 340, 410];
+  const art: [number, number, number, number] = [110, 60, 330, 400];
+
+  it("stands when the art has not moved", () => {
+    expect(followBox(box, art, [...art])).toBeNull();
+  });
+
+  it("moves with the art", () => {
+    expect(followBox(box, art, [150, 80, 370, 420])).toEqual([
+      140, 70, 380, 430,
+    ]);
+  });
+
+  it("scales with the art, about the art's own corner", () => {
+    // The art doubled in width and height from its top-left.
+    expect(followBox(box, art, [110, 60, 550, 740])).toEqual([
+      90, 40, 570, 760,
+    ]);
+  });
+
+  it("follows only the top-left of a label frame, which sizes itself", () => {
+    expect(followBox(box, art, [110, 60, 400, 500], false)).toBeNull();
+    expect(followBox(box, art, [120, 65, 400, 500], false)).toEqual([
+      110, 55, 350, 415,
+    ]);
   });
 });

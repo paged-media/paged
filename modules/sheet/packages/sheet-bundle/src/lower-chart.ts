@@ -96,6 +96,13 @@ export interface PlacedChart {
   /** The geometry it was drawn from (JSON) — a refresh re-lowers only when
    *  the chart's geometry actually changed. */
   geometryKey: string;
+  /** The element that carries the chart's binding (its first one), and its
+   *  page-space outline when the chart was drawn or last followed: a
+   *  refresh reads where that element stands now and moves (and scales)
+   *  `bounds` with it, so a chart moved on the page is redrawn where it
+   *  now is. Absent where the host named no element. */
+  anchor?: ElementId;
+  art?: [number, number, number, number];
 }
 
 /** The chart-frame size a placed chart is drawn at (unless its page cannot
@@ -179,6 +186,11 @@ export interface PlacedChartCopy extends ChartElements {
   chartIndex: number;
   /** The box its binding recorded (absent on charts placed before it was). */
   box?: [number, number, number, number];
+  /** The element carrying the binding, and the outline its binding recorded
+   *  for it when the chart was drawn (absent on charts drawn before it
+   *  was). */
+  anchor: ElementId;
+  art?: [number, number, number, number];
 }
 
 /**
@@ -202,15 +214,16 @@ export async function placedChartCopies(
     host.log.debug("placed charts: scene tree read failed", err);
     return [];
   }
-  const chartOf = (
-    n: Node,
-  ): { index: number; box?: [number, number, number, number] } | null => {
+  type Box = [number, number, number, number];
+  const chartOf = (n: Node): { index: number; box?: Box; art?: Box } | null => {
     const entry = n.pluginMetadata?.find((m) => m.key === BINDING_KEY);
     if (!entry) return null;
     try {
       const b = parseBinding(JSON.parse(entry.value));
       const m = /^chart:(\d+)$/.exec(b?.data.range ?? "");
-      return m ? { index: Number(m[1]), box: b?.data.box } : null;
+      return m
+        ? { index: Number(m[1]), box: b?.data.box, art: b?.data.art }
+        : null;
     } catch {
       return null;
     }
@@ -220,7 +233,11 @@ export async function placedChartCopies(
     for (const n of nodes) {
       const chart = n.id && n.id.kind !== "group" ? chartOf(n) : null;
       if (n.id && chart) {
-        const extra = chart.box ? { box: chart.box } : {};
+        const extra = {
+          anchor: n.id,
+          ...(chart.box ? { box: chart.box } : {}),
+          ...(chart.art ? { art: chart.art } : {}),
+        };
         if (parent?.id?.kind === "group") {
           const groupId = parent.id.id;
           if (!found.some((f) => f.groupId === groupId))
@@ -245,6 +262,96 @@ export async function placedChartCopies(
   };
   walk(roots, null);
   return found;
+}
+
+/** A page-space box `[top, left, bottom, right]` (pt). */
+type Box = [number, number, number, number];
+
+/** Where `ids` stand on the page: the page of the first one that has one,
+ *  and the page-space outline of them all (each element's bounds carried
+ *  through its composed item transform, so a moved or scaled group's
+ *  members read where they stand). Null when the read fails or no element
+ *  is on a page. */
+export async function elementsOutline(
+  host: BundleHost,
+  ids: readonly ElementId[],
+): Promise<{ pageId: PageId; bounds: Box } | null> {
+  if (ids.length === 0) return null;
+  let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
+  try {
+    geom = await host.document.elementGeometry([...ids]);
+  } catch {
+    return null;
+  }
+  const pageId = geom.find((g) => g?.pageId)?.pageId;
+  if (!pageId) return null;
+  let top = Infinity;
+  let left = Infinity;
+  let bottom = -Infinity;
+  let right = -Infinity;
+  for (const g of geom) {
+    if (!g?.bounds) continue;
+    const [t, l, b, r] = g.bounds;
+    const [a, bb, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    for (const [x, y] of [
+      [l, t],
+      [r, t],
+      [r, b],
+      [l, b],
+    ] as const) {
+      const px = a * x + c * y + tx;
+      const py = bb * x + d * y + ty;
+      top = Math.min(top, py);
+      bottom = Math.max(bottom, py);
+      left = Math.min(left, px);
+      right = Math.max(right, px);
+    }
+  }
+  return Number.isFinite(top)
+    ? { pageId, bounds: [top, left, bottom, right] }
+    : null;
+}
+
+/** How far a chart's art may drift (pt) before it counts as moved. */
+const FOLLOW_EPSILON_PT = 0.01;
+
+/**
+ * ADR 522 amendment — a chart's box carried along with its art: the art
+ * stood at `art` when the chart was drawn and stands at `live` now, so the
+ * box moves by the art's offset and, where the art has an extent on an
+ * axis, scales by its change of size on that axis. `scale: false` follows
+ * the art's top-left only (a label frame, which sizes itself to its text).
+ * Null when the art has not moved (the box stands).
+ */
+export function followBox(
+  box: Box,
+  art: Box,
+  live: Box,
+  scale = true,
+): Box | null {
+  const watched = scale ? [0, 1, 2, 3] : [0, 1];
+  if (watched.every((i) => Math.abs(art[i]! - live[i]!) <= FOLLOW_EPSILON_PT))
+    return null;
+  if (!scale) {
+    const dy = live[0] - art[0];
+    const dx = live[1] - art[1];
+    return [box[0] + dy, box[1] + dx, box[2] + dy, box[3] + dx];
+  }
+  const axis = (
+    lo: number,
+    hi: number,
+    artLo: number,
+    artHi: number,
+    liveLo: number,
+    liveHi: number,
+  ): [number, number] => {
+    const span = artHi - artLo;
+    const k = span > 1 ? (liveHi - liveLo) / span : 1;
+    return [liveLo + (lo - artLo) * k, liveLo + (hi - artLo) * k];
+  };
+  const [top, bottom] = axis(box[0], box[2], art[0], art[2], live[0], live[2]);
+  const [left, right] = axis(box[1], box[3], art[1], art[3], live[1], live[3]);
+  return [top, left, bottom, right];
 }
 
 /** The placed copies of chart `chartIndex` ({@link placedChartCopies}). */
@@ -496,7 +603,7 @@ export async function lowerChartToFrame(
   // landed NOTHING (measured: scene tree unchanged at 18 nodes). A failed
   // read mints nothing rather than gamble the batch; the art still lands,
   // unpainted. See `swatch-mints.ts`.
-  const { batch, texts } = chartGeometryToMutations(
+  const { batch, texts, art } = chartGeometryToMutations(
     geom,
     placement,
     binding,
@@ -521,6 +628,8 @@ export async function lowerChartToFrame(
   const withHandles: Mutation[] = [];
   const pours: Mutation[] = [];
   const members: ElementId[] = [];
+  // The first element created carries the binding (and is the `art`).
+  let anchorHandle: string | null = null;
   let label = 0;
   let path = 0;
   for (const op of ops) {
@@ -528,12 +637,14 @@ export async function lowerChartToFrame(
     if (op.op === "insertPath") {
       const handle = `p${path}`;
       path += 1;
+      anchorHandle ??= handle;
       withHandles.push({ op: "bindCreated", args: { handle } });
       members.push({ kind: "polygon", id: `$h:${handle}` });
       continue;
     }
     if (op.op !== "insertTextFrame") continue;
     const handle = `l${label}`;
+    anchorHandle ??= handle;
     const text: ChartTextLabel | undefined = texts[label];
     label += 1;
     withHandles.push({ op: "bindCreated", args: { handle } });
@@ -587,6 +698,10 @@ export async function lowerChartToFrame(
       ? (outcome.minted ?? []).map((m) => m.element)
       : [];
     const groupId = made.find((id) => id.kind === "group")?.id ?? null;
+    const minted = outcome.applied ? (outcome.minted ?? []) : [];
+    const anchor =
+      minted.find((m) => anchorHandle !== null && m.handle === anchorHandle)
+        ?.element ?? made.find((id) => id.kind !== "group");
     opts.onLowered({
       chartIndex,
       pageId,
@@ -595,6 +710,8 @@ export async function lowerChartToFrame(
       groupId: typeof groupId === "string" ? groupId : null,
       contentVersion,
       geometryKey: JSON.stringify(geom),
+      ...(anchor ? { anchor } : {}),
+      ...(anchor && art ? { art } : {}),
     });
   }
 

@@ -243,6 +243,42 @@ describe("sheet_frame_view_binding: v2 view, print, freeze, sizing (ADR 510)", (
     });
   });
 
+  it("a chart's art and a chain's record round-trip; a malformed one is dropped, never the binding", () => {
+    const chart = makeBinding("S", "chart:0", 1, undefined, {
+      box: [10, 20, 250, 380],
+      art: [10, 20, 250, 380],
+    });
+    expect(parseBinding(JSON.parse(JSON.stringify(chart)))).toEqual(chart);
+    expect(withView(chart, { view: { lock: true } }).data.art).toEqual([
+      10, 20, 250, 380,
+    ]);
+    const chain = makeBinding("S", "A1:A2", 0, undefined, {
+      chain: {
+        areas: ["A1:A2", "B3:B4"],
+        repeatHeaderRows: 1,
+        tables: [{ tableId: "t1", hash: "abcd0123", widths: [40, 60] }],
+      },
+    });
+    expect(parseBinding(JSON.parse(JSON.stringify(chain)))).toEqual(chain);
+    for (const bad of [
+      { repeatHeaderRows: -1, tables: [] },
+      { repeatHeaderRows: 0, tables: [{ tableId: 1, hash: "h", widths: [] }] },
+      {
+        repeatHeaderRows: 0,
+        tables: [{ tableId: "t", hash: "h", widths: ["x"] }],
+      },
+      { repeatHeaderRows: 0 },
+    ]) {
+      const b = parseBinding({
+        v: 2,
+        data: { ...chain.data, chain: bad, art: [1, 2, "3", 4] },
+      });
+      expect(b?.data.chain).toBeUndefined();
+      expect(b?.data.art).toBeUndefined();
+      expect(b?.data.range).toBe("A1:A2");
+    }
+  });
+
   it("rangeTopLeft strips sheet prefixes and dollar signs", () => {
     expect(rangeTopLeft("A1")).toBe("A1");
     expect(rangeTopLeft("'Q 3'!$b$2:$d$9")).toBe("B2");

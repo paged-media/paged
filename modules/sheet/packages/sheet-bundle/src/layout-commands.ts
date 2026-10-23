@@ -286,26 +286,30 @@ export function layoutCommands(
         session.setActiveSheet(sheet);
         session.setRange(ranges[0]!);
         if (chain === undefined) {
-          // One table per range, in order, each in its own frame: the first
-          // at the selection, each next one under the one before.
-          const frames: string[] = [];
-          for (const [i, range] of ranges.entries()) {
-            session.setRange(range);
-            const frame = await session.lowerSelection({
-              sizing,
-              ...(box
-                ? { boxPt: { widthPt: box.width, heightPt: box.height } }
-                : {}),
-              ...(view
-                ? { view: { ...view, ...(topLeft ? { topLeft } : {}) } }
-                : {}),
-              ...(print ? { print } : {}),
-              below: i > 0,
-            });
-            if (!frame) throw new Error(`could not place ${ref}`);
-            frames.push(`textFrame:${frame}`);
+          const one = {
+            sizing,
+            ...(box
+              ? { boxPt: { widthPt: box.width, heightPt: box.height } }
+              : {}),
+            ...(view
+              ? { view: { ...view, ...(topLeft ? { topLeft } : {}) } }
+              : {}),
+            ...(print ? { print } : {}),
+          };
+          if (ranges.length > 1) {
+            // One table per range, in order, each in its own frame under
+            // the one before: one document write, one undo step.
+            const ids = await session.placeAreas(ranges, one);
+            if (!ids) throw new Error(`could not place ${ref}`);
+            const frames = ids.map((id) => `textFrame:${id}`);
+            return { frame: frames[0]!, frames };
           }
-          return { frame: frames[0]!, frames };
+          const frame = await session.lowerSelection(one);
+          if (!frame) throw new Error(`could not place ${ref}`);
+          return {
+            frame: `textFrame:${frame}`,
+            frames: [`textFrame:${frame}`],
+          };
         }
         const frameId = frameIdOf(chain);
         const r = await session.paginateSelection({
