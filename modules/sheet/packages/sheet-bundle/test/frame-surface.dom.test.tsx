@@ -159,6 +159,7 @@ function fakeSession(shown: GridScene = scene) {
     documentSwatchColors: async (ids) =>
       new Map(ids.map((id) => [id, "#123456"] as [string, string])),
     documentStyleRevision: () => 0,
+    documentStyleLooks: async () => new Map(),
     documentStyleChoices: async () => ({
       paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
       swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
