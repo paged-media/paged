@@ -294,6 +294,7 @@ impl SheetSession {
             }
             plan
         };
+        self.guard_cells(plan.iter().map(|(r, c, _, _)| (sheet, *r, *c)))?;
 
         // ── formats first (Excel's fill carries them), where a target's
         //    style differs — a style-id swap, no recalc.

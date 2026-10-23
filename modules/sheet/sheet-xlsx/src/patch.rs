@@ -1014,22 +1014,30 @@ pub(crate) fn patch_worksheet(input: &PatchInput<'_>) -> Result<Option<Vec<u8>>,
                 }
             }
             None => {
-                // Added since: before the next child of its bucket that was
-                // read, else in schema position.
-                let next = items[i + 1..]
-                    .iter()
-                    .find(|n| n.anchor == c.anchor)
-                    .and_then(|n| n.span);
-                let at = match (next, c.anchor) {
-                    (Some((s, _)), _) => s,
-                    (None, crate::preserve::Anchor::BeforeSheetData) => {
-                        cols_span.map_or(sd.start, |s| s.start)
-                    }
-                    (None, crate::preserve::Anchor::AfterSheetData) => {
-                        let local = captured_local(&c.bytes);
-                        kids.iter()
-                            .find(|k| k.local == "extLst" && local != "extLst")
-                            .map_or(root_close, |k| k.start)
+                // Added since: before the first child the schema puts
+                // after it (ECMA-376 §18.3.1.99, `ws_child::ws_rank`), else
+                // before the root's end tag. A child of unknown rank goes
+                // before the next child of its bucket that was read.
+                let local = captured_local(&c.bytes);
+                let rank = crate::ws_child::ws_rank(&local);
+                let at = if rank < crate::ws_child::WS_ORDER.len() {
+                    kids.iter()
+                        .find(|k| crate::ws_child::ws_rank(&k.local) > rank)
+                        .map_or(root_close, |k| k.start)
+                } else {
+                    let next = items[i + 1..]
+                        .iter()
+                        .find(|n| n.anchor == c.anchor)
+                        .and_then(|n| n.span);
+                    match (next, c.anchor) {
+                        (Some((s, _)), _) => s,
+                        (None, crate::preserve::Anchor::BeforeSheetData) => {
+                            cols_span.map_or(sd.start, |s| s.start)
+                        }
+                        (None, crate::preserve::Anchor::AfterSheetData) => kids
+                            .iter()
+                            .find(|k| k.local == "extLst")
+                            .map_or(root_close, |k| k.start),
                     }
                 };
                 edits.push((at, at, c.bytes.clone()));

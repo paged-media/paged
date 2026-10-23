@@ -75,6 +75,7 @@ macro_rules! perf_count {
 }
 
 mod accel;
+pub mod adhoc;
 pub mod argview;
 pub mod dirty;
 pub mod eval;
