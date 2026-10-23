@@ -46,6 +46,7 @@ import {
   currentImportName,
   importReplaceAllowed,
   replaceDeclinedError,
+  type EditorScope,
 } from "@paged-media/shell";
 
 const M = defineMessages("app.pluginNativeDocument", {
@@ -73,6 +74,8 @@ const CORE_PARTS_PREFIX = "paged/core/";
  * is no client or the part is absent; `open` rejects with no client.
  */
 export function createEditorNativeDocumentBackend(
+  // The editor's scope: its replace question and its import session.
+  scope: EditorScope,
   getClient: () => CanvasClient | null,
   // Full-document open orchestration (loadDocumentFile-equivalent: load with
   // the default font, then setHandle + snapshot). Injected so an importer that
@@ -126,13 +129,13 @@ export function createEditorNativeDocumentBackend(
       // importer opens twice on the way (its own half-built document is
       // nothing the user could lose). The name is the file the user chose,
       // when the shell runs the import (File ▸ Open…, a drop, Open PDF…).
-      if (!importReplaceAllowed()) {
-        const name = currentImportName();
-        const proceed = await confirmReplace(client, {
+      if (!importReplaceAllowed(scope)) {
+        const name = currentImportName(scope);
+        const proceed = await confirmReplace(scope, client, {
           action: name ? t(M.opening, { name }) : t(M.openingImported),
         });
         if (!proceed) throw replaceDeclinedError();
-        allowImportReplace();
+        allowImportReplace(scope);
       }
       // Prefer the full shell orchestration so the opened document activates
       // in the view (setHandle + snapshot + default font). Fall back to the

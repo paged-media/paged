@@ -42,6 +42,8 @@
 // specific loses over most of the window and the copy cursor appears
 // only in the gaps.
 
+import { scoped, type EditorScope } from "./editor-scope";
+
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
   clientX: number;
@@ -70,11 +72,14 @@ const DRAG_THRESHOLD_PX = 4;
  *  dock re-layout mid-gesture. */
 const ARMED_ATTR = "data-paged-placement";
 
-let armed = false;
+/** The armed placement's cancel, per editor (null: none armed). */
+const ARMED = scoped("pendingPlacement", () => ({
+  cancel: null as (() => void) | null,
+}));
 
-/** True while a placement is waiting for its click. */
-export function placementArmed(): boolean {
-  return armed;
+/** True while a placement is waiting for its click in `scope`'s editor. */
+export function placementArmed(scope: EditorScope): boolean {
+  return scope.get(ARMED).cancel !== null;
 }
 
 /**
@@ -90,8 +95,10 @@ export function placementArmed(): boolean {
  * user believes they cancelled.
  */
 export function awaitPlacementPoint(
+  scope: EditorScope,
   options: PlacementOptions = {},
 ): Promise<PlacementPoint | null> {
+  const armed = scope.get(ARMED);
   return new Promise<PlacementPoint | null>((resolve) => {
     const root = document.documentElement;
     const previous = root.style.getPropertyValue("cursor");
@@ -105,7 +112,7 @@ export function awaitPlacementPoint(
     const finish = (value: PlacementPoint | null) => {
       if (settled) return;
       settled = true;
-      armed = false;
+      armed.cancel = null;
       root.removeAttribute(ARMED_ATTR);
       if (previous)
         root.style.setProperty("cursor", previous, previousPriority);
@@ -185,7 +192,7 @@ export function awaitPlacementPoint(
       finish(null);
     };
 
-    armed = true;
+    armed.cancel = () => finish(null);
     root.setAttribute(ARMED_ATTR, "armed");
     root.style.setProperty("cursor", "copy", "important");
     // Capture phase, so this wins the pointer before ViewportCanvas's
@@ -205,9 +212,8 @@ export function awaitPlacementPoint(
  *  Clicking those menu items already cancels — a click outside the
  *  canvas stands the placement down — but the KEYBOARD route reaches
  *  the command with the placement still armed. */
-export function cancelPendingPlacement(): void {
-  if (!armed) return;
-  // Escape is the same cancel this promise already understands, so the
-  // teardown lives in one place rather than two that can drift.
-  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+export function cancelPendingPlacement(scope: EditorScope): void {
+  // The same `finish(null)` Escape runs, so the teardown lives in one
+  // place rather than two that can drift.
+  scope.get(ARMED).cancel?.();
 }

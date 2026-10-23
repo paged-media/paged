@@ -32,7 +32,7 @@
 import type { OpenDocumentResult } from "@paged-media/plugin-api";
 import type { DocumentsBackend } from "@paged-media/plugin-sdk";
 import type { CanvasClient, DocumentHandle } from "@paged-media/client";
-import { confirmReplace } from "@paged-media/shell";
+import { confirmReplace, type EditorScope } from "@paged-media/shell";
 import { defineMessages, t } from "@paged-media/strings";
 
 export type { OpenDocumentResult };
@@ -69,7 +69,8 @@ function looksLikePackage(bytes: Uint8Array): boolean {
   return bytes.byteLength >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
-export function createEditorDocuments(): EditorDocuments {
+/** `scope` is the editor's: its replace question is asked. */
+export function createEditorDocuments(scope: EditorScope): EditorDocuments {
   let deps: DocumentsDeps | null = null;
   let busy = false;
 
@@ -94,7 +95,7 @@ export function createEditorDocuments(): EditorDocuments {
       busy = true;
       try {
         const name = request.name ?? t(M.untitled);
-        const proceed = await confirmReplace(client, {
+        const proceed = await confirmReplace(scope, client, {
           action: t(M.opening, { name }),
           requester: request.requester.name,
           documentName: name,

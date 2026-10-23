@@ -36,11 +36,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 
-import {
-  addressOfElement,
-  objectModelEditor,
-  objectRegistry,
-} from "./object-model";
+import { useEditorObjects, type EditorObjects } from "./object-model";
 import {
   chrome,
   color,
@@ -49,7 +45,14 @@ import {
   refusalText,
   status,
 } from "@paged-media/panel-kit";
-import { FocusScope } from "@paged-media/shell";
+import {
+  createValueStore,
+  FocusScope,
+  scoped,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+} from "@paged-media/shell";
 import { defineMessages, t as tr, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.coreCommandDialog", {
@@ -103,39 +106,38 @@ interface Pending {
   onDone?: (result: unknown) => void;
 }
 
-let pending: Pending | null = null;
-let seq = 0;
-const listeners = new Set<() => void>();
-const emit = () => {
-  for (const l of listeners) l();
-};
+/** The form's question, per editor (null: closed). */
+const DIALOG = scoped("coreCommandDialog", () => ({
+  seq: 0,
+  pending: createValueStore<Pending | null>(null),
+}));
 
-/** Open the form on a typed core command (`op` without the `core.`
+/** Open `scope`'s form on a typed core command (`op` without the `core.`
  *  prefix), or on the command picker when `op` is null. */
 export function openCoreCommand(
+  scope: EditorScope,
   op: string | null,
   prefill: Args = {},
   opts: { title?: string; onDone?: (result: unknown) => void } = {},
 ): void {
-  pending = { seq: ++seq, op, prefill, title: opts.title, onDone: opts.onDone };
-  emit();
+  const dialog = scope.get(DIALOG);
+  dialog.pending.set({
+    seq: ++dialog.seq,
+    op,
+    prefill,
+    title: opts.title,
+    onDone: opts.onDone,
+  });
 }
-
-function close(): void {
-  pending = null;
-  emit();
-}
-
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const current = () => pending;
 
 /** Run a typed core command directly (a panel button whose args are all
  *  known): ONE invoke = one undo step. Throws the refusal. */
-export function invokeCoreCommand(op: string, args: Args): Promise<unknown> {
-  return objectRegistry.invoke(`${CORE_COMMAND_PREFIX}${op}`, args);
+export function invokeCoreCommand(
+  objects: Pick<EditorObjects["registry"], "invoke">,
+  op: string,
+  args: Args,
+): Promise<unknown> {
+  return objects.invoke(`${CORE_COMMAND_PREFIX}${op}`, args);
 }
 
 // ------------------------------------------------------------ context
@@ -145,8 +147,8 @@ interface Ctx {
   caret: { storyId: string; start: number; end: number } | null;
 }
 
-function liveContext(): Ctx {
-  const editor = objectModelEditor() as unknown as {
+function liveContext(objects: EditorObjects): Ctx {
+  const editor = objects.editor() as unknown as {
     selection?: { elementSelection?: unknown[] };
     contentSelection?: {
       contentSelection?: Ctx["caret"];
@@ -156,7 +158,7 @@ function liveContext(): Ctx {
   const items: string[] = [];
   for (const id of editor?.selection?.elementSelection ?? []) {
     try {
-      items.push(addressOfElement(id as never));
+      items.push(objects.addressOfElement(id as never));
     } catch {
       /* an id the grammar cannot spell: not prefilled */
     }
@@ -282,12 +284,17 @@ const queryKindOf = (to: string): string => (to === "item" ? "frame" : to);
 // -------------------------------------------------------------- dialog
 
 export function CoreCommandDialog() {
-  const p = useSyncExternalStore(subscribe, current, current);
+  const { pending } = useScoped(DIALOG);
+  const p = useSyncExternalStore(pending.subscribe, pending.get, pending.get);
   return p ? <CommandForm key={p.seq} pending={p} /> : null;
 }
 
 function CommandForm({ pending: p }: { pending: Pending }) {
   const strings = useStrings();
+  const { pending: dialog } = useScoped(DIALOG);
+  const objects = useEditorObjects();
+  const objectRegistry = objects.registry;
+  const close = () => dialog.set(null);
   const [commands, setCommands] = useState<CommandInfo[] | null>(null);
   const [op, setOp] = useState<string | null>(p.op);
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -308,7 +315,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [objectRegistry]);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const info = useMemo(
@@ -331,7 +338,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     if (!info) return;
     const seedFields = Object.fromEntries(fields);
     const seed = {
-      ...contextPrefill(seedFields, liveContext()),
+      ...contextPrefill(seedFields, liveContext(objects)),
       ...(op === p.op ? p.prefill : {}),
     };
     setTexts(
@@ -370,11 +377,11 @@ function CommandForm({ pending: p }: { pending: Pending }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") dialog.set(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [dialog]);
 
   const run = async (): Promise<void> => {
     if (!op || !info) return;
@@ -397,7 +404,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     setBusy(true);
     setError(null);
     const failed = await attempt(async () => {
-      const result = await invokeCoreCommand(op, args);
+      const result = await invokeCoreCommand(objectRegistry, op, args);
       p.onDone?.(result);
       close();
     });
@@ -697,14 +704,19 @@ export function CoreCommandButton({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const scope = useEditorScope();
+  const objects = useEditorObjects();
   const click = async (): Promise<void> => {
     if (!args) {
-      openCoreCommand(op, prefill ?? {}, { title: title ?? label, onDone });
+      openCoreCommand(scope, op, prefill ?? {}, {
+        title: title ?? label,
+        onDone,
+      });
       return;
     }
     setBusy(true);
     const failed = await attempt(async () => {
-      const r = await invokeCoreCommand(op, args);
+      const r = await invokeCoreCommand(objects.registry, op, args);
       setError(null);
       onDone?.(r);
     });

@@ -41,6 +41,7 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  useEditorScope,
   printOutputFacts,
   useCanvasClient,
   useDocument,
@@ -119,6 +120,7 @@ function readiness(
 /** Export mode — LEFT panel: outputs navigation (kit ExportNavPanel).
  *  Status dots reflect real per-target readiness. */
 export function OutputsPanel(_props: PanelProps) {
+  const scope = useEditorScope();
   const strings = useStrings();
   const meta = useDocumentMeta();
   const loaded = meta != null && meta.pageCount > 0;
@@ -170,7 +172,7 @@ export function OutputsPanel(_props: PanelProps) {
                 data-output-live={t.live ? "" : undefined}
                 data-selected={sel || undefined}
                 checked={sel}
-                onChoose={() => setSelectedExportTarget(t.id)}
+                onChoose={() => setSelectedExportTarget(scope, t.id)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -354,6 +356,7 @@ async function imageExportPhase(
  *  ExportInspector). LIVE targets carry real inline settings + a real
  *  run action; HONEST targets carry the concept seam. */
 export function ExportInspectorPanel(_props: PanelProps) {
+  const scope = useEditorScope();
   const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
@@ -405,7 +408,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
               primary
               disabled={!loaded}
               testId="export-inspector-run"
-              onClick={() => notifyExportPdfDialog("open")}
+              onClick={() => notifyExportPdfDialog(scope, "open")}
             >
               <Icon name="ui-export" size={15} />{" "}
               {strings.t(M.exportTarget, { target: target.title })}
@@ -427,7 +430,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                   value={String(image.dpi)}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       dpi: Number(e.target.value) as 72 | 150 | 300,
                     })
                   }
@@ -443,7 +446,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                   value={image.format}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       format: e.target.value as "png" | "jpeg",
                     })
                   }
@@ -459,7 +462,9 @@ export function ExportInspectorPanel(_props: PanelProps) {
                     value={String(image.quality)}
                     disabled={!loaded}
                     onChange={(e) =>
-                      setImageSettings({ quality: Number(e.target.value) })
+                      setImageSettings(scope, {
+                        quality: Number(e.target.value),
+                      })
                     }
                   >
                     <option value="0.6">{strings.t(M.q60)}</option>
@@ -475,7 +480,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                   value={image.scope}
                   disabled={!loaded}
                   onChange={(e) =>
-                    setImageSettings({
+                    setImageSettings(scope, {
                       scope: e.target.value as "all" | "current" | "range",
                     })
                   }
@@ -496,7 +501,7 @@ export function ExportInspectorPanel(_props: PanelProps) {
                     value={image.range}
                     disabled={!loaded}
                     onChange={(e) =>
-                      setImageSettings({ range: e.target.value })
+                      setImageSettings(scope, { range: e.target.value })
                     }
                   />
                 </SettingRow>

@@ -24,7 +24,7 @@
 // registry. A row whose command is not registered is left out, so a solo
 // profile or a missing bundle never shows a dead entry.
 //
-// Opened with `openCanvasContextMenu(x, y)` (the app's right-click and
+// Opened with `openCanvasContextMenu(scope, x, y)` (the app's right-click and
 // Shift+F10 / the context-menu key); Radix's menu gives it the roles,
 // focus and keys (arrows, Enter, Escape, typeahead).
 
@@ -38,6 +38,12 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+import {
+  createValueStore,
+  scoped,
+  useEditorScope,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useOptionalPaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
@@ -53,32 +59,23 @@ export interface ContextMenuEntry {
   label?: string;
 }
 
-let at: { x: number; y: number } | null = null;
-const listeners = new Set<() => void>();
-const notify = () => {
-  for (const l of [...listeners]) l();
-};
-const store = {
-  subscribe(l: () => void) {
-    listeners.add(l);
-    return () => {
-      listeners.delete(l);
-    };
-  },
-  current: () => at,
-};
+/** Where the menu is open (client space), per editor; null: closed. */
+const MENU_AT = scoped("canvasContextMenu", () =>
+  createValueStore<{ x: number; y: number } | null>(null),
+);
 
-/** Open the context menu at a client-space point. */
-export function openCanvasContextMenu(x: number, y: number): void {
-  at = { x, y };
-  notify();
+/** Open `scope`'s context menu at a client-space point. */
+export function openCanvasContextMenu(
+  scope: EditorScope,
+  x: number,
+  y: number,
+): void {
+  scope.get(MENU_AT).set({ x, y });
 }
 
 /** Close it (no-op when closed). */
-export function closeCanvasContextMenu(): void {
-  if (!at) return;
-  at = null;
-  notify();
+export function closeCanvasContextMenu(scope: EditorScope): void {
+  scope.get(MENU_AT).set(null);
 }
 
 /** Whether a command's `when` holds against `state`. */
@@ -97,11 +94,9 @@ export function CanvasContextMenu({
   entries: readonly ContextMenuEntry[];
 }) {
   const strings = useStrings();
-  const point = useSyncExternalStore(
-    store.subscribe,
-    store.current,
-    store.current,
-  );
+  const scope = useEditorScope();
+  const store = scope.get(MENU_AT);
+  const point = useSyncExternalStore(store.subscribe, store.get, store.get);
   const registries = useRegistries();
   const commands = useRegistryView(registries.commands);
   const keybindings = useRegistryView(registries.keybindings);
@@ -133,7 +128,7 @@ export function CanvasContextMenu({
       open
       modal
       onOpenChange={(open) => {
-        if (!open) closeCanvasContextMenu();
+        if (!open) closeCanvasContextMenu(scope);
       }}
     >
       <DropdownMenuTrigger asChild>
@@ -165,7 +160,7 @@ export function CanvasContextMenu({
               disabled={!r.enabled}
               data-command={r.command}
               onSelect={() => {
-                closeCanvasContextMenu();
+                closeCanvasContextMenu(scope);
                 void registries.commands.invoke(r.command);
               }}
             >

@@ -68,6 +68,7 @@ import {
   type PagedEditor,
   type PendingReplace,
   attachReplacePromptSurface,
+  createEditorScope,
   replacePrompts,
   type RunResult,
   type ShellRegistries,
@@ -170,7 +171,8 @@ import {
   runAlign,
   type AlignKind,
 } from "../../src/align-plan";
-import { objectRegistry, setObjectModelEditor } from "../../src/object-model";
+import { editorObjectsOf } from "../../src/object-model";
+import type { ObjectRegistry } from "@paged-media/plugin-sdk";
 import {
   createEditorHostOptions,
   hostOptionsForPlugin,
@@ -189,6 +191,7 @@ import {
   createEditorSecretStore,
   type EditorSecretStore,
 } from "../../src/plugin-secret-store";
+import { pageDoorsOf } from "../../src/plugin-pages";
 import { createEditorDocuments } from "../../src/plugin-documents";
 import { createEditorNativeDocumentBackend } from "../../src/plugin-native-document";
 import {
@@ -198,12 +201,7 @@ import {
 import type { ModuleManifest } from "../../src/plugin-modules";
 import type { BundleWorkerModuleResolver } from "../../src/plugin-worker";
 import { PLUGIN_BUNDLES } from "../../src/plugin-bundle-table";
-import {
-  getProblemsSnapshot,
-  problemsSink,
-  resetProblems,
-  type ProblemEntry,
-} from "../../src/panels/problems-store";
+import { problemsOf, type ProblemEntry } from "../../src/panels/problems-store";
 
 // ------------------------------------------------------------------ fonts
 
@@ -533,7 +531,7 @@ export interface HeadlessEditorOptions {
 export interface HeadlessCanvasHandle extends CanvasHandleLike {
   client: CanvasClient;
   registries: ShellRegistries;
-  objects: typeof objectRegistry;
+  objects: ObjectRegistry;
   readonly handle: DocumentHandle | null;
   readonly elementSelection: ElementId[];
 }
@@ -549,7 +547,7 @@ export interface HeadlessEditor {
   readonly editor: PagedEditor;
   readonly state: HeadlessState;
   /** The app's object registry (`host.objects`, `editor.get/set/…`). */
-  readonly objects: typeof objectRegistry;
+  readonly objects: ObjectRegistry;
   /** The `__canvas` handle (also published on `globalThis.__canvas`). */
   readonly canvas: HeadlessCanvasHandle;
   /** `paged.*` / `editor.*` / `demo.*`, as a demo script sees them. */
@@ -672,10 +670,6 @@ let live: HeadlessEditor | null = null;
 export async function createHeadlessEditor(
   options: HeadlessEditorOptions = {},
 ): Promise<HeadlessEditor> {
-  // A new editor is a new app: the Problems store is module-scoped only
-  // because every editor of a test file shares one process, so the last
-  // editor's reports go, also for an editor that never loads a document.
-  resetProblems();
   const engines = await headlessEngineModule();
   const worker = createEngineWorker(engines.create(), {
     gestureReader: (buffer) => new GestureBuffer(buffer),
@@ -692,6 +686,11 @@ export async function createHeadlessEditor(
   });
   const state = headlessState();
   const opened: HeadlessEditor["opened"] = [];
+  // The editor's own scope: its object registry, its replace question,
+  // its view toggles, as one mounted editor has (plan task E1).
+  const scope = createEditorScope();
+  const objectRegistry = editorObjectsOf(scope).registry;
+  const problemsSink = problemsOf(scope);
 
   let editor!: PagedEditor;
   // The keybinding registry listens on `window` from birth. Headlessly it
@@ -801,17 +800,12 @@ export async function createHeadlessEditor(
       return state.editContext;
     },
     registries,
+    scope,
   } as unknown as PagedEditor;
 
   // The object registry reads the editor lazily and arms the Boa host
-  // bridge on the client (main.tsx: setObjectModelEditor(paged)).
-  setObjectModelEditor(editor as unknown as ContractEditor);
-  // The registry is a module singleton (one per app) and its core seam
-  // subscribes to the FIRST client it meets; the app has one client per
-  // page life, a test process has one per editor. Release the previous
-  // editor's subscription so the seam follows this one.
-  objectRegistry.core?.dispose();
-  objectRegistry.core?.invalidate();
+  // bridge on the client (mount.tsx: `objects.setEditor(paged)`).
+  editorObjectsOf(scope).setEditor(editor as unknown as ContractEditor);
 
   const setSelection = async (ids: ElementId[]) => {
     const applied = await client.setElementSelection(ids, "replace");
@@ -986,7 +980,7 @@ export async function createHeadlessEditor(
         ),
     },
   ];
-  setAssistantOpener(() => {
+  setAssistantOpener(scope, () => {
     opened.push({ kind: "assistant" });
   });
   const aiCommands = [
@@ -996,7 +990,7 @@ export async function createHeadlessEditor(
       category: "Assistant",
       args: { kind: "text" } as const,
       handler: (_paged: unknown, payload?: unknown) => {
-        openAssistant({
+        openAssistant(scope, {
           view: "ask",
           draft: String(payload ?? ""),
           autoRun: false,
@@ -1018,7 +1012,7 @@ export async function createHeadlessEditor(
       setStatus: status,
     }),
     buildExportAseCommand({ setStatus: status }),
-    buildNewFromBriefCommand(() => openAssistant({ view: "brief" })),
+    buildNewFromBriefCommand(() => openAssistant(scope, { view: "brief" })),
     buildExportPdfCommand(),
   ];
   const registrations = [
@@ -1058,7 +1052,7 @@ export async function createHeadlessEditor(
     state.document.resetForNewDocument();
     state.document.setHandle(handle);
     state.contentSelection.setContentSelection(null);
-    resetProblems();
+    problemsSink.reset();
     return handle;
   };
   // A document the engine loaded on its own (File ▸ New, a plugin's
@@ -1103,7 +1097,7 @@ export async function createHeadlessEditor(
   });
   const consent = createEditorConsentBackend({ identity });
   const secrets = createEditorSecretStore();
-  const documents = createEditorDocuments();
+  const documents = createEditorDocuments(scope);
   documents.attach({
     getClient: () => client,
     openBytes: (bytes) => ed.load(bytes),
@@ -1135,6 +1129,7 @@ export async function createHeadlessEditor(
     secrets: secrets.backend,
     documents: documents.backend,
     nativeDocument: createEditorNativeDocumentBackend(
+      scope,
       () => client,
       async (bytes) => {
         await ed.load(bytes);
@@ -1144,6 +1139,7 @@ export async function createHeadlessEditor(
     willSave,
     objects: objectRegistry,
     diagnosticsSink: problemsSink,
+    pages: pageDoorsOf(scope),
   });
   const hostApp: HeadlessHostApp = {
     identity,
@@ -1153,8 +1149,8 @@ export async function createHeadlessEditor(
     documents,
     systemClipboard,
     replace: {
-      attach: attachReplacePromptSurface,
-      current: () => replacePrompts.current(),
+      attach: () => attachReplacePromptSurface(scope),
+      current: () => replacePrompts(scope).current(),
     },
     willSave,
     workerResolvers,
@@ -1193,7 +1189,8 @@ export async function createHeadlessEditor(
     },
     script: (source) => client.executeScript(source),
     runDemo: (source) => runDemoScript(source, automation),
-    invokeCore: (op, args) => invokeCoreCommand(op, args as never),
+    invokeCore: (op, args) =>
+      invokeCoreCommand(objectRegistry, op, args as never),
     hostApp,
     host(manifest = {}) {
       const full = { ...DEFAULT_MANIFEST, ...manifest } as PluginManifest;
@@ -1256,7 +1253,7 @@ export async function createHeadlessEditor(
       await worker.idle();
       return event.defaultPrevented;
     },
-    problems: () => getProblemsSnapshot(),
+    problems: () => problemsSink.snapshot(),
     idle: () => worker.idle(),
     async dispose() {
       unsubscribe();
@@ -1268,11 +1265,11 @@ export async function createHeadlessEditor(
         }
       }
       for (const r of registrations) r.dispose();
-      setAssistantOpener(null);
+      setAssistantOpener(scope, null);
+      objectRegistry.core?.dispose();
+      editorObjectsOf(scope).setEditor(null);
       if (live === ed) {
         live = null;
-        objectRegistry.core?.dispose();
-        setObjectModelEditor(null);
         delete (globalThis as { __canvas?: unknown }).__canvas;
       }
       client.dispose();

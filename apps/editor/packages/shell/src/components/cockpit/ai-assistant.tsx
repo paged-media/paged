@@ -41,17 +41,15 @@ import { createStrings, useStrings, type Strings } from "@paged-media/strings";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
 
 import {
-  dismissAssistantRun,
-  getAssistantState,
-  setAssistantDraft,
-  setAssistantView,
-  startAssistantRun,
-  stopAssistantRun,
-  subscribeAssistant,
-  takeAssistantAutoRun,
-  undoAssistantRun,
+  assistantSession,
   type AssistantStep,
 } from "../../ai/assistant-session";
+import {
+  createValueStore,
+  scoped,
+  useEditorScope,
+  useScoped,
+} from "../../state/editor-scope";
 import { PoweredByClaude } from "../../ai/powered-by-claude";
 import { aiUnavailableText, useAiAvailability } from "../../ai/availability";
 import {
@@ -153,6 +151,16 @@ function issueList(strings: Strings, issues: readonly Issue[]): string {
 }
 
 export function AIAssistant() {
+  const {
+    dismissAssistantRun,
+    getAssistantState,
+    setAssistantView,
+    startAssistantRun,
+    stopAssistantRun,
+    subscribeAssistant,
+    takeAssistantAutoRun,
+    undoAssistantRun,
+  } = assistantSession(useEditorScope());
   const strings = useStrings();
   const client = useCanvasClient();
   const editor = useOptionalPaged();
@@ -236,6 +244,7 @@ export function AIAssistant() {
       });
     },
     [
+      startAssistantRun,
       client,
       context,
       running,
@@ -271,7 +280,7 @@ export function AIAssistant() {
     if (!session.autoRun || !hasDocument || running) return;
     const request = takeAssistantAutoRun();
     if (request) ask(request);
-  }, [session.autoRun, hasDocument, running, ask]);
+  }, [session.autoRun, hasDocument, running, ask, takeAssistantAutoRun]);
 
   return (
     <div
@@ -478,6 +487,7 @@ function AskView({
   running: boolean;
   onAsk: (text: string) => void;
 }) {
+  const { setAssistantDraft } = assistantSession(useEditorScope());
   const strings = useStrings();
   // F-25 (PN-355): with no AI service, say so before a request is made.
   const offline = useAiAvailability() === "unavailable";
@@ -619,8 +629,10 @@ function BriefView({
   canBuild: boolean;
   onBuild: (brief: string, sizeId: string) => void;
 }) {
+  const { setAssistantDraft } = assistantSession(useEditorScope());
   const strings = useStrings();
-  const sizeId = useSyncExternalStore(subscribeSize, getSize);
+  const briefSize = useScoped(BRIEF_SIZE);
+  const sizeId = useSyncExternalStore(briefSize.subscribe, briefSize.get);
   return (
     <div
       data-new-from-brief
@@ -655,7 +667,7 @@ function BriefView({
         </span>
         <select
           value={sizeId}
-          onChange={(e) => setSize(e.target.value)}
+          onChange={(e) => briefSize.set(e.target.value)}
           disabled={running}
           data-brief-size
           style={select}
@@ -682,15 +694,6 @@ function BriefView({
   );
 }
 
-// The page size survives the panel being hidden, like the rest of the session.
-let size = "a4";
-const sizeListeners = new Set<() => void>();
-const getSize = () => size;
-const subscribeSize = (l: () => void) => {
-  sizeListeners.add(l);
-  return () => sizeListeners.delete(l);
-};
-const setSize = (next: string) => {
-  size = next;
-  for (const l of sizeListeners) l();
-};
+// The page size survives the panel being hidden, like the rest of the
+// session: the editor's (plan task E1).
+const BRIEF_SIZE = scoped("assistantBriefSize", () => createValueStore("a4"));

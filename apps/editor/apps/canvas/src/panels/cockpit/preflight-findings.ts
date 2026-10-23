@@ -27,19 +27,25 @@
 // (the packages/client gap is closed), so the Preflight panel feeds
 // this store directly from the export's resolved value via
 // `recordFindings(...)` — the W2.12 broadcast-capture workaround is
-// gone. A module-level store still lets the Preflight panel (which runs
-// the export) and the Publication-health panel (which reflects the last
-// run's counts) read the SAME findings without re-exporting; only the
-// `documentLoaded` RESET still rides the broadcast (it has no typed
-// return to hang off).
+// gone. A store in the editor's scope (plan task E1) still lets the
+// Preflight panel (which runs the export) and the Publication-health
+// panel (which reflects the last run's counts) read the SAME findings
+// without re-exporting; only the `documentLoaded` RESET still rides the
+// broadcast (it has no typed return to hang off).
 //
-// One CanvasClient exists per app, so a singleton store is sufficient;
-// it resets on `documentLoaded` so stale findings never bleed across
-// documents.
+// One CanvasClient exists per editor, so one store per editor is
+// sufficient; it resets on `documentLoaded` so stale findings never bleed
+// across documents.
 
 import { useSyncExternalStore } from "react";
 
 import type { CanvasClient, PreflightFinding } from "@paged-media/client";
+import {
+  createValueStore,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "@paged-media/shell";
 
 export interface PreflightFindingsState {
   /** `null` until the first export of the current document completes. */
@@ -58,59 +64,46 @@ const EMPTY: PreflightFindingsState = {
   runCount: 0,
 };
 
-let state: PreflightFindingsState = EMPTY;
-const listeners = new Set<() => void>();
-const wired = new WeakSet<CanvasClient>();
-
-function emit(next: PreflightFindingsState): void {
-  state = next;
-  for (const l of listeners) l();
-}
+const FINDINGS = scoped("preflightFindings", () => ({
+  store: createValueStore<PreflightFindingsState>(EMPTY),
+  wired: new WeakSet<CanvasClient>(),
+}));
 
 /** Record the findings from an export's TYPED return. The Preflight
  *  panel calls this with the resolved value of `client.exportPdf(...)`
  *  — the structured findings + legacy diagnostics in one shot, no
  *  broadcast capture. Bumps `runCount` so consumers tell "ran but
  *  found nothing" from "never ran". */
-export function recordFindings(result: {
-  findings: PreflightFinding[];
-  diagnostics: string[];
-}): void {
-  emit({
+export function recordFindings(
+  scope: EditorScope,
+  result: {
+    findings: PreflightFinding[];
+    diagnostics: string[];
+  },
+): void {
+  const { store } = scope.get(FINDINGS);
+  store.set({
     findings: result.findings ?? [],
     diagnostics: result.diagnostics ?? [],
-    runCount: state.runCount + 1,
+    runCount: store.get().runCount + 1,
   });
 }
 
-/** Subscribe a client's broadcast once so its `documentLoaded` reply
- *  resets the store across documents. Idempotent per client. (The
- *  findings themselves now arrive via `recordFindings` off the typed
- *  export return, not the broadcast.) */
-function ensureWired(client: CanvasClient): void {
-  if (wired.has(client)) return;
-  wired.add(client);
-  client.subscribe((msg) => {
-    if (msg.kind === "documentLoaded") {
-      emit(EMPTY);
-    }
-  });
-}
-
-/** Live last-export findings for the given client. Re-renders the
- *  caller whenever a fresh export reply (or a document load) lands. */
+/** Live last-export findings of this component's editor. Re-renders the
+ *  caller whenever a fresh export reply (or a document load) lands. The
+ *  client's broadcast is subscribed once, so its `documentLoaded` reply
+ *  resets the store across documents. */
 export function usePreflightFindings(
   client: CanvasClient,
 ): PreflightFindingsState {
-  ensureWired(client);
-  return useSyncExternalStore(
-    (onChange) => {
-      listeners.add(onChange);
-      return () => listeners.delete(onChange);
-    },
-    () => state,
-    () => state,
-  );
+  const { store, wired } = useScoped(FINDINGS);
+  if (!wired.has(client)) {
+    wired.add(client);
+    client.subscribe((msg) => {
+      if (msg.kind === "documentLoaded") store.set(EMPTY);
+    });
+  }
+  return useSyncExternalStore(store.subscribe, store.get, store.get);
 }
 
 /** Severity rollup for the health tiles — `error` and `warning`

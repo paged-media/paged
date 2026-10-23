@@ -32,14 +32,13 @@
 // failed the working space, and Health warned "No output intent" while
 // Export read "Ready · PDF 1.7".
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 import type { CanvasClient } from "@paged-media/client";
 
 import { PrepressToolbar } from "../../src/cockpit/toolbars";
 import { DocumentMapPanel } from "../../src/panels/cockpit/document-map-panel";
 import { ExportCenterPanel } from "../../src/panels/cockpit/export-center-panel";
-import { setSelectedExportTarget } from "../../src/panels/cockpit/export-targets";
 import { ExportInspectorPanel } from "../../src/panels/cockpit/export-views";
 import { OutputReadinessPanel } from "../../src/panels/cockpit/mode-inspectors";
 import { PublicationHealthPanel } from "../../src/panels/cockpit/publication-health-panel";
@@ -51,7 +50,6 @@ import {
   PRESS_PROFILE,
 } from "./support/cockpit";
 
-beforeEach(() => setSelectedExportTarget("pdf-x4"));
 afterEach(unmountAll);
 
 type H = PanelHarness<unknown>;

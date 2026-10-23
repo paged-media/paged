@@ -31,6 +31,7 @@ import {
   saveModeUiState,
 } from "../../src/cockpit/cockpit-persistence";
 import { setChromeStorageScope } from "../../src/state/chrome-storage-scope";
+import { createEditorScope } from "../../src/state/editor-scope";
 import { memoryStorage, type MemoryStorage } from "./memory-storage";
 
 const KEY = "paged.cockpit.v1";
@@ -38,6 +39,7 @@ const DEBOUNCE_MS = 300;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 let ls: MemoryStorage;
+let scope = createEditorScope();
 
 /** The module reads `window.localStorage` and `window.setTimeout`; a
  *  window whose storage getter can be made to throw (blocked storage). */
@@ -53,20 +55,19 @@ function installWindow(storage: () => Storage) {
 
 beforeEach(() => {
   ls = memoryStorage();
+  scope = createEditorScope();
   installWindow(() => ls);
-  setChromeStorageScope("");
 });
 afterEach(async () => {
   // Let a debounced write from the test land before the next one starts.
   await wait(DEBOUNCE_MS + 20);
   unstubAllGlobals();
-  setChromeStorageScope("");
 });
 
 describe("setting paged.cockpit.v1", () => {
   test("default: nothing stored → an empty store (each mode seeds from its slots)", () => {
     covers("setting:paged.cockpit.v1");
-    expect(loadCockpitStore()).toEqual({});
+    expect(loadCockpitStore(scope)).toEqual({});
   });
 
   test("a mode's tabs persist after the debounce and load back (a reload)", async () => {
@@ -75,13 +76,13 @@ describe("setting paged.cockpit.v1", () => {
       rightTabs: ["paged.properties", "paged.swatches"],
       activeTab: "paged.swatches",
     };
-    const next = saveModeUiState({}, "design", state);
+    const next = saveModeUiState(scope, {}, "design", state);
     expect(next).toEqual({ design: state });
     // Debounced: nothing yet.
     expect(ls.getItem(KEY)).toBeNull();
     await wait(DEBOUNCE_MS + 50);
     expect(JSON.parse(ls.getItem(KEY)!)).toEqual({ design: state });
-    expect(loadCockpitStore()).toEqual({ design: state });
+    expect(loadCockpitStore(scope)).toEqual({ design: state });
   });
 
   test("changes inside the debounce window coalesce into one write of the latest", async () => {
@@ -92,15 +93,15 @@ describe("setting paged.cockpit.v1", () => {
       writes++;
       setItem(k, v);
     };
-    let store = saveModeUiState({}, "design", {
+    let store = saveModeUiState(scope, {}, "design", {
       rightTabs: ["a"],
       activeTab: "a",
     });
-    store = saveModeUiState(store, "design", {
+    store = saveModeUiState(scope, store, "design", {
       rightTabs: ["a", "b"],
       activeTab: "b",
     });
-    store = saveModeUiState(store, "prepress", {
+    store = saveModeUiState(scope, store, "prepress", {
       rightTabs: ["p"],
       activeTab: "p",
     });
@@ -122,7 +123,7 @@ describe("setting paged.cockpit.v1", () => {
       KEY,
       JSON.stringify({ data: { rightTabs: ["x"], activeTab: "x" } }),
     );
-    expect(loadCockpitStore()).toEqual({
+    expect(loadCockpitStore(scope)).toEqual({
       data: { rightTabs: ["x"], activeTab: "x" },
     });
     expect(ls.keys().sort()).toEqual([KEY, "paged.theme"]);
@@ -136,9 +137,12 @@ describe("setting paged.cockpit.v1", () => {
         design: { rightTabs: ["editor"], activeTab: "editor" },
       }),
     );
-    setChromeStorageScope(".solo.paged.draw");
-    expect(loadCockpitStore()).toEqual({});
-    saveModeUiState({}, "design", { rightTabs: ["draw"], activeTab: "draw" });
+    setChromeStorageScope(scope, ".solo.paged.draw");
+    expect(loadCockpitStore(scope)).toEqual({});
+    saveModeUiState(scope, {}, "design", {
+      rightTabs: ["draw"],
+      activeTab: "draw",
+    });
     await wait(DEBOUNCE_MS + 50);
     expect(JSON.parse(ls.getItem(`${KEY}.solo.paged.draw`)!)).toEqual({
       design: { rightTabs: ["draw"], activeTab: "draw" },
@@ -152,7 +156,10 @@ describe("setting paged.cockpit.v1", () => {
     covers("setting:paged.cockpit.v1");
     for (const raw of ["{not json", "5", "null", '"text"', "true"]) {
       ls.setItem(KEY, raw);
-      expect({ raw, store: loadCockpitStore() }).toEqual({ raw, store: {} });
+      expect({ raw, store: loadCockpitStore(scope) }).toEqual({
+        raw,
+        store: {},
+      });
     }
   });
 
@@ -161,9 +168,11 @@ describe("setting paged.cockpit.v1", () => {
     installWindow(() => {
       throw new Error("SecurityError");
     });
-    expect(loadCockpitStore()).toEqual({});
+    expect(loadCockpitStore(scope)).toEqual({});
     const state = { rightTabs: ["a"], activeTab: "a" };
-    expect(saveModeUiState({}, "review", state)).toEqual({ review: state });
+    expect(saveModeUiState(scope, {}, "review", state)).toEqual({
+      review: state,
+    });
     await wait(DEBOUNCE_MS + 50);
   });
 
@@ -173,7 +182,9 @@ describe("setting paged.cockpit.v1", () => {
       throw new Error("QuotaExceededError");
     };
     const state = { rightTabs: ["a"], activeTab: "a" };
-    expect(saveModeUiState({}, "export", state)).toEqual({ export: state });
+    expect(saveModeUiState(scope, {}, "export", state)).toEqual({
+      export: state,
+    });
     await wait(DEBOUNCE_MS + 50);
     expect(ls.getItem(KEY)).toBeNull();
   });

@@ -37,6 +37,12 @@ import { Icon } from "../icons";
 import { paletteScore } from "./palette-score";
 import type { CommandContribution, CommandRegistry } from "../registries";
 import { useRegistries } from "../state/registries-context";
+import {
+  createEmitter,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
@@ -45,20 +51,18 @@ import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
 import { categoryLabel, PALETTE } from "./messages";
 
 /**
- * Module-level event emitter for the palette's open/toggle state.
- * Listeners are the mounted palette components; emitters are
- * registered commands (`paged.palette.toggle`, `…open`, `…close`)
- * + the keybinding registry that routes Cmd+K through them.
- *
- * Module scope so external command handlers can fire the toggle
+ * The palette's open/toggle event, one per editor (plan task E1).
+ * The listener is the mounted palette; emitters are registered commands
+ * (`paged.palette.toggle`, …) and the keybinding registry that routes
+ * Cmd+K through them, which reach it through their editor's scope
  * without crossing the React context boundary.
  */
 type PaletteAction = "toggle" | "open" | "close";
-const listeners = new Set<(action: PaletteAction) => void>();
+const PALETTE_EVENT = scoped("palette", () => createEmitter<PaletteAction>());
 
-/** Emit a palette action. Idempotent — safe to call from anywhere. */
-export function notifyPalette(action: PaletteAction): void {
-  for (const fn of listeners) fn(action);
+/** Emit a palette action in `scope`'s editor. Idempotent. */
+export function notifyPalette(scope: EditorScope, action: PaletteAction): void {
+  scope.get(PALETTE_EVENT).emit(action);
 }
 
 /** Recently-run command ids, most recent first. */
@@ -171,21 +175,20 @@ export function CommandPalette() {
   const workflowMode = useOptionalWorkflowMode();
   const [recents, setRecents] = useState<string[]>(loadRecents);
 
-  useEffect(() => {
-    const handler = (action: PaletteAction) => {
-      if (action === "toggle") {
-        setOpen((v) => !v);
-      } else if (action === "open") {
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
-    };
-    listeners.add(handler);
-    return () => {
-      listeners.delete(handler);
-    };
-  }, []);
+  const palette = useScoped(PALETTE_EVENT);
+  useEffect(
+    () =>
+      palette.subscribe((action) => {
+        if (action === "toggle") {
+          setOpen((v) => !v);
+        } else if (action === "open") {
+          setOpen(true);
+        } else {
+          setOpen(false);
+        }
+      }),
+    [palette],
+  );
 
   // Fresh query each open so the zero-state groups show.
   useEffect(() => {

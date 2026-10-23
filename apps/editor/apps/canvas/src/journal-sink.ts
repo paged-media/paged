@@ -251,11 +251,16 @@ export function exportJournalBundle(options: JournalExportOptions = {}): void {
 let workerEpochMs: number | null = null;
 let drainer: (() => Promise<JournalDrain | null>) | null = null;
 
-/** Registered once by the app, when it has a client to drain through. */
+/** Registered by an editor, when it has a client to drain through. The
+ *  journal is the page's; the last editor to register is drained. Returns
+ *  the unregister (a no-op once another editor registered). */
 export function setJournalDrainer(
-  fn: (() => Promise<JournalDrain | null>) | null,
-): void {
+  fn: () => Promise<JournalDrain | null>,
+): () => void {
   drainer = fn;
+  return () => {
+    if (drainer === fn) drainer = null;
+  };
 }
 
 /** Fold one drain into the shell ring. Safe to call with `null` — a failed or
@@ -309,10 +314,15 @@ export async function exportJournalBundleAsync(
 let documentShapeProvider: (() => BundleDocumentShape | undefined) | null =
   null;
 
+/** The last editor to register provides the shape; returns the
+ *  unregister (a no-op once another editor registered). */
 export function setDocumentShapeProvider(
-  fn: (() => BundleDocumentShape | undefined) | null,
-): void {
+  fn: () => BundleDocumentShape | undefined,
+): () => void {
   documentShapeProvider = fn;
+  return () => {
+    if (documentShapeProvider === fn) documentShapeProvider = null;
+  };
 }
 
 /** `undefined` when no document is open — the checkbox then adds nothing, and

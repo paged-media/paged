@@ -1,0 +1,75 @@
+{
+  "description": "Module-level mutable state that stays at module scope in apps/canvas/src and packages/shell/src, one reason per name (scripts/instance-guard.mjs; docs/composable-editor-plan.md, E1). Everything an editor keeps lives in its instance (apps/canvas/src/app/instance.tsx) or its scope (packages/shell/src/state/editor-scope.tsx); what is listed here is the page's by nature, or is keyed by a per-editor object so it is per editor by construction. A new entry needs the same: say why two editors on one page may share it.",
+  "allowed": {
+    "apps/canvas/src/panels/journal-panel.tsx": {
+      "view": "A memo of the page's one journal (journal-sink.ts), keyed by the journal's version: derived from page state, holds nothing of an editor."
+    },
+    "apps/canvas/src/panels/catalog-registry.ts": {
+      "singleton": "The catalog of leaf renderers the schema panels compose from: filled once with the same built-in entries and never changed after, so every editor on the page reads the same immutable table."
+    },
+    "apps/canvas/src/live-bridge.ts": {
+      "connection": "The live relay (ADR 225) connects a TAB to paged.server, not an editor in it: one relay per page. It acts on the editor that connected it (`editor`).",
+      "state": "The page's live relay state (see `connection`).",
+      "reason": "The page's live relay state (see `connection`).",
+      "ask": "The page's live relay setting, 'Ask before each change' (see `connection`).",
+      "log": "The page's live relay log (see `connection`).",
+      "pending": "The page's live relay questions waiting for an answer (see `connection`).",
+      "version": "The page's live relay version counter (see `connection`).",
+      "editor": "The scope of the editor that connected the page's relay (see `connection`); set by `connect`.",
+      "listeners": "Subscribers to the page's live relay (see `connection`)."
+    },
+    "apps/canvas/src/journal-sink.ts": {
+      "workerEpochMs": "The journal (ADR 025) is the page's: one bug report for the page, capturing everything that happened in it, whichever editor it happened in.",
+      "drainer": "The page's journal drains the worker of the editor that registered last; an editor's unregister clears only its own (setJournalDrainer).",
+      "documentShapeProvider": "The page's journal reports the shape of the document of the editor that registered last; an editor's unregister clears only its own.",
+      "loadedPlugins": "The page's journal roster of the bundles loaded on the page (the same bundles in every editor of a build)."
+    },
+    "apps/canvas/src/object-commands.ts": {
+      "NUDGE_QUEUES": "A WeakMap keyed by the editor's engine client: one queue per engine, so per editor by construction, and dropped with the client."
+    },
+    "apps/canvas/src/clipboard-commands.ts": {
+      "seq": "The page-item clipboard is the page's, like the system clipboard it mirrors: copy in one editor, paste in another.",
+      "clip": "The page-item clipboard's content (see `seq`).",
+      "listeners": "Subscribers to the page-item clipboard (see `seq`).",
+      "pageItemClipboard": "The page-item clipboard (see `seq`)."
+    },
+    "packages/shell/src/demo/overlay.tsx": {
+      "current": "The live-demo playground's overlay (the dev and demo builds' guided demo): one guide per page, driven by the page's demo script.",
+      "subscribers": "Subscribers to the page's demo overlay (see `current`).",
+      "guideSide": "The page's demo guide placement (see `current`).",
+      "guideSideSubs": "Subscribers to the page's demo guide placement (see `current`).",
+      "spotlightSelector": "The page's demo spotlight (see `current`).",
+      "spotlightSubs": "Subscribers to the page's demo spotlight (see `current`)."
+    },
+    "packages/shell/src/catalog/property-field.tsx": {
+      "engineReads": "A memo of what the engine build reads: every editor on the page runs the same engine wasm, so an answer holds for all of them."
+    },
+    "packages/shell/src/state/document-loader.ts": {
+      "defaultFontUrls": "Where the build serves its default faces: set once by the build that ships them (the editor package), the same for every editor on the page.",
+      "defaultItalic": "A cache of the default italic face's bytes, fetched once for the page and handed to every editor."
+    },
+    "packages/shell/src/state/content-selection-context.tsx": {
+      "heldBy": "A WeakMap keyed by the editor's engine client: each editor's held typing style, per editor by construction."
+    },
+    "packages/shell/src/state/editor-scope.tsx": {
+      "detached": "The one scope of components rendered outside any editor (a standalone panel, a unit test). Every editor mount provides its own scope."
+    },
+    "packages/shell/src/state/document-source.ts": {
+      "sources": "A WeakMap keyed by the File object a picker read: the source travels with the file into whichever editor opens it."
+    },
+    "packages/shell/src/ai/availability.ts": {
+      "availability": "Whether the page's origin answers the AI proxy: a fact about the page's server, the same for every editor on it.",
+      "probe": "The page's one probe of the AI proxy (see `availability`).",
+      "listeners": "Subscribers to the page's AI availability (see `availability`)."
+    },
+    "packages/shell/src/ai/editor-ai.ts": {
+      "catalogLoad": "A cache of the scripting API catalogue the build ships: fetched once for the page, the same for every editor."
+    },
+    "packages/shell/src/icons/Icon.tsx": {
+      "warnedUnknownIcons": "Warn-once bookkeeping for the console: an unknown icon name is a build problem, said once per page."
+    },
+    "packages/shell/src/lib/file-chooser.ts": {
+      "pending": "The transient file inputs a picker is waiting on, each settled by its own change event: page DOM, owned by the pick that made it, gone when it settles."
+    }
+  }
+}

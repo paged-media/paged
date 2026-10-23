@@ -40,6 +40,7 @@ import {
   Icon,
   StatusPill,
   notifyExportPdfDialog,
+  useEditorScope,
   printOutputFacts,
   useCanvasClient,
   useDocument,
@@ -92,6 +93,7 @@ function rowReadiness(
 }
 
 export function ExportCenterPanel() {
+  const scope = useEditorScope();
   const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
@@ -125,7 +127,7 @@ export function ExportCenterPanel() {
     const t = exportTargetById(id);
     if (!t.live || !loaded || !handle) return;
     if (t.action === "dialog") {
-      notifyExportPdfDialog("open");
+      notifyExportPdfDialog(scope, "open");
       return;
     }
     setBusy(id);
@@ -219,7 +221,7 @@ export function ExportCenterPanel() {
                   data-export-live={t.live ? "" : undefined}
                   data-selected={sel || undefined}
                   checked={sel}
-                  onChoose={() => setSelectedExportTarget(t.id)}
+                  onChoose={() => setSelectedExportTarget(scope, t.id)}
                   style={{
                     display: "flex",
                     flexWrap: "wrap",

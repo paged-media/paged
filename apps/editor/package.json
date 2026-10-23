@@ -31,6 +31,7 @@
     "test:profile-presets": "bun scripts/profile-presets-guard.mjs",
     "test:client-catalog": "bun scripts/client-api-catalog.mjs --check",
     "test:feature-ids": "bun scripts/feature-ids.mjs --check",
+    "test:instance-guard": "bun scripts/instance-guard.mjs",
     "test:theme-tokens": "bun scripts/theme-tokens.mjs --check"
   },
   "devDependencies": {

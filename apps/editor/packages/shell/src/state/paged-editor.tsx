@@ -25,6 +25,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
+import { useEditorScope, type EditorScope } from "./editor-scope";
 import { useCanvasClient } from "./canvas-client-context";
 import { useCamera, type ViewportSize } from "./camera-context";
 import { useDocument } from "./document-context";
@@ -260,6 +261,10 @@ export interface PagedEditor {
 
   /** The four shell registries. */
   registries: ShellRegistries;
+
+  /** This editor's own stores (plan task E1): what a command handler
+   *  reaches its editor's palette, dialogs and toggles through. */
+  scope: EditorScope;
 }
 
 /**
@@ -312,6 +317,7 @@ function PagedEditorBinder({
   const contentSelection = useContentSelection();
   const toolSettings = useToolSettings();
   const registries = useRegistries();
+  const scope = useEditorScope();
   // OPTIONAL on purpose: this binder can mount outside the stack
   // provider (standalone panels, tests), and "no provider" and "no
   // context active" are the same fact to every consumer.
@@ -375,8 +381,10 @@ function PagedEditorBinder({
       },
       editContext,
       registries,
+      scope,
     }),
     [
+      scope,
       client,
       document,
       camera,

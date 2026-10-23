@@ -42,6 +42,7 @@ import type { PageId } from "@paged-media/client";
 
 import "../../src/translations";
 import { CommandPalette, notifyPalette } from "../../src/chrome/CommandPalette";
+import { detachedEditorScope } from "../../src/state/editor-scope";
 import { menuLabel } from "../../src/chrome/messages";
 import {
   resetAiAvailability,
@@ -70,7 +71,7 @@ function Grab() {
 }
 
 afterEach(() => {
-  act(() => notifyPalette("close"));
+  act(() => notifyPalette(detachedEditorScope(), "close"));
   cleanup();
   resetAiAvailability();
   commands = null;
@@ -89,7 +90,7 @@ describe("the shell in German", () => {
     );
     act(() => {
       commands!.register(buildExportPdfCommand());
-      notifyPalette("open");
+      notifyPalette(detachedEditorScope(), "open");
     });
     const input = await waitFor(() => {
       const el = document.body.querySelector<HTMLInputElement>("[cmdk-input]");

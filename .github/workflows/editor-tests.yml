@@ -440,6 +440,10 @@ jobs:
       # be current.
       - name: feature-id inventory is current
         run: bun run test:feature-ids
+      # The editor mounts as an instance (plan task E1): no new module-level
+      # mutable state in the app or the shell, and what stays says why.
+      - name: no new module-level editor state
+        run: bun run test:instance-guard
       # The theme tokens a host may set (handle.setTheme) are a contract
       # too; the table is generated from theme.css and must be current.
       - name: theme-token contract is current

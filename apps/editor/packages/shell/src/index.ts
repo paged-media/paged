@@ -29,6 +29,23 @@ import "./translations";
 export { categoryLabel, menuLabel } from "./chrome/messages";
 
 // ── State contexts ─────────────────────────────────────────────
+// One editor's own stores (plan task E1).
+export {
+  createEditorScope,
+  createEmitter,
+  createValueStore,
+  detachedEditorScope,
+  EditorScopeProvider,
+  scoped,
+  scopeOf,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+  type Emitter,
+  type ScopedKey,
+  type ValueStore,
+} from "./state/editor-scope";
+
 export {
   CanvasClientProvider,
   useCanvasClient,
@@ -439,11 +456,14 @@ export {
   CockpitStateProvider,
   PanelHost,
   RightDock,
-  cockpitActions,
+  cockpitActionsOf,
+  useCockpitActions,
+  type CockpitActions,
   groupSpreads,
   isIdLikeLabel,
   navigateToPages,
   setCockpitPageNavigator,
+  usePageNavigation,
   useCockpitState,
   useOptionalCockpitState,
   type CockpitLayoutProps,
@@ -649,12 +669,10 @@ export {
   type AssistantKind,
 } from "./components/cockpit/ai-assistant";
 export {
-  dismissAssistantRun,
-  getAssistantState,
+  assistantSession,
   openAssistant,
   setAssistantOpener,
-  startAssistantRun,
-  subscribeAssistant,
+  type AssistantSession,
   type AssistantRun,
   type AssistantState,
   type AssistantView,

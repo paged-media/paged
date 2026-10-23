@@ -26,7 +26,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 import {
   AIAssistant,
-  dismissAssistantRun,
   resetAiAvailability,
   setAiAvailability,
 } from "@paged-media/shell";
@@ -37,7 +36,6 @@ import { structureIdml } from "./support/structure";
 
 afterEach(() => {
   unmountAll();
-  dismissAssistantRun();
   resetAiAvailability();
 });
 

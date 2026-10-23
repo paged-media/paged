@@ -40,7 +40,9 @@
 import type { SnapPointQuery, SnapPointResult } from "@paged-media/plugin-api";
 import {
   getViewToggle,
+  scopeOf,
   type CanvasPointerEvent,
+  type EditorScope,
   type PagedEditor,
 } from "@paged-media/shell";
 import type { Vec2 } from "@paged-media/draw/geometry";
@@ -79,12 +81,17 @@ export async function engineSnapPoint(
   }
 }
 
-/** Is snapping on for a sample with these modifiers? */
-export function snappingOn(modifiers: {
-  cmd?: boolean;
-  shift?: boolean;
-}): boolean {
-  return getViewToggle("snapToPoints") && !modifiers.cmd && !modifiers.shift;
+/** Is snapping on in `scope`'s editor for a sample with these modifiers? */
+export function snappingOn(
+  scope: EditorScope,
+  modifiers: {
+    cmd?: boolean;
+    shift?: boolean;
+  },
+): boolean {
+  return (
+    getViewToggle(scope, "snapToPoints") && !modifiers.cmd && !modifiers.shift
+  );
 }
 
 export interface HostSnapper {
@@ -116,7 +123,7 @@ export function createHostSnapper(
         point,
         cameraScale: 1 / ptPerPx,
         extra,
-        bypass: !snappingOn(e.modifiers),
+        bypass: !snappingOn(scopeOf(paged()), e.modifiers),
       }),
     last: () => snapper.last(),
     reset: () => snapper.reset(),

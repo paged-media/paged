@@ -48,7 +48,7 @@ import { useEffect, useState } from "react";
 import {
   CatalogRegistryProvider,
   CompositionRenderer,
-  cockpitActions,
+  useCockpitActions,
   useCanvasClient,
   useObjectBindings,
   useDocumentMeta,
@@ -78,6 +78,7 @@ function unwrapColorRef(v: Value | null): string | null {
 }
 
 export function ColorPanel() {
+  const cockpitActions = useCockpitActions();
   const strings = useStrings();
   const client = useCanvasClient();
   const resolved = useObjectBindings(FILL_BINDING);

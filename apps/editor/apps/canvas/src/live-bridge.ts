@@ -25,14 +25,17 @@
 // change" is on (the default), allows or declines each one that changes the
 // document.
 //
-// A MODULE-SCOPE STORE (like library-document.ts): the connection outlives the
-// panel being closed and reopened.
+// A MODULE-SCOPE STORE: the connection outlives the panel being closed and
+// reopened, and the server relays to a TAB, not to an editor in it — one
+// relay per page. It acts on the editor that connected it (its library
+// document, its library; `connect`'s scope).
 
 import {
   canvasScriptEngine,
   commitSave,
   currentLibraryDocument,
   getLibrary,
+  type EditorScope,
 } from "@paged-media/shell";
 import {
   accessToken,
@@ -67,6 +70,8 @@ let ask = true;
 let log: LiveEntry[] = [];
 let pending: Pending[] = [];
 let version = 0;
+/** The editor the relay acts on (set by `connect`). */
+let editor: EditorScope | null = null;
 const listeners = new Set<() => void>();
 
 function changed(): void {
@@ -143,7 +148,7 @@ async function handle(
     let result: ToolResult;
     switch (call.tool) {
       case "open_document": {
-        const doc = currentLibraryDocument();
+        const doc = editor ? currentLibraryDocument(editor) : null;
         result = {
           content: [
             {
@@ -195,12 +200,14 @@ async function handle(
         break;
       }
       case "save_document": {
-        const library = getLibrary();
-        if (!library) return text("This editor keeps no library.", true);
+        const scope = editor;
+        const library = scope ? getLibrary(scope) : null;
+        if (!scope || !library)
+          return text("This editor keeps no library.", true);
         const bytes = await client.exportPaged();
-        if (!currentLibraryDocument())
-          await commitSave(bytes.slice(), "document");
-        const doc = currentLibraryDocument();
+        if (!currentLibraryDocument(scope))
+          await commitSave(scope, bytes.slice(), "document");
+        const doc = currentLibraryDocument(scope);
         if (!doc)
           return text("The document could not be kept in the library.", true);
         const message = String(call.args.message ?? "Claude's edit");
@@ -237,11 +244,13 @@ async function handle(
 export async function connect(
   server: string,
   client: CanvasClient,
+  scope: EditorScope,
 ): Promise<void> {
   if (connection) return;
+  editor = scope;
   const token = await accessToken(server);
   if (!token) throw new Error("Sign in to the server first.");
-  const doc = currentLibraryDocument();
+  const doc = editor ? currentLibraryDocument(editor) : null;
   connection = await connectLive(
     server,
     token,

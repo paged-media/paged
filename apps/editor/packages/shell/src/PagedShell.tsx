@@ -32,6 +32,12 @@
 
 import { t, useStrings } from "@paged-media/strings";
 import { COMMANDS, LOAD } from "./state/messages";
+import {
+  createEditorScope,
+  EditorScopeProvider,
+  useEditorScope,
+  type EditorScope,
+} from "./state/editor-scope";
 import React, {
   useEffect,
   useEffectEvent,
@@ -121,7 +127,7 @@ import { SoftProofToggle } from "./chrome/SoftProofToggle";
 import { CockpitLayout } from "./cockpit/CockpitLayout";
 import {
   CockpitStateProvider,
-  cockpitActions,
+  useCockpitActions,
   useOptionalCockpitState,
 } from "./cockpit/cockpit-state-context";
 import {
@@ -260,6 +266,9 @@ export interface PagedShellProps {
   /** The host keeps the role: a role change (Preview as filler, Author
    *  template) goes here and comes back as `sessionPolicy`. */
   onSessionRoleChange?: (role: SessionPolicy["role"]) => void;
+  /** The editor's own stores (plan task E1). The host passes one when it
+   *  reaches them from outside the tree; omitted, the shell makes its own. */
+  scope?: EditorScope;
 }
 
 /**
@@ -286,66 +295,69 @@ export function PagedShell({
   features,
   sessionPolicy,
   onSessionRoleChange,
+  scope,
   children,
 }: PropsWithChildren<PagedShellProps>) {
   const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
+  const [ownScope] = useState(createEditorScope);
   return (
-    <DebugErrorBoundary label="paged-shell">
-      <CanvasClientProvider client={client}>
-        <ChromeRegionsProvider value={chromeRegions}>
-          <SessionPolicyProvider
-            policy={sessionPolicy ?? DEFAULT_SESSION}
-            {...(onSessionRoleChange
-              ? { onRoleChange: onSessionRoleChange }
-              : {})}
-          >
-            <ThemeProvider>
-              <CameraProvider>
-                <DocumentProvider>
-                  {/* ToolProvider above SelectionProvider: the selection
-                   *  context's `activeTool` facade reads the tool stack. */}
-                  <ToolProvider>
-                    <WorkflowModeProvider initialMode={initialMode}>
-                      <ScreenModeProvider>
-                        <ToolSettingsProvider>
-                          <FormattingAffectsProvider>
-                            <SelectionProvider>
-                              <ContentSelectionProvider>
-                                <OverlaySignalsProvider>
-                                  {/* W2.8 — guide creation/drag state, shared
+    <EditorScopeProvider scope={scope ?? ownScope}>
+      <DebugErrorBoundary label="paged-shell">
+        <CanvasClientProvider client={client}>
+          <ChromeRegionsProvider value={chromeRegions}>
+            <SessionPolicyProvider
+              policy={sessionPolicy ?? DEFAULT_SESSION}
+              {...(onSessionRoleChange
+                ? { onRoleChange: onSessionRoleChange }
+                : {})}
+            >
+              <ThemeProvider>
+                <CameraProvider>
+                  <DocumentProvider>
+                    {/* ToolProvider above SelectionProvider: the selection
+                     *  context's `activeTool` facade reads the tool stack. */}
+                    <ToolProvider>
+                      <WorkflowModeProvider initialMode={initialMode}>
+                        <ScreenModeProvider>
+                          <ToolSettingsProvider>
+                            <FormattingAffectsProvider>
+                              <SelectionProvider>
+                                <ContentSelectionProvider>
+                                  <OverlaySignalsProvider>
+                                    {/* W2.8 — guide creation/drag state, shared
                                   by the ruler hit zones, the controller,
                                   and the guide overlay. */}
-                                  <GuideDragProvider>
-                                    {/* W2.9 — text-frame threading state
+                                    <GuideDragProvider>
+                                      {/* W2.9 — text-frame threading state
                                     (ports + loaded cursor + controller). */}
-                                    <ThreadingProvider>
-                                      {/* W3.A2 — table cell selection,
+                                      <ThreadingProvider>
+                                        {/* W3.A2 — table cell selection,
                                       shared by the canvas hit handler,
                                       the Table panel, and the cell
                                       overlay. */}
-                                      <TableSelectionProvider>
-                                        <InstrumentationProvider>
-                                          {/* W3.2 — the edit-context stack
+                                        <TableSelectionProvider>
+                                          <InstrumentationProvider>
+                                            {/* W3.2 — the edit-context stack
                                         (B-02/W-03): the active scoped-
                                         editing-mode stack + breadcrumb +
                                         write-scope. Above PagedEditor so
                                         chrome + canvas integration can
                                         read it. */}
-                                          <EditContextStackProvider>
-                                            {/* ADR 023 phase C — the binding-
+                                            <EditContextStackProvider>
+                                              {/* ADR 023 phase C — the binding-
                                         provider seam. Deliberately
                                         INSIDE the edit-context stack:
                                         a provider's lifetime is that
                                         stack's, and reading them in
                                         that order is the point. */}
-                                            <BindingProviderProvider
-                                              host={bindingProviders ?? null}
-                                            >
-                                              <ObjectModelProvider
-                                                host={objectModel ?? null}
+                                              <BindingProviderProvider
+                                                host={bindingProviders ?? null}
                                               >
-                                                <PagedEditorProvider>
-                                                  {/* Actions — the command recorder.
+                                                <ObjectModelProvider
+                                                  host={objectModel ?? null}
+                                                >
+                                                  <PagedEditorProvider>
+                                                    {/* Actions — the command recorder.
                                         INSIDE PagedEditorProvider (it
                                         needs the registries) and OUTSIDE
                                         ShellChrome, because the right
@@ -354,52 +366,53 @@ export function PagedShell({
                                         would stop recording the moment
                                         the user switched tabs to do the
                                         thing they were recording. */}
-                                                  <ActionsProvider>
-                                                    <SeedFeatures
-                                                      features={features}
-                                                    />
-                                                    <ShellChrome
-                                                      panels={panels}
-                                                      overlays={overlays}
-                                                      tools={tools}
-                                                      headerExtras={
-                                                        headerExtras
-                                                      }
-                                                      modes={modes}
-                                                      panelRail={panelRail}
-                                                      canvasComponent={
-                                                        canvasComponent
-                                                      }
-                                                      initialDocumentSizePt={
-                                                        initialDocumentSizePt
-                                                      }
-                                                    >
-                                                      {children}
-                                                    </ShellChrome>
-                                                  </ActionsProvider>
-                                                </PagedEditorProvider>
-                                              </ObjectModelProvider>
-                                            </BindingProviderProvider>
-                                          </EditContextStackProvider>
-                                        </InstrumentationProvider>
-                                      </TableSelectionProvider>
-                                    </ThreadingProvider>
-                                  </GuideDragProvider>
-                                </OverlaySignalsProvider>
-                              </ContentSelectionProvider>
-                            </SelectionProvider>
-                          </FormattingAffectsProvider>
-                        </ToolSettingsProvider>
-                      </ScreenModeProvider>
-                    </WorkflowModeProvider>
-                  </ToolProvider>
-                </DocumentProvider>
-              </CameraProvider>
-            </ThemeProvider>
-          </SessionPolicyProvider>
-        </ChromeRegionsProvider>
-      </CanvasClientProvider>
-    </DebugErrorBoundary>
+                                                    <ActionsProvider>
+                                                      <SeedFeatures
+                                                        features={features}
+                                                      />
+                                                      <ShellChrome
+                                                        panels={panels}
+                                                        overlays={overlays}
+                                                        tools={tools}
+                                                        headerExtras={
+                                                          headerExtras
+                                                        }
+                                                        modes={modes}
+                                                        panelRail={panelRail}
+                                                        canvasComponent={
+                                                          canvasComponent
+                                                        }
+                                                        initialDocumentSizePt={
+                                                          initialDocumentSizePt
+                                                        }
+                                                      >
+                                                        {children}
+                                                      </ShellChrome>
+                                                    </ActionsProvider>
+                                                  </PagedEditorProvider>
+                                                </ObjectModelProvider>
+                                              </BindingProviderProvider>
+                                            </EditContextStackProvider>
+                                          </InstrumentationProvider>
+                                        </TableSelectionProvider>
+                                      </ThreadingProvider>
+                                    </GuideDragProvider>
+                                  </OverlaySignalsProvider>
+                                </ContentSelectionProvider>
+                              </SelectionProvider>
+                            </FormattingAffectsProvider>
+                          </ToolSettingsProvider>
+                        </ScreenModeProvider>
+                      </WorkflowModeProvider>
+                    </ToolProvider>
+                  </DocumentProvider>
+                </CameraProvider>
+              </ThemeProvider>
+            </SessionPolicyProvider>
+          </ChromeRegionsProvider>
+        </CanvasClientProvider>
+      </DebugErrorBoundary>
+    </EditorScopeProvider>
   );
 }
 
@@ -483,6 +496,8 @@ function ShellChrome({
   canvasComponent?: ComponentType<PanelProps>;
   initialDocumentSizePt?: readonly [number, number];
 }>) {
+  const scope = useEditorScope();
+  const cockpitActions = useCockpitActions();
   const client = useCanvasClient();
   const chrome = useChromeRegions();
   const actionsRegion = chrome.region("actions-bar");
@@ -904,7 +919,7 @@ function ShellChrome({
                     ],
                   });
                   if (picked) {
-                    setOpenFileHandle(picked);
+                    setOpenFileHandle(scope, picked);
                     const file = await (
                       picked as unknown as { getFile(): Promise<File> }
                     ).getFile();
@@ -918,7 +933,7 @@ function ShellChrome({
                   // No handle and no throw: the platform answered with
                   // nothing. Treat it as a cancel rather than falling
                   // through to a second dialog.
-                  setOpenFileHandle(null);
+                  setOpenFileHandle(scope, null);
                   handled = true;
                   resolve(null);
                   return;
@@ -940,7 +955,7 @@ function ShellChrome({
                   // a filechooser that was never going to arrive.
                   const aborted =
                     err instanceof Error && err.name === "AbortError";
-                  setOpenFileHandle(null);
+                  setOpenFileHandle(scope, null);
                   if (aborted) {
                     resolve(null);
                     return;
@@ -980,7 +995,7 @@ function ShellChrome({
                 // one: keeping it would make the next Save write this new
                 // document over the file the LAST one came from, silently
                 // and with no undo.
-                setOpenFileHandle(null);
+                setOpenFileHandle(scope, null);
                 resolve(files[0] ?? null);
               });
             })();
@@ -1000,7 +1015,7 @@ function ShellChrome({
     );
     // ADR 221 — File ▸ New from a brief… (Claude builds the document).
     const newFromBrief = registries.commands.register(
-      buildNewFromBriefCommand(() => openAssistant({ view: "brief" })),
+      buildNewFromBriefCommand(() => openAssistant(scope, { view: "brief" })),
     );
     // Concept 2 — swatch-library import/export commands.
     const importAse = registries.commands.register(
@@ -1028,7 +1043,7 @@ function ShellChrome({
       exportAse.dispose();
       exportPdf.dispose();
     };
-  }, [registries]);
+  }, [registries, scope]);
 
   // Register the palette-toggle command + Cmd+K keybinding. The
   // command body (notifyPalette) is shell-internal; binding via

@@ -25,6 +25,7 @@ import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useDocument } from "../state/document-context";
 import { useOptionalScreenMode } from "../state/screen-mode-context";
 import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
+import { useEditorScope } from "../state/editor-scope";
 
 /**
  * Per-page labels: "page N" caption under the page, plus heading-
@@ -36,8 +37,10 @@ import { getViewToggle, subscribeViewToggles } from "../state/view-toggles";
  */
 function PageDecorationsRender(props: OverlayProps) {
   const { resolution } = useDocument();
-  const showAnchors = useSyncExternalStore(subscribeViewToggles, () =>
-    getViewToggle("headingAnchors"),
+  const scope = useEditorScope();
+  const showAnchors = useSyncExternalStore(
+    (l) => subscribeViewToggles(scope, l),
+    () => getViewToggle(scope, "headingAnchors"),
   );
   // Concept 1 (T7) — captions/badges are non-printing chrome: Normal
   // mode only; Preview / Bleed / Slug / Presentation hide them.

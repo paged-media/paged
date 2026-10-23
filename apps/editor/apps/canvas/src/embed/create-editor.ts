@@ -42,7 +42,6 @@ import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
 import { mountEditor } from "../main";
-import { bootBundlesSettled } from "../plugin-bundle-loader";
 
 /** A field's value, as the handle takes and gives it. */
 export type FieldValue = TemplateFieldValue["value"];
@@ -172,7 +171,7 @@ export async function createEditor(
     ...(config.engineWasm ? { engineWasm: config.engineWasm } : {}),
   });
   const shell = await shellReady;
-  await bootBundlesSettled();
+  await mounted.instance.services.boot.settled();
   const { client, paged, registries } = shell;
 
   const listeners = new Set<(event: EditorEvent) => void>();
