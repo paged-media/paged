@@ -816,8 +816,8 @@ export function makeWorkbookPanel(
 
             {/* CHART AUTHORING — the chart engine was import-only. Authored
              *  charts render + place through the SAME generator as parsed
-             *  ones, and stay PAGE-side (never written back to the xlsx —
-             *  the publishing-first ruling, asserted in conformance).
+             *  ones, and are written into the xlsx on save (a generated
+             *  chart part, sheet ADR 519).
              *  The kind list is READ FROM THE ENGINE (session.chartKinds),
              *  never hard-coded here: which kinds exist is a Rust decision,
              *  so the panel cannot offer one the engine refuses. */}

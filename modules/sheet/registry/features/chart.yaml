@@ -36,7 +36,11 @@
 
 - id: sheet.chart.xlsx-part
   title: XLSX chart part (/charts/chartN.xml) parse + preserve into the chart model (preservation invariant, spec §10.2)
-  ruling: "The chart + drawing parts stay OPAQUE OPC parts (never promoted), so a zero-edit round-trip is BYTE-IDENTICAL; the model is parsed ADDITIVELY for render only (sheet-xlsx/src/parts/chart.rs), discovered through the worksheet->drawing->chart .rels chain. Full chart-part re-emit is a later tier; T2 is parse-for-render + preserve-on-save."
+  ruling: >
+    The chart and drawing parts stay OPAQUE until a chart is edited: a
+    zero-edit round-trip is byte-identical. Discovered through the
+    worksheet->drawing->chart (and /chartEx) relationship chain. An edited
+    chart is spliced into its part (sheet.chart.writer, ADR 519).
   status: implemented
   provenance: ["ECMA-376 §21.2 (DrawingML charts)", "spec §8.4, §10.2", "sheet-xlsx/src/parts/chart.rs"]
   tests:
@@ -168,17 +172,18 @@
 - id: sheet.chart.authoring
   title: Chart AUTHORING over live data (add_chart) — the model stopped being import-only
   ruling: >
-    `add_chart(sheet, values, categories, kind, title, series_in)` constructs a
-    ChartModel and appends it to the session's chart vector, returning the same
-    index handle `get_chart_geometry` and the lowering take — so an authored
-    chart renders and lowers exactly like a parsed one. PUBLISHING-FIRST scope:
-    authored charts are PAGE-side only; the xlsx writer never re-derives chart
-    parts, so a save round-trip carries the workbook's ORIGINAL charts only
-    (asserted). Legend on when there is more than one series.
+    `add_chart(sheet, values, categories, kind, title, series_in)` builds a
+    ChartModel and returns the same index handle `get_chart_geometry` and the
+    lowering take. The chart is written into the xlsx on save (a generated
+    part, sheet.chart.writer); scatter takes its first column as X, bubble X
+    then (Y, size) pairs, the single-series chartEx kinds their first series.
+    Legend on with more than one series.
   status: implemented
   provenance: ["spec §8.4", "sheet-js/src/core.rs::add_chart"]
   tests:
-    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_authoring"]
+    rust:
+      - "sheet-conformance/tests/it/chart.rs::sheet_chart_authoring"
+      - "sheet-conformance/tests/it/chart_write.rs::every_authored_kind_is_written"
 
 - id: sheet.chart.series-orientation
   title: "Transpose rows/columns — read the values block as one series per column OR per row"
@@ -288,7 +293,9 @@
   status: implemented
   provenance: ["[MS-ODRAWXML] §2.24 (chartEx)", "platform/shared/dml-chart/src/read_ex.rs"]
   tests:
-    rust: ["sheet-xlsx/src/parts/chart_tests.rs::chart_ex_parts_are_read"]
+    rust:
+      - "sheet-xlsx/src/parts/chart_tests.rs::chart_ex_parts_are_read"
+      - "sheet-conformance/tests/it/chart_write.rs::excel_written_chart_ex_reads_back"
 
 - id: sheet.chart.combo
   title: Combo charts — several plots, each with its kind, grouping and axis group; a secondary value axis
@@ -355,3 +362,25 @@
       - "sheet-xlsx/src/parts/sparkline.rs::reads_groups_colours_and_cells"
       - "sheet-chart/src/sparkline.rs::three_kinds_draw_in_the_cell"
       - "sheet-chart/tests/kinds.rs::sparklines_draw_in_their_cell"
+
+- id: sheet.chart.writer
+  title: Charts written back into the xlsx — edited charts spliced, authored ones generated, deleted ones removed
+  ruling: >
+    dml_chart::write generates c:chartSpace / cx:chartSpace parts in schema
+    order and patches a part as read (ADR 503 amendment). An edited chart
+    replaces only the changed roles; an authored chart gets its part, drawing
+    anchor, relationships, overrides and (chartEx) style parts; a deleted one
+    leaves the package. Each written chart records its session index so a
+    reload keeps every handle. Excel opens every case without a repair and
+    reports the chart type Paged wrote (open-check lane, recorded).
+  status: implemented
+  provenance: ["ECMA-376 §21.2", "[MS-ODRAWXML] chartEx", "ADR 519", "ADR 503 amendment 2026-10-23"]
+  tests:
+    rust:
+      - "sheet-conformance/tests/it/chart_write.rs::every_authored_kind_is_written"
+      - "sheet-conformance/tests/it/chart_write.rs::an_edited_chart_is_spliced"
+      - "sheet-conformance/tests/it/chart_write.rs::a_kind_change_replaces_the_plot_element"
+      - "sheet-conformance/tests/it/chart_write.rs::a_deleted_chart_leaves_the_package"
+      - "sheet-conformance/tests/it/chart_write.rs::an_authored_chart_keeps_its_index"
+      - "sheet-conformance/tests/it/excel_opencheck.rs::excel_opens_the_charts_paged_writes"
+      - "sheet-xlsx/src/chart_write_tests.rs::recorded_indexes_keep_every_handle"

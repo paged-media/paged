@@ -64,7 +64,12 @@ import {
   type KnownSwatchIds,
 } from "./palette";
 import type { Bounds } from "./placement";
-import type { DataBarRect, LoweredContent, LoweredStyle } from "./lowered";
+import type {
+  DataBarRect,
+  IconRect,
+  LoweredContent,
+  LoweredStyle,
+} from "./lowered";
 
 /** The page + bounds the frame is placed at (from placement.ts). */
 export interface LowerPlacement {
@@ -387,15 +392,114 @@ export function dataBarOps(
     { op: "insertPath", args: { pageId, anchors, open: false } },
   ];
   const fillHex = normalizeBarHex(bar.fill);
-  if (fillHex != null) {
+  const fillRef = bar.swatch ?? (fillHex != null ? barSwatchId(fillHex) : null);
+  if (fillRef != null) {
     ops.push({
       op: "setElementProperty",
       args: {
         elementId: CREATED_DATABAR,
         path: "frameFillColor",
-        value: { type: "colorRef", value: barSwatchId(fillHex) },
+        value: { type: "colorRef", value: fillRef },
       },
     });
+  }
+  // W2.4: the bar's border.
+  const borderHex = bar.border == null ? null : normalizeBarHex(bar.border);
+  if (borderHex != null) {
+    ops.push(
+      {
+        op: "setElementProperty",
+        args: {
+          elementId: CREATED_DATABAR,
+          path: "frameStrokeColor",
+          value: { type: "colorRef", value: barSwatchId(borderHex) },
+        },
+      },
+      {
+        op: "setElementProperty",
+        args: {
+          elementId: CREATED_DATABAR,
+          path: "frameStrokeWeight",
+          value: { type: "length", value: 0.5 },
+        },
+      },
+    );
+  }
+  return ops;
+}
+
+/** The axis line of a data bar whose range holds negatives (W2.4): a
+ *  0.5 pt path down the cell at the axis, in the axis colour. Empty
+ *  without an axis. */
+export function dataBarAxisOps(
+  bar: DataBarRect,
+  pageId: PageId,
+  top: number,
+  left: number,
+): Mutation[] {
+  if (bar.axisX == null) return [];
+  const x = left + bar.axisX;
+  const p = (y: number) => {
+    const pt: [number, number] = [x, y];
+    return { anchor: pt, left: pt, right: pt };
+  };
+  const hex = normalizeBarHex(bar.axisColor ?? "#000000");
+  const ops: Mutation[] = [
+    {
+      op: "insertPath",
+      args: {
+        pageId,
+        anchors: [p(top + bar.y), p(top + bar.y + bar.h)],
+        open: true,
+      },
+    },
+    {
+      op: "setElementProperty",
+      args: {
+        elementId: CREATED_DATABAR,
+        path: "frameStrokeWeight",
+        value: { type: "length", value: 0.5 },
+      },
+    },
+  ];
+  if (hex != null)
+    ops.push({
+      op: "setElementProperty",
+      args: {
+        elementId: CREATED_DATABAR,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: barSwatchId(hex) },
+      },
+    });
+  return ops;
+}
+
+/** The filled polygons of one conditional-format icon (W2.4), offset by
+ *  the frame origin, each in its colour (a `dataBar`-lane swatch). */
+export function iconOps(
+  icon: IconRect,
+  pageId: PageId,
+  top: number,
+  left: number,
+): Mutation[] {
+  const ops: Mutation[] = [];
+  for (const sh of icon.shapes) {
+    if (sh.points.length < 3) continue;
+    const anchors = sh.points.map(([x, y]) => {
+      const pt: [number, number] = [left + x, top + y];
+      return { anchor: pt, left: pt, right: pt };
+    });
+    ops.push({ op: "insertPath", args: { pageId, anchors, open: false } });
+    const hex = normalizeBarHex(sh.fill);
+    if (hex != null)
+      ops.push({
+        op: "setElementProperty",
+        args: {
+          elementId: CREATED_DATABAR,
+          path: "frameFillColor",
+          value: { type: "colorRef", value: barSwatchId(hex) },
+        },
+      });
   }
   return ops;
 }
