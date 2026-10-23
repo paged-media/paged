@@ -5,5 +5,17 @@
   "publish.pdfImport.dpiRange": "Die Auflösung liegt zwischen 36 und 600 dpi",
   "publish.pdfImport.editableFailed": "die bearbeitbare Rekonstruktion konnte nicht ausgeführt werden",
   "publish.pdfImport.maxPagesRange": "Die Höchstzahl der Seiten liegt zwischen 1 und 2000 (ohne Angabe: die Vorgabe des gewählten Wegs)",
-  "publish.pdfImport.pdf": "PDF"
+  "publish.pdfImport.pdf": "PDF",
+  "publish.pdfTemplateField.noFrame": "Das Objekt {item} ist kein Bildrahmen.",
+  "publish.pdfTemplateField.noPdf": "Der Rahmen {item} platziert kein PDF.",
+  "publish.pdfTemplateField.none": "(keiner)",
+  "publish.pdfTemplateField.notAPage": "Die Seite muss eine ganze Zahl ab 1 sein.",
+  "publish.pdfTemplateField.notAllowed": "Seite {page} gehört nicht zu den Seiten, die dieses Feld erlaubt.",
+  "publish.pdfTemplateField.notPermitted": "{permission} ist auf {target} nicht erlaubt",
+  "publish.pdfTemplateField.pageTitle": "PDF-Seite",
+  "publish.pdfTemplateField.pastLast": "Das PDF hat {count} Seiten; eine Seite {page} gibt es nicht.",
+  "publish.pdfTemplateField.refused": "Die Vorlage erlaubt diesem Feld nicht, die Seite zu ändern ({why}).",
+  "publish.pdfTemplateField.undoLabel": "Vorlagenfeld ausfüllen",
+  "publish.pdfTemplateField.writeRefused": "das Schreiben wurde abgelehnt",
+  "publish.pdfTemplateField.wrongFrame": "Das Feld nennt den Rahmen {frame}, liegt aber auf dem Objekt {item}."
 }

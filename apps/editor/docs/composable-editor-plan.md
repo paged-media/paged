@@ -1172,30 +1172,30 @@ sees the module's editing UI only for the parts its fields open.
 
 ### G3a — The field kinds in detail (from the module audits)
 
-| Kind                                 | Definition                                      | Read and write                                                                                |
-| ------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `media.paged.sheet.cell`             | `{ ref }` (a named range or `Sheet!A1`), a type | the cell's `value` through the object model's write door; a list validation makes it a choice |
-| `media.paged.sheet.range`            | `{ ref, columns?, rows: fixed or { max } }`     | `range.values`; a growable range inserts or deletes rows first                                |
-| `media.paged.sheet.chartSource`      | `{ chart, allowed }`                            | the chart's series through `updateChart`                                                      |
-| `media.paged.doc.blockText`          | `{ frame, anchor }` (a bookmark or style + nth) | `block.text` planned like a merge field: the first run takes the text, the rest empty         |
-| `media.paged.doc.mergeField`         | `{ name }`                                      | `mergeField.value` (already writable)                                                         |
-| `media.paged.doc.listItems`          | `{ frame, anchor }`                             | needs list identity in the lowering and an insert that copies a paragraph's properties        |
-| `media.paged.draw.paint`             | `{ target, channel: fill or stroke, allowed }`  | the frame's fill or stroke, or the front layer of its appearance stack                        |
-| `media.paged.draw.graphicStyle`      | `{ targets, allowed }`                          | `appearance.graphicStyle`                                                                     |
-| `media.paged.draw.textOnPath`        | `{ path }`                                      | the attached story's text                                                                     |
-| `media.paged.draw.symbolChoice`      | `{ instance, allowed }`                         | re-place the instance with the chosen symbol in one batch                                     |
-| `media.paged.image.picture`          | `{ frame, layer }` (by layer name)              | `replaceLayerPixels`; adjustment layers above stay; reports a pending composite               |
-| `media.paged.image.adjustmentPreset` | `{ frame, allowed: [{ name, rows }] }`          | creates or sets one named adjustment layer with the preset's rows                             |
-| `media.paged.image.layerVisibility`  | `{ frame, layer }`                              | `layer.visible`                                                                               |
-| `media.paged.slide.placeholderText`  | `{ slide, placeholder: { type, idx } }`         | delegates to the engine's text lowering on the placeholder's story                            |
-| `media.paged.slide.visibility`       | `{ slide }`                                     | the slide's `hidden` flag; PDF export must skip hidden slides                                 |
-| `media.paged.web.value`              | `{ name }` (a `{{doc.key}}` value)              | `templateVar.value`: one field fills every web frame that uses it                             |
-| `media.paged.web.source`             | `{ frame, lane: html or css }`                  | `webFrame.html` or `.css`, sanitised on write                                                 |
-| `media.paged.web.cssVar`             | `{ frame, name, allowed }`                      | `cssVar.value`                                                                                |
-| `media.paged.data.record`            | `{ query or binding, label }`                   | previews the chosen record; the choice must be persisted (it is in memory today)              |
-| `media.paged.data.bindingValue`      | `{ binding }`                                   | the control follows the binding kind; a write pins the value                                  |
-| `media.paged.data.dataSet`           | `{ allowed? }`                                  | applies a captured data set in one batch                                                      |
-| `media.paged.pdf.page`               | `{ frame }`                                     | needs the engine to honour a placed PDF's page number (it always draws the first page today)  |
+| Kind                                 | Definition                                      | Read and write                                                                                                                                  |
+| ------------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.sheet.cell`             | `{ ref }` (a named range or `Sheet!A1`), a type | the cell's `value` through the object model's write door; a list validation makes it a choice                                                   |
+| `media.paged.sheet.range`            | `{ ref, columns?, rows: fixed or { max } }`     | `range.values`; a growable range inserts or deletes rows first                                                                                  |
+| `media.paged.sheet.chartSource`      | `{ chart, allowed }`                            | the chart's series through `updateChart`                                                                                                        |
+| `media.paged.doc.blockText`          | `{ frame, anchor }` (a bookmark or style + nth) | `block.text` planned like a merge field: the first run takes the text, the rest empty                                                           |
+| `media.paged.doc.mergeField`         | `{ name }`                                      | `mergeField.value` (already writable)                                                                                                           |
+| `media.paged.doc.listItems`          | `{ frame, anchor }`                             | needs list identity in the lowering and an insert that copies a paragraph's properties                                                          |
+| `media.paged.draw.paint`             | `{ target, channel: fill or stroke, allowed }`  | the frame's fill or stroke, or the front layer of its appearance stack                                                                          |
+| `media.paged.draw.graphicStyle`      | `{ targets, allowed }`                          | `appearance.graphicStyle`                                                                                                                       |
+| `media.paged.draw.textOnPath`        | `{ path }`                                      | the attached story's text                                                                                                                       |
+| `media.paged.draw.symbolChoice`      | `{ instance, allowed }`                         | re-place the instance with the chosen symbol in one batch                                                                                       |
+| `media.paged.image.picture`          | `{ frame, layer }` (by layer name)              | `replaceLayerPixels`; adjustment layers above stay; reports a pending composite                                                                 |
+| `media.paged.image.adjustmentPreset` | `{ frame, allowed: [{ name, rows }] }`          | creates or sets one named adjustment layer with the preset's rows                                                                               |
+| `media.paged.image.layerVisibility`  | `{ frame, layer }`                              | `layer.visible`                                                                                                                                 |
+| `media.paged.slide.placeholderText`  | `{ slide, placeholder: { type, idx } }`         | delegates to the engine's text lowering on the placeholder's story                                                                              |
+| `media.paged.slide.visibility`       | `{ slide }`                                     | the slide's `hidden` flag; PDF export must skip hidden slides                                                                                   |
+| `media.paged.web.value`              | `{ name }` (a `{{doc.key}}` value)              | `templateVar.value`: one field fills every web frame that uses it                                                                               |
+| `media.paged.web.source`             | `{ frame, lane: html or css }`                  | `webFrame.html` or `.css`, sanitised on write                                                                                                   |
+| `media.paged.web.cssVar`             | `{ frame, name, allowed }`                      | `cssVar.value`                                                                                                                                  |
+| `media.paged.data.record`            | `{ query or binding, label }`                   | previews the chosen record; the choice must be persisted (it is in memory today)                                                                |
+| `media.paged.data.bindingValue`      | `{ binding }`                                   | the control follows the binding kind; a write pins the value                                                                                    |
+| `media.paged.data.dataSet`           | `{ allowed? }`                                  | applies a captured data set in one batch                                                                                                        |
+| `media.paged.pdf.page`               | `{ frame?, allowed? }`                          | the frame's `framePdfPage`: a number from 1 to its `pdfPageCount`, or a choice of the `allowed` pages; grants `image.replace` (engine ADR 1003) |
 
 Every write maps onto a core permission (`text.edit`, `image.replace`, `style.edit`,
 visibility), so a module field is never a way around the policy. Template-level output

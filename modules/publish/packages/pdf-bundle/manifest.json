@@ -27,6 +27,9 @@
           "args": "schema/import-pdf.args.json",
           "result": "schema/import-pdf.result.json"
         }
+      ],
+      "templateFields": [
+        { "kind": "media.paged.pdf.page", "title": "PDF page" }
       ]
     }
   }

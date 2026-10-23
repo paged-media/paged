@@ -1018,6 +1018,9 @@ export const CORE_PATHS: Record<
   documentFootnoteSpacer: V71,
   documentFootnoteRuleOn: V71,
   documentFootnoteContinuingRuleOn: V71,
+  // Core protocol 76 (engine ADR 1003): the page of a placed PDF; the
+  // catalog types it.
+  framePdfPage: V71,
 };
 
 /** Ranges the SDK knows from core's PropertyPath docs: opacity / tint /
