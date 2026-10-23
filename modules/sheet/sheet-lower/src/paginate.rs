@@ -352,6 +352,7 @@ fn assemble_page_content(
                 align: sheet_core::Align::General,
                 style_key: 0,
                 fill: None,
+                runs: None,
             })
             .collect();
         rows.push(LoweredRow {

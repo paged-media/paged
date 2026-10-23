@@ -69,6 +69,8 @@ export interface CellParagraphStyle {
   id: string;
   name: string;
   props: { path: PropertyPath; value: Value }[];
+  /** A document paragraph style the minted style is based on (W2.2). */
+  basedOn?: string;
 }
 
 /** The gap (pt) between a repeat-fill's right tab stop and the cell's right
@@ -100,7 +102,12 @@ export function cellParagraphStyle(
   const fill = cell.fill !== undefined && cell.text.includes("\t");
   const align = fill ? "left" : cell.align;
   const fixed = ALIGN_PARAGRAPH_STYLES[align];
-  if (!fill && indent === 0) {
+  const doc = style?.docParaStyle ?? undefined;
+  // A document paragraph style with nothing on top is applied as it is.
+  if (doc && !fill && indent === 0 && !fixed) {
+    return { id: doc, name: "", props: [] };
+  }
+  if (!fill && indent === 0 && !doc) {
     return fixed
       ? {
           id: fixed.id,
@@ -143,11 +150,12 @@ export function cellParagraphStyle(
     });
     parts.push(`fill ${leader ?? "space"} ${position}`);
   }
-  const key = JSON.stringify(props);
+  const key = JSON.stringify(doc ? { doc, props } : props);
   return {
     id: `ParagraphStyle/paged.sheet ${fnv(key)}`,
     name: `Sheet · ${parts.join(" · ")}`,
     props,
+    ...(doc ? { basedOn: doc } : {}),
   };
 }
 
@@ -235,10 +243,16 @@ export function cellAlignStyleMints(
   const minted = new Set<string>();
   for (const { style } of cellParagraphStyles(content).values()) {
     if (!style || knownStyleIds.has(style.id) || minted.has(style.id)) continue;
+    // A document style is the document's: never minted here.
+    if (style.props.length === 0) continue;
     minted.add(style.id);
     ops.push({
       op: "createParagraphStyle",
-      args: { selfId: style.id, name: style.name },
+      args: {
+        selfId: style.id,
+        name: style.name,
+        ...(style.basedOn ? { basedOn: style.basedOn } : {}),
+      },
     });
     for (const p of style.props) {
       ops.push({

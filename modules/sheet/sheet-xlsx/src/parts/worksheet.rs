@@ -55,6 +55,8 @@ pub struct ParsedCell {
     /// `cm=`: the 1-based cell-metadata block (`metadata.xml`) the cell
     /// points at — on an array formula, the dynamic-array marker.
     pub cm: Option<u32>,
+    /// `t="s"`: the shared-string index (its rich runs are read by it).
+    pub shared_index: Option<u32>,
 }
 
 /// Everything a worksheet part yields.
@@ -418,6 +420,7 @@ fn push_cell(
         cm: acc.cm,
         formula,
         style_index: acc.style_index,
+        shared_index: (acc.ty == "s").then(|| acc.v.trim().parse().ok()).flatten(),
     });
     Ok(())
 }

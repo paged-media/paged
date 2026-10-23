@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 57d8be8f8b59068ef8b8e4bb8a1caf0598124f074cebb57d797984bf03a3e6a2 # shrinks to seed = Seed { cells: [(0, 9, 1, 0)], hidden: [], hidden_cols: [], cf: false, top: 0, left: 2, w: 393.5090616512619, h: 20.0 }, merges = [], freeze_rows = 0, freeze_cols = 0
+cc 80cf9cc157091b1632509107aa9f17f756c5005ca61095d816c7e134dd23cb62 # shrinks to seed = Seed { cells: [(9, 3, 1, 6)], hidden: [], hidden_cols: [], cf: false, top: 2, left: 0, w: 209.77789001546992, h: 123.21094333416983 }, merges = [(6, 1, 3, 2)], freeze_rows = 0, freeze_cols = 0
