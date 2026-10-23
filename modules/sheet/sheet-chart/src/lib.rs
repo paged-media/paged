@@ -49,8 +49,21 @@
 //! `sheet-calc`, no inter-plugin contact.
 
 mod backend;
+mod cartesian;
+pub mod colors;
+mod extras;
+mod frame;
 pub mod geometry;
 pub mod model;
+mod radial;
+pub mod scale;
+pub mod sparkline;
+mod special;
 
 pub use geometry::{generate, ChartGeometry, PlotData, Primitive, TextAnchor};
-pub use model::{Axis, ChartKind, ChartModel, Series};
+pub use model::{
+    Axis, AxisKind, ChartKind, ChartModel, ColorRef, ColorValue, DataLabels, ErrorBars, Grouping,
+    Legend, LegendPosition, Marker, MarkerSymbol, Plot, Series, SparklineGroup, SparklineKind,
+    TextStyleRef, TrendKind, Trendline,
+};
+pub use sparkline::sparkline;

@@ -42,6 +42,7 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   chartGeometryToMutations,
+  labelAutoSizeOp,
   labelStyleOps,
   makeBinding,
   type ChartGeometry,
@@ -447,6 +448,8 @@ export async function lowerChartToFrame(
         args: { storyId: `$h:${handle}`, offset: 0, text: text.text },
       },
       ...labelStyleOps(`$h:${handle}`, text),
+      // A label set in a document style sizes its frame to the styled text.
+      ...labelAutoSizeOp(`$h:${handle}`, text),
     );
   }
   const group: Mutation[] =

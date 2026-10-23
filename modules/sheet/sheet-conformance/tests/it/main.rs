@@ -8,6 +8,7 @@ mod calc_model;
 mod calc_order;
 mod calc_rewrite;
 mod chart;
+mod chart_corpus;
 mod coerce;
 mod comments;
 mod condfmt;

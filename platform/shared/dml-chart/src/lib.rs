@@ -37,6 +37,12 @@
 
 pub mod model;
 pub mod read;
+pub mod read_ex;
+pub mod write;
 
-pub use model::{Axis, Chart, ChartTitle, DataLabels, Legend, Plot, PlotKind, Series, SeriesRefs};
+pub use model::{
+    Axis, Chart, ChartTitle, DataLabels, ErrorBars, ExLayout, Legend, Plot, PlotKind, PlotOptions,
+    Series, SeriesRefs, Trendline,
+};
 pub use read::{chart, Props};
+pub use read_ex::chart_ex;
