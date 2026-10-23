@@ -61,7 +61,7 @@ pub use format::{
     EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };
 pub use objects::{ChartPatch, ChartSpec, RawValue, SeriesArg, SeriesSpec, TableInfo};
-pub use ops::{CalcSettingsInfo, StructuralEdit};
+pub use ops::{CalcSettingsInfo, FramePageSpec, StructuralEdit, TracksSpec};
 
 // ─────────────────────────────────────────── serde wire structs (camelCase)
 

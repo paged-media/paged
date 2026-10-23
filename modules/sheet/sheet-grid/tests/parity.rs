@@ -24,8 +24,8 @@
 #![allow(non_snake_case)] // test names end in `__feat__<cockpit id>`
 
 use proptest::prelude::*;
-use sheet_core::{Cell, CellValue, SheetModel, StyleId};
-use sheet_grid::{grid_scene_styled, FrameWindowSpec};
+use sheet_core::{Cell, CellRef, CellValue, RangeRef, SheetModel, StyleId};
+use sheet_grid::{frame_page, grid_scene_styled, FrameWindowSpec, PagePrint};
 use sheet_lower::condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, ScaleStop, SheetCondFmt,
 };
@@ -214,6 +214,139 @@ proptest! {
                     prop_assert!(scene.cells.iter().any(|g| g.row == r && g.col == c));
                 }
             }
+        }
+    }
+}
+
+fn at(row: u32, col: u32) -> CellRef {
+    CellRef {
+        sheet: 0,
+        row,
+        col,
+        row_abs: false,
+        col_abs: false,
+    }
+}
+
+/// Non-overlapping merges from seeds: each seed `(r, c, h, w)` becomes the
+/// area `r..r+h × c..c+w` unless it overlaps one already placed.
+fn add_merges(m: &mut SheetModel, seeds: &[(u32, u32, u32, u32)]) {
+    let ws = m.sheet_mut(0).unwrap();
+    let mut placed: Vec<(u32, u32, u32, u32)> = Vec::new();
+    for &(r, c, h, w) in seeds {
+        let a = (r, c, r + h, c + w);
+        if (h, w) == (0, 0) {
+            continue;
+        }
+        if placed
+            .iter()
+            .any(|p| a.0 <= p.2 && p.0 <= a.2 && a.1 <= p.3 && p.1 <= a.3)
+        {
+            continue;
+        }
+        placed.push(a);
+        ws.merges.push(RangeRef {
+            start: at(a.0, a.1),
+            end: at(a.2, a.3),
+        });
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(160))]
+
+    /// The page table of a frame (`frame_page`, no printed headings) and the
+    /// live grid of the same window (`grid_scene_styled`) show the same
+    /// tracks with the same sizes, the same styles table, the same cells and
+    /// the same merges and gridlines — with frozen splits, hidden tracks,
+    /// merges clipped by the window and conditional formats (ADR 510).
+    #[test]
+    fn frame_page_equals_the_grid_track_by_track__feat__sheet_lower_page(
+        seed in seed(),
+        merges in prop::collection::vec((0u32..40, 0u32..12, 0u32..4, 0u32..3), 0..6),
+        freeze_rows in 0u32..4,
+        freeze_cols in 0u32..3,
+    ) {
+        let (mut m, cf) = build(&seed);
+        add_merges(&mut m, &merges);
+        let spec = FrameWindowSpec {
+            top_row: seed.top,
+            left_col: seed.left,
+            width_pt: seed.w,
+            height_pt: seed.h,
+            freeze_rows,
+            freeze_cols,
+        };
+        let scene = grid_scene_styled(&m, 0, &spec, true, &[], &cf, &visual);
+        let page = frame_page(
+            &m,
+            0,
+            &spec,
+            PagePrint { headings: false, gridlines: true },
+            &cf,
+            &visual,
+        );
+        let vp = &scene.viewport;
+        // Same tracks (sheet indices, display order) and sizes.
+        let rows: Vec<u32> = page.rows.iter().map(|r| r.index).collect();
+        prop_assert_eq!(&rows, &vp.row_indices);
+        let cols: Vec<u32> = page.cols.iter().map(|c| c.index).collect();
+        prop_assert_eq!(&cols, &vp.col_indices);
+        for (i, c) in page.cols.iter().enumerate() {
+            prop_assert!((c.width_pt - (vp.x_offsets[i + 1] - vp.x_offsets[i])).abs() < 1e-9);
+        }
+        for (i, r) in page.rows.iter().enumerate() {
+            prop_assert!((r.height_pt - (vp.y_offsets[i + 1] - vp.y_offsets[i])).abs() < 1e-9);
+        }
+        prop_assert_eq!(page.header_rows, vp.frozen_rows);
+        // Same styles table.
+        prop_assert_eq!(&scene.styles, &page.styles);
+        // The grid's cells are the page's.
+        let cell_at = |r: u32, c: u32| {
+            let dr = rows.iter().position(|&x| x == r).unwrap();
+            let dc = cols.iter().position(|&x| x == c).unwrap();
+            (&page.rows[dr].cells[dc], dr, dc)
+        };
+        for g in &scene.cells {
+            let (pc, _, _) = cell_at(g.row, g.col);
+            prop_assert_eq!(&g.text, &pc.text);
+            prop_assert_eq!(g.align, pc.align);
+            prop_assert_eq!(g.style_key, pc.style_key);
+        }
+        // Each merge rect's shown corner carries the anchor on the page, and
+        // spans the same shown tracks.
+        prop_assert_eq!(scene.merges.len(), page.merges.len());
+        let mut corners = std::collections::HashSet::new();
+        for (gm, pm) in scene.merges.iter().zip(&page.merges) {
+            let dc = vp.x_offsets.iter().position(|&x| (x - gm.x).abs() < 1e-9).unwrap();
+            let dr = vp.y_offsets.iter().position(|&y| (y - gm.y).abs() < 1e-9).unwrap();
+            prop_assert_eq!((pm.row, pm.col), (rows[dr], cols[dc]));
+            let shown_rows = rows.iter().filter(|&&r| r >= pm.row && r < pm.row + pm.row_span).count();
+            let shown_cols = cols.iter().filter(|&&c| c >= pm.col && c < pm.col + pm.col_span).count();
+            let dr1 = vp.y_offsets.iter().position(|&y| (y - (gm.y + gm.h)).abs() < 1e-9).unwrap();
+            let dc1 = vp.x_offsets.iter().position(|&x| (x - (gm.x + gm.w)).abs() < 1e-9).unwrap();
+            prop_assert_eq!(shown_rows, dr1 - dr);
+            prop_assert_eq!(shown_cols, dc1 - dc);
+            let pc = &page.rows[dr].cells[dc];
+            prop_assert_eq!(&gm.text, &pc.text);
+            prop_assert_eq!(gm.style_key, pc.style_key);
+            corners.insert((dr, dc));
+        }
+        // Every other page cell with content is a grid cell.
+        for (dr, row) in page.rows.iter().enumerate() {
+            for (dc, pc) in row.cells.iter().enumerate() {
+                if corners.contains(&(dr, dc)) || (pc.text.is_empty() && pc.style_key == 0) {
+                    continue;
+                }
+                prop_assert!(scene.cells.iter().any(|g| g.row == row.index && g.col == pc.col));
+            }
+        }
+        // Same gridlines (both broken across merges) and data bars.
+        prop_assert_eq!(&scene.gridlines, &page.rules);
+        prop_assert_eq!(scene.databars.len(), page.databars.len());
+        for (g, p) in scene.databars.iter().zip(&page.databars) {
+            prop_assert_eq!((g.row, g.col, &g.fill), (p.row, p.col, &p.fill));
+            prop_assert!((g.x - p.x).abs() < 1e-9 && (g.w - p.w).abs() < 1e-9);
         }
     }
 }

@@ -37,6 +37,7 @@ export {
   type Rules,
   totalHeightPt,
   totalWidthPt,
+  HEADING_INDEX,
 } from "./lowered";
 
 export {
@@ -131,6 +132,8 @@ export {
   type GridCommentMarker,
   type FrameWindow,
   type FrameWindowSpec,
+  type FramePageSpec,
+  type TracksSpec,
   type GridDataBar,
   type GridFreeze,
   type GridMerge,
@@ -210,6 +213,7 @@ export {
 export {
   NO_FILL_SWATCH,
   offsetTableRows,
+  REPLACE_FRACTION,
   tableRefreshOps,
   textOffsetLength,
   type TableRefreshOps,

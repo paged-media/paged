@@ -309,6 +309,26 @@ mod wasm {
             to_js(&lowered)
         }
 
+        /// Lower explicit tracks for the page (ADR 510):
+        /// `{rows, cols, headerRows?, frozenCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` with sheet indices.
+        pub fn get_tracks_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::TracksSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_tracks_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
+        /// The page table of a frame (ADR 510): `{topRow, leftCol, widthPt,
+        /// heightPt, freezeRows?, freezeCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` (frame window + tracks).
+        pub fn get_frame_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::FramePageSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_frame_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
         /// Wave 5 — the re-enterable INPUT text of every cell in `range`
         /// (row-major `string[][]`; formulas with `=`): a copy's snapshot.
         pub fn get_range_inputs(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
