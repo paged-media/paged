@@ -21,7 +21,8 @@
 // from the workspace. Node has no GPU, so the engine runs the CPU twins
 // of the kernels (image ADR 465); the document is written back with the
 // filtered image in its frame. A mask given as data narrows the region:
-// polygons in the JSON argument, an alpha coverage read from a file with
+// polygons in the JSON argument (with a fill rule or per-polygon ops, so
+// an inner polygon cuts a hole), an alpha coverage read from a file with
 // the `bytes` argument form "@path"; `selection: true` is refused, as
 // there is no editor session to hold one.
 
@@ -188,6 +189,60 @@ describe("paged-node invoke — paged.image", () => {
           want,
         );
       }
+  });
+
+  it("filterRegion with fillRule evenodd: an inner polygon cuts a hole; a subtract op does too", async () => {
+    const outer = [
+      [0, 0],
+      [8, 0],
+      [8, 6],
+      [0, 6],
+    ];
+    const inner = [
+      [2, 1],
+      [6, 1],
+      [6, 4],
+      [2, 4],
+    ];
+    const before = stripes();
+    for (const [name, mask] of [
+      ["evenodd", { polygons: [outer, inner], fillRule: "evenodd" }],
+      ["subtract", { polygons: [outer, inner], ops: ["add", "subtract"] }],
+    ] as const) {
+      const out = join(tmp.dir, `hole-${name}.paged`);
+      const r = await cli([
+        "invoke",
+        docPath,
+        FILTER,
+        JSON.stringify({
+          layer: LAYER,
+          params: { "invert.enabled": true },
+          mask,
+        }),
+        "-o",
+        out,
+        IMAGE,
+      ]);
+      expect(r.code, JSON.stringify(r.json) + r.err).toBe(0);
+      const after = await placedPixels(out);
+      for (let y = 0; y < H; y++)
+        for (let x = 0; x < W; x++) {
+          const o = (y * W + x) * 4;
+          const hole = x >= 2 && x < 6 && y >= 1 && y < 4;
+          const want = hole
+            ? Array.from(before.subarray(o, o + 4))
+            : [
+                255 - before[o]!,
+                255 - before[o + 1]!,
+                255 - before[o + 2]!,
+                255,
+              ];
+          expect(
+            Array.from(after.subarray(o, o + 4)),
+            `${name} (${x}, ${y})`,
+          ).toEqual(want);
+        }
+    }
   });
 
   it("filterRegion within an alpha mask read from a file (@path): 0 untouched, 255 inverted, 128 half way", async () => {

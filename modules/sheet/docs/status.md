@@ -84,6 +84,21 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Tables, editable** (ADR 517). `createTable` makes a range a table (its part, the worksheet
+  relationship, the content type and `<tablePart>`; blank and repeated headers made unique as
+  Excel makes them; without headers the data moves down under a `Column1…` row), `resizeTable`
+  (the header row stays), `renameTable` and header edits (the structured references follow),
+  `setTableTotals` (the row below, `Total` and a SUM or COUNT; `setTotalsFunction`: SUBTOTAL's
+  functions, a custom formula, a label), `setCalculatedColumn` (filled down every data row, kept
+  as `calculatedColumnFormula`), `setTableStyle` (the 60 built-in styles and a workbook's own
+  `<tableStyles>`, banded rows and columns, first and last column). A typed entry (`enterCell`)
+  directly below or to the right of a table grows it, and a formula typed into an empty table
+  column becomes its calculated column. Table styles paint under the cells' own formatting
+  through the shared styler, on the page and in the grid, empty table cells included. The
+  built-in styles are a family model over the theme (nine families × dark 1 and six accents),
+  not Excel's internal definitions: a shade can differ by a tint step. The object model's
+  `table` kind is writable (name, range, totals row, style and its switches) and creatable, with
+  a Table section in Sheet properties.
 - **Sort and AutoFilter** (ADR 517). `sortRangeBy` is Excel's Sort dialog: up to 64 levels, each
   by value (ascending, descending, a custom list), cell colour or font colour (on top or on
   bottom), case-sensitive or not, top to bottom or left to right; stable, blanks last, formats move
@@ -251,12 +266,23 @@ each published canary added is under [Releases](#releases).
   the frame's handles; the second needs a host that reports a gesture's reflow (core v0.71.13
   through plugin-sdk 0.2.58). On an older host a handle resize leaves the split where it was
   until the next resize by command or the next workbook edit.
-- **Charts.** Ten kinds, read from the workbook or authored over a range, placed as vector paths
-  and labelled text frames in one document write, grouped as one object, and replaced in one
-  write when their data changes. Each label frame is sized to its text (measured with the
-  document's font metrics), set at the chart's size and justified to its anchor, inside the
-  chart. A new chart lands inside the page's margins: beside what is selected (below it, else
-  above, else to its right or left), never on top of it, and in the margin box's top-left
+- **Charts** (ADR 519). Every chart kind Excel writes is drawn as itself: column, bar, line and
+  area (each clustered, stacked or 100% stacked), pie, doughnut (one ring per series), pie of
+  pie, bar of pie, scatter, bubble, radar (outlined, with markers, filled), stock (high-low-close
+  and open-high-low-close), surface (as a contour), and the Office 2016 chartEx kinds waterfall,
+  funnel, treemap, sunburst, histogram, pareto and box & whisker. A 3-D chart is drawn as its
+  2-D kind and flagged; a region map is a labelled placeholder. Combo charts keep each plot's
+  kind and draw a secondary value axis. Markers, data labels, trendlines (with R² and
+  equation, fitted as LINEST fits), error bars, logarithmic, reversed and date axes, axis
+  crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
+  Colour and text roles carry document swatch and style references, which the page uses.
+  Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
+  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  one document write, grouped as one object, and replaced in one write when their data
+  changes. Each label frame is sized to its text (measured with the document's font metrics,
+  or sized by the frame when a document style sets the label), justified to its anchor, inside
+  the chart. A new chart lands inside the page's margins: beside what is selected (below it,
+  else above, else to its right or left), never on top of it, and in the margin box's top-left
   corner with nothing selected. It is shrunk proportionally only when the margin box cannot
   hold 360 × 240 pt.
 - **Host panels in the sheet context.** The host's Swatches panel shows and edits the workbook
@@ -351,8 +377,7 @@ ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the 
 
 ## Limits of what is shipped
 
-- **Object model.** Tables are read-only (the xlsx table part is written back byte for byte, so
-  a table edit would not survive a save). The version label is the document's, not a frame's:
+- **Object model.** The version label is the document's, not a frame's:
   core keeps one label per plugin per host, and a frame's already holds the placement binding.
   The page refresh after a write is a second document step. Charts the object model creates or
   changes are kept as a chart-op journal next to each version; charts authored in the panel are

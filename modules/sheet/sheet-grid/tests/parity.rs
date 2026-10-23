@@ -217,6 +217,7 @@ fn build(seed: &Seed) -> (SheetModel, SheetCondFmt) {
     }
     let cf = if seed.cf {
         SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![
                 CfBlock {
                     ranges: vec![(0, 0, 39, 3)],

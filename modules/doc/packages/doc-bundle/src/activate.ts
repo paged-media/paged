@@ -39,6 +39,7 @@ import {
 } from "./panels/outline-panel.js";
 import { placeEmbedded } from "./place.js";
 import { openStandalone } from "./open.js";
+import { readTableCells } from "./save-cells.js";
 import {
   discoverDocs,
   readDocBytes,
@@ -186,16 +187,18 @@ export function activate(host: BundleHost): BundleHandle {
       contents,
       sectionBlocks(ir).map(pouredParagraphCount),
     );
+    const { cells, skips } = await readTableCells(host, ir, sections);
     const engine = await DocEngine.boot();
     try {
       engine.loadDocx(source);
       engine.setMidPageColumns(state.data.midPageColumns ?? true);
-      const bytes = engine.saveEditedFromContent(content);
+      const bytes = engine.saveEditedFromContent({ ...content, cells });
       host.diagnostics.set(
         "media.paged.doc/save-back",
-        engine
-          .lastSaveSkips()
-          .map((message) => ({ severity: "warning" as const, message })),
+        [...skips, ...engine.lastSaveSkips()].map((message) => ({
+          severity: "warning" as const,
+          message,
+        })),
       );
       return bytes;
     } finally {
@@ -265,12 +268,20 @@ export function activate(host: BundleHost): BundleHandle {
       try {
         engine.loadDocx(last.source);
         engine.setMidPageColumns(last.midPageColumns);
-        const bytes = engine.saveEditedFromContent(content);
+        const read = await readTableCells(
+          host,
+          engine.lowered(),
+          last.storyIds,
+        );
+        const bytes = engine.saveEditedFromContent({
+          ...content,
+          cells: read.cells,
+        });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan
-        // column ops, non-patchable runs) — reaches the Problems panel
-        // instead of dying silently in the engine.
-        const skips = engine.lastSaveSkips();
+        // column ops, non-patchable runs, cells it could not read) — reaches
+        // the Problems panel instead of dying silently in the engine.
+        const skips = [...read.skips, ...engine.lastSaveSkips()];
         host.diagnostics.set(
           "media.paged.doc/save-back",
           skips.map((message) => ({ severity: "warning" as const, message })),

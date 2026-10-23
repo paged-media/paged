@@ -64,6 +64,11 @@ export function documentChangeOf(
         kind: msg.kind,
         pageIds: [...(msg.payload.pageIds ?? [])],
         ...reflowOf(msg.payload.reflow),
+        // Engine ADR 1004 — the step this change committed, which a
+        // follow-up write may join (`mutate(…, { amend })`).
+        ...(typeof msg.payload.appliedSeq === "number"
+          ? { appliedSeq: msg.payload.appliedSeq }
+          : {}),
       };
     case "undoApplied":
     case "redoApplied":

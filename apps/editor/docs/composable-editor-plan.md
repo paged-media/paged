@@ -1227,19 +1227,25 @@ Per module:
 - **draw:** done. The tool-only operations have typed twins (`knife`, `scissorsAt`,
   `shapeBuild`); the width profile is a typed command (`widthProfile { targets, widths }`) and
   a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
-  recipe an edited source feeds. A rebuild on every edit is left out: it would be a second
-  undo step after the edit's own (`modules/draw/docs/status.md`).
+  recipe an edited source feeds, and an edit of a source rebuilds those recipes on its own, in
+  the edit's undo step (`mutate(…, { amend })`, engine ADR 1004, extensions ADR 337; the
+  command stays for a host without it; `modules/draw/docs/status.md`).
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
-  region: the typed `filterRegion { layer, params, region? }` runs the adjustment chain (blur,
-  sharpen, hue, invert and the adjustment paths) on a rectangle of a pixel layer, on the GPU where
-  one exists and headless on shipped CPU twins of the same kernels, held to the GPU's tolerance
-  (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it through `paged-node invoke`. A
-  selection is data there: `mask { polygons?, alpha?, feather? }` (polygons in image pixels, an
-  8-bit coverage as bytes or an image, a feather) narrows the region, partial coverage blending,
-  on both paths alike; in the editor `selection: true` filters within the live selection, and
-  headless it is refused with the reason (`modules/image/docs/status.md`).
+  region: the typed `filterRegion { layer, params, region?, mask?, selection? }` runs the
+  adjustment chain (blur, sharpen, hue, invert and the adjustment paths) on a rectangle of a
+  pixel layer, on the GPU where one exists and headless on shipped CPU twins of the same
+  kernels, held to the GPU's tolerance (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it
+  through `paged-node invoke`. A selection is data there: `mask { polygons?, ops?, fillRule?,
+alpha?, feather? }` (polygons in image pixels, filled together by an even–odd or non-zero rule
+  or folded in by per-polygon add / subtract / intersect, so a polygon cuts a hole; an 8-bit
+  coverage as bytes or an image; a feather) narrows the region, partial coverage blending, on
+  both paths alike. In the editor `selection: true` filters within the frame's selection: the
+  live one, or the one the session kept when that frame's image closed, resampled when the
+  canvas is the same image at another size; another crop or no selection is refused with the
+  reason, as it is headless. A Playwright spec makes a marquee selection and checks that only
+  its pixels change and one undo restores them (`modules/image/docs/status.md`).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) or a sheet's
@@ -1259,8 +1265,9 @@ chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) o
   2026-10-23).
 - **doc:** done: the exporter works after reopening a saved document; `block.text` writable;
   table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
-  heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
-  headless host has no native-open door, so `paged-node` places it in a frame).
+  heading anchor (`{ heading: n }`); a `.docx` opens standalone headless (the SDK's headless
+  host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
+  table cells are saved back on export.
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

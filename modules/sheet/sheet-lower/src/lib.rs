@@ -101,6 +101,7 @@ pub use styler::CellStyler;
 // dep — the xlsx side converts its parsed cf model into these mirror types).
 pub mod condfmt;
 // ---- Lowering over EXPLICIT tracks (ADR 510: the page side of a frame window). ----
+pub mod table_band;
 pub mod tracks;
 pub use condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, DataBar, ScaleStop, SheetCondFmt,
@@ -638,7 +639,13 @@ pub fn lower_range_condfmt(
                     }
                     (d.text, d.align, key, d.fill.map(String::from), runs)
                 }
-                None => (String::new(), Align::General, 0, None, None),
+                None => (
+                    String::new(),
+                    Align::General,
+                    styler.key_for_empty(r, c),
+                    None,
+                    None,
+                ),
             };
             cells.push(LoweredCell {
                 col: c - left,

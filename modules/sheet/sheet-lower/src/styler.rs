@@ -89,10 +89,14 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
         cell: &Cell,
         format_color: Option<FormatColor>,
     ) -> u32 {
-        if self.cf.is_empty() && format_color.is_none() {
+        let table = self.table_attrs(row, col);
+        if self.cf.is_empty() && format_color.is_none() && table.is_none() {
             return self.key_for_style(cell.style);
         }
         let mut base = self.visual.visual(cell.style).unwrap_or_default();
+        if let Some(t) = &table {
+            base = crate::table_band::under(t, &base);
+        }
         if let Some(c) = format_color {
             base.text_rgb = Some(self.visual.format_color_rgb(c));
         }
@@ -108,6 +112,21 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
             }
         };
         self.intern(effective)
+    }
+
+    /// The table style at sheet `(row, col)`, if a table covers it.
+    fn table_attrs(&self, row: u32, col: u32) -> Option<VisualAttrs> {
+        self.cf.tables.iter().find_map(|b| b.attrs_at(row, col))
+    }
+
+    /// The `style_key` of an EMPTY cell at sheet `(row, col)`: the table
+    /// style when a table covers it (Excel bands empty table cells too),
+    /// else the default key 0.
+    pub fn key_for_empty(&mut self, row: u32, col: u32) -> u32 {
+        match self.table_attrs(row, col) {
+            Some(t) => self.intern(t),
+            None => 0,
+        }
     }
 
     /// The key of a bare `StyleId` (no format colour, no cf).

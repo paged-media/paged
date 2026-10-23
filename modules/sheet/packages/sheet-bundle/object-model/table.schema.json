@@ -4,7 +4,6 @@
     "type": {
       "kind": "text"
     },
-    "access": "readOnly",
     "title": "Name"
   },
   {
@@ -20,8 +19,8 @@
     "type": {
       "kind": "text"
     },
-    "access": "readOnly",
-    "title": "Range"
+    "title": "Range",
+    "summary": "Resizing keeps the header row where it is."
   },
   {
     "path": "columns",
@@ -47,7 +46,6 @@
     "type": {
       "kind": "bool"
     },
-    "access": "readOnly",
     "title": "Totals row"
   },
   {
@@ -55,9 +53,36 @@
     "type": {
       "kind": "text"
     },
-    "access": "readOnly",
     "title": "Table style",
     "nullable": true
+  },
+  {
+    "path": "bandedRows",
+    "type": {
+      "kind": "bool"
+    },
+    "title": "Banded rows"
+  },
+  {
+    "path": "bandedColumns",
+    "type": {
+      "kind": "bool"
+    },
+    "title": "Banded columns"
+  },
+  {
+    "path": "firstColumn",
+    "type": {
+      "kind": "bool"
+    },
+    "title": "First column"
+  },
+  {
+    "path": "lastColumn",
+    "type": {
+      "kind": "bool"
+    },
+    "title": "Last column"
   },
   {
     "path": "totals",

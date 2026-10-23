@@ -88,6 +88,12 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   list, case-sensitive, left-to-right and colour sorts with their `sortState`; every criterion,
   the clock-driven dynamic dates, the dropdown data, named views; property tests: a two-key sort
   is stable against brute force, the custom-condition engine equals a brute-force reading).
+- Tables: `sheet-xlsx/src/table_doc.rs` (the part read whole and written back, a new part with its
+  relationship, content type and `<tablePart>`), `sheet-xlsx/src/table_style.rs` (the 60 built-in
+  styles as a family model over the theme, a workbook's `<tableStyles>`),
+  `sheet-lower/src/table_band.rs` (the style under the cell's own, folded by the shared
+  `CellStyler` through `SheetCondFmt::tables`), `sheet-js/src/core/tables.rs`,
+  `sheet-conformance/tests/it/w2_tables.rs`.
 
 **Frozen type amendment (filter criteria).** `sheet_core::FilterCriterion` gains `DateGroups`,
 `Custom`, `Dynamic`, `Color` and `Icon` (with `FilterOp`, `CustomCondition`, `DateGroup`);
