@@ -58,10 +58,11 @@ pub struct ColumnFilter {
     pub criterion: FilterCriterion,
 }
 
-/// A column criterion. `Values`, `Contains` and `Top` are applied; anything
-/// else Excel can express (dynamic date filters, colour filters, custom
-/// operator pairs) is [`FilterCriterion::Unsupported`] — known to exist,
-/// preserved in the file, not applied by a Paged view.
+/// A column criterion (ECMA-376 §18.3.2.2–.10). Everything Excel's filter
+/// dropdown writes has a variant (the ADR 517 amendment added `DateGroups`,
+/// `Custom`, `Dynamic`, `Color` and `Icon`); [`FilterCriterion::Unsupported`]
+/// is what is left — an extension criterion Paged does not read, preserved
+/// in the file and not applied.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FilterCriterion {
     /// Keep rows whose displayed text equals one of `values`
@@ -78,4 +79,91 @@ pub enum FilterCriterion {
     Top { n: f64, percent: bool, top: bool },
     /// Any other criterion (not applied).
     Unsupported,
+    /// A value list with date groups (`<filters>` holding `<dateGroupItem>`s):
+    /// keep rows whose text is one of `values`, whose date falls in one of
+    /// `dates`, or (with `blanks`) that are empty. ADR 517 amendment.
+    DateGroups {
+        values: Vec<CompactString>,
+        blanks: bool,
+        dates: Vec<DateGroup>,
+    },
+    /// One or two operator conditions (`<customFilters [and="1"]>`); text
+    /// operands may carry the wildcards `*`, `?` and `~`. ADR 517 amendment.
+    Custom {
+        and: bool,
+        conditions: Vec<CustomCondition>,
+    },
+    /// A dynamic filter (`<dynamicFilter type=…>`): `aboveAverage`,
+    /// `belowAverage`, `today`, `thisWeek`, `lastMonth`, `Q1`…`Q4`,
+    /// `M1`…`M12`, `yearToDate`, … `val`/`max_val` are the bounds Excel
+    /// computed when the filter was applied. ADR 517 amendment.
+    Dynamic {
+        kind: CompactString,
+        val: Option<f64>,
+        max_val: Option<f64>,
+    },
+    /// Keep rows whose cell (`cell_color`) or font colour is the colour of
+    /// differential format `dxf_id` (`<colorFilter>`). ADR 517 amendment.
+    Color {
+        cell_color: bool,
+        dxf_id: Option<u32>,
+    },
+    /// Keep rows whose conditional-format icon is icon `id` of icon set `set`
+    /// (`<iconFilter>`; no `id`: no icon). ADR 517 amendment.
+    Icon { set: CompactString, id: Option<u32> },
+}
+
+/// The comparison of a [`CustomCondition`] (`ST_FilterOperator`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum FilterOp {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+}
+
+impl FilterOp {
+    pub fn parse(s: &str) -> Option<FilterOp> {
+        Some(match s {
+            "equal" => FilterOp::Equal,
+            "notEqual" => FilterOp::NotEqual,
+            "lessThan" => FilterOp::LessThan,
+            "lessThanOrEqual" => FilterOp::LessThanOrEqual,
+            "greaterThan" => FilterOp::GreaterThan,
+            "greaterThanOrEqual" => FilterOp::GreaterThanOrEqual,
+            _ => return None,
+        })
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FilterOp::Equal => "equal",
+            FilterOp::NotEqual => "notEqual",
+            FilterOp::LessThan => "lessThan",
+            FilterOp::LessThanOrEqual => "lessThanOrEqual",
+            FilterOp::GreaterThan => "greaterThan",
+            FilterOp::GreaterThanOrEqual => "greaterThanOrEqual",
+        }
+    }
+}
+
+/// One `<customFilter operator val>`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CustomCondition {
+    pub op: FilterOp,
+    pub val: CompactString,
+}
+
+/// One `<dateGroupItem>`: a year, optionally narrowed to a month, day,
+/// hour, minute or second (`grouping` says how deep).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DateGroup {
+    pub year: u32,
+    pub month: Option<u32>,
+    pub day: Option<u32>,
+    pub hour: Option<u32>,
+    pub minute: Option<u32>,
+    pub second: Option<u32>,
 }

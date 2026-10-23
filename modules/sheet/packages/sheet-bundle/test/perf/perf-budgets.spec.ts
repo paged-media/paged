@@ -491,7 +491,9 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 2,
         "=reads": 0,
-        "=bytesWritten": 18661,
+        // The saved workbook now carries the sort as Excel writes it, a
+        // `<sortState>` of ~100 bytes (sheet ADR 517) — content, not work.
+        "=bytesWritten": 18763,
         "=sceneItems": 0,
         "=rejected": 0,
       });
