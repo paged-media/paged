@@ -26,7 +26,8 @@ import { afterEach, describe, expect, it } from "bun:test";
 import fc from "fast-check";
 
 import {
-  setViewToggle,
+  detachedEditorScope,
+  setViewToggle as setToggle,
   type CanvasPointerEvent,
   type PagedEditor,
 } from "@paged-media/shell";
@@ -49,6 +50,11 @@ import {
   snappingOn,
 } from "../src/handlers/snapper";
 import { harness } from "./support";
+
+// The fake editors carry no scope, so the snapper reads the detached one.
+const scope = detachedEditorScope();
+const setViewToggle = (which: "snapToPoints", on: boolean) =>
+  setToggle(scope, which, on);
 
 const RUNS = { numRuns: 200, seed: 0x9e57 };
 const coord = fc.double({ min: -5000, max: 5000, noNaN: true });
@@ -306,11 +312,11 @@ describe("the host snapper (RFI C-68)", () => {
   });
 
   it("snapping is off while Cmd or Shift is held, and when View ▸ Snap to points is off", () => {
-    expect(snappingOn({})).toBe(true);
-    expect(snappingOn({ cmd: true })).toBe(false);
-    expect(snappingOn({ shift: true })).toBe(false);
+    expect(snappingOn(scope, {})).toBe(true);
+    expect(snappingOn(scope, { cmd: true })).toBe(false);
+    expect(snappingOn(scope, { shift: true })).toBe(false);
     setViewToggle("snapToPoints", false);
-    expect(snappingOn({})).toBe(false);
+    expect(snappingOn(scope, {})).toBe(false);
   });
 
   it("engineSnapPoint: the engine's answer when it gives one; null for no answer, a zero tolerance or a throw", async () => {

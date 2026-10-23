@@ -29,11 +29,14 @@
 // The rows are commands — the clipboard, Arrange, Group, Lock and Hide
 // (F-41), Delete, Select all — each greyed by its own `when`.
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
+  CONTEXT_MENU_ROOT,
   CanvasContextMenu,
+  FRAME_SURFACE_ATTR,
   editorRootOf,
+  isEnabled,
   openCanvasContextMenu,
   ownsEvent,
   queryEditor,
@@ -175,9 +178,46 @@ export const CANVAS_CONTEXT_MENU_KEYBINDINGS: KeybindingContribution[] = [
   { key: "contextmenu", command: PAGED_EDIT_CONTEXT_MENU },
 ];
 
+/** The right-click rows a frame surface's bundle contributed for the active
+ *  edit context: menu items under `Context/…` whose `when` holds
+ *  (extensions ADR 334). The label is the path's last segment. */
+export function frameSurfaceRows(paged: PagedEditor): ContextMenuEntry[] {
+  const menus = (
+    paged as unknown as {
+      registries?: {
+        menus?: {
+          list(): Array<{
+            path: string;
+            command: string;
+            group?: string;
+            order?: number;
+            when?: unknown;
+          }>;
+        };
+      };
+    }
+  ).registries?.menus;
+  if (!menus) return [];
+  return menus
+    .list()
+    .filter(
+      (m) =>
+        m.path.startsWith(`${CONTEXT_MENU_ROOT}/`) &&
+        isEnabled(m.when as never, () => paged),
+    )
+    .sort((a, b) => (a.order ?? 100) - (b.order ?? 100))
+    .map((m) => ({
+      command: m.command,
+      group: m.group ?? "default",
+      label: m.path.split("/").filter(Boolean).at(-1),
+    }));
+}
+
 /** The right-click door and the menu itself. Render inside PagedShell. */
 export function CanvasContextMenuHost() {
   const paged = usePaged();
+  const [entries, setEntries] =
+    useState<readonly ContextMenuEntry[]>(CANVAS_CONTEXT_MENU);
   // The live editor for the document listener (ADR 229: written in a
   // layout effect, read in the event).
   const pagedRef = useRef(paged);
@@ -193,6 +233,16 @@ export function CanvasContextMenuHost() {
         return;
       e.preventDefault();
       const { clientX, clientY } = e;
+      // Inside a frame surface: its bundle's rows, and no page-item hit
+      // test (the surface already chose what the right-click is about).
+      if (target?.closest?.(`[${FRAME_SURFACE_ATTR}]`)) {
+        const rows = frameSurfaceRows(pagedRef.current);
+        if (rows.length === 0) return;
+        setEntries(rows);
+        openCanvasContextMenu(scopeOf(pagedRef.current), clientX, clientY);
+        return;
+      }
+      setEntries(CANVAS_CONTEXT_MENU);
       void selectUnder(pagedRef.current, viewport, clientX, clientY)
         .catch(() => undefined)
         .then(() =>
@@ -203,5 +253,5 @@ export function CanvasContextMenuHost() {
     return () =>
       document.removeEventListener("contextmenu", onContextMenu, true);
   }, []);
-  return <CanvasContextMenu entries={CANVAS_CONTEXT_MENU} />;
+  return <CanvasContextMenu entries={entries} />;
 }

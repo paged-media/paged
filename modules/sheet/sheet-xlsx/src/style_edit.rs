@@ -47,6 +47,9 @@ use sheet_core::{StyleId, StyleTable};
 
 use crate::error::XlsxError;
 use crate::opc::{ModeledKind, PartEntry};
+use crate::parts::style_model::{
+    doc_refs_attrs, doc_refs_of, StyleSheet, XfDocRefs, DOC_EXT_NS, DOC_EXT_URI,
+};
 use crate::parts::styles::{builtin_num_fmt, ColorAttrs, ColorContext};
 use crate::parts::theme::ThemePalette;
 use crate::rels::{parse_rels, part_dir, resolve_target};
@@ -55,6 +58,9 @@ use crate::splice::{
     splice, Span,
 };
 use crate::XlsxDocument;
+use sheet_core::visual::{
+    builtin_style_name, CellFill, DocSwatchRef, GradientKind, PatternKind, UnderlineKind, VertAlign,
+};
 
 /// The styles part content type.
 const CT_STYLES: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml";
@@ -122,6 +128,87 @@ const BORDER_ORDER: &[&str] = &[
 pub struct EdgePatch {
     pub style: String,
     pub color: Option<String>,
+    /// A document swatch the line colour references (W2.2): the concrete
+    /// colour written is its `fallback_rgb`, the reference rides the
+    /// record's paged extension.
+    pub swatch: Option<DocSwatchRef>,
+}
+
+/// A gradient fill a patch sets (W2.2): `"linear"` at `degree`, or
+/// `"path"` from the inner rectangle; stops `(position, #RRGGBB)`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct GradientPatch {
+    pub kind: String,
+    pub degree: f64,
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
+    pub stops: Vec<(f64, String)>,
+}
+
+/// The W2.2 facets of a [`StylePatch`] (sheet ADR 518): the rest of the
+/// cell visual model, document references and Excel named styles. Every
+/// `Some` field is set; an EMPTY string clears a text field.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StyleExt {
+    /// A `patternFill` pattern (`solid`, `gray125`, `darkTrellis`, … the 18
+    /// patterns, `none`); its foreground is `StylePatch::fill`, its
+    /// background [`fill_bg`](Self::fill_bg).
+    pub pattern: Option<String>,
+    pub fill_bg: Option<String>,
+    pub gradient: Option<GradientPatch>,
+    pub border_diagonal: Option<EdgePatch>,
+    pub diagonal_up: Option<bool>,
+    pub diagonal_down: Option<bool>,
+    /// Indent levels (0–250).
+    pub indent: Option<u32>,
+    /// `textRotation`: 0–180, 255 stacked.
+    pub rotation: Option<u32>,
+    pub shrink: Option<bool>,
+    pub strike: Option<bool>,
+    /// `baseline` / `superscript` / `subscript`.
+    pub vert_align: Option<String>,
+    /// `none` / `single` / `double` / `singleAccounting` / `doubleAccounting`.
+    pub underline_style: Option<String>,
+    /// The fill foreground as a document swatch.
+    pub fill_swatch: Option<DocSwatchRef>,
+    /// The pattern background as a document swatch.
+    pub fill_bg_swatch: Option<DocSwatchRef>,
+    /// The font colour as a document swatch.
+    pub font_swatch: Option<DocSwatchRef>,
+    /// Document character / paragraph / cell styles (empty clears).
+    pub doc_char_style: Option<String>,
+    pub doc_para_style: Option<String>,
+    pub doc_cell_style: Option<String>,
+    /// Apply an Excel named cell style by name (`Heading 1`, `Good`, …): a
+    /// built-in the workbook lacks is added from Excel's definition.
+    pub named_style: Option<String>,
+}
+
+impl StyleExt {
+    fn touches_font(&self) -> bool {
+        self.strike.is_some()
+            || self.vert_align.is_some()
+            || self.underline_style.is_some()
+            || self.font_swatch.is_some()
+    }
+
+    fn touches_fill(&self) -> bool {
+        self.pattern.is_some()
+            || self.fill_bg.is_some()
+            || self.gradient.is_some()
+            || self.fill_swatch.is_some()
+            || self.fill_bg_swatch.is_some()
+    }
+
+    fn touches_alignment(&self) -> bool {
+        self.indent.is_some() || self.rotation.is_some() || self.shrink.is_some()
+    }
+
+    fn touches_border(&self) -> bool {
+        self.border_diagonal.is_some() || self.diagonal_up.is_some() || self.diagonal_down.is_some()
+    }
 }
 
 /// A partial cell style: every `Some` field is set, every `None` field is
@@ -154,6 +241,16 @@ pub struct StylePatch {
     /// Excel's quote prefix (`<xf quotePrefix="1">`): the cell's text was
     /// entered after a leading `'` (ruling `sheet.edit.typed-entry`).
     pub quote_prefix: Option<bool>,
+    /// `<protection locked>`: a locked cell refuses an entry while its sheet
+    /// is protected (Excel's default is locked; sheet ADR 517).
+    pub locked: Option<bool>,
+    /// `<protection hidden>`: the formula is not shown while the sheet is
+    /// protected.
+    pub formula_hidden: Option<bool>,
+    /// The W2.2 facets (patterns, gradients, diagonals, indent, rotation,
+    /// shrink, strike, super/subscript, underline kinds, document references,
+    /// named styles).
+    pub ext: StyleExt,
 }
 
 impl StylePatch {
@@ -164,6 +261,7 @@ impl StylePatch {
             || self.italic.is_some()
             || self.underline.is_some()
             || self.font_color.is_some()
+            || self.ext.touches_font()
     }
 
     fn edges(&self) -> [(&'static str, &Option<EdgePatch>); 4] {
@@ -176,11 +274,14 @@ impl StylePatch {
     }
 
     fn touches_border(&self) -> bool {
-        self.edges().iter().any(|(_, e)| e.is_some())
+        self.edges().iter().any(|(_, e)| e.is_some()) || self.ext.touches_border()
     }
 
     fn touches_alignment(&self) -> bool {
-        self.h_align.is_some() || self.v_align.is_some() || self.wrap.is_some()
+        self.h_align.is_some()
+            || self.v_align.is_some()
+            || self.wrap.is_some()
+            || self.ext.touches_alignment()
     }
 
     /// True when the patch sets nothing.
@@ -509,13 +610,152 @@ fn patched_font(mut font: Elem, p: &StylePatch, prefix: &str) -> Result<Elem, Xl
                 .push(Elem::new(format!("{prefix}color")).with_attr("rgb", &argb(color)?));
         }
     }
+    let x = &p.ext;
+    if let Some(sw) = &x.font_swatch {
+        font.remove_children("color");
+        font.children
+            .push(Elem::new(format!("{prefix}color")).with_attr("rgb", &argb_of(sw.fallback_rgb)));
+    }
+    flag(&mut font, "strike", x.strike);
+    if let Some(v) = &x.vert_align {
+        if !matches!(v.as_str(), "baseline" | "superscript" | "subscript") {
+            return Err(XlsxError::Structure(format!(
+                "vertical text alignment {v:?}"
+            )));
+        }
+        font.remove_children("vertAlign");
+        if v != "baseline" {
+            font.children
+                .push(Elem::new(format!("{prefix}vertAlign")).with_attr("val", v));
+        }
+    }
+    if let Some(u) = &x.underline_style {
+        let kind = UnderlineKind::parse(Some(u.as_str()));
+        if kind == UnderlineKind::None && u != "none" {
+            return Err(XlsxError::Structure(format!("underline {u:?}")));
+        }
+        font.remove_children("u");
+        match kind {
+            UnderlineKind::None => {}
+            UnderlineKind::Single => font.children.push(Elem::new(format!("{prefix}u"))),
+            k => font.children.push(
+                Elem::new(format!("{prefix}u")).with_attr("val", k.as_xlsx().unwrap_or("single")),
+            ),
+        }
+    }
     font.order_children(FONT_ORDER);
     Ok(font)
 }
 
+/// `(r, g, b)` → `FFRRGGBB`.
+fn argb_of((r, g, b): (u8, u8, u8)) -> String {
+    format!("FF{r:02X}{g:02X}{b:02X}")
+}
+
+/// The `<fill>` a patch asks for (`None` = the reserved `none` fill 0), from
+/// the base fill: a pattern (solid unless the patch names one) with its
+/// foreground and background, or a gradient.
+fn patched_fill(
+    base: Option<Elem>,
+    p: &StylePatch,
+    prefix: &str,
+) -> Result<Option<Elem>, XlsxError> {
+    let x = &p.ext;
+    if let Some(g) = &x.gradient {
+        let mut gf = Elem::new(format!("{prefix}gradientFill"));
+        if g.kind == "path" {
+            gf = gf
+                .with_attr("type", "path")
+                .with_attr("left", &fmt_num(g.left))
+                .with_attr("right", &fmt_num(g.right))
+                .with_attr("top", &fmt_num(g.top))
+                .with_attr("bottom", &fmt_num(g.bottom));
+        } else if g.degree != 0.0 {
+            gf = gf.with_attr("degree", &fmt_num(g.degree));
+        }
+        if g.stops.len() < 2 {
+            return Err(XlsxError::Structure("a gradient needs two stops".into()));
+        }
+        for (pos, c) in &g.stops {
+            let mut st = Elem::new(format!("{prefix}stop")).with_attr("position", &fmt_num(*pos));
+            st.children
+                .push(Elem::new(format!("{prefix}color")).with_attr("rgb", &argb(c)?));
+            gf.children.push(st);
+        }
+        let mut fill = Elem::new(format!("{prefix}fill"));
+        fill.children.push(gf);
+        return Ok(Some(fill));
+    }
+    // The base pattern's colours carry over unless the patch sets them.
+    let base_pf = base.as_ref().and_then(|f| f.child("patternFill")).cloned();
+    let base_type = base_pf.as_ref().and_then(|pf| pf.attr("patternType"));
+    let fg_color = |c: &Elem| c.clone();
+    let mut fg = base_pf
+        .as_ref()
+        .and_then(|pf| pf.child("fgColor"))
+        .map(fg_color);
+    let mut bg = base_pf
+        .as_ref()
+        .and_then(|pf| pf.child("bgColor"))
+        .map(fg_color);
+    if let Some(c) = &p.fill {
+        if c.is_empty() && x.pattern.is_none() {
+            return Ok(None);
+        }
+        fg = (!c.is_empty())
+            .then(|| argb(c))
+            .transpose()?
+            .map(|a| Elem::new(format!("{prefix}fgColor")).with_attr("rgb", &a));
+    }
+    if let Some(sw) = &x.fill_swatch {
+        fg =
+            Some(Elem::new(format!("{prefix}fgColor")).with_attr("rgb", &argb_of(sw.fallback_rgb)));
+    }
+    if let Some(c) = &x.fill_bg {
+        bg = (!c.is_empty())
+            .then(|| argb(c))
+            .transpose()?
+            .map(|a| Elem::new(format!("{prefix}bgColor")).with_attr("rgb", &a));
+    }
+    if let Some(sw) = &x.fill_bg_swatch {
+        bg =
+            Some(Elem::new(format!("{prefix}bgColor")).with_attr("rgb", &argb_of(sw.fallback_rgb)));
+    }
+    let pattern = match &x.pattern {
+        Some(t) => {
+            if PatternKind::parse(t).is_none() {
+                return Err(XlsxError::Structure(format!("fill pattern {t:?}")));
+            }
+            t.clone()
+        }
+        None => match base_type.as_deref() {
+            Some(t) if t != "none" && t != "solid" && base.is_some() => t.to_string(),
+            _ => "solid".to_string(),
+        },
+    };
+    if pattern == "none" {
+        return Ok(None);
+    }
+    let mut pf = Elem::new(format!("{prefix}patternFill")).with_attr("patternType", &pattern);
+    if let Some(fg) = fg {
+        pf.children.push(fg);
+    }
+    match bg {
+        Some(bg) => pf.children.push(bg),
+        None if pattern == "solid" => pf
+            .children
+            .push(Elem::new(format!("{prefix}bgColor")).with_attr("indexed", "64")),
+        None => {}
+    }
+    let mut fill = Elem::new(format!("{prefix}fill"));
+    fill.children.push(pf);
+    Ok(Some(fill))
+}
+
 /// The `<border>` a patch asks for, built from the base border.
 fn patched_border(mut border: Elem, p: &StylePatch, prefix: &str) -> Result<Elem, XlsxError> {
-    for (edge, patch) in p.edges() {
+    let diagonal = [("diagonal", &p.ext.border_diagonal)];
+    for (edge, patch) in p.edges().into_iter().chain(diagonal) {
         let Some(patch) = patch else { continue };
         border.remove_children(edge);
         let mut el = Elem::new(format!("{prefix}{edge}"));
@@ -527,8 +767,11 @@ fn patched_border(mut border: Elem, p: &StylePatch, prefix: &str) -> Result<Elem
                 )));
             }
             el.attrs.push(("style".into(), patch.style.clone()));
-            let color = match &patch.color {
-                Some(c) if !c.is_empty() => {
+            let color = match (&patch.swatch, &patch.color) {
+                (Some(sw), _) => {
+                    Elem::new(format!("{prefix}color")).with_attr("rgb", &argb_of(sw.fallback_rgb))
+                }
+                (None, Some(c)) if !c.is_empty() => {
                     Elem::new(format!("{prefix}color")).with_attr("rgb", &argb(c)?)
                 }
                 _ => Elem::new(format!("{prefix}color")).with_attr("auto", "1"),
@@ -536,6 +779,12 @@ fn patched_border(mut border: Elem, p: &StylePatch, prefix: &str) -> Result<Elem
             el.children.push(color);
         }
         border.children.push(el);
+    }
+    if let Some(up) = p.ext.diagonal_up {
+        border.set("diagonalUp", up.then(|| "1".to_string()));
+    }
+    if let Some(down) = p.ext.diagonal_down {
+        border.set("diagonalDown", down.then(|| "1".to_string()));
     }
     // Excel always writes the five CT_Border edges.
     for edge in ["left", "right", "top", "bottom", "diagonal"] {
@@ -590,6 +839,9 @@ fn fmt_num(n: f64) -> String {
 fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, usize), XlsxError> {
     let prefix = root_prefix(&xml)?;
     let mut xml = xml;
+    if let Some(name) = &p.ext.named_style {
+        xml = ensure_named_style(xml, name, &prefix)?;
+    }
     let mut xf = match record(&xml, "cellXfs", "xf", base)? {
         Some(x) => x,
         None => record(&xml, "cellXfs", "xf", 0)?.unwrap_or_else(|| {
@@ -603,6 +855,21 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
     };
     let idx_of =
         |xf: &Elem, k: &str| -> usize { xf.attr(k).and_then(|s| s.parse().ok()).unwrap_or(0) };
+
+    // An Excel named style: the record takes the style's formatting and
+    // derives from it (`xfId`), as Excel's Cell Styles gallery applies it;
+    // the patch's other facets then apply on top.
+    if let Some(name) = &p.ext.named_style {
+        let (xf_id, style_xf) = named_style_record(&xml, name)?;
+        for k in ["numFmtId", "fontId", "fillId", "borderId"] {
+            xf.set(k, Some(style_xf.attr(k).unwrap_or_else(|| "0".into())));
+        }
+        xf.set("xfId", Some(xf_id.to_string()));
+        xf.remove_children("alignment");
+        if let Some(al) = style_xf.child("alignment") {
+            xf.children.insert(0, al.clone());
+        }
+    }
 
     if let Some(code) = &p.num_fmt {
         if code.is_empty() {
@@ -624,25 +891,15 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
         xf.set("applyFont", Some("1".into()));
     }
 
-    if let Some(fill) = &p.fill {
-        let id = if fill.is_empty() {
-            0 // the reserved `none` fill
-        } else {
-            let el = Elem {
-                name: format!("{prefix}fill"),
-                attrs: Vec::new(),
-                children: vec![Elem {
-                    name: format!("{prefix}patternFill"),
-                    attrs: vec![("patternType".into(), "solid".into())],
-                    children: vec![
-                        Elem::new(format!("{prefix}fgColor")).with_attr("rgb", &argb(fill)?),
-                        Elem::new(format!("{prefix}bgColor")).with_attr("indexed", "64"),
-                    ],
-                }],
-            };
-            let (x, id) = find_or_append(xml, "fills", "fill", &el, &prefix)?;
-            xml = x;
-            id
+    if p.fill.is_some() || p.ext.touches_fill() {
+        let base_fill = record(&xml, "fills", "fill", idx_of(&xf, "fillId"))?;
+        let id = match patched_fill(base_fill, p, &prefix)? {
+            None => 0, // the reserved `none` fill
+            Some(el) => {
+                let (x, id) = find_or_append(xml, "fills", "fill", &el, &prefix)?;
+                xml = x;
+                id
+            }
         };
         xf.set("fillId", Some(id.to_string()));
         xf.set("applyFill", Some("1".into()));
@@ -678,6 +935,23 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
         if let Some(w) = p.wrap {
             al.set("wrapText", w.then(|| "1".to_string()));
         }
+        if let Some(i) = p.ext.indent {
+            if i > 250 {
+                return Err(XlsxError::Structure(format!("indent {i} out of range")));
+            }
+            al.set("indent", (i > 0).then(|| i.to_string()));
+        }
+        if let Some(r) = p.ext.rotation {
+            if r > 180 && r != 255 {
+                return Err(XlsxError::Structure(format!(
+                    "text rotation {r} out of range"
+                )));
+            }
+            al.set("textRotation", (r > 0).then(|| r.to_string()));
+        }
+        if let Some(sh) = p.ext.shrink {
+            al.set("shrinkToFit", sh.then(|| "1".to_string()));
+        }
         xf.remove_children("alignment");
         if !al.attrs.is_empty() {
             // CT_Xf: alignment comes first (then protection, extLst).
@@ -690,7 +964,292 @@ fn apply_to_xf(xml: Vec<u8>, base: usize, p: &StylePatch) -> Result<(Vec<u8>, us
         xf.set("quotePrefix", q.then(|| "1".to_string()));
     }
 
+    if p.locked.is_some() || p.formula_hidden.is_some() {
+        let mut pr = xf
+            .child("protection")
+            .cloned()
+            .unwrap_or_else(|| Elem::new(format!("{prefix}protection")));
+        if let Some(l) = p.locked {
+            // Locked is the default: only an unlocked cell says so.
+            pr.set("locked", (!l).then(|| "0".to_string()));
+        }
+        if let Some(h) = p.formula_hidden {
+            pr.set("hidden", h.then(|| "1".to_string()));
+        }
+        xf.remove_children("protection");
+        if !pr.attrs.is_empty() {
+            // CT_Xf: alignment, protection, extLst.
+            let at = usize::from(xf.child("alignment").is_some());
+            xf.children.insert(at, pr);
+        }
+        xf.set("applyProtection", Some("1".into()));
+    }
+
+    // Document references (the record's paged extension): what the patch
+    // sets replaces, a plain colour on the same facet clears.
+    let mut refs = xf_doc_refs(&xf);
+    let before = refs.clone();
+    update_doc_refs(&mut refs, p);
+    if refs != before {
+        set_xf_doc_refs(&mut xf, &refs, &prefix);
+    }
+
     find_or_append(xml, "cellXfs", "xf", &xf, &prefix)
+}
+
+/// The document references of an `<xf>` (its paged extension).
+fn xf_doc_refs(xf: &Elem) -> XfDocRefs {
+    xf.child("extLst")
+        .and_then(|l| {
+            l.children
+                .iter()
+                .find(|e| e.local() == "ext" && e.attr("uri").as_deref() == Some(DOC_EXT_URI))
+        })
+        .and_then(|e| e.children.iter().find(|c| c.local() == "doc"))
+        .map(doc_refs_of)
+        .unwrap_or_default()
+}
+
+/// Apply a patch's colour and style facets to the references.
+fn update_doc_refs(refs: &mut XfDocRefs, p: &StylePatch) {
+    let x = &p.ext;
+    if p.fill.is_some() || x.gradient.is_some() {
+        refs.fill_fg = None;
+    }
+    if x.fill_bg.is_some() || x.gradient.is_some() {
+        refs.fill_bg = None;
+    }
+    if let Some(sw) = &x.fill_swatch {
+        refs.fill_fg = Some(sw.clone());
+    }
+    if let Some(sw) = &x.fill_bg_swatch {
+        refs.fill_bg = Some(sw.clone());
+    }
+    if p.font_color.is_some() {
+        refs.font_color = None;
+    }
+    if let Some(sw) = &x.font_swatch {
+        refs.font_color = Some(sw.clone());
+    }
+    let diagonal = [("diagonal", &x.border_diagonal)];
+    for (edge, e) in p.edges().into_iter().chain(diagonal) {
+        if let Some(e) = e {
+            match &e.swatch {
+                Some(sw) if e.style != "none" => {
+                    refs.border.insert(edge.to_string(), sw.clone());
+                }
+                _ => {
+                    refs.border.remove(edge);
+                }
+            }
+        }
+    }
+    let text = |v: &Option<String>, slot: &mut Option<String>| {
+        if let Some(v) = v {
+            *slot = (!v.is_empty()).then(|| v.clone());
+        }
+    };
+    text(&x.doc_char_style, &mut refs.char_style);
+    text(&x.doc_para_style, &mut refs.para_style);
+    text(&x.doc_cell_style, &mut refs.cell_style);
+}
+
+/// Write the references into the `<xf>`'s `extLst` (dropping the paged
+/// extension when there are none; other extensions stay).
+fn set_xf_doc_refs(xf: &mut Elem, refs: &XfDocRefs, prefix: &str) {
+    let mut lst = xf
+        .child("extLst")
+        .cloned()
+        .unwrap_or_else(|| Elem::new(format!("{prefix}extLst")));
+    lst.children
+        .retain(|e| !(e.local() == "ext" && e.attr("uri").as_deref() == Some(DOC_EXT_URI)));
+    if !refs.is_empty() {
+        let mut doc = Elem::new("pg:doc".to_string());
+        doc.attrs = doc_refs_attrs(refs);
+        let mut ext = Elem::new(format!("{prefix}ext"))
+            .with_attr("uri", DOC_EXT_URI)
+            .with_attr("xmlns:pg", DOC_EXT_NS);
+        ext.children.push(doc);
+        lst.children.push(ext);
+    }
+    xf.remove_children("extLst");
+    if !lst.children.is_empty() {
+        // CT_Xf: alignment, protection, extLst — the extension list is last.
+        xf.children.push(lst);
+    }
+}
+
+// ───────────────────────────────────────────────────── named cell styles
+
+/// Excel's built-in cell styles as data (Office theme, Excel 2013+): name,
+/// `builtinId`, and the `<font>` / `<fill>` / `<border>` children and number
+/// format the style record carries. `{p}` is the part's prefix.
+fn builtin_style_def(name: &str) -> Option<(u32, String, String, String, Option<&'static str>)> {
+    let id = (0..=53).find(|&i| builtin_style_name(i) == Some(name))?;
+    let font = |inner: &str| {
+        format!("<{{p}}font>{inner}<{{p}}sz val=\"11\"/><{{p}}name val=\"Calibri\"/><{{p}}family val=\"2\"/><{{p}}scheme val=\"minor\"/></{{p}}font>")
+    };
+    let font_c = |inner: &str, color: &str| font(&format!("{inner}<{{p}}color {color}/>"));
+    let solid = |color: &str| {
+        format!("<{{p}}fill><{{p}}patternFill patternType=\"solid\"><{{p}}fgColor {color}/><{{p}}bgColor indexed=\"64\"/></{{p}}patternFill></{{p}}fill>")
+    };
+    let none_fill = "<{p}fill><{p}patternFill patternType=\"none\"/></{p}fill>".to_string();
+    let edges = |l: &str, r: &str, t: &str, b: &str| {
+        format!(
+            "<{{p}}border>{}{}{}{}<{{p}}diagonal/></{{p}}border>",
+            edge("left", l),
+            edge("right", r),
+            edge("top", t),
+            edge("bottom", b)
+        )
+    };
+    fn edge(n: &str, spec: &str) -> String {
+        match spec.split_once(':') {
+            Some((style, color)) => {
+                format!("<{{p}}{n} style=\"{style}\"><{{p}}color {color}/></{{p}}{n}>")
+            }
+            None => format!("<{{p}}{n}/>"),
+        }
+    }
+    let no_border = edges("", "", "", "");
+    let all = |spec: &str| edges(spec, spec, spec, spec);
+    let (f, fl, b, nf): (String, String, String, Option<&'static str>) = match id {
+        0 => (font(""), none_fill, no_border, None),
+        3 => (font(""), none_fill, no_border, Some("_(* #,##0.00_);_(* \\(#,##0.00\\);_(* \"-\"??_);_(@_)")),
+        4 => (font(""), none_fill, no_border, Some("_(\"$\"* #,##0.00_);_(\"$\"* \\(#,##0.00\\);_(\"$\"* \"-\"??_);_(@_)")),
+        5 => (font(""), none_fill, no_border, Some("0%")),
+        6 => (font(""), none_fill, no_border, Some("_(* #,##0_);_(* \\(#,##0\\);_(* \"-\"_);_(@_)")),
+        7 => (font(""), none_fill, no_border, Some("_(\"$\"* #,##0_);_(\"$\"* \\(#,##0\\);_(\"$\"* \"-\"_);_(@_)")),
+        8 => (font_c("<{p}u/>", "theme=\"10\""), none_fill, no_border, None),
+        9 => (font_c("<{p}u/>", "theme=\"11\""), none_fill, no_border, None),
+        10 => (font(""), solid("rgb=\"FFFFFFCC\""), all("thin:rgb=\"FFB2B2B2\""), None),
+        11 => (font_c("", "rgb=\"FFFF0000\""), none_fill, no_border, None),
+        15 => (
+            "<{p}font><{p}sz val=\"18\"/><{p}color theme=\"3\"/><{p}name val=\"Calibri Light\"/><{p}family val=\"2\"/><{p}scheme val=\"major\"/></{p}font>".to_string(),
+            none_fill,
+            no_border,
+            None,
+        ),
+        16 => (
+            "<{p}font><{p}b/><{p}sz val=\"15\"/><{p}color theme=\"3\"/><{p}name val=\"Calibri\"/><{p}family val=\"2\"/><{p}scheme val=\"minor\"/></{p}font>".to_string(),
+            none_fill,
+            edges("", "", "", "thick:theme=\"4\""),
+            None,
+        ),
+        17 => (
+            "<{p}font><{p}b/><{p}sz val=\"13\"/><{p}color theme=\"3\"/><{p}name val=\"Calibri\"/><{p}family val=\"2\"/><{p}scheme val=\"minor\"/></{p}font>".to_string(),
+            none_fill,
+            edges("", "", "", "thick:theme=\"4\" tint=\"0.499984740745262\""),
+            None,
+        ),
+        18 => (font_c("<{p}b/>", "theme=\"3\""), none_fill, edges("", "", "", "medium:theme=\"4\" tint=\"0.39997558519241921\""), None),
+        19 => (font_c("<{p}b/>", "theme=\"3\""), none_fill, no_border, None),
+        20 => (font_c("", "rgb=\"FF3F3F76\""), solid("rgb=\"FFFFCC99\""), all("thin:rgb=\"FF7F7F7F\""), None),
+        21 => (font_c("<{p}b/>", "rgb=\"FF3F3F3F\""), solid("rgb=\"FFF2F2F2\""), all("thin:rgb=\"FF3F3F3F\""), None),
+        22 => (font_c("<{p}b/>", "rgb=\"FFFA7D00\""), solid("rgb=\"FFF2F2F2\""), all("thin:rgb=\"FF7F7F7F\""), None),
+        23 => (font_c("<{p}b/>", "theme=\"0\""), solid("rgb=\"FFA5A5A5\""), all("double:rgb=\"FF3F3F3F\""), None),
+        24 => (font_c("", "rgb=\"FFFA7D00\""), none_fill, edges("", "", "", "double:rgb=\"FFFF8001\""), None),
+        25 => (font_c("<{p}b/>", "theme=\"1\""), none_fill, edges("", "", "thin:theme=\"4\"", "double:theme=\"4\""), None),
+        26 => (font_c("", "rgb=\"FF006100\""), solid("rgb=\"FFC6EFCE\""), no_border, None),
+        27 => (font_c("", "rgb=\"FF9C0006\""), solid("rgb=\"FFFFC7CE\""), no_border, None),
+        28 => (font_c("", "rgb=\"FF9C5700\""), solid("rgb=\"FFFFEB9C\""), no_border, None),
+        53 => (font_c("<{p}i/>", "rgb=\"FF7F7F7F\""), none_fill, no_border, None),
+        29..=52 => {
+            // Accent1–6 and their 20 % / 40 % / 60 % tints.
+            let k = id - 29;
+            let theme = 4 + k / 4;
+            let (tint, white) = match k % 4 {
+                0 => (None, true),
+                1 => (Some("0.79998168889431442"), false),
+                2 => (Some("0.59999389629810485"), false),
+                _ => (Some("0.39997558519241921"), true),
+            };
+            let color = match tint {
+                Some(t) => format!("theme=\"{theme}\" tint=\"{t}\""),
+                None => format!("theme=\"{theme}\""),
+            };
+            let f = if white { font_c("", "theme=\"0\"") } else { font_c("", "theme=\"1\"") };
+            (f, solid(&color), no_border, None)
+        }
+        _ => (font(""), none_fill, no_border, None),
+    };
+    Some((id, f, fl, b, nf))
+}
+
+/// Make sure the workbook carries the named style `name` (a built-in it
+/// lacks is added: its font, fill and border records, a `cellStyleXfs`
+/// record and the `cellStyle` entry). An unknown non-built-in name fails.
+fn ensure_named_style(xml: Vec<u8>, name: &str, prefix: &str) -> Result<Vec<u8>, XlsxError> {
+    if named_style_record(&xml, name).is_ok() {
+        return Ok(xml);
+    }
+    let Some((builtin, font, fill, border, num_fmt)) = builtin_style_def(name) else {
+        return Err(XlsxError::Structure(format!(
+            "no cell style named {name:?}"
+        )));
+    };
+    let el = |s: &str| parse_elem(s.replace("{p}", prefix).as_bytes());
+    let (xml, font_id) = find_or_append(xml, "fonts", "font", &el(&font)?, prefix)?;
+    let (xml, fill_id) = find_or_append(xml, "fills", "fill", &el(&fill)?, prefix)?;
+    let (xml, border_id) = find_or_append(xml, "borders", "border", &el(&border)?, prefix)?;
+    let (xml, fmt_id) = match num_fmt {
+        Some(code) => num_fmt_id(xml, code, prefix)?,
+        None => (xml, 0),
+    };
+    let mut sxf = Elem::new(format!("{prefix}xf"))
+        .with_attr("numFmtId", &fmt_id.to_string())
+        .with_attr("fontId", &font_id.to_string())
+        .with_attr("fillId", &fill_id.to_string())
+        .with_attr("borderId", &border_id.to_string());
+    for (k, on) in [
+        ("applyNumberFormat", num_fmt.is_some()),
+        ("applyBorder", border_id != 0),
+        ("applyFill", fill_id != 0),
+    ] {
+        if !on {
+            sxf.attrs.push((k.into(), "0".into()));
+        }
+    }
+    // A new record at the END of cellStyleXfs (existing indices stay).
+    let xml = ensure_section(xml, "cellStyleXfs", prefix)?;
+    let sec = section(&xml, "cellStyleXfs")?.expect("ensured");
+    let xf_id = records(&xml, &sec, "xf")?.len();
+    let close_at = sec.end - format!("</{}>", sec.qname).len();
+    let xml = splice(&xml, close_at, close_at, sxf.to_xml().as_bytes());
+    let mut attrs = attrs_of(&xml, &sec)?;
+    set_attr(&mut attrs, "count", Some((xf_id + 1).to_string()));
+    let tag = render_tag(&sec.qname, &attrs, false);
+    let xml = splice(&xml, sec.start, sec.tag_end, tag.as_bytes());
+    let cs = Elem::new(format!("{prefix}cellStyle"))
+        .with_attr("name", name)
+        .with_attr("xfId", &xf_id.to_string())
+        .with_attr("builtinId", &builtin.to_string());
+    let (xml, _) = find_or_append(xml, "cellStyles", "cellStyle", &cs, prefix)?;
+    Ok(xml)
+}
+
+/// The `cellStyleXfs` index and record of the named style `name`.
+fn named_style_record(xml: &[u8], name: &str) -> Result<(usize, Elem), XlsxError> {
+    let Some(sec) = section(xml, "cellStyles")? else {
+        return Err(XlsxError::Structure(format!(
+            "no cell style named {name:?}"
+        )));
+    };
+    for sp in records(xml, &sec, "cellStyle")? {
+        let a = attrs_of(xml, &sp)?;
+        if attr_local(&a, "name").as_deref() == Some(name) {
+            let xf_id: usize = attr_local(&a, "xfId")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            let rec = record(xml, "cellStyleXfs", "xf", xf_id)?.ok_or_else(|| {
+                XlsxError::Structure(format!("cell style {name:?} has no record"))
+            })?;
+            return Ok((xf_id, rec));
+        }
+    }
+    Err(XlsxError::Structure(format!(
+        "no cell style named {name:?}"
+    )))
 }
 
 /// Resolve a `<color>`-shaped element against the workbook's colour
@@ -734,13 +1293,21 @@ impl XlsxDocument {
             map.insert(base, StyleId(idx as u32));
         }
 
-        // Re-parse with the loader's own parser: ids are positional, the
-        // visual side table is the parser's output.
+        let table = self.store_styles(xml)?;
+        Ok((map, table))
+    }
+
+    /// Store new `styles.xml` bytes (creating the part when the package has
+    /// none) and re-parse them with the loader's own parser: ids are
+    /// positional, the visual side table and the dxfs are the parser's
+    /// output. Returns the style table the model must adopt.
+    fn store_styles(&mut self, xml: Vec<u8>) -> Result<StyleTable, XlsxError> {
         let mut table = StyleTable::new();
         let colors = ColorContext::new(&xml, self.theme_palette());
         let parsed = crate::parts::styles::parse_with_colors(&xml, &mut table, &colors)?;
         self.visual_styles = parsed.visual;
         self.dxfs = parsed.dxfs;
+        self.dxf_models = parsed.dxf_models;
 
         let existing = self
             .styles_part
@@ -765,7 +1332,49 @@ impl XlsxDocument {
                 self.styles_part = Some(part);
             }
         }
-        Ok((map, table))
+        Ok(table)
+    }
+
+    /// The index of a differential format (`<dxfs>`) that paints a solid
+    /// fill (`cell_color`) or a font colour `rgb` (`#RRGGBB`) — found, or
+    /// appended. A colour sort or colour filter names its colour this way
+    /// (sheet ADR 517). The cell style table is unchanged.
+    pub fn color_dxf(&mut self, rgb: &str, cell_color: bool) -> Result<u32, XlsxError> {
+        let xml = self.styles_bytes();
+        let prefix = root_prefix(&xml)?;
+        let c = argb(rgb)?;
+        let el = if cell_color {
+            Elem {
+                name: format!("{prefix}dxf"),
+                attrs: Vec::new(),
+                children: vec![Elem {
+                    name: format!("{prefix}fill"),
+                    attrs: Vec::new(),
+                    children: vec![Elem {
+                        name: format!("{prefix}patternFill"),
+                        attrs: vec![("patternType".into(), "solid".into())],
+                        children: vec![
+                            Elem::new(format!("{prefix}fgColor")).with_attr("rgb", &c),
+                            Elem::new(format!("{prefix}bgColor")).with_attr("rgb", &c),
+                        ],
+                    }],
+                }],
+            }
+        } else {
+            Elem {
+                name: format!("{prefix}dxf"),
+                attrs: Vec::new(),
+                children: vec![Elem {
+                    name: format!("{prefix}font"),
+                    attrs: Vec::new(),
+                    children: vec![Elem::new(format!("{prefix}color")).with_attr("rgb", &c)],
+                }],
+            }
+        };
+        let (xml, idx) = find_or_append(xml, "dxfs", "dxf", &el, &prefix)?;
+        // cellXfs is untouched, so the model's style table stays as it is.
+        self.store_styles(xml)?;
+        Ok(idx as u32)
     }
 
     /// The scheme of the theme part the workbook relates (`/theme`);
@@ -831,15 +1440,84 @@ impl XlsxDocument {
                     .flatten()
             });
         let border = record(&xml, "borders", "border", idx_of("borderId"))?;
+        let refs = xf_doc_refs(&xf);
         let edge = |l: &str| -> Option<EdgePatch> {
             let e = border.as_ref()?.child(l)?;
             Some(EdgePatch {
                 style: e.attr("style").unwrap_or_else(|| "none".into()),
                 color: color_of(e.child("color"), &ctx),
+                swatch: refs.border.get(l).cloned(),
             })
         };
         let al = xf.child("alignment");
+        // The W2.2 facets, read through the visual model.
+        let model = StyleSheet::parse(&xml)?;
+        let palette = model.palette(ctx.theme_rgbs());
+        let visual = model.cell_visual(id.0 as usize, &palette);
+        let hex = |c: &Option<sheet_core::ColorRef>| {
+            c.as_ref()
+                .and_then(|c| sheet_format::resolve_hex(c, &palette))
+                .unwrap_or_default()
+        };
+        let (pattern, fill_bg, gradient) = match &visual.fill {
+            CellFill::None => ("none".to_string(), String::new(), None),
+            CellFill::Pattern { pattern, bg, .. } => (pattern.as_xlsx().to_string(), hex(bg), None),
+            CellFill::Gradient { gradient, stops } => {
+                let mut g = GradientPatch {
+                    stops: stops
+                        .iter()
+                        .map(|st| (st.position, hex(&Some(st.color.clone()))))
+                        .collect(),
+                    ..GradientPatch::default()
+                };
+                match gradient {
+                    GradientKind::Linear { degree } => {
+                        g.kind = "linear".into();
+                        g.degree = *degree;
+                    }
+                    GradientKind::Path {
+                        left,
+                        right,
+                        top,
+                        bottom,
+                    } => {
+                        g.kind = "path".into();
+                        (g.left, g.right, g.top, g.bottom) = (*left, *right, *top, *bottom);
+                    }
+                }
+                ("gradient".to_string(), String::new(), Some(g))
+            }
+        };
+        let font_m = &visual.font.font;
+        let ext = StyleExt {
+            pattern: Some(pattern),
+            fill_bg: Some(fill_bg),
+            gradient,
+            border_diagonal: edge("diagonal"),
+            diagonal_up: Some(visual.border.diagonal_up),
+            diagonal_down: Some(visual.border.diagonal_down),
+            indent: Some(visual.alignment.indent),
+            rotation: Some(visual.alignment.rotation),
+            shrink: Some(visual.alignment.shrink),
+            strike: Some(font_m.strike),
+            vert_align: Some(font_m.vert_align.as_xlsx().to_string()),
+            underline_style: Some(font_m.underline.as_xlsx().unwrap_or("none").to_string()),
+            fill_swatch: refs.fill_fg.clone(),
+            fill_bg_swatch: refs.fill_bg.clone(),
+            font_swatch: refs.font_color.clone(),
+            doc_char_style: Some(refs.char_style.clone().unwrap_or_default()),
+            doc_para_style: Some(refs.para_style.clone().unwrap_or_default()),
+            doc_cell_style: Some(refs.cell_style.clone().unwrap_or_default()),
+            named_style: Some(
+                visual
+                    .named_style
+                    .clone()
+                    .unwrap_or_else(|| "Normal".into()),
+            ),
+        };
+        let _ = VertAlign::Baseline;
         Ok(StylePatch {
+            ext,
             num_fmt: Some(num_fmt.unwrap_or_else(|| "General".into())),
             font_name: font
                 .as_ref()
@@ -877,12 +1555,49 @@ impl XlsxDocument {
                 xf.attr("quotePrefix")
                     .is_some_and(|q| q == "1" || q == "true"),
             ),
+            locked: Some(
+                !xf.child("protection")
+                    .and_then(|p| p.attr("locked"))
+                    .is_some_and(|v| v == "0" || v == "false"),
+            ),
+            formula_hidden: Some(
+                xf.child("protection")
+                    .and_then(|p| p.attr("hidden"))
+                    .is_some_and(|v| v == "1" || v == "true"),
+            ),
         })
     }
 
     /// The style ids (`cellXfs` indices) carrying Excel's quote prefix
     /// (`quotePrefix="1"`) — what typed entry reads to clear the attribute
     /// when a cell is re-typed without a leading `'`.
+    /// The style ids (`cellXfs` indices) whose cells are NOT locked
+    /// (`<protection locked="0">`) and those whose formulas are hidden
+    /// (`hidden="1"`): what sheet protection reads (sheet ADR 517). Every
+    /// other style is locked, Excel's default.
+    pub fn protection_styles(&self) -> Result<(BTreeSet<u32>, BTreeSet<u32>), XlsxError> {
+        let xml = self.styles_bytes();
+        let (mut unlocked, mut hidden) = (BTreeSet::new(), BTreeSet::new());
+        let Some(sec) = section(&xml, "cellXfs")? else {
+            return Ok((unlocked, hidden));
+        };
+        for (i, sp) in records(&xml, &sec, "xf")?.iter().enumerate() {
+            if sp.empty {
+                continue;
+            }
+            let xf = parse_elem(&xml[sp.start..sp.end])?;
+            if let Some(p) = xf.child("protection") {
+                if matches!(p.attr("locked").as_deref(), Some("0" | "false")) {
+                    unlocked.insert(i as u32);
+                }
+                if matches!(p.attr("hidden").as_deref(), Some("1" | "true")) {
+                    hidden.insert(i as u32);
+                }
+            }
+        }
+        Ok((unlocked, hidden))
+    }
+
     pub fn quote_prefixed_styles(&self) -> Result<BTreeSet<u32>, XlsxError> {
         let xml = self.styles_bytes();
         let mut out = BTreeSet::new();
@@ -902,6 +1617,202 @@ impl XlsxDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn reparse(xml: &[u8], idx: usize) -> sheet_core::CellVisual {
+        let sheet = StyleSheet::parse(xml).unwrap();
+        sheet.cell_visual(idx, &sheet.palette(vec![]))
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn the_full_visual_model_is_authored__feat__sheet_format_cell_style() {
+        use sheet_core::visual::{BorderStyle, CellFill, HAlign, PatternKind, VertAlign};
+        let p = StylePatch {
+            fill: Some("#FF0000".into()),
+            h_align: Some("distributed".into()),
+            ext: StyleExt {
+                pattern: Some("darkTrellis".into()),
+                fill_bg: Some("#FFFF00".into()),
+                border_diagonal: Some(EdgePatch {
+                    style: "dashDot".into(),
+                    color: Some("#0000FF".into()),
+                    swatch: None,
+                }),
+                diagonal_down: Some(true),
+                indent: Some(3),
+                rotation: Some(255),
+                shrink: Some(true),
+                strike: Some(true),
+                vert_align: Some("subscript".into()),
+                underline_style: Some("doubleAccounting".into()),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        let (xml, idx) = apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &p).unwrap();
+        let v = reparse(&xml, idx);
+        assert_eq!(
+            v.fill,
+            CellFill::Pattern {
+                pattern: PatternKind::DarkTrellis,
+                fg: Some(sheet_core::ColorRef::rgb(255, 0, 0)),
+                bg: Some(sheet_core::ColorRef::rgb(255, 255, 0)),
+            }
+        );
+        assert_eq!(v.border.diagonal.style, BorderStyle::DashDot);
+        assert!(v.border.diagonal_down && !v.border.diagonal_up);
+        assert_eq!(v.alignment.horizontal, HAlign::Distributed);
+        assert_eq!(
+            (v.alignment.indent, v.alignment.rotation, v.alignment.shrink),
+            (3, 255, true)
+        );
+        assert!(v.font.font.strike);
+        assert_eq!(v.font.font.vert_align, VertAlign::Subscript);
+        assert_eq!(
+            v.font.font.underline,
+            sheet_core::UnderlineKind::DoubleAccounting
+        );
+        // A gradient replaces the pattern.
+        let g = StylePatch {
+            ext: StyleExt {
+                gradient: Some(GradientPatch {
+                    kind: "linear".into(),
+                    degree: 90.0,
+                    stops: vec![(0.0, "#FFFFFF".into()), (1.0, "#4472C4".into())],
+                    ..GradientPatch::default()
+                }),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        let (xml, idx) = apply_to_xf(xml, idx, &g).unwrap();
+        assert!(
+            matches!(reparse(&xml, idx).fill, CellFill::Gradient { ref stops, .. } if stops.len() == 2)
+        );
+        // Bad values are refused.
+        let bad = StylePatch {
+            ext: StyleExt {
+                rotation: Some(200),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        assert!(apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &bad).is_err());
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn document_references_round_trip_through_the_record__feat__sheet_format_cell_style() {
+        use sheet_core::visual::CellFill;
+        let brand = DocSwatchRef {
+            id: "Color/Brand".into(),
+            model: sheet_core::DocColorModel::Spot,
+            fallback_rgb: (0xE3, 0x00, 0x0F),
+        };
+        let p = StylePatch {
+            ext: StyleExt {
+                fill_swatch: Some(brand.clone()),
+                font_swatch: Some(brand.clone()),
+                doc_char_style: Some("CharacterStyle/Emphasis".into()),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        let (xml, idx) = apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &p).unwrap();
+        let text = String::from_utf8(xml.clone()).unwrap();
+        // The concrete colour is the swatch's sRGB; the reference rides the
+        // record's paged extension.
+        assert!(text.contains(r#"rgb="FFE3000F""#), "{text}");
+        assert!(text.contains(DOC_EXT_URI), "{text}");
+        let v = reparse(&xml, idx);
+        match &v.fill {
+            CellFill::Pattern { fg, .. } => {
+                assert_eq!(fg.as_ref().unwrap().doc.as_ref(), Some(&brand))
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            v.font.font.color.as_ref().unwrap().doc.as_ref(),
+            Some(&brand)
+        );
+        assert_eq!(
+            v.font.doc_char_style.as_deref(),
+            Some("CharacterStyle/Emphasis")
+        );
+        // A plain colour on the fill clears the fill's reference only.
+        let plain = StylePatch {
+            fill: Some("#00FF00".into()),
+            ..Default::default()
+        };
+        let (xml2, idx2) = apply_to_xf(xml.clone(), idx, &plain).unwrap();
+        let v2 = reparse(&xml2, idx2);
+        match &v2.fill {
+            CellFill::Pattern { fg, .. } => assert!(fg.as_ref().unwrap().doc.is_none()),
+            other => panic!("{other:?}"),
+        }
+        assert!(v2.font.font.color.as_ref().unwrap().doc.is_some());
+        // Another application changed the concrete colour behind the
+        // reference: on re-import the stale reference is not restored.
+        let edited = text.replacen(
+            r#"<fgColor rgb="FFE3000F"/>"#,
+            r#"<fgColor rgb="FF112233"/>"#,
+            1,
+        );
+        let v3 = reparse(edited.as_bytes(), idx);
+        match &v3.fill {
+            CellFill::Pattern { fg, .. } => assert!(fg.as_ref().unwrap().doc.is_none()),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_built_in_named_style_is_added_and_applied__feat__sheet_format_cell_style() {
+        let p = StylePatch {
+            ext: StyleExt {
+                named_style: Some("Heading 1".into()),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        let (xml, idx) = apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &p).unwrap();
+        let sheet = StyleSheet::parse(&xml).unwrap();
+        let named = sheet.named_styles();
+        let h1 = named.iter().find(|n| n.name == "Heading 1").expect("added");
+        assert_eq!(h1.builtin_id, Some(16));
+        assert!(h1.visual.font.font.bold);
+        assert_eq!(h1.visual.font.font.size, Some(15.0));
+        let v = reparse(&xml, idx);
+        assert_eq!(v.named_style.as_deref(), Some("Heading 1"));
+        assert!(v.font.font.bold);
+        assert_eq!(v.border.bottom.style, sheet_core::BorderStyle::Thick);
+        // Applying it again reuses the style (no second cellStyle).
+        let (xml2, idx2) = apply_to_xf(xml.clone(), 0, &p).unwrap();
+        assert_eq!(idx2, idx);
+        assert_eq!(StyleSheet::parse(&xml2).unwrap().cell_styles.len(), 2);
+        // Every built-in name is defined; an unknown name is refused.
+        for id in 0..=53 {
+            if let Some(name) = builtin_style_name(id) {
+                let p = StylePatch {
+                    ext: StyleExt {
+                        named_style: Some(name.into()),
+                        ..StyleExt::default()
+                    },
+                    ..Default::default()
+                };
+                apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &p)
+                    .unwrap_or_else(|e| panic!("{name}: {e}"));
+            }
+        }
+        let bad = StylePatch {
+            ext: StyleExt {
+                named_style: Some("Fancy".into()),
+                ..StyleExt::default()
+            },
+            ..Default::default()
+        };
+        assert!(apply_to_xf(MIN_STYLES.as_bytes().to_vec(), 0, &bad).is_err());
+    }
 
     fn xf_count(xml: &[u8]) -> usize {
         let sec = section(xml, "cellXfs").unwrap().unwrap();
@@ -1001,6 +1912,7 @@ mod tests {
                 border_top: Some(EdgePatch {
                     style: "wavy".into(),
                     color: None,
+                    swatch: None,
                 }),
                 ..Default::default()
             },

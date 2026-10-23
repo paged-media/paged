@@ -41,6 +41,48 @@ use super::{
     SetCellResult, SheetSession, T0_LOWER_CELL_CAP,
 };
 
+/// The tracks [`SheetSession::get_tracks_page`] lowers (TS `TracksSpec`):
+/// sheet row / column indices in display order, the frozen counts and what
+/// is printed besides the cells.
+#[derive(serde::Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TracksSpec {
+    pub rows: Vec<u32>,
+    pub cols: Vec<u32>,
+    /// Leading entries of `rows` that are frozen (the table's header rows).
+    pub header_rows: u32,
+    /// Leading entries of `cols` that are frozen.
+    pub frozen_cols: u32,
+    pub print_headings: bool,
+    pub print_gridlines: bool,
+}
+
+/// A frame's page request for [`SheetSession::get_frame_page`] (TS
+/// `FramePageSpec`): the frame window spec plus what is printed. An absent
+/// frozen split means the workbook's stored one.
+#[derive(serde::Deserialize, Debug, Clone, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct FramePageSpec {
+    pub top_row: u32,
+    pub left_col: u32,
+    pub width_pt: f64,
+    pub height_pt: f64,
+    pub freeze_rows: Option<u32>,
+    pub freeze_cols: Option<u32>,
+    pub print_headings: bool,
+    pub print_gridlines: bool,
+}
+
+/// The T0 lowering cap on a track product.
+fn check_area(rows: usize, cols: usize) -> Result<(), SessionError> {
+    if (rows as u64 + 1) * (cols as u64 + 1) > T0_LOWER_CELL_CAP {
+        return Err(SessionError(format!(
+            "range exceeds the T0 lowering cap ({T0_LOWER_CELL_CAP} cells)"
+        )));
+    }
+    Ok(())
+}
+
 /// Days from the 1900-system epoch to 1970-01-01 (Excel serial of the Unix
 /// epoch; the 1900 leap-bug day is already inside it).
 const UNIX_EPOCH_SERIAL_1900: f64 = 25569.0;
@@ -208,7 +250,11 @@ fn shrink_span(
 impl SheetSession {
     /// Run `f` on the model taken out of the engine, then rebuild the engine
     /// (the `save_xlsx` dance). `recalc` re-evaluates every formula after.
-    fn with_model<R>(&mut self, recalc: bool, f: impl FnOnce(&mut SheetModel) -> R) -> R {
+    pub(crate) fn with_model<R>(
+        &mut self,
+        recalc: bool,
+        f: impl FnOnce(&mut SheetModel) -> R,
+    ) -> R {
         let engine = self.engine.take().expect("engine present outside save");
         let mut model = engine.into_model();
         let out = f(&mut model);
@@ -287,6 +333,86 @@ impl SheetSession {
             &self.doc.visual_styles,
             &cf,
         ))
+    }
+
+    /// Lower EXPLICIT tracks for the page (ADR 510, render on leave): the
+    /// rows and columns `spec` names, in display order (frozen tracks first;
+    /// gaps allowed), with the workbook's styles and conditional formats.
+    /// Sizes are the sheet's own pt sizes; indices are sheet indices; see
+    /// [`sheet_lower::lower_tracks_styled`]. An OOB sheet id and an area
+    /// over the T0 lowering cap are boundary errors.
+    pub fn get_tracks_page(
+        &self,
+        sheet: u16,
+        spec: TracksSpec,
+    ) -> Result<sheet_lower::LoweredContent, SessionError> {
+        self.check_sheet(sheet)?;
+        check_area(spec.rows.len(), spec.cols.len())?;
+        let opts = sheet_lower::TrackOptions {
+            print_headings: spec.print_headings,
+            print_gridlines: spec.print_gridlines,
+            header_rows: spec.header_rows,
+            frozen_cols: spec.frozen_cols,
+        };
+        let cf = self.doc.lowered_conditional_formats(sheet);
+        Ok(sheet_lower::lower_tracks_styled(
+            self.engine().model(),
+            sheet,
+            &spec.rows,
+            &spec.cols,
+            &opts,
+            &self.doc.visual_styles,
+            &cf,
+        ))
+    }
+
+    /// The page table of a sheet frame (ADR 510): `sheet_grid::frame_window`
+    /// for `spec` (the frozen split defaults to the workbook's stored one, as
+    /// for `get_grid_scene`), lowered over its tracks. Without printed
+    /// headings it shows exactly the window the live grid shows for the same
+    /// spec; with them, the heading strips come off the box first. The
+    /// frozen rows become the table's header rows (`headerRows`).
+    pub fn get_frame_page(
+        &self,
+        sheet: u16,
+        spec: FramePageSpec,
+    ) -> Result<sheet_lower::LoweredContent, SessionError> {
+        self.check_sheet(sheet)?;
+        let stored = self.doc.freeze_panes_of(sheet);
+        let window = sheet_grid::FrameWindowSpec {
+            top_row: spec.top_row,
+            left_col: spec.left_col,
+            width_pt: spec.width_pt,
+            height_pt: spec.height_pt,
+            freeze_rows: spec.freeze_rows.unwrap_or(stored.rows),
+            freeze_cols: spec.freeze_cols.unwrap_or(stored.cols),
+        };
+        let model = self.engine().model();
+        let win = sheet_grid::frame_page_window(model, sheet, &window, spec.print_headings);
+        check_area(win.rows.len(), win.cols.len())?;
+        let cf = self.doc.lowered_conditional_formats(sheet);
+        Ok(sheet_grid::frame_page(
+            model,
+            sheet,
+            &window,
+            sheet_grid::PagePrint {
+                headings: spec.print_headings,
+                gridlines: spec.print_gridlines,
+            },
+            &cf,
+            &self.doc.visual_styles,
+        ))
+    }
+
+    /// Reject an out-of-range sheet id (finding-2 discipline).
+    fn check_sheet(&self, sheet: u16) -> Result<(), SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if (sheet as usize) >= sheet_count {
+            return Err(SessionError(format!(
+                "sheet id {sheet} out of range ({sheet_count} sheets)"
+            )));
+        }
+        Ok(())
     }
 
     // ── 4. the host clock ────────────────────────────────────────────────
@@ -402,6 +528,7 @@ impl SheetSession {
     /// ADD a worksheet at the end (empty `name` = the next free `SheetN`).
     /// Returns its id. The new sheet is written as its own worksheet part.
     pub fn add_sheet(&mut self, name: &str) -> Result<u16, SessionError> {
+        self.guard_structure()?;
         let name = if name.trim().is_empty() {
             self.default_sheet_name()
         } else {
@@ -424,6 +551,7 @@ impl SheetSession {
     /// are unaffected; their stored TEXT (and defined names) is re-printed
     /// with the new name on save.
     pub fn rename_sheet(&mut self, sheet: u16, name: &str) -> Result<(), SessionError> {
+        self.guard_structure()?;
         self.validate_sheet(sheet)?;
         validate_sheet_name(name)?;
         let old = self.engine().model().sheets[sheet as usize]
@@ -493,13 +621,14 @@ impl SheetSession {
     /// down one id. Refused when it is the last sheet, or when the workbook
     /// carries charts (their series ranges are not re-pointed yet).
     pub fn delete_sheet(&mut self, sheet: u16) -> Result<SetCellResult, SessionError> {
+        self.guard_structure()?;
         self.validate_sheet(sheet)?;
         if self.engine().model().sheets.len() <= 1 {
             return Err(SessionError(
                 "a workbook must keep at least one sheet".into(),
             ));
         }
-        if !self.doc.charts.is_empty() {
+        if self.live_chart_count() > 0 {
             return Err(SessionError(
                 "this workbook has charts; deleting a sheet would leave their ranges \
                  pointing at the wrong sheet (not supported yet)"
@@ -640,6 +769,15 @@ impl SheetSession {
         if n == 0 {
             return Err(SessionError("count must be at least 1".into()));
         }
+        self.guard_allow(
+            sheet,
+            match kind {
+                StructuralEdit::InsertRows => super::protect::Allow::InsertRows,
+                StructuralEdit::DeleteRows => super::protect::Allow::DeleteRows,
+                StructuralEdit::InsertCols => super::protect::Allow::InsertColumns,
+                StructuralEdit::DeleteCols => super::protect::Allow::DeleteColumns,
+            },
+        )?;
         let (limit, axis) = match kind {
             StructuralEdit::InsertRows | StructuralEdit::DeleteRows => (1_048_576u32, "row"),
             StructuralEdit::InsertCols | StructuralEdit::DeleteCols => (16_384u32, "column"),

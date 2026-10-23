@@ -45,6 +45,9 @@
 pub mod core;
 
 #[cfg(target_arch = "wasm32")]
+mod wasm_w2;
+
+#[cfg(target_arch = "wasm32")]
 mod wasm {
     use crate::core::{
         CellInput, FindOptions, FrameBoxArg, GridSceneOptions, LowerOptions, PaginateOptionsArg,
@@ -57,7 +60,7 @@ mod wasm {
     /// forwards; nothing computes here (semantics live in the Rust crates).
     #[wasm_bindgen]
     pub struct SheetEngine {
-        session: SheetSession,
+        pub(crate) session: SheetSession,
     }
 
     #[wasm_bindgen]
@@ -309,6 +312,26 @@ mod wasm {
             to_js(&lowered)
         }
 
+        /// Lower explicit tracks for the page (ADR 510):
+        /// `{rows, cols, headerRows?, frozenCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` with sheet indices.
+        pub fn get_tracks_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::TracksSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_tracks_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
+        /// The page table of a frame (ADR 510): `{topRow, leftCol, widthPt,
+        /// heightPt, freezeRows?, freezeCols?, printHeadings?,
+        /// printGridlines?}` → `LoweredContent` (frame window + tracks).
+        pub fn get_frame_page(&self, sheet: u16, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: crate::core::FramePageSpec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let lowered = self.session.get_frame_page(sheet, spec).map_err(map_err)?;
+            to_js(&lowered)
+        }
+
         /// Wave 5 — the re-enterable INPUT text of every cell in `range`
         /// (row-major `string[][]`; formulas with `=`): a copy's snapshot.
         pub fn get_range_inputs(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
@@ -438,6 +461,29 @@ mod wasm {
             to_js(&window)
         }
 
+        /// Where Ctrl+arrow lands: `[row, col]`.
+        pub fn data_edge(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            d_row: i32,
+            d_col: i32,
+        ) -> Result<Vec<u32>, JsValue> {
+            let (r, c) = self
+                .session
+                .data_edge(sheet, row, col, d_row, d_col)
+                .map_err(map_err)?;
+            Ok(vec![r, c])
+        }
+
+        /// Status-bar statistics of a range: `{count, numbers, sum, average,
+        /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
+        pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+            let stats = self.session.range_stats(sheet, range).map_err(map_err)?;
+            to_js(&stats)
+        }
+
         /// Record the sheets-mode selection rectangle (consumed by the next
         /// `get_grid_scene` for the same sheet).
         pub fn set_grid_selection(
@@ -458,16 +504,17 @@ mod wasm {
             to_js(&self.session.list_sheets()).unwrap_or(JsValue::NULL)
         }
 
-        /// Enumerate the workbook's charts (M2, spec §8.4):
-        /// `[{index,hostSheet,kind,title,seriesCount}]`.
+        /// Enumerate the workbook's charts (spec §8.4, W4):
+        /// `[{index,hostSheet,kind,title,seriesCount,flattened3d,source,
+        /// chartsheet,combo}]`.
         pub fn list_charts(&self) -> JsValue {
             to_js(&self.session.list_charts()).unwrap_or(JsValue::NULL)
         }
 
-        /// The chart-kind tags `add_chart` accepts, in panel order —
-        /// `["column","stackedColumn","bar","stackedBar","line","area",
-        /// "scatter","pie","donut","radar"]`. The panel READS the set
-        /// rather than hard-coding it, so a kind can never be offered
+        /// The chart-kind tags `add_chart` accepts, in panel order (one per
+        /// kind and grouping: `column`, `stackedColumn`,
+        /// `percentStackedColumn`, … `boxWhisker`). The panel READS the
+        /// set rather than hard-coding it, so a kind can never be offered
         /// that the engine refuses (all chart semantics stay in Rust).
         pub fn chart_kinds(&self) -> JsValue {
             to_js(&crate::core::CHART_KIND_TAGS.to_vec()).unwrap_or(JsValue::NULL)
@@ -479,8 +526,7 @@ mod wasm {
         /// values COLUMN, `"rows"` one per ROW — the same cells read the
         /// other way round, never a rewrite of the user's data. Returns
         /// the new chart index — the same handle the geometry/lowering
-        /// lanes take. Publishing-first: authored charts are PAGE-side
-        /// only (the xlsx writer never re-derives chart parts).
+        /// lanes take. The chart is written into the xlsx on save.
         pub fn add_chart(
             &mut self,
             sheet: u16,
@@ -493,6 +539,32 @@ mod wasm {
             self.session
                 .add_chart(sheet, values, categories, kind, title, series_in)
                 .map_err(map_err)
+        }
+
+        /// The chartsheets (a tab that is one chart): `[{sheet,name,chart}]`.
+        pub fn list_chartsheets(&self) -> JsValue {
+            to_js(&self.session.list_chartsheets()).unwrap_or(JsValue::NULL)
+        }
+
+        /// The sparklines of `sheet`: `[{sheet,row,col,kind,data}]`.
+        pub fn list_sparklines(&self, sheet: u16) -> JsValue {
+            to_js(&self.session.list_sparklines(sheet)).unwrap_or(JsValue::NULL)
+        }
+
+        /// The primitives of the sparkline in a cell, drawn in a
+        /// `w_pt × h_pt` box (null when the cell has none).
+        pub fn sparkline_geometry(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            w_pt: f64,
+            h_pt: f64,
+        ) -> JsValue {
+            match self.session.sparkline_geometry(sheet, row, col, w_pt, h_pt) {
+                Some(p) => to_js(&p).unwrap_or(JsValue::NULL),
+                None => JsValue::NULL,
+            }
         }
 
         /// Enumerate the worksheets with a FROZEN PANE (spec §8.1):
@@ -698,6 +770,22 @@ mod wasm {
             to_js(&r)
         }
 
+        /// The cell visual model of one cell (W2.2): every colour a
+        /// `ColorRef` (`concrete` + optional document swatch).
+        pub fn get_cell_visual(&self, sheet: u16, row: u32, col: u32) -> Result<JsValue, JsValue> {
+            let r = self
+                .session
+                .get_cell_visual(sheet, row, col)
+                .map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// The workbook's Excel named cell styles and the built-ins it can
+        /// add: `[{name, builtinId?, present}]`.
+        pub fn named_styles(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.named_styles())
+        }
+
         /// The style ids of every cell of `range`, row-major — a snapshot
         /// for `set_style_ids` (the in-session undo of a format change).
         pub fn get_style_ids(&self, sheet: u16, range: &str) -> Result<Vec<u32>, JsValue> {
@@ -818,8 +906,11 @@ mod wasm {
 
         /// Every chart with its series ranges and options:
         /// `[{index, hostSheet, kind, title?, legend, series:[{name?, values,
-        /// categories?, color?}], categoryAxisTitle?, valueAxisTitle?,
-        /// valueAxisMin?, valueAxisMax?}]`.
+        /// categories?, color?, colorSwatch?, kind, secondary, xValues?,
+        /// sizes?}], categoryAxisTitle?, valueAxisTitle?, valueAxisMin?,
+        /// valueAxisMax?, valueAxisLogBase?, valueAxisFormat?,
+        /// legendPosition?, dataLabels, style?, flattened3d,
+        /// titleParagraphStyle?}]`.
         pub fn chart_specs(&self) -> Result<JsValue, JsValue> {
             to_js(&self.session.chart_specs())
         }
@@ -827,11 +918,17 @@ mod wasm {
         /// Patch chart `index` (`{kind?, title?, legend?, series?,
         /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?}`;
         /// `null` clears a nullable field). Validated whole first.
-        /// Page-side only, like `add_chart`.
+        /// Written into the chart part on save.
         pub fn update_chart(&mut self, index: u32, patch: JsValue) -> Result<(), JsValue> {
             let patch: crate::core::ChartPatch = serde_wasm_bindgen::from_value(patch)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             self.session.update_chart(index, patch).map_err(map_err)
+        }
+
+        /// Delete chart `index` (its slot stays, so other charts keep their
+        /// indices). Page-side only, like `add_chart`.
+        pub fn delete_chart(&mut self, index: u32) -> Result<(), JsValue> {
+            self.session.delete_chart(index).map_err(map_err)
         }
 
         /// Resolve a range argument (A1, `Sheet!A1:B2`, a defined name or a
@@ -853,13 +950,13 @@ mod wasm {
 
     /// Map a session error to a JS string error. Calc errors (`#DIV/0!`) are
     /// NOT boundary errors — they are display strings, never reach here.
-    fn map_err(e: crate::core::SessionError) -> JsValue {
+    pub(crate) fn map_err(e: crate::core::SessionError) -> JsValue {
         JsValue::from_str(&e.to_string())
     }
 
     /// Serialise a serde value to a `JsValue` (camelCase shapes are decided in
     /// the serde derives, matching the TS contract).
-    fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+    pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 

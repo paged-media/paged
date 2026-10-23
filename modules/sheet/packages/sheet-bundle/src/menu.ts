@@ -40,6 +40,21 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Sheet/New sheet from dataset", "sheetFromDataset", "dataset"],
 ];
 
+/** The right-click rows of the sheet's frame surface (`Context/…`, shown
+ *  only while the sheet context is active; extensions ADR 334). */
+const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
+  ["Context/Cut", "cutSelection", "clipboard"],
+  ["Context/Copy", "copySelection", "clipboard"],
+  ["Context/Paste", "pasteSelection", "clipboard"],
+  ["Context/Insert rows", "insertRows", "structure"],
+  ["Context/Insert columns", "insertColumns", "structure"],
+  ["Context/Delete rows", "deleteRows", "structure"],
+  ["Context/Delete columns", "deleteColumns", "structure"],
+  ["Context/Clear contents", "clearCells", "clear"],
+  ["Context/Sort…", "sortRange", "data"],
+  ["Context/Format cells…", "formatCells", "format"],
+];
+
 /** Register every entry; one Disposable drops them all. */
 export function contributeMenu(host: BundleHost): Disposable {
   const handles: Disposable[] = [];
@@ -56,6 +71,17 @@ export function contributeMenu(host: BundleHost): Disposable {
       }),
     );
   }
+  CONTEXT_ENTRIES.forEach(([path, suffix, group], i) => {
+    handles.push(
+      host.contribute.menu({
+        path,
+        command: `${C}.${suffix}`,
+        group,
+        order: (i + 1) * 10,
+        scope: { editContext: "sheet" },
+      }),
+    );
+  });
   host.log.info(`contributed ${handles.length} menu entries`);
   return {
     dispose() {

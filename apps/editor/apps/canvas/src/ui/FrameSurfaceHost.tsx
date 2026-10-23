@@ -25,15 +25,28 @@
 // content-box origin, so one CSS pixel inside it is one point of frame
 // content. Pointer and context-menu events stop here (they belong to the
 // surface, not the canvas's tools). A wheel is the surface's to stop: one
-// it uses (the grid scrolled) stops there; one it declines (an edge, or
-// Cmd/Ctrl-wheel) bubbles on to the canvas, which pans or zooms. Keys typed while focus is inside are the
-// surface's (key-ownership: FRAME_SURFACE_ATTR).
+// it uses stops there; one it declines bubbles on to the canvas, which pans
+// or zooms. Keys typed while focus is inside are the surface's
+// (key-ownership: FRAME_SURFACE_ATTR).
+//
+// Editor ADR 283 — FULL SCREEN: on the surface's request the host pushes a
+// chrome override (only the canvas region and the context menu stay; no
+// title bar, rulers or thumbnails) and the surface fills the work area,
+// upright and unscaled, its bar along the top. Esc or the bar's button
+// asks for the frame again.
 
-import type { CSSProperties, RefObject, SyntheticEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type RefObject,
+  type SyntheticEvent,
+} from "react";
 
 import type { Camera, ElementGeometryItem, PageId } from "@paged-media/client";
 import {
   FRAME_SURFACE_ATTR,
+  useChromeOverride,
   useOptionalEditContextStack,
   useRegistries,
   useRegistryView,
@@ -49,15 +62,45 @@ export interface FrameSurfaceHostProps {
   elementGeometry: ReadonlyArray<ElementGeometryItem> | undefined;
   /** The canvas host the camera's pixels are relative to. */
   hostRef: RefObject<HTMLDivElement | null>;
+  /** The canvas host's size, CSS px (the full-screen work area). */
+  hostSize: { width: number; height: number };
 }
 
 const stop = (e: SyntheticEvent) => e.stopPropagation();
+
+/** What full screen leaves of the chrome. */
+const FULLSCREEN_OVERRIDE = {
+  keep: ["canvas", "context-menu"] as const,
+  canvas: { titleBar: false, rulers: false, thumbnails: false },
+};
+
+/** Screen room the bar needs above the frame before it flips below. */
+const BAR_ROOM_PX = 52;
+const BAR_GAP_PX = 6;
+/** Height reserved for the bar along the top in full screen. */
+const FULLSCREEN_BAR_PX = 44;
 
 export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
   const registries = useRegistries();
   const surfaces = useRegistryView(registries.frameSurfaces);
   const stack = useOptionalEditContextStack();
   const active = stack?.active ?? null;
+  const pushOverride = useChromeOverride();
+  // Full screen belongs to one entered frame; entering another starts in
+  // the frame presentation again.
+  const activeKey = active
+    ? `${active.type}:${active.scopeRoot.kind}:${String(active.scopeRoot.id)}`
+    : null;
+  const [fullscreenOf, setFullscreenOf] = useState<string | null>(null);
+  const fullscreen = activeKey !== null && fullscreenOf === activeKey;
+  useEffect(() => {
+    if (!fullscreen) return;
+    return pushOverride({
+      keep: [...FULLSCREEN_OVERRIDE.keep],
+      canvas: FULLSCREEN_OVERRIDE.canvas,
+    });
+  }, [fullscreen, pushOverride]);
+
   if (!active || !stack) return null;
   const surface = surfaces.get(active.type);
   if (!surface) return null;
@@ -70,16 +113,62 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
   const page = pageIndex >= 0 ? props.pageRects[pageIndex] : undefined;
   if (!page) return null;
 
-  const m = contentToHostMatrix(props.camera, page, geom);
-  const inverse = invert(m);
   const [top, left, bottom, right] = geom.bounds;
-  const widthPt = Math.max(right - left, 0);
-  const heightPt = Math.max(bottom - top, 0);
+  const frameBoxPt = {
+    widthPt: Math.max(right - left, 0),
+    heightPt: Math.max(bottom - top, 0),
+  };
+  // On the frame: the content-box transform. Full screen: upright, one CSS
+  // pixel a point, below the bar.
+  const m: [number, number, number, number, number, number] = fullscreen
+    ? [1, 0, 0, 1, 0, FULLSCREEN_BAR_PX]
+    : contentToHostMatrix(props.camera, page, geom);
+  const inverse = invert(m);
+  const widthPt = fullscreen
+    ? Math.max(props.hostSize.width, 1)
+    : frameBoxPt.widthPt;
+  const heightPt = fullscreen
+    ? Math.max(props.hostSize.height - FULLSCREEN_BAR_PX, 1)
+    : frameBoxPt.heightPt;
   // Screen pixels per content point: the camera scale times the frame's own
   // scale (the square root of its linear part's determinant).
   const pxPerPt = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
   const elementId =
     typeof active.scopeRoot.id === "string" ? active.scopeRoot.id : "";
+  const presentation: "frame" | "fullscreen" = fullscreen
+    ? "fullscreen"
+    : "frame";
+
+  const surfaceProps = {
+    elementId,
+    widthPt,
+    heightPt,
+    pxPerPt,
+    presentation,
+    frameBoxPt,
+    toContentPt: (
+      clientX: number,
+      clientY: number,
+    ): [number, number] | null => {
+      const host = props.hostRef.current;
+      if (!host || !inverse) return null;
+      const r = host.getBoundingClientRect();
+      const x = clientX - r.left;
+      const y = clientY - r.top;
+      const cx = inverse[0] * x + inverse[2] * y + inverse[4];
+      const cy = inverse[1] * x + inverse[3] * y + inverse[5];
+      if (cx < 0 || cy < 0 || cx > widthPt || cy > heightPt) return null;
+      return [cx, cy];
+    },
+    requestPresentation: (p: "frame" | "fullscreen") => {
+      setFullscreenOf(p === "fullscreen" ? activeKey : null);
+    },
+    exit: ({ commit }: { commit: boolean }) => {
+      setFullscreenOf(null);
+      if (commit) stack.commit();
+      else stack.cancel();
+    },
+  };
 
   const style: CSSProperties = {
     position: "absolute",
@@ -92,47 +181,79 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
     overflow: "hidden",
     pointerEvents: "auto",
     // Above the canvas and the overlay SVG, below the HUD.
-    zIndex: 2,
+    zIndex: fullscreen ? 4 : 2,
+    background: fullscreen ? "var(--pg-bg, #ffffff)" : undefined,
   };
+
+  // The bar: above the frame's screen box (below it when the top edge is
+  // too close to the viewport's), or along the top in full screen.
+  const corners = [
+    [0, 0],
+    [widthPt, 0],
+    [0, heightPt],
+    [widthPt, heightPt],
+  ].map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
+  const minX = Math.min(...corners.map((c) => c[0]));
+  const minY = Math.min(...corners.map((c) => c[1]));
+  const maxY = Math.max(...corners.map((c) => c[1]));
+  const above = minY > BAR_ROOM_PX;
+  const barStyle: CSSProperties = fullscreen
+    ? {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        top: 0,
+        height: FULLSCREEN_BAR_PX,
+        display: "flex",
+        alignItems: "center",
+        padding: "0 8px",
+        boxSizing: "border-box",
+        pointerEvents: "auto",
+        zIndex: 5,
+        background: "var(--pg-bg, #ffffff)",
+      }
+    : {
+        position: "absolute",
+        left: Math.max(4, minX),
+        top: above ? minY - BAR_GAP_PX : maxY + BAR_GAP_PX,
+        transform: above ? "translateY(-100%)" : undefined,
+        pointerEvents: "auto",
+        zIndex: 3,
+      };
   const Render = surface.render;
+  const Bar = surface.bar;
   return (
-    <div
-      {...{ [FRAME_SURFACE_ATTR]: active.type }}
-      data-testid="frame-surface"
-      style={style}
-      onPointerDown={stop}
-      onPointerMove={stop}
-      onPointerUp={stop}
-      onPointerCancel={stop}
-      onDoubleClick={stop}
-      onContextMenu={stop}
-    >
-      <Render
-        elementId={elementId}
-        widthPt={widthPt}
-        heightPt={heightPt}
-        pxPerPt={pxPerPt}
-        presentation="frame"
-        toContentPt={(clientX, clientY) => {
-          const host = props.hostRef.current;
-          if (!host || !inverse) return null;
-          const r = host.getBoundingClientRect();
-          const x = clientX - r.left;
-          const y = clientY - r.top;
-          const cx = inverse[0] * x + inverse[2] * y + inverse[4];
-          const cy = inverse[1] * x + inverse[3] * y + inverse[5];
-          if (cx < 0 || cy < 0 || cx > widthPt || cy > heightPt) return null;
-          return [cx, cy];
-        }}
-        requestPresentation={() => {
-          // Full-screen lands with editor ADR 283; until then the host
-          // keeps the frame presentation.
-        }}
-        exit={({ commit }) => {
-          if (commit) stack.commit();
-          else stack.cancel();
-        }}
-      />
-    </div>
+    <>
+      {Bar ? (
+        <div
+          {...{ [FRAME_SURFACE_ATTR]: active.type }}
+          data-testid="frame-surface-bar"
+          data-presentation={presentation}
+          style={barStyle}
+          onPointerDown={stop}
+          onPointerMove={stop}
+          onPointerUp={stop}
+          onDoubleClick={stop}
+          onContextMenu={stop}
+          onWheel={stop}
+        >
+          <Bar {...surfaceProps} />
+        </div>
+      ) : null}
+      <div
+        {...{ [FRAME_SURFACE_ATTR]: active.type }}
+        data-testid="frame-surface"
+        data-presentation={presentation}
+        style={style}
+        onPointerDown={stop}
+        onPointerMove={stop}
+        onPointerUp={stop}
+        onPointerCancel={stop}
+        onDoubleClick={stop}
+        onContextMenu={stop}
+      >
+        <Render {...surfaceProps} />
+      </div>
+    </>
   );
 }

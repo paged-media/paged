@@ -144,7 +144,7 @@ fn gradient_map_ref(a: Px, _b: Px, p: &AdjustGradientMapParams) -> Px {
     Px([m[0] * a.0[3], m[1] * a.0[3], m[2] * a.0[3], a.0[3]])
 }
 
-fn exposure_ref(a: Px, _b: Px, p: &AdjustExposureParams) -> Px {
+pub(crate) fn exposure_ref(a: Px, _b: Px, p: &AdjustExposureParams) -> Px {
     // Linear: vec4(a.rgb * exp2(ev), a.a) on premultiplied rgb directly.
     let k = p.ev.exp2();
     if p.encoding == 0 {
@@ -162,14 +162,14 @@ fn exposure_ref(a: Px, _b: Px, p: &AdjustExposureParams) -> Px {
     Px([o[0] * al, o[1] * al, o[2] * al, al])
 }
 
-fn brightness_contrast_ref(a: Px, _b: Px, p: &AdjustBrightnessContrastParams) -> Px {
+pub(crate) fn brightness_contrast_ref(a: Px, _b: Px, p: &AdjustBrightnessContrastParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let cp = c.map(|x| (x - 0.5) * p.contrast + (0.5 + p.brightness));
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn levels_ref(a: Px, _b: Px, p: &AdjustLevelsParams) -> Px {
+pub(crate) fn levels_ref(a: Px, _b: Px, p: &AdjustLevelsParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let cp = c.map(|x| {
@@ -181,7 +181,7 @@ fn levels_ref(a: Px, _b: Px, p: &AdjustLevelsParams) -> Px {
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn saturation_ref(a: Px, _b: Px, p: &AdjustSaturationParams) -> Px {
+pub(crate) fn saturation_ref(a: Px, _b: Px, p: &AdjustSaturationParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     // lum dot in fixed r,g,b order; cp = mix(splat(lum), c, sat).
@@ -194,7 +194,7 @@ fn saturation_ref(a: Px, _b: Px, p: &AdjustSaturationParams) -> Px {
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn hue_rotate_ref(a: Px, _b: Px, p: &AdjustHueRotateParams) -> Px {
+pub(crate) fn hue_rotate_ref(a: Px, _b: Px, p: &AdjustHueRotateParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let theta = p.degrees * std::f32::consts::PI / 180.0;
@@ -214,7 +214,7 @@ fn hue_rotate_ref(a: Px, _b: Px, p: &AdjustHueRotateParams) -> Px {
     Px([rr * al, gg * al, bb * al, al])
 }
 
-fn white_balance_ref(a: Px, _b: Px, p: &AdjustWhiteBalanceParams) -> Px {
+pub(crate) fn white_balance_ref(a: Px, _b: Px, p: &AdjustWhiteBalanceParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     // gain = (1+temp, 1+tint, 1-temp); c' = c * gain (componentwise).
@@ -236,7 +236,7 @@ fn smoothstep_ref(e0: f32, e1: f32, x: f32) -> f32 {
     t * t * (3.0 - 2.0 * t)
 }
 
-fn vibrance_ref(a: Px, _b: Px, p: &AdjustVibranceParams) -> Px {
+pub(crate) fn vibrance_ref(a: Px, _b: Px, p: &AdjustVibranceParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let lum = lum3(c);
@@ -255,7 +255,7 @@ fn vibrance_ref(a: Px, _b: Px, p: &AdjustVibranceParams) -> Px {
 
 /// Mirrors `HUE_SATURATION_WGSL` term for term (HSL round trip, range
 /// weights, colorize).
-fn hue_saturation_ref(a: Px, _b: Px, p: &AdjustHueSaturationParams) -> Px {
+pub(crate) fn hue_saturation_ref(a: Px, _b: Px, p: &AdjustHueSaturationParams) -> Px {
     fn to_hsl(c: [f32; 3]) -> [f32; 3] {
         let mx = c[0].max(c[1].max(c[2]));
         let mn = c[0].min(c[1].min(c[2]));
@@ -451,7 +451,7 @@ fn dodge_burn_reference_is_the_identity_at_zero_and_moves_the_right_way__feat__i
     assert!((lum(desat) - lum(px)).abs() < 1e-5);
 }
 
-fn hue_sat_master_and_ranges() -> AdjustHueSaturationParams {
+pub(crate) fn hue_sat_master_and_ranges() -> AdjustHueSaturationParams {
     let mut p = AdjustHueSaturationParams::identity();
     p.master = [20.0, 0.2, -0.1, 0.0];
     p.ranges[0] = [-15.0, 0.4, 0.1, 0.0];
@@ -460,13 +460,13 @@ fn hue_sat_master_and_ranges() -> AdjustHueSaturationParams {
     p
 }
 
-fn hue_sat_colorize() -> AdjustHueSaturationParams {
+pub(crate) fn hue_sat_colorize() -> AdjustHueSaturationParams {
     let mut p = AdjustHueSaturationParams::identity();
     p.colorize = [1.0, 35.0, 0.6, -0.2];
     p
 }
 
-fn color_balance_ref(a: Px, _b: Px, p: &AdjustColorBalanceParams) -> Px {
+pub(crate) fn color_balance_ref(a: Px, _b: Px, p: &AdjustColorBalanceParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let lum = lum3(c);
@@ -486,7 +486,7 @@ fn color_balance_ref(a: Px, _b: Px, p: &AdjustColorBalanceParams) -> Px {
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn black_white_ref(a: Px, _b: Px, p: &AdjustBlackWhiteParams) -> Px {
+pub(crate) fn black_white_ref(a: Px, _b: Px, p: &AdjustBlackWhiteParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let (r, g, b) = (c[0], c[1], c[2]);
@@ -508,7 +508,7 @@ fn black_white_ref(a: Px, _b: Px, p: &AdjustBlackWhiteParams) -> Px {
     Px([gc * al, gc * al, gc * al, al])
 }
 
-fn posterize_ref(a: Px, _b: Px, p: &AdjustPosterizeParams) -> Px {
+pub(crate) fn posterize_ref(a: Px, _b: Px, p: &AdjustPosterizeParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let n = p.levels.max(2.0);
@@ -519,7 +519,7 @@ fn posterize_ref(a: Px, _b: Px, p: &AdjustPosterizeParams) -> Px {
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn threshold_ref(a: Px, _b: Px, p: &AdjustThresholdParams) -> Px {
+pub(crate) fn threshold_ref(a: Px, _b: Px, p: &AdjustThresholdParams) -> Px {
     // Premultiplied-space compare (mirrors THRESHOLD_WGSL): lum is
     // linear, so lum(premul) >= threshold*alpha avoids the unpremul
     // division entirely.
@@ -529,7 +529,7 @@ fn threshold_ref(a: Px, _b: Px, p: &AdjustThresholdParams) -> Px {
     Px([v, v, v, a.0[3]])
 }
 
-fn photo_filter_ref(a: Px, _b: Px, p: &AdjustPhotoFilterParams) -> Px {
+pub(crate) fn photo_filter_ref(a: Px, _b: Px, p: &AdjustPhotoFilterParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let tinted = [c[0] * p.fr, c[1] * p.fg, c[2] * p.fb];
@@ -552,7 +552,7 @@ fn photo_filter_ref(a: Px, _b: Px, p: &AdjustPhotoFilterParams) -> Px {
     Px([cp[0] * al, cp[1] * al, cp[2] * al, al])
 }
 
-fn channel_mixer_ref(a: Px, _b: Px, p: &AdjustChannelMixerParams) -> Px {
+pub(crate) fn channel_mixer_ref(a: Px, _b: Px, p: &AdjustChannelMixerParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     // Fixed left-to-right sums, identical to CHANNEL_MIXER_WGSL.
@@ -562,7 +562,7 @@ fn channel_mixer_ref(a: Px, _b: Px, p: &AdjustChannelMixerParams) -> Px {
     Px([rr * al, gg * al, bb * al, al])
 }
 
-fn levels_rgb_ref(a: Px, _b: Px, p: &AdjustLevelsRgbParams) -> Px {
+pub(crate) fn levels_rgb_ref(a: Px, _b: Px, p: &AdjustLevelsRgbParams) -> Px {
     let c = unpremul(a);
     let al = a.0[3];
     let ch = |x: f32, ib: f32, iw: f32, ga: f32| {
@@ -582,7 +582,7 @@ fn levels_rgb_ref(a: Px, _b: Px, p: &AdjustLevelsRgbParams) -> Px {
 /// per-texel alpha in {0.25,…,1}, stored premultiplied (rgb = straight·α)
 /// so `unpremul` recovers a valid color. Alpha is never 0 (the unpremul
 /// special case is covered by the dedicated case below).
-fn premul_tile(w: u32, h: u32) -> RefTile {
+pub(crate) fn premul_tile(w: u32, h: u32) -> RefTile {
     RefTile::from_fn(w, h, |x, y| {
         let al = 0.25 + 0.75 * ((x as f32 * 0.01).fract());
         let r = (x as f32 * 0.013).fract();
@@ -597,7 +597,7 @@ fn premul_tile(w: u32, h: u32) -> RefTile {
 /// shift), so kernels with hard discontinuities (posterize bin edges,
 /// the threshold cut) see BIT-identical unpremultiplied stimulus and
 /// cannot flip across the discontinuity between lanes.
-fn premul_tile_pow2(w: u32, h: u32) -> RefTile {
+pub(crate) fn premul_tile_pow2(w: u32, h: u32) -> RefTile {
     const ALPHAS: [f32; 3] = [0.25, 0.5, 1.0];
     RefTile::from_fn(w, h, |x, y| {
         let al = ALPHAS[((x + y) % 3) as usize];

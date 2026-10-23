@@ -26,14 +26,16 @@
 //! - [`SheetSession::chart_specs`] — every chart with its series ranges and
 //!   options (what `list_charts` summarises).
 //! - [`SheetSession::update_chart`] — patch one chart's kind, title, legend,
-//!   axis titles and bounds, or replace its series. Page-side only, like
-//!   `add_chart`: the xlsx writer never re-derives chart parts, so the bundle
-//!   keeps a chart-op journal beside the workbook bytes.
+//!   axes, data labels, style references, or replace its series (each with
+//!   its own kind and axis group: a combo). The change is written into the
+//!   xlsx on save (the chart part is spliced, ADR 503 amendment).
 
 use serde::{Deserialize, Deserializer};
 use sheet_core::{CellRef, RangeRef, SheetId, SheetModel};
 
-use super::{chart_kind_from_tag, chart_kind_tag, SessionError, SheetSession, CHART_KIND_TAGS};
+use super::charts::{chart_kind_from_tag, chart_kind_tag, CHART_KIND_TAGS};
+use super::{SessionError, SheetSession};
+use sheet_chart::model::{ColorRef, ConcreteColor, DataLabels, Legend, LegendPosition, Series};
 
 /// One structured table (ListObject).
 #[derive(serde::Serialize, Debug, Clone, PartialEq)]
@@ -56,7 +58,15 @@ pub struct SeriesSpec {
     pub name: Option<String>,
     pub values: String,
     pub categories: Option<String>,
+    /// The fill as `#RRGGBB` (an RGB or resolved theme colour).
     pub color: Option<String>,
+    /// The document swatch the fill names.
+    pub color_swatch: Option<String>,
+    /// The series' plot kind tag (differs from the chart's in a combo).
+    pub kind: &'static str,
+    pub secondary: bool,
+    pub x_values: Option<String>,
+    pub sizes: Option<String>,
 }
 
 /// One chart with everything the object model reads.
@@ -73,6 +83,14 @@ pub struct ChartSpec {
     pub value_axis_title: Option<String>,
     pub value_axis_min: Option<f64>,
     pub value_axis_max: Option<f64>,
+    pub value_axis_log_base: Option<f64>,
+    pub value_axis_format: Option<String>,
+    /// `r`, `l`, `t`, `b`, `tr`, or none.
+    pub legend_position: Option<&'static str>,
+    pub data_labels: bool,
+    pub style: Option<u32>,
+    pub flattened3d: bool,
+    pub title_paragraph_style: Option<String>,
 }
 
 /// A series argument of [`ChartPatch::series`]; empty strings mean none.
@@ -82,7 +100,15 @@ pub struct SeriesArg {
     pub values: String,
     pub categories: String,
     pub name: String,
+    /// `#RRGGBB`; empty = automatic.
     pub color: String,
+    /// A document swatch id the fill names (`Color/…`).
+    pub color_swatch: String,
+    /// This series' kind tag in a combo (empty = the chart's kind).
+    pub kind: String,
+    pub secondary: bool,
+    pub x_values: String,
+    pub sizes: String,
 }
 
 /// A partial chart update: absent = unchanged; `null` (for the nullable
@@ -103,6 +129,19 @@ pub struct ChartPatch {
     pub value_axis_min: Option<Option<f64>>,
     #[serde(deserialize_with = "present")]
     pub value_axis_max: Option<Option<f64>>,
+    #[serde(deserialize_with = "present")]
+    pub value_axis_log_base: Option<Option<f64>>,
+    #[serde(deserialize_with = "present")]
+    pub value_axis_format: Option<Option<String>>,
+    /// `r`, `l`, `t`, `b` or `tr` (and shown).
+    pub legend_position: Option<String>,
+    /// Show values as data labels on every series.
+    pub data_labels: Option<bool>,
+    #[serde(deserialize_with = "present")]
+    pub style: Option<Option<u32>>,
+    /// A document paragraph style for the title (`ParagraphStyle/…`).
+    #[serde(deserialize_with = "present")]
+    pub title_paragraph_style: Option<Option<String>>,
 }
 
 /// A field that is present (even as `null`) is `Some(..)`; `default` makes
@@ -228,31 +267,67 @@ impl SheetSession {
     /// Every chart with its series ranges and options.
     pub fn chart_specs(&self) -> Vec<ChartSpec> {
         let model = self.engine().model();
+        let theme = self.doc.chart_theme;
+        let hex = |c: &ColorRef| -> Option<String> {
+            let th = sheet_chart::colors::Theme {
+                colors: theme.unwrap_or(sheet_chart::colors::OFFICE_THEME),
+            };
+            (!matches!(c.concrete, ConcreteColor::Auto)).then(|| th.paint(c, "#808080").hex)
+        };
         self.doc
             .charts
             .iter()
             .enumerate()
-            .map(|(i, c)| ChartSpec {
-                index: i as u32,
-                host_sheet: c.host_sheet,
-                kind: chart_kind_tag(c.model.kind),
-                title: c.model.title.as_ref().map(|t| t.to_string()),
-                legend: c.model.legend,
-                series: c
-                    .model
-                    .series
-                    .iter()
-                    .map(|s| SeriesSpec {
-                        name: s.name.as_ref().map(|t| t.to_string()),
-                        values: plain_range(model, &s.values),
-                        categories: s.categories.as_ref().map(|r| plain_range(model, r)),
-                        color: s.color.as_ref().map(|t| t.to_string()),
-                    })
-                    .collect(),
-                category_axis_title: c.model.cat_axis.title.as_ref().map(|t| t.to_string()),
-                value_axis_title: c.model.val_axis.title.as_ref().map(|t| t.to_string()),
-                value_axis_min: c.model.val_axis.min,
-                value_axis_max: c.model.val_axis.max,
+            .filter(|(i, _)| !self.removed_charts.contains(&(*i as u32)))
+            .map(|(i, c)| {
+                let m = &c.model;
+                ChartSpec {
+                    index: i as u32,
+                    host_sheet: c.host_sheet,
+                    kind: chart_kind_tag(m.kind(), m.grouping()),
+                    title: m.title.as_ref().map(|t| t.to_string()),
+                    legend: m.legend.is_some(),
+                    series: m
+                        .plots
+                        .iter()
+                        .flat_map(|p| p.series.iter().map(move |s| (p, s)))
+                        .map(|(p, s)| SeriesSpec {
+                            name: s.name.as_ref().map(|t| t.to_string()),
+                            values: plain_range(model, &s.values),
+                            categories: s.categories.as_ref().map(|r| plain_range(model, r)),
+                            color: s.fill.as_ref().and_then(hex),
+                            color_swatch: s
+                                .fill
+                                .as_ref()
+                                .and_then(|f| f.doc.as_ref())
+                                .map(|d| d.id.clone()),
+                            kind: chart_kind_tag(p.kind, p.grouping),
+                            secondary: p.secondary,
+                            x_values: s.x_values.as_ref().map(|r| plain_range(model, r)),
+                            sizes: s.sizes.as_ref().map(|r| plain_range(model, r)),
+                        })
+                        .collect(),
+                    category_axis_title: m.cat_axis.title.as_ref().map(|t| t.to_string()),
+                    value_axis_title: m.val_axis.title.as_ref().map(|t| t.to_string()),
+                    value_axis_min: m.val_axis.min,
+                    value_axis_max: m.val_axis.max,
+                    value_axis_log_base: m.val_axis.log_base,
+                    value_axis_format: m.val_axis.format.as_ref().map(|t| t.to_string()),
+                    legend_position: m.legend.as_ref().map(|l| l.position.tag()),
+                    data_labels: m
+                        .series()
+                        .any(|s| s.labels.as_ref().is_some_and(DataLabels::any))
+                        || m.plots
+                            .iter()
+                            .any(|p| p.labels.as_ref().is_some_and(DataLabels::any)),
+                    style: m.style,
+                    flattened3d: m.flattened_3d,
+                    title_paragraph_style: m
+                        .title_style
+                        .doc_para_style
+                        .as_ref()
+                        .map(|t| t.to_string()),
+                }
             })
             .collect()
     }
@@ -276,7 +351,7 @@ impl SheetSession {
 
     /// Patch chart `index`. Validated whole before anything changes: a bad
     /// kind, an unresolvable range or an empty series list leaves the chart
-    /// as it was.
+    /// as it was. A patched chart is spliced into its part on save.
     pub fn update_chart(&mut self, index: u32, patch: ChartPatch) -> Result<(), SessionError> {
         let count = self.doc.charts.len();
         let host_sheet = self
@@ -287,14 +362,18 @@ impl SheetSession {
             .ok_or_else(|| {
                 SessionError(format!("chart index {index} out of range ({count} charts)"))
             })?;
-        let kind = match &patch.kind {
-            None => None,
-            Some(tag) => Some(chart_kind_from_tag(tag).ok_or_else(|| {
+        self.live_chart(index)?;
+        let tag = |t: &str| {
+            chart_kind_from_tag(t).ok_or_else(|| {
                 SessionError(format!(
-                    "unknown chart kind {tag:?} ({})",
+                    "unknown chart kind {t:?} ({})",
                     CHART_KIND_TAGS.join("|")
                 ))
-            })?),
+            })
+        };
+        let kind = match &patch.kind {
+            None => None,
+            Some(t) => Some(tag(t)?),
         };
         let series = match &patch.series {
             None => None,
@@ -303,48 +382,158 @@ impl SheetSession {
                     return Err(SessionError("a chart needs at least one series".into()));
                 }
                 let mut out = Vec::with_capacity(list.len());
-                for s in list {
-                    let values = self.range_ref(host_sheet, &s.values)?;
-                    let categories = match non_empty(&s.categories) {
+                for a in list {
+                    let mut s = Series::of(self.range_ref(host_sheet, &a.values)?);
+                    s.categories = match non_empty(&a.categories) {
                         None => None,
                         Some(c) => Some(self.range_ref(host_sheet, &c)?),
                     };
-                    out.push(sheet_chart::Series {
-                        name: non_empty(&s.name).map(Into::into),
-                        categories,
-                        values,
-                        color: non_empty(&s.color).map(Into::into),
-                    });
+                    s.x_values = match non_empty(&a.x_values) {
+                        None => None,
+                        Some(c) => Some(self.range_ref(host_sheet, &c)?),
+                    };
+                    s.sizes = match non_empty(&a.sizes) {
+                        None => None,
+                        Some(c) => Some(self.range_ref(host_sheet, &c)?),
+                    };
+                    s.name = non_empty(&a.name).map(Into::into);
+                    let mut fill = non_empty(&a.color).and_then(|c| ColorRef::from_hex(&c));
+                    if let Some(sw) = non_empty(&a.color_swatch) {
+                        // A swatch named without a colour paints automatic
+                        // until the document resolves it.
+                        let base = fill.unwrap_or_else(ColorRef::auto);
+                        let fallback = sheet_chart::model::rgb_of(&base).unwrap_or(0x808080);
+                        fill = Some(base.with_doc(sheet_chart::model::doc_swatch(&sw, fallback)));
+                    }
+                    s.fill = fill;
+                    if let Some(k) = non_empty(&a.kind) {
+                        let (k, g) = tag(&k)?;
+                        s.kind = Some(k);
+                        s.grouping = Some(g);
+                    }
+                    s.secondary = a.secondary;
+                    out.push(s);
                 }
                 Some(out)
             }
         };
-        let chart = &mut self.doc.charts[index as usize].model;
-        if let Some(k) = kind {
-            chart.kind = k;
+        let legend_pos = match patch.legend_position.as_deref() {
+            None => None,
+            Some(p @ ("r" | "l" | "t" | "b" | "tr")) => Some(LegendPosition::from_tag(p)),
+            Some(other) => {
+                return Err(SessionError(format!(
+                    "unknown legend position {other:?} (r|l|t|b|tr)"
+                )))
+            }
+        };
+        let chart = &mut self.doc.charts[index as usize];
+        chart.dirty = true;
+        let m = &mut chart.model;
+        if let Some(s) = series {
+            let (k, g) = kind.unwrap_or((m.kind(), m.grouping()));
+            m.set_series(s, k, g);
+        } else if let Some((k, g)) = kind {
+            // A kind change re-types every plot of a one-kind chart; a combo
+            // keeps its other plots and changes the first.
+            if m.plots.len() == 1 {
+                m.plots[0].kind = k;
+                m.plots[0].grouping = g;
+            } else if let Some(p) = m.plots.first_mut() {
+                p.kind = k;
+                p.grouping = g;
+            }
+            if k.is_xy() {
+                m.cat_axis.kind = sheet_chart::model::AxisKind::Value;
+            } else if m.cat_axis.kind == sheet_chart::model::AxisKind::Value {
+                m.cat_axis.kind = sheet_chart::model::AxisKind::Category;
+            }
+            if matches!(
+                k,
+                sheet_chart::ChartKind::Pie | sheet_chart::ChartKind::Donut
+            ) {
+                m.plots[0].vary_colors = true;
+            }
         }
         if let Some(t) = patch.title {
-            chart.title = t.and_then(|t| non_empty(&t)).map(Into::into);
+            m.title = t.and_then(|t| non_empty(&t)).map(Into::into);
         }
         if let Some(l) = patch.legend {
-            chart.legend = l;
+            m.legend = if l {
+                Some(m.legend.clone().unwrap_or_default())
+            } else {
+                None
+            };
         }
-        if let Some(s) = series {
-            chart.series = s;
+        if let Some(p) = legend_pos {
+            m.legend.get_or_insert_with(Legend::default).position = p;
         }
         if let Some(t) = patch.category_axis_title {
-            chart.cat_axis.title = t.and_then(|t| non_empty(&t)).map(Into::into);
+            m.cat_axis.title = t.and_then(|t| non_empty(&t)).map(Into::into);
         }
         if let Some(t) = patch.value_axis_title {
-            chart.val_axis.title = t.and_then(|t| non_empty(&t)).map(Into::into);
+            m.val_axis.title = t.and_then(|t| non_empty(&t)).map(Into::into);
         }
         if let Some(v) = patch.value_axis_min {
-            chart.val_axis.min = v;
+            m.val_axis.min = v;
         }
         if let Some(v) = patch.value_axis_max {
-            chart.val_axis.max = v;
+            m.val_axis.max = v;
+        }
+        if let Some(v) = patch.value_axis_log_base {
+            m.val_axis.log_base = v.filter(|b| *b >= 2.0);
+        }
+        if let Some(v) = patch.value_axis_format {
+            m.val_axis.format = v.and_then(|t| non_empty(&t)).map(Into::into);
+        }
+        if let Some(on) = patch.data_labels {
+            for p in &mut m.plots {
+                p.labels = None;
+                for s in &mut p.series {
+                    s.labels = on.then(|| DataLabels {
+                        show_value: true,
+                        ..DataLabels::default()
+                    });
+                }
+            }
+        }
+        if let Some(v) = patch.style {
+            m.style = v.filter(|s| (1..=48).contains(s));
+        }
+        if let Some(v) = patch.title_paragraph_style {
+            m.title_style.doc_para_style = v.and_then(|t| non_empty(&t)).map(Into::into);
         }
         Ok(())
+    }
+
+    /// Refuse a chart index that names a deleted chart.
+    pub(crate) fn live_chart(&self, index: u32) -> Result<(), SessionError> {
+        if self.removed_charts.contains(&index) {
+            return Err(SessionError(format!("chart {index} was deleted")));
+        }
+        Ok(())
+    }
+
+    /// Delete chart `index`. Its slot stays, so every other chart keeps its
+    /// index; it is no longer listed (`list_charts`, `chart_specs`), drawn or
+    /// patched. Page-side only, like `add_chart`: a chart read from the
+    /// workbook keeps its parts in the saved xlsx (the writer never
+    /// re-derives chart parts), so a caller that reloads the bytes replays
+    /// the delete (the object model's chart journal does).
+    pub fn delete_chart(&mut self, index: u32) -> Result<(), SessionError> {
+        let count = self.doc.charts.len();
+        if index as usize >= count {
+            return Err(SessionError(format!(
+                "chart index {index} out of range ({count} charts)"
+            )));
+        }
+        self.live_chart(index)?;
+        self.removed_charts.insert(index);
+        Ok(())
+    }
+
+    /// How many charts are not deleted.
+    pub(crate) fn live_chart_count(&self) -> usize {
+        self.doc.charts.len() - self.removed_charts.len()
     }
 }
 
@@ -370,6 +559,36 @@ mod tests {
             }
         }
         s
+    }
+
+    #[test]
+    fn delete_chart_keeps_the_other_indices__feat__sheet_objects() {
+        let mut s = session();
+        let a = s
+            .add_chart(0, "B2:B3", "A2:A3", "column", "A", "columns")
+            .unwrap();
+        let b = s
+            .add_chart(0, "C2:C3", "A2:A3", "line", "B", "columns")
+            .unwrap();
+        s.delete_chart(a).unwrap();
+        let specs = s.chart_specs();
+        assert_eq!(specs.len(), 1);
+        assert_eq!(specs[0].index, b);
+        assert_eq!(s.list_charts().len(), 1);
+        assert_eq!(s.list_charts()[0].index, b);
+        assert!(s.get_chart_geometry(a, 200.0, 100.0).is_err());
+        assert!(s.get_chart_geometry(b, 200.0, 100.0).is_ok());
+        assert!(s
+            .update_chart(a, ChartPatch::default())
+            .unwrap_err()
+            .0
+            .contains("deleted"));
+        // Twice, or out of range, is refused.
+        assert!(s.delete_chart(a).is_err());
+        assert!(s.delete_chart(9).is_err());
+        // A chart added later takes the next slot, never the deleted one.
+        let c = s.add_chart(0, "B2:C3", "", "bar", "", "columns").unwrap();
+        assert_eq!(c, b + 1);
     }
 
     #[test]
@@ -401,7 +620,7 @@ mod tests {
                 values: "C2:C3".into(),
                 categories: "A2:A3".into(),
                 name: "Q2".into(),
-                color: String::new(),
+                ..Default::default()
             }]),
             value_axis_min: Some(Some(0.0)),
             ..Default::default()

@@ -222,6 +222,25 @@ export type GridKeyAction =
   | { kind: "find" }
   | { kind: "undo" }
   | { kind: "redo" }
+  /** Ctrl+arrow: to the data edge (Shift extends). */
+  | { kind: "jump"; dRow: number; dCol: number; extend: boolean }
+  /** Ctrl+End: the last used cell. */
+  | { kind: "lastCell" }
+  /** Shift+Space / Ctrl+Space: the active cell's whole row / column. */
+  | { kind: "selectRow" }
+  | { kind: "selectColumn" }
+  /** Ctrl+; / Ctrl+Shift+;: type today's date / the time into the cell. */
+  | { kind: "insertNow"; what: "date" | "time" }
+  /** Ctrl+Enter while editing: the entry goes into every selected cell. */
+  | { kind: "commitFill" }
+  | { kind: "cut" }
+  | { kind: "toggleStyle"; style: "bold" | "italic" | "underline" }
+  /** Ctrl+1: the cell format panel. */
+  | { kind: "formatCells" }
+  /** F9: recalculate (manual calculation mode). */
+  | { kind: "calculate" }
+  /** Alt+PageDown / Alt+PageUp: a screen to the right / left. */
+  | { kind: "pageAcross"; dir: 1 | -1; extend: boolean }
   | { kind: "none" };
 
 const ARROWS: Record<string, [number, number]> = {
@@ -243,7 +262,38 @@ export function gridKeyAction(
   const shift = !!e.shiftKey;
   const key = e.key;
   if (mod && !e.altKey) {
+    if (key in ARROWS) {
+      if (editing) return { kind: "none" };
+      const [dRow, dCol] = ARROWS[key];
+      return { kind: "jump", dRow, dCol, extend: shift };
+    }
+    if (key === "Enter")
+      return editing ? { kind: "commitFill" } : { kind: "none" };
     switch (key.toLowerCase()) {
+      case "end":
+        return editing ? { kind: "none" } : { kind: "lastCell" };
+      case " ":
+        return editing ? { kind: "none" } : { kind: "selectColumn" };
+      case ";":
+        return { kind: "insertNow", what: shift ? "time" : "date" };
+      case ":":
+        return { kind: "insertNow", what: "time" };
+      case "x":
+        return editing ? { kind: "none" } : { kind: "cut" };
+      case "b":
+        return editing
+          ? { kind: "none" }
+          : { kind: "toggleStyle", style: "bold" };
+      case "i":
+        return editing
+          ? { kind: "none" }
+          : { kind: "toggleStyle", style: "italic" };
+      case "u":
+        return editing
+          ? { kind: "none" }
+          : { kind: "toggleStyle", style: "underline" };
+      case "1":
+        return editing ? { kind: "none" } : { kind: "formatCells" };
       case "z":
         return shift ? { kind: "redo" } : { kind: "undo" };
       case "y":
@@ -284,7 +334,17 @@ export function gridKeyAction(
     const [dRow, dCol] = ARROWS[key];
     return { kind: "move", dRow, dCol, extend: shift };
   }
+  if (key === " " && shift) return { kind: "selectRow" };
+  if (e.altKey && (key === "PageDown" || key === "PageUp")) {
+    return {
+      kind: "pageAcross",
+      dir: key === "PageDown" ? 1 : -1,
+      extend: shift,
+    };
+  }
   switch (key) {
+    case "F9":
+      return { kind: "calculate" };
     case "Tab":
       return { kind: "advance", dir: shift ? "left" : "right" };
     case "Enter":

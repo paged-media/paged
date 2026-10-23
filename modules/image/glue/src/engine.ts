@@ -960,6 +960,16 @@ export interface PerfCounters {
   };
 }
 
+/** A region filter's mask given as data (`ImageEngine.filterRegion`). */
+export interface FilterMask {
+  /** Closed polygons, `[x, y]` vertices in image pixels; unioned. */
+  polygons?: ReadonlyArray<ReadonlyArray<readonly [number, number]>>;
+  /** `width·height` coverage bytes (0 untouched … 255 filtered). */
+  alpha?: Uint8Array;
+  /** Gaussian feather of the mask's edge, σ in image pixels. */
+  feather?: number;
+}
+
 export interface ImageEngine {
   abiVersion(): number;
   kernelCount(): number;
@@ -971,6 +981,22 @@ export interface ImageEngine {
    *  are GPU-only; identity adjusts still work, nothing else). */
   initGpu(): Promise<boolean>;
   gpuReady(): boolean;
+  /** A filter on a region (ADR 465): the adjustment chain given as an
+   *  adjustment layer's wire block, applied to the rectangle of a
+   *  straight RGBA8 image; resolves the whole image. On the GPU when
+   *  `initGpu` succeeded, otherwise on the CPU twins of the same
+   *  kernels — the one kernel path that runs without a device. `mask`
+   *  narrows the rectangle (a selection given as data): its polygons'
+   *  union, intersected with `alpha` (`width·height` coverage bytes),
+   *  feathered by `feather` (σ px); partial coverage blends. */
+  filterRegion(
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+    wire: Float32Array,
+    rect: { x: number; y: number; w: number; h: number },
+    mask?: FilterMask,
+  ): Promise<Uint8Array>;
   /** Decode PSD/PNG/JPEG bytes (magic-sniffed) to an engine-held RGBA8
    *  image. Throws with the engine's honest message on unsupported
    *  inputs (16-bit, CMYK, ZIP composites, …). */
@@ -1681,6 +1707,20 @@ export interface ImageWasmModule {
   perf_counters_reset(): void;
   init_gpu(): Promise<void>;
   gpu_ready(): boolean;
+  filter_region_rgba8(
+    width: number,
+    height: number,
+    rgba: Uint8Array,
+    wire: Float32Array,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    polygons: Float32Array,
+    polygonLens: Uint32Array,
+    alpha: Uint8Array,
+    feather: number,
+  ): Promise<Uint8Array>;
   decode_image(bytes: Uint8Array): DecodedHandleWasm;
   ingest_rgba8(
     width: number,
@@ -2268,6 +2308,21 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       }
     },
     gpuReady: () => wasm.gpu_ready(),
+    filterRegion: (rgba, width, height, wire, r, mask) =>
+      wasm.filter_region_rgba8(
+        width,
+        height,
+        rgba,
+        wire,
+        r.x,
+        r.y,
+        r.w,
+        r.h,
+        Float32Array.from((mask?.polygons ?? []).flat(2)),
+        Uint32Array.from((mask?.polygons ?? []).map((p) => p.length)),
+        mask?.alpha ?? new Uint8Array(0),
+        mask?.feather ?? 0,
+      ),
     decode(bytes) {
       const h = wasm.decode_image(bytes);
       const info = {

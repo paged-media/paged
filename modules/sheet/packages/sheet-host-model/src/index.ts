@@ -37,6 +37,7 @@ export {
   type Rules,
   totalHeightPt,
   totalWidthPt,
+  HEADING_INDEX,
 } from "./lowered";
 
 export {
@@ -111,6 +112,7 @@ export {
   DEFAULT_GRID_SVG_OPTIONS,
   cellEditorRect,
   cellRect,
+  fillOnce,
   colAt,
   colBand,
   colPos,
@@ -131,6 +133,8 @@ export {
   type GridCommentMarker,
   type FrameWindow,
   type FrameWindowSpec,
+  type FramePageSpec,
+  type TracksSpec,
   type GridDataBar,
   type GridFreeze,
   type GridMerge,
@@ -190,6 +194,7 @@ export {
   estimateLabelMetrics,
   labelBox,
   labelJustification,
+  labelAutoSizeOp,
   labelStyleOps,
   LABEL_FIT_ALLOWANCE_PT,
   LABEL_SLACK_PT,
@@ -210,6 +215,7 @@ export {
 export {
   NO_FILL_SWATCH,
   offsetTableRows,
+  REPLACE_FRACTION,
   tableRefreshOps,
   textOffsetLength,
   type TableRefreshOps,

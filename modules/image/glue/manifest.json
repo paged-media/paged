@@ -595,6 +595,56 @@
           }
         },
         {
+          "id": "media.paged.image.command.filterRegion",
+          "title": "Filter a region",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "layer": {
+                "kind": "ref",
+                "to": "plugin:media.paged.image/layer"
+              },
+              "params": {
+                "kind": "struct",
+                "fields": {},
+                "open": true
+              },
+              "region": {
+                "kind": "bounds",
+                "optional": true
+              },
+              "mask": {
+                "kind": "struct",
+                "optional": true,
+                "fields": {
+                  "polygons": {
+                    "kind": "list",
+                    "of": {
+                      "kind": "list",
+                      "of": {
+                        "kind": "point"
+                      }
+                    },
+                    "optional": true
+                  },
+                  "alpha": {
+                    "kind": "bytes",
+                    "optional": true
+                  },
+                  "feather": {
+                    "kind": "number",
+                    "optional": true
+                  }
+                }
+              },
+              "selection": {
+                "kind": "bool",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
           "id": "media.paged.image.command.replaceLayerPixels",
           "title": "Replace layer pixels",
           "args": {

@@ -83,6 +83,7 @@ import {
   report,
   type WorkLog,
 } from "./counting-host";
+import { tableRefreshOps } from "@paged-media/sheet-host-model";
 import { engineCounters, resetEngineCounters } from "./perf-engine";
 import {
   ENGINE_BUILT,
@@ -262,7 +263,8 @@ describe.skipIf(!ENGINE_BUILT)(
         "text.measureString": 20,
         "document.mutate": 1, // was 2 (0.64): frame + table, then the content
         "selection.set": 1,
-        "engine.getRangePage": 1,
+        // ADR 510: a window frame lowers its range's tracks as a frame page.
+        "engine.getTracksPage": 1,
         "selection.get": 1,
         "engine.listSheets": 1,
         "document.collection": 1, // the swatch read before the fill mints
@@ -300,11 +302,58 @@ describe.skipIf(!ENGINE_BUILT)(
       expectBudget("refresh 10x3", work, {
         "engine.setCells": 1,
         "engine.listSheets": 1,
-        "engine.getRangePage": 1,
+        // ADR 510: a window frame refreshes from its frame page.
+        "engine.getFramePage": 1,
         "text.measureString": 3,
         "document.mutate": 1,
         "=mutations": 1,
         "=engineCalls": 3,
+        "=reads": 0,
+        "=bytesWritten": 0,
+        "=sceneItems": 0,
+        "=rejected": 0,
+      });
+    });
+
+    // COVERS: the page side of a frame window (ADR 510, render on leave):
+    // the frame page before and after a 3-column horizontal scroll, and the
+    // in-place refresh between them (table-refresh.ts aligns columns by
+    // their sheet index). Plan budget: ≤ 6 column ops — 3 deletes where the
+    // window left, 3 inserts where it arrived; only the new columns' cells
+    // are re-poured.
+    it("refresh after a 3-column scroll [sheet.lower.page]", async () => {
+      const s = await open(
+        await authorWorkbook(20, 30, (r, c) => `r${r}c${c}`),
+        "A1:C3",
+      );
+      const engine = engineOf(s);
+      const spec = { topRow: 0, leftCol: 0, widthPt: 400, heightPt: 200 };
+      const before = engine.getFramePage!(0, spec);
+      const after = engine.getFramePage!(0, { ...spec, leftCol: 3 });
+      const work = take("refresh after 3-column scroll");
+      const widths = (c: typeof before) => c.cols.map((x) => x.widthPt);
+      const ops = tableRefreshOps(
+        before,
+        after,
+        "s",
+        "t",
+        widths(before),
+        widths(after),
+      );
+      const columnOps = ops.structure.filter(
+        (o) => o.op === "insertTableColumn" || o.op === "deleteTableColumn",
+      );
+      // The two windows show the same rows; the second starts at column D.
+      expect(after.cols[0].index).toBe(3);
+      expect(after.cols.length).toBe(before.cols.length);
+      expect(columnOps.length).toBe(6);
+      expect(ops.structure.some((o) => o.op.endsWith("TableRow"))).toBe(false);
+      expect(ops.rewrittenCells).toBe(3 * after.rows.length);
+      expect(ops.replace).toBe(false);
+      expectBudget("refresh after 3-column scroll", work, {
+        "engine.getFramePage": 2,
+        "=mutations": 0,
+        "=engineCalls": 2,
         "=reads": 0,
         "=bytesWritten": 0,
         "=sceneItems": 0,
@@ -444,7 +493,9 @@ describe.skipIf(!ENGINE_BUILT)(
         "=mutations": 0,
         "=engineCalls": 2,
         "=reads": 0,
-        "=bytesWritten": 18661,
+        // The saved workbook now carries the sort as Excel writes it, a
+        // `<sortState>` of ~100 bytes (sheet ADR 517) — content, not work.
+        "=bytesWritten": 18763,
         "=sceneItems": 0,
         "=rejected": 0,
       });

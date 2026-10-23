@@ -74,6 +74,36 @@ export const MODEL = defineMessages("slide.model", {
   exportPptx: "Export as a PowerPoint deck",
 });
 
+/** The palette commands (commands.ts). */
+export const COMMANDS = defineMessages("slide.commands", {
+  newSlide: "New slide",
+  duplicateSlide: "Duplicate slide",
+  deleteSlide: "Delete slide",
+  moveSlideUp: "Move slide up",
+  moveSlideDown: "Move slide down",
+  importPptx: "Open PowerPoint deck…",
+  exportPptx: "Export PowerPoint deck…",
+});
+
+/** The menu items this bundle adds (menu.ts): the path stays English (it is
+ *  the item's identity) and the shell shows each segment through this. */
+defineMessages("menu", {
+  Slide: "Slide",
+  "Open PowerPoint deck…": "Open PowerPoint deck…",
+  "Export PowerPoint deck…": "Export PowerPoint deck…",
+  "New slide": "New slide",
+  "Duplicate slide": "Duplicate slide",
+  "Delete slide": "Delete slide",
+  "Move slide up": "Move slide up",
+  "Move slide down": "Move slide down",
+});
+
+/** The palette category of this bundle's commands (an identity, labelled
+ *  through the shell). */
+defineMessages("commandCategory", {
+  Slide: "Slide",
+});
+
 export const DECK = defineMessages("slide.deck", {
   format: "PowerPoint presentation (.pptx)",
   cannotOpen:

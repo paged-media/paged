@@ -1,0 +1,46 @@
+$ paged-node generate <REPO>/modules/data/conformance/indesign-merge/templates/single-record.idml --data <REPO>/modules/data/conformance/indesign-merge/csv/single-record.csv --out <TMP>/generated --plugins=@paged-media/data
+# exit 0
+# stdout
+{
+  "records": 3,
+  "per": "record",
+  "format": "paged",
+  "outputs": [
+    {
+      "path": "<TMP>/generated/single-record-1.paged",
+      "unit": "row-0",
+      "records": [
+        0
+      ],
+      "pages": 1,
+      "overset": [],
+      "bytes": <N>
+    },
+    {
+      "path": "<TMP>/generated/single-record-2.paged",
+      "unit": "row-1",
+      "records": [
+        1
+      ],
+      "pages": 1,
+      "overset": [],
+      "bytes": <N>
+    },
+    {
+      "path": "<TMP>/generated/single-record-3.paged",
+      "unit": "row-2",
+      "records": [
+        2
+      ],
+      "pages": 1,
+      "overset": [],
+      "bytes": <N>
+    }
+  ]
+}
+# stderr
+(empty)
+# structure
+single-record-1.paged
+single-record-2.paged
+single-record-3.paged

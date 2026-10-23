@@ -175,3 +175,20 @@ The chart PART is read by the DrawingML chart reader shared with paged.slide (`d
 `platform/shared/dml-chart`, slide ADR 709); `sheet-xlsx/src/parts/chart.rs` folds its model into
 the frozen `ChartModel`, with this module's reading rules. The layout decision recorded here
 (plotters, the custom backend, `ChartGeometry`) is unchanged.
+
+## Amendment 2026-10-23 (W4, [ADR 519](519-charts-excel-parity.md))
+
+The decision stands: `sheet_chart::generate` is the only code that drives plotters, every text
+label still flows through the custom backend, and the output is still the five-primitive IR.
+Three things changed.
+
+1. **Value→pt placement is the crate's own scale** (`sheet-chart/src/scale.rs`). A logarithmic,
+   reversed, date or secondary axis is not expressible as one plotters `f64` range, and the
+   generator now places marks at exact positions instead of plotters' whole pixels. Point 3 of
+   the 2026-10-02 amendment ("plotters supplies the cartesian coordinate system") is superseded
+   by this.
+2. **The IR gained optional fields only**: swatch references beside colours, a wedge's inner
+   radius, a line's dash, a text's colour, weight, face, document styles and role, and the
+   geometry's `flattened3d`. Each is omitted from the JSON when unset.
+3. **There are 29 authorable kind tags over 21 kinds**, plus `unsupported`; the model is a list
+   of plots (combo charts). See ADR 519.

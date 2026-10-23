@@ -51,7 +51,7 @@ each published canary added is under [Releases](#releases).
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
   locales. Expected values are recorded from Excel and replayed in CI: 5,752 of 5,902 function
-  cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling (the
+  cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling (the
   coverage per category is in the table below).
   Recalculating real workbooks reproduces Excel's saved value in 95.9% of comparable formula
   cells (57,672 of 60,121 over 201 workbooks): shared formulas, defined names of every kind,
@@ -91,6 +91,63 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Tables, editable** (ADR 517). `createTable` makes a range a table (its part, the worksheet
+  relationship, the content type and `<tablePart>`; blank and repeated headers made unique as
+  Excel makes them; without headers the data moves down under a `Column1…` row), `resizeTable`
+  (the header row stays), `renameTable` and header edits (the structured references follow),
+  `setTableTotals` (the row below, `Total` and a SUM or COUNT; `setTotalsFunction`: SUBTOTAL's
+  functions, a custom formula, a label), `setCalculatedColumn` (filled down every data row, kept
+  as `calculatedColumnFormula`), `setTableStyle` (the 60 built-in styles and a workbook's own
+  `<tableStyles>`, banded rows and columns, first and last column). A typed entry (`enterCell`)
+  directly below or to the right of a table grows it, and a formula typed into an empty table
+  column becomes its calculated column. Table styles paint under the cells' own formatting
+  through the shared styler, on the page and in the grid, empty table cells included. The
+  built-in styles are a family model over the theme (nine families × dark 1 and six accents),
+  not Excel's internal definitions: a shade can differ by a tint step. The object model's
+  `table` kind is writable (name, range, totals row, style and its switches) and creatable, with
+  a Table section in Sheet properties.
+- **Sort and AutoFilter** (ADR 517). `sortRangeBy` is Excel's Sort dialog: up to 64 levels, each
+  by value (ascending, descending, a custom list), cell colour or font colour (on top or on
+  bottom), case-sensitive or not, top to bottom or left to right; stable, blanks last, formats move
+  with their rows, formulas are re-addressed; the sort is written as `<sortState>` (inside the
+  `<autoFilter>` when the range lies in it) so Excel's dialog reopens with the same levels. The
+  AutoFilter engine evaluates every criterion Excel writes — value lists with date groups and
+  blanks, one or two custom conditions with wildcards, top/bottom n or n%, dynamic filters
+  (above/below average, today … year to date, `Q1`–`Q4`, `M1`–`M12`, against the host clock), cell
+  and font colour as shown (conditional formatting included) — and writes it as `<filterColumn>`;
+  the rows it hides are saved hidden, as Excel saves them, and clearing it shows exactly those.
+  `filterColumnValues` is the dropdown's data (distinct shown values with counts and ticks over
+  the rows the other columns keep, the date tree, blanks, the colours present, the current
+  criterion); `filterState`, `reapplyFilter`, `clearFilterCriteria`, `removeAutofilter`. Named
+  filter views are saved and applied by name and kept beside the workbook in the `.paged` part
+  (`filter-views.json`, `writeFilterViewsPart`); the active one is the `<autoFilter>`. No UI calls
+  these doors yet; the bundle does not yet persist the named views on its own.
+- **Data validation, interpreted** (ADR 517). `enterCell` checks a typed entry against its
+  cell's rule: whole and decimal numbers, dates, times and text length against the operator and
+  operands (formulas, relative to the rule's first cell), lists (case-insensitive text, numbers by
+  value) from an inline list or a range, a name or a dynamic `OFFSET`/`INDIRECT` source, and
+  custom formulas evaluated with the entry in place; a blank passes where the rule allows it. A
+  `stop` alert refuses; a `warning` or `information` alert is returned unapplied until the
+  caller confirms; a rule with its error alert off never refuses. Only an entry is checked, as in
+  Excel (paste, fill, sort and undo are not). `validationAt` gives a cell's rule with its input
+  message and a list rule's dropdown items; `invalidCells` is Circle Invalid Data. Rules are
+  authored and edited (`setValidation`, `updateValidation`, `clearValidation`; the cells leave
+  older rules, Excel's length limits on messages apply) and written back into
+  `<dataValidations>`, keeping what each untouched rule held. A protected sheet refuses rule
+  edits. The editor's cell editor does not call `enterCell` yet, and the Workbook panel still
+  reports the rules as not enforced. The Excel 2010 `x14:dataValidation` copies in `extLst`
+  (cross-sheet lists written by Excel 2010) are kept but not read.
+- **Outline, hidden rows, columns and sheets, protection** (ADR 517). Rows and columns group
+  and ungroup (up to seven levels), groups collapse and expand (a nested collapsed group stays
+  collapsed when its parent expands), Excel's outline-level buttons, hide and unhide rows, columns
+  and sheet tabs (never the last visible one); `outline` reports the groups and hidden tracks for
+  the grid. The save writes the row and column attributes, `<sheetFormatPr outlineLevelRow/Col>`
+  and `<sheet state>`. A protected sheet refuses an entry into a locked cell at every write door
+  (entry, batch, sort, fill, replace) and the actions its `allow*` flags do not allow (format
+  cells, rows, columns; insert and delete rows and columns; sort); a protected workbook structure
+  refuses adding, deleting, renaming and hiding sheets. Passwords are checked against the stored
+  SHA-512 spin hash or the legacy 16-bit hash; new ones are stored as SHA-512 with 100,000 spins.
+  Format Cells ▸ Protection (locked, hidden) is a style patch. No UI calls these doors yet.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
@@ -127,8 +184,48 @@ each published canary added is under [Releases](#releases).
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
   painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
-  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
-  text onto the page.
+  like hidden rows.
+- **The page side of the window (ADR 510 amendment).** `get_frame_page` (TS `getFramePage`)
+  lowers the window a frame shows into the page table: `frame_window` for the frame's spec, then
+  `lower_tracks` over its rows and columns (`get_tracks_page` / `getTracksPage` takes explicit
+  tracks). Widths and heights are the sheet's own pt sizes, not measured; rows and columns keep
+  their sheet index; the frozen rows become the table's header rows (`headerRows`, so they repeat
+  on continuation frames). Printed headings add a heading row (A, B, C…) and column (1, 2, 3…),
+  boxed, taken off the box first; printed gridlines are an option. A merge clipped by the window
+  carries its anchor's text and style on its shown corner (on the page and in the grid). A
+  property test holds the page (without headings) to the grid scene of the same window, track by
+  track: indices, sizes, styles table, cells, merges, gridlines and data bars. The in-place
+  refresh (`tableRefreshOps`) aligns columns by their index as rows are aligned, so a scroll by k
+  columns is k column deletes and k inserts and only the new cells are re-poured (perf budget:
+  6 column ops for a 3-column scroll); header-band changes use `insertHeaderRow` /
+  `removeHeaderRow`; `replace` asks for a fresh table when more than 60 % of the cells would be
+  re-poured. The session does not call the page door on leave yet (the exit flow is the next
+  step).
+- **Number formats as a cell shows them** (W2.1). A section's colour (`[Red]`, the other seven
+  names and `[Color1]`–`[Color56]`, read through the workbook's own palette when it overrides
+  the default) colours the number on the page table and in the live grid alike; a conditional
+  format's font colour wins over it, and a text value keeps its font colour, as in Excel.
+  Conditional sections, fractions (the last continued-fraction convergent that fits, as Excel
+  picks it), elapsed time, `@` (a number under a text section shows as General) and the system
+  long date and time (`[$-F800]`, `[$-F400]`, `[$-x-sysdate]`, `[$-x-systime]`) render; a General
+  cell fits 11 characters as in Excel (`1.23457E+14`, `3.141592654`), while `&` and `CONCAT` keep
+  15 digits. A repeat fill (`*x`, the accounting formats' `* `) splits the cell: the grid
+  repeats the character across the free width, the page table puts a right tab stop at the
+  cell's inner width with the character as its leader. Recorded from Excel 16 (the display lane,
+  `recorded/display.tsv`: the text and the font colour of 190 cells) and replayed in CI: all 190
+  agree. Not modelled: General narrowing to a column narrower than 11 characters, `_x` as the
+  exact width of `x` (it is one space).
+- **The cell visual model** (W2.2, ADR 518). A cell style reads into `CellVisual`: the 18 fill
+  patterns with both colours, gradients, every border line style and the diagonals, indent,
+  rotation (0–180, stacked), shrink-to-fit, strike-through, super- and subscript, the underline
+  kinds and the Excel named cell style it derives from; every colour is a reference (the stored
+  RGB / theme / indexed / automatic colour plus an optional document swatch, RGB, CMYK, spot or
+  Lab) and one resolver gives the page and the grid the same colour. `set_style` authors all of
+  it, applies an Excel named style by name (adding a built-in the workbook lacks from Excel's
+  definition), and sets document swatches and character / paragraph / cell styles; an xlsx save
+  writes the concrete colours and keeps the references in the style record's own `extLst`,
+  restored on re-import only while the concrete colour is unchanged. `get_cell_visual` and
+  `named_styles` read the model. The lowered styles carry the new facets beside the colours.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -165,12 +262,23 @@ each published canary added is under [Releases](#releases).
   the frame's handles; the second needs a host that reports a gesture's reflow (core v0.71.13
   through plugin-sdk 0.2.58). On an older host a handle resize leaves the split where it was
   until the next resize by command or the next workbook edit.
-- **Charts.** Ten kinds, read from the workbook or authored over a range, placed as vector paths
-  and labelled text frames in one document write, grouped as one object, and replaced in one
-  write when their data changes. Each label frame is sized to its text (measured with the
-  document's font metrics), set at the chart's size and justified to its anchor, inside the
-  chart. A new chart lands inside the page's margins: beside what is selected (below it, else
-  above, else to its right or left), never on top of it, and in the margin box's top-left
+- **Charts** (ADR 519). Every chart kind Excel writes is drawn as itself: column, bar, line and
+  area (each clustered, stacked or 100% stacked), pie, doughnut (one ring per series), pie of
+  pie, bar of pie, scatter, bubble, radar (outlined, with markers, filled), stock (high-low-close
+  and open-high-low-close), surface (as a contour), and the Office 2016 chartEx kinds waterfall,
+  funnel, treemap, sunburst, histogram, pareto and box & whisker. A 3-D chart is drawn as its
+  2-D kind and flagged; a region map is a labelled placeholder. Combo charts keep each plot's
+  kind and draw a secondary value axis. Markers, data labels, trendlines (with R² and
+  equation, fitted as LINEST fits), error bars, logarithmic, reversed and date axes, axis
+  crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
+  Colour and text roles carry document swatch and style references, which the page uses.
+  Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
+  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  one document write, grouped as one object, and replaced in one write when their data
+  changes. Each label frame is sized to its text (measured with the document's font metrics,
+  or sized by the frame when a document style sets the label), justified to its anchor, inside
+  the chart. A new chart lands inside the page's margins: beside what is selected (below it,
+  else above, else to its right or left), never on top of it, and in the margin box's top-left
   corner with nothing selected. It is shrunk proportionally only when the margin box cannot
   hold 360 × 240 pt.
 - **Host panels in the sheet context.** The host's Swatches panel shows and edits the workbook
@@ -189,7 +297,7 @@ each published canary added is under [Releases](#releases).
   outlined columns, row styles, outline levels and the `collapsed`/`thickTop`/`thickBot` flags
   are read into the model (`RowMeta`, `ColMeta`) and written back; hidden columns are skipped
   by the page lowering and the frame window like hidden rows. `listSheets` reports each tab's
-  `state` (`visible`, `hidden`, `veryHidden`), read-only. A rich-text string can be appended to
+  `state` (`visible`, `hidden`, `veryHidden`). A rich-text string can be appended to
   the shared-string table without renumbering it (`XlsxDocument::append_shared_string`); no
   editing surface writes one yet.
 
@@ -240,8 +348,25 @@ each published canary added is under [Releases](#releases).
 - **Layout commands** (plan G4; `src/layout-commands.ts`). Typed `importCsv { text, name }`,
   `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
 bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
-size? }` (no size clears it), each one workbook version and one undo step. Deleting a chart
-  is not a command: the engine has no door that removes one.
+size? }` (no size clears it), each one workbook version and one undo step.
+- **Placement and chart delete** (plan G4). Typed `place { source: range | name | printArea,
+ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the placement
+  keeps the name, as the panel's Place does) or a sheet's print area (`_xlnm.Print_Area`,
+  resolved by the engine; `ref` is the sheet) on the page as one table in a new frame, or,
+  with `chain` (a frame of a threaded chain), paginated across the chain with the leading rows
+  repeated, live as the palette's Paginate is. Each placement is one document write and one
+  undo step: the first pagination of a chain is one batch on a host with in-batch handles
+  (core protocol 66), every page's table addressed by its handle and each swatch or style
+  minted once; an older host places table by table. Typed `deleteChart { chart }` removes the
+  chart from the workbook (`delete_chart`: the slot stays, so every other chart keeps its
+  index; the chart journal replays the delete) and every placed copy of it (found on the scene
+  tree by its binding, so a chart placed in an earlier session goes too), one workbook version
+  and one undo step; a `host.objects` delete of `chart/<n>` does the same in its batch.
+  `apps/cli/test/cli-sheet.spec.ts` runs both through `paged-node invoke`. Not a placement
+  kind yet: a frame's view and sizing (`sizing: "window"`, print headings and gridlines, ADR
+  510), whose page side is not wired to placement; a print area of several ranges; a chart read
+  from the workbook stays in the saved xlsx (the writer never re-derives chart parts) and is
+  deleted again from the journal when the version is loaded.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
@@ -274,8 +399,7 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 
 ## Limits of what is shipped
 
-- **Object model.** Tables are read-only (the xlsx table part is written back byte for byte, so
-  a table edit would not survive a save). The version label is the document's, not a frame's:
+- **Object model.** The version label is the document's, not a frame's:
   core keeps one label per plugin per host, and a frame's already holds the placement binding.
   The page refresh after a write is a second document step. Charts the object model creates or
   changes are kept as a chart-op journal next to each version; charts authored in the panel are
@@ -303,8 +427,9 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   theme part and the workbook palette; conditional-format colour-scale stops still use the
   default Office theme.
 - **One workbook** is stored at a time; importing another replaces it.
-- **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
-  panel calls them yet.
+- **Icon criteria.** Sorting by a conditional-format icon is refused and an icon filter keeps
+  every row (`filterState` reports it as not applied): the styler does not compute icon sets yet.
+  Tables' own AutoFilters are read and kept; the filter doors work on the sheet's AutoFilter.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
@@ -318,8 +443,7 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   digits.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
 - **Saving an edited sheet** writes a new or changed literal text cell as an inline string
-  (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
-  Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
+  (`t="inlineStr"`), not into the shared-string table. Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
   corpus): the members of a legacy array formula (`{=MINVERSE(…)}`) are not kept as cells, so
   their cached values are not written; and a pre-dynamic-array formula that returns an array
   (`MMULT` in one cell) is written back as a dynamic array.
@@ -330,8 +454,8 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   the bundle never sets.
 - **Exact decimal arithmetic:** a Cargo feature `sheet-js` does not enable
   ([ADR 501](adr/501-f64-numbers.md)).
-- **Interpreting pivot tables, data validation, external links or macros**
-  ([ADR 504](adr/504-publishing-first-scope.md)). External links are never followed; a formula
+- **Interpreting pivot tables, slicers or macros**
+  ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
 - **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
   refused.

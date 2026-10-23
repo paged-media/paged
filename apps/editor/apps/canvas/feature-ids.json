@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 368,
+    "command": 383,
     "keybinding": 88,
-    "menu": 260,
+    "menu": 277,
     "panel": 122,
     "tool": 72
   },
@@ -111,6 +111,11 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.defineBinding",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.defineProperty",
       "kind": "command",
       "owner": "media.paged.data"
@@ -131,12 +136,22 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.importSource",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.importVariableLibrary",
       "kind": "command",
       "owner": "media.paged.data"
     },
     {
       "id": "command:media.paged.data.merge",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.planBatch",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -866,6 +881,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.filterRegion",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.flipHorizontal",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1011,6 +1031,16 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.cutSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.deleteChart",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.deleteColumns",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1042,6 +1072,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.findReplace",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.formatCells",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1106,6 +1141,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.place",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.publishDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1154,6 +1194,41 @@
       "id": "command:media.paged.sheet.command.unpublishDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.slide.command.deleteSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.importPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.moveSlideDown",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.moveSlideUp",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.newSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.duplicateSlide",
@@ -2311,6 +2386,56 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Context/Clear contents",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Copy",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Cut",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Delete columns",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Delete rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Format cells…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Insert columns",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Insert rows",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Paste",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Sort…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Data/Apply a data set…",
       "kind": "menu",
       "owner": "media.paged.data"
@@ -2816,6 +2941,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:File/Export PowerPoint deck…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:File/New document…",
       "kind": "menu",
       "owner": "editor"
@@ -2829,6 +2959,11 @@
       "id": "menu:File/Open PDF…",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:File/Open PowerPoint deck…",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:File/Open as template…",
@@ -3474,6 +3609,31 @@
       "id": "menu:Sheet/Style from cell",
       "kind": "menu",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Slide/Delete slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Duplicate slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Move slide down",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Move slide up",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/New slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:Tools/Sample bundle hello",

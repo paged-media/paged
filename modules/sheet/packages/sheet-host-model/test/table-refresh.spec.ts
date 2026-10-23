@@ -24,6 +24,7 @@ import {
   cellAlignApplies,
   cellCharacterStyleApplies,
   offsetTableRows,
+  tableInsertOp,
   tableRefreshOps,
   textOffsetLength,
 } from "../src";
@@ -256,5 +257,175 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
     expect(offsetTableRows([{ op: "batch", args: { ops } }], "T", 2)).toEqual([
       { op: "batch", args: { ops: moved } },
     ]);
+  });
+});
+
+/** A frame-page-shaped window: rows/cols carry SHEET indices, a cell's
+ *  text names its sheet cell, `header` leading rows are header rows. */
+function windowContent(
+  rows: number[],
+  cols: number[],
+  header = 0,
+): LoweredContent {
+  return {
+    cols: cols.map((index) => ({ index, widthPt: 40 + (index % 3) })),
+    rows: rows.map((r) => ({
+      index: r,
+      heightPt: 15,
+      cells: cols.map((c) => ({
+        col: c,
+        text: `${r}:${c}`,
+        align: "left" as const,
+        styleKey: 0,
+      })),
+    })),
+    rules: { h: [], v: [] },
+    merges: [],
+    headerRows: header,
+  };
+}
+
+const range = (from: number, n: number) =>
+  Array.from({ length: n }, (_, i) => from + i);
+const widthsOf = (c: LoweredContent) => c.cols.map((x) => x.widthPt);
+const columnOps = (ops: { op: string }[]) =>
+  ops.filter(
+    (o) => o.op === "insertTableColumn" || o.op === "deleteTableColumn",
+  );
+
+describe("frame-page refresh aligns tracks by sheet index [sheet.lower.page]", () => {
+  for (const k of [1, 3, 5]) {
+    it(`a horizontal scroll by ${k} columns is ${k} deletes + ${k} inserts and re-pours only the new columns`, () => {
+      const rows = range(0, 8);
+      const prev = windowContent(rows, range(0, 10));
+      const next = windowContent(rows, range(k, 10));
+      const ops = tableRefreshOps(
+        prev,
+        next,
+        "s",
+        "t",
+        widthsOf(prev),
+        widthsOf(next),
+      );
+      const cols = columnOps(ops.structure);
+      expect(cols.length).toBeLessThanOrEqual(2 * k);
+      expect(cols.filter((o) => o.op === "deleteTableColumn")).toHaveLength(k);
+      expect(cols.filter((o) => o.op === "insertTableColumn")).toHaveLength(k);
+      // Deletes at the start, inserts at the end.
+      for (const o of cols) {
+        const at = (o as unknown as { args: { at: number } }).args.at;
+        if (o.op === "deleteTableColumn") expect(at).toBeLessThan(k);
+        else expect(at).toBeGreaterThanOrEqual(10 - k);
+      }
+      // No row moves, and text only for the k new columns of every row.
+      expect(ops.structure.some((o) => o.op.endsWith("TableRow"))).toBe(false);
+      expect(ops.rewrittenCells).toBe(rows.length * k);
+      expect(ops.text.every((o) => o.op === "insertText")).toBe(true);
+      expect(ops.replace).toBe(false);
+    });
+  }
+
+  it("a frozen column stays while the body scrolls", () => {
+    const rows = range(0, 4);
+    const prev = windowContent(rows, [0, ...range(5, 6)]);
+    const next = windowContent(rows, [0, ...range(7, 6)]);
+    const ops = tableRefreshOps(
+      prev,
+      next,
+      "s",
+      "t",
+      widthsOf(prev),
+      widthsOf(next),
+    );
+    const cols = columnOps(ops.structure);
+    expect(cols).toHaveLength(4);
+    expect(
+      cols
+        .filter((o) => o.op === "deleteTableColumn")
+        .map((o) => (o as unknown as { args: { at: number } }).args.at),
+    ).toEqual([2, 1]);
+    expect(ops.rewrittenCells).toBe(rows.length * 2);
+  });
+
+  it("a vertical scroll below frozen header rows moves body rows only", () => {
+    const cols = range(0, 5);
+    const prev = windowContent([0, ...range(10, 8)], cols, 1);
+    const next = windowContent([0, ...range(12, 8)], cols, 1);
+    const ops = tableRefreshOps(
+      prev,
+      next,
+      "s",
+      "t",
+      widthsOf(prev),
+      widthsOf(next),
+    );
+    const rowOps = ops.structure.filter((o) => o.op.endsWith("TableRow"));
+    expect(rowOps).toHaveLength(4);
+    expect(
+      rowOps
+        .filter((o) => o.op === "deleteTableRow")
+        .map((o) => (o as unknown as { args: { at: number } }).args.at),
+    ).toEqual([2, 1]);
+    expect(columnOps(ops.structure)).toHaveLength(0);
+    expect(ops.rewrittenCells).toBe(2 * cols.length);
+  });
+
+  it("a header band that grows gains header rows at its top; one that shrinks loses them", () => {
+    const cols = range(0, 3);
+    const one = windowContent([0, ...range(5, 4)], cols, 1);
+    const two = windowContent([0, 1, ...range(5, 4)], cols, 2);
+    const grow = tableRefreshOps(
+      one,
+      two,
+      "s",
+      "t",
+      widthsOf(one),
+      widthsOf(two),
+    );
+    expect(
+      grow.structure.filter((o) => o.op === "insertHeaderRow"),
+    ).toHaveLength(1);
+    expect(grow.structure.some((o) => o.op.endsWith("TableRow"))).toBe(false);
+    const shrink = tableRefreshOps(
+      two,
+      one,
+      "s",
+      "t",
+      widthsOf(two),
+      widthsOf(one),
+    );
+    expect(
+      shrink.structure.filter((o) => o.op === "removeHeaderRow"),
+    ).toHaveLength(1);
+    expect(shrink.structure.some((o) => o.op.endsWith("TableRow"))).toBe(false);
+    // The body rows are kept; only the header band's cells re-pour.
+    expect(shrink.rewrittenCells).toBeLessThanOrEqual(2 * cols.length);
+  });
+
+  it("asks to replace the table when most cells would be re-poured", () => {
+    const rows = range(0, 6);
+    const prev = windowContent(rows, range(0, 10));
+    const far = windowContent(rows, range(30, 10));
+    const ops = tableRefreshOps(
+      prev,
+      far,
+      "s",
+      "t",
+      widthsOf(prev),
+      widthsOf(far),
+    );
+    expect(ops.rewrittenCells).toBe(60);
+    expect(ops.replace).toBe(true);
+    const near = windowContent(rows, range(2, 10));
+    expect(
+      tableRefreshOps(prev, near, "s", "t", widthsOf(prev), widthsOf(near))
+        .replace,
+    ).toBe(false);
+  });
+
+  it("a frame page's header rows become the table's header rows", () => {
+    const page = windowContent([0, 1, ...range(9, 3)], range(0, 2), 2);
+    const op = tableInsertOp(page, "s", widthsOf(page));
+    expect(op.op === "insertTable" && op.args.headerRows).toBe(2);
   });
 });

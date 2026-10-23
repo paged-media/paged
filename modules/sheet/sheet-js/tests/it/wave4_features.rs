@@ -28,7 +28,9 @@ use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-use sheet_js::core::{LowerOptions, SheetSession, StructuralEdit};
+use sheet_js::core::{
+    FramePageSpec, GridSceneOptions, LowerOptions, SheetSession, StructuralEdit, TracksSpec,
+};
 
 fn fixture(name: &str) -> Vec<u8> {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -133,6 +135,82 @@ fn page_door_carries_base_styles__feat__sheet_lower_page() {
         "styled cells resolve to real style keys: {:?}",
         page.styles
     );
+}
+
+/// The frame page door (ADR 510): the window `get_frame_page` lowers is the
+/// one `get_grid_scene` shows for the same box and split — same tracks, same
+/// texts — with sheet indices and the frozen rows as header rows; explicit
+/// tracks lower through `get_tracks_page`; printed headings add a heading
+/// row and column.
+#[test]
+fn frame_page_door_shows_the_grid_window__feat__sheet_lower_page() {
+    let mut s = SheetSession::new();
+    for r in 0..40u32 {
+        for c in 0..12u32 {
+            s.set_cell(0, r, c, &format!("{}", r * 100 + c)).unwrap();
+        }
+    }
+    let spec = FramePageSpec {
+        top_row: 10,
+        left_col: 3,
+        width_pt: 200.0,
+        height_pt: 120.0,
+        freeze_rows: Some(1),
+        freeze_cols: Some(0),
+        print_headings: false,
+        print_gridlines: true,
+    };
+    let page = s.get_frame_page(0, spec.clone()).unwrap();
+    let scene = s
+        .get_grid_scene(
+            0,
+            10,
+            3,
+            200.0,
+            120.0,
+            GridSceneOptions {
+                include_gridlines: Some(true),
+                freeze_rows: Some(1),
+                freeze_cols: Some(0),
+            },
+        )
+        .unwrap();
+    let rows: Vec<u32> = page.rows.iter().map(|r| r.index).collect();
+    let cols: Vec<u32> = page.cols.iter().map(|c| c.index).collect();
+    assert_eq!(rows, scene.viewport.row_indices);
+    assert_eq!(cols, scene.viewport.col_indices);
+    assert_eq!(rows[..2], [0, 10]);
+    assert_eq!(page.header_rows, 1);
+    assert_eq!(page.rows[1].cells[0].text, "1003");
+
+    let tracks = s
+        .get_tracks_page(
+            0,
+            TracksSpec {
+                rows: rows.clone(),
+                cols: cols.clone(),
+                header_rows: 1,
+                frozen_cols: 0,
+                print_headings: false,
+                print_gridlines: true,
+            },
+        )
+        .unwrap();
+    assert_eq!(tracks, page);
+
+    let printed = s
+        .get_frame_page(
+            0,
+            FramePageSpec {
+                print_headings: true,
+                ..spec
+            },
+        )
+        .unwrap();
+    assert_eq!(printed.header_rows, 2);
+    assert_eq!(printed.rows[0].cells[1].text, "D");
+    assert_eq!(printed.rows[2].cells[0].text, "11");
+    assert!(s.get_frame_page(9, FramePageSpec::default()).is_err());
 }
 
 // ── 4. the host clock ────────────────────────────────────────────────────

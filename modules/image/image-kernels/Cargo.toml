@@ -17,6 +17,9 @@ default = []
 # Enabled SOLELY by image-conformance's dev-dependency; a wasm32 release
 # build must never activate it (CI cargo-tree guard).
 reference = []
+# The shipped CPU twins of the adjustment chain (src/cpu.rs), used only
+# where no GPU device exists (ADR 465). image-js turns it on.
+cpu = []
 
 [dependencies]
 image-core = { path = "../image-core" }

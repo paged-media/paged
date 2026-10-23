@@ -73,9 +73,9 @@ describe("sheet properties panel (property rows)", () => {
     expect(rows.sort()).toEqual(
       SHEET_PANEL_FIELDS.map((f) => `${f.kind}.${f.path}`).sort(),
     );
-    // Tables are read-only: no field.
+    // Tables are edited from the panel too (ADR 517).
     expect(SHEET_PANEL_FIELDS.some((f) => (f.kind as string) === "table")).toBe(
-      false,
+      true,
     );
   });
 

@@ -41,6 +41,62 @@ use sheet_lower::CellRange;
 pub struct EdgeArg {
     pub style: String,
     pub color: Option<String>,
+    /// A document swatch the line colour references (W2.2).
+    pub swatch: Option<DocSwatchArg>,
+}
+
+/// A document swatch reference across the wasm door (W2.2, sheet ADR 518):
+/// `{ id, model: "rgb"|"cmyk"|"spot"|"lab", fallbackRgb: "#RRGGBB" }`.
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DocSwatchArg {
+    pub id: String,
+    pub model: String,
+    pub fallback_rgb: String,
+}
+
+impl DocSwatchArg {
+    fn to_ref(&self) -> Option<sheet_core::DocSwatchRef> {
+        let rgb = match sheet_core::ColorRef::from_hex(&self.fallback_rgb)?.concrete {
+            sheet_core::ConcreteColor::Rgb { r, g, b } => (r, g, b),
+            _ => return None,
+        };
+        Some(sheet_core::DocSwatchRef {
+            id: self.id.clone(),
+            model: sheet_core::DocColorModel::parse(&self.model)?,
+            fallback_rgb: rgb,
+        })
+    }
+
+    fn of(d: &sheet_core::DocSwatchRef) -> DocSwatchArg {
+        DocSwatchArg {
+            id: d.id.clone(),
+            model: d.model.as_str().to_string(),
+            fallback_rgb: sheet_format::resolve::hex(d.fallback_rgb),
+        }
+    }
+}
+
+/// A gradient fill across the wasm door (W2.2).
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GradientArg {
+    /// `"linear"` (default) or `"path"`.
+    pub kind: String,
+    pub degree: f64,
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
+    pub stops: Vec<GradientStopArg>,
+}
+
+/// One gradient stop: `{ position: 0..1, color: "#RRGGBB" }`.
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GradientStopArg {
+    pub position: f64,
+    pub color: String,
 }
 
 /// A partial cell style across the wasm door (camelCase). Absent fields are
@@ -67,17 +123,84 @@ pub struct StylePatchArg {
     /// Excel's quote prefix (a leading `'` was typed; ruling
     /// `sheet.edit.typed-entry`).
     pub quote_prefix: Option<bool>,
+    /// Format Cells ▸ Protection ▸ Locked (sheet ADR 517).
+    pub locked: Option<bool>,
+    /// Format Cells ▸ Protection ▸ Hidden (the formula is not shown while
+    /// the sheet is protected).
+    pub formula_hidden: Option<bool>,
+    // ---- W2.2 (sheet ADR 518) ----
+    /// A fill pattern (`solid`, `gray125`, `darkTrellis`, … `none`): `fill`
+    /// is its foreground, `fillBg` its background.
+    pub pattern: Option<String>,
+    pub fill_bg: Option<String>,
+    pub gradient: Option<GradientArg>,
+    pub border_diagonal: Option<EdgeArg>,
+    pub diagonal_up: Option<bool>,
+    pub diagonal_down: Option<bool>,
+    pub indent: Option<u32>,
+    /// 0–180, 255 stacked.
+    pub rotation: Option<u32>,
+    pub shrink: Option<bool>,
+    pub strike: Option<bool>,
+    /// `baseline` / `superscript` / `subscript`.
+    pub vert_align: Option<String>,
+    /// `none` / `single` / `double` / `singleAccounting` / `doubleAccounting`.
+    pub underline_style: Option<String>,
+    pub fill_swatch: Option<DocSwatchArg>,
+    pub fill_bg_swatch: Option<DocSwatchArg>,
+    pub font_swatch: Option<DocSwatchArg>,
+    pub doc_char_style: Option<String>,
+    pub doc_para_style: Option<String>,
+    pub doc_cell_style: Option<String>,
+    /// An Excel named cell style by name (`Heading 1`, `Good`, …).
+    pub named_style: Option<String>,
 }
 
 impl From<StylePatchArg> for StylePatch {
     fn from(a: StylePatchArg) -> StylePatch {
         let edge = |e: Option<EdgeArg>| {
             e.map(|e| EdgePatch {
+                swatch: e.swatch.as_ref().and_then(DocSwatchArg::to_ref),
                 style: e.style,
                 color: e.color,
             })
         };
+        let sw = |d: &Option<DocSwatchArg>| d.as_ref().and_then(DocSwatchArg::to_ref);
+        let ext = sheet_xlsx::StyleExt {
+            pattern: a.pattern.clone(),
+            fill_bg: a.fill_bg.clone(),
+            gradient: a.gradient.as_ref().map(|g| sheet_xlsx::GradientPatch {
+                kind: g.kind.clone(),
+                degree: g.degree,
+                left: g.left,
+                right: g.right,
+                top: g.top,
+                bottom: g.bottom,
+                stops: g
+                    .stops
+                    .iter()
+                    .map(|s| (s.position, s.color.clone()))
+                    .collect(),
+            }),
+            border_diagonal: edge(a.border_diagonal.clone()),
+            diagonal_up: a.diagonal_up,
+            diagonal_down: a.diagonal_down,
+            indent: a.indent,
+            rotation: a.rotation,
+            shrink: a.shrink,
+            strike: a.strike,
+            vert_align: a.vert_align.clone(),
+            underline_style: a.underline_style.clone(),
+            fill_swatch: sw(&a.fill_swatch),
+            fill_bg_swatch: sw(&a.fill_bg_swatch),
+            font_swatch: sw(&a.font_swatch),
+            doc_char_style: a.doc_char_style.clone(),
+            doc_para_style: a.doc_para_style.clone(),
+            doc_cell_style: a.doc_cell_style.clone(),
+            named_style: a.named_style.clone(),
+        };
         StylePatch {
+            ext,
             num_fmt: a.num_fmt,
             font_name: a.font_name,
             font_size: a.font_size,
@@ -94,6 +217,8 @@ impl From<StylePatchArg> for StylePatch {
             v_align: a.v_align,
             wrap: a.wrap,
             quote_prefix: a.quote_prefix,
+            locked: a.locked,
+            formula_hidden: a.formula_hidden,
         }
     }
 }
@@ -102,11 +227,48 @@ impl From<StylePatch> for StylePatchArg {
     fn from(p: StylePatch) -> StylePatchArg {
         let edge = |e: Option<EdgePatch>| {
             e.map(|e| EdgeArg {
+                swatch: e.swatch.as_ref().map(DocSwatchArg::of),
                 style: e.style,
                 color: e.color,
             })
         };
+        let x = p.ext;
+        let sw = |d: &Option<sheet_core::DocSwatchRef>| d.as_ref().map(DocSwatchArg::of);
         StylePatchArg {
+            pattern: x.pattern.clone(),
+            fill_bg: x.fill_bg.clone(),
+            gradient: x.gradient.as_ref().map(|g| GradientArg {
+                kind: g.kind.clone(),
+                degree: g.degree,
+                left: g.left,
+                right: g.right,
+                top: g.top,
+                bottom: g.bottom,
+                stops: g
+                    .stops
+                    .iter()
+                    .map(|(position, color)| GradientStopArg {
+                        position: *position,
+                        color: color.clone(),
+                    })
+                    .collect(),
+            }),
+            border_diagonal: edge(x.border_diagonal.clone()),
+            diagonal_up: x.diagonal_up,
+            diagonal_down: x.diagonal_down,
+            indent: x.indent,
+            rotation: x.rotation,
+            shrink: x.shrink,
+            strike: x.strike,
+            vert_align: x.vert_align.clone(),
+            underline_style: x.underline_style.clone(),
+            fill_swatch: sw(&x.fill_swatch),
+            fill_bg_swatch: sw(&x.fill_bg_swatch),
+            font_swatch: sw(&x.font_swatch),
+            doc_char_style: x.doc_char_style.clone(),
+            doc_para_style: x.doc_para_style.clone(),
+            doc_cell_style: x.doc_cell_style.clone(),
+            named_style: x.named_style.clone(),
             num_fmt: p.num_fmt,
             font_name: p.font_name,
             font_size: p.font_size,
@@ -123,8 +285,20 @@ impl From<StylePatch> for StylePatchArg {
             v_align: p.v_align,
             wrap: p.wrap,
             quote_prefix: p.quote_prefix,
+            locked: p.locked,
+            formula_hidden: p.formula_hidden,
         }
     }
+}
+
+/// One Excel named cell style (`named_styles`): its name, its built-in id
+/// and whether the workbook carries it already.
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct NamedStyleInfo {
+    pub name: String,
+    pub builtin_id: Option<u32>,
+    pub present: bool,
 }
 
 /// One typed entry awaiting its style decision: the cell, the format its
@@ -288,6 +462,7 @@ impl SheetSession {
                 "range exceeds the style cap ({T0_LOWER_CELL_CAP} cells)"
             )));
         }
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let patch: StylePatch = patch.into();
         if let Some(code) = &patch.num_fmt {
             // The engine must be able to RENDER the code it stores.
@@ -417,6 +592,60 @@ impl SheetSession {
             .describe_style(id)
             .map(StylePatchArg::from)
             .map_err(|e| SessionError(e.to_string()))
+    }
+
+    /// The cell visual model of one cell (W2.2, sheet ADR 518): font,
+    /// fill, border, alignment with every colour as a `ColorRef` (concrete
+    /// + document swatch) — what a document-styles editor reads.
+    pub fn get_cell_visual(
+        &self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+    ) -> Result<sheet_core::CellVisual, SessionError> {
+        self.validate_sheet(sheet)?;
+        let id = self
+            .engine()
+            .model()
+            .sheet(sheet)
+            .and_then(|ws| ws.cell(row, col))
+            .map(|c| c.style)
+            .unwrap_or_default();
+        Ok(self
+            .doc
+            .visual_styles
+            .model(id)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    /// The workbook's Excel named cell styles plus the built-ins it does not
+    /// carry yet (each can be applied with `set_style`'s `namedStyle`).
+    pub fn named_styles(&self) -> Vec<NamedStyleInfo> {
+        let mut out: Vec<NamedStyleInfo> = self
+            .doc
+            .visual_styles
+            .named_styles()
+            .iter()
+            .map(|n| NamedStyleInfo {
+                name: n.name.clone(),
+                builtin_id: n.builtin_id,
+                present: true,
+            })
+            .collect();
+        for id in 0..=53 {
+            if let Some(name) = sheet_core::visual::builtin_style_name(id) {
+                if id <= 2 || out.iter().any(|n| n.name == name) {
+                    continue;
+                }
+                out.push(NamedStyleInfo {
+                    name: name.to_string(),
+                    builtin_id: Some(id),
+                    present: false,
+                });
+            }
+        }
+        out
     }
 
     // ── range resolution ────────────────────────────────────────────────
@@ -561,6 +790,7 @@ impl SheetSession {
         if top == bottom && left == right {
             return Err(SessionError("a merge needs at least two cells".into()));
         }
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let overlaps = |m: &sheet_core::RangeRef| {
             let n = m.normalized();
             n.start.row <= bottom && n.end.row >= top && n.start.col <= right && n.end.col >= left
@@ -649,6 +879,7 @@ impl SheetSession {
     /// Remove every merge that intersects `range`; returns how many.
     pub fn unmerge(&mut self, sheet: u16, range: &str) -> Result<u32, SessionError> {
         let (sheet, cr) = self.resolve_range(sheet, range)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatCells)?;
         let (top, left, bottom, right) = bounds(&cr);
         let layout = self
             .engine_mut()
@@ -681,6 +912,7 @@ impl SheetSession {
         width: Option<f64>,
     ) -> Result<(), SessionError> {
         self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatColumns)?;
         if let Some(w) = width {
             if !(w.is_finite() && (0.0..=MAX_COL_WIDTH).contains(&w)) {
                 return Err(SessionError(format!(
@@ -713,6 +945,7 @@ impl SheetSession {
         height: Option<f64>,
     ) -> Result<(), SessionError> {
         self.validate_sheet(sheet)?;
+        self.guard_allow(sheet, super::protect::Allow::FormatRows)?;
         if let Some(h) = height {
             if !(h.is_finite() && (0.0..=MAX_ROW_HEIGHT).contains(&h)) {
                 return Err(SessionError(format!(

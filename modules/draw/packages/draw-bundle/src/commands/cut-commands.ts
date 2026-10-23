@@ -144,25 +144,43 @@ export async function runShapeBuild(
   return null;
 }
 
+/** A typed call (with a payload) fails loudly; the palette's bare invoke
+ *  cannot supply the points a cut needs, so it logs why and does nothing. */
+const fromPalette =
+  <T>(host: BundleHost, id: string, run: (payload: unknown) => Promise<T>) =>
+  async (_paged: unknown, payload: unknown): Promise<T | null> => {
+    if (payload !== undefined) return run(payload);
+    try {
+      return await run(payload);
+    } catch (e) {
+      host.log.info(`${id}: ${String(e)}`);
+      return null;
+    }
+  };
+
 export function contributeCutCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: KNIFE_COMMAND_ID,
       title: M.knife,
       category: CUT_COMMAND_CATEGORY,
-      handler: (_paged, payload) => runKnife(host, payload),
+      handler: fromPalette(host, KNIFE_COMMAND_ID, (p) => runKnife(host, p)),
     }),
     registerCommand(host, {
       id: SCISSORS_AT_COMMAND_ID,
       title: M.scissors,
       category: CUT_COMMAND_CATEGORY,
-      handler: (_paged, payload) => runScissorsAt(host, payload),
+      handler: fromPalette(host, SCISSORS_AT_COMMAND_ID, (p) =>
+        runScissorsAt(host, p),
+      ),
     }),
     registerCommand(host, {
       id: SHAPE_BUILD_COMMAND_ID,
       title: M.shapeBuilder,
       category: CUT_COMMAND_CATEGORY,
-      handler: (_paged, payload) => runShapeBuild(host, payload),
+      handler: fromPalette(host, SHAPE_BUILD_COMMAND_ID, (p) =>
+        runShapeBuild(host, p),
+      ),
     }),
   ];
   return {

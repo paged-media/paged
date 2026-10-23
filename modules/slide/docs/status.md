@@ -45,6 +45,14 @@ Read from the code on 2026-10-14.
 - **Slides and Notes panels** (M3, first part). A sorter with a thumbnail per slide from the
   engine's renderer: click to go to the slide, drag to reorder, duplicate, delete, hide from the
   slideshow, each one undo step. A notes panel edits the active slide's speaker notes.
+- **Palette commands and menus** (`src/commands.ts`, `src/menu.ts`). The user's verbs as
+  palette commands (category Slide) with a menu entry each: File ▸ Open PowerPoint deck… (the
+  importer, through the host's file picker) and File ▸ Export PowerPoint deck… (the exporter,
+  through the host's file saver), and New slide, Duplicate slide, Delete slide, Move slide up and
+  Move slide down under Plugins ▸ Slide. Each is offered only where it applies (a deck open, a
+  slide active, more than one slide to delete, a neighbour to pass) and acts on the active slide;
+  New and Duplicate run the typed commands, so the palette, a script and the Node CLI make the
+  same slide; each is one undo step. A bare invoke that cannot act logs why and does nothing.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container

@@ -33,24 +33,27 @@
 //! the grid's style keys equal the page lowering's for the same window.
 
 use crate::condfmt::{self, CfRange, SheetCondFmt};
-use crate::style::{StyleResolver, VisualAttrs, VisualStyleSource};
+use crate::style::{StyleKeyless, VisualAttrs, VisualStyleSource};
 use crate::LoweredStyle;
-use sheet_core::{Cell, CellValue, Worksheet};
+use sheet_core::{Cell, CellValue, StyleId, Worksheet};
+use sheet_format::FormatColor;
 use std::collections::HashMap;
 
 /// Resolves cells to `style_key`s over one deduplicated styles table (see the
-/// module docs). Without conditional formatting it is exactly the
-/// `StyleId`-cached [`StyleResolver`]; with it, every cell's effective style
-/// (base folded with the winning cf override) is interned by content.
+/// module docs). A cell whose style needs nothing beyond its `StyleId` (no
+/// format colour, no conditional formatting) is cached by `StyleId`; every
+/// other cell's effective style (base, then the number format's colour, then
+/// the winning cf override) is interned by content into the same table.
 pub struct CellStyler<'a, S: VisualStyleSource> {
     visual: &'a S,
     cf: &'a SheetCondFmt,
     ws: Option<&'a Worksheet>,
-    /// The cf-free path (no cf on the sheet): cached by `StyleId`.
-    plain: StyleResolver<'a, S>,
-    /// The cf-aware path: effective styles interned by content.
+    /// The output table; index == key, entry 0 the default.
     styles: Vec<LoweredStyle>,
+    /// Effective style (minus its key) -> key.
     dedup: HashMap<StyleKeyless, u32>,
+    /// `StyleId` -> key for cells with no override.
+    by_style_id: HashMap<u32, u32>,
     /// cf range -> the numeric `(min, max)` of its cells, memoized.
     domains: HashMap<CfRange, Option<(f64, f64)>>,
 }
@@ -63,27 +66,78 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
             visual,
             cf,
             ws,
-            plain: StyleResolver::new(visual),
             styles: vec![LoweredStyle::default_key0()],
             dedup: HashMap::new(),
+            by_style_id: HashMap::new(),
             domains: HashMap::new(),
         }
     }
 
     /// The `style_key` of the cell at sheet `(row, col)`.
     pub fn key_for_cell(&mut self, row: u32, col: u32, cell: &Cell) -> u32 {
-        if self.cf.is_empty() {
-            return self.plain.key_for(cell.style);
+        self.key_for_display(row, col, cell, None)
+    }
+
+    /// The `style_key` of the cell at sheet `(row, col)` whose number format
+    /// asked for `format_color` (a `[Red]` / `[ColorN]` bracket on the section
+    /// it rendered with). The format colour replaces the font colour; a
+    /// conditional format's font colour wins over it (Excel's order).
+    pub fn key_for_display(
+        &mut self,
+        row: u32,
+        col: u32,
+        cell: &Cell,
+        format_color: Option<FormatColor>,
+    ) -> u32 {
+        let table = self.table_attrs(row, col);
+        if self.cf.is_empty() && format_color.is_none() && table.is_none() {
+            return self.key_for_style(cell.style);
         }
-        let base = self.visual.visual(cell.style).unwrap_or_default();
-        let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
-        let effective = match condfmt::override_for(cf, row, col, &cell.value, &mut |rng| {
-            domain(ws, rng, domains)
-        }) {
-            Some(over) => condfmt::fold_override(&base, &over),
-            None => base,
+        let mut base = self.visual.visual(cell.style).unwrap_or_default();
+        if let Some(t) = &table {
+            base = crate::table_band::under(t, &base);
+        }
+        if let Some(c) = format_color {
+            base.text_rgb = Some(self.visual.format_color_rgb(c));
+        }
+        let effective = if self.cf.is_empty() {
+            base
+        } else {
+            let (cf, ws, domains) = (self.cf, self.ws, &mut self.domains);
+            match condfmt::override_for(cf, row, col, &cell.value, &mut |rng| {
+                domain(ws, rng, domains)
+            }) {
+                Some(over) => condfmt::fold_override(&base, &over),
+                None => base,
+            }
         };
-        intern(&mut self.styles, &mut self.dedup, effective)
+        self.intern(effective)
+    }
+
+    /// The table style at sheet `(row, col)`, if a table covers it.
+    fn table_attrs(&self, row: u32, col: u32) -> Option<VisualAttrs> {
+        self.cf.tables.iter().find_map(|b| b.attrs_at(row, col))
+    }
+
+    /// The `style_key` of an EMPTY cell at sheet `(row, col)`: the table
+    /// style when a table covers it (Excel bands empty table cells too),
+    /// else the default key 0.
+    pub fn key_for_empty(&mut self, row: u32, col: u32) -> u32 {
+        match self.table_attrs(row, col) {
+            Some(t) => self.intern(t),
+            None => 0,
+        }
+    }
+
+    /// The key of a bare `StyleId` (no format colour, no cf).
+    fn key_for_style(&mut self, id: StyleId) -> u32 {
+        if let Some(&k) = self.by_style_id.get(&id.0) {
+            return k;
+        }
+        let attrs = self.visual.visual(id).unwrap_or_default();
+        let key = self.intern(attrs);
+        self.by_style_id.insert(id.0, key);
+        key
     }
 
     /// The data bar to draw in the cell at sheet `(row, col)`, if any:
@@ -100,11 +154,27 @@ impl<'a, S: VisualStyleSource> CellStyler<'a, S> {
 
     /// The finished styles table (index == key; entry 0 is the default).
     pub fn into_styles(self) -> Vec<LoweredStyle> {
-        if self.cf.is_empty() {
-            self.plain.into_styles()
-        } else {
-            self.styles
+        self.styles
+    }
+
+    /// Intern an effective [`VisualAttrs`], deduping by content (a default
+    /// style is key 0).
+    fn intern(&mut self, attrs: VisualAttrs) -> u32 {
+        if attrs.is_default() {
+            return 0;
         }
+        let lowered = attrs.into_lowered(0);
+        let dk = StyleKeyless::of(&lowered);
+        if let Some(&existing) = self.dedup.get(&dk) {
+            return existing;
+        }
+        let new_key = self.styles.len() as u32;
+        self.styles.push(LoweredStyle {
+            key: new_key,
+            ..lowered
+        });
+        self.dedup.insert(dk, new_key);
+        new_key
     }
 }
 
@@ -137,64 +207,4 @@ fn domain(
     let out = (lo.is_finite() && hi.is_finite()).then_some((lo, hi));
     cache.insert(rng, out);
     out
-}
-
-/// Intern an effective [`VisualAttrs`] into the cf-aware table, deduping by
-/// content (a default style is key 0).
-fn intern(
-    styles: &mut Vec<LoweredStyle>,
-    dedup: &mut HashMap<StyleKeyless, u32>,
-    attrs: VisualAttrs,
-) -> u32 {
-    if attrs.is_default() {
-        return 0;
-    }
-    let lowered = attrs.into_lowered(0);
-    let dk = StyleKeyless::of(&lowered);
-    if let Some(&existing) = dedup.get(&dk) {
-        return existing;
-    }
-    let new_key = styles.len() as u32;
-    styles.push(LoweredStyle {
-        key: new_key,
-        ..lowered
-    });
-    dedup.insert(dk, new_key);
-    new_key
-}
-
-/// A [`LoweredStyle`] without its positional `key` (the dedup map key).
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct StyleKeyless {
-    bold: bool,
-    italic: bool,
-    font_size_bits: Option<u64>,
-    font_name: Option<String>,
-    fill_rgb: Option<String>,
-    text_rgb: Option<String>,
-    border_top: bool,
-    border_right: bool,
-    border_bottom: bool,
-    border_left: bool,
-    /// The Wave 6 facets (underline, vertical alignment, wrap, border
-    /// lines), keyed by their debug rendering (f64 weights have no `Hash`).
-    extra: String,
-}
-
-impl StyleKeyless {
-    fn of(s: &LoweredStyle) -> Self {
-        StyleKeyless {
-            bold: s.bold,
-            italic: s.italic,
-            font_size_bits: s.font_size_pt.map(f64::to_bits),
-            font_name: s.font_name.clone(),
-            fill_rgb: s.fill_rgb.clone(),
-            text_rgb: s.text_rgb.clone(),
-            border_top: s.border_top,
-            border_right: s.border_right,
-            border_bottom: s.border_bottom,
-            border_left: s.border_left,
-            extra: format!("{:?}", (s.underline, &s.v_align, s.wrap, &s.border_lines)),
-        }
-    }
 }

@@ -32,9 +32,14 @@
 //
 // PURE: content in, mutations out.
 
-import type { Mutation } from "@paged-media/plugin-api";
+import type { Mutation, PropertyPath, Value } from "@paged-media/plugin-api";
 
-import type { Align, LoweredContent } from "./lowered";
+import type {
+  Align,
+  LoweredCell,
+  LoweredContent,
+  LoweredStyle,
+} from "./lowered";
 import { columnOrder } from "./lower-to-table";
 import { textOffsetLength } from "./table-refresh";
 
@@ -58,20 +63,137 @@ export const ALIGN_PARAGRAPH_STYLES: Readonly<
   },
 };
 
-/** The paragraph style each populated cell's paragraph should carry, keyed
- *  `row:col` at TABLE positions (`NO_PARAGRAPH_STYLE` for left/general). */
-export function cellAlignMap(
+/** One paragraph style a cell needs: its id, display name and the
+ *  facets it sets (`setStyleProperty` path + value). */
+export interface CellParagraphStyle {
+  id: string;
+  name: string;
+  props: { path: PropertyPath; value: Value }[];
+}
+
+/** The gap (pt) between a repeat-fill's right tab stop and the cell's right
+ *  edge, so the tab never wraps the line (a native cell has no inset). */
+export const FILL_TAB_GAP_PT = 1;
+
+/** FNV-1a, 32-bit, hex — a short stable content address. */
+function fnv(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/** The paragraph style a cell needs, or null (left/general, no fill, no
+ *  indent: the default paragraph). Alignment alone keeps the fixed ids of
+ *  `ALIGN_PARAGRAPH_STYLES`; a repeat fill (a right tab stop at the cell's
+ *  inner width with the fill character as its leader — the text carries a
+ *  TAB there, ruling `sheet.format.padding`) or an indent mints a
+ *  content-addressed style. */
+export function cellParagraphStyle(
+  cell: LoweredCell,
+  widthPt: number,
+  style?: LoweredStyle,
+): CellParagraphStyle | null {
+  const indent = style?.indentPt ?? 0;
+  const fill = cell.fill !== undefined && cell.text.includes("\t");
+  const align = fill ? "left" : cell.align;
+  const fixed = ALIGN_PARAGRAPH_STYLES[align];
+  if (!fill && indent === 0) {
+    return fixed
+      ? {
+          id: fixed.id,
+          name: fixed.name,
+          props: [
+            {
+              path: "paragraphJustification",
+              value: { type: "text", value: fixed.justification },
+            },
+          ],
+        }
+      : null;
+  }
+  const props: CellParagraphStyle["props"] = [];
+  const parts: string[] = [];
+  if (fixed) {
+    props.push({
+      path: "paragraphJustification",
+      value: { type: "text", value: fixed.justification },
+    });
+    parts.push(`align ${align}`);
+  }
+  if (indent > 0) {
+    // Excel indents from the edge the text is aligned to.
+    const path: PropertyPath =
+      align === "right" ? "paragraphRightIndent" : "paragraphLeftIndent";
+    props.push({ path, value: { type: "length", value: indent } });
+    parts.push(`indent ${indent}`);
+  }
+  if (fill) {
+    const position =
+      Math.round(Math.max(widthPt - FILL_TAB_GAP_PT, 0) * 100) / 100;
+    const leader = cell.fill === " " ? null : (cell.fill ?? null);
+    props.push({
+      path: "paragraphTabStops",
+      value: {
+        type: "tabStops",
+        value: [{ position, alignment: "RightAlign", leader }],
+      },
+    });
+    parts.push(`fill ${leader ?? "space"} ${position}`);
+  }
+  const key = JSON.stringify(props);
+  return {
+    id: `ParagraphStyle/paged.sheet ${fnv(key)}`,
+    name: `Sheet · ${parts.join(" · ")}`,
+    props,
+  };
+}
+
+/** Each lowered cell's width (pt): its column's, or the sum of a merged
+ *  area's columns at its anchor. Keyed `row:col` in model coordinates. */
+function cellWidths(content: LoweredContent): Map<string, number> {
+  const widthOf = new Map(content.cols.map((c) => [c.index, c.widthPt]));
+  const out = new Map<string, number>();
+  for (const m of content.merges) {
+    let w = 0;
+    for (let c = m.col; c < m.col + m.colSpan; c++) w += widthOf.get(c) ?? 0;
+    out.set(`${m.row}:${m.col}`, w);
+  }
+  for (const row of content.rows) {
+    for (const cell of row.cells) {
+      const k = `${row.index}:${cell.col}`;
+      if (!out.has(k)) out.set(k, widthOf.get(cell.col) ?? 0);
+    }
+  }
+  return out;
+}
+
+/** The paragraph style of every populated cell (null = the default), keyed
+ *  `row:col` at TABLE positions. */
+export function cellParagraphStyles(
   content: LoweredContent,
-): Map<string, { style: string; text: string }> {
+): Map<string, { style: CellParagraphStyle | null; text: string }> {
   const colPos = new Map<number, number>();
   columnOrder(content).forEach((m, i) => colPos.set(m, i));
-  const out = new Map<string, { style: string; text: string }>();
+  const widths = cellWidths(content);
+  const styleByKey = new Map((content.styles ?? []).map((s) => [s.key, s]));
+  const out = new Map<
+    string,
+    { style: CellParagraphStyle | null; text: string }
+  >();
   content.rows.forEach((row, r) => {
     for (const cell of row.cells) {
       const c = colPos.get(cell.col);
       if (c === undefined || cell.text.length === 0) continue;
+      const style = cell.styleKey ? styleByKey.get(cell.styleKey) : undefined;
       out.set(`${r}:${c}`, {
-        style: ALIGN_PARAGRAPH_STYLES[cell.align]?.id ?? NO_PARAGRAPH_STYLE,
+        style: cellParagraphStyle(
+          cell,
+          widths.get(`${row.index}:${cell.col}`) ?? 0,
+          style,
+        ),
         text: cell.text,
       });
     }
@@ -79,7 +201,19 @@ export function cellAlignMap(
   return out;
 }
 
-/** Whether any populated cell needs a non-default alignment (a caller skips
+/** The paragraph style id each populated cell's paragraph should carry, keyed
+ *  `row:col` at TABLE positions (`NO_PARAGRAPH_STYLE` for the default). */
+export function cellAlignMap(
+  content: LoweredContent,
+): Map<string, { style: string; text: string }> {
+  const out = new Map<string, { style: string; text: string }>();
+  for (const [k, v] of cellParagraphStyles(content)) {
+    out.set(k, { style: v.style?.id ?? NO_PARAGRAPH_STYLE, text: v.text });
+  }
+  return out;
+}
+
+/** Whether any populated cell needs a non-default paragraph (a caller skips
  *  the paragraph-style read when none does). */
 export function needsAlignStyles(content: LoweredContent): boolean {
   for (const { style } of cellAlignMap(content).values()) {
@@ -88,31 +222,35 @@ export function needsAlignStyles(content: LoweredContent): boolean {
   return false;
 }
 
-/** createParagraphStyle + its justification for every alignment style the
- *  content uses and the document lacks. `knownStyleIds === null` (the read
- *  failed) mints nothing — the cells then stay left, the batch still lands. */
+/** createParagraphStyle + its facets for every paragraph style the content
+ *  uses and the document lacks. `knownStyleIds === null` (the read failed)
+ *  mints nothing — the cells then keep the default paragraph, the batch
+ *  still lands. */
 export function cellAlignStyleMints(
   content: LoweredContent,
   knownStyleIds: ReadonlySet<string> | null,
 ): Mutation[] {
   if (knownStyleIds === null) return [];
-  const used = new Set([...cellAlignMap(content).values()].map((v) => v.style));
   const ops: Mutation[] = [];
-  for (const st of Object.values(ALIGN_PARAGRAPH_STYLES)) {
-    if (!st || !used.has(st.id) || knownStyleIds.has(st.id)) continue;
+  const minted = new Set<string>();
+  for (const { style } of cellParagraphStyles(content).values()) {
+    if (!style || knownStyleIds.has(style.id) || minted.has(style.id)) continue;
+    minted.add(style.id);
     ops.push({
       op: "createParagraphStyle",
-      args: { selfId: st.id, name: st.name },
+      args: { selfId: style.id, name: style.name },
     });
-    ops.push({
-      op: "setStyleProperty",
-      args: {
-        collection: "paragraph",
-        styleId: st.id,
-        path: "paragraphJustification",
-        value: { type: "text", value: st.justification },
-      },
-    });
+    for (const p of style.props) {
+      ops.push({
+        op: "setStyleProperty",
+        args: {
+          collection: "paragraph",
+          styleId: style.id,
+          path: p.path,
+          value: p.value,
+        },
+      });
+    }
   }
   return ops;
 }

@@ -608,3 +608,79 @@ describe.skipIf(!built)(
     });
   },
 );
+
+describe("gridKeyAction — Excel's navigation and command keys (sheet ADR 510)", () => {
+  const k = (key: string, mods: Partial<KeyLikeForTest> = {}) => ({
+    key,
+    ...mods,
+  });
+  it("Ctrl+arrows jump to the data edge, Shift extends; not while editing", () => {
+    expect(gridKeyAction(k("ArrowDown", { ctrlKey: true }), null)).toEqual({
+      kind: "jump",
+      dRow: 1,
+      dCol: 0,
+      extend: false,
+    });
+    expect(
+      gridKeyAction(k("ArrowLeft", { metaKey: true, shiftKey: true }), null),
+    ).toEqual({
+      kind: "jump",
+      dRow: 0,
+      dCol: -1,
+      extend: true,
+    });
+    expect(gridKeyAction(k("ArrowDown", { ctrlKey: true }), "edit").kind).toBe(
+      "none",
+    );
+  });
+  it("row and column selection, last cell, cut, styles, format, F9, paging across", () => {
+    expect(gridKeyAction(k(" ", { shiftKey: true }), null).kind).toBe(
+      "selectRow",
+    );
+    expect(gridKeyAction(k(" ", { ctrlKey: true }), null).kind).toBe(
+      "selectColumn",
+    );
+    expect(gridKeyAction(k("End", { ctrlKey: true }), null).kind).toBe(
+      "lastCell",
+    );
+    expect(gridKeyAction(k("x", { metaKey: true }), null).kind).toBe("cut");
+    expect(gridKeyAction(k("b", { metaKey: true }), null)).toEqual({
+      kind: "toggleStyle",
+      style: "bold",
+    });
+    expect(gridKeyAction(k("1", { ctrlKey: true }), null).kind).toBe(
+      "formatCells",
+    );
+    expect(gridKeyAction(k("F9"), null).kind).toBe("calculate");
+    expect(gridKeyAction(k("PageDown", { altKey: true }), null)).toEqual({
+      kind: "pageAcross",
+      dir: 1,
+      extend: false,
+    });
+  });
+  it("Ctrl+; types the date, Ctrl+Shift+; the time; Ctrl+Enter fills the selection while editing", () => {
+    expect(gridKeyAction(k(";", { ctrlKey: true }), null)).toEqual({
+      kind: "insertNow",
+      what: "date",
+    });
+    expect(
+      gridKeyAction(k(";", { ctrlKey: true, shiftKey: true }), "enter"),
+    ).toEqual({
+      kind: "insertNow",
+      what: "time",
+    });
+    expect(gridKeyAction(k("Enter", { ctrlKey: true }), "enter").kind).toBe(
+      "commitFill",
+    );
+    expect(gridKeyAction(k("Enter", { ctrlKey: true }), null).kind).toBe(
+      "none",
+    );
+  });
+});
+
+type KeyLikeForTest = {
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+};

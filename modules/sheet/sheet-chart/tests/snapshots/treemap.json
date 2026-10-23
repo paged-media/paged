@@ -1,0 +1,215 @@
+{
+  "widthPt": 360.0,
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 20.0,
+      "s": "Treemap",
+      "sizePt": 14.0,
+      "anchor": "middle",
+      "role": "title"
+    },
+    {
+      "kind": "rect",
+      "x": 314.25,
+      "y": 120.6,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#4472C4",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 325.25,
+      "y": 127.25,
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 314.25,
+      "y": 133.20000000000002,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#ED7D31",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 325.25,
+      "y": 139.85000000000002,
+      "s": "Veg",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 197.82638888888889,
+      "y": 26.8,
+      "w": 108.42361111111111,
+      "h": 13.5,
+      "fill": "#D26012",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 200.82638888888889,
+      "y": 37.3,
+      "s": "Veg",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "bold": true,
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 259.7827380952381,
+      "y": 129.7,
+      "w": 46.46726190476192,
+      "h": 104.29999999999994,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 263.7827380952381,
+      "y": 140.5,
+      "s": "Leek",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 197.82638888888889,
+      "y": 129.7,
+      "w": 61.956349206349195,
+      "h": 104.30000000000001,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 201.82638888888889,
+      "y": 140.5,
+      "s": "Bean",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 197.82638888888889,
+      "y": 40.3,
+      "w": 108.42361111111111,
+      "h": 89.39999999999998,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 201.82638888888889,
+      "y": 51.099999999999994,
+      "s": "Kale",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 6.0,
+      "y": 26.8,
+      "w": 191.82638888888889,
+      "h": 13.5,
+      "fill": "#335AA1",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 9.0,
+      "y": 37.3,
+      "s": "Fruit",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "bold": true,
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 6.0,
+      "y": 191.89130434782606,
+      "w": 191.8263888888889,
+      "h": 42.10869565217391,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 10.0,
+      "y": 202.69130434782608,
+      "s": "Pear",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 112.57021604938271,
+      "y": 40.3,
+      "w": 85.25617283950616,
+      "h": 151.59130434782608,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 116.57021604938271,
+      "y": 51.099999999999994,
+      "s": "Plum",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    },
+    {
+      "kind": "rect",
+      "x": 6.0,
+      "y": 40.3,
+      "w": 106.57021604938271,
+      "h": 151.59130434782608,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF",
+      "strokeW": 1.0
+    },
+    {
+      "kind": "text",
+      "x": 10.0,
+      "y": 51.099999999999994,
+      "s": "Apple",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "color": "#FFFFFF",
+      "role": "dataLabel"
+    }
+  ]
+}
