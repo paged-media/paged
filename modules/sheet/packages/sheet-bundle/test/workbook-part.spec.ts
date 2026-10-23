@@ -25,7 +25,12 @@ import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
-import { readWorkbookPart, writeWorkbookPart } from "../src/workbook-part";
+import {
+  readFilterViewsPart,
+  readWorkbookPart,
+  writeFilterViewsPart,
+  writeWorkbookPart,
+} from "../src/workbook-part";
 
 /** A host exposing just the `parts` door + `supports`, backed by an in-memory
  *  store (the host normally prepends the plugin namespace; this fake keeps the
@@ -80,5 +85,15 @@ describe("sheet_plugin_workbook_part", () => {
     store.set("workbook.xlsx", new Uint8Array([9]));
     const back = await readWorkbookPart(host);
     expect(back!.name).toBe("workbook.xlsx");
+  });
+});
+
+describe("sheet filter views part", () => {
+  it("round-trips the named filter views", async () => {
+    const { host } = partsHost();
+    expect(await readFilterViewsPart(host)).toEqual([]);
+    const views = [{ sheet: 0, name: "east", range: "A1:C6", columns: [] }];
+    await writeFilterViewsPart(host, views);
+    expect(await readFilterViewsPart(host)).toEqual(views);
   });
 });

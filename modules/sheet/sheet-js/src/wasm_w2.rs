@@ -23,8 +23,10 @@
 
 use wasm_bindgen::prelude::*;
 
+use crate::core::filter::{CriterionArg, FilterViewInfo};
 use crate::core::outline::Axis;
 use crate::core::protect::ProtectOptions;
+use crate::core::sort::SortSpec;
 use crate::core::validation::ValidationRuleArg;
 use crate::wasm::{map_err, to_js, SheetEngine};
 
@@ -286,5 +288,112 @@ impl SheetEngine {
                 .clear_validation(sheet, range)
                 .map_err(map_err)?,
         )
+    }
+
+    // ── sort and filter (W2.7) ──────────────────────────────────────────
+
+    /// Excel's Sort dialog: `spec` = `{keys: [{index, descending?, sortBy?,
+    /// color?, customList?}], hasHeader?, leftToRight?, caseSensitive?}`.
+    pub fn sort_range_by(
+        &mut self,
+        sheet: u16,
+        range: &str,
+        spec: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let spec: SortSpec = arg(spec)?;
+        to_js(
+            &self
+                .session
+                .sort_range_by(sheet, range, spec)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn set_autofilter(&mut self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+        to_js(&self.session.set_autofilter(sheet, range).map_err(map_err)?)
+    }
+
+    pub fn remove_autofilter(&mut self, sheet: u16) -> Result<JsValue, JsValue> {
+        to_js(&self.session.remove_autofilter(sheet).map_err(map_err)?)
+    }
+
+    /// One column's criterion (`undefined` clears it): `{kind: "values",
+    /// values, blanks?, dates?} | {kind: "custom", and?, conditions: [{op,
+    /// val}]} | {kind: "contains", text} | {kind: "top", n, percent?, top?} |
+    /// {kind: "dynamic", type} | {kind: "color", color, cellColor?} | {kind:
+    /// "icon", set, id?}`.
+    pub fn set_filter_column(
+        &mut self,
+        sheet: u16,
+        range: &str,
+        col: u32,
+        criterion: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let c: Option<CriterionArg> = if criterion.is_undefined() || criterion.is_null() {
+            None
+        } else {
+            Some(arg(criterion)?)
+        };
+        to_js(
+            &self
+                .session
+                .set_filter_column(sheet, range, col, c)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn clear_filter_criteria(&mut self, sheet: u16) -> Result<JsValue, JsValue> {
+        to_js(&self.session.clear_filter_criteria(sheet).map_err(map_err)?)
+    }
+
+    pub fn reapply_filter(&mut self, sheet: u16) -> Result<JsValue, JsValue> {
+        to_js(&self.session.reapply_filter(sheet).map_err(map_err)?)
+    }
+
+    /// `{range, columns: [{col, criterion?, applied}], hiddenRows}` or
+    /// `undefined`.
+    pub fn filter_state(&self, sheet: u16) -> Result<JsValue, JsValue> {
+        match self.session.filter_state(sheet).map_err(map_err)? {
+            Some(s) => to_js(&s),
+            None => Ok(JsValue::UNDEFINED),
+        }
+    }
+
+    /// The filter dropdown of one column.
+    pub fn filter_column_values(&self, sheet: u16, col: u32) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .filter_column_values(sheet, col)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn save_filter_view(&mut self, sheet: u16, name: &str) -> Result<(), JsValue> {
+        self.session.save_filter_view(sheet, name).map_err(map_err)
+    }
+
+    pub fn apply_filter_view(&mut self, sheet: u16, name: &str) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .apply_filter_view(sheet, name)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn delete_filter_view(&mut self, sheet: u16, name: &str) {
+        self.session.delete_filter_view(sheet, name);
+    }
+
+    /// The named views (the bundle keeps them in the `.paged` part).
+    pub fn list_filter_views(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.list_filter_views())
+    }
+
+    pub fn set_filter_views(&mut self, views: JsValue) -> Result<(), JsValue> {
+        let v: Vec<FilterViewInfo> = arg(views)?;
+        self.session.set_filter_views(v);
+        Ok(())
     }
 }
