@@ -607,6 +607,7 @@ impl XlsxDocument {
                 sheet_id: sid,
                 part_name: ws_part,
                 captured: parsed_ws.captured,
+                data_tables: parsed_ws.data_tables.iter().map(|d| d.range).collect(),
             });
         }
 
