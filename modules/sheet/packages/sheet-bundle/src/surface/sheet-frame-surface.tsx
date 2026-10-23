@@ -85,7 +85,7 @@ function SheetFrameSurfaceView({
         wPt: props.widthPt - headW,
         hPt: props.heightPt - headH,
       }),
-    [props.widthPt, props.heightPt, headW, headH],
+    [session, props.widthPt, props.heightPt, headW, headH],
   );
 
   // Keys go to the grid as soon as the frame is entered.
