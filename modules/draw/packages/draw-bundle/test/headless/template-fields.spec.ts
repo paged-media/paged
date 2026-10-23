@@ -393,7 +393,7 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
     });
   });
 
-  it("textOnPath: reads the story; a filler's write is the engine's call", async () => {
+  it("textOnPath: reads the story; a filler writes it with the field's own grant", async () => {
     expect((await h.objects.readTemplateField(fields.caption!)).value).toBe(
       "Along the line",
     );
@@ -403,36 +403,14 @@ describe("paged.draw — template field kinds, filled as a filler", () => {
       ok: false,
       problem: "text on a path is one line: remove the line breaks",
     });
-    // The engine decides a story's permissions by its TEXT FRAME, and a
-    // story on a path has none: the field's grant does not reach it.
-    const filled = await h.objects.writeTemplateField(fields.caption!, "New");
-    expect(filled.ok).toBe(false);
-    expect((filled as { problem: string }).problem).toContain("text.edit");
-  });
-
-  it("textOnPath: written when the template grants text.edit document-wide", async () => {
-    await send(h, "setSessionPolicy", { policy: { role: "author" } });
-    const doc = await send(h, "mutate", {
-      op: "setDocumentMetadata",
-      args: {
-        key: "x-paged:template",
-        value: JSON.stringify({ v: 1, data: { defaults: ["text.edit"] } }),
-      },
-    });
-    expect(doc.kind).toBe("mutationApplied");
-    await send(h, "setSessionPolicy", { policy: { role: "filler" } });
+    // A story on a path has no text frame: the engine decides it by the
+    // item that carries its path, so the field's text.edit reaches it.
     expect(
       await h.objects.writeTemplateField(fields.caption!, "Along the path"),
     ).toEqual({ ok: true });
     expect((await h.objects.readTemplateField(fields.caption!)).value).toBe(
       "Along the path",
     );
-    await send(h, "setSessionPolicy", { policy: { role: "author" } });
-    await send(h, "mutate", {
-      op: "setDocumentMetadata",
-      args: { key: "x-paged:template", value: null },
-    });
-    await send(h, "setSessionPolicy", { policy: { role: "filler" } });
   });
 
   it("a write outside the fields is refused", async () => {

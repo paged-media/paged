@@ -47,6 +47,9 @@ pub enum Target {
     Variable(String),
     /// The document as a whole.
     Document,
+    /// The document- or page-level label a plugin keeps, by plugin id
+    /// (`x-paged:<plugin>`): decided by the fields of that plugin.
+    ModuleLabel(String),
 }
 
 /// One permission an operation needs.
@@ -105,6 +108,42 @@ fn page_item(node: &NodeId) -> Option<&str> {
     }
 }
 
+/// A plugin's document- or page-level label (`x-paged:<plugin>`).
+fn module_label(key: &str) -> Requirement {
+    match key.strip_prefix("x-paged:") {
+        Some(plugin) if !plugin.is_empty() => req(
+            Permission::DocumentMetadata,
+            Target::ModuleLabel(plugin.to_string()),
+        ),
+        _ => doc(Permission::DocumentMetadata),
+    }
+}
+
+/// The page item a story on a path is drawn along: a story with no text
+/// frame is decided by the item whose `<TextPath>` carries it.
+fn path_host_of(doc: &Document, story: &str) -> Option<String> {
+    let on = |paths: &[paged_model::TextPath]| paths.iter().any(|t| t.parent_story == story);
+    doc.spreads.iter().find_map(|s| {
+        let sp = &s.spread;
+        sp.rectangles
+            .iter()
+            .find(|r| on(&r.text_paths))
+            .and_then(|r| r.self_id.clone())
+            .or_else(|| {
+                sp.polygons
+                    .iter()
+                    .find(|p| on(&p.text_paths))
+                    .and_then(|p| p.self_id.clone())
+            })
+            .or_else(|| {
+                sp.graphic_lines
+                    .iter()
+                    .find(|l| on(&l.text_paths))
+                    .and_then(|l| l.self_id.clone())
+            })
+    })
+}
+
 fn item(permission: Permission, node: &NodeId) -> Requirement {
     match page_item(node) {
         Some(id) => req(permission, Target::Item(id.to_string())),
@@ -155,6 +194,12 @@ fn set_property(node: &NodeId, path: PropertyPath, value: &Value) -> Vec<Require
         let template = matches!(value, Value::PluginMetadata { key, .. } if key == TEMPLATE_KEY);
         return vec![if template {
             doc(P::TemplateAuthor)
+        } else if page_item(node).is_none() {
+            // A page's or the document's label: the plugin's own state.
+            match value {
+                Value::PluginMetadata { key, .. } => module_label(key),
+                _ => doc(P::DocumentMetadata),
+            }
         } else {
             item(P::DocumentMetadata, node)
         }];
@@ -338,11 +383,8 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::InsertSection { .. }
         | O::EditSection { .. }
         | O::DeleteSection { .. } => vec![doc(P::DocumentPages)],
-        O::SetDocumentMetadata { key, .. } => vec![doc(if key == TEMPLATE_KEY {
-            P::TemplateAuthor
-        } else {
-            P::DocumentMetadata
-        })],
+        O::SetDocumentMetadata { key, .. } if key == TEMPLATE_KEY => vec![doc(P::TemplateAuthor)],
+        O::SetDocumentMetadata { key, .. } => vec![module_label(key)],
     }
 }
 
@@ -353,6 +395,7 @@ fn refused(r: &Requirement, permission: Permission) -> OperationError {
         Target::Story(id) => format!("story {id}"),
         Target::Variable(id) => format!("variable {id}"),
         Target::Document => "the document".to_string(),
+        Target::ModuleLabel(plugin) => format!("the document's {plugin} state"),
     };
     OperationError::NotPermitted {
         permission: permission.name().to_string(),
@@ -383,7 +426,11 @@ pub fn check_requirements(
     let unbound = session.unbound();
     let needs_index = unbound.is_none() || requirements.iter().any(|r| r.also_author_if_field);
     let index = needs_index.then(|| PolicyIndex::build(doc).0);
-    let item_of_story = |story_id: &str| doc.frame_for(story_id).and_then(|f| f.self_id.clone());
+    let item_of_story = |story_id: &str| {
+        doc.frame_for(story_id)
+            .and_then(|f| f.self_id.clone())
+            .or_else(|| path_host_of(doc, story_id))
+    };
 
     for r in requirements {
         let allowed = match (&unbound, &index) {
@@ -393,6 +440,7 @@ pub fn check_requirements(
                 Target::Story(s) => ix.effective(session, item_of_story(s).as_deref()),
                 Target::Variable(v) => ix.effective_for_variable(session, v),
                 Target::Document => ix.effective(session, None),
+                Target::ModuleLabel(plugin) => ix.effective_for_module_label(session, plugin),
             },
             (None, None) => unreachable!("an index is built whenever the session is bound"),
         };

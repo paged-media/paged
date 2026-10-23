@@ -314,3 +314,45 @@ fn parent_pages_are_page_setup() {
     assert_eq!(required.len(), 1);
     assert_eq!(required[0].permission, Permission::DocumentPages);
 }
+
+/// A module field opens its own plugin's document-level label to a filler
+/// (a sheet's workbook version lives there), and no other plugin's.
+#[test]
+fn a_module_field_opens_its_own_plugins_document_label() {
+    let (mut doc, _photo, _logo) = template();
+    let sheet = add_rect(&mut doc, "sheet", 300.0);
+    let policy: ItemPolicy = serde_json::from_value(serde_json::json!({
+        "field": {
+            "name": "price",
+            "kind": "module",
+            "module": { "kind": "media.paged.sheet.cell", "grants": ["text.edit"], "def": { "ref": "B4" } }
+        }
+    }))
+    .unwrap();
+    apply(&mut doc, &label(&sheet, policy.to_label())).expect("sheet policy");
+    let filler = session(Role::Filler);
+    let doc_label = |key: &str| Operation::SetDocumentMetadata {
+        key: key.to_string(),
+        value: Some(r#"{"v":1,"data":{}}"#.to_string()),
+        caller: None,
+    };
+    apply_checked(&mut doc, &doc_label("x-paged:media.paged.sheet"), &filler)
+        .expect("the sheet's own state");
+    assert_refused(
+        apply_checked(&mut doc, &doc_label("x-paged:media.paged.web"), &filler),
+        "document.metadata",
+    );
+    assert_refused(
+        apply_checked(&mut doc, &doc_label(TEMPLATE_KEY), &filler),
+        "template.author",
+    );
+    // A session override still closes it.
+    let closed = SessionPolicy {
+        role: Role::Filler,
+        overrides: vec![(Permission::DocumentMetadata, Override::Deny)],
+    };
+    assert_refused(
+        apply_checked(&mut doc, &doc_label("x-paged:media.paged.sheet"), &closed),
+        "document.metadata",
+    );
+}

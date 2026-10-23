@@ -215,7 +215,7 @@ describe("[plugin-slide.object-model] template field kinds", () => {
     ).toEqual({ ok: false, problem: "Slide 3 has no pic placeholder." });
   });
 
-  it("visibility: the engine checks a slide's hidden flag document-wide, so a filler needs the template to grant it", async () => {
+  it("visibility: a slide field opens the slide module's own page label, without a document-wide grant", async () => {
     const title = await placeholder(4, "title");
     const field = await template(frameId(title), VISIBILITY_KIND, null, [
       "item.visibility",
@@ -225,10 +225,10 @@ describe("[plugin-slide.object-model] template field kinds", () => {
       value: true,
     });
     expect(await h.objects.writeTemplateField(field, false)).toEqual({
-      ok: false,
-      problem:
-        "The template does not let a filler show or hide slides: it must grant document.metadata to the whole document.",
+      ok: true,
     });
+    expect(v(await h.objects.get(slides[3]!, "hidden"))).toBe(true);
+    await h.host.document.undo();
     expect(v(await h.objects.get(slides[3]!, "hidden"))).toBe(false);
   });
 
