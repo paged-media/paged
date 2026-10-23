@@ -1,0 +1,9 @@
+# LOGINV(probability,mean,standard_dev) - legacy.
+# id	formula	setup	expected
+lil-0	=LOGINV(0.039084,3.5,1.2)	-	4.00002521868064
+lil-1	=LOGINV(0.5,0,1)	-	1
+lil-2	=LOGINV(0,0,1)	-	#NUM!
+lil-3	=LOGINV(1,0,1)	-	#NUM!
+lil-4	=LOGINV(0.5,0,0)	-	#NUM!
+lil-5	=LOGINV("x",0,1)	-	#VALUE!
+lil-6	=LOGINV(0.95,2,0.5)	-	16.8176144024102

@@ -304,20 +304,15 @@ fn main() {
                 )
                 .unwrap();
             } else {
-                // Scalar kernel: wrap in FnResult::Scalar.
+                // Scalar kernel: the scalar door already guards the arity and
+                // calls it; routing through it keeps ONE call site per kernel
+                // (the wasm no longer carries a second inlined copy of every
+                // scalar kernel here — W3 size work).
                 writeln!(
                     out,
-                    "        {i} => {{ // {name}\n\
-                     \x20           if args.len() < {min}{max_guard} {{\n\
-                     \x20               return FnResult::Scalar(CellValue::Error(CellError::Value));\n\
-                     \x20           }}\n\
-                     \x20           FnResult::Scalar({path}(args, ctx))\n\
-                     \x20       }}",
+                    "        {i} => FnResult::Scalar(dispatch(id, args, ctx)), // {name}",
                     i = i,
                     name = r.name,
-                    min = r.arity.min,
-                    max_guard = max_guard,
-                    path = path,
                 )
                 .unwrap();
             }

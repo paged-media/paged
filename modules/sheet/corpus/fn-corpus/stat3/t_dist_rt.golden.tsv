@@ -1,0 +1,15 @@
+# T.DIST.RT(x,deg_freedom).
+# id	formula	setup	expected
+tdr-0	=T.DIST.RT(1.959999998,60)	-	0.02732246498796
+tdr-1	=T.DIST.RT(1,1)	-	0.25
+tdr-2	=T.DIST.RT(0,5)	-	0.5
+tdr-3	=T.DIST.RT(-1,5)	-	0.818391266175439
+tdr-4	=T.DIST.RT(3,2)	-	0.047732983133355
+tdr-5	=T.DIST.RT(10,30)	-	2.28762570411481E-11
+tdr-6	=T.DIST.RT(1,0)	-	#NUM!
+tdr-7	=T.DIST.RT(1,2.5)	-	0.211324865405187
+tdr-8	=T.DIST.RT(-20,4)	-	0.999981558447098
+tdr-9	=T.DIST.RT(40,8)	-	8.3928594395729E-11
+tdr-txt	=T.DIST.RT("x",5)	-	#VALUE!
+tdr-err	=T.DIST.RT(A1,5)	A1=#DIV/0!	#DIV/0!
+tdr-numtxt	=T.DIST.RT("1",5)	-	0.181608733824561

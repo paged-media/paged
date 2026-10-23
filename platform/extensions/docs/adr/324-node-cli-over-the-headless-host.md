@@ -236,3 +236,20 @@ the data verbs reaching into paged.data's session object and the PDF of `merge` 
   Restricted Licence embedding is not copied, and the report says so; a family no face
   answers for is reported missing. Whether a font's licence lets it be handed on otherwise
   is the user's question: the report lists what was copied.
+- **The package carries the `.paged` too** (decided the same day, after the first cut wrote
+  the IDML alone). Beside the IDML, `<name>.paged` is the whole document, with the module
+  content IDML cannot carry: the container's `paged/` parts (a sheet, a drawing, a web
+  frame, the data session). It is written by default, because a package is the document's
+  archive and a package without the only lossless copy turns the report's "not carried"
+  list into a loss; `--no-paged` leaves it out for a printer who wants the IDML alone. The
+  report names the file (`paged`) and lists the module parts (`moduleParts`, everything
+  under `paged/` but the engine's own `paged/core/` model part), and its text says they are
+  in the `.paged`, or that `--no-paged` left them out. The `.paged` keeps the document's own
+  link spelling; the IDML's links are the ones pointed into `Links/`. The Rust `paged
+  package` writes the same file with the same flag and report fields.
+- **Expression property bindings in `apply`.** A `property` binding with an `expr` goes
+  through paged.data's typed `defineProperty` and is applied by `apply` with the session
+  bindings: the engine evaluates the expression and types the value by the property's schema
+  row (ADR 558). A binding with a `field` instead stays the CLI's shorthand (the record's text
+  for the field, typed as `set` types a value, all such bindings in one `host.objects.batch`);
+  giving both is a usage error. The "needs Wave 5" refusal is gone.

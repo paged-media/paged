@@ -1,0 +1,10 @@
+# TINV(probability,deg_freedom) - legacy two-tailed.
+# id	formula	setup	expected
+til-0	=TINV(0.546449,60)	-	0.606533075825759
+til-1	=TINV(0.05,10)	-	2.22813885198627
+til-2	=TINV(0.5,1)	-	1
+til-3	=TINV(1,5)	-	0
+til-4	=TINV(0,5)	-	#NUM!
+til-5	=TINV(0.5,0)	-	#NUM!
+til-6	=TINV("x",5)	-	#VALUE!
+til-7	=TINV(0.001,3)	-	12.9239786366875

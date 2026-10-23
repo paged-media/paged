@@ -1,0 +1,11 @@
+# STANDARDIZE(x,mean,standard_dev).
+# id	formula	setup	expected
+st-0	=STANDARDIZE(42,40,1.5)	-	1.33333333333333
+st-1	=STANDARDIZE(0,0,1)	-	0
+st-2	=STANDARDIZE(-3,2,0.5)	-	-10
+st-3	=STANDARDIZE(1,1,0)	-	#NUM!
+st-4	=STANDARDIZE(1,1,-1)	-	#NUM!
+st-5	=SUM(STANDARDIZE({1,2},1,2))	-	0.5
+st-txt	=STANDARDIZE("x",40,1.5)	-	#VALUE!
+st-err	=STANDARDIZE(A1,40,1.5)	A1=#DIV/0!	#DIV/0!
+st-numtxt	=STANDARDIZE("42",40,1.5)	-	1.33333333333333

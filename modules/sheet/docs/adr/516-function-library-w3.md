@@ -2,7 +2,8 @@
 
 - **Status:** Accepted, 2026-10-23. Extends [ADR 507](507-golden-corpora-coverage-gate.md)
   (goldens) with recorded expected values; amends the frozen `SheetModel` and `EvalCtx` (one field each).
-- **Scope:** `registry/functions/{eng,math3,text3,info3,array3,…}.yaml`, `sheet-fn` (the new
+  Part 2 (decisions 11–16) adds the statistical and financial functions.
+- **Scope:** `registry/functions/{eng,math3,text3,info3,array3,stat3,fin2,…}.yaml`, `sheet-fn` (the new
   families, `special.rs`, `coerce.rs`, `ctx.rs`), `sheet-calc/src/eval/info.rs`, `sheet-core/src/model.rs`,
   `sheet-js`, the bundle facade, `sheet-conformance` (golden replay, oracle lane).
 
@@ -50,6 +51,45 @@ reading documentation alone would encode guesses: the documentation does not say
    `INFO` answers for the engine (`system` is `pcdos`, `release` `16.0`).
 10. **Regular expressions** use `fancy-regex` (MIT) with trimmed Unicode tables (+650 KB wasm);
    `\p{L}` and `\p{N}` map onto the Perl classes, other property classes are `#VALUE!`.
+
+### Part 2 (2026-10-23): statistics and financial functions
+
+11. **Own numerics, no statistics crate.** `special.rs` carries ln Γ (Lanczos on (0.5, 10),
+    Stirling beyond, the ζ series of ln Γ(1+z) around the zeros at 1 and 2), the regularised
+    incomplete gamma (series / continued fraction, the prefactor kept accurate for a large
+    shape) and beta functions (continued fraction, the hypergeometric series near the mean of
+    a very large parameter, logarithms from the accurate small one of `x` and `1 − x`),
+    Loader's binomial and Poisson densities, and Brent's bracketed root finder. Every inverse
+    (`BETA.INV`, `CHISQ.INV`, `F.INV`, `T.INV`, `GAMMA.INV`, …) solves on the smaller tail for
+    the smaller of `z` and `1 − z` to a few ulps; the recordings agree to 1e-12 except at
+    `10^10` degrees of freedom and alpha `1E-9`, where Excel's own value is the less accurate
+    one (listed).
+12. **Legacy names keep their legacy arguments** (`CHIDIST`/`FDIST`/`FINV`/`CHIINV` right-tailed,
+    `TDIST` with tails and no negative `x`, `TINV` two-tailed, the density-only `HYPGEOMDIST`
+    and `NEGBINOMDIST`), sharing the kernels of the new names. Domain edges follow the
+    recordings, not the reference where they differ (`T.INV.2T` accepts a probability in (1, 2);
+    `HYPGEOM.DIST` outside its support is 0, not `#NUM!`; `PROB` checks only the sum of the
+    probabilities).
+13. **`FORECAST.ETS` is the published AAA method, and diverges.** Microsoft names the model but
+    not its optimiser or initial states. The engine starts from a classical decomposition and
+    minimises the one-step squared error over α, β, γ; seasonality is the strongest
+    autocorrelation peak of the detrended series (it agrees on every recorded case). Forecasts
+    agree where the series fits the model exactly; elsewhere the four functions are listed
+    divergences, not guessed tuning.
+14. **Financial conventions the reference leaves open are recorded.** One coupon schedule
+    (back from maturity, month ends kept for a month-end maturity) drives `COUP*`, `PRICE`,
+    `YIELD`, `DURATION`; the days to the next coupon in the bond formulas are
+    `COUPDAYS − COUPDAYBS`; the 30/360 variants differ by function family (coupon/discount,
+    `PRICEMAT`/`YIELDMAT`, odd last period); `AMORDEGRC`'s coefficients (1.5 to a life of 4
+    years, 2 to 6, 2.5 beyond, `#NUM!` below 2) and its last-two-periods rule come from the
+    recordings. The long odd first period follows the documented formula, which Excel's values
+    do not match (listed).
+15. **`FIXED` and `DOLLAR` render in the workbook's locale**, `DOLLAR` with the locale's currency
+    pattern (recorded from Excel under each region: `1.234,57 €`, `€1 234,57`, `($1,234.57)`).
+16. **Size.** `dispatch_rich` routes scalar rows through `dispatch` instead of inlining a second
+    copy of every scalar kernel, and `lookup_func` is a binary search over a sorted table instead
+    of a generated `match`; together −23 KB of wasm. `opt-level = "z"` would save 0.3 MiB but
+    halves calculation speed (measured), so the release profile stays at `"s"`.
 
 ## Consequences
 
