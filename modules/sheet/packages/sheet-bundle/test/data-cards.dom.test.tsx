@@ -92,6 +92,19 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     documentFontFace: async () => null,
     documentSwatchColors: async () => new Map(),
     documentStyleRevision: () => 0,
+    documentStyleChoices: async () => ({
+      paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
+      swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
+    }),
+    applyDocumentSwatch: async (target, id) => {
+      calls.push(["swatch", target, id]);
+      return { ok: true as const };
+    },
+    styleAtTarget: () => null,
+    setStyle: (patch) => {
+      calls.push(["style", patch]);
+      return { ok: true as const };
+    },
   };
   return { session, calls, changed };
 }

@@ -140,12 +140,44 @@ describe.skipIf(!BUILT)(
         PLUGINS,
       ]);
       expect(r.code, r.out + r.err).toBe(0);
-      expect(r.json.result).toEqual({ frame: `textFrame:${chainFrame}` });
+      expect(r.json.result).toEqual({
+        frame: `textFrame:${chainFrame}`,
+        frames: [`textFrame:${chainFrame}`],
+      });
       // Two frames, a table in each (the header row repeated).
       const tables = await cli(["query", out, "table", PLUGINS]);
       expect(tables.code, tables.out + tables.err).toBe(0);
       expect((tables.json as { addresses: string[] }).addresses).toHaveLength(
         2,
+      );
+    });
+
+    it("place puts a frame's view on the page: a fixed box, printed headings and gridlines", async () => {
+      const out = join(tmp.dir, "view.paged");
+      const r = await cli([
+        "invoke",
+        docPath,
+        `${C}.place`,
+        JSON.stringify({
+          ref: "book!A1:B4",
+          sizing: "fixed",
+          box: { width: 200, height: 60 },
+          view: { topLeft: "A2", lock: true },
+          print: { headings: true, gridlines: true },
+        }),
+        "-o",
+        out,
+        PLUGINS,
+      ]);
+      expect(r.code, r.out + r.err).toBe(0);
+      const { frame, frames } = r.json.result as {
+        frame: string;
+        frames: string[];
+      };
+      expect(frames).toEqual([frame]);
+      const tables = await cli(["query", out, "table", PLUGINS]);
+      expect((tables.json as { addresses: string[] }).addresses).toHaveLength(
+        1,
       );
     });
 

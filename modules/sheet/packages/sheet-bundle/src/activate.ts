@@ -513,6 +513,46 @@ export function activate(host: BundleHost): BundleHandle {
       if (!r.ok) host.log.warn(`toggleFilter: ${r.message}`);
     },
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.hideSelection",
+    title: t(COMMANDS.hideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(true);
+      if (!r.ok) host.log.warn(`hideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.unhideSelection",
+    title: t(COMMANDS.unhideSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.hideSelection(false);
+      if (!r.ok) host.log.warn(`unhideSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.groupSelection",
+    title: t(COMMANDS.groupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(true);
+      if (!r.ok) host.log.warn(`groupSelection: ${r.message}`);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.ungroupSelection",
+    title: t(COMMANDS.ungroupSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      const r = session.groupSelection(false);
+      if (!r.ok) host.log.warn(`ungroupSelection: ${r.message}`);
+    },
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context

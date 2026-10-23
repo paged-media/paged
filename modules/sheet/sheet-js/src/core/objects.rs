@@ -515,10 +515,12 @@ impl SheetSession {
 
     /// Delete chart `index`. Its slot stays, so every other chart keeps its
     /// index; it is no longer listed (`list_charts`, `chart_specs`), drawn or
-    /// patched. Page-side only, like `add_chart`: a chart read from the
-    /// workbook keeps its parts in the saved xlsx (the writer never
-    /// re-derives chart parts), so a caller that reloads the bytes replays
-    /// the delete (the object model's chart journal does).
+    /// patched. A chart read from the workbook leaves the package on the
+    /// next save (`save_xlsx` removes its anchor, relationship and parts);
+    /// its slot is then a tombstone ([`chart_tombstones`](Self::chart_tombstones))
+    /// that a caller reloading those bytes restores
+    /// ([`restore_chart_slots`](Self::restore_chart_slots)), so the indices
+    /// placements and journals name stay valid.
     pub fn delete_chart(&mut self, index: u32) -> Result<(), SessionError> {
         let count = self.doc.charts.len();
         if index as usize >= count {
@@ -531,10 +533,65 @@ impl SheetSession {
         Ok(())
     }
 
+    /// The deleted slots of charts read from the file (in index order): the
+    /// saved bytes no longer carry them, so a reload must re-open them for
+    /// the later charts to keep their indices. A chartsheet's chart is never
+    /// one: the tab is the chart, so its parts stay and the delete replays.
+    pub fn chart_tombstones(&self) -> Vec<u32> {
+        self.removed_charts
+            .iter()
+            .copied()
+            .filter(|&i| {
+                self.doc
+                    .charts
+                    .get(i as usize)
+                    .is_some_and(|c| c.from_file && !c.chartsheet)
+            })
+            .collect()
+    }
+
+    /// Re-open deleted chart slots after a load: each slot (ascending) is
+    /// inserted at its index as a deleted chart read from the file, so the
+    /// charts the bytes still carry move back to the indices they had when
+    /// the bytes were saved. Called before any chart is added; a slot past
+    /// the end (more than one beyond the charts already there) is refused.
+    pub fn restore_chart_slots(&mut self, slots: &[u32]) -> Result<(), SessionError> {
+        let mut sorted = slots.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        for slot in sorted {
+            let at = slot as usize;
+            if at > self.doc.charts.len() {
+                return Err(SessionError(format!(
+                    "chart slot {slot} is past the end ({} charts)",
+                    self.doc.charts.len()
+                )));
+            }
+            // Later deletes move up with their charts.
+            self.removed_charts = self
+                .removed_charts
+                .iter()
+                .map(|&i| if i >= slot { i + 1 } else { i })
+                .collect();
+            self.doc.charts.insert(at, tombstone_chart());
+            self.removed_charts.insert(slot);
+        }
+        Ok(())
+    }
+
     /// How many charts are not deleted.
     pub(crate) fn live_chart_count(&self) -> usize {
         self.doc.charts.len() - self.removed_charts.len()
     }
+}
+
+/// The stand-in for a chart a save dropped from the file: an empty chart on
+/// the first sheet, never listed or drawn (its slot is deleted).
+fn tombstone_chart() -> sheet_xlsx::XlsxChart {
+    let mut c = sheet_xlsx::XlsxChart::authored(0, sheet_chart::ChartModel::default());
+    c.dirty = false;
+    c.from_file = true;
+    c
 }
 
 #[cfg(test)]
