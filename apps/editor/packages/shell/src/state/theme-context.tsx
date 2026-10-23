@@ -27,6 +27,8 @@ import {
   type PropsWithChildren,
 } from "react";
 
+import { useEditorStorage, type StorageAdapter } from "./storage";
+
 // Design system — the editor theme. DARK is the primary surface
 // ("long design sessions"); light ships as the toggle for colour /
 // proof judgement. Both themes are ONE token set (styles/theme.css
@@ -39,9 +41,9 @@ export type EditorTheme = "dark" | "light";
 
 const STORAGE_KEY = "paged.theme";
 
-function loadInitialTheme(): EditorTheme {
+function loadInitialTheme(storage: StorageAdapter): EditorTheme {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (raw === "light" || raw === "dark") return raw;
   } catch {
     /* storage unavailable (iframe sandbox) — fall through */
@@ -58,16 +60,21 @@ interface ThemeValue {
 const Context = createContext<ThemeValue | null>(null);
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [theme, setTheme] = useState<EditorTheme>(loadInitialTheme);
+  // The editor's settings store (state/storage.ts): the page's
+  // localStorage for the app, the host's choice when embedded.
+  const storage = useEditorStorage();
+  const [theme, setTheme] = useState<EditorTheme>(() =>
+    loadInitialTheme(storage),
+  );
 
   // The root element applies it (`EditorRoot`); persist the choice.
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, theme);
+      storage.setItem(STORAGE_KEY, theme);
     } catch {
       /* persistence is a convenience only */
     }
-  }, [theme]);
+  }, [storage, theme]);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const toggleTheme = useCallback(

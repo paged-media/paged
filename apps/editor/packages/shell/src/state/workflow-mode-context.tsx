@@ -28,6 +28,7 @@ import {
 
 import { scopedChromeKey } from "./chrome-storage-scope";
 import { useEditorScope, type EditorScope } from "./editor-scope";
+import { editorStorage } from "./storage";
 
 // Design system (publishing cockpit) — the workflow mode. One
 // product, six purpose-built experiences: each mode re-skins the
@@ -56,7 +57,7 @@ const storageKey = (scope: EditorScope) =>
 
 function loadInitialMode(scope: EditorScope): WorkflowMode {
   try {
-    const raw = localStorage.getItem(storageKey(scope));
+    const raw = editorStorage(scope).getItem(storageKey(scope));
     // Any stored id is taken here; the shell falls back to the first
     // registered mode when it is not one of this editor's (PagedShell).
     if (raw && raw.length <= 64) return raw;
@@ -99,7 +100,7 @@ export function WorkflowModeProvider({
     (m: WorkflowMode) => {
       setModeState(m);
       try {
-        localStorage.setItem(storageKey(scope), m);
+        editorStorage(scope).setItem(storageKey(scope), m);
       } catch {
         /* persistence is a convenience only */
       }

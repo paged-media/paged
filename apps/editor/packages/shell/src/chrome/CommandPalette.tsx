@@ -44,6 +44,7 @@ import {
   type EditorScope,
 } from "../state/editor-scope";
 import { useRegistryView } from "../state/live";
+import { useEditorStorage, type StorageAdapter } from "../state/storage";
 import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
@@ -69,9 +70,9 @@ export function notifyPalette(scope: EditorScope, action: PaletteAction): void {
 const RECENTS_KEY = "paged.palette.recents.v1";
 const RECENTS_MAX = 5;
 
-function loadRecents(): string[] {
+function loadRecents(storage: StorageAdapter): string[] {
   try {
-    const raw = localStorage.getItem(RECENTS_KEY);
+    const raw = storage.getItem(RECENTS_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(parsed)
       ? parsed.filter((x) => typeof x === "string")
@@ -81,13 +82,13 @@ function loadRecents(): string[] {
   }
 }
 
-function pushRecent(id: string): string[] {
-  const next = [id, ...loadRecents().filter((x) => x !== id)].slice(
+function pushRecent(storage: StorageAdapter, id: string): string[] {
+  const next = [id, ...loadRecents(storage).filter((x) => x !== id)].slice(
     0,
     RECENTS_MAX,
   );
   try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    storage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
     /* convenience only */
   }
@@ -173,7 +174,8 @@ export function CommandPalette() {
   // formatter, MenuBar's `acceleratorLookup`).
   const keyFor = acceleratorLookup(keybindings.list());
   const workflowMode = useOptionalWorkflowMode();
-  const [recents, setRecents] = useState<string[]>(loadRecents);
+  const storage = useEditorStorage();
+  const [recents, setRecents] = useState<string[]>(() => loadRecents(storage));
 
   const palette = useScoped(PALETTE_EVENT);
   useEffect(
@@ -207,7 +209,7 @@ export function CommandPalette() {
 
   const run = (cmd: CommandContribution) => {
     setOpen(false);
-    setRecents(pushRecent(cmd.id));
+    setRecents(pushRecent(storage, cmd.id));
     void registries.commands.invoke(cmd.id);
   };
 

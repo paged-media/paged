@@ -54,6 +54,7 @@ import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
 import { TOOL_RAIL } from "./messages";
 import { useEditorRoot, usePortalContainer } from "../state/editor-root";
+import { useEditorStorage, type StorageAdapter } from "../state/storage";
 
 // Concept 1 (T4) — the left tool rail. Shell CHROME, rendered as a
 // sibling of the dockview container, NOT a dock panel: fixed, not
@@ -251,10 +252,10 @@ function deriveSections(
 
 /** The persisted "last used" faces (a module function: the React Compiler
  *  does not compile a component with a conditional inside a `try`). */
-function readLastUsed(): Record<ToolGroupId, string> {
+function readLastUsed(storage: StorageAdapter): Record<ToolGroupId, string> {
   let raw: string | null = null;
   try {
-    raw = window.localStorage.getItem(LAST_USED_STORAGE_KEY);
+    raw = storage.getItem(LAST_USED_STORAGE_KEY);
   } catch {
     return {};
   }
@@ -321,18 +322,17 @@ export function ToolRail({
   // updated whenever a member of the group becomes effective (click,
   // flyout pick, or shortcut). Persisted in localStorage so the rail
   // faces survive a reload, alongside the dock layout.
-  const [lastUsed, setLastUsed] =
-    useState<Record<ToolGroupId, string>>(readLastUsed);
+  const storage = useEditorStorage();
+  const [lastUsed, setLastUsed] = useState<Record<ToolGroupId, string>>(() =>
+    readLastUsed(storage),
+  );
   useEffect(() => {
     try {
-      window.localStorage.setItem(
-        LAST_USED_STORAGE_KEY,
-        JSON.stringify(lastUsed),
-      );
+      storage.setItem(LAST_USED_STORAGE_KEY, JSON.stringify(lastUsed));
     } catch {
       // Storage unavailable (private mode) — faces just reset on reload.
     }
-  }, [lastUsed]);
+  }, [lastUsed, storage]);
 
   // T8 v2 — torn-off flyouts: group → floating-palette position. The
   // palette is just another projection of the group, so the data model

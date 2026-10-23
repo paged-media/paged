@@ -233,6 +233,24 @@ export interface EditorConfig {
    * when the host serves it somewhere of its own. Wins over `assetBase`.
    */
   engineWasm?: string;
+  /**
+   * Where the editor keeps its settings (theme, workflow mode, dock tabs,
+   * palette recents, export options, remembered grants): `"memory"` (the
+   * default) for this editor's lifetime only, so an embedded editor never
+   * reads or writes the host's origin storage unasked; `"local"` the
+   * page's `localStorage`, under the editor's own keys; `"none"` nothing
+   * kept; or the host's own store (Web Storage's getItem / setItem /
+   * removeItem).
+   */
+  storage?: "local" | "memory" | "none" | EditorStorage;
+}
+
+/** A host's settings store for the editor (`EditorConfig.storage`): Web
+ *  Storage's item methods, so `localStorage` is one. */
+export interface EditorStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
 }
 
 export type EditorEvent =
@@ -297,6 +315,9 @@ export interface MountOptions {
   assetBase?: string;
   /** As `EditorConfig.engineWasm`. */
   engineWasm?: string;
+  /** Where the editor keeps its settings; default memory, for this
+   *  editor's lifetime (as `EditorConfig.storage`). */
+  storage?: EditorStorage;
 }
 
 /** A mounted editor without the handle: only its disposal. */

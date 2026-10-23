@@ -39,6 +39,7 @@ import { useSyncExternalStore } from "react";
 import type { CanvasClient } from "@paged-media/client";
 import {
   createValueStore,
+  editorStorage,
   oneOf,
   parseStored,
   printReadinessLabel,
@@ -48,6 +49,7 @@ import {
   useScoped,
   type EditorScope,
   type ExporterContribution,
+  type StorageAdapter,
   type PrintOutputFacts,
 } from "@paged-media/shell";
 
@@ -274,17 +276,17 @@ const IMAGE_DEFAULTS: ImageSettings = {
 };
 
 /** The editor's image settings, read from storage when first used. */
-const IMAGE = scoped("exportImageSettings", () =>
-  createValueStore<ImageSettings>(loadImageSettings()),
+const IMAGE = scoped("exportImageSettings", (scope) =>
+  createValueStore<ImageSettings>(loadImageSettings(editorStorage(scope))),
 );
 
 /** The stored settings, field by field: a value the panel never offers
  *  (a DPI of "huge" or 100000, an unknown scope) reads as the default
  *  (SH-102, ADR 247). */
-function loadImageSettings(): ImageSettings {
+function loadImageSettings(storage: StorageAdapter): ImageSettings {
   let raw: string | null = null;
   try {
-    raw = localStorage.getItem(IMAGE_KEY);
+    raw = storage.getItem(IMAGE_KEY);
   } catch {
     return IMAGE_DEFAULTS;
   }
@@ -303,7 +305,7 @@ export function setImageSettings(
   const store = scope.get(IMAGE);
   const next = { ...store.get(), ...patch };
   try {
-    localStorage.setItem(IMAGE_KEY, JSON.stringify(next));
+    editorStorage(scope).setItem(IMAGE_KEY, JSON.stringify(next));
   } catch {
     /* quota — last-used settings are a convenience only */
   }

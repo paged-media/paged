@@ -24,6 +24,7 @@
 // builds the `__*` handles the tests and the playground drive the editor
 // by, and the playground's tools.
 
+import { pageStorage } from "@paged-media/shell";
 import { loadLocale, type Strings } from "@paged-media/strings";
 
 import { publishDevHandles } from "./app/dev-handles";
@@ -79,6 +80,9 @@ function mount(strings?: Strings): void {
     devTools: true,
     ownsPage: true,
     guardUnload: true,
+    // The page is the editor's: its settings live in the page's storage,
+    // under the keys scripts/settings-inventory.json lists.
+    storage: pageStorage(),
     ...(strings ? { strings } : {}),
   });
   if (devBuild) publishDevHandles(mounted.instance);

@@ -28,6 +28,7 @@ import { createDebouncer } from "@paged-media/panel-kit";
 import type { WorkflowMode } from "../state/workflow-mode-context";
 import { scopedChromeKey } from "../state/chrome-storage-scope";
 import { scoped, type EditorScope } from "../state/editor-scope";
+import { editorStorage } from "../state/storage";
 import { isRecord, isStringArray } from "../lib/stored-settings";
 
 const KEY_BASE = "paged.cockpit.v1";
@@ -47,28 +48,22 @@ export interface ModeUiState {
 
 export type CockpitStore = Partial<Record<WorkflowMode, ModeUiState>>;
 
-function safeStorage(): Storage | null {
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
 /** Load the persisted per-mode state and delete the legacy dockview
  *  layout keys (one-shot migration: old snapshots are meaningless in
  *  the fixed cockpit). */
 export function loadCockpitStore(scope: EditorScope): CockpitStore {
-  const ls = safeStorage();
-  if (!ls) return {};
-  // Legacy cleanup — enumerate first, then remove (removal mutates
-  // the key index).
-  const stale: string[] = [];
-  for (let i = 0; i < ls.length; i++) {
-    const k = ls.key(i);
-    if (k && LEGACY_PREFIXES.some((p) => k.startsWith(p))) stale.push(k);
+  // The editor's settings store (state/storage.ts).
+  const ls = editorStorage(scope);
+  try {
+    // Legacy cleanup — enumerate first, then remove (removal mutates
+    // the key index).
+    const stale = (ls.keys?.() ?? []).filter((k) =>
+      LEGACY_PREFIXES.some((p) => k.startsWith(p)),
+    );
+    for (const k of stale) ls.removeItem(k);
+  } catch {
+    /* storage unavailable — nothing to migrate */
   }
-  for (const k of stale) ls.removeItem(k);
 
   try {
     const raw = ls.getItem(KEY(scope));
@@ -118,8 +113,7 @@ export function saveModeUiState(
   const next: CockpitStore = { ...store, [mode]: state };
   const pending = scope.get(PENDING);
   pending.latest = next;
-  const ls = safeStorage();
-  if (!ls) return next;
+  const ls = editorStorage(scope);
   pending.write.schedule(() => {
     try {
       ls.setItem(KEY(scope), JSON.stringify(pending.latest));

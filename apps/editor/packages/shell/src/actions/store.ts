@@ -77,8 +77,11 @@ function storage(): Storage | null {
   }
 }
 
-export function loadLibrary(): ActionLibrary {
-  const store = storage();
+/** The library in `store`: the editor's settings store (the page's
+ *  localStorage when none is given). */
+export function loadLibrary(
+  store: Pick<Storage, "getItem"> | null = storage(),
+): ActionLibrary {
   if (!store) return EMPTY_LIBRARY;
   try {
     const raw = store.getItem(ACTIONS_STORAGE_KEY);
@@ -91,8 +94,10 @@ export function loadLibrary(): ActionLibrary {
 
 /** Returns false when the write was refused (quota, blocked storage)
  *  so the caller can say so instead of pretending it saved. */
-export function saveLibrary(library: ActionLibrary): boolean {
-  const store = storage();
+export function saveLibrary(
+  library: ActionLibrary,
+  store: Pick<Storage, "setItem"> | null = storage(),
+): boolean {
   if (!store) return false;
   try {
     store.setItem(ACTIONS_STORAGE_KEY, JSON.stringify(library));

@@ -46,6 +46,7 @@ import {
 } from "@paged-media/plugin-sdk";
 import {
   createEditorScope,
+  editorStorage,
   setDocumentSourceSink,
   type EditorScope,
 } from "@paged-media/shell";
@@ -266,7 +267,11 @@ export function createEditorServices(scope: EditorScope): EditorServices {
   setDocumentSourceSink(scope, documentIdentity);
   return {
     documentIdentity,
-    consent: createEditorConsentBackend({ identity: documentIdentity }),
+    // Remembered grants live in the editor's settings store.
+    consent: createEditorConsentBackend({
+      identity: documentIdentity,
+      storage: editorStorage(scope),
+    }),
     documents: createEditorDocuments(scope),
     secrets: createEditorSecretStore(),
     bindingProviders: createBindingProviderRegistry(),
