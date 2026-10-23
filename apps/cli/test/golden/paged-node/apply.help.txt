@@ -8,7 +8,7 @@ apply data bindings (bindings.json) for one record of --data, then save
 options:
   --data <x.csv>                     the records (CSV/TSV/JSON/Parquet/XLSX through paged.data)
   --query <sql>                      select the records (default SELECT * FROM "data")
-  --bindings <b.json>                { "bindings": [ { "kind": "property", "target", "path", "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }
+  --bindings <b.json>                { "bindings": [ { "kind": "property", "target", "path", "expr" | "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }
   --record <n>                       the record to apply (0-based, default 0)
   -o, --out <file>                   write the result here (format from the extension: .paged, .idml, .pdf)
   --no-save                          apply the change but write nothing (a dry run)
