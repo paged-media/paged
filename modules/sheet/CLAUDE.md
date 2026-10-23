@@ -187,7 +187,7 @@ Rules for every code change in this repo:
   calling convention (`Arg`/`EvalCtx`), and the registry YAML schema are
   FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
   amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`
-  and `EvalCtx::locale`, ADR 516.)
+  and `EvalCtx::locale`, ADR 516; the cell visual model `sheet_core::visual`, ADR 518.)
 
 ## Two-registry split
 

@@ -47,6 +47,7 @@ pub mod refs;
 pub mod style;
 pub mod table;
 pub mod value;
+pub mod visual;
 
 // ---- Crate-root re-exports of the key public types (spec §5). ----
 
@@ -68,6 +69,13 @@ pub use names::{NameDef, NameScope, NameTable, NameTarget};
 pub use style::{Align, CellStyle, NumFmtId, StyleTable};
 
 pub use table::Table;
+
+pub use visual::{
+    BorderEdge, BorderStyle, CellAlignment, CellBorder, CellFill, CellVisual, ColorRef,
+    ConcreteColor, DifferentialFormat, DocColorModel, DocSwatchRef, FontDelta, FontSpec,
+    GradientKind, GradientStop, HAlign, NamedCellStyle, PatternKind, RichRunVisual, TextStyleRef,
+    UnderlineKind, VAlign, VertAlign,
+};
 
 pub use filter::{ColumnFilter, FilterCriterion, FilterView};
 
