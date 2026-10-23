@@ -288,7 +288,18 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::DeleteNumberingList { .. }
         | O::SetStyleProperty { .. }
         | O::CreateTextVariable { .. }
-        | O::DeleteTextVariable { .. } => vec![doc(P::DocumentStyles)],
+        | O::DeleteTextVariable { .. }
+        // Tag definitions are the document's vocabulary, like its styles
+        // (engine ADR 1002).
+        | O::CreateXmlTag { .. }
+        | O::DeleteXmlTag { .. } => vec![doc(P::DocumentStyles)],
+        // Tagging is how a template's fields are marked: the author's.
+        O::TagItem { .. }
+        | O::UntagItem { .. }
+        | O::TagRange { .. }
+        | O::UntagRange { .. }
+        | O::SetXmlAttribute { .. }
+        | O::RestoreXmlStructure { .. } => vec![doc(P::TemplateAuthor)],
         O::CreateGroup { spec } => spec.members.iter().map(|m| item(P::ItemRestack, m)).collect(),
         O::DissolveGroup { group_id, .. } => {
             vec![req(P::ItemRestack, Target::Item(group_id.clone()))]

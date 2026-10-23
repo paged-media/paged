@@ -88,5 +88,6 @@ mod tracked_insertion_edit;
 mod transparency_targets_roundtrip;
 mod unmodelled_item_roundtrip;
 mod xml_element_edit;
+mod xml_structure_roundtrip;
 mod z_order_roundtrip;
 mod zip_layout;

@@ -4603,6 +4603,13 @@
             "setDocumentMetadata",
             "createTextVariable",
             "deleteTextVariable",
+            "createXmlTag",
+            "deleteXmlTag",
+            "tagItem",
+            "untagItem",
+            "tagRange",
+            "untagRange",
+            "setXmlAttribute",
             "pathPointCurveType",
             "pathPointSet",
             "batch",
@@ -6441,5 +6448,5 @@
       ]
     }
   ],
-  "protocol": 75
+  "protocol": 76
 }

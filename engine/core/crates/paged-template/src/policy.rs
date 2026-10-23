@@ -216,6 +216,12 @@ pub struct DocumentPolicy {
     /// Fields that are text variables, by variable `Self` id.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub variables: BTreeMap<String, FieldDef>,
+    /// Fields that are runs of text inside a story (`text-run`), by the
+    /// key of the placeholder run that holds the value: the `Self` of the
+    /// XML element tagging the range for a field made from a tag (engine
+    /// ADR 1002), or a plugin placeholder's key.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub runs: BTreeMap<String, FieldDef>,
 }
 
 /// A policy label that could not be read. The document still opens; the

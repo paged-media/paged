@@ -278,6 +278,32 @@ reason = "element names, not attributes"
 
 # ------------------------------------------------------------- exporter
 
+# Engine ADR 1002 — the XML structure written from the model.
+[[fn]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "pkg"
+elements = ["idPkg:Tags", "idPkg:BackingStory"]
+
+[[fn]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "tags_part"
+elements = ["XMLTag"]
+
+[[fn]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "element_start"
+elements = ["XMLElement"]
+
+[[fn]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "write_attributes"
+elements = ["XMLAttribute"]
+
+[[fn]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "backing_story_part"
+elements = ["XmlStory", "ParagraphStyleRange", "CharacterStyleRange"]
+
 [[fn]]
 file = "crates/idml-export/src/emit.rs"
 name = "open_pkg_root"
@@ -763,6 +789,22 @@ parts = ["Stories"]
 # or part writer.
 
 # Spreads and master spreads: the patch chain `write_package` runs over both.
+# Engine ADR 1002 — the XML structure, written once it changed.
+[[part_entry]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "tags_part"
+parts = ["XML"]
+
+[[part_entry]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "backing_story_part"
+parts = ["XML"]
+
+[[part_entry]]
+file = "crates/idml-export/src/xml_structure.rs"
+name = "place_elements"
+parts = ["Stories"]
+
 [[part_entry]]
 file = "crates/idml-export/src/text_frame_prefs.rs"
 name = "rewrite_text_frame_prefs"
