@@ -623,6 +623,7 @@ mod tests {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,

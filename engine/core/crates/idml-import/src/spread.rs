@@ -715,6 +715,9 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
     // Q-03 capture below would decode PostScript and hand it to the image
     // decoder as if it were a JPEG.
     let mut in_eps_element = false;
+    // Inside a `<PDF>` container: its `<PDFAttribute>` belongs to the
+    // frame being read (engine ADR 1003).
+    let mut in_pdf_element = false;
     // `<TextFramePreference><Properties><InsetSpacing>` capture.
     //
     // InDesign never writes the insets as an attribute: measured across
@@ -2279,6 +2282,9 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                     if matches!(e.name().as_ref(), b"EPS") && event_is_start {
                         in_eps_element = true;
                     }
+                    if is_pdf_element && event_is_start {
+                        in_pdf_element = true;
+                    }
                     // W1.21: entering an image container — its own
                     // `<PathGeometry>` is the picture box, not the
                     // frame outline, so suppress frame-anchor
@@ -2380,6 +2386,26 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                                 let host = out.ovals[i].self_id.clone();
                                 record_image_metadata(&mut out, host, &e);
                             }
+                        }
+                        _ => {}
+                    }
+                }
+                b"PDFAttribute" if in_pdf_element => {
+                    // A placed PDF's page and crop (engine ADR 1003),
+                    // kept as IDML spells them.
+                    let placed = paged_model::PlacedPdf {
+                        page_number: attr(&e, b"PageNumber").and_then(|s| s.trim().parse().ok()),
+                        crop: attr(&e, b"PDFCrop"),
+                    };
+                    match current_frame.as_ref().map(|cf| cf.kind) {
+                        Some(CurrentFrameKind::Rect(i)) => {
+                            out.rectangles[i].placed_pdf.get_or_insert(placed);
+                        }
+                        Some(CurrentFrameKind::Polygon(i)) => {
+                            out.polygons[i].placed_pdf.get_or_insert(placed);
+                        }
+                        Some(CurrentFrameKind::Oval(i)) => {
+                            out.ovals[i].placed_pdf.get_or_insert(placed);
                         }
                         _ => {}
                     }
@@ -2783,6 +2809,9 @@ pub fn parse_spread_with_provenance(xml: &[u8]) -> Result<(Spread, SpreadProvena
                     }
                     if e.name().as_ref() == b"EPS" {
                         in_eps_element = false;
+                    }
+                    if e.name().as_ref() == b"PDF" {
+                        in_pdf_element = false;
                     }
                 }
                 b"StrokeTransparencySetting" => {
@@ -5027,6 +5056,47 @@ mod tests {
             s.polygons[0].image_item_transform,
             Some([2.0, 0.0, 0.0, 2.0, 0.0, 0.0])
         );
+    }
+
+    #[test]
+    fn a_placed_pdf_reads_its_page_and_crop() {
+        // `<PDFAttribute>` (engine ADR 1003): the page shown and the box,
+        // kept as spelled, on every frame kind; a `<PDF>` without one and
+        // a `<PDFAttribute>` outside a `<PDF>` give the frame none.
+        let xml =
+            br#"<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+          <Spread Self="s">
+            <Rectangle Self="r1" GeometricBounds="0 0 120 200">
+              <PDF Self="pdf1">
+                <Properties><GraphicBounds Left="0" Top="0" Right="200" Bottom="120"/></Properties>
+                <PDFAttribute PageNumber="2" PDFCrop="CropTrim" TransparentBackground="true"/>
+                <Link Self="l1" LinkResourceURI="file:/tmp/art.pdf"/>
+              </PDF>
+            </Rectangle>
+            <Oval Self="o1" GeometricBounds="0 0 100 100">
+              <PDF Self="pdf2"><PDFAttribute PDFCrop="CropMedia"/></PDF>
+            </Oval>
+            <Polygon Self="p1" GeometricBounds="0 0 100 100">
+              <PDF Self="pdf3"><Link Self="l3" LinkResourceURI="file:/tmp/art.pdf"/></PDF>
+            </Polygon>
+            <Rectangle Self="r2" GeometricBounds="0 0 10 10">
+              <Image Self="i1"><PDFAttribute PageNumber="4"/></Image>
+            </Rectangle>
+          </Spread>
+        </idPkg:Spread>"#;
+        let s = parse_spread(xml).unwrap();
+        let page = |p: Option<&paged_model::PlacedPdf>| p.map(|p| (p.page_number, p.crop.clone()));
+        assert_eq!(
+            page(s.rectangles[0].placed_pdf.as_ref()),
+            Some((Some(2), Some("CropTrim".to_string())))
+        );
+        assert_eq!(s.rectangles[0].placed_pdf.as_ref().unwrap().page_index(), 1);
+        assert_eq!(
+            page(s.ovals[0].placed_pdf.as_ref()),
+            Some((None, Some("CropMedia".to_string())))
+        );
+        assert_eq!(s.polygons[0].placed_pdf, None);
+        assert_eq!(s.rectangles[1].placed_pdf, None);
     }
 
     #[test]

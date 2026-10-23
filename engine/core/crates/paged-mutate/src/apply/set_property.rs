@@ -2898,6 +2898,17 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // ============ engine ADR 1003 — a placed PDF's page ==========
+        (
+            NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FramePdfPage,
+        ) => (
+            set_pdf_page(doc, node, path, value)?,
+            InvalidationHint {
+                frame_style: vec![node.clone()],
+                ..Default::default()
+            },
+        ),
         (NodeId::Rectangle(id), PropertyPath::FrameAutoFit) => {
             let new_val = expect_bool(path, value)?;
             let rect = find_rectangle_mut(doc, id)
@@ -3626,4 +3637,82 @@ fn set_footnote_option(
     };
     fo.present = true;
     Ok(prev)
+}
+
+/// Engine ADR 1003 — `FramePdfPage` on a picture frame: the page of its
+/// placed PDF, stored as `<PDFAttribute PageNumber>` spells it. Answers
+/// the prior page (`None` when none was set) for the inverse.
+fn set_pdf_page(
+    doc: &mut Document,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<Value, OperationError> {
+    let refuse = |reason: String| OperationError::InvalidValue {
+        node: node.clone(),
+        path,
+        reason,
+    };
+    let next = match expect_length(path, value)? {
+        None => None,
+        Some(n) if n.is_finite() && n >= 1.0 && n.fract() == 0.0 && n <= u32::MAX as f32 => {
+            Some(n as u32)
+        }
+        Some(n) => {
+            return Err(refuse(format!(
+                "{n} is not a page number (a whole number >= 1)"
+            )))
+        }
+    };
+    let missing = || OperationError::NodeNotFound(node.clone());
+    let (slot, link, bytes) = match node {
+        NodeId::Rectangle(id) => {
+            let r = find_rectangle_mut(doc, id).ok_or_else(missing)?;
+            (
+                &mut r.placed_pdf,
+                r.image_link.is_some(),
+                r.image_bytes.as_deref(),
+            )
+        }
+        NodeId::Oval(id) => {
+            let o = find_oval_mut(doc, id).ok_or_else(missing)?;
+            (
+                &mut o.placed_pdf,
+                o.image_link.is_some(),
+                o.image_bytes.as_deref(),
+            )
+        }
+        NodeId::Polygon(id) => {
+            let p = find_polygon_mut(doc, id).ok_or_else(missing)?;
+            (
+                &mut p.placed_pdf,
+                p.image_link.is_some(),
+                p.image_bytes.as_deref(),
+            )
+        }
+        _ => {
+            return Err(OperationError::UnsupportedProperty {
+                node: node.clone(),
+                path,
+            })
+        }
+    };
+    // Bytes the model holds say what they are; a link alone is taken at
+    // its word (its bytes are the asset resolver's).
+    match bytes {
+        Some(b) if !b[..b.len().min(1024)].windows(5).any(|w| w == b"%PDF-") => {
+            return Err(refuse("the frame's picture is not a PDF".to_string()));
+        }
+        None if !link && slot.is_none() => {
+            return Err(refuse("the frame places no picture".to_string()));
+        }
+        _ => {}
+    }
+    let prev = slot.as_ref().and_then(|p| p.page_number);
+    // Kept once the frame has one, so the export can clear a source
+    // attribute (engine ADR 1003).
+    if next.is_some() || slot.is_some() {
+        slot.get_or_insert_with(Default::default).page_number = next;
+    }
+    Ok(Value::Length(prev.map(|n| n as f32)))
 }

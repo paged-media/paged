@@ -162,6 +162,8 @@ fn item_property(path: PropertyPath) -> Permission {
         Pp::FrameRotationAngle => P::ItemRotate,
         Pp::FrameFlipH | Pp::FrameFlipV => P::ItemFlip,
         Pp::ImageContentTransform => P::ImageCrop,
+        // Which page of a placed PDF shows: the picture, not its look.
+        Pp::FramePdfPage => P::ImageReplace,
         Pp::ElementVisible => P::ItemVisibility,
         p if super::lock::moves_geometry(p) => P::ItemResize,
         p => {

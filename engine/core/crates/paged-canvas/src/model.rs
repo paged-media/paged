@@ -7755,6 +7755,16 @@ impl CanvasModel {
                             path: PropertyPath::ImageContentTransform,
                             value: Some(Value::Transform(f.image_item_transform)),
                         });
+                        // Engine ADR 1003 — the page of a placed PDF.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FramePdfPage,
+                            value: Some(Value::Length(
+                                f.placed_pdf
+                                    .as_ref()
+                                    .and_then(|p| p.page_number)
+                                    .map(|n| n as f32),
+                            )),
+                        });
                         // PN-254 — Invert, written on a rectangle since
                         // W0.3 and read only on a text frame.
                         entries.push(PropertyEntry {
@@ -8021,6 +8031,16 @@ impl CanvasModel {
                         entries.push(PropertyEntry {
                             path: PropertyPath::ImageContentTransform,
                             value: Some(Value::Transform(p.image_item_transform)),
+                        });
+                        // Engine ADR 1003 — the page of a placed PDF.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FramePdfPage,
+                            value: Some(Value::Length(
+                                p.placed_pdf
+                                    .as_ref()
+                                    .and_then(|p| p.page_number)
+                                    .map(|n| n as f32),
+                            )),
                         });
                         entries.extend(corner_entries(&p.corners));
                         // R1 — the rows a polygon's write arms had and its
@@ -8333,6 +8353,16 @@ impl CanvasModel {
                         entries.push(PropertyEntry {
                             path: PropertyPath::ImageContentTransform,
                             value: Some(Value::Transform(o.image_item_transform)),
+                        });
+                        // Engine ADR 1003 — the page of a placed PDF.
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FramePdfPage,
+                            value: Some(Value::Length(
+                                o.placed_pdf
+                                    .as_ref()
+                                    .and_then(|p| p.page_number)
+                                    .map(|n| n as f32),
+                            )),
                         });
                         entries.extend(corner_entries(&o.corners));
                         // R1 — the rows an oval's write arms had and its

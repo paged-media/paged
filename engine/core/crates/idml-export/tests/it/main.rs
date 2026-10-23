@@ -62,6 +62,7 @@ mod paragraph_edits_saveback;
 mod paragraph_mark_resave;
 mod paragraph_terminator;
 mod path_contour_roundtrip;
+mod pdf_page_roundtrip;
 mod pen_path_caps_roundtrip;
 mod pure_idml_export;
 mod rewritten_paragraphs;
