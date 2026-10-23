@@ -61,6 +61,7 @@ mod styles;
 mod swatches;
 mod tables;
 mod text;
+mod xml;
 
 /// The row files, read for the enumeration gate.
 const ROW_SOURCES: &[&str] = &[
@@ -77,6 +78,7 @@ const ROW_SOURCES: &[&str] = &[
     include_str!("swatches.rs"),
     include_str!("tables.rs"),
     include_str!("text.rs"),
+    include_str!("xml.rs"),
 ];
 
 // ------------------------------------------------------------- fixtures

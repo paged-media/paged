@@ -176,6 +176,102 @@ fn on_char_boundary(paragraphs: &[paged_model::Paragraph], offset: u32) -> bool 
 /// affected story id. Caller (CanvasModel::apply_mutation) wraps
 /// the returned inverse into its applied-log + invalidates caches.
 pub fn apply(doc: &mut Document, op: &TextOp) -> Result<AppliedText, TextOpError> {
+    // Engine ADR 1002 — where the edit stands among the story's tagged
+    // ranges, in story characters, before it applies.
+    let tagged = match op {
+        TextOp::InsertText {
+            story_id,
+            offset,
+            cell: None,
+            ..
+        }
+        | TextOp::DeleteRange {
+            story_id,
+            start: offset,
+            cell: None,
+            ..
+        } => doc
+            .stories
+            .iter()
+            .find(|s| &s.self_id == story_id && !s.story.xml_elements.is_empty())
+            .map(|s| {
+                (
+                    story_id.clone(),
+                    content_offset_to_char(&s.story.paragraphs, *offset),
+                    s.story.flat_text().chars().count() as u32,
+                    matches!(op, TextOp::DeleteRange { .. }),
+                )
+            }),
+        _ => None,
+    };
+    let applied = apply_text_op(doc, op)?;
+    if let Some((story_id, at, before, deleted)) = tagged {
+        if let Some(s) = doc.stories.iter_mut().find(|s| s.self_id == story_id) {
+            let after = s.story.flat_text().chars().count() as u32;
+            if deleted {
+                s.story
+                    .shift_xml_ranges(at, before.saturating_sub(after), 0);
+            } else {
+                s.story
+                    .shift_xml_ranges(at, 0, after.saturating_sub(before));
+            }
+        }
+    }
+    Ok(applied)
+}
+
+/// A `ContentSelection` offset (UTF-8 bytes, one synthetic `\n` per
+/// paragraph boundary) as a story character offset (the space `StoryRange`
+/// and the tagged ranges count in, which has no paragraph separators).
+pub(crate) fn content_offset_to_char(paragraphs: &[paged_model::Paragraph], offset: u32) -> u32 {
+    let mut consumed = 0u32;
+    let mut chars = 0u32;
+    for (i, p) in paragraphs.iter().enumerate() {
+        if i > 0 {
+            if offset <= consumed {
+                return chars;
+            }
+            consumed += 1;
+        }
+        let text: String = p.runs.iter().map(|r| r.text.as_str()).collect();
+        let len = text.len() as u32;
+        if offset <= consumed + len {
+            let local = (offset - consumed) as usize;
+            return chars + text[..text.floor_char_boundary(local)].chars().count() as u32;
+        }
+        consumed += len;
+        chars += text.chars().count() as u32;
+    }
+    chars
+}
+
+/// A story character offset as a `ContentSelection` offset: the inverse of
+/// [`content_offset_to_char`]. A character at a paragraph's end is that
+/// paragraph's end, not the next one's start.
+pub(crate) fn char_to_content_offset(paragraphs: &[paged_model::Paragraph], at: u32) -> u32 {
+    let mut consumed = 0u32;
+    let mut chars = 0u32;
+    for (i, p) in paragraphs.iter().enumerate() {
+        if i > 0 {
+            consumed += 1;
+        }
+        let text: String = p.runs.iter().map(|r| r.text.as_str()).collect();
+        let n = text.chars().count() as u32;
+        if at <= chars + n {
+            let local = (at - chars) as usize;
+            let byte = text
+                .char_indices()
+                .nth(local)
+                .map_or(text.len(), |(b, _)| b);
+            return consumed + byte as u32;
+        }
+        consumed += text.len() as u32;
+        chars += n;
+    }
+    consumed
+}
+
+fn apply_text_op(doc: &mut Document, op: &TextOp) -> Result<AppliedText, TextOpError> {
     match op {
         TextOp::InsertText {
             story_id,

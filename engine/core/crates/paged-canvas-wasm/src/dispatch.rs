@@ -875,6 +875,35 @@ impl WorkerCore {
                     Err(problems) => WorkerToMainKind::TemplateFieldsRefused { problems },
                 }
             }
+            MainToWorkerKind::RequestDerivedTemplateFields { options } => {
+                WorkerToMainKind::DerivedTemplateFields {
+                    derivation: self
+                        .model
+                        .as_ref()
+                        .map(|m| m.derived_template_fields(options))
+                        .unwrap_or_default(),
+                }
+            }
+            MainToWorkerKind::OpenAsTemplate { options, only } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                match model.lower_open_as_template(options, only.as_deref()) {
+                    Ok(mutation) => {
+                        return self.dispatch(
+                            MainToWorker {
+                                seq: msg_seq,
+                                protocol: PROTOCOL_VERSION,
+                                kind: MainToWorkerKind::Mutate(mutation),
+                            },
+                            clock,
+                        );
+                    }
+                    Err(problems) => WorkerToMainKind::TemplateFieldsRefused { problems },
+                }
+            }
             MainToWorkerKind::SetSessionPolicy { policy } => {
                 self.session_policy = policy.clone();
                 if let Some(m) = self.model.as_mut() {
