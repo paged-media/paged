@@ -36,6 +36,12 @@ editing a sheet, and a grid that *shows* them as the page will print them.
    editing a swatch in the document recolours the grid as it recolours the placed table (which
    names the swatch and needs no re-lowering).
 
+4. **The sheet bar offers the document's styles.** A paragraph-style menu and two swatch pickers
+   (cell fill, text colour) list the document's own paragraph styles and swatches (with their
+   display colour); a pick is written as an ADR 518 reference, one undo step. The fill control of
+   the host (`frameFillColor`, container mode) also fills the selected cells while a sheet frame is
+   entered.
+
 ## Consequences
 
 - A text colour from the Swatches or Character panel is always a document swatch: picking a
@@ -43,5 +49,5 @@ editing a sheet, and a grid that *shows* them as the page will print them.
 - The workbook keeps a concrete fallback for each reference (ADR 518), so the xlsx export and
   other spreadsheet applications still see the colour.
 - Open: Excel named styles mapped to document styles by default ("Use document styles"), the
-  mapping table and "Create document styles from workbook", a style menu and swatch pickers on
-  the sheet bar, the cell fill from the Swatches panel, and chart roles naming document styles.
+  mapping table and "Create document styles from workbook", and the chart roles still without
+  engine doors (a palette from a document colour group, a document default chart style).

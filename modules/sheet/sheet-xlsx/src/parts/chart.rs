@@ -118,6 +118,14 @@ pub struct ParsedChart {
     pub part: Option<String>,
     /// The drawing part that anchors it, and the anchor's relationship id.
     pub drawing: Option<String>,
+    /// The drawing relationship id that names the chart part (its anchor's
+    /// `<c:chart r:id>`), for a chart read from the package: a delete takes
+    /// the anchor out by it
+    /// ([`XlsxDocument::remove_chart_parts`](crate::XlsxDocument::remove_chart_parts)).
+    pub rel_id: Option<String>,
+    /// Read from the package (or a slot standing for one a save dropped):
+    /// its index is a file position, which a reload must keep.
+    pub from_file: bool,
     /// Read from a chartEx part.
     pub chart_ex: bool,
     /// The host is a chartsheet (the chart IS the tab).
@@ -139,6 +147,8 @@ impl ParsedChart {
             model,
             part: None,
             drawing: None,
+            rel_id: None,
+            from_file: false,
             chart_ex: false,
             chartsheet: false,
             dirty: true,
@@ -337,6 +347,8 @@ pub fn parse(
         model,
         part: None,
         drawing: None,
+        rel_id: None,
+        from_file: true,
         chart_ex: ex,
         chartsheet: false,
         dirty: false,

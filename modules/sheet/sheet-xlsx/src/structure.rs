@@ -781,6 +781,108 @@ impl XlsxDocument {
     }
 }
 
+impl XlsxDocument {
+    /// Take chart `index` (a chart read from the package) out of the
+    /// package: its anchor in the drawing (the one drawing element whose
+    /// `<c:chart r:id>` names it — a whole `mc:AlternateContent` when it is
+    /// wrapped in one), the drawing relationship, the chart part and the
+    /// parts only it reached (its style and colour parts, an embedded
+    /// workbook), with their `[Content_Types]` overrides; a chartsheet's chart
+    /// stays (the tab is the chart). Every other part,
+    /// and every other byte of the drawing and its `.rels`, stays as it was.
+    /// The chart keeps its slot (and its index); its part is cleared, so a
+    /// second call is a no-op. Returns whether anything was removed.
+    pub fn remove_chart_parts(&mut self, index: usize) -> Result<bool, XlsxError> {
+        let Some((chart_part, drawing_part, rel_id)) = self
+            .charts
+            .get(index)
+            .filter(|c| !c.chartsheet)
+            .and_then(|c| Some((c.part.clone()?, c.drawing.clone()?, c.rel_id.clone()?)))
+        else {
+            return Ok(false);
+        };
+        // 1. The anchor.
+        if let Some(dr) = self.part_bytes(&drawing_part) {
+            let (kids, _) = root_children(&dr)?;
+            if let Some(k) = kids
+                .iter()
+                .rev()
+                .find(|k| names_chart(&dr[k.start..k.end], &rel_id))
+            {
+                let out = splice(&dr, k.start, k.end, b"");
+                self.set_part_bytes(&drawing_part, out);
+            }
+        }
+        // 2. The relationship.
+        let dr_rels = rels_part_name(&drawing_part);
+        self.remove_rel(&dr_rels, &rel_id)?;
+        // 3. The chart part and what only it reached, unless another
+        //    relationship still names it.
+        if !self.part_is_targeted(&chart_part)? {
+            for part in self.parts_only_reached_from(&chart_part)? {
+                self.container.parts.retain(|p| p.name() != part);
+                self.remove_override(&part)?;
+            }
+        }
+        if let Some(c) = self.charts.get_mut(index) {
+            c.part = None;
+            c.drawing = None;
+            c.rel_id = None;
+            c.dirty = false;
+        }
+        self.container.dirty = true;
+        Ok(true)
+    }
+
+    /// Whether any `.rels` part of the package resolves to `part`.
+    fn part_is_targeted(&self, part: &str) -> Result<bool, XlsxError> {
+        for p in &self.container.parts {
+            let name = p.name();
+            let Some(dir_end) = name.find("_rels/") else {
+                continue;
+            };
+            if !name.ends_with(".rels") {
+                continue;
+            }
+            let owner_dir = &name[..dir_end];
+            let rels = parse_rels(p.bytes())?;
+            if rels
+                .items
+                .iter()
+                .any(|r| resolve_target(owner_dir, &r.target) == part)
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+}
+
+/// Whether the XML fragment holds a `<…:chart>` element whose `…:id`
+/// attribute is `rel_id` (a drawing anchor's chart reference).
+fn names_chart(xml: &[u8], rel_id: &str) -> bool {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
+                if e.local_name().as_ref() == b"chart"
+                    && e.attributes().flatten().any(|a| {
+                        a.key.local_name().as_ref() == b"id"
+                            && a.value.as_ref() == rel_id.as_bytes()
+                    })
+                {
+                    return true;
+                }
+            }
+            Ok(Event::Eof) | Err(_) => return false,
+            _ => {}
+        }
+        buf.clear();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

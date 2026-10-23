@@ -189,6 +189,10 @@ describe("sheet_plugin_bundle_activate", () => {
       "media.paged.sheet.command.dataValidation",
       "media.paged.sheet.command.circleInvalid",
       "media.paged.sheet.command.toggleFilter",
+      "media.paged.sheet.command.hideSelection",
+      "media.paged.sheet.command.unhideSelection",
+      "media.paged.sheet.command.groupSelection",
+      "media.paged.sheet.command.ungroupSelection",
     ]);
   });
 

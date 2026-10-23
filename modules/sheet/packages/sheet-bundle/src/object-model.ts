@@ -488,6 +488,10 @@ interface VersionMeta {
   /** The version's xlsx holds its charts (sheet ADR 519): nothing to
    *  replay. Absent in versions saved before the engine wrote charts. */
   chartsInXlsx?: true;
+  /** Plan G4 — the chart slots the version's bytes no longer carry (charts
+   *  read from the file, deleted and dropped by the save): re-opened on
+   *  load before the journal replays, so every chart keeps its index. */
+  chartSlots?: number[];
 }
 
 // ------------------------------------------------------------ the model
@@ -1331,11 +1335,13 @@ export function contributeObjectModel(
     engine: SheetEngine,
   ): Promise<{ hash: string; parts: PartChange[] }> {
     const bytes = engine.saveXlsx();
+    const chartSlots = engine.chartTombstones?.() ?? [];
     const meta: VersionMeta = {
       v: 1,
       name: session.state().fileName ?? "workbook.xlsx",
       chartOps: [],
       chartsInXlsx: true,
+      ...(chartSlots.length > 0 ? { chartSlots } : {}),
     };
     const metaBytes = enc.encode(JSON.stringify(meta));
     const all = new Uint8Array(bytes.length + 1 + metaBytes.length);
@@ -1582,9 +1588,14 @@ export function contributeObjectModel(
     }
     if (!bridge.loadVersion(v.bytes, v.meta.name)) return false;
     const engine = bridge.engine()!;
+    const slots = new Set(v.meta.chartSlots ?? []);
+    bridge.restoreChartSlots([...slots]);
     // A version written since the engine saves charts holds them already.
     const replay = v.meta.chartsInXlsx ? [] : v.meta.chartOps;
     for (const op of replay) {
+      // A delete the saved bytes already carry out (its slot re-opened
+      // deleted above).
+      if (op.op === "delete" && slots.has(op.index!)) continue;
       try {
         if (op.op === "add")
           engine.addChart(
@@ -1630,6 +1641,11 @@ export function contributeObjectModel(
         if (await loadVersion(target)) {
           if (h === null) loadedHash = baselineHash;
         }
+      })
+      // Plan G4 — art the undo or redo brought back (a deleted chart's
+      // copies) is tracked again, and art it took away no longer is.
+      .then(async () => {
+        if (bridge.engine()) await bridge.rediscoverCharts();
       })
       .catch((err) =>
         host.log.warn("object model: version follow failed", err),
@@ -2013,6 +2029,46 @@ export function contributeObjectModel(
       args: struct({}),
       async handler() {
         const r = session.toggleAutofilter();
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — hide rows or columns in the grid.
+      id: C("hideSelection"),
+      title: "Hide rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.hideSelection(true);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — unhide rows or columns in the grid.
+      id: C("unhideSelection"),
+      title: "Unhide rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.hideSelection(false);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — group rows or columns in the grid.
+      id: C("groupSelection"),
+      title: "Group rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.groupSelection(true);
+        if (!r.ok) throw new Error(r.message);
+      },
+    },
+    {
+      // Sheet ADR 517 — ungroup rows or columns in the grid.
+      id: C("ungroupSelection"),
+      title: "Ungroup rows or columns",
+      args: struct({}),
+      async handler() {
+        const r = session.groupSelection(false);
         if (!r.ok) throw new Error(r.message);
       },
     },

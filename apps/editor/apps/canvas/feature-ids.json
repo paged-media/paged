@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 387,
+    "command": 391,
     "keybinding": 88,
-    "menu": 281,
+    "menu": 285,
     "panel": 122,
     "tool": 72
   },
@@ -1091,7 +1091,17 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.groupSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.hideGridInFrame",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.hideSelection",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1202,6 +1212,16 @@
     },
     {
       "id": "command:media.paged.sheet.command.toggleFilter",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.ungroupSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.unhideSelection",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2451,6 +2471,16 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Context/Group",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Hide",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Insert columns",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -2472,6 +2502,16 @@
     },
     {
       "id": "menu:Context/Sort…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Ungroup",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Unhide",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },

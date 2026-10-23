@@ -622,7 +622,7 @@ impl XlsxDocument {
         // byte-identical on round-trip (the `<drawing>` element on the
         // worksheet is itself a captured unknown child). The resolver maps
         // `c:f` sheet names to model ids; the full model has all sheets now.
-        let mut found: Vec<(ParsedChart, Option<u32>)> = Vec::new();
+        let mut found: Vec<(ParsedChart, (Option<u32>, Vec<u32>))> = Vec::new();
         let mut sparklines: BTreeMap<SheetId, Vec<sheet_chart::SparklineGroup>> = BTreeMap::new();
         {
             let resolver = ModelSheetResolver { model: &model };
@@ -681,6 +681,7 @@ impl XlsxDocument {
                             {
                                 parsed.part = Some(chart_part.clone());
                                 parsed.drawing = Some(drawing_part.clone());
+                                parsed.rel_id = Some(chart_rel.id.clone());
                                 parsed.chartsheet = chartsheets.contains(&host_sheet);
                                 let index = chart_write::recorded_index(&chart_bytes);
                                 found.push((parsed, index));

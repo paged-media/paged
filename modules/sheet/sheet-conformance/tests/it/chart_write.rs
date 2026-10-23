@@ -189,7 +189,10 @@ fn a_deleted_chart_leaves_the_package_and_keeps_the_others_indexes__feat__sheet_
         s.list_charts().iter().map(|c| (c.index, c.kind)).collect();
     s.delete_chart(3).unwrap();
     let out = s.save_xlsx().unwrap();
-    let r = SheetSession::load_xlsx(&out).unwrap();
+    // The slot a read chart leaves is a tombstone stored beside the bytes
+    // (ADR 522) and re-opened after the load.
+    let mut r = SheetSession::load_xlsx(&out).unwrap();
+    r.restore_chart_slots(&s.chart_tombstones()).unwrap();
     let after: Vec<(u32, &'static str)> =
         r.list_charts().iter().map(|c| (c.index, c.kind)).collect();
     let want: Vec<(u32, &'static str)> = before.into_iter().filter(|(i, _)| *i != 3).collect();
@@ -204,6 +207,9 @@ fn a_deleted_chart_leaves_the_package_and_keeps_the_others_indexes__feat__sheet_
 
 #[test]
 fn an_authored_chart_keeps_its_index_beside_charts_of_a_later_sheet__feat__sheet_chart_writer() {
+    // And with a read chart deleted before it: the authored chart records
+    // the deleted slot, so the load re-opens it and the tombstone restore
+    // finds it open.
     // annual-charts' charts sit on its second sheet; a chart authored on
     // the first would be discovered first on reload without its record.
     let mut s = SheetSession::load_xlsx(&corpus("annual-charts.xlsx")).unwrap();

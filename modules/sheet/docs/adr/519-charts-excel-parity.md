@@ -81,10 +81,12 @@ In the corpus 17 of 172 charts were drawn as the wrong kind.
    concrete value (`a:srgbClr`, or `a:schemeClr` with `lumMod`/`lumOff` for a theme-sourced
    role); text roles as `a:latin`, size, bold and italic in `c:txPr`. Document references ride
    in a paged `c:extLst` extension and are restored on import only while the concrete value is
-   unchanged. The extension also records each chart's session index, and a load places such a
-   chart at that index (the others fill the remaining slots in file order), so placements,
-   journals and template fields keep naming the right chart after a save and reload; a deleted
-   chart's slot stays empty. Excel writes a chartEx part's data as hidden `_xlchart.v1.N`
+   unchanged. The extension also records each chart's session index and the slots of deleted
+   charts, and a load places such a chart at that index, re-opens the deleted slots and fills
+   the rest with the other charts in file order, so placements, journals and template fields
+   keep naming the right chart after a save and reload. A read chart that is deleted leaves the
+   package by [ADR 522](522-placement-views-print-areas-and-chart-delete.md)'s splices and
+   tombstones; a slot the load already re-opened is not re-opened twice. Excel writes a chartEx part's data as hidden `_xlchart.v1.N`
    defined names; the reader resolves them.
 
 ## Consequences
