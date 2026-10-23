@@ -78,6 +78,8 @@ export type FrameSurfaceSession = Pick<
   | "setFrameSheet"
   | "documentFontFace"
   | "documentTextDefault"
+  | "documentSwatchColors"
+  | "documentStyleRevision"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -233,6 +235,80 @@ function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
   };
 }
 
+/** The document swatch ids a scene's styles reference. */
+function swatchIdsOf(scene: GridScene): string[] {
+  const ids = new Set<string>();
+  for (const st of scene.styles) {
+    if (st.fillSwatch) ids.add(st.fillSwatch);
+    if (st.textSwatch) ids.add(st.textSwatch);
+    for (const line of Object.values(st.borderLines ?? {}))
+      if (line?.swatch) ids.add(line.swatch);
+  }
+  return [...ids].sort();
+}
+
+/** `scene` with every referenced document swatch drawn in the colour the
+ *  document shows it in now (P7): a swatch edited in the document recolours
+ *  the grid, as it recolours the placed table. */
+export function withSwatchColors(
+  scene: GridScene,
+  colors: ReadonlyMap<string, string>,
+): GridScene {
+  if (colors.size === 0) return scene;
+  const pick = (
+    id: string | null | undefined,
+    rgb: string | null | undefined,
+  ) => (id ? colors.get(id) : undefined) ?? rgb ?? null;
+  return {
+    ...scene,
+    styles: scene.styles.map((st) => {
+      if (!st.fillSwatch && !st.textSwatch && !st.borderLines) return st;
+      const lines = st.borderLines
+        ? Object.fromEntries(
+            Object.entries(st.borderLines).map(([edge, line]) => [
+              edge,
+              line?.swatch
+                ? { ...line, rgb: pick(line.swatch, line.rgb) }
+                : line,
+            ]),
+          )
+        : undefined;
+      return {
+        ...st,
+        fillRgb: st.fillSwatch ? pick(st.fillSwatch, st.fillRgb) : st.fillRgb,
+        textRgb: st.textSwatch ? pick(st.textSwatch, st.textRgb) : st.textRgb,
+        ...(lines ? { borderLines: lines } : {}),
+      };
+    }),
+  };
+}
+
+/** The document's current colours for the swatches `scene` references,
+ *  re-read when the document's styles may have changed. */
+function useSwatchColors(
+  session: FrameSurfaceSession,
+  scene: GridScene | null,
+): ReadonlyMap<string, string> {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [colors, setColors] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const key = scene ? swatchIdsOf(scene).join("\u0000") : "";
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    void session.documentSwatchColors(key.split("\u0000")).then((next) => {
+      if (live) setColors(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, key, revision]);
+  return colors;
+}
+
 /** The document's default text face per session (asked once). */
 const textDefaults = new WeakMap<
   FrameSurfaceSession,
@@ -337,6 +413,7 @@ function SheetFrameSurfaceView({
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [scene, setScene] = useState<GridScene | null>(null);
   const textDefault = useDocumentTextDefault(session);
+  const swatchColors = useSwatchColors(session, scene);
   const facesLoaded = useDocumentFaces(
     session,
     scene,
@@ -434,7 +511,7 @@ function SheetFrameSurfaceView({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    paintGridScene(ctx, scene, {
+    paintGridScene(ctx, withSwatchColors(scene, swatchColors), {
       // P7 — un-styled cells in the face the page prints them in.
       ...(textDefault
         ? {
@@ -535,6 +612,7 @@ function SheetFrameSurfaceView({
     data.circles,
     facesLoaded,
     textDefault,
+    swatchColors,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────

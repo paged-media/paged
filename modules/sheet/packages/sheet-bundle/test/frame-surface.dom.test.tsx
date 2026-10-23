@@ -37,6 +37,7 @@ import {
 import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
+  withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
 import { dataToolsStub } from "./data-tools-stub";
 
@@ -155,6 +156,9 @@ function fakeSession(shown: GridScene = scene) {
     ],
     state: () =>
       ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    documentSwatchColors: async (ids) =>
+      new Map(ids.map((id) => [id, "#123456"] as [string, string])),
+    documentStyleRevision: () => 0,
     documentTextDefault: async () => ({
       family: "Minion Pro",
       style: null,
@@ -393,6 +397,45 @@ describe("sheet frame surface", () => {
       if (!hadFontFace) delete g.FontFace;
       if (!hadFonts) delete doc.fonts;
     }
+  });
+
+  it("draws referenced document swatches in the document's current colours", () => {
+    const styled: GridScene = {
+      ...scene,
+      styles: [
+        {
+          key: 1,
+          bold: false,
+          italic: false,
+          borderTop: false,
+          borderRight: false,
+          borderBottom: true,
+          borderLeft: false,
+          fillRgb: "#FF0000",
+          fillSwatch: "Color/Brand",
+          textRgb: "#000000",
+          borderLines: {
+            bottom: {
+              style: "thin",
+              weightPt: 0.5,
+              rgb: "#000000",
+              swatch: "Color/Ink",
+            },
+          },
+        },
+      ],
+    };
+    const shown = withSwatchColors(
+      styled,
+      new Map([
+        ["Color/Brand", "#c8102e"],
+        ["Color/Ink", "#222222"],
+      ]),
+    );
+    expect(shown.styles[0]?.fillRgb).toBe("#c8102e");
+    // A plain colour (no reference) stays as the workbook has it.
+    expect(shown.styles[0]?.textRgb).toBe("#000000");
+    expect(shown.styles[0]?.borderLines?.bottom?.rgb).toBe("#222222");
   });
 
   it("detaches on unmount", () => {
