@@ -63,6 +63,7 @@ import {
   type FindMatch,
   type FindOptions,
   type Restyle,
+  type RangeStats,
   type SheetEngine,
   type SheetInfo,
   type StructuralEditKind,
@@ -168,6 +169,9 @@ export interface SessionNotice {
 
 export type SessionChange =
   | { kind: "selection" }
+  /** The in-frame cell edit opened, changed, committed or was cancelled
+   *  (the formula bar and the frame surface's editor follow it). */
+  | { kind: "edit" }
   | { kind: "cells"; regions: readonly CellRegion[] }
   | { kind: "other" };
 
@@ -245,7 +249,8 @@ class Emitter {
     };
   }
   emit(change: SessionChange = OTHER_CHANGE): void {
-    this.beforeEmit?.();
+    // The cell-edit buffer is not engine state: no cached read goes stale.
+    if (change.kind !== "edit") this.beforeEmit?.();
     for (const l of [...this.listeners]) l(change);
   }
   clear(): void {
@@ -382,6 +387,19 @@ export interface WorkbookSession {
   /** K-1 — abandon the in-frame cell edit (Esc): drop the buffer + re-render
    *  the committed value. */
   cancelCellEdit(): void;
+  /** The open in-frame cell edit: its cell, its text and how it began
+   *  (`"enter"`: typing replaced the value, arrows commit and move;
+   *  `"edit"`: F2 or a click into the text, arrows move the caret). */
+  /** Status-bar statistics of the selection (Sum, Average, Count), or null
+   *  without a selection or an engine that cannot say. */
+  selectionStats(): RangeStats | null;
+  cellEditState(): { row: number; col: number; text: string; mode: "enter" | "edit" } | null;
+  /** Open an edit on the active cell: with `text` it replaces the value
+   *  (typing), with `null` it starts from the cell's input (F2). */
+  beginCellEdit(text: string | null, mode: "enter" | "edit"): boolean;
+  /** Replace the open edit's text (a text field owns the caret); opens an
+   *  `"enter"` edit on the active cell when none is open. */
+  setCellEditText(text: string): boolean;
   /** Clear the in-frame grid layer (the frame returns to its native
    *  lowered content). */
   hideGridInFrame(): void;
@@ -1410,6 +1428,7 @@ export function createWorkbookSession(
     } else {
       cellEdit = { ...cellEdit, text: cellEdit.text + ch };
     }
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1428,6 +1447,7 @@ export function createWorkbookSession(
       cellEditMode = "edit";
     }
     cellEdit = { ...cellEdit, text: cellEdit.text.slice(0, -1) };
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1446,6 +1466,7 @@ export function createWorkbookSession(
     }
     cellEdit = { row: at.row, col: at.col, text };
     cellEditMode = "edit";
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
     return true;
   }
@@ -1474,6 +1495,7 @@ export function createWorkbookSession(
   function cancelEdit(): void {
     if (!cellEdit) return;
     cellEdit = null;
+    emitter.emit({ kind: "edit" });
     void submitInFrameGrid();
   }
 
@@ -3150,6 +3172,45 @@ export function createWorkbookSession(
 
     cancelCellEdit() {
       cancelEdit();
+    },
+
+    selectionStats() {
+      const t = formatTarget();
+      if (!t || !state.engine?.rangeStats) return null;
+      try {
+        return state.engine.rangeStats(t.sheet, t.range);
+      } catch (err) {
+        host.log.debug("selectionStats: engine refused", err);
+        return null;
+      }
+    },
+
+    cellEditState() {
+      return cellEdit ? { ...cellEdit, mode: cellEditMode } : null;
+    },
+
+    beginCellEdit(text, mode) {
+      if (text === null) {
+        const ok = openEdit();
+        if (ok) cellEditMode = mode;
+        return ok;
+      }
+      const at = activeOf();
+      if (!at) return false;
+      cellEdit = { row: at.row, col: at.col, text };
+      cellEditMode = mode;
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
+    },
+
+    setCellEditText(text) {
+      if (!cellEdit) return api.beginCellEdit(text, "enter");
+      if (cellEdit.text === text) return true;
+      cellEdit = { ...cellEdit, text };
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+      return true;
     },
 
     attachFrameSurface(sink, cellArea) {

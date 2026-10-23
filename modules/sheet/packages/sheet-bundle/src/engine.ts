@@ -47,6 +47,18 @@ import type {
 
 // ------------------------------------------------------------ facade
 
+/** Status-bar statistics of a range (`SheetEngine.rangeStats`). */
+export interface RangeStats {
+  count: number;
+  numbers: number;
+  sum: number;
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  sumDisplay: string;
+  averageDisplay: string;
+}
+
 /** One worksheet's identity + dimensions. `rows`/`cols` are the used
  *  extent (the engine computes it) so the panel can default the range
  *  input without a separate call. */
@@ -385,6 +397,10 @@ export interface SheetEngine {
    *  order with their pt sizes, decided in Rust for the live grid and the
    *  page lowering alike. */
   getFrameWindow(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  /** Status-bar statistics of a range (sheet ADR 510): value and number
+   *  counts, the numbers' sum/average/min/max, sum and average as text in
+   *  the first number's format. Optional: an older wasm lacks it. */
+  rangeStats?(sheet: number, range: string): RangeStats;
   /** Record the sheets-mode selection rectangle in the engine model so the
    *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
    *  state, the panel only requests it). `setGridSelection` forwards to
@@ -782,6 +798,7 @@ export interface SheetWasmEngine {
     opts?: GridSceneOptions,
   ): GridScene;
   get_frame_window(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  range_stats?(sheet: number, range: string): RangeStats;
   set_grid_selection(
     sheet: number,
     anchor_row: number,
@@ -963,6 +980,9 @@ export function wrapEngine(
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
       wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
     getFrameWindow: (sheet, spec) => wasm.get_frame_window(sheet, spec),
+    ...(wasm.range_stats
+      ? { rangeStats: (sheet: number, range: string) => wasm.range_stats!(sheet, range) }
+      : {}),
     setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
       wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
     listSheets: () => wasm.list_sheets(),

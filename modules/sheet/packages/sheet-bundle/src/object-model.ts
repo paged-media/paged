@@ -1513,7 +1513,8 @@ export function contributeObjectModel(
   }
 
   const changeSub = session.onDidChange((c) => {
-    if (c.kind === "selection" || published.size === 0) return;
+    if (c.kind === "selection" || c.kind === "edit" || published.size === 0)
+      return;
     const revision = revisionNow();
     for (const p of published.values()) {
       if (p.revision === revision) continue;

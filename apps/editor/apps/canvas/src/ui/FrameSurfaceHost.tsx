@@ -95,44 +95,90 @@ export function FrameSurfaceHost(props: FrameSurfaceHostProps) {
     zIndex: 2,
   };
   const Render = surface.render;
+  const Bar = surface.bar;
+  const surfaceProps = {
+    elementId,
+    widthPt,
+    heightPt,
+    pxPerPt,
+    presentation: "frame" as const,
+    toContentPt: (
+      clientX: number,
+      clientY: number,
+    ): [number, number] | null => {
+      const host = props.hostRef.current;
+      if (!host || !inverse) return null;
+      const r = host.getBoundingClientRect();
+      const x = clientX - r.left;
+      const y = clientY - r.top;
+      const cx = inverse[0] * x + inverse[2] * y + inverse[4];
+      const cy = inverse[1] * x + inverse[3] * y + inverse[5];
+      if (cx < 0 || cy < 0 || cx > widthPt || cy > heightPt) return null;
+      return [cx, cy];
+    },
+    requestPresentation: () => {
+      // Full-screen lands with editor ADR 283; until then the host keeps
+      // the frame presentation.
+    },
+    exit: ({ commit }: { commit: boolean }) => {
+      if (commit) stack.commit();
+      else stack.cancel();
+    },
+  };
+  // The bar: a card in screen space above the frame's screen box (below
+  // it when the top edge is too close to the viewport's).
+  const corners = [
+    [0, 0],
+    [widthPt, 0],
+    [0, heightPt],
+    [widthPt, heightPt],
+  ].map(([x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]);
+  const minX = Math.min(...corners.map((c) => c[0]));
+  const minY = Math.min(...corners.map((c) => c[1]));
+  const maxY = Math.max(...corners.map((c) => c[1]));
+  const above = minY > BAR_ROOM_PX;
+  const barStyle: CSSProperties = {
+    position: "absolute",
+    left: Math.max(4, minX),
+    top: above ? minY - BAR_GAP_PX : maxY + BAR_GAP_PX,
+    transform: above ? "translateY(-100%)" : undefined,
+    pointerEvents: "auto",
+    zIndex: 3,
+  };
   return (
-    <div
-      {...{ [FRAME_SURFACE_ATTR]: active.type }}
-      data-testid="frame-surface"
-      style={style}
-      onPointerDown={stop}
-      onPointerMove={stop}
-      onPointerUp={stop}
-      onPointerCancel={stop}
-      onDoubleClick={stop}
-      onContextMenu={stop}
-    >
-      <Render
-        elementId={elementId}
-        widthPt={widthPt}
-        heightPt={heightPt}
-        pxPerPt={pxPerPt}
-        presentation="frame"
-        toContentPt={(clientX, clientY) => {
-          const host = props.hostRef.current;
-          if (!host || !inverse) return null;
-          const r = host.getBoundingClientRect();
-          const x = clientX - r.left;
-          const y = clientY - r.top;
-          const cx = inverse[0] * x + inverse[2] * y + inverse[4];
-          const cy = inverse[1] * x + inverse[3] * y + inverse[5];
-          if (cx < 0 || cy < 0 || cx > widthPt || cy > heightPt) return null;
-          return [cx, cy];
-        }}
-        requestPresentation={() => {
-          // Full-screen lands with editor ADR 283; until then the host
-          // keeps the frame presentation.
-        }}
-        exit={({ commit }) => {
-          if (commit) stack.commit();
-          else stack.cancel();
-        }}
-      />
-    </div>
+    <>
+      {Bar ? (
+        <div
+          {...{ [FRAME_SURFACE_ATTR]: active.type }}
+          data-testid="frame-surface-bar"
+          style={barStyle}
+          onPointerDown={stop}
+          onPointerMove={stop}
+          onPointerUp={stop}
+          onDoubleClick={stop}
+          onContextMenu={stop}
+          onWheel={stop}
+        >
+          <Bar {...surfaceProps} />
+        </div>
+      ) : null}
+      <div
+        {...{ [FRAME_SURFACE_ATTR]: active.type }}
+        data-testid="frame-surface"
+        style={style}
+        onPointerDown={stop}
+        onPointerMove={stop}
+        onPointerUp={stop}
+        onPointerCancel={stop}
+        onDoubleClick={stop}
+        onContextMenu={stop}
+      >
+        <Render {...surfaceProps} />
+      </div>
+    </>
   );
 }
+
+/** Screen room the bar needs above the frame before it flips below. */
+const BAR_ROOM_PX = 52;
+const BAR_GAP_PX = 6;

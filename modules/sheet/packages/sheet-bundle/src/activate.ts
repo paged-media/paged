@@ -577,7 +577,7 @@ export function activate(host: BundleHost): BundleHandle {
     if (host.supports("contribute.frameSurface@1")) {
       host.contribute.frameSurface({
         contextType: "sheet",
-        render: makeSheetFrameSurface(session),
+        ...makeSheetFrameSurface(session),
       });
     }
 
