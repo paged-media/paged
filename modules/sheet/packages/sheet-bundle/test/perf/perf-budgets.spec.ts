@@ -265,11 +265,14 @@ describe.skipIf(!ENGINE_BUILT)(
         "selection.set": 1,
         // ADR 510: a window frame lowers its range's tracks as a frame page.
         "engine.getTracksPage": 1,
+        // W4: a sheet's sparklines, read once per engine (a refresh asks
+        // no more) so the page can draw them in their cells.
+        "engine.listSparklines": 1,
         "selection.get": 1,
         "engine.listSheets": 1,
         "document.collection": 1, // the swatch read before the fill mints
         "=mutations": 1,
-        "=engineCalls": 2,
+        "=engineCalls": 3,
         "=reads": 2, // no frame-chain read: `minted` names the frame
         "=bytesWritten": 0,
         "=sceneItems": 0,
