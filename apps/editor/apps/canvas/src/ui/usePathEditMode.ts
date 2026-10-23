@@ -116,10 +116,13 @@ export function usePathEditMode() {
   const single = elementSelection.length === 1 ? elementSelection[0] : null;
   const singleKey = single ? JSON.stringify(single) : null;
   const [ownedKey, setOwnedKey] = useState<string | null>(null);
+  // The element is read back from its key: a new array of the same
+  // element is the same question, so the effect depends on the key alone.
   useEffect(() => {
-    if (!single || !singleKey) return;
+    if (!singleKey) return;
+    const element = JSON.parse(singleKey) as NonNullable<typeof single>;
     let live = true;
-    void isOwnedContent(single)
+    void isOwnedContent(element)
       .then((owned) => {
         if (live) setOwnedKey(owned ? singleKey : null);
       })
@@ -127,9 +130,6 @@ export function usePathEditMode() {
     return () => {
       live = false;
     };
-    // `single` is read through its key: a new array of the same element
-    // is the same question.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [singleKey, isOwnedContent]);
 
   const target =
