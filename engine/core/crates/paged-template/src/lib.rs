@@ -30,13 +30,18 @@
 //! an item ([`PolicyIndex::effective`]). Which permissions an operation
 //! needs, and refusing it, is `paged-mutate`'s (`apply::permit`).
 
+mod derive;
 mod permission;
 mod policy;
 mod resolve;
 
+pub use derive::{
+    derive_fields, field_attributes, Derivation, DeriveOptions, DerivedField, DerivedFrom,
+    DerivedTarget, SkippedTag, LABEL_ATTRIBUTE, MAX_LENGTH_ATTRIBUTE, REQUIRED_ATTRIBUTE,
+};
 pub use permission::{Override, PermSet, Permission, Role, SessionPolicy};
 pub use policy::{
     Constraints, DocumentPolicy, FieldDef, ItemPolicy, ModuleField, OverflowRule, PolicyProblem,
     TemplateFieldKind, TEMPLATE_KEY,
 };
-pub use resolve::PolicyIndex;
+pub use resolve::{story_of_run, PolicyIndex};

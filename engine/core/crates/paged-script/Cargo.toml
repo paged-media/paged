@@ -34,6 +34,8 @@ paged-model = { path = "../paged-model" }
 # (no dependency on the gitignored corpus).
 paged-gen = { path = "../paged-gen" }
 paged-scene = { path = "../paged-scene" }
+# Engine ADR 1002 — tagging is an author's write.
+paged-template = { path = "../paged-template" }
 
 [lints]
 workspace = true

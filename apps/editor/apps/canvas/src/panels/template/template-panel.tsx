@@ -89,6 +89,33 @@ interface ItemPolicy {
 
 const envelope = (data: unknown) => JSON.stringify({ v: 1, data });
 
+/** A field's name as an XML tag name: letters, digits, `_`, `-` and `.`,
+ *  not starting with a digit, `-`, `.` or "xml". */
+export function tagNameFor(name: string): string {
+  const cleaned = name.trim().replace(/[^\p{L}\p{N}_.-]+/gu, "_");
+  return /^(?:[\p{N}.-]|xml)/iu.test(cleaned) || !cleaned
+    ? `_${cleaned}`
+    : cleaned;
+}
+
+/** Engine ADR 1002 — the mutations that tag a field's item after the field
+ *  and mirror its metadata as the attributes derive reads back. */
+export function tagOps(
+  item: string,
+  field: NonNullable<ItemPolicy["field"]>,
+): unknown[] {
+  const attribute = (name: string, value: string | undefined) => ({
+    op: "setXmlAttribute",
+    args: { element: item, name, value: value ?? null },
+  });
+  return [
+    { op: "tagItem", args: { item, tag: tagNameFor(field.name) } },
+    attribute("label", field.label),
+    attribute("maxLength", field.constraints?.maxLength?.toString()),
+    attribute("required", field.required ? "true" : undefined),
+  ];
+}
+
 function parse<T>(raw: unknown): T | null {
   try {
     const value = typeof raw === "string" ? JSON.parse(raw) : raw;
@@ -259,19 +286,45 @@ function FieldEditor({
       ...(allow.length ? { allow: [...allow] } : {}),
       ...(policy?.deny?.length ? { deny: policy.deny } : {}),
     };
-    const refused = await write(envelope(next));
-    if (refused) return onDone(refused);
-    // The field's item carries the field's name, as InDesign's script
-    // label would, so the name survives a round trip.
-    await client.mutate({
-      op: "setElementProperty",
+    // One batch, one undo step: the policy; the item's name, as InDesign's
+    // script label would carry it, so the name survives a round trip; and
+    // (engine ADR 1002) a text or picture field's XML tag, named after the
+    // field, with the metadata a tag-based tool reads.
+    const tagged = kind === "text" || kind === "image";
+    const reply = await client.mutate({
+      op: "batch",
       args: {
-        elementId: id,
-        path: "itemName",
-        value: { type: "text", value: trimmed },
+        ops: [
+          {
+            op: "setPluginMetadata",
+            args: { elementId: id, key: KEY, value: envelope(next) },
+          },
+          {
+            op: "setElementProperty",
+            args: {
+              elementId: id,
+              path: "itemName",
+              value: { type: "text", value: trimmed },
+            },
+          },
+          ...(tagged ? tagOps(String(id.id), next.field!) : []),
+        ],
       },
     } as never);
-    onDone(null);
+    onDone(
+      reply.kind === "mutationFailed" ? refusalText(reply.payload.error) : null,
+    );
+  };
+
+  const remove = async () => {
+    const refused = await write(null);
+    // The item's tag goes with its field (the tag's definition stays).
+    if (!refused)
+      await client.mutate({
+        op: "untagItem",
+        args: { item: String(id.id) },
+      } as never);
+    onDone(refused);
   };
 
   const row = (title: string, control: ReactElement) => (
@@ -377,7 +430,7 @@ function FieldEditor({
           <button
             type="button"
             data-template-remove
-            onClick={async () => onDone(await write(null))}
+            onClick={() => void remove()}
           >
             Remove field
           </button>

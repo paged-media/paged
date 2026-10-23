@@ -1183,6 +1183,17 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             js_string!("deleteTextVariable"),
             1,
         )
+        .function(guarded(paged_create_xml_tag), js_string!("createXmlTag"), 2)
+        .function(guarded(paged_delete_xml_tag), js_string!("deleteXmlTag"), 1)
+        .function(guarded(paged_tag_item), js_string!("tagItem"), 3)
+        .function(guarded(paged_untag_item), js_string!("untagItem"), 1)
+        .function(guarded(paged_tag_range), js_string!("tagRange"), 5)
+        .function(guarded(paged_untag_range), js_string!("untagRange"), 1)
+        .function(
+            guarded(paged_set_xml_attribute),
+            js_string!("setXmlAttribute"),
+            3,
+        )
         .function(guarded(paged_batch), js_string!("batch"), 1)
         // selection setters
         .function(
@@ -4871,6 +4882,85 @@ fn paged_delete_text_variable(
         .map(str::to_string)
         .unwrap_or(variable_id);
     Ok(apply_bool(&Mutation::DeleteTextVariable { variable_id }))
+}
+
+fn arg_string(args: &[JsValue], i: usize, ctx: &mut Context) -> JsResult<String> {
+    Ok(args
+        .get_or_undefined(i)
+        .to_string(ctx)?
+        .to_std_string_escaped())
+}
+
+/// `paged.createXmlTag(name, color?)` — define an XML tag
+/// (`Mutation::CreateXmlTag`, v76, engine ADR 1002).
+fn paged_create_xml_tag(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name = arg_string(args, 0, ctx)?;
+    let color = opt_string(args.get_or_undefined(1), ctx);
+    Ok(apply_bool(&Mutation::CreateXmlTag { name, color }))
+}
+
+/// `paged.deleteXmlTag(name)` — remove an XML tag no element uses
+/// (`Mutation::DeleteXmlTag`, v76).
+fn paged_delete_xml_tag(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name = arg_string(args, 0, ctx)?;
+    Ok(apply_bool(&Mutation::DeleteXmlTag { name }))
+}
+
+/// `paged.tagItem(itemId, tag, elementId?)` — tag a page item or a story
+/// (`Mutation::TagItem`, v76).
+fn paged_tag_item(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let item = arg_string(args, 0, ctx)?;
+    let tag = arg_string(args, 1, ctx)?;
+    let self_id = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::TagItem { item, tag, self_id }))
+}
+
+/// `paged.untagItem(itemId)` — remove the element tagging a page item or a
+/// story (`Mutation::UntagItem`, v76).
+fn paged_untag_item(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let item = arg_string(args, 0, ctx)?;
+    Ok(apply_bool(&Mutation::UntagItem { item }))
+}
+
+/// `paged.tagRange(storyId, start, end, tag, elementId?)` — tag a range of
+/// a story's characters (`Mutation::TagRange`, v76).
+fn paged_tag_range(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = arg_string(args, 0, ctx)?;
+    let start = args.get_or_undefined(1).to_u32(ctx)?;
+    let end = args.get_or_undefined(2).to_u32(ctx)?;
+    let tag = arg_string(args, 3, ctx)?;
+    let self_id = opt_string(args.get_or_undefined(4), ctx);
+    Ok(apply_bool(&Mutation::TagRange {
+        story_id,
+        start,
+        end,
+        tag,
+        self_id,
+    }))
+}
+
+/// `paged.untagRange(elementId)` — remove the element tagging a text range
+/// (`Mutation::UntagRange`, v76).
+fn paged_untag_range(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let element = arg_string(args, 0, ctx)?;
+    Ok(apply_bool(&Mutation::UntagRange { element }))
+}
+
+/// `paged.setXmlAttribute(elementId, name, value?)` — set or (value absent)
+/// remove an XML element's attribute (`Mutation::SetXmlAttribute`, v76).
+fn paged_set_xml_attribute(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let element = arg_string(args, 0, ctx)?;
+    let name = arg_string(args, 1, ctx)?;
+    let value = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::SetXmlAttribute {
+        element,
+        name,
+        value,
+    }))
 }
 
 /// `paged.batch([mutations])` — apply an array of `{ op, args }` mutation

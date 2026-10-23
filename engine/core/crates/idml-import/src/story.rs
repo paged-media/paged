@@ -431,6 +431,27 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // PathPointType handler only extends bounds when the flag is
     // `true`, so an explicit `GeometricBounds="…"` always wins.
     let mut bounds_from_path: Vec<bool> = Vec::new();
+    // Engine ADR 1002 — the open `<XMLElement>`s and where each began in
+    // the story's characters (`None` where its text is not the story's
+    // body: an anchored frame, a table, a note); `xml_ranges` keeps each
+    // closed one's range by `Self`, given to the parsed elements at the end.
+    let mut xml_open: Vec<Option<(String, u32)>> = Vec::new();
+    let mut xml_ranges: std::collections::HashMap<String, paged_model::XmlRange> =
+        std::collections::HashMap::new();
+    // The story character offset where the next character would land:
+    // the paragraphs pushed, the open paragraph's runs and the open run.
+    fn story_offset(
+        paragraphs: &[Paragraph],
+        current_paragraph: &Option<Paragraph>,
+        current_run: &Option<CharacterRun>,
+    ) -> u32 {
+        let chars =
+            |p: &Paragraph| -> usize { p.runs.iter().map(|r| r.text.chars().count()).sum() };
+        let pushed: usize = paragraphs.iter().map(chars).sum();
+        let open = current_paragraph.as_ref().map_or(0, chars);
+        let run = current_run.as_ref().map_or(0, |r| r.text.chars().count());
+        (pushed + open + run) as u32
+    }
 
     // Helper: build an `AnchoredFrame` record from a frame
     // element's start tag. Mirrors `spread.rs::read_common_attrs`
@@ -573,6 +594,24 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             Event::Start(e) => {
                 let n = e.name();
                 let name = n.as_ref();
+                if name == b"XMLElement" {
+                    let in_body = anchored_depth == 0
+                        && suppress_depth == 0
+                        && table_stack.is_empty()
+                        && footnote_stack.is_empty()
+                        && deletion.is_none();
+                    xml_open.push(in_body.then(|| {
+                        let at = story_offset(&out.paragraphs, &current_paragraph, &current_run);
+                        // A mark held before it is interior once text
+                        // follows, and that text is the element's.
+                        let held = if current_run.is_some() {
+                            pending_breaks as u32
+                        } else {
+                            0
+                        };
+                        (attr(&e, b"Self").unwrap_or_default(), at + held)
+                    }));
+                }
                 // Anchored-frame handling. A `<TextFrame>` /
                 // `<Rectangle>` / `<Group>` nested directly
                 // inside a `<CharacterStyleRange>` is an
@@ -1342,6 +1381,18 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             Event::End(e) => {
                 let n = e.name();
                 let name = n.as_ref();
+                if name == b"XMLElement" {
+                    if let Some(Some((self_id, start))) = xml_open.pop() {
+                        let end = story_offset(&out.paragraphs, &current_paragraph, &current_run);
+                        xml_ranges.insert(
+                            self_id,
+                            paged_model::XmlRange {
+                                start,
+                                end: end.max(start),
+                            },
+                        );
+                    }
+                }
                 // Anchored-frame close: pop depth; when an End
                 // for a frame element fires we pop the top of
                 // the anchored stack and attach it to its parent
@@ -1728,6 +1779,18 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
             Event::Empty(e) => {
                 let n = e.name();
                 let name = n.as_ref();
+                if name == b"XMLElement"
+                    && anchored_depth == 0
+                    && suppress_depth == 0
+                    && table_stack.is_empty()
+                    && footnote_stack.is_empty()
+                    && deletion.is_none()
+                {
+                    if let Some(self_id) = attr(&e, b"Self") {
+                        let at = story_offset(&out.paragraphs, &current_paragraph, &current_run);
+                        xml_ranges.insert(self_id, paged_model::XmlRange { start: at, end: at });
+                    }
+                }
                 if name == b"CharacterStyleRange" {
                     if let Some(c) = psr_ranges.last_mut() {
                         *c += 1;
@@ -2205,6 +2268,24 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // D-02 — the element that tags the story, with those tagging its
     // ranges.
     out.xml_elements = crate::xml_structure::parse_elements(xml)?;
+    // … and where each element tagging a range stands (engine ADR 1002).
+    fn give_ranges(
+        el: &mut paged_model::XmlElement,
+        ranges: &std::collections::HashMap<String, paged_model::XmlRange>,
+    ) {
+        if el.content.is_none() {
+            el.range = ranges.get(&el.self_id).copied();
+        }
+        for child in &mut el.children {
+            give_ranges(child, ranges);
+        }
+    }
+    for top in &mut out.xml_elements {
+        // The element tagging the story itself stands for all of it.
+        for child in &mut top.children {
+            give_ranges(child, &xml_ranges);
+        }
+    }
     Ok((out, provenance))
 }
 
