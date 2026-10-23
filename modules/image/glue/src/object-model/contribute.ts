@@ -6,8 +6,9 @@
 // them act on the image open in the edit context (the selection, the
 // active layer) and take no arguments. Four become headless and name
 // their target instead — `addLayer`, `addLayerMask`,
-// `addLayerMaskHideAll`, `convertLayerToSmart` — and one is new,
-// `replaceLayerPixels`. Those run through `host.objects` like any other
+// `addLayerMaskHideAll`, `convertLayerToSmart` — and some are new
+// (`replaceLayerPixels`, `cropImage`, `canvasSize`, `applyAdjustment`,
+// `filterRegion`). Those run through `host.objects` like any other
 // caller, so each is one undo step.
 
 import type {
@@ -123,6 +124,17 @@ export const TYPED_ARGS: Record<string, { args: ValueType; title?: string }> = {
       },
     },
   },
+  "media.paged.image.command.filterRegion": {
+    title: "Filter a region",
+    args: {
+      kind: "struct",
+      fields: {
+        layer: LAYER_REF,
+        params: { kind: "struct", fields: {}, open: true },
+        region: { kind: "bounds", optional: true },
+      },
+    },
+  },
   "media.paged.image.command.replaceLayerPixels": {
     title: "Replace layer pixels",
     args: {
@@ -151,6 +163,15 @@ export function engineCodec(): () => Promise<ImageCodec> {
       },
       encodePng: (rgba: Uint8Array, width: number, height: number) =>
         e.encode(rgba, width, height, "png"),
+      // The GPU when this realm's engine has a device (the editor's
+      // session requested one); the CPU twins otherwise (ADR 465).
+      async filterRegion(rgba, width, height, wire, rect) {
+        const gpu = e.gpuReady();
+        return {
+          rgba: await e.filterRegion(rgba, width, height, wire, rect),
+          gpu,
+        };
+      },
     })));
 }
 
@@ -270,6 +291,20 @@ function nativeHandlers(
         });
       }
       return fail(await objects.batch(ops));
+    },
+    "media.paged.image.command.filterRegion": async ({ objects }, args) => {
+      const { layer, params, region } = args as {
+        layer: string;
+        params: Record<string, unknown>;
+        region?: number[];
+      };
+      frameOf(layer);
+      return fail(
+        await objects.set(layer, "filter", {
+          params,
+          ...(region ? { region } : {}),
+        }),
+      );
     },
     "media.paged.image.command.replaceLayerPixels": async (
       { objects },
