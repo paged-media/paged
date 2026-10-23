@@ -259,6 +259,26 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     });
   });
 
+  it("a document swatch and paragraph style set on a cell reach the page lowering (P7)", async () => {
+    const { s } = await placed();
+    s.selectCell(1, 1);
+    const r = s.setStyle({
+      fontSwatch: { id: "Color/Brand", model: "spot", fallbackRgb: "#C8102E" },
+      docParaStyle: "ParagraphStyle/Table body",
+    });
+    expect(r.ok).toBe(true);
+    const engine = s.state().engine!;
+    const sheet = s.sheets()[0]!.id;
+    const page = engine.getRangePage!(sheet, "B2:B2", {
+      includeGridRules: true,
+    });
+    const key = page.rows[0]?.cells[0]?.styleKey ?? 0;
+    const st = page.styles?.find((x) => x.key === key);
+    expect(st?.textSwatch).toBe("Color/Brand");
+    expect(st?.docParaStyle).toBe("ParagraphStyle/Table body");
+    expect(st?.textRgb?.toUpperCase()).toBe("#C8102E");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);

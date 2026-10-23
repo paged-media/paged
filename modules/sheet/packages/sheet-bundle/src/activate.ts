@@ -662,6 +662,13 @@ export function activate(host: BundleHost): BundleHandle {
                 includeGridRules: false,
               });
             },
+            // P7 — the host's Character / Paragraph / style panels write
+            // the selected cells (sheet ADR 518 `setStyle`).
+            applyStyle: (patch) => {
+              const r = session.setStyle(patch);
+              return r.ok ? { ok: true } : { ok: false, message: r.message };
+            },
+            swatchRef: (id) => session.documentSwatchRef(id),
           }).provider,
         )
       : null;
