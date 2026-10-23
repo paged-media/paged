@@ -436,6 +436,13 @@ export interface WorkbookSession {
    *  window onto a component): the grid moves to its A1, and a window
    *  frame's page shows that sheet when the frame is left. */
   setFrameSheet(sheetId: number): boolean;
+  /** The bytes of a font face the document holds (`host.assets`), so the
+   *  frame surface draws cell text in the faces the page uses. Null when
+   *  the host serves none (no asset door, a family the document lacks). */
+  documentFontFace(
+    family: string,
+    style?: string,
+  ): Promise<{ bytes: Uint8Array; family: string; style?: string } | null>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -3787,6 +3794,23 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    async documentFontFace(family, style) {
+      if (!host.supports("assets.fonts@1")) return null;
+      try {
+        const face = await host.assets.getFontFace(family, style);
+        return face
+          ? {
+              bytes: face.bytes,
+              family: face.family,
+              ...(face.style ? { style: face.style } : {}),
+            }
+          : null;
+      } catch (err) {
+        host.log.debug(`documentFontFace: ${family} unavailable`, err);
+        return null;
+      }
     },
 
     setFrameSheet(sheetId) {
