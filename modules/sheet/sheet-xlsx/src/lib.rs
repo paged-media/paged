@@ -680,6 +680,7 @@ impl XlsxDocument {
                             {
                                 parsed.part = Some(chart_part.clone());
                                 parsed.drawing = Some(drawing_part.clone());
+                                parsed.rel_id = Some(chart_rel.id.clone());
                                 parsed.chartsheet = chartsheets.contains(&host_sheet);
                                 charts.push(parsed);
                             }

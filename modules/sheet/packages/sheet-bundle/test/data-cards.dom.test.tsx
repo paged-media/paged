@@ -10,7 +10,12 @@ import type { FrameSurfaceProps } from "@paged-media/plugin-api";
 
 import type { GridScene } from "../../sheet-host-model/src";
 import type { DataToolsApi, EntryAlert } from "../src/data-tools";
-import type { ValidationRuleArg } from "../src/engine-w2";
+import type {
+  FilterColumnValues,
+  FilterCriterion,
+  SortSpec,
+  ValidationRuleArg,
+} from "../src/engine-w2";
 import {
   makeSheetFrameSurface,
   type FrameSurfaceSession,
@@ -87,6 +92,19 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     documentFontFace: async () => null,
     documentSwatchColors: async () => new Map(),
     documentStyleRevision: () => 0,
+    documentStyleChoices: async () => ({
+      paragraphStyles: [{ id: "ParagraphStyle/Cells", name: "Cells" }],
+      swatches: [{ id: "Color/Brand", name: "Brand", rgbHex: "#c8102e" }],
+    }),
+    applyDocumentSwatch: async (target, id) => {
+      calls.push(["swatch", target, id]);
+      return { ok: true as const };
+    },
+    styleAtTarget: () => null,
+    setStyle: (patch) => {
+      calls.push(["style", patch]);
+      return { ok: true as const };
+    },
   };
   return { session, calls, changed };
 }
@@ -318,5 +336,245 @@ describe("cell dropdown and input message [sheet.validation.list]", () => {
       fireEvent.input(editor);
     });
     expect(editor.value).toBe("");
+  });
+});
+
+const fruit: FilterColumnValues = {
+  kind: "text",
+  items: [
+    { text: "apple", count: 2, selected: true },
+    { text: "pear", count: 1, selected: true },
+  ],
+  dates: [],
+  blanks: 1,
+  blanksSelected: true,
+  fillColors: [],
+  fontColors: [],
+  criterion: null,
+};
+
+function filterSession() {
+  let open: { kind: "filter"; col: number } | null = null;
+  const applied: [number, FilterCriterion | null][] = [];
+  const sorted: unknown[] = [];
+  const fake = fakeSession({
+    filterButtons: () => ({ row: 0, left: 0, right: 1, filtered: [1] }),
+    dataCard: () => open,
+    openDataCard: (c) => {
+      open = c as typeof open;
+      fake.changed();
+      return true;
+    },
+    closeDataCard: () => {
+      open = null;
+      fake.changed();
+    },
+    filterValues: () => fruit,
+    applyFilter: (col, criterion) => {
+      applied.push([col, criterion]);
+      open = null;
+      fake.changed();
+      return { ok: true };
+    },
+    sortFilterColumn: (col, key) => {
+      sorted.push([col, key]);
+      open = null;
+      fake.changed();
+      return { ok: true };
+    },
+  });
+  return { ...fake, applied, sorted };
+}
+
+describe("AutoFilter buttons and menu [sheet.filter.dropdown]", () => {
+  it("draws a button on each header cell; a filtered column shows the funnel", () => {
+    const { session } = filterSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
+    const buttons = r.getAllByTestId("sheet-filter-button");
+    expect(buttons.map((b) => b.getAttribute("data-col"))).toEqual(["0", "1"]);
+    expect(buttons[1]!.getAttribute("aria-label")).toContain("Filtered");
+  });
+
+  it("a header button opens the menu under the bar; unticking filters by value", () => {
+    const fake = filterSession();
+    const surface = makeSheetFrameSurface(fake.session);
+    const grid = render(createElement(surface.render, props()));
+    const bar = render(createElement(surface.bar, props()));
+    act(() => {
+      fireEvent.click(grid.getAllByTestId("sheet-filter-button")[0]!);
+    });
+    const menu = bar.getByTestId("sheet-filter-menu");
+    expect(menu.textContent).toContain("Sort A to Z");
+    const items = bar.getAllByTestId("sheet-filter-item");
+    expect(items).toHaveLength(2);
+    fireEvent.click(items[0]!); // untick apple
+    fireEvent.click(bar.getByTestId("sheet-filter-ok"));
+    expect(fake.applied).toEqual([
+      [0, { kind: "values", values: ["pear"], blanks: true }],
+    ]);
+  });
+
+  it("everything ticked clears the column; search narrows the list", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 0 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.change(bar.getByTestId("sheet-filter-search"), {
+      target: { value: "pe" },
+    });
+    expect(bar.getAllByTestId("sheet-filter-item")).toHaveLength(1);
+    fireEvent.change(bar.getByTestId("sheet-filter-search"), {
+      target: { value: "" },
+    });
+    fireEvent.click(bar.getByTestId("sheet-filter-ok"));
+    expect(fake.applied).toEqual([[0, null]]);
+  });
+
+  it("Text Filters ▸ Begins with… writes Excel's wildcard condition", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 0 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.click(bar.getByTestId("sheet-filter-conditions"));
+    fireEvent.click(bar.getByText("Begins with…"));
+    fireEvent.change(bar.getByTestId("sheet-filter-value1"), {
+      target: { value: "ap" },
+    });
+    fireEvent.click(bar.getByTestId("sheet-filter-custom-ok"));
+    expect(fake.applied).toEqual([
+      [
+        0,
+        {
+          kind: "custom",
+          and: true,
+          conditions: [{ op: "equal", val: "ap*" }],
+        },
+      ],
+    ]);
+  });
+
+  it("the menu's sort hands the column to the session", () => {
+    const fake = filterSession();
+    fake.session.openDataCard({ kind: "filter", col: 1 });
+    const bar = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    fireEvent.click(bar.getByTestId("sheet-filter-sort-desc"));
+    expect(fake.sorted).toEqual([[1, { descending: true }]]);
+    expect(bar.queryByTestId("sheet-filter-menu")).toBeNull();
+  });
+});
+
+describe("Sort card [sheet.sort.multikey]", () => {
+  it("builds levels by header and hands the keys to the session", () => {
+    let open = true;
+    const sorts: [SortSpec, string | undefined][] = [];
+    const fake = fakeSession({
+      dataCard: () => (open ? { kind: "sort" } : null),
+      closeDataCard: () => {
+        open = false;
+        fake.changed();
+      },
+      sortDialogInfo: () => ({
+        range: "A1:C9",
+        hasHeader: true,
+        columns: [
+          { index: 0, label: "Column A", header: "Team" },
+          { index: 1, label: "Column B", header: "Score" },
+          { index: 2, label: "Column C", header: "Rank" },
+        ],
+      }),
+      sortWith: (spec, range) => {
+        sorts.push([spec, range]);
+        return { ok: true };
+      },
+    });
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    const keys = () =>
+      r.getAllByTestId("sheet-sort-key") as HTMLSelectElement[];
+    expect([...keys()[0]!.options].map((o) => o.textContent)).toEqual([
+      "Team",
+      "Score",
+      "Rank",
+    ]);
+    fireEvent.click(r.getByTestId("sheet-sort-add"));
+    expect(keys()).toHaveLength(2);
+    fireEvent.change(keys()[1]!, { target: { value: "1" } });
+    const orders = r.getAllByTestId("sheet-sort-order");
+    fireEvent.change(orders[1]!, { target: { value: "desc" } });
+    fireEvent.change(orders[0]!, { target: { value: "custom" } });
+    fireEvent.change(r.getByTestId("sheet-sort-custom-list"), {
+      target: { value: "Low, High" },
+    });
+    // Unticking headers labels the columns by letter.
+    fireEvent.click(r.getByTestId("sheet-sort-header"));
+    expect(keys()[0]!.options[0]!.textContent).toBe("Column A");
+    fireEvent.click(r.getByTestId("sheet-sort-ok"));
+    expect(sorts).toEqual([
+      [
+        {
+          keys: [
+            { index: 0, descending: false, customList: ["Low", "High"] },
+            { index: 1, descending: true },
+          ],
+          hasHeader: false,
+          leftToRight: false,
+          caseSensitive: false,
+        },
+        "A1:C9",
+      ],
+    ]);
+    expect(r.queryByTestId("sheet-sort-card")).toBeNull();
+  });
+});
+
+describe("Goal Seek card [sheet.whatif.goalseek]", () => {
+  it("takes typed references or a click in the grid, then reports the result", () => {
+    let open = true;
+    const seeks: [string, number, string][] = [];
+    const fake = fakeSession({
+      dataCard: () => (open ? { kind: "goalSeek" } : null),
+      closeDataCard: () => {
+        open = false;
+        fake.changed();
+      },
+      goalSeek: (set, target, changing) => {
+        seeks.push([set, target, changing]);
+        return { ok: true, found: true, value: 7, result: 49, iterations: 4 };
+      },
+    });
+    const r = render(
+      createElement(makeSheetFrameSurface(fake.session).bar, props()),
+    );
+    const set = r.getByTestId("sheet-goal-seek-set") as HTMLInputElement;
+    expect(set.value).toBe("A1"); // the active cell
+    fireEvent.change(set, { target: { value: "B1" } });
+    fireEvent.change(r.getByTestId("sheet-goal-seek-target"), {
+      target: { value: "49" },
+    });
+    // Focus the changing cell, then click C3 in the grid.
+    const changing = r.getByTestId(
+      "sheet-goal-seek-changing",
+    ) as HTMLInputElement;
+    fireEvent.focus(changing);
+    act(() => fake.session.selectCell(2, 2));
+    expect(changing.value).toBe("C3");
+    fireEvent.click(r.getByTestId("sheet-goal-seek-ok"));
+    expect(seeks).toEqual([["B1", 49, "C3"]]);
+    expect(r.getByTestId("sheet-goal-seek-current").textContent).toContain(
+      "49",
+    );
+    // Cancel on the status takes the change back.
+    fireEvent.keyDown(r.getByTestId("sheet-goal-seek-status"), {
+      key: "Escape",
+    });
+    expect(fake.calls).toContainEqual(["undo"]);
+    expect(r.queryByTestId("sheet-goal-seek-status")).toBeNull();
   });
 });

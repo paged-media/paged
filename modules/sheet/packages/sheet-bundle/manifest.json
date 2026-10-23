@@ -69,7 +69,13 @@
       "media.paged.sheet.command.formatCells",
       "media.paged.sheet.command.pasteSpecial",
       "media.paged.sheet.command.dataValidation",
-      "media.paged.sheet.command.circleInvalid"
+      "media.paged.sheet.command.circleInvalid",
+      "media.paged.sheet.command.toggleFilter",
+      "media.paged.sheet.command.hideSelection",
+      "media.paged.sheet.command.unhideSelection",
+      "media.paged.sheet.command.groupSelection",
+      "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -447,6 +453,54 @@
           }
         },
         {
+          "id": "media.paged.sheet.command.toggleFilter",
+          "title": "Toggle filter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.hideSelection",
+          "title": "Hide rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.unhideSelection",
+          "title": "Unhide rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.groupSelection",
+          "title": "Group rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.ungroupSelection",
+          "title": "Ungroup rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.goalSeek",
+          "title": "Goal Seek",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.sheet.command.clearCells",
           "title": "Clear cells",
           "args": {
@@ -566,6 +620,51 @@
                 "kind": "number",
                 "integer": true,
                 "default": 0
+              },
+              "sizing": {
+                "kind": "enum",
+                "members": ["window", "fixed", "fit"],
+                "default": "window"
+              },
+              "box": {
+                "kind": "struct",
+                "fields": {
+                  "width": {
+                    "kind": "number"
+                  },
+                  "height": {
+                    "kind": "number"
+                  }
+                },
+                "optional": true
+              },
+              "view": {
+                "kind": "struct",
+                "fields": {
+                  "topLeft": {
+                    "kind": "text",
+                    "optional": true
+                  },
+                  "lock": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
+              },
+              "print": {
+                "kind": "struct",
+                "fields": {
+                  "headings": {
+                    "kind": "bool",
+                    "default": false
+                  },
+                  "gridlines": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
               }
             }
           },
@@ -574,6 +673,12 @@
             "fields": {
               "frame": {
                 "kind": "text"
+              },
+              "frames": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
               }
             }
           }

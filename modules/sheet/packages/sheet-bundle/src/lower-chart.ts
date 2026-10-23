@@ -174,20 +174,26 @@ export async function removePlacedChart(
 /** What removing a placed chart needs: its group and its members. */
 export type ChartElements = Pick<PlacedChart, "elementIds" | "groupId">;
 
+/** One placed copy of a chart, as the scene tree shows it. */
+export interface PlacedChartCopy extends ChartElements {
+  chartIndex: number;
+  /** The box its binding recorded (absent on charts placed before it was). */
+  box?: [number, number, number, number];
+}
+
 /**
- * Plan G4 — the placed copies of chart `chartIndex`, read off the scene
- * tree: every item carrying this plugin's binding with the range
- * `chart:<index>` (the binding rides a chart's first element), with the
- * group it sits in and every member of that group. One tree read (its rows
- * carry the items' plugin metadata); a chart placed in an earlier session
- * is found as well as this session's. An item outside a group is the only
- * element found for its chart (the rest cannot be told apart from other
- * art). Empty when the tree cannot be read or carries no metadata.
+ * Plan G4 — every placed chart copy on the page, read off the scene tree:
+ * each item carrying this plugin's binding with a range `chart:<index>` (the
+ * binding rides a chart's first element), with the group it sits in and
+ * every member of that group. One tree read (its rows carry the items'
+ * plugin metadata); a chart placed in an earlier session is found as well as
+ * this session's. An item outside a group is the only element found for its
+ * chart (the rest cannot be told apart from other art). Empty when the tree
+ * cannot be read or carries no metadata.
  */
-export async function placedChartsOnPage(
+export async function placedChartCopies(
   host: BundleHost,
-  chartIndex: number,
-): Promise<ChartElements[]> {
+): Promise<PlacedChartCopy[]> {
   type Node = Awaited<ReturnType<BundleHost["document"]["tree"]>>[number];
   let roots: Node[];
   try {
@@ -196,36 +202,59 @@ export async function placedChartsOnPage(
     host.log.debug("placed charts: scene tree read failed", err);
     return [];
   }
-  const want = `chart:${chartIndex}`;
-  const isChart = (n: Node): boolean => {
+  const chartOf = (
+    n: Node,
+  ): { index: number; box?: [number, number, number, number] } | null => {
     const entry = n.pluginMetadata?.find((m) => m.key === BINDING_KEY);
-    if (!entry) return false;
+    if (!entry) return null;
     try {
-      return parseBinding(JSON.parse(entry.value))?.data.range === want;
+      const b = parseBinding(JSON.parse(entry.value));
+      const m = /^chart:(\d+)$/.exec(b?.data.range ?? "");
+      return m ? { index: Number(m[1]), box: b?.data.box } : null;
     } catch {
-      return false;
+      return null;
     }
   };
-  const found: ChartElements[] = [];
+  const found: PlacedChartCopy[] = [];
   const walk = (nodes: readonly Node[], parent: Node | null) => {
     for (const n of nodes) {
-      if (n.id && n.id.kind !== "group" && isChart(n)) {
+      const chart = n.id && n.id.kind !== "group" ? chartOf(n) : null;
+      if (n.id && chart) {
+        const extra = chart.box ? { box: chart.box } : {};
         if (parent?.id?.kind === "group") {
           const groupId = parent.id.id;
           if (!found.some((f) => f.groupId === groupId))
             found.push({
+              chartIndex: chart.index,
               groupId,
               elementIds: (parent.children ?? [])
                 .map((c) => c.id)
                 .filter((id): id is ElementId => !!id && id.kind !== "group"),
+              ...extra,
             });
-        } else found.push({ groupId: null, elementIds: [n.id] });
+        } else
+          found.push({
+            chartIndex: chart.index,
+            groupId: null,
+            elementIds: [n.id],
+            ...extra,
+          });
       }
       if (n.children) walk(n.children, n);
     }
   };
   walk(roots, null);
   return found;
+}
+
+/** The placed copies of chart `chartIndex` ({@link placedChartCopies}). */
+export async function placedChartsOnPage(
+  host: BundleHost,
+  chartIndex: number,
+): Promise<ChartElements[]> {
+  return (await placedChartCopies(host))
+    .filter((c) => c.chartIndex === chartIndex)
+    .map(({ groupId, elementIds }) => ({ groupId, elementIds }));
 }
 
 /** The within-batch handle the chart's group is named by. */
@@ -447,7 +476,16 @@ export async function lowerChartToFrame(
   // chart index ride as the range slot — a chart binds to its parsed index,
   // re-resolved on recalc). contentVersion 0: T0 has no revision counter.
   const contentVersion = opts?.contentVersion ?? 0;
-  const binding = makeBinding(sheetName, `chart:${chartIndex}`, contentVersion);
+  // Plan G4 — the box rides the binding, so a later session (a reopened
+  // document, or an undo that brought deleted art back) can track the chart
+  // again where it stands and at the size it was drawn.
+  const binding = makeBinding(
+    sheetName,
+    `chart:${chartIndex}`,
+    contentVersion,
+    undefined,
+    { box: placement.bounds },
+  );
 
   // The colour swatches this chart references ride INSIDE the phase-1
   // batch, at deterministic content-addressed ids. Read what the document

@@ -681,8 +681,28 @@ export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
   /** ADR 323 — patch one chart (validated whole; page-side only). */
   updateChart?(index: number, patch: ChartPatch): void;
   /** Plan G4 — delete one chart (its slot stays: the other charts keep
-   *  their indices; page-side only, like `addChart`). */
+   *  their indices). A chart read from the file leaves the package on the
+   *  next save; its slot is then a tombstone (`chartTombstones`). */
   deleteChart?(index: number): void;
+  /** Plan G4 — the chart slots the saved bytes no longer carry (charts read
+   *  from the file, deleted since); stored with the bytes and handed to
+   *  `restoreChartSlots` after the next load of them. */
+  chartTombstones?(): number[];
+  /** Plan G4 — re-open those slots right after a load, before any chart op
+   *  replays, so every other chart keeps its index. */
+  restoreChartSlots?(slots: number[]): void;
+  /** Plan G4 — a sheet's print area, one range per area in definition
+   *  order (a print area of several ranges is stored as one formula). */
+  printAreas?(sheet: number): ResolvedRange[];
+  /** Plan G4 — paginate several ranges of one sheet in sequence across a
+   *  chain: each range's pages in turn (`area` names the range), the next
+   *  range starting in the room the one before it left. */
+  paginateAreas?(
+    sheet: number,
+    ranges: string[],
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
 }
 
 /** One computed cell value (no number format applied). */
@@ -1161,6 +1181,15 @@ export interface SheetWasmEngine
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
   delete_chart?(index: number): void;
+  chart_tombstones?(): Uint32Array | number[];
+  restore_chart_slots?(slots: Uint32Array): void;
+  print_areas?(sheet: number): ResolvedRange[];
+  paginate_areas?(
+    sheet: number,
+    ranges: string[],
+    frames: FrameBox[],
+    opts?: PaginateOptions,
+  ): Page[];
 }
 
 /** The module shape the wasm-bindgen `--target web` glue exports. */
@@ -1389,6 +1418,15 @@ export function wrapEngine(
     deleteChart: (index) => {
       need("delete_chart")(index);
     },
+    chartTombstones: () => [
+      ...(need("chart_tombstones")() as Uint32Array | number[]),
+    ],
+    restoreChartSlots: (slots) => {
+      need("restore_chart_slots")(Uint32Array.from(slots));
+    },
+    printAreas: (sheet) => need("print_areas")(sheet) as ResolvedRange[],
+    paginateAreas: (sheet, ranges, frames, opts) =>
+      need("paginate_areas")(sheet, ranges, frames, opts) as Page[],
     // Sheet ADR 517 — outline, protection, tables, sort/filter, validation,
     // what-if (src/engine-w2.ts).
     ...wrapW2(need as Parameters<typeof wrapW2>[0], tick),
