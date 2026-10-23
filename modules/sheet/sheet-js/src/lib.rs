@@ -438,6 +438,13 @@ mod wasm {
             to_js(&window)
         }
 
+        /// Status-bar statistics of a range: `{count, numbers, sum, average,
+        /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
+        pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+            let stats = self.session.range_stats(sheet, range).map_err(map_err)?;
+            to_js(&stats)
+        }
+
         /// Record the sheets-mode selection rectangle (consumed by the next
         /// `get_grid_scene` for the same sheet).
         pub fn set_grid_selection(

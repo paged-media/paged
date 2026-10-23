@@ -391,6 +391,52 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       void at;
     });
 
+    test("AC-SURFACE-2 — Excel in the frame: typing edits in place, a click inserts a reference, the bar shows the formula, a heading selects its column @feat:sheet.grid.inframe @feat:sheet.grid.keyboard @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B3");
+      await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="sheet-frame-surface"]');
+      await expect(surface).toBeVisible({ timeout: 10_000 });
+      // Where a cell is on screen: the surface box over the content box,
+      // past the heading strips (row headings 26 pt, column headings 16 pt;
+      // default columns 44.2575 pt, rows 15 pt).
+      const widthPt = await page.evaluate(async (id) => {
+        const c = (globalThis as unknown as CanvasHandle).__canvas;
+        const g = (await c.client.elementGeometry([id]))[0]!;
+        return g.bounds[3] - g.bounds[1];
+      }, frame);
+      const cellAt = async (row: number, col: number) => {
+        const box = (await surface.boundingBox())!;
+        const k = box.width / widthPt;
+        return {
+          x: box.x + (26 + col * 44.2575 + 20) * k,
+          y: box.y + (16 + row * 15 + 7) * k,
+        };
+      };
+      const bar = page.locator('[data-testid="sheet-bar"]');
+      await expect(bar).toBeVisible();
+      // A1, then type "=" and click B2: point mode puts B2 in the formula.
+      const a1 = await cellAt(0, 0);
+      await page.mouse.click(a1.x, a1.y);
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText("A1");
+      await page.keyboard.type("=");
+      const editor = page.locator('[data-testid="sheet-cell-editor"]');
+      await expect(editor).toHaveValue("=");
+      const b2 = await cellAt(1, 1);
+      await page.mouse.click(b2.x, b2.y);
+      await expect(editor).toHaveValue("=B2");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowUp");
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText("A1");
+      await expect(page.locator('[data-testid="sheet-bar-formula"]')).toHaveValue("=B2");
+      // A column heading selects the whole column.
+      const box = (await surface.boundingBox())!;
+      const k = box.width / widthPt;
+      await page.mouse.click(box.x + (26 + 44.2575 + 20) * k, box.y + 8 * k);
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText("B1:B1048576");
+    });
+
     test("AC-WHEEL-1 — a wheel over the active frame goes to onContentWheel; the canvas pans only when it declines @feat:plugin-platform.modal-edit-session @feat:sheet.grid.inframe @level:gesture", async ({
       page,
     }) => {

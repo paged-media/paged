@@ -35,6 +35,9 @@ mounts as DOM exactly over the frame's content box while that context is active 
 - **Lifetime.** The surface borrows its edit context: `contextType` must be declared in
   `contributes.editContexts[]` and registered by the same bundle. It mounts on enter and
   unmounts on exit; while mounted it paints over the frame's page content.
+- **Bar.** An optional `bar` component is shown by the host as a floating card in screen
+  space, upright and unscaled, attached above the frame (below it when there is no room): the
+  place for a formula bar or a toolbar, which must stay legible at any zoom.
 - **Leaving.** `exit({ commit })` in the props, and `host.shell.exitEditContext({ commit })` for
   code outside the component, end the bundle's own active context, running `onCommit` or
   `onCancel` first. A bundle can never end another bundle's context.
