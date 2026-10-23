@@ -400,7 +400,7 @@ const rejected = (reason: string): ObjectWrite => ({
 });
 
 /** An envelope (parsed, or its JSON text) → its `data`, or null. */
-function parseLabel<T>(raw: unknown): T | null {
+export function parseLabel<T>(raw: unknown): T | null {
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
