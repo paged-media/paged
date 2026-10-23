@@ -131,6 +131,21 @@ pub struct ResolvedParaTarget {
     pub new_ppr: Option<Vec<u8>>,
 }
 
+/// A structural action on one TABLE-CELL paragraph, keyed by its
+/// `(table_ord, row, cell, para)` source path.
+#[derive(Debug, Clone, Default)]
+pub struct CellParaAction {
+    /// Drop the whole `<w:p>` subtree.
+    pub delete: bool,
+    /// Pre-rendered `<w:p>…</w:p>` fragments to emit before this paragraph.
+    pub insert_before: Vec<Vec<u8>>,
+    /// Pre-rendered `<w:p>…</w:p>` fragments to emit after its `</w:p>`.
+    pub insert_after: Vec<Vec<u8>>,
+    /// Pre-rendered `<w:r>…</w:r>` fragments to emit at the end of its
+    /// content (just before `</w:p>`).
+    pub append_runs: Vec<Vec<u8>>,
+}
+
 /// Are we inside a table cell? (The body-paragraph counters must ignore cell
 /// content, and vice versa.)
 fn in_cell(stack: &[Vec<u8>]) -> bool {
@@ -181,10 +196,20 @@ pub fn patch_document_xml_rows(
     cells: &[ResolvedCellTarget],
     rows: &BTreeMap<(u32, u32), ResolvedRowTarget>,
 ) -> Vec<u8> {
-    patch_document_xml_cols(src, targets, paras, cells, rows, &BTreeMap::new()).0
+    patch_document_xml_cols(
+        src,
+        targets,
+        paras,
+        cells,
+        rows,
+        &BTreeMap::new(),
+        &BTreeMap::new(),
+    )
+    .0
 }
 
-/// As [`patch_document_xml_rows`], plus COLUMN actions keyed by table ordinal.
+/// As [`patch_document_xml_rows`], plus COLUMN actions keyed by table ordinal
+/// and CELL-PARAGRAPH actions keyed by `(table_ord, row, cell, para)`.
 /// Returns the patched part and the run edits it refused (each under its
 /// target's label, with the reason) — those runs are left byte-identical.
 #[allow(clippy::too_many_arguments)]
@@ -195,6 +220,7 @@ pub fn patch_document_xml_cols(
     cells: &[ResolvedCellTarget],
     rows: &BTreeMap<(u32, u32), ResolvedRowTarget>,
     columns: &BTreeMap<u32, ColumnAction>,
+    cell_paras: &BTreeMap<(u32, u32, u32, u32), CellParaAction>,
 ) -> (Vec<u8>, Vec<String>) {
     let mut refusals: Vec<String> = Vec::new();
     let mut reader = Reader::from_reader(src);
@@ -228,6 +254,9 @@ pub fn patch_document_xml_cols(
     let mut c_wrap_run_ord: i64 = -1;
     let mut open_cell_wrapper: Option<crate::bindings::Wrapper> = None;
     let mut open_row: Option<ResolvedRowTarget> = None;
+    // The open cell paragraph's action, while it has runs to append or
+    // paragraphs to emit after it.
+    let mut open_cell_para: Option<CellParaAction> = None;
     // Column locator: the `<w:gridCol>` index inside the open `<w:tblGrid>`.
     let mut gc_ord: i64 = -1;
     // `<w:tbl>` nesting depth. A NESTED table's rows/cells sit under their own
@@ -393,6 +422,24 @@ pub fn patch_document_xml_cols(
                     c_hl_ord = -1;
                     c_fld_ord = -1;
                     open_cell_wrapper = None;
+                    open_cell_para = None;
+                    let key = (tbl_ord as u32, tr_ord as u32, tc_ord as u32, cp_ord as u32);
+                    if let Some(a) = cell_paras.get(&key) {
+                        out.extend_from_slice(&src[cursor..event_start]);
+                        for frag in &a.insert_before {
+                            out.extend_from_slice(frag);
+                        }
+                        cursor = event_start;
+                        if a.delete {
+                            let _ = reader.read_to_end(QName(&name));
+                            cursor = reader.buffer_position() as usize;
+                            for frag in &a.insert_after {
+                                out.extend_from_slice(frag);
+                            }
+                            continue;
+                        }
+                        open_cell_para = Some(a.clone());
+                    }
                 }
                 // A cell paragraph's wrappers, and the runs inside the open one.
                 if parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1 {
@@ -572,6 +619,43 @@ pub fn patch_document_xml_cols(
                 if ln == b"r" && parent == Some(b"p".as_ref()) {
                     r_ord += 1; // an empty `<w:r/>` has no text/rPr to patch
                 }
+                // An empty cell paragraph (`<w:p/>`) counts like any other.
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
+                    cp_ord += 1;
+                    cr_ord = -1;
+                    open_cell_para = None;
+                    let key = (tbl_ord as u32, tr_ord as u32, tc_ord as u32, cp_ord as u32);
+                    if let Some(a) = cell_paras.get(&key) {
+                        let end = reader.buffer_position() as usize;
+                        out.extend_from_slice(&src[cursor..event_start]);
+                        for frag in &a.insert_before {
+                            out.extend_from_slice(frag);
+                        }
+                        if !a.delete {
+                            if a.append_runs.is_empty() {
+                                out.extend_from_slice(&src[event_start..end]);
+                            } else {
+                                // `<w:p …/>` opens instead, takes the runs
+                                // and closes under its own name.
+                                let tag = &src[event_start..end];
+                                let open = tag.strip_suffix(b"/>").unwrap_or(tag);
+                                let open = open.strip_suffix(b" ").unwrap_or(open);
+                                out.extend_from_slice(open);
+                                out.push(b'>');
+                                for frag in &a.append_runs {
+                                    out.extend_from_slice(frag);
+                                }
+                                out.extend_from_slice(b"</");
+                                out.extend_from_slice(e.name().as_ref());
+                                out.push(b'>');
+                            }
+                        }
+                        for frag in &a.insert_after {
+                            out.extend_from_slice(frag);
+                        }
+                        cursor = end;
+                    }
+                }
             }
             Ok(Event::End(e)) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
@@ -582,6 +666,26 @@ pub fn patch_document_xml_cols(
                 if ln == b"hyperlink" || ln == b"fldSimple" {
                     open_wrapper = None;
                     open_cell_wrapper = None;
+                }
+                // A cell paragraph closes: its appended runs go before its
+                // `</w:p>`, the paragraphs queued after it after.
+                if ln == b"p"
+                    && stack.last().map(Vec::as_slice) == Some(b"tc".as_ref())
+                    && tbl_depth == 1
+                {
+                    if let Some(a) = open_cell_para.take() {
+                        out.extend_from_slice(&src[cursor..event_start]);
+                        for frag in &a.append_runs {
+                            out.extend_from_slice(frag);
+                        }
+                        cursor = event_start;
+                        let after = reader.buffer_position() as usize;
+                        out.extend_from_slice(&src[cursor..after]);
+                        for frag in &a.insert_after {
+                            out.extend_from_slice(frag);
+                        }
+                        cursor = after;
+                    }
                 }
                 if ln == b"tr" {
                     if let Some(rt) = open_row.take() {
@@ -700,6 +804,178 @@ pub fn clone_paragraph(src: &[u8], para_ord: u32, text: &str) -> Option<Vec<u8>>
     out.extend_from_slice(rpr.unwrap_or_default());
     out.extend_from_slice(&crate::rpr::render_wt(text));
     out.extend_from_slice(b"</w:r></w:p>");
+    Some(out)
+}
+
+/// The source byte range of the TABLE-CELL paragraph at `path` (a body-level
+/// table's `<w:tbl>`/`<w:tr>`/`<w:tc>`/`<w:p>` ordinals, as the cell
+/// locator counts them). `None` when there is no such paragraph.
+fn cell_paragraph_range(src: &[u8], path: docx_core::CellPath) -> Option<(usize, usize)> {
+    let mut reader = Reader::from_reader(src);
+    let mut stack: Vec<Vec<u8>> = Vec::new();
+    let (mut tbl, mut tr, mut tc, mut cp) = (-1i64, -1i64, -1i64, -1i64);
+    let mut depth = 0i32;
+    loop {
+        let start = reader.buffer_position() as usize;
+        match reader.read_event().ok()? {
+            Event::Eof => return None,
+            Event::Start(e) => {
+                let name = e.name().as_ref().to_vec();
+                let ln = local_name(&name).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"tbl" {
+                    depth += 1;
+                    if depth == 1 {
+                        tbl += 1;
+                        tr = -1;
+                    }
+                } else if ln == b"tr" && parent == Some(b"tbl".as_ref()) && depth == 1 {
+                    tr += 1;
+                    tc = -1;
+                } else if ln == b"tc" && parent == Some(b"tr".as_ref()) && depth == 1 {
+                    tc += 1;
+                    cp = -1;
+                } else if ln == b"p" && parent == Some(b"tc".as_ref()) && depth == 1 {
+                    cp += 1;
+                    if (tbl, tr, tc, cp)
+                        == (
+                            path.table_ord as i64,
+                            path.row as i64,
+                            path.cell as i64,
+                            path.para as i64,
+                        )
+                    {
+                        reader.read_to_end(QName(&name)).ok()?;
+                        return Some((start, reader.buffer_position() as usize));
+                    }
+                }
+                stack.push(ln);
+            }
+            Event::Empty(e) => {
+                let ln = local_name(e.name().as_ref()).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && depth == 1 {
+                    cp += 1;
+                    if (tbl, tr, tc, cp)
+                        == (
+                            path.table_ord as i64,
+                            path.row as i64,
+                            path.cell as i64,
+                            path.para as i64,
+                        )
+                    {
+                        return Some((start, reader.buffer_position() as usize));
+                    }
+                }
+            }
+            Event::End(e) => {
+                stack.pop();
+                if local_name(e.name().as_ref()) == b"tbl" {
+                    depth -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// A paragraph's `<w:pPr>` bytes and each direct `<w:r>`'s `<w:rPr>` bytes
+/// (`None` for a run without one), from the paragraph's own bytes `p`.
+fn paragraph_parts(p: &[u8]) -> (Option<&[u8]>, Vec<Option<&[u8]>>) {
+    let mut reader = Reader::from_reader(p);
+    let mut depth = 0i32;
+    let mut ppr: Option<&[u8]> = None;
+    let mut runs: Vec<Option<&[u8]>> = Vec::new();
+    loop {
+        let start = reader.buffer_position() as usize;
+        let Ok(ev) = reader.read_event() else { break };
+        match ev {
+            Event::Eof => break,
+            Event::Start(e) => {
+                let name = e.name().as_ref().to_vec();
+                let ln = local_name(&name);
+                if depth == 1 && ln == b"pPr" {
+                    if reader.read_to_end(QName(&name)).is_err() {
+                        break;
+                    }
+                    ppr = Some(&p[start..reader.buffer_position() as usize]);
+                    continue;
+                }
+                if depth == 1 && ln == b"r" {
+                    // The run's first child is its `<w:rPr>`, when it has one.
+                    let mut child = reader.buffer_position() as usize;
+                    let mut ev = reader.read_event();
+                    while matches!(ev, Ok(Event::Text(_))) {
+                        child = reader.buffer_position() as usize;
+                        ev = reader.read_event();
+                    }
+                    let rpr = match ev {
+                        Ok(Event::Start(c)) if local_name(c.name().as_ref()) == b"rPr" => {
+                            let cname = c.name().as_ref().to_vec();
+                            if reader.read_to_end(QName(&cname)).is_err() {
+                                break;
+                            }
+                            Some(&p[child..reader.buffer_position() as usize])
+                        }
+                        Ok(Event::Empty(c)) if local_name(c.name().as_ref()) == b"rPr" => {
+                            Some(&p[child..reader.buffer_position() as usize])
+                        }
+                        Ok(Event::End(_)) => {
+                            // `<w:r></w:r>`: already closed.
+                            runs.push(None);
+                            continue;
+                        }
+                        _ => None,
+                    };
+                    runs.push(rpr);
+                    if reader.read_to_end(QName(&name)).is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                depth += 1;
+            }
+            Event::Empty(e) => {
+                let qn = e.name();
+                let ln = local_name(qn.as_ref());
+                if depth == 1 && ln == b"pPr" {
+                    ppr = Some(&p[start..reader.buffer_position() as usize]);
+                } else if depth == 1 && ln == b"r" {
+                    runs.push(None);
+                }
+            }
+            Event::End(_) => depth -= 1,
+            _ => {}
+        }
+    }
+    (ppr, runs)
+}
+
+/// A new `<w:p>` like the TABLE-CELL paragraph at `path`: its `<w:pPr>` bytes
+/// verbatim and, for non-empty `text`, one `<w:r>` carrying it with the
+/// `<w:rPr>` bytes of the paragraph's last direct run (`last_run`) or its
+/// first — the run the new paragraph continues. `None` when there is no
+/// such paragraph.
+pub fn clone_cell_paragraph(
+    src: &[u8],
+    path: docx_core::CellPath,
+    text: &str,
+    last_run: bool,
+) -> Option<Vec<u8>> {
+    let (start, end) = cell_paragraph_range(src, path)?;
+    let (ppr, runs) = paragraph_parts(&src[start..end]);
+    let rpr = if last_run { runs.last() } else { runs.first() }
+        .copied()
+        .flatten();
+    let mut out = b"<w:p>".to_vec();
+    out.extend_from_slice(ppr.unwrap_or_default());
+    if !text.is_empty() {
+        out.extend_from_slice(b"<w:r>");
+        out.extend_from_slice(rpr.unwrap_or_default());
+        out.extend_from_slice(&crate::rpr::render_wt(text));
+        out.extend_from_slice(b"</w:r>");
+    }
+    out.extend_from_slice(b"</w:p>");
     Some(out)
 }
 
@@ -1176,6 +1452,7 @@ mod tests {
                 &[t],
                 &BTreeMap::new(),
                 &[],
+                &BTreeMap::new(),
                 &BTreeMap::new(),
                 &BTreeMap::new(),
             );

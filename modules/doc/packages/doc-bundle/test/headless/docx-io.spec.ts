@@ -254,6 +254,87 @@ describe.skipIf(!docxPresent)(
       expect(errors).toEqual([]);
     });
 
+    it("a placed Word document saves its table cells back after the story's tables changed", async () => {
+      covers("exporter:media.paged.doc.exporter.docx");
+      const bytes = fixture("price-table.docx");
+      const engine = await DocEngine.boot();
+      let ir;
+      try {
+        engine.loadDocx(bytes);
+        ir = engine.lowered();
+      } finally {
+        engine.dispose();
+      }
+      const placed = await placeEmbedded(host, ir, bytes, "price-table.docx");
+      const storyId = placed!.storyId!;
+      const [word] = await host.objects.query(`story:${storyId} > table`);
+      const wordTable = word!.replace(/^table:/, "");
+      // A table of the same shape added to the story after the Word one,
+      // a cell of each typed into.
+      const added = await host.document.mutate({
+        op: "insertTable",
+        args: {
+          storyId,
+          rows: 3,
+          cols: 2,
+          headerRows: 0,
+          footerRows: 0,
+          columnWidths: [100, 100],
+          rowHeights: [],
+        },
+      } as never);
+      expect(added.applied).toBe(true);
+      const tables = await host.objects.query(`story:${storyId} > table`);
+      expect(tables).toHaveLength(2);
+      const other = tables
+        .map((a) => a.replace(/^table:/, ""))
+        .find((t) => t !== wordTable)!;
+      for (const [tableId, text] of [
+        [wordTable, "Red "],
+        [other, "Mine"],
+      ] as const) {
+        const ins = await host.document.mutate({
+          op: "insertText",
+          args: {
+            storyId,
+            offset: 0,
+            text,
+            cell: { tableId, row: 1, col: 0 },
+          },
+        });
+        expect(ins.applied).toBe(true);
+      }
+      const out = await exporter.export();
+      expect(out).not.toBeNull();
+      const back = await DocEngine.boot();
+      try {
+        back.loadDocx(out!.bytes);
+        const table = back
+          .lowered()
+          .story.blocks.find((b) => b.kind === "table");
+        expect(
+          table?.kind === "table"
+            ? table.cells.map((c) =>
+                c.paragraphs
+                  .map((p) => p.runs.map((r) => r.text).join(""))
+                  .join("\n"),
+              )
+            : [],
+        ).toEqual([
+          "Item",
+          "Price",
+          "Red Apples",
+          "1.20",
+          "Line one\nLine two",
+          "For «Name»",
+        ]);
+      } finally {
+        back.dispose();
+      }
+      expect(host.diagnostics.get("media.paged.doc/save-back")).toEqual([]);
+      expect(errors).toEqual([]);
+    });
+
     it("with no Word document open there is nothing to export", async () => {
       covers("exporter:media.paged.doc.exporter.docx");
       expect(await exporter.export()).toBeNull();

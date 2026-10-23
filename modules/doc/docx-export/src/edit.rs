@@ -144,6 +144,35 @@ pub enum StructuralEdit {
         after: usize,
         text: String,
     },
+    /// Remove paragraph `para` of lowered cell `cell` of the table at `block`
+    /// (its whole `<w:p>` subtree). The differ never removes a cell's last
+    /// paragraph: Word requires a `<w:tc>` to end in a `<w:p>`.
+    DeleteCellParagraph {
+        block: usize,
+        cell: usize,
+        para: usize,
+    },
+    /// Insert a new `<w:p>` into lowered cell `cell` of the table at `block`,
+    /// right after its paragraph `para` (or right before it when `before`):
+    /// `para`'s `<w:pPr>` copied verbatim and one run carrying `text` with the
+    /// `<w:rPr>` of the run it continues — `para`'s last direct run when the
+    /// new paragraph follows it, its first when it precedes it.
+    CloneCellParagraph {
+        block: usize,
+        cell: usize,
+        para: usize,
+        #[serde(default)]
+        before: bool,
+        text: String,
+    },
+    /// Give cell paragraph `para` (a Word paragraph with no text run, so no
+    /// run to patch) one run carrying `text`, at the end of its content.
+    InsertCellRun {
+        block: usize,
+        cell: usize,
+        para: usize,
+        text: String,
+    },
     /// Insert a new `<w:p>` immediately AFTER the given paragraph block, with a
     /// single run carrying `text`.
     InsertParagraph {
