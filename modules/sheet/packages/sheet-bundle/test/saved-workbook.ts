@@ -31,6 +31,15 @@ export async function savedWorkbook(
   const hash = await value(env, `${P}/workbook/main`, "version");
   const bytes = await env.host.parts.read(`versions/${String(hash)}.xlsx`);
   if (!bytes) throw new Error(`no stored version ${String(hash)}`);
+  const out = xlsxEntries(bytes);
+  return {
+    sheet: out.get("xl/worksheets/sheet1.xml") ?? "",
+    styles: out.get("xl/styles.xml") ?? "",
+  };
+}
+
+/** Every entry of an xlsx (a zip), as text. */
+export function xlsxEntries(bytes: Uint8Array): Map<string, string> {
   const zip = Buffer.from(bytes);
   let eocd = zip.length - 22;
   while (eocd >= 0 && zip.readUInt32LE(eocd) !== 0x06054b50) eocd -= 1;
@@ -54,8 +63,5 @@ export async function savedWorkbook(
     );
     p += 46 + nameLen + extraLen + commentLen;
   }
-  return {
-    sheet: out.get("xl/worksheets/sheet1.xml") ?? "",
-    styles: out.get("xl/styles.xml") ?? "",
-  };
+  return out;
 }
