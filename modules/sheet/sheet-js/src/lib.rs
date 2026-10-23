@@ -942,19 +942,44 @@ mod wasm {
         /// sizes?}], categoryAxisTitle?, valueAxisTitle?, valueAxisMin?,
         /// valueAxisMax?, valueAxisLogBase?, valueAxisFormat?,
         /// legendPosition?, dataLabels, style?, flattened3d,
-        /// titleParagraphStyle?}]`.
+        /// titleParagraphStyle?, roles, seriesPalette?}]`.
         pub fn chart_specs(&self) -> Result<JsValue, JsValue> {
-            to_js(&self.session.chart_specs())
+            to_js_obj(&self.session.chart_specs())
         }
 
         /// Patch chart `index` (`{kind?, title?, legend?, series?,
-        /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?}`;
-        /// `null` clears a nullable field). Validated whole first.
+        /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?,
+        /// roles?, resetRoles?, seriesPalette?}`; `null` clears a nullable
+        /// field). Validated whole first.
         /// Written into the chart part on save.
         pub fn update_chart(&mut self, index: u32, patch: JsValue) -> Result<(), JsValue> {
             let patch: crate::core::ChartPatch = serde_wasm_bindgen::from_value(patch)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             self.session.update_chart(index, patch).map_err(map_err)
+        }
+
+        /// Sheet ADR 524 — the workbook's document chart style: `{roles:
+        /// {[role]: {swatch?: {id, model, fallbackRgb}, paragraphStyle?,
+        /// characterStyle?}}, palette?: {group, swatches}}`.
+        pub fn chart_style(&self) -> Result<JsValue, JsValue> {
+            to_js_obj(&self.session.chart_style())
+        }
+
+        /// Sheet ADR 524 — replace the workbook's document chart style (the
+        /// shape `chart_style` reads; an empty object clears it). Validated
+        /// whole first; spliced into `workbook.xml`.
+        pub fn set_chart_style(&mut self, style: JsValue) -> Result<(), JsValue> {
+            let style: crate::core::ChartStyleIn = serde_wasm_bindgen::from_value(style)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session.set_chart_style(style).map_err(map_err)
+        }
+
+        /// Sheet ADR 524 — chart `index`'s overrides become the workbook
+        /// default; the chart then follows it.
+        pub fn use_chart_style_as_default(&mut self, index: u32) -> Result<(), JsValue> {
+            self.session
+                .use_chart_style_as_default(index)
+                .map_err(map_err)
         }
 
         /// Delete chart `index` (its slot stays, so other charts keep their
@@ -1014,6 +1039,16 @@ mod wasm {
     /// the serde derives, matching the TS contract).
     pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// [`to_js`] with maps as plain objects (keyed records such as the
+    /// chart style roles), not JS `Map`s.
+    pub(crate) fn to_js_obj<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+        serde::Serialize::serialize(
+            value,
+            &serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true),
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     /// The hash of the sources this wasm was built from

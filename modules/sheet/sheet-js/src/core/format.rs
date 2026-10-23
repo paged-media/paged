@@ -56,7 +56,7 @@ pub struct DocSwatchArg {
 }
 
 impl DocSwatchArg {
-    fn to_ref(&self) -> Option<sheet_core::DocSwatchRef> {
+    pub(crate) fn to_ref(&self) -> Option<sheet_core::DocSwatchRef> {
         let rgb = match sheet_core::ColorRef::from_hex(&self.fallback_rgb)?.concrete {
             sheet_core::ConcreteColor::Rgb { r, g, b } => (r, g, b),
             _ => return None,
@@ -68,7 +68,7 @@ impl DocSwatchArg {
         })
     }
 
-    fn of(d: &sheet_core::DocSwatchRef) -> DocSwatchArg {
+    pub(crate) fn of(d: &sheet_core::DocSwatchRef) -> DocSwatchArg {
         DocSwatchArg {
             id: d.id.clone(),
             model: d.model.as_str().to_string(),
