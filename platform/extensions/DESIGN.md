@@ -2711,6 +2711,8 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `FrameSurfaceProps`: `elementId`, `widthPt` / `heightPt` (its own CSS size), `pxPerPt`,
   `presentation` (`"frame"` | `"fullscreen"`), `toContentPt(clientX, clientY)`,
   `requestPresentation(p)` and `exit({ commit })`.
+- **Bar.** An optional `bar` component the host shows as a floating, upright, unscaled card
+  attached above the frame (below when there is no room), with the same props.
 - **Coordinates.** One CSS pixel inside the surface is one point of frame content; the host's
   transform carries camera, page origin, ItemTransform and the content-box origin.
 - **Gate.** `contextType` must be declared in `contributes.editContexts[]` and registered by the

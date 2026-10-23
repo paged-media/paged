@@ -158,3 +158,54 @@ describe("sheet_grid_paint: frame surface painter", () => {
     expect(rowHeadingWidthPt(1_000_000)).toBeGreaterThan(rowHeadingWidthPt(0));
   });
 });
+
+describe("sheet_grid_paint: number-format fills [sheet.format.engine]", () => {
+  it("draws a repeat fill: head left, tail right, the character repeated between", () => {
+    const { ctx, calls } = recorder();
+    (ctx as { measureText?: (t: string) => { width: number } }).measureText = (
+      t: string,
+    ) => ({ width: t.length * 2 });
+    const filled: GridScene = {
+      ...scene,
+      cells: [
+        {
+          row: 9,
+          col: 2,
+          text: "Total\t",
+          fill: ".",
+          align: "left",
+          styleKey: 0,
+        },
+        {
+          row: 10,
+          col: 3,
+          text: "$\t1,234",
+          fill: " ",
+          align: "right",
+          styleKey: 0,
+        },
+      ],
+      selection: null,
+    };
+    paintGridScene(ctx, filled, {
+      headings: false,
+      rowHeadingWidthPt: 0,
+      widthPt: 200,
+      heightPt: 100,
+    });
+    const texts = calls.filter((c) => c.op === "fillText");
+    const head = texts.find((c) => c.args[0] === "Total");
+    expect(head?.textAlign).toBe("left");
+    // 40 pt cell, pad 3 → 34 pt free; "Total" is 10 → 24 pt of "." (2 each).
+    const dots = texts.find((c) => String(c.args[0]).startsWith("."));
+    expect(dots?.args[0]).toBe(".".repeat(12));
+    const tail = texts.find((c) => c.args[0] === "1,234");
+    expect(tail?.textAlign).toBe("right");
+    expect(tail?.args[1]).toBe(80 - 3);
+    expect(texts.find((c) => c.args[0] === "$")?.args[1]).toBe(40 + 3);
+    // A space fill draws no fill glyphs.
+    expect(
+      texts.some((c) => String(c.args[0]).trim() === "" && c.args[0] !== ""),
+    ).toBe(false);
+  });
+});

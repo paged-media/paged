@@ -369,6 +369,23 @@ pub struct LowerOptions {
     pub header_rows: Option<u32>,
 }
 
+/// The status-bar statistics of a range (see `SheetSession::range_stats`).
+#[derive(serde::Serialize, Debug, Default, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RangeStats {
+    /// Cells holding any value.
+    pub count: u32,
+    /// Cells holding a number.
+    pub numbers: u32,
+    pub sum: f64,
+    pub average: Option<f64>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    /// Sum and average in the first numeric cell's number format.
+    pub sum_display: String,
+    pub average_display: String,
+}
+
 /// Grid-scene options forwarded verbatim from the TS `GridSceneOptions` (serde
 /// defaults so an absent/partial object is accepted). `include_gridlines`
 /// toggles the [`sheet_grid::RuleSet`] at every visible track boundary;
@@ -2037,6 +2054,139 @@ impl SheetSession {
             rows.push(row);
         }
         Ok(rows)
+    }
+
+    /// Where Ctrl+arrow lands from `(row, col)` in direction `(d_row,
+    /// d_col)` (one of them ±1), as Excel moves: inside a run of filled
+    /// cells, to the run's last cell; otherwise to the next filled cell, or
+    /// to the sheet's edge when there is none. Cost is the populated cells
+    /// of that row or column, never the empty span.
+    pub fn data_edge(
+        &self,
+        sheet: u16,
+        row: u32,
+        col: u32,
+        d_row: i32,
+        d_col: i32,
+    ) -> Result<(u32, u32), SessionError> {
+        let sheet_count = self.engine().model().sheets.len();
+        if (sheet as usize) >= sheet_count {
+            return Err(SessionError(format!(
+                "sheet id {sheet} out of range ({sheet_count} sheets)"
+            )));
+        }
+        let model = self.engine().model();
+        let Some(ws) = model.sheet(sheet) else {
+            return Ok((row, col));
+        };
+        let filled = |c: &sheet_core::Cell| !matches!(c.value, CellValue::Empty);
+        // The filled positions along the line, sorted.
+        let (pos, max, line): (u32, u32, Vec<u32>) = if d_row != 0 {
+            let mut rows: Vec<u32> = ws
+                .cells
+                .iter()
+                .filter(|(&(_, c), cell)| c == col && filled(cell))
+                .map(|(&(r, _), _)| r)
+                .collect();
+            rows.sort_unstable();
+            (row, sheet_core::MAX_ROW, rows)
+        } else {
+            let cols: Vec<u32> = ws
+                .cells
+                .range((row, 0)..=(row, sheet_core::MAX_COL))
+                .filter(|(_, cell)| filled(cell))
+                .map(|(&(_, c), _)| c)
+                .collect();
+            (col, sheet_core::MAX_COL, cols)
+        };
+        let forward = d_row > 0 || d_col > 0;
+        let is_filled = |p: u32| line.binary_search(&p).is_ok();
+        let next = |p: u32| -> Option<u32> {
+            if forward {
+                (p < max).then(|| p + 1)
+            } else {
+                p.checked_sub(1)
+            }
+        };
+        let target = match next(pos) {
+            None => pos,
+            Some(n) if is_filled(pos) && is_filled(n) => {
+                // Run to the last filled cell of this run.
+                let mut p = n;
+                while let Some(q) = next(p) {
+                    if !is_filled(q) {
+                        break;
+                    }
+                    p = q;
+                }
+                p
+            }
+            Some(_) => {
+                // The next filled cell, else the edge.
+                let found = if forward {
+                    line.iter().copied().find(|&p| p > pos)
+                } else {
+                    line.iter().rev().copied().find(|&p| p < pos)
+                };
+                found.unwrap_or(if forward { max } else { 0 })
+            }
+        };
+        Ok(if d_row != 0 {
+            (target, col)
+        } else {
+            (row, target)
+        })
+    }
+
+    /// The status-bar statistics of a range (sheet ADR 510): how many cells
+    /// hold a value, how many hold a number, and the numbers' sum, average,
+    /// minimum and maximum. Sum and average are also given as text in the
+    /// number format of the first numeric cell, as Excel's status bar shows
+    /// them. Reads only the populated cells, so a whole column is cheap.
+    pub fn range_stats(&self, sheet: u16, range: &str) -> Result<RangeStats, SessionError> {
+        let (sheet, cell_range) = self.resolve_range(sheet, range)?;
+        let (top, left, bottom, right) = (
+            cell_range.r0.min(cell_range.r1),
+            cell_range.c0.min(cell_range.c1),
+            cell_range.r0.max(cell_range.r1),
+            cell_range.c0.max(cell_range.c1),
+        );
+        let model = self.engine().model();
+        let mut stats = RangeStats::default();
+        let mut first_style = None;
+        if let Some(ws) = model.sheet(sheet) {
+            for (&(r, c), cell) in ws.cells.range((top, 0)..=(bottom, sheet_core::MAX_COL)) {
+                if c < left || c > right || ws.row_hidden(r) {
+                    continue;
+                }
+                match &cell.value {
+                    CellValue::Empty => {}
+                    CellValue::Number(n) => {
+                        stats.count += 1;
+                        stats.numbers += 1;
+                        stats.sum += n;
+                        stats.min = Some(stats.min.map_or(*n, |m: f64| m.min(*n)));
+                        stats.max = Some(stats.max.map_or(*n, |m: f64| m.max(*n)));
+                        first_style.get_or_insert(cell.style);
+                    }
+                    _ => stats.count += 1,
+                }
+            }
+        }
+        if stats.numbers > 0 {
+            let average = stats.sum / stats.numbers as f64;
+            stats.average = Some(average);
+            let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
+            let mut cache = FormatCache::default();
+            let code = model.styles.num_fmt_of(first_style.unwrap_or_default());
+            let show = |v: f64, cache: &mut FormatCache| match cache.get(code) {
+                Ok(fmt) => sheet_format::format_value(&CellValue::Number(v), fmt, &ctx),
+                Err(_) => sheet_format::format_general(&CellValue::Number(v)),
+            };
+            stats.sum_display = show(stats.sum, &mut cache);
+            stats.average_display = show(average, &mut cache);
+        }
+        Ok(stats)
     }
 
     /// Paginate `range` of `sheet` across `frames` (the host frame chain's

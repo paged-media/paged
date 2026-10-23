@@ -122,11 +122,23 @@ fn sheet_format_general() {
     let ctx = FormatCtx::default();
     let f = compile("General").unwrap();
     let g = |x: f64| format_value(&CellValue::Number(x), &f, &ctx);
-    assert_eq!(g(1e21), "1E+21"); // e == 21 -> scientific
-    assert_eq!(g(1e20), "100000000000000000000"); // e == 20 -> plain
-    assert_eq!(g(1e-7), "0.0000001"); // e == -7 -> plain
-    assert_eq!(g(1e-8), "1E-08"); // e == -8 -> scientific
-                                  // Bools / errors via General.
+    // Coercion (`&`, CONCAT) keeps the 15-digit form and its switch points.
+    let c = sheet_format::general::general_number;
+    assert_eq!(c(1e21), "1E+21"); // e == 21 -> scientific
+    assert_eq!(c(1e20), "100000000000000000000"); // e == 20 -> plain
+    assert_eq!(c(1e-7), "0.0000001"); // e == -7 -> plain
+    assert_eq!(c(1e-8), "1E-08"); // e == -8 -> scientific
+                                  // A General CELL fits 11 characters (Excel 16, recorded).
+    assert_eq!(g(1e21), "1E+21");
+    assert_eq!(g(1e20), "1E+20");
+    assert_eq!(g(1e-7), "0.0000001");
+    assert_eq!(g(12345678901.0), "12345678901");
+    assert_eq!(g(123456789012.0), "1.23457E+11");
+    assert_eq!(g(-123456789012.0), "-1.2346E+11");
+    assert_eq!(g(1.5e100), "1.5E+100");
+    assert_eq!(g(1.23456789e-9), "1.23457E-09");
+    assert_eq!(g(2.0 / 3.0), "0.666666667");
+    // Bools / errors via General.
     assert_eq!(format_value(&CellValue::Bool(true), &f, &ctx), "TRUE");
     assert_eq!(
         format_value(&CellValue::Error(sheet_core::CellError::Div0), &f, &ctx),

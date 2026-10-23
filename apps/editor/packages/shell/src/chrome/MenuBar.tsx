@@ -408,6 +408,9 @@ function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** The reserved first path segment of right-click rows (extensions ADR 334). */
+export const CONTEXT_MENU_ROOT = "Context";
+
 export function buildMenuTree(
   items: MenuItemContribution[],
 ): Array<[string, MenuNode[]]> {
@@ -415,6 +418,9 @@ export function buildMenuTree(
   for (const item of items) {
     let segments = item.path.split("/").filter(Boolean);
     if (segments.length < 2) continue; // No top-level menu to live in.
+    // `Context/…` rows belong to a frame surface's right-click menu
+    // (extensions ADR 334), not to the menu bar.
+    if (segments[0] === CONTEXT_MENU_ROOT) continue;
     // Insert verbs filed under a CORE menu gather in the Insert menu (see
     // the header comment). A context menu's own verbs stay put: "Insert
     // rows" belongs to the sheet, not to the page.
