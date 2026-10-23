@@ -48,9 +48,9 @@
 use crate::condfmt::SheetCondFmt;
 use crate::style::{NoStyles, VisualStyleSource};
 use crate::{
-    databar_rect, lower_cell_display, BorderLines, CellStyler, DataBarRect, LoweredCell,
-    LoweredCol, LoweredContent, LoweredRow, LoweredStyle, MergeSpan, Rule, RuleSet, CHAR_TO_PT,
-    DEFAULT_COL_CHARS, DEFAULT_ROW_PT,
+    bar_rect, lower_cell_cf, lower_cell_display, place_icon, BorderLines, CellStyler, DataBarRect,
+    LoweredCell, LoweredCol, LoweredContent, LoweredRow, LoweredStyle, MergeSpan, Rule, RuleSet,
+    CHAR_TO_PT, DEFAULT_COL_CHARS, DEFAULT_ROW_PT,
 };
 use sheet_core::{Align, SheetId, SheetModel, Worksheet};
 use sheet_format::{FormatCache, FormatCtx};
@@ -177,6 +177,21 @@ pub fn lower_tracks_styled(
     visual: &impl VisualStyleSource,
     cf: &SheetCondFmt,
 ) -> LoweredContent {
+    lower_tracks_cf(model, sheet, rows, cols, opts, visual, cf, None)
+}
+
+/// [`lower_tracks_styled`] with conditional formatting evaluated through `src` (W2.4,
+/// the session's `sheet_calc::cf` evaluator) instead of the static rules.
+pub fn lower_tracks_cf(
+    model: &SheetModel,
+    sheet: SheetId,
+    rows: &[u32],
+    cols: &[u32],
+    opts: &TrackOptions,
+    visual: &impl VisualStyleSource,
+    cf: &SheetCondFmt,
+    src: Option<&dyn crate::cfdraw::CellCfSource>,
+) -> LoweredContent {
     let ws = model.sheet(sheet);
     let n_rows = rows.len();
     let n_cols = cols.len();
@@ -258,8 +273,9 @@ pub fn lower_tracks_styled(
     // ---- Cells, walked in display order (the grid's styler order). ----
     let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
     let mut cache = FormatCache::default();
-    let mut styler = CellStyler::new(visual, cf, ws);
+    let mut styler = CellStyler::new(visual, cf, ws).with_cf_source(src);
     let mut databars: Vec<DataBarRect> = Vec::new();
+    let mut icons: Vec<crate::IconRect> = Vec::new();
     let mut anchors: HashMap<usize, (String, Align, u32, Option<String>)> = HashMap::new();
     let mut grid: Vec<Vec<LoweredCell>> = Vec::with_capacity(n_rows);
     for (dr, &r) in rows.iter().enumerate() {
@@ -278,20 +294,15 @@ pub fn lower_tracks_styled(
                 runs: None,
             };
             if let Some(cell) = ws.and_then(|w| w.cell(r, c)) {
-                let d = lower_cell_display(model, cell, &mut cache, &ctx);
+                let d = lower_cell_cf(&mut styler, model, r, c, cell, &mut cache, &ctx);
                 let key = styler.key_for_display(r, c, cell, d.color);
-                if let Some((frac, rgb)) = styler.databar(r, c, cell) {
-                    let (x0, y0) = (x_offsets[dc + hd], y_offsets[dr + hd]);
-                    databars.push(databar_rect(
-                        r,
-                        c,
-                        x0,
-                        y0,
-                        x_offsets[dc + hd + 1] - x0,
-                        y_offsets[dr + hd + 1] - y0,
-                        frac,
-                        rgb,
-                    ));
+                let (x0, y0) = (x_offsets[dc + hd], y_offsets[dr + hd]);
+                let (w0, h0) = (x_offsets[dc + hd + 1] - x0, y_offsets[dr + hd + 1] - y0);
+                if let Some(bar) = styler.databar(r, c, cell) {
+                    databars.push(bar_rect(r, c, (x0, y0, w0, h0), &bar));
+                }
+                if let Some(icon) = styler.icon(r, c, cell) {
+                    icons.push(place_icon(r, c, &icon, x0, y0, h0, crate::DATABAR_INSET_PT));
                 }
                 let fill = d.fill.map(String::from);
                 match covered.get(&(dr, dc)).map(|&fi| frags[fi]) {
@@ -452,6 +463,7 @@ pub fn lower_tracks_styled(
         merges,
         styles,
         databars,
+        icons,
         header_rows: fr as u32 + hd as u32,
     }
 }
