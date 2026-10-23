@@ -866,6 +866,7 @@ pub(crate) fn rewrite_images(
     links: &mut LinkCollector,
 ) -> Result<Vec<u8>, quick_xml::Error> {
     let placed = rewrite_placed_children(original, spread, links)?;
+    let placed = crate::pdf_attribute::rewrite_pdf_attributes(&placed, spread)?;
     crate::frame_fitting::rewrite_frame_fitting(&placed, spread)
 }
 

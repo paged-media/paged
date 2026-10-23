@@ -1573,6 +1573,16 @@ pub enum PropertyPath {
     DocumentFootnoteRuleOn,
     /// `ContinuingRuleOn`: `Value::Bool` (true).
     DocumentFootnoteContinuingRuleOn,
+
+    // ---- engine ADR 1003 — a placed PDF's page ---------------------
+    /// The page of a placed PDF the frame shows: `<PDF><PDFAttribute
+    /// PageNumber>`, 1-based. `Value::Length` carrying a whole number of
+    /// at least 1; `None` clears it (page 1). On a Rectangle, Oval or
+    /// Polygon that places a picture; a frame whose bytes are not a PDF
+    /// refuses it. The renderer shows page 1 for a page the PDF lacks.
+    /// Paint-only (`frame_style`): the frame's fit re-resolves against
+    /// the page's size on the next build.
+    FramePdfPage,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -1948,6 +1958,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteSpacer => "document.footnoteSpacer",
             PropertyPath::DocumentFootnoteRuleOn => "document.footnoteRuleOn",
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
+            PropertyPath::FramePdfPage => "frame.pdfPage",
         }
     }
 }

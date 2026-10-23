@@ -90,6 +90,7 @@ mod paragraph_span_columns_paths;
 mod paste_wire;
 mod path_edit_gesture;
 mod place_image_wire;
+mod placed_pdf_page;
 mod placeholder_wire;
 mod planar_regions_wire;
 mod property_sweep;

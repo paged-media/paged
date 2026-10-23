@@ -26,6 +26,9 @@
 //! stays vector on the canvas, on both rasterizers and in the PDF export.
 
 use hayro_interpret::font::GlyphRun;
+use hayro_interpret::hayro_syntax::object::dict::keys::{ART_BOX, BLEED_BOX, TRIM_BOX};
+use hayro_interpret::hayro_syntax::object::Rect as PdfRect;
+use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::{
     interpret_page, BlendMode as PdfBlend, ClipPath, Context, Device, DrawMode, DrawProps, Image,
@@ -36,6 +39,7 @@ use paged_compose::{
     BlendMode, Color, DisplayCommand, DisplayList, LineCap, LineJoin, Paint, PathData, PathSegment,
     Rect as ListRect, Stroke, Transform,
 };
+use paged_model::PdfCropBox;
 
 /// True for bytes that open as a PDF: `%PDF-` within the first KB (an
 /// Illustrator file may carry a header before it).
@@ -45,44 +49,145 @@ pub(crate) fn is_pdf(bytes: &[u8]) -> bool {
         .any(|w| w == b"%PDF-")
 }
 
-/// The size (pt) of page `page_index`'s box, or `None`.
-pub(crate) fn page_size(bytes: &[u8], page_index: usize) -> Option<(f32, f32)> {
-    let pdf = Pdf::new(bytes.to_vec()).ok()?;
-    let pages = pdf.pages();
-    let page = pages.get(page_index).or_else(|| pages.first())?;
-    Some(page.render_dimensions())
+/// Which page of a placed PDF a frame shows, and the box of that page it
+/// is cropped to (engine ADR 1003): the model's `<PDFAttribute>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PdfView {
+    /// 0-based. A page past the document's last shows its first, as the
+    /// renderer always did for a page it could not find.
+    pub page: usize,
+    pub crop: PdfCropBox,
 }
 
-/// Interpret page `page_index` (0-based) of `bytes` into `list`, under
-/// `transform` (the page's top-left-origin points into page space).
-/// `false` when the bytes are not a PDF this interpreter reads.
+impl Default for PdfView {
+    fn default() -> Self {
+        PdfView {
+            page: 0,
+            crop: PdfCropBox::Crop,
+        }
+    }
+}
+
+impl PdfView {
+    pub(crate) fn of(placed: Option<&paged_model::PlacedPdf>) -> PdfView {
+        placed.map_or_else(PdfView::default, |p| PdfView {
+            page: p.page_index(),
+            crop: p.crop_box(),
+        })
+    }
+}
+
+/// The number of pages `bytes` holds, or `None` for bytes that do not
+/// open as a PDF.
+pub fn page_count(bytes: &[u8]) -> Option<usize> {
+    if !is_pdf(bytes) {
+        return None;
+    }
+    let pdf = Pdf::new(bytes.to_vec()).ok()?;
+    Some(pdf.pages().len())
+}
+
+/// The size (pt) of the viewed page's box, or `None`.
+pub(crate) fn page_size(bytes: &[u8], view: PdfView) -> Option<(f32, f32)> {
+    let pdf = Pdf::new(bytes.to_vec()).ok()?;
+    let pages = pdf.pages();
+    let page = pages.get(view.page).or_else(|| pages.first())?;
+    let (_, w, h, _) = geometry(page, view.crop);
+    Some((w, h))
+}
+
+/// The transform from the page's PDF space to the viewed box's top-left
+/// origin (y down), and the box's size. The crop box is hayro's own
+/// mapping, rotation included; another box is that mapping with the box's
+/// corners as its extent (a page rotates by quarter turns, so the box
+/// stays axis-aligned), cropped to the media box as PDF 32000 §14.11.2
+/// asks. A box with no area falls back to the crop box. The flag says the
+/// box is not the crop box, so what lies outside it is cropped away.
+fn geometry(page: &Page<'_>, crop: PdfCropBox) -> (Affine, f32, f32, bool) {
+    let base = Affine::new(page.initial_transform(true).as_coeffs());
+    let (w, h) = page.render_dimensions();
+    let raw = page.raw();
+    let crop_box = page.intersected_crop_box();
+    let chosen = match crop {
+        PdfCropBox::Crop => return (base, w, h, false),
+        PdfCropBox::Media => page.media_box(),
+        PdfCropBox::Trim => raw.get::<PdfRect>(TRIM_BOX).unwrap_or(crop_box),
+        PdfCropBox::Bleed => raw.get::<PdfRect>(BLEED_BOX).unwrap_or(crop_box),
+        PdfCropBox::Art => raw.get::<PdfRect>(ART_BOX).unwrap_or(crop_box),
+    };
+    let b = chosen.intersect(page.media_box());
+    if b.width() < 1e-3 || b.height() < 1e-3 {
+        return (base, w, h, false);
+    }
+    let same = |a: f64, c: f64| (a - c).abs() < 1e-3;
+    if same(b.x0, crop_box.x0)
+        && same(b.y0, crop_box.y0)
+        && same(b.x1, crop_box.x1)
+        && same(b.y1, crop_box.y1)
+    {
+        return (base, w, h, false);
+    }
+    let corners = [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)]
+        .map(|(x, y)| base * kurbo13::Point::new(x, y));
+    let min_x = corners.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
+    let min_y = corners.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
+    let max_x = corners
+        .iter()
+        .map(|p| p.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let max_y = corners
+        .iter()
+        .map(|p| p.y)
+        .fold(f64::NEG_INFINITY, f64::max);
+    (
+        Affine::translate((-min_x, -min_y)) * base,
+        (max_x - min_x) as f32,
+        (max_y - min_y) as f32,
+        true,
+    )
+}
+
+/// Interpret the viewed page of `bytes` into `list`, under `transform`
+/// (the box's top-left-origin points into page space). `false` when the bytes are not a PDF this interpreter reads.
 pub(crate) fn draw_placed_pdf(
     bytes: &[u8],
-    page_index: usize,
+    view: PdfView,
     transform: Transform,
     list: &mut DisplayList,
 ) -> bool {
-    draw(bytes, page_index, transform, list).is_some()
+    draw(bytes, view, transform, list).is_some()
 }
 
-fn draw(
-    bytes: &[u8],
-    page_index: usize,
-    transform: Transform,
-    list: &mut DisplayList,
-) -> Option<()> {
+fn draw(bytes: &[u8], view: PdfView, transform: Transform, list: &mut DisplayList) -> Option<()> {
     let pdf = Pdf::new(bytes.to_vec()).ok()?;
     let pages = pdf.pages();
-    let page = pages.get(page_index).or_else(|| pages.first())?;
-    let (w, h) = page.render_dimensions();
+    let page = pages.get(view.page).or_else(|| pages.first())?;
+    let (initial, w, h, boxed) = geometry(page, view.crop);
     let cache = InterpreterCache::new();
     let mut ctx = Context::new(
-        Affine::new(page.initial_transform(true).as_coeffs()),
+        initial,
         kurbo13::Rect::new(0.0, 0.0, w as f64, h as f64),
         &cache,
         pdf.xref(),
         InterpreterSettings::default(),
     );
+    // A box other than the crop box is a crop: what lies outside it is
+    // not shown. (The crop box draws as it always did, unclipped.)
+    if boxed {
+        let (path_id, _) = list.paths.intern(UNIT_RECT_KEY, unit_rect());
+        list.push(DisplayCommand::PushClip {
+            path_id,
+            transform: Transform::for_rect_in(
+                ListRect {
+                    x: 0.0,
+                    y: 0.0,
+                    w,
+                    h,
+                },
+                transform,
+            ),
+        });
+    }
     let mut device = ListDevice {
         list,
         outer: transform,
@@ -97,7 +202,26 @@ fn draw(
     for _ in 0..device.clips {
         device.list.push(DisplayCommand::PopClip(transform));
     }
+    if boxed {
+        device.list.push(DisplayCommand::PopClip(transform));
+    }
     Some(())
+}
+
+/// The unit square, interned under the key the frame clips share
+/// (`images.rs`), so a box clip adds no path of its own.
+const UNIT_RECT_KEY: u64 = 0x1d_4c_69_70_5f_72_65_63;
+
+fn unit_rect() -> PathData {
+    PathData {
+        segments: vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 1.0 },
+            PathSegment::LineTo { x: 0.0, y: 1.0 },
+            PathSegment::Close,
+        ],
+    }
 }
 
 struct ListDevice<'l> {
@@ -392,13 +516,18 @@ mod tests {
         ai.extend_from_slice(ART);
         assert!(is_pdf(&ai));
         assert!(!is_pdf(b"\x89PNG\r\n\x1a\n"));
-        assert_eq!(page_size(ART, 0), Some((200.0, 120.0)));
+        assert_eq!(page_size(ART, PdfView::default()), Some((200.0, 120.0)));
     }
 
     #[test]
     fn the_placed_art_draws_its_paths_stroke_and_clip() {
         let mut list = DisplayList::default();
-        assert!(draw_placed_pdf(ART, 0, Transform::IDENTITY, &mut list));
+        assert!(draw_placed_pdf(
+            ART,
+            PdfView::default(),
+            Transform::IDENTITY,
+            &mut list
+        ));
         let count = |f: fn(&DisplayCommand) -> bool| list.commands.iter().filter(|c| f(c)).count();
         // Two rectangles, the curve, the clipped square, the 50 % panel.
         assert_eq!(count(|c| matches!(c, DisplayCommand::FillPath { .. })), 5);
@@ -422,7 +551,7 @@ mod tests {
         let mut list = DisplayList::default();
         assert!(!draw_placed_pdf(
             b"%PDF-1.4 truncated",
-            0,
+            PdfView::default(),
             Transform::IDENTITY,
             &mut list
         ));

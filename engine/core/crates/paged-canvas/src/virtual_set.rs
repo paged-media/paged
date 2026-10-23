@@ -902,6 +902,41 @@ impl CanvasModel {
         }
     }
 
+    /// The page count of the PDF a picture frame places: its own bytes,
+    /// else its link's as the last build resolved them (the renderer
+    /// remembers a linked PDF's bytes). `None` when neither is a PDF.
+    fn placed_pdf_page_count(&self, element_id: &ElementId) -> Option<usize> {
+        if let Some(Some(bytes)) = self.image_bytes_of(element_id) {
+            return paged_renderer::pipeline::placed_pdf_page_count(bytes);
+        }
+        let id = Some(element_id.raw_id());
+        let link = self
+            .scene
+            .spreads
+            .iter()
+            .map(|s| &s.spread)
+            .find_map(|s| {
+                s.rectangles
+                    .iter()
+                    .find(|r| r.self_id.as_deref() == id)
+                    .map(|r| r.image_link.clone())
+                    .or_else(|| {
+                        s.ovals
+                            .iter()
+                            .find(|r| r.self_id.as_deref() == id)
+                            .map(|r| r.image_link.clone())
+                    })
+                    .or_else(|| {
+                        s.polygons
+                            .iter()
+                            .find(|r| r.self_id.as_deref() == id)
+                            .map(|r| r.image_link.clone())
+                    })
+            })??;
+        let cache = self.image_decode_cache.borrow();
+        paged_renderer::pipeline::placed_pdf_page_count(&cache.get(&link)?.encoded)
+    }
+
     /// The read twin of the v71 frame rows (`None`: not one of them).
     fn frame_row(&self, element_id: &ElementId, path: &str) -> Option<Result<Value, ReadError>> {
         let what = format!("frame.{path}");
@@ -914,6 +949,17 @@ impl CanvasModel {
                     .image_bytes_of(element_id)
                     .ok_or_else(missing)
                     .map(|b| text(b.map(|b| encode_asset(b)))),
+                _ => Err(unknown()),
+            },
+            // Engine ADR 1003 — how many pages the frame's placed PDF has
+            // (`null`: it places none the engine has read).
+            "pdfPageCount" => match element_id {
+                ElementId::Rectangle(_) | ElementId::Oval(_) | ElementId::Polygon(_) => self
+                    .image_bytes_of(element_id)
+                    .ok_or_else(missing)
+                    .map(|_| {
+                        Value::Length(self.placed_pdf_page_count(element_id).map(|n| n as f32))
+                    }),
                 _ => Err(unknown()),
             },
             "nextTextFrame" | "previousTextFrame" => match element_id {

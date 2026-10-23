@@ -149,6 +149,7 @@ pub(super) fn emit_rectangle_image(
             None => ImageResolution::LinkMissing,
         }
     };
+    let resolved = view_pdf_page(resolved, rect.placed_pdf.as_ref());
     report_image_resolution(
         page,
         &resolved,
@@ -298,10 +299,10 @@ pub(super) fn emit_rectangle_image(
         }
         match &id {
             Placed::Raster(image) => paged_compose::emit_image_at(r, outer, *image, &mut page.list),
-            Placed::Pdf(bytes) => {
+            Placed::Pdf(bytes, view) => {
                 let t = Transform::for_rect_in(r, outer)
                     .compose(&Transform::scale(1.0 / img_w, 1.0 / img_h));
-                let _ = super::placed_pdf::draw_placed_pdf(bytes, 0, t, &mut page.list);
+                let _ = super::placed_pdf::draw_placed_pdf(bytes, *view, t, &mut page.list);
             }
             Placed::Svg(art) => {
                 let t = Transform::for_rect_in(r, outer)
@@ -412,6 +413,7 @@ pub(super) fn emit_polygon_image(
             None => ImageResolution::LinkMissing,
         }
     };
+    let resolved = view_pdf_page(resolved, poly.placed_pdf.as_ref());
     report_image_resolution(
         page,
         &resolved,
@@ -598,6 +600,7 @@ pub(super) fn emit_oval_image(
             None => ImageResolution::LinkMissing,
         }
     };
+    let resolved = view_pdf_page(resolved, oval.placed_pdf.as_ref());
     report_image_resolution(
         page,
         &resolved,
@@ -775,8 +778,8 @@ fn emit_image_under_clip(
             transform: Transform::for_rect_in(image_rect, image_transform),
         }),
         // The page's points ride the placement as an image's pixels do.
-        Placed::Pdf(bytes) => {
-            let _ = super::placed_pdf::draw_placed_pdf(bytes, 0, image_transform, list);
+        Placed::Pdf(bytes, view) => {
+            let _ = super::placed_pdf::draw_placed_pdf(bytes, *view, image_transform, list);
         }
         // So do an SVG's user units, as its raster's pixels would.
         Placed::Svg(art) => super::placed_svg::draw(art, image_transform, list),
@@ -814,7 +817,7 @@ enum ImageResolution {
 #[derive(Clone)]
 enum Placed {
     Raster(paged_compose::ImageId),
-    Pdf(std::sync::Arc<[u8]>),
+    Pdf(std::sync::Arc<[u8]>, super::placed_pdf::PdfView),
     Svg(std::sync::Arc<super::placed_svg::SvgArt>),
 }
 
@@ -824,12 +827,35 @@ fn placed_pdf(bytes: &[u8]) -> Option<ImageResolution> {
     if !super::placed_pdf::is_pdf(bytes) {
         return None;
     }
-    Some(match super::placed_pdf::page_size(bytes, 0) {
+    let view = super::placed_pdf::PdfView::default();
+    Some(match super::placed_pdf::page_size(bytes, view) {
         Some((w, h)) if w > 0.0 && h > 0.0 => {
-            ImageResolution::Resolved(Placed::Pdf(std::sync::Arc::from(bytes)), w, h)
+            ImageResolution::Resolved(Placed::Pdf(std::sync::Arc::from(bytes), view), w, h)
         }
         _ => ImageResolution::DecodeFailed,
     })
+}
+
+/// A resolved placed PDF moved to the page and box the frame's
+/// `<PDFAttribute>` names (engine ADR 1003), its size that page's: the
+/// frame's fit and crop then place the page the document shows. Any other
+/// resolution, and the default view, as it came.
+fn view_pdf_page(
+    resolved: ImageResolution,
+    placed: Option<&paged_model::PlacedPdf>,
+) -> ImageResolution {
+    let view = super::placed_pdf::PdfView::of(placed);
+    match resolved {
+        ImageResolution::Resolved(Placed::Pdf(bytes, current), w, h) if view != current => {
+            match super::placed_pdf::page_size(&bytes, view) {
+                Some((pw, ph)) if pw > 0.0 && ph > 0.0 => {
+                    ImageResolution::Resolved(Placed::Pdf(bytes, view), pw, ph)
+                }
+                _ => ImageResolution::Resolved(Placed::Pdf(bytes, current), w, h),
+            }
+        }
+        other => other,
+    }
 }
 
 /// A placed SVG the display list can draw as vectors, resolved to its
@@ -875,6 +901,10 @@ fn cached_svg(
         return None;
     }
     let encoded = d.encoded.clone();
+    // A linked PDF is remembered the same way (see [`resolve_image_id`]).
+    if let Some(pdf) = placed_pdf(&encoded) {
+        return Some(pdf);
+    }
     placed_svg(&encoded, key, decoded_cache)
 }
 
@@ -909,6 +939,21 @@ fn resolve_image_id(
                     bytes
                 };
                 if let Some(pdf) = placed_pdf(bytes.as_ref()) {
+                    // Remembered encoded-only, as an SVG is, so the next
+                    // build skips the resolver and the placed-asset door
+                    // (and the object model's page count) can read it.
+                    if let ImageResolution::Resolved(_, w, h) = &pdf {
+                        decoded_cache.insert(
+                            uri.to_string(),
+                            paged_compose::DecodedImage {
+                                width: *w as u32,
+                                height: *h as u32,
+                                encoded: bytes.clone(),
+                                rgba: bytes::Bytes::new(),
+                                icc: None,
+                            },
+                        );
+                    }
                     return pdf;
                 }
                 if let Some(svg) = placed_svg(bytes.as_ref(), uri, decoded_cache) {

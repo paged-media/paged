@@ -189,6 +189,45 @@ fn a_filler_replaces_and_crops_a_field_and_nothing_else() {
     );
 }
 
+/// Engine ADR 1003 — which page of a placed PDF a frame shows is the
+/// picture itself: `image.replace` on the item, which a picture field
+/// grants and scenery does not.
+#[test]
+fn a_placed_pdfs_page_is_image_replace_on_the_item() {
+    let page = |node: &NodeId| Operation::SetProperty {
+        node: node.clone(),
+        path: PropertyPath::FramePdfPage,
+        value: Value::Length(Some(2.0)),
+    };
+    let (mut doc, photo, logo) = template();
+    let required = paged_mutate::apply::permit::required(&page(&photo));
+    assert_eq!(
+        required,
+        vec![paged_mutate::apply::permit::Requirement::on_item(
+            Permission::ImageReplace,
+            "photo"
+        )]
+    );
+    let filler = session(Role::Filler);
+    for frame in [&photo, &logo] {
+        apply_checked(
+            &mut doc,
+            &Operation::PlaceImage {
+                frame: frame.clone(),
+                image_uri: Some("file:///art.pdf".into()),
+                fit: None,
+            },
+            &session(Role::Author),
+        )
+        .expect("the author places a PDF");
+    }
+    apply_checked(&mut doc, &page(&photo), &filler).expect("the field's page");
+    assert_refused(
+        apply_checked(&mut doc, &page(&logo), &filler),
+        "image.replace",
+    );
+}
+
 #[test]
 fn a_batch_is_refused_whole_before_anything_applies() {
     let (mut doc, photo, logo) = template();

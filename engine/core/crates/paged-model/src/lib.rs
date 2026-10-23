@@ -1695,6 +1695,68 @@ impl ClippingPathSettings {
     }
 }
 
+/// `<PDFAttribute>` of a placed `<PDF>`: the page a frame shows and the
+/// box of it the frame crops to (engine ADR 1003). Stored as IDML spells
+/// it, so an unchanged import writes back the same attributes.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PlacedPdf {
+    /// `PageNumber`, 1-based. `None` when the attribute is absent, which
+    /// InDesign reads as page 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_number: Option<u32>,
+    /// `PDFCrop`: `CropContent`, `CropArt`, `CropPDF`, `CropTrim`,
+    /// `CropBleed`, `CropMedia`, `CropContentAllLayers` or
+    /// `CropContentVisibleLayers`. `None` when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<String>,
+}
+
+impl PlacedPdf {
+    /// The page shown, 0-based (page 1 when unset or written as 0).
+    pub fn page_index(&self) -> usize {
+        self.page_number.map_or(0, |n| n.saturating_sub(1) as usize)
+    }
+
+    /// The box of the page the frame shows, by `PDFCrop`.
+    pub fn crop_box(&self) -> PdfCropBox {
+        PdfCropBox::from_idml(self.crop.as_deref())
+    }
+}
+
+/// The page box a placed PDF is cropped to, read from `PDFCrop`.
+///
+/// InDesign's three content crops (`CropContent` — "Bounding Box" — and
+/// its two layer-visibility variants) are the extent of the page's
+/// marks, which the PDF states only as its art box; they read as
+/// [`PdfCropBox::Art`], whose default is the crop box.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PdfCropBox {
+    /// `CropPDF` (and an absent or unknown value): the crop box.
+    Crop,
+    /// `CropArt` and the content crops: the art box.
+    Art,
+    /// `CropTrim`: the trim box.
+    Trim,
+    /// `CropBleed`: the bleed box.
+    Bleed,
+    /// `CropMedia`: the media box.
+    Media,
+}
+
+impl PdfCropBox {
+    pub fn from_idml(s: Option<&str>) -> Self {
+        match s {
+            Some("CropMedia") => Self::Media,
+            Some("CropTrim") => Self::Trim,
+            Some("CropBleed") => Self::Bleed,
+            Some(
+                "CropArt" | "CropContent" | "CropContentAllLayers" | "CropContentVisibleLayers",
+            ) => Self::Art,
+            _ => Self::Crop,
+        }
+    }
+}
+
 /// Vector-only frame (no story). Mirrors `TextFrame` minus the
 /// `parent_story` field; shares the same paint / stroke handling
 /// downstream.
@@ -1744,6 +1806,12 @@ pub struct Rectangle {
     /// shared "unrasterizable" flag so diagnostics can still name the
     /// format the document actually used.
     pub has_inline_eps: bool,
+    /// The nested `<PDF>`'s `<PDFAttribute>`: which page of a placed PDF
+    /// the frame shows and the box it is cropped to (engine ADR 1003).
+    /// `None` when the frame places no `<PDF>` or the element carries no
+    /// `<PDFAttribute>`: page 1, the PDF's crop box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` attribute on the nested `<Image>` element.
     /// Maps the image's natural-pixel coordinate space (origin at the
     /// top-left of the source pixmap, with 1px ≈ 1pt at 72 ppi) into
@@ -1974,6 +2042,7 @@ impl Rectangle {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,
@@ -2351,6 +2420,9 @@ pub struct Oval {
     pub has_inline_pdf: bool,
     /// [`Rectangle::has_inline_eps`].
     pub has_inline_eps: bool,
+    /// See [`Rectangle::placed_pdf`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` from the nested `<Image>`. Mirrors
     /// [`Rectangle::image_item_transform`] (P-16).
     pub image_item_transform: Option<[f32; 6]>,
@@ -2447,6 +2519,7 @@ impl Oval {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,
@@ -2997,6 +3070,9 @@ pub struct Polygon {
     pub has_inline_pdf: bool,
     /// [`Rectangle::has_inline_eps`].
     pub has_inline_eps: bool,
+    /// See [`Rectangle::placed_pdf`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placed_pdf: Option<PlacedPdf>,
     /// `ItemTransform` attribute on the nested `<Image>` element.
     /// See [`Rectangle::image_item_transform`].
     pub image_item_transform: Option<[f32; 6]>,
@@ -3120,6 +3196,7 @@ impl Polygon {
             has_image_element: false,
             has_inline_pdf: false,
             has_inline_eps: false,
+            placed_pdf: None,
             image_item_transform: None,
             image_bytes: None,
             image_clip: None,

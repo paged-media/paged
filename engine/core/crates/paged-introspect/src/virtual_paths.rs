@@ -624,6 +624,9 @@ pub const DERIVED_PATHS: &[DerivedPath] = &[
         "swatchKind",
         enum_(SWATCH_KINDS).derived().required(),
     ),
+    // Engine ADR 1003 — the pages of a frame's placed PDF; null when the
+    // frame places none the engine has read.
+    d("frame", "pdfPageCount", count().derived()),
     d("table", "tableRowCount", count().derived().required()),
     d("table", "tableColumnCount", count().derived().required()),
     d("table", "tableHeaderRowCount", count().derived().required()),

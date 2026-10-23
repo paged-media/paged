@@ -100,6 +100,7 @@ mod overprint;
 mod page_labels;
 mod paged;
 mod paragraph_props;
+mod pdf_attribute;
 pub mod preferences;
 mod reorder;
 pub mod resources;
