@@ -114,6 +114,7 @@ export const PROPERTIES = defineMessages("sheet.properties", {
   workbook: "Workbook",
   namedRange: "Named range",
   chart: "Chart",
+  table: "Table",
 });
 
 /** Copy and paste answers (the grid's status line). */
