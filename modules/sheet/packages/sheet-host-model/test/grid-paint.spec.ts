@@ -306,3 +306,56 @@ describe("sheet_grid_paint: the cell visual model [sheet.format.cell-style]", ()
     expect(texts[1].args[1]).toBe((texts[0].args[1] as number) + 5);
   });
 });
+
+describe("sparklines in the frame surface [sheet.chart.sparklines]", () => {
+  it("paints the engine's sparkline primitives at their cell", () => {
+    const { ctx, calls } = recorder();
+    paintGridScene(
+      ctx,
+      {
+        ...scene,
+        sparklines: [
+          {
+            row: 10,
+            col: 3,
+            x: 40,
+            y: 15,
+            w: 30,
+            h: 15,
+            prims: [
+              {
+                kind: "rect",
+                x: 2,
+                y: 3,
+                w: 4,
+                h: 8,
+                fill: "#376092",
+                stroke: null,
+                strokeW: 0,
+              },
+              {
+                kind: "line",
+                pts: [
+                  [1, 1],
+                  [5, 4],
+                ],
+                stroke: "#D00000",
+                strokeW: 0.75,
+              },
+            ],
+          },
+        ],
+      },
+      { headings: false, rowHeadingWidthPt: 0, widthPt: 200, heightPt: 100 },
+    );
+    const bar = calls.find(
+      (c) => c.op === "fillRect" && c.fillStyle === "#376092",
+    );
+    expect(bar?.args).toEqual([42, 18, 4, 8]);
+    expect(
+      calls.some(
+        (c) => c.op === "lineTo" && c.args[0] === 45 && c.args[1] === 19,
+      ),
+    ).toBe(true);
+  });
+});

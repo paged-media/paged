@@ -594,6 +594,27 @@ export function paintGridScene(
     ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
   }
 
+  // Sparklines (sheet ADR 519): the engine's primitives, at their cell.
+  for (const sp of scene.sparklines ?? []) {
+    for (const p of sp.prims) {
+      if (p.kind === "rect" && p.fill) {
+        ctx.fillStyle = p.fill;
+        ctx.fillRect(sp.x + p.x, sp.y + p.y, p.w, p.h);
+      } else if (p.kind === "line" && p.pts.length >= 2) {
+        ctx.strokeStyle = p.stroke;
+        ctx.lineWidth = p.strokeW;
+        ctx.setLineDash?.([]);
+        ctx.beginPath();
+        p.pts.forEach(([x, y], i) =>
+          i === 0
+            ? ctx.moveTo(sp.x + x, sp.y + y)
+            : ctx.lineTo(sp.x + x, sp.y + y),
+        );
+        ctx.stroke();
+      }
+    }
+  }
+
   // Gridlines (the engine already broke them around merged areas). A
   // filled cell covers the gridlines along its edges, as in Excel.
   ctx.strokeStyle = g.gridColor;
