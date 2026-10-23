@@ -1,0 +1,229 @@
+{
+  "widthPt": 360.0,
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 20.0,
+      "s": "BarOfPie",
+      "sizePt": 14.0,
+      "anchor": "middle",
+      "role": "title"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 95.39999999999999,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#4472C4",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 102.05,
+      "s": "Q1",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 107.99999999999999,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#ED7D31",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 114.64999999999999,
+      "s": "Q2",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 120.6,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#A5A5A5",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 127.25,
+      "s": "Q3",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 133.2,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#FFC000",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 139.85,
+      "s": "Q4",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 145.8,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#5B9BD5",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 152.45000000000002,
+      "s": "Q5",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "rect",
+      "x": 329.1,
+      "y": 158.4,
+      "w": 7.0,
+      "h": 7.0,
+      "fill": "#70AD47",
+      "stroke": null,
+      "strokeW": 0.0
+    },
+    {
+      "kind": "text",
+      "x": 340.1,
+      "y": 165.05,
+      "s": "Q6",
+      "sizePt": 9.0,
+      "anchor": "start",
+      "role": "legend"
+    },
+    {
+      "kind": "wedge",
+      "cx": 98.99292682926831,
+      "cy": 130.4,
+      "r": 61.48292682926831,
+      "startDeg": 102.6,
+      "endDeg": 246.6,
+      "fill": "#4472C4",
+      "stroke": "#FFFFFF"
+    },
+    {
+      "kind": "wedge",
+      "cx": 98.99292682926831,
+      "cy": 130.4,
+      "r": 61.48292682926831,
+      "startDeg": 246.6,
+      "endDeg": 336.6,
+      "fill": "#ED7D31",
+      "stroke": "#FFFFFF"
+    },
+    {
+      "kind": "wedge",
+      "cx": 98.99292682926831,
+      "cy": 130.4,
+      "r": 61.48292682926831,
+      "startDeg": 336.6,
+      "endDeg": 408.6,
+      "fill": "#A5A5A5",
+      "stroke": "#FFFFFF"
+    },
+    {
+      "kind": "wedge",
+      "cx": 98.99292682926831,
+      "cy": 130.4,
+      "r": 61.48292682926831,
+      "startDeg": 408.6,
+      "endDeg": 437.40000000000003,
+      "fill": "#FFC000",
+      "stroke": "#FFFFFF"
+    },
+    {
+      "kind": "wedge",
+      "cx": 98.99292682926831,
+      "cy": 130.4,
+      "r": 61.48292682926831,
+      "startDeg": 77.4,
+      "endDeg": 102.6,
+      "fill": "#264478",
+      "stroke": "#FFFFFF"
+    },
+    {
+      "kind": "rect",
+      "x": 231.94975609756105,
+      "y": 84.28780487804877,
+      "w": 23.056097560975616,
+      "h": 65.87456445993033,
+      "fill": "#5B9BD5",
+      "stroke": "#FFFFFF",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "rect",
+      "x": 231.94975609756105,
+      "y": 150.1623693379791,
+      "w": 23.056097560975616,
+      "h": 26.34982578397213,
+      "fill": "#70AD47",
+      "stroke": "#FFFFFF",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          158.9951456950048,
+          116.98791505091697
+        ],
+        [
+          231.94975609756105,
+          84.28780487804877
+        ]
+      ],
+      "stroke": "#808080",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          158.9951456950048,
+          143.81208494908304
+        ],
+        [
+          231.94975609756105,
+          176.51219512195124
+        ]
+      ],
+      "stroke": "#808080",
+      "strokeW": 0.75
+    }
+  ]
+}

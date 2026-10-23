@@ -255,12 +255,23 @@ each published canary added is under [Releases](#releases).
   the frame's handles; the second needs a host that reports a gesture's reflow (core v0.71.13
   through plugin-sdk 0.2.58). On an older host a handle resize leaves the split where it was
   until the next resize by command or the next workbook edit.
-- **Charts.** Ten kinds, read from the workbook or authored over a range, placed as vector paths
-  and labelled text frames in one document write, grouped as one object, and replaced in one
-  write when their data changes. Each label frame is sized to its text (measured with the
-  document's font metrics), set at the chart's size and justified to its anchor, inside the
-  chart. A new chart lands inside the page's margins: beside what is selected (below it, else
-  above, else to its right or left), never on top of it, and in the margin box's top-left
+- **Charts** (ADR 519). Every chart kind Excel writes is drawn as itself: column, bar, line and
+  area (each clustered, stacked or 100% stacked), pie, doughnut (one ring per series), pie of
+  pie, bar of pie, scatter, bubble, radar (outlined, with markers, filled), stock (high-low-close
+  and open-high-low-close), surface (as a contour), and the Office 2016 chartEx kinds waterfall,
+  funnel, treemap, sunburst, histogram, pareto and box & whisker. A 3-D chart is drawn as its
+  2-D kind and flagged; a region map is a labelled placeholder. Combo charts keep each plot's
+  kind and draw a secondary value axis. Markers, data labels, trendlines (with R² and
+  equation, fitted as LINEST fits), error bars, logarithmic, reversed and date axes, axis
+  crossings, gridlines, legend positions and the chart style's theme colours follow Excel.
+  Colour and text roles carry document swatch and style references, which the page uses.
+  Sparklines (line, column, win/loss) and chartsheets are read; 172 of 172 corpus charts
+  render with their real kind. Charts are placed as vector paths and labelled text frames in
+  one document write, grouped as one object, and replaced in one write when their data
+  changes. Each label frame is sized to its text (measured with the document's font metrics,
+  or sized by the frame when a document style sets the label), justified to its anchor, inside
+  the chart. A new chart lands inside the page's margins: beside what is selected (below it,
+  else above, else to its right or left), never on top of it, and in the margin box's top-left
   corner with nothing selected. It is shrunk proportionally only when the margin box cannot
   hold 360 × 240 pt.
 - **Host panels in the sheet context.** The host's Swatches panel shows and edits the workbook

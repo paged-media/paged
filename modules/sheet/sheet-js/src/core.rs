@@ -43,13 +43,13 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use sheet_calc::{Engine, EngineConfig};
-use sheet_chart::{generate as generate_chart, ChartGeometry, PlotData};
-use sheet_core::{parse_a1, CellRef, CellValue, DateSystem, RangeRef, SheetId, SheetModel};
+use sheet_core::{parse_a1, CellRef, CellValue, DateSystem, SheetId, SheetModel};
 use sheet_format::{FormatCache, FormatCtx};
 use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, ViewOptions};
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
-use sheet_xlsx::{XlsxChart, XlsxDocument};
+use sheet_xlsx::XlsxDocument;
 
+mod charts;
 pub mod csv;
 mod fill;
 pub mod filter;
@@ -61,6 +61,7 @@ pub mod protect;
 pub mod sort;
 pub mod tables;
 pub mod validation;
+pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
     ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
@@ -310,22 +311,6 @@ pub struct DataValidationInfo {
     /// The distinct validation kinds present (`"list"`, `"whole"`, `"date"`,
     /// …) for the panel summary. Preserved-not-enforced — display only.
     pub kinds: Vec<String>,
-}
-
-/// One chart in the workbook (M2 charts track, spec §8.4) for the panel's
-/// chart list. `index` is the position in the engine's parsed-chart vector (the
-/// handle [`SheetSession::get_chart_geometry`] takes); `hostSheet` is the model
-/// sheet the chart is anchored to; `kind`/`title`/`seriesCount` summarize it.
-#[derive(serde::Serialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ChartInfo {
-    pub index: u32,
-    pub host_sheet: u16,
-    /// The lowercase kind tag (`"column"`, `"bar"`, `"line"`, `"area"`,
-    /// `"pie"`, `"donut"`, `"scatter"`) — the geometry generator's tag space.
-    pub kind: &'static str,
-    pub title: Option<String>,
-    pub series_count: u32,
 }
 
 /// One registered function for the formula-bar autocomplete (S-04 formula
@@ -2117,140 +2102,6 @@ impl SheetSession {
             .collect()
     }
 
-    /// AUTHOR a chart over live data (editor-ui-coverage M — the model was
-    /// import-only). Constructs a [`ChartModel`] and appends it to the
-    /// session's chart vector: `values` is the data block, `categories`
-    /// (may be empty) the shared label range, `kind` one of
-    /// [`CHART_KIND_TAGS`], empty `title` = none, legend on when there is
-    /// more than one series. Returns the new chart index — the same handle
-    /// `get_chart_geometry` / the lowering take, so an authored chart
-    /// renders and lowers exactly like a parsed one.
-    ///
-    /// `series_in` is the §16.4 TRANSPOSE ROWS/COLUMNS control: `"columns"`
-    /// (the default, and what an empty string means) reads one series per
-    /// COLUMN of the values block; `"rows"` reads one series per ROW. It
-    /// re-reads the SAME cells the other way round — the workbook is never
-    /// rewritten to transpose a chart (that is what the `TRANSPOSE` worksheet
-    /// function is for, and it would edit the user's data).
-    ///
-    /// HONEST SCOPE (publishing-first): authored charts live on the PAGE —
-    /// the xlsx writer never re-derives chart parts, so a save round-trip
-    /// carries only the workbook's original charts.
-    pub fn add_chart(
-        &mut self,
-        sheet: u16,
-        values: &str,
-        categories: &str,
-        kind: &str,
-        title: &str,
-        series_in: &str,
-    ) -> Result<u32, SessionError> {
-        use sheet_chart::{Axis, ChartModel, Series};
-        self.validate_sheet(sheet)?;
-        let chart_kind = chart_kind_from_tag(kind).ok_or_else(|| {
-            SessionError(format!(
-                "unknown chart kind {kind:?} ({})",
-                CHART_KIND_TAGS.join("|")
-            ))
-        })?;
-        let by_row = match series_in {
-            "" | "columns" => false,
-            "rows" => true,
-            other => {
-                return Err(SessionError(format!(
-                    "unknown series orientation {other:?} (columns|rows)"
-                )))
-            }
-        };
-        let vr = parse_range(values)?;
-        let (top, bottom) = (vr.r0.min(vr.r1), vr.r0.max(vr.r1));
-        let (left, right) = (vr.c0.min(vr.c1), vr.c0.max(vr.c1));
-        let cell = |row: u32, col: u32| CellRef {
-            sheet: sheet as SheetId,
-            row,
-            col,
-            row_abs: false,
-            col_abs: false,
-        };
-        let cat_ref = if categories.is_empty() {
-            None
-        } else {
-            let cr = parse_range(categories)?;
-            Some(RangeRef {
-                start: cell(cr.r0.min(cr.r1), cr.c0.min(cr.c1)),
-                end: cell(cr.r0.max(cr.r1), cr.c0.max(cr.c1)),
-            })
-        };
-        // One series per COLUMN (default) or per ROW (`series_in: "rows"` —
-        // the transpose). `resolve_values` walks a range row-major, so a
-        // single-row range reads left-to-right and a single-column range
-        // top-to-bottom; both orientations need only the right slice.
-        let series: Vec<Series> = if by_row {
-            (top..=bottom)
-                .map(|row| Series {
-                    name: None,
-                    categories: cat_ref,
-                    values: RangeRef {
-                        start: cell(row, left),
-                        end: cell(row, right),
-                    },
-                    color: None,
-                })
-                .collect()
-        } else {
-            (left..=right)
-                .map(|col| Series {
-                    name: None,
-                    categories: cat_ref,
-                    values: RangeRef {
-                        start: cell(top, col),
-                        end: cell(bottom, col),
-                    },
-                    color: None,
-                })
-                .collect()
-        };
-        let legend = series.len() > 1;
-        self.doc.charts.push(XlsxChart {
-            host_sheet: sheet as SheetId,
-            model: ChartModel {
-                kind: chart_kind,
-                title: if title.is_empty() {
-                    None
-                } else {
-                    Some(title.into())
-                },
-                series,
-                cat_axis: Axis::default(),
-                val_axis: Axis::default(),
-                legend,
-            },
-        });
-        Ok((self.doc.charts.len() - 1) as u32)
-    }
-
-    /// Enumerate the workbook's parsed charts (M2 charts track, spec §8.4):
-    /// index (the [`get_chart_geometry`](Self::get_chart_geometry) handle), host
-    /// sheet, kind, title, and series count. Empty for a workbook with no
-    /// charts. The charts were parsed from the XLSX `xl/charts/chartN.xml` parts
-    /// on load (`sheet_xlsx::XlsxDocument::charts`); the parts stay opaque /
-    /// round-trip-preserved.
-    pub fn list_charts(&self) -> Vec<ChartInfo> {
-        self.doc
-            .charts
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| !self.removed_charts.contains(&(*i as u32)))
-            .map(|(i, c)| ChartInfo {
-                index: i as u32,
-                host_sheet: c.host_sheet,
-                kind: chart_kind_tag(c.model.kind),
-                title: c.model.title.as_ref().map(|t| t.to_string()),
-                series_count: c.model.series.len() as u32,
-            })
-            .collect()
-    }
-
     /// Enumerate the worksheets that carry a FROZEN PANE (spec §8.1), as
     /// `[{sheet,rows,cols}]` in sheet order. Read-only derived state parsed
     /// from each worksheet's `<sheetViews><pane>` on load (the view still
@@ -2357,47 +2208,6 @@ impl SheetSession {
             .collect()
     }
 
-    /// Resolve a parsed chart's series ranges to [`PlotData`] against the LIVE
-    /// model (so the geometry is live to recalculation — spec §8.4) and call the
-    /// PURE `sheet_chart::generate` for a `w_pt × h_pt` content box. `chart_index`
-    /// is an index into [`list_charts`](Self::list_charts); an OOB index is a
-    /// boundary error (finding-2 discipline, matching `set_cell`). The returned
-    /// [`ChartGeometry`] is the same IR the page-surface paged.draw lowering AND
-    /// the grid view consume — one generator, two projections.
-    pub fn get_chart_geometry(
-        &self,
-        chart_index: u32,
-        w_pt: f64,
-        h_pt: f64,
-    ) -> Result<ChartGeometry, SessionError> {
-        let chart: &XlsxChart = self.doc.charts.get(chart_index as usize).ok_or_else(|| {
-            SessionError(format!(
-                "chart index {chart_index} out of range ({} charts)",
-                self.doc.charts.len()
-            ))
-        })?;
-        self.live_chart(chart_index)?;
-        let model = self.engine().model();
-
-        // Resolve each series' values range to a numeric vector, and the shared
-        // category labels from the FIRST series that carries a category range.
-        let mut data = PlotData::default();
-        for series in &chart.model.series {
-            data.series.push(resolve_values(model, &series.values));
-        }
-        if let Some(cat_ref) = chart
-            .model
-            .series
-            .iter()
-            .find_map(|s| s.categories.as_ref())
-        {
-            let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
-            data.categories = resolve_labels(model, cat_ref, &ctx);
-        }
-
-        Ok(generate_chart(&chart.model, &data, w_pt, h_pt))
-    }
-
     /// Workbook metadata for the panel.
     pub fn metadata(&self) -> Metadata {
         let model = self.engine().model();
@@ -2412,6 +2222,7 @@ impl SheetSession {
             // the edited-cell set instead (cleared on a successful save).
             dirty: !self.edited.is_empty()
                 || !self.extra_dirty.is_empty()
+                || self.doc.charts.iter().any(|c| c.dirty)
                 || self.structure_changed,
             unparsed_formulas: self.unparsed_formulas,
         }
@@ -2656,105 +2467,6 @@ fn excerpt_of(text: &str) -> String {
     }
     let mut out: String = text.chars().take(MAX).collect();
     out.push('…');
-    out
-}
-
-/// Every chart-kind TAG `add_chart` accepts / `list_charts` reports, in the
-/// order the panel offers them. ONE list, so the parser
-/// ([`chart_kind_from_tag`]) and the printer ([`chart_kind_tag`]) cannot
-/// disagree and the panel cannot offer a kind the engine refuses.
-pub const CHART_KIND_TAGS: &[&str] = &[
-    "column",
-    "stackedColumn",
-    "bar",
-    "stackedBar",
-    "line",
-    "area",
-    "scatter",
-    "pie",
-    "donut",
-    "radar",
-];
-
-/// The lowercase kind tag for a [`sheet_chart::model::ChartKind`] — the same
-/// space the geometry IR's `Primitive` tags / the registry use.
-fn chart_kind_tag(kind: sheet_chart::model::ChartKind) -> &'static str {
-    use sheet_chart::model::ChartKind::*;
-    match kind {
-        Column => "column",
-        Bar => "bar",
-        Line => "line",
-        Area => "area",
-        Pie => "pie",
-        Donut => "donut",
-        Scatter => "scatter",
-        StackedColumn => "stackedColumn",
-        StackedBar => "stackedBar",
-        Radar => "radar",
-    }
-}
-
-/// A [`CHART_KIND_TAGS`] tag → its [`sheet_chart::model::ChartKind`]. The exact
-/// inverse of [`chart_kind_tag`]; an unknown tag is `None` (the caller turns it
-/// into the boundary error naming the accepted set).
-fn chart_kind_from_tag(tag: &str) -> Option<sheet_chart::model::ChartKind> {
-    use sheet_chart::model::ChartKind::*;
-    Some(match tag {
-        "bar" => Bar,
-        "column" => Column,
-        "line" => Line,
-        "area" => Area,
-        "pie" => Pie,
-        "donut" => Donut,
-        "scatter" => Scatter,
-        "stackedColumn" => StackedColumn,
-        "stackedBar" => StackedBar,
-        "radar" => Radar,
-        _ => return None,
-    })
-}
-
-/// Resolve a series' values [`RangeRef`] to a numeric vector against the LIVE
-/// model (chart geometry is live to recalc — spec §8.4). Cells iterate in
-/// natural order (row-major), so a column range `$B$2:$B$4` and a row range
-/// `$B$2:$D$2` both yield their values left-to-right / top-to-bottom. A numeric
-/// cell contributes its value; a bool contributes 0/1; empty / text / error
-/// cells contribute 0.0 (the publishing reading — a gap in a chart is a zero,
-/// never a panic).
-fn resolve_values(model: &SheetModel, range: &RangeRef) -> Vec<f64> {
-    let r = range.normalized();
-    let sheet = r.start.sheet;
-    let mut out = Vec::new();
-    for row in r.start.row..=r.end.row {
-        for col in r.start.col..=r.end.col {
-            let v = model
-                .sheet(sheet)
-                .and_then(|ws| ws.cell(row, col))
-                .map(|c| match &c.value {
-                    CellValue::Number(n) => *n,
-                    CellValue::Bool(true) => 1.0,
-                    _ => 0.0,
-                })
-                .unwrap_or(0.0);
-            out.push(v);
-        }
-    }
-    out
-}
-
-/// Resolve a category [`RangeRef`] to formatted label strings against the live
-/// model (the category axis shows the cells' DISPLAY text — spec §9, the same
-/// formatting the grid / page lower use). Empty cells become empty labels.
-fn resolve_labels(model: &SheetModel, range: &RangeRef, ctx: &FormatCtx) -> Vec<String> {
-    let r = range.normalized();
-    let sheet = r.start.sheet;
-    let mut cache = FormatCache::default();
-    let mut out = Vec::new();
-    for row in r.start.row..=r.end.row {
-        for col in r.start.col..=r.end.col {
-            out.push(cell_display(model, sheet, row, col, &mut cache, ctx));
-        }
-    }
     out
 }
 

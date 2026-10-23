@@ -1,0 +1,55 @@
+{
+  "widthPt": 360.0,
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "kind": "line",
+      "pts": [
+        [
+          6.0,
+          6.0
+        ],
+        [
+          354.0,
+          6.0
+        ],
+        [
+          354.0,
+          234.0
+        ],
+        [
+          6.0,
+          234.0
+        ],
+        [
+          6.0,
+          6.0
+        ]
+      ],
+      "stroke": "#A6A6A6",
+      "strokeW": 0.75,
+      "dash": "dash"
+    },
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 110.0,
+      "s": "Unsupported",
+      "sizePt": 10.0,
+      "anchor": "middle",
+      "color": "#595959",
+      "bold": true,
+      "role": "note"
+    },
+    {
+      "kind": "text",
+      "x": 180.0,
+      "y": 125.0,
+      "s": "A regionMap chart: not drawn by Paged",
+      "sizePt": 10.0,
+      "anchor": "middle",
+      "color": "#595959",
+      "role": "note"
+    }
+  ]
+}

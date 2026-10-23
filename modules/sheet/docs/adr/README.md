@@ -12,7 +12,7 @@ it stood, for decisions made earlier; their status says so.
 
 | ADR | Title | Status |
 |---|---|---|
-| [016](016-chart-engine-plotters-chartgeometry.md) | The chart engine: plotters + a custom `DrawingBackend` → frozen `ChartGeometry` IR | Accepted (amended 2026-10-02) |
+| [016](016-chart-engine-plotters-chartgeometry.md) | The chart engine: plotters + a custom `DrawingBackend` → frozen `ChartGeometry` IR | Accepted (amended 2026-10-02, 2026-10-19, 2026-10-23) |
 | [500](500-own-calculation-engine.md) | The calculation engine is own-built and clean-room | Accepted, recorded retroactively 2026-10-02 |
 | [501](501-f64-numbers.md) | Numbers are f64 because Excel's are; exact decimal stays behind a seam | Accepted, recorded retroactively 2026-10-02 |
 | [502](502-recalculation-and-spill.md) | Recalculation: a range-keyed graph, deterministic order, spill by fixpoint | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-15, 2026-10-22) |
@@ -32,6 +32,7 @@ it stood, for decisions made earlier; their status says so.
 | [516](516-function-library-w3.md) | The function library towards Excel's full set: recorded expected values, numeric agreement, the document-name amendment | Accepted 2026-10-23; extends 507 |
 | [517](517-interactive-workbook-features.md) | Validation, what-if, external links, outline and protection are interpreted; pivots stay preserved | Accepted 2026-10-23; amends 504 |
 | [518](518-cell-visual-model-and-colour-references.md) | The cell visual model: colour and text-style references, one resolver | Accepted 2026-10-23; amends the frozen style types, extends 503, 508 |
+| [519](519-charts-excel-parity.md) | Charts as Excel draws them: plots, every kind, style roles, written back | Accepted 2026-10-23; amends 016, 503 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed
