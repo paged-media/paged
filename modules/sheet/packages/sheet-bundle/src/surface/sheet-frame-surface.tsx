@@ -69,6 +69,8 @@ import {
 export type FrameSurfaceSession = Pick<
   WorkbookSession,
   | "attachFrameSurface"
+  | "frameView"
+  | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
   | "pointerUpInFrame"
@@ -925,6 +927,8 @@ function SheetBarView({
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
+      // ADR 510 — a window frame's lock (null: not a window frame).
+      lock: session.frameView(props.elementId)?.lock ?? null,
     };
   });
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1041,6 +1045,31 @@ function SheetBarView({
       >
         {view.sheet}
       </span>
+      {view.lock !== null ? (
+        <button
+          type="button"
+          data-testid="sheet-bar-lock"
+          aria-label="Lock view"
+          aria-pressed={view.lock}
+          title={
+            view.lock
+              ? "View locked: leaving the frame keeps this window"
+              : "Lock view: keep the page on this window when you leave"
+          }
+          style={{
+            ...button,
+            ...(view.lock
+              ? { background: "var(--pg-accent-bg, #e6eefc)" }
+              : null),
+          }}
+          onClick={() => {
+            session.setFrameViewLock(!view.lock, props.elementId);
+            requestAnimationFrame(focusGrid);
+          }}
+        >
+          {view.lock ? "🔒" : "🔓"}
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label="Full screen"
