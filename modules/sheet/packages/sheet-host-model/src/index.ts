@@ -143,6 +143,7 @@ export {
   type FramePageSpec,
   type TracksSpec,
   type GridDataBar,
+  type GridSparkline,
   type GridFreeze,
   type GridMerge,
   type GridScene,
