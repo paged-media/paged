@@ -1,7 +1,8 @@
 # ADR 465 — Where no GPU exists, a region filter runs on shipped CPU twins
 
 - **Status:** Accepted, 2026-10-23. An exception to [ADR 450](450-gpu-only-kernels.md), which it amends.
-  Amended 2026-10-23: a mask given as data (below).
+  Amended 2026-10-23: a mask given as data (below); the same day, fill rules and polygon ops,
+  and the selection of a frame that is not the open image.
 - **Scope:** `image-kernels` (feature `cpu`, `src/cpu.rs`), `image-js/src/region_filter.rs` and the
   chain it shares with the GPU (`ingest.rs`, `adjust_stages`), the wasm export
   `filter_region_rgba8`, the object model's layer `filter` row and the typed command
@@ -107,17 +108,36 @@ and filtering within a selection stayed the editor's Apply. The amendment below 
 `filterRegion` takes a selection as data, so a script and the CLI can filter within one, and the
 editor's live selection:
 
-- **`mask { polygons?, alpha?, feather? }`.** `polygons` are closed polygons of `[x, y]` image
-  pixels, each filled even–odd and anti-aliased by the selection rasteriser
-  (`SelectionCoverage::rasterize_polygon`), unioned; `alpha` is an 8-bit coverage, one byte per
+- **`mask { polygons?, ops?, fillRule?, alpha?, feather? }`.** `polygons` are closed polygons of
+  `[x, y]` image pixels, anti-aliased as the lasso is (four sub-scanlines a row, analytic
+  coverage in x). Without `fillRule` each is filled even–odd on its own
+  (`SelectionCoverage::rasterize_polygon`) and they are unioned, so overlapping polygons never
+  cut each other. `fillRule: "evenodd" | "nonzero"` fills the polygons together as one path
+  (`region_filter::rasterize_polygons`, crossings carrying their winding direction): an inner
+  polygon cuts a hole, under non-zero only when wound the other way. `ops`, one
+  `"add" | "subtract" | "intersect"` per polygon, splits them: the add polygons are the shape
+  (filled under the rule), then each subtract polygon cuts it (`shape · (1 − p)`) and each
+  intersect polygon keeps the overlap (`min`), in order, each filled alone. Without an add
+  polygon the shape starts as the whole image, as a mask without polygons does, so a lone
+  subtract polygon means "all but this". A wrong number of ops, an unknown op or rule, and a
+  rule without polygons are refused. `alpha` is an 8-bit coverage, one byte per
   canvas pixel (or an encoded image of the canvas size, its luminance times its alpha),
   intersected; `feather` is a Gaussian on the mask (σ ≤ 250 px). The result is clipped hard to
   `region`. Rasterising is mask preparation, the CPU work ADR 450 allows; it happens once, in
   Rust (`region_filter::mask_coverage`), and both paths consume the same coverage.
 - **`selection: true`** reads the editor session's selection of that frame as coverage bytes
-  (`ImageSession.liveSelection`) and intersects it with any `mask`. Without one (headless,
-  another image open, nothing selected) it is refused with the reason; "no selection" does not
-  silently mean everything here.
+  (`ImageSession.liveSelection`) and intersects it with any `mask`. The selection is session
+  state: one coverage, at the resolution of the image open in the session, never written to the
+  document. While the frame's image is open, its live selection counts. When another image
+  opens, the session keeps the closing frame's selection (the last four frames, dropped when
+  that frame opens again, where its live selection counts, and when another document opens,
+  since frame ids are per document), so a script can still filter within it. The coverage is
+  at the size of the image it was made on: when the object model's canvas is the same image at
+  another resolution (the aspect agrees within a pixel) it is resampled bilinearly at pixel
+  centres, as resizing an image resizes its selection; another aspect is another crop, where
+  the selection's place on the canvas is not known, and is refused. A frame with no selection
+  (headless, never selected in this session, nothing selected) is refused with the reason;
+  "no selection" does not silently mean everything here.
 - **One mask on both paths.** The GPU path gives the coverage to the pipeline as its selection;
   the CPU path applies it per stage as the ABI does, `mix(a, result, m)` with `m` the coverage
   byte lowered to f16 as `mask_window_f16` lowers it, the Gaussian passes and the unsharp
@@ -130,10 +150,15 @@ editor's live selection:
 Evidence: `image-js/src/region_filter.rs` (`RegionMask`, `mask_coverage`, `filter_masked_cpu`,
 `filter_masked_gpu`), `image-js/src/lib.rs` (`filter_region_rgba8`'s mask arguments),
 `glue/src/object-model/image-objects.ts` (`FILTER_FIELDS`, the mask and selection checks),
-`glue/src/session.ts` (`liveSelection`); tests in `image-conformance/tests/it/cpu_twins.rs` (the
-rasteriser, the CPU path under a mask, the two paths under a mask), `glue/test/region-filter.spec.ts`
-(a polygon and an alpha mask headless, the selection source), `glue/test/selection.spec.ts` and
-`apps/cli/test/cli-image.spec.ts` (a polygon, an alpha mask from `@path`, `selection: true` refused).
+`glue/src/session.ts` (`liveSelection`, the kept selections), `glue/src/object-model/image-objects.ts`
+(`coverageAt`); tests in `image-conformance/tests/it/cpu_twins.rs` (the rasteriser, the fill
+rules and ops, the CPU path under a mask, the two paths under a mask),
+`glue/test/region-filter.spec.ts` (a polygon and an alpha mask headless, fill rules and ops, the
+selection source, a resampled and a refused selection), `glue/test/selection.spec.ts` (the
+selection kept for a closed frame), `apps/cli/test/cli-image.spec.ts` (a polygon, a hole by fill
+rule and by op, an alpha mask from `@path`, `selection: true` refused), and
+`apps/editor/apps/canvas/tests/plugin-surface/image-filter-selection.spec.ts` (a marquee selection
+in the running editor: only its pixels change, one undo restores them).
 
 ## Related
 

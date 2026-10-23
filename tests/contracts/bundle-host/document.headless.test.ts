@@ -124,6 +124,47 @@ describe.each(ADAPTERS)("host.document — %s", (_name, make) => {
     if (out.applied) expect(out.pageIds).toEqual(["pg1"]);
   });
 
+  test("an amend joins the step the change named: one undo, one redo, refused once history moved", async () => {
+    expect(t.host.supports("document.mutate.amend@1")).toBe(true);
+    const props = async () =>
+      JSON.stringify(await t.host.document.elementProperties(BOX));
+    const opacity = (value: number) =>
+      ({
+        op: "setElementProperty",
+        args: {
+          elementId: BOX,
+          path: "frameOpacity",
+          value: { type: "length", value },
+        },
+      }) as never;
+    const original = await props();
+    const events: DocumentChangeEvent[] = [];
+    const sub = t.host.document.onDidChange((e) => events.push(e));
+    const edit = await t.host.document.mutate(opacity(50));
+    expect(edit.applied).toBe(true);
+    const seq = events[0]?.appliedSeq;
+    expect(typeof seq).toBe("number");
+    if (edit.applied) expect(edit.appliedSeq).toBe(seq);
+    const follow = await t.host.document.mutate(opacity(20), { amend: seq });
+    expect(follow.applied).toBe(true);
+    const both = await props();
+    // One undo reverts the edit and the follow-up…
+    await t.host.document.undo();
+    expect(await props()).toBe(original);
+    // …and an undo carries no step to amend; the old one is refused.
+    expect(events.at(-1)).toMatchObject({ kind: "undoApplied" });
+    expect(events.at(-1)?.appliedSeq).toBeUndefined();
+    const late = await t.host.document.mutate(opacity(10), { amend: seq });
+    expect(late.applied).toBe(false);
+    if (!late.applied)
+      expect(late.error).toMatchObject({ error: { kind: "notAmendable" } });
+    expect(await props()).toBe(original);
+    // One redo replays both.
+    await t.host.document.redo();
+    expect(await props()).toBe(both);
+    sub.dispose();
+  });
+
   test("a mutation the engine refuses is a result, never a throw", async () => {
     const out = await t.host.document.mutate({
       op: "setElementProperty",

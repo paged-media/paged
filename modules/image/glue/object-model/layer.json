@@ -152,6 +152,26 @@
               },
               "optional": true
             },
+            "ops": {
+              "kind": "list",
+              "of": {
+                "kind": "enum",
+                "members": [
+                  "add",
+                  "subtract",
+                  "intersect"
+                ]
+              },
+              "optional": true
+            },
+            "fillRule": {
+              "kind": "enum",
+              "members": [
+                "nonzero",
+                "evenodd"
+              ],
+              "optional": true
+            },
             "alpha": {
               "kind": "bytes",
               "optional": true
@@ -168,7 +188,7 @@
         }
       }
     },
-    "summary": "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths (blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] in image pixels; the whole canvas when absent), narrowed by `mask` (a selection as data: `polygons` of [x, y] image pixels, unioned; `alpha`, one coverage byte per canvas pixel or an encoded image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with `selection: true`, by the editor's live selection (refused headless). Partial coverage blends filtered and original pixels. On the GPU where one exists, otherwise on the CPU twins of the same kernels (ADR 465). Reads nothing."
+    "summary": "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths (blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] in image pixels; the whole canvas when absent), narrowed by `mask` (a selection as data: `polygons` of [x, y] image pixels, each filled alone and unioned, or with `fillRule` (`evenodd`, `nonzero`) filled together, so an inner polygon cuts a hole; `ops`, one of `add`, `subtract`, `intersect` per polygon, folds the subtract and intersect polygons into the add polygons' shape in order; `alpha`, one coverage byte per canvas pixel or an encoded image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with `selection: true`, by the editor's selection of that frame (the open image's live selection, or the one it kept when the frame closed, resampled when the canvas is the same image at another size; refused where there is none). Partial coverage blends filtered and original pixels. On the GPU where one exists, otherwise on the CPU twins of the same kernels (ADR 465). Reads nothing."
   },
   {
     "path": "pixelSource",

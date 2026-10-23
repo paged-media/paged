@@ -43,6 +43,7 @@ import type {
 import {
   BINDING_KEY,
   chartGeometryToMutations,
+  labelAutoSizeOp,
   labelStyleOps,
   makeBinding,
   parseBinding,
@@ -506,6 +507,8 @@ export async function lowerChartToFrame(
         args: { storyId: `$h:${handle}`, offset: 0, text: text.text },
       },
       ...labelStyleOps(`$h:${handle}`, text),
+      // A label set in a document style sizes its frame to the styled text.
+      ...labelAutoSizeOp(`$h:${handle}`, text),
     );
   }
   const group: Mutation[] =

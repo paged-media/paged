@@ -90,6 +90,27 @@ impl ThemePalette {
         Ok(out)
     }
 
+    /// The twelve colours in DrawingML scheme order (dk1, lt1, dk2, lt2,
+    /// accent1–6, hlink, folHlink), the Office theme's for a missing slot.
+    pub fn drawing_order(&self) -> [u32; 12] {
+        const OFFICE: [u32; 12] = [
+            0x000000, 0xFFFFFF, 0x44546A, 0xE7E6E6, 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000,
+            0x5B9BD5, 0x70AD47, 0x0563C1, 0x954F72,
+        ];
+        // SLOT_NAMES is lt1, dk1, lt2, dk2, …
+        const MAP: [usize; 12] = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11];
+        let mut out = OFFICE;
+        for (i, slot) in MAP.iter().enumerate() {
+            if let Some(v) = self.slots[*slot]
+                .as_deref()
+                .and_then(|h| u32::from_str_radix(h.trim_start_matches('#'), 16).ok())
+            {
+                out[i] = v;
+            }
+        }
+        out
+    }
+
     /// The colour a `theme="N"` index names, `#RRGGBB`.
     pub fn color(&self, index: u32) -> Option<&str> {
         self.slots.get(index as usize)?.as_deref()

@@ -136,7 +136,53 @@ describe("the session selection surface (real engine wasm)", () => {
       coverage: new Uint8Array([255, 255]),
     });
     expect(session.liveSelection("u2")).toMatchObject({
-      refused: expect.stringMatching(/another image \(u1\), not u2/),
+      refused: expect.stringMatching(
+        /open image is u1, and no selection was made on u2/,
+      ),
+    });
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("liveSelection keeps a frame's selection once another image opens, until it reopens or another document opens", async () => {
+    // @feat: image.editor.region-filter — `selection: true` on a frame
+    // that is not the open image.
+    const { fake, handle, session } = await ingest();
+    expect(session.selectAll()).toBe(true);
+    fake.placed.set("u2", psdBytes());
+    fake.geometry.set("u2", geomFor("u2", [0, 0, 100, 200]));
+    fake.emitSelection([{ kind: "rectangle", id: "u2" }]);
+    expect(await session.ingestSelection()).toBe(true);
+    // u1 closed with its selection; u2 is open with none.
+    expect(session.liveSelection("u1")).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([255, 255]),
+    });
+    expect(session.liveSelection("u2")).toEqual({
+      refused: "nothing is selected in the editor",
+    });
+    expect(session.liveSelection("u3")).toMatchObject({
+      refused: expect.stringMatching(/no selection was made on u3/),
+    });
+    // u1 opens again: its live selection (none) is the one that counts.
+    fake.emitSelection([{ kind: "rectangle", id: "u1" }]);
+    expect(await session.ingestSelection()).toBe(true);
+    expect(session.liveSelection("u1")).toEqual({
+      refused: "nothing is selected in the editor",
+    });
+    // u2 closed without a selection: none kept.
+    expect(session.liveSelection("u2")).toMatchObject({
+      refused: expect.stringMatching(/no selection was made on u2/),
+    });
+    // A kept selection does not outlive its document.
+    expect(session.selectAll()).toBe(true);
+    fake.emitSelection([{ kind: "rectangle", id: "u2" }]);
+    expect(await session.ingestSelection()).toBe(true);
+    expect(session.liveSelection("u1")).toMatchObject({ width: 2 });
+    fake.emitDocumentLoaded();
+    expect(session.liveSelection("u1")).toMatchObject({
+      refused: expect.stringMatching(/no selection was made on u1/),
     });
     session.dispose();
     handle.dispose();

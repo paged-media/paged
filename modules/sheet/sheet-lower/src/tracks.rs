@@ -265,11 +265,15 @@ pub fn lower_tracks_styled(
     for (dr, &r) in rows.iter().enumerate() {
         let mut line = Vec::with_capacity(n_cols);
         for (dc, &c) in cols.iter().enumerate() {
+            let empty_key = match ws.and_then(|w| w.cell(r, c)) {
+                Some(_) => 0,
+                None => styler.key_for_empty(r, c),
+            };
             let mut out = LoweredCell {
                 col: c,
                 text: String::new(),
                 align: Align::General,
-                style_key: 0,
+                style_key: empty_key,
                 fill: None,
                 runs: None,
             };

@@ -627,6 +627,19 @@
                     },
                     "optional": true
                   },
+                  "ops": {
+                    "kind": "list",
+                    "of": {
+                      "kind": "enum",
+                      "members": ["add", "subtract", "intersect"]
+                    },
+                    "optional": true
+                  },
+                  "fillRule": {
+                    "kind": "enum",
+                    "members": ["nonzero", "evenodd"],
+                    "optional": true
+                  },
                   "alpha": {
                     "kind": "bytes",
                     "optional": true

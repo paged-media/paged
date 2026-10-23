@@ -217,6 +217,7 @@ impl SheetConditionalFormats {
     /// `dxfId` out of range resolves to the default (inert) override.
     pub fn to_lower(&self, dxfs: &[VisualStyle]) -> sheet_lower::SheetCondFmt {
         sheet_lower::SheetCondFmt {
+            tables: Vec::new(),
             blocks: self
                 .blocks
                 .iter()

@@ -59,6 +59,8 @@ mod shift;
 pub mod splice;
 pub mod structure;
 pub mod style_edit;
+pub mod table_doc;
+pub mod table_style;
 pub mod write;
 pub mod ws_child;
 pub mod xtree;
@@ -85,8 +87,9 @@ pub use style_edit::{EdgePatch, GradientPatch, StyleExt, StylePatch};
 use opc::{ModeledKind, OpcContainer, PartEntry};
 use parts::chart::{ParsedChart, SheetResolver};
 use rels::{
-    parse_rels, part_dir, rels_part_name, resolve_target, Relationships, REL_CHART, REL_COMMENTS,
-    REL_DRAWING, REL_EXTERNAL_LINK, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
+    parse_rels, part_dir, rels_part_name, resolve_target, Relationships, REL_CHART, REL_CHARTSHEET,
+    REL_CHART_EX, REL_COMMENTS, REL_DRAWING, REL_EXTERNAL_LINK, REL_OFFICE_DOCUMENT,
+    REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
 };
 use sheet_core::cell::{Cell, StyleId};
 use sheet_core::{SheetId, SheetModel};
@@ -141,6 +144,19 @@ pub struct XlsxDocument {
     /// §10.2); this model exists for `sheet-js` to LIST + RENDER charts, never
     /// for re-emit. Document order across sheets.
     pub charts: Vec<ParsedChart>,
+
+    /// The sheets that are chartsheets (a tab that is one chart). They load
+    /// as empty sheets, so references and indexes stay as they were; their
+    /// chart carries `chartsheet: true`.
+    pub chartsheets: std::collections::BTreeSet<SheetId>,
+
+    /// The sparkline groups of each worksheet (`x14:sparklineGroups`).
+    pub sparklines: BTreeMap<SheetId, Vec<sheet_chart::SparklineGroup>>,
+
+    /// The workbook theme's twelve colours in DrawingML order (dk1, lt1,
+    /// dk2, lt2, accent1–6, hlink, folHlink) for the charts, when the
+    /// workbook has a theme part.
+    pub chart_theme: Option<[u32; 12]>,
 
     /// The CACHED values of every referenced external workbook (M3
     /// external-link reads, spec §13; the no-network ruling §1.1), indexed by
@@ -336,6 +352,12 @@ impl XlsxDocument {
         // AND the workbook display locale derived from a custom numFmt's
         // `[$…-LCID]` token (M3 localization track, ruling
         // `sheet.format.locale.locale-from-workbook`).
+        let chart_theme = wb_rels
+            .by_type_suffix("/theme")
+            .map(|r| resolve_target(wb_base, &r.target))
+            .and_then(|t| container.part(&t))
+            .and_then(|t| parts::theme::ThemePalette::parse(t.bytes()).ok())
+            .map(|t| t.drawing_order());
         let (xf_to_style, visual_styles, dxfs, dxf_models, workbook_locale) = match &styles_part {
             Some(name) => match container.part(name) {
                 Some(p) => {
@@ -397,7 +419,11 @@ impl XlsxDocument {
             BTreeMap::new();
         let mut comments: BTreeMap<SheetId, parts::comments::SheetComments> = BTreeMap::new();
 
+        let mut chartsheets: std::collections::BTreeSet<SheetId> = Default::default();
         for sref in &parsed_wb.sheets {
+            let is_chartsheet = wb_rels
+                .by_id(&sref.rid)
+                .is_some_and(|r| r.is_type(REL_CHARTSHEET));
             let target = wb_rels.target_of(&sref.rid).ok_or_else(|| {
                 XlsxError::Structure(format!(
                     "sheet {} has dangling r:id {}",
@@ -413,6 +439,9 @@ impl XlsxDocument {
             let parsed_ws = parts::worksheet::parse(&ws_bytes, &shared_strings)?;
 
             let sid = model.add_sheet(sref.name.as_str());
+            if is_chartsheet {
+                chartsheets.insert(sid);
+            }
             {
                 let ws = model.sheet_mut(sid).expect("just added");
                 ws.merges = parsed_ws.merges;
@@ -580,8 +609,21 @@ impl XlsxDocument {
         // worksheet is itself a captured unknown child). The resolver maps
         // `c:f` sheet names to model ids; the full model has all sheets now.
         let mut charts: Vec<ParsedChart> = Vec::new();
+        let mut sparklines: BTreeMap<SheetId, Vec<sheet_chart::SparklineGroup>> = BTreeMap::new();
         {
             let resolver = ModelSheetResolver { model: &model };
+            // Sparklines: the `x14:sparklineGroups` of each worksheet's
+            // captured `<extLst>` (read-only; the bytes round-trip as captured).
+            for b in &bindings {
+                let groups = parts::sparkline::parse_all(
+                    b.captured.after().map(|c| c.bytes.as_slice()),
+                    b.sheet_id,
+                    &resolver,
+                );
+                if !groups.is_empty() {
+                    sparklines.insert(b.sheet_id, groups);
+                }
+            }
             // Snapshot (sheet_id, part_name) so we don't borrow `bindings`
             // while reading the container.
             let ws_for_charts: Vec<(SheetId, String)> = bindings
@@ -607,16 +649,25 @@ impl XlsxDocument {
                     };
                     let dr_rels = parse_rels(&dr_bytes)?;
                     let dr_base = part_dir(&drawing_part);
-                    for chart_rel in dr_rels.all_of_type(REL_CHART) {
+                    // Classic charts and chartEx parts, in the drawing's
+                    // relationship order.
+                    for chart_rel in dr_rels
+                        .items
+                        .iter()
+                        .filter(|r| r.is_type(REL_CHART) || r.is_type(REL_CHART_EX))
+                    {
                         let chart_part = resolve_target(dr_base, &chart_rel.target);
                         if let Some(chart_bytes) =
                             container.part(&chart_part).map(|p| p.bytes().to_vec())
                         {
                             // A malformed chart part is skipped (preservation-
                             // safe: its bytes still round-trip).
-                            if let Ok(parsed) =
+                            if let Ok(mut parsed) =
                                 parts::chart::parse(&chart_bytes, host_sheet, &resolver)
                             {
+                                parsed.part = Some(chart_part.clone());
+                                parsed.drawing = Some(drawing_part.clone());
+                                parsed.chartsheet = chartsheets.contains(&host_sheet);
                                 charts.push(parsed);
                             }
                         }
@@ -682,6 +733,9 @@ impl XlsxDocument {
             dxf_models,
             conditional_formats,
             charts,
+            chartsheets,
+            sparklines,
+            chart_theme,
             external_links,
             freeze_panes,
             data_validations,
@@ -852,10 +906,13 @@ impl XlsxDocument {
     /// `sheet_lower::lower_range_condfmt` (it reproduces the styled path when
     /// empty). M2 conditional-formatting track, spec §10.4.
     pub fn lowered_conditional_formats(&self, sheet: SheetId) -> sheet_lower::SheetCondFmt {
-        match self.conditional_formats.get(&sheet) {
+        let mut cf = match self.conditional_formats.get(&sheet) {
             Some(cf) => cf.to_lower(&self.dxfs),
             None => sheet_lower::SheetCondFmt::default(),
-        }
+        };
+        // The tables' styles paint under the cells (sheet ADR 517).
+        cf.tables = self.table_bands(sheet);
+        cf
     }
 
     /// The frozen-pane split of a sheet (spec §8.1), or the default `(0, 0)`
