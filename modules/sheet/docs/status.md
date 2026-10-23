@@ -50,7 +50,7 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 5,752 of 5,902 function
+  locales. Expected values are recorded from Excel and replayed in CI: 5,754 of 5,902 function
   cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling (the
   coverage per category is in the table below).
   Recalculating real workbooks reproduces Excel's saved value in 95.9% of comparable formula
@@ -383,7 +383,7 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 | Financial                                  |         55 |        55 | fin 88/93, fin2 974/1,008 (34 listed: iterative yields, long odd first period, ACCRINT and odd last periods on the actual basis over several periods) |
 | Math and trigonometry                      |         74 |        74 | math, math2, math3: 522/522                                                                                                                           |
 | Engineering                                |         54 |        54 | 1,304/1,304                                                                                                                                           |
-| Text                                       |         50 |        50 | text, text2, text3: 429/469                                                                                                                           |
+| Text                                       |         50 |        50 | text, text2, text3: 431/469                                                                                                                           |
 | Date and time                              |         25 |        25 | 171/171                                                                                                                                               |
 | Lookup and reference                       |         23 |        23 | 89/89                                                                                                                                                 |
 | Information                                |         21 |        21 | 140/158                                                                                                                                               |
@@ -395,7 +395,7 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 | Other (T2)                                 |          5 |         5 | 44/44                                                                                                                                                 |
 | Cross-family fixes and reference forms     |          — |         — | fix3 161/164, refs 81/81                                                                                                                              |
 | External (network, cube, add-in, pivot)    |         18 |         0 | keep the cached value                                                                                                                                 |
-| **Total**                                  |    **519** |   **501** | **5,752/5,902**                                                                                                                                       |
+| **Total**                                  |    **519** |   **501** | **5,754/5,902**                                                                                                                                       |
 
 ## Limits of what is shipped
 
