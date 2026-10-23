@@ -154,7 +154,7 @@ before. ADR 558 and 559 are proposed and not yet recorded in [`adr/`](adr/).
 - **"Export as InDesign Data Merge template"**: IDML + UTF-16 CSV; InDesign 2025 opened the
   recorded template with fields `sku, name` and merged its three records.
 - **paged.data's own objects** in `host.objects` (sources, queries, bindings, data sets,
-  variables) and seventeen typed commands (seven of them the inspection commands below), including "Bind to data…"
+  variables) and twenty-three typed commands (seven of them the inspection commands below, three the automation commands after them), including "Bind to data…"
   (`media.paged.data.bindProperty`, which the Bindings panel completes) and the Data Merge
   (`media.paged.data.merge`). A binding write (create, set, delete; the Bindings panel's
   "Bind" goes the same way) is one undo step: its element label and the document
@@ -240,6 +240,14 @@ Not done:
   `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the
   variable set's `captureEveryRecord`, `exportVariableLibrary` and `importVariableLibrary`,
   which change the session, never the document.
+- **Automation commands** (plan G4). What the Node CLI's `apply`, `merge` and `generate`
+  drive the data through, so a script reaches every step: `importSource { bytes, fileName,
+name?, sheet? }` (CSV, TSV, JSON, Parquet or XLSX bytes as a source, the panel's import),
+  `defineBinding { id, kind, query, … }` (a variable, image, barcode, visibility, table or
+  rule binding, the Bindings panel's own paths) and `planBatch { query?, mode, by? }` (the
+  units of a per-record, per-group or one-catalogue batch, from the engine's batch plan).
+  `merge` also takes `imageBase` and `imageFields` and answers `undoSteps` and
+  `oversetRecords`, so a batch can merge one unit, write it and undo back to the template.
 
 ## Limits of what is shipped
 

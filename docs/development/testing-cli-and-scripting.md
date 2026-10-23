@@ -113,8 +113,9 @@ verb, add its row to `CASES`, add a test that calls `covers("cli:paged-node <ver
 `runVerb("<verb>")`, run once with `PAGED_UPDATE_GOLDEN=1`, and review the new files.
 Outside resources are avoided or skipped honestly: `ai` runs against a local fake Messages
 endpoint, and its no-credential case runs as a child process with an empty home;
-`modules-upload` sees an unroutable module host and a fake `npx` on `PATH`; the `apply` and
-`merge` successes need the paged.data engine wasm (`modules/data`: `scripts/build-wasm.sh`
+`modules-upload` sees an unroutable module host and a fake `npx` on `PATH`; `preflight` loads
+the workspace's paged.publish bundle by path; the `apply`, `merge` and `generate` successes
+need the paged.data engine wasm (`modules/data`: `scripts/build-wasm.sh`
 and `scripts/vendor-duckdb.sh`), print `unavailable: <resource>: <reason>` without it, and
 fail under `PAGED_REQUIRE_DATA_ENGINE=1`.
 

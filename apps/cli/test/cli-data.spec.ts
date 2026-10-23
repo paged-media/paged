@@ -263,6 +263,99 @@ describe("paged merge — InDesign Data Merge oracle (long-record-set)", () => {
   });
 });
 
+describe("paged generate — a batch per record or per group (planBatch)", () => {
+  const story = async (path: string): Promise<string> =>
+    (
+      (await cli(["get", path, "story", "content", "--no-plugins"])).json
+        .results as Array<{ value: string }>
+    )
+      .map((x) => x.value)
+      .join("\n");
+
+  it("--per group: one document per group of --by, each holding its records", async () => {
+    const csv = join(tmp.dir, "groups.csv");
+    writeFileSync(
+      csv,
+      "name,sku,price,cat\nWidget,A-1,9.90,x\nGadget,B-2,19.99,y\nDoohickey,C-3,1234.50,x\n",
+    );
+    const out = join(tmp.dir, "per-group");
+    const r = await cli([
+      "generate",
+      SINGLE_RECORD,
+      "--data",
+      csv,
+      "--per",
+      "group",
+      "--by",
+      "cat",
+      "--out",
+      out,
+      DATA,
+    ]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.json).toMatchObject({ records: 3, per: "group", by: ["cat"] });
+    expect(
+      r.json.outputs.map((o: { unit: string; records: number[] }) => [
+        o.unit,
+        o.records,
+      ]),
+    ).toEqual([
+      ["x", [0, 2]],
+      ["y", [1]],
+    ]);
+    const first = await story(r.json.outputs[0].path);
+    expect(first).toContain("Widget");
+    expect(first).toContain("Doohickey");
+    expect(first).not.toContain("Gadget");
+    const second = await story(r.json.outputs[1].path);
+    expect(second).toContain("Gadget");
+    expect(second).not.toContain("Widget");
+  });
+
+  it("--per record: one document per record, back to the template between them", async () => {
+    const csv = join(tmp.dir, "two.csv");
+    writeFileSync(csv, "name,sku,price\nWidget,A-1,9.90\nGadget,B-2,19.99\n");
+    const out = join(tmp.dir, "per-record-gen");
+    const r = await cli([
+      "generate",
+      SINGLE_RECORD,
+      "--data",
+      csv,
+      "--out",
+      out,
+      DATA,
+    ]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.json.outputs.map((o: { pages: number }) => o.pages)).toEqual([
+      1, 1,
+    ]);
+    expect(await story(r.json.outputs[1].path)).toContain("Gadget");
+    expect(await story(r.json.outputs[1].path)).not.toContain("Widget");
+  });
+
+  it("--per group without --by, and --by without --per group, are usage errors", async () => {
+    const csv = join(tmp.dir, "two.csv");
+    const out = join(tmp.dir, "never");
+    for (const extra of [
+      ["--per", "group"],
+      ["--by", "cat"],
+    ]) {
+      const r = await cli([
+        "generate",
+        SINGLE_RECORD,
+        "--data",
+        csv,
+        "--out",
+        out,
+        ...extra,
+        DATA,
+      ]);
+      expect(r.code).toBe(2);
+    }
+    expect(existsSync(out)).toBe(false);
+  });
+});
+
 describe("paged apply", () => {
   it("interim property bindings: one record's fields → typed properties in ONE write", async () => {
     const csv = join(tmp.dir, "apply.csv");
