@@ -68,6 +68,11 @@ Rules for every code change in this repo:
   prove by `cargo tree` that no reference code is reachable. What stays
   on CPU is inherently CPU work: codec entropy coding, PSD structural
   parse/write, CMS transform _compilation_, orchestration.
+  ONE EXCEPTION (ADR 465): the CPU twins of the adjustment chain's
+  nineteen kernels (`image-kernels` feature `cpu`, `src/cpu.rs`) ship
+  for the region filter, used only where no GPU device exists; each is
+  held to its kernel's tolerance (`image-conformance/tests/it/cpu_twins.rs`).
+  A covered kernel's WGSL change changes its twin too.
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
   Every unmodeled block is retained as opaque bytes attached to its
   owner node and re-emitted verbatim; zero-edit round-trip is

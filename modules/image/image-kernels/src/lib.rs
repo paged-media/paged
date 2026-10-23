@@ -29,8 +29,12 @@
 pub mod abi;
 #[macro_use]
 pub mod family;
+/// The shipped CPU twins of the adjustment chain's kernels (feature
+/// `cpu`; ADR 465). The `reference` feature stays test-only.
+#[cfg(feature = "cpu")]
+pub mod cpu;
 pub mod families;
-#[cfg(feature = "reference")]
+#[cfg(any(feature = "reference", feature = "cpu"))]
 pub mod reference_prelude;
 
 /// Frozen kernel ABI version (spec §9.2). Bumps are orchestrator-level

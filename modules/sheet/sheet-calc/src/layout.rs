@@ -36,7 +36,30 @@ pub struct SheetLayoutMut<'a> {
     pub row_heights: &'a mut BTreeMap<u32, f64>,
 }
 
+/// What a worksheet shows and hides beyond its sizes (sheet ADR 517):
+/// outline levels and flags, hidden rows and columns, the tab state.
+/// Hidden rows feed SUBTOTAL 101–111 and AGGREGATE, so a caller that
+/// changes them follows with [`Engine::recalc_visibility`].
+pub struct SheetViewMut<'a> {
+    pub row_meta: &'a mut BTreeMap<u32, sheet_core::RowMeta>,
+    pub col_meta: &'a mut Vec<sheet_core::ColMeta>,
+    pub hidden_rows: &'a mut std::collections::BTreeSet<u32>,
+    pub state: &'a mut sheet_core::SheetState,
+}
+
 impl Engine {
+    /// Mutable access to a sheet's outline, hidden rows and columns and tab
+    /// state (`None` for an unknown sheet). Nothing recalculates.
+    pub fn sheet_view_mut(&mut self, sheet: SheetId) -> Option<SheetViewMut<'_>> {
+        let ws = self.model.sheet_mut(sheet)?;
+        Some(SheetViewMut {
+            row_meta: &mut ws.row_meta,
+            col_meta: &mut ws.col_meta,
+            hidden_rows: &mut ws.hidden_rows,
+            state: &mut ws.state,
+        })
+    }
+
     /// Replace the workbook style table (the xlsx layer re-parses
     /// `styles.xml` after authoring a style; ids are positional, so every
     /// existing cell style keeps its meaning).

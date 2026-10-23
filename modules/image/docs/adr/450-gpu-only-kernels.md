@@ -88,3 +88,26 @@ enabling dependency a dev-dependency; it is a normal dependency of the test crat
 - [ADR 451](451-one-kernel-definition.md) — where the scalar twin comes from
 - [ADR 453](453-tolerance-not-golden-bytes.md) — what the scalar twin is used for
 - [ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md) — how the wasm that creates the device is loaded
+
+## Amendment — 2026-10-23
+
+One exception, recorded in [ADR 465](465-cpu-twins-for-region-filters.md): the scalar twins of
+the nineteen kernels the adjustment chain dispatches ship as a CPU path, used only where no GPU
+device exists, so that a filter on a region of a layer runs in the Node CLI and the SDK's
+headless host. The statements above change as follows; everything else stands.
+
+- "No Rust implementation of a kernel is compiled into the shipped wasm" no longer holds for
+  those nineteen. Their twins compile under a new `image-kernels` feature, `cpu`, which
+  `image-js` turns on (`image-kernels/src/cpu.rs`). The `reference` feature stays test-only and
+  is still enabled only by `image-conformance`.
+- "A missing GPU is reported as an error" still holds for every call except the region filter
+  (`filter_region_rgba8`, reached through the object model's layer `filter` row and the typed
+  command `filterRegion`). It uses the GPU whenever `init_gpu` succeeded, and the CPU twins
+  otherwise. An adjustment preview, an Apply, the layer fold and every other kernel still return
+  an error without a device.
+- The twins are held to each kernel's declared `gpu_tolerance` against the test-only reference
+  in every lane, and against the shader on the GPU lanes
+  (`image-conformance/tests/it/cpu_twins.rs`).
+- The CI guard still fails when `image-js`'s wasm32 tree names `image-conformance` or
+  `proptest`, and a second guard fails when that tree turns on `image-kernels`'s `reference`
+  feature (`.github/workflows/image-ci.yml`; the file named in the scope above is now this one).
