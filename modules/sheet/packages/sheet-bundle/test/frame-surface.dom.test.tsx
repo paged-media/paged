@@ -69,7 +69,19 @@ function fakeSession() {
     for (const l of listeners) l();
   };
   let lock = false;
+  let pasteCard = false;
   const session: FrameSurfaceSession = {
+    pasteSpecialOpen: () => pasteCard,
+    closePasteSpecial: () => {
+      pasteCard = false;
+      changed();
+    },
+    pasteAtSelection: async (options) => {
+      calls.push(["paste", options]);
+      pasteCard = false;
+      changed();
+      return { ok: true as const, rows: 1, cols: 1 };
+    },
     frameView: () => ({ topLeft: "A1", lock }),
     setFrameViewLock: (next) => {
       calls.push(["lock", next]);
@@ -136,7 +148,11 @@ function fakeSession() {
     sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
     state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
   };
-  return { session, calls };
+  const openPaste = () => {
+    pasteCard = true;
+    changed();
+  };
+  return { session, calls, openPaste };
 }
 
 function props(over: Partial<FrameSurfaceProps> = {}): FrameSurfaceProps {
@@ -274,6 +290,26 @@ describe("sheet frame surface", () => {
     expect(r.getByTestId("sheet-bar-lock").getAttribute("aria-pressed")).toBe(
       "true",
     );
+  });
+
+  it("paste special's card pastes with the chosen options", () => {
+    const { session, calls, openPaste } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    expect(r.queryByTestId("sheet-paste-special")).toBeNull();
+    act(() => openPaste());
+    const card = r.getByTestId("sheet-paste-special");
+    fireEvent.click(r.getByLabelText("Values"));
+    fireEvent.click(r.getByLabelText("Add"));
+    fireEvent.click(r.getByLabelText("Transpose"));
+    fireEvent.click(r.getByTestId("sheet-paste-special-ok"));
+    expect(calls).toContainEqual([
+      "paste",
+      { what: "values", operation: "add", skipBlanks: false, transpose: true },
+    ]);
+    // The paste closes the card.
+    expect(card.isConnected).toBe(false);
   });
 
   it("detaches on unmount", () => {

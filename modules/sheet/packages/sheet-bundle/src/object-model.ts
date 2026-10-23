@@ -1871,6 +1871,15 @@ export function contributeObjectModel(
       },
     },
     {
+      // Sheet ADR 510 — paste special: opens its options on the sheet bar.
+      id: C("pasteSpecial"),
+      title: "Paste special",
+      args: struct({}),
+      async handler() {
+        session.openPasteSpecial();
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),
