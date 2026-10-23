@@ -51,23 +51,71 @@ export async function writeWorkbookPart(
   host: PartsHost,
   bytes: Uint8Array,
   name: string,
+  /** Plan G4 — the chart slots the bytes no longer carry (the engine's
+   *  `chartTombstones`); a later restore re-opens them. Null (a workbook
+   *  no chart was deleted from) leaves the part alone. */
+  chartSlots: readonly number[] | null = null,
 ): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   await host.parts.write(WORKBOOK_PART, bytes);
   await host.parts.write(WORKBOOK_NAME_PART, new TextEncoder().encode(name));
+  if (chartSlots) {
+    // Keyed to the bytes, so slots never reach another workbook's bytes (an
+    // import over a workbook a chart was deleted from writes no slots).
+    await host.parts.write(
+      CHART_SLOTS_PART,
+      new TextEncoder().encode(
+        JSON.stringify({ of: bytesKey(bytes), slots: chartSlots }),
+      ),
+    );
+  }
 }
+
+/** Plan G4 — the deleted chart slots stored beside the workbook bytes. */
+const CHART_SLOTS_PART = "workbook.chart-slots.json";
 
 /** Read the workbook + name from the container parts, or `null` when absent /
  *  no container writer — the caller then falls back to the per-browser blob. */
 export async function readWorkbookPart(
   host: PartsHost,
-): Promise<{ bytes: Uint8Array; name: string } | null> {
+): Promise<{ bytes: Uint8Array; name: string; chartSlots: number[] } | null> {
   if (!host.supports("storage.parts@1")) return null;
   const bytes = await host.parts.read(WORKBOOK_PART);
   if (!bytes) return null;
   const nameBytes = await host.parts.read(WORKBOOK_NAME_PART);
   const name = nameBytes ? new TextDecoder().decode(nameBytes) : DEFAULT_NAME;
-  return { bytes, name };
+  return { bytes, name, chartSlots: await readChartSlots(host, bytes) };
+}
+
+/** The stored chart slots, when they belong to `bytes`. */
+async function readChartSlots(
+  host: PartsHost,
+  bytes: Uint8Array,
+): Promise<number[]> {
+  try {
+    const raw = await host.parts.read(CHART_SLOTS_PART);
+    if (!raw) return [];
+    const v = JSON.parse(new TextDecoder().decode(raw)) as {
+      of?: unknown;
+      slots?: unknown;
+    };
+    if (v.of !== bytesKey(bytes) || !Array.isArray(v.slots)) return [];
+    return v.slots.filter(
+      (n): n is number => Number.isInteger(n) && (n as number) >= 0,
+    );
+  } catch {
+    return [];
+  }
+}
+
+/** A short key of a byte string (its length and FNV-1a 32). */
+function bytesKey(bytes: Uint8Array): string {
+  let h = 0x811c9dc5;
+  for (const b of bytes) {
+    h ^= b;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return `${bytes.length}:${h.toString(16)}`;
 }
 
 /** The named filter views (sheet ADR 517) — criteria saved beside the

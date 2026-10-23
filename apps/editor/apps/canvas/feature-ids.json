@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 384,
+    "command": 392,
     "keybinding": 88,
-    "menu": 278,
+    "menu": 286,
     "panel": 122,
     "tool": 72
   },
@@ -1021,6 +1021,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.circleInvalid",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.clearCells",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1032,6 +1037,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.cutSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.dataValidation",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1081,7 +1091,22 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.goalSeek",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.groupSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.hideGridInFrame",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.hideSelection",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1187,6 +1212,21 @@
     },
     {
       "id": "command:media.paged.sheet.command.styleFromCell",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.toggleFilter",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.ungroupSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.unhideSelection",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2391,6 +2431,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Context/Circle invalid data",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Clear contents",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -2406,6 +2451,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Context/Data validation…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Delete columns",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -2416,7 +2466,27 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Context/Filter",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Format cells…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Goal Seek…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Group",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Hide",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
@@ -2442,6 +2512,16 @@
     },
     {
       "id": "menu:Context/Sort…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Ungroup",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Unhide",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },

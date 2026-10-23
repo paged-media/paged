@@ -396,15 +396,20 @@ describe.skipIf(!ENGINE_BUILT)(
         "engine.getGridScene": 1, // was 21: the whole window, per keystroke
         "sceneLayer.submit": 1, // was 21: coalesced per frame
         supports: 3,
-        // The commit: one setCells whose reply carries the journal's prior
-        // input (was getCellInput + setCell).
-        "engine.setCells": 1,
+        // The commit is a typed entry through validation (sheet ADR 517):
+        // the cell's protection (read once, memoised while typing), the
+        // journal's prior input, and enterCell, which also grows a table
+        // the entry lands beside. Was one setCells whose reply carried the
+        // prior input; the validated door has no such reply.
+        "engine.cellProtection": 1,
+        "engine.getCellInput": 1,
+        "engine.enterCell": 1,
         "engine.saveXlsx": 1, // the persist after the commit
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
         "=mutations": 0,
-        "=engineCalls": 3,
+        "=engineCalls": 5,
         "=reads": 0,
         "=bytesWritten": 5223,
         // was 5922 (21 × the full grid). 282 → 283 in Wave 5: the selection
@@ -450,13 +455,16 @@ describe.skipIf(!ENGINE_BUILT)(
         "engine.getGridScene": 1, // the commit's re-window; keystrokes reuse the memo
         "sceneLayer.submit": 21, // one per frame — the contract replaces the whole layer
         supports: 23,
-        "engine.setCells": 1, // prior input in the reply (was getCellInput + setCell)
+        // A typed entry through validation (sheet ADR 517; see above).
+        "engine.cellProtection": 1,
+        "engine.getCellInput": 1,
+        "engine.enterCell": 1,
         "engine.saveXlsx": 1,
         "blob.write": 1,
         "parts.write": 2,
         "storage.set": 1,
         "=mutations": 0,
-        "=engineCalls": 3,
+        "=engineCalls": 5,
         "=reads": 0,
         "=bytesWritten": 5223,
         "=sceneItems": 5943, // 5922 + the fill-handle knob × 21 submits (Wave 5)

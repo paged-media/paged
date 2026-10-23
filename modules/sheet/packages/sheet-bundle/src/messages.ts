@@ -62,8 +62,18 @@ export const COMMANDS = defineMessages("sheet.command", {
   cutSelection: "Cut sheet selection",
   formatCells: "Format cells…",
   pasteSpecial: "Paste special…",
+  dataValidation: "Data validation…",
+  circleInvalid: "Circle invalid data",
+  toggleFilter: "Filter",
+  hideSelection: "Hide",
+  unhideSelection: "Unhide",
+  groupSelection: "Group",
+  ungroupSelection: "Ungroup",
+  goalSeek: "Goal Seek…",
   findInSheet: "Find in sheet…",
   findNext: "Find next in sheet",
+  exportCsv: "Export sheet as CSV…",
+  toggleR1C1: "R1C1 reference style",
   defaultStyleName: "Cell style",
 });
 
@@ -91,6 +101,8 @@ defineMessages("menu", {
   "Paste into sheet": "Paste into sheet",
   "Style from cell": "Style from cell",
   "New sheet from dataset": "New sheet from dataset",
+  "Export sheet as CSV…": "Export sheet as CSV…",
+  "R1C1 reference style": "R1C1 reference style",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled
@@ -104,6 +116,9 @@ export const FILES = defineMessages("sheet.files", {
   spreadsheet: "Spreadsheet",
   delimited: "Delimited text (CSV/TSV)",
   xlsx: "Workbook (.xlsx)",
+  xlsm: "Macro-enabled workbook (.xlsm)",
+  ods: "OpenDocument spreadsheet (.ods)",
+  csv: "Active sheet as CSV (.csv)",
 });
 
 /** The Sheet properties panel's sections. */
