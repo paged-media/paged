@@ -23,7 +23,8 @@
 // the schema's own struct-field defaults, which `host.objects.invoke` fills
 // in, so a caller passes `{ bytes }` alone (SDK 0.2.43 StructField).
 // A PDF has no editable model of its own once opened (it becomes a native
-// document), so the plugin contributes no object kinds.
+// document), so the plugin contributes no object kinds. It contributes one
+// template field kind: the page a placed PDF shows (template-fields.ts).
 
 import type {
   BundleHost,
@@ -38,6 +39,7 @@ import importPdfArgs from "../schema/import-pdf.args.json";
 import importPdfResult from "../schema/import-pdf.result.json";
 
 import { openPdf, type PdfImportOptions } from "./io/pdf";
+import { pdfTemplateFields } from "./template-fields";
 
 const M = defineMessages("publish.pdfCommands", {
   openPdf: "Open PDF",
@@ -96,5 +98,6 @@ export function contributePdfCommands(
   return host.contribute.objectModel({
     kinds: [],
     commands: [importPdf as TypedCommandContribution],
+    templateFields: pdfTemplateFields(host),
   });
 }

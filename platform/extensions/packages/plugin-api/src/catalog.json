@@ -1545,6 +1545,7 @@
     "frameTextWrapInvert",
     "frameFittingReferencePoint",
     "frameAutoFit",
+    "framePdfPage",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -3826,6 +3827,29 @@
         {
           "element": "FrameFittingOption",
           "attribute": "AutoFit",
+          "kind": "attr"
+        }
+      ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "framePdfPage",
+      "type": {
+        "kind": "number",
+        "unit": "count"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 1.0
+      },
+      "default": 1.0,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "PDFAttribute",
+          "attribute": "PageNumber",
           "kind": "attr"
         }
       ]
@@ -13902,6 +13926,21 @@
       "bindable": false
     },
     {
+      "addressKind": "frame",
+      "path": "pdfPageCount",
+      "type": {
+        "kind": "number",
+        "unit": "count"
+      },
+      "wire": "length",
+      "nullable": true,
+      "range": {
+        "min": 0.0
+      },
+      "access": "derived",
+      "bindable": false
+    },
+    {
       "addressKind": "table",
       "path": "tableRowCount",
       "type": {
@@ -16573,6 +16612,29 @@
           {
             "element": "FrameFittingOption",
             "attribute": "AutoFit",
+            "kind": "attr"
+          }
+        ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "framePdfPage",
+        "type": {
+          "kind": "number",
+          "integer": true
+        },
+        "nullable": true,
+        "range": {
+          "min": 1.0
+        },
+        "default": 1.0,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "length",
+        "idml": [
+          {
+            "element": "PDFAttribute",
+            "attribute": "PageNumber",
             "kind": "attr"
           }
         ]
@@ -19694,6 +19756,21 @@
         },
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "pdfPageCount",
+        "type": {
+          "kind": "number",
+          "integer": true
+        },
+        "nullable": true,
+        "range": {
+          "min": 0.0
+        },
+        "access": "derived",
+        "bindable": false,
+        "wire": "length"
       }
     ],
     "gradient": [
