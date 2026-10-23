@@ -55,6 +55,7 @@ import {
   type SessionPolicy,
   type TemplateFieldProblem,
   type TemplateFieldSummary,
+  TemplateFinding,
   type TemplateFieldValue,
   type DeriveOptions,
   type Derivation,
@@ -648,6 +649,15 @@ export class CanvasClient {
    */
   async templateFields(): Promise<readonly TemplateFieldSummary[]> {
     return this.collection<TemplateFieldSummary>("templateFields");
+  }
+
+  /**
+   * v76 (editor plan F3) — the template's preflight: what is wrong with its
+   * policy before anyone fills it, errors first. The `templateFindings`
+   * collection.
+   */
+  async templateFindings(): Promise<readonly TemplateFinding[]> {
+    return this.collection<TemplateFinding>("templateFindings");
   }
 
   /**

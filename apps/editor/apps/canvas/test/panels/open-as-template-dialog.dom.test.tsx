@@ -116,6 +116,11 @@ describe("paged.template.openAsTemplate", () => {
       OPEN_AS_TEMPLATE_COMMANDS[0]!.handler({ scope: h.scope } as never),
     );
     await until(h, '[data-open-as-template-field="Who"]');
+    // Nothing is a field yet: every derived field is new.
+    await h.settle();
+    expect(q(h, '[data-open-as-template-status="Who"]')?.textContent).toBe(
+      "(new)",
+    );
     expect(
       q(h, '[data-open-as-template-field="Photo"]')?.textContent,
     ).toContain("Picture");
