@@ -98,9 +98,10 @@ each published canary added is under [Releases](#releases).
   series, row and column attributes. What the delete removes entirely goes with its cells, as
   in Excel. Still refused, with the reason: a pivot table on the sheet or a pivot cache over it,
   and an extension Paged does not know that holds cell references. Over the Excel-written
-  workbooks of the private corpus, 1778 inserts and deletes: none refused. Excel 16 opens what
+  workbooks of the private corpus, 1778 inserts and deletes: the 24 refused are on protected
+  sheets that do not allow them (ADR 517). Excel 16 opens what
   Paged saves after these edits without a repair and keeps what it holds (the open-check lane,
-  `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
+  `recorded/opencheck.tsv`: 23 cases, seven of them what ADR 517 authors — tables, validations, protection, sort and filter, outline; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
 - **What-if** (ADR 517). Data tables (`<f t="dataTable">`, one variable in a column or a row,
