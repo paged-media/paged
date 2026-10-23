@@ -22,6 +22,8 @@
   "menu.Style from cell": "Format aus Zelle",
   "sheet.command.addSheet": "Tabellenblatt hinzufügen",
   "sheet.command.clearCells": "Zellen leeren",
+  "sheet.command.cutSelection": "Tabellenauswahl ausschneiden",
+  "sheet.command.formatCells": "Zellen formatieren…",
   "sheet.command.copySelection": "Tabellenauswahl kopieren",
   "sheet.command.defaultStyleName": "Zellenformat",
   "sheet.command.deleteColumns": "Spalten löschen",
