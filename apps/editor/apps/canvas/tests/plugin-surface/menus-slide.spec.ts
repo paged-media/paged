@@ -246,7 +246,7 @@ test.describe.serial("plugin menus — paged.slide", () => {
     const out = await clickEntry(live, EXPORT, `${C}.exportPptx`);
     // The deck's file name: see slide.spec.ts's KNOWN DEFECT on the name.
     expect(out.shell).toEqual([
-      { door: "saveFile", arg: '{"suggestedName":"presentation.pptx"}' },
+      { door: "saveFile", arg: '{"suggestedName":"slide-deck.pptx"}' },
     ]);
     expect(out.after, "an export leaves the document alone").toBe(out.before);
   });

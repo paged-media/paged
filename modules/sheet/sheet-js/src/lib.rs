@@ -45,6 +45,8 @@
 pub mod core;
 
 #[cfg(target_arch = "wasm32")]
+mod wasm_files;
+#[cfg(target_arch = "wasm32")]
 mod wasm_w2;
 
 #[cfg(target_arch = "wasm32")]
@@ -417,6 +419,36 @@ mod wasm {
             let pages = self
                 .session
                 .paginate(sheet, range, frames, opts)
+                .map_err(map_err)?;
+            to_js(&pages)
+        }
+
+        /// Paginate several ranges of `sheet` in sequence across the chain's
+        /// content boxes (a print area of several ranges): the pages of each
+        /// range in turn, each `{frameIndex, content, continued, oversize,
+        /// area}`; a range starts in the room the one before it left.
+        pub fn paginate_areas(
+            &self,
+            sheet: u16,
+            ranges: Vec<String>,
+            frames: JsValue,
+            opts: JsValue,
+        ) -> Result<JsValue, JsValue> {
+            let frames: Vec<FrameBoxArg> = if frames.is_undefined() || frames.is_null() {
+                Vec::new()
+            } else {
+                serde_wasm_bindgen::from_value(frames)
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?
+            };
+            let opts: PaginateOptionsArg = if opts.is_undefined() || opts.is_null() {
+                PaginateOptionsArg::default()
+            } else {
+                serde_wasm_bindgen::from_value(opts)
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?
+            };
+            let pages = self
+                .session
+                .paginate_areas(sheet, &ranges, frames, opts)
                 .map_err(map_err)?;
             to_js(&pages)
         }
@@ -939,6 +971,30 @@ mod wasm {
                 .resolve_range_a1(sheet, text)
                 .map_err(map_err)?;
             to_js(&r)
+        }
+
+        /// The print area of `sheet`, one `{sheet, range, top, left,
+        /// bottom, right}` per area in definition order (a print area of
+        /// several ranges is stored as one formula).
+        pub fn print_areas(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            let r = self.session.print_areas(sheet).map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// The chart slots this workbook's saved bytes no longer carry: the
+        /// charts read from the file and deleted since. A caller that
+        /// stores the bytes stores these with them and hands them to
+        /// [`restore_chart_slots`](Self::restore_chart_slots) after the
+        /// next load, so every other chart keeps its index.
+        pub fn chart_tombstones(&self) -> Vec<u32> {
+            self.session.chart_tombstones()
+        }
+
+        /// Re-open the deleted chart slots `slots` (from
+        /// [`chart_tombstones`](Self::chart_tombstones)) right after a load,
+        /// before any chart op replays.
+        pub fn restore_chart_slots(&mut self, slots: Vec<u32>) -> Result<(), JsValue> {
+            self.session.restore_chart_slots(&slots).map_err(map_err)
         }
     }
 

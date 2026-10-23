@@ -19,6 +19,18 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
+- **Files and dialect** (ADR 521). Macro-enabled workbooks (`.xlsm`) open and save with their
+  VBA project kept byte for byte and never run; templates (`.xltx`, `.xltm`) open as a new
+  workbook; saving as `.xlsx` (the `.xlsx` exporter) leaves the VBA project out, the `.xlsm`
+  exporter keeps it. OpenDocument spreadsheets (`.ods`, `.ots`) import: every table, values of
+  each type, OpenFormula formulas translated to Excel's syntax (else the cached value), named
+  ranges, merges, number formats, bold/italic/underline, font colours, fills, alignment; not
+  widths, borders, conditional formats or charts. The active sheet (or a range) exports as CSV:
+  RFC 4180 quoting, formatted or raw values, `,` `;` or tab, UTF-8 with an optional BOM
+  ("Export sheet as CSV…", the CSV exporter, the typed `exportCsv`). Formulas show and take
+  R1C1 references when the workbook is in R1C1 mode (kept in `<calcPr refMode>`, toggled by "R1C1
+  reference style") and German function names, `;` separators and `,` decimals when the host
+  language is German (`SUMME`, `WENN`, `SVERWEIS`, `Z1S1`); stored formulas stay A1 and English.
 - **Calculation.** 519 registered functions: 501 evaluated, and 18 that need a network, a cube
   connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
   `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
@@ -371,24 +383,33 @@ each published canary added is under [Releases](#releases).
   `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
 bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
 size? }` (no size clears it), each one workbook version and one undo step.
-- **Placement and chart delete** (plan G4). Typed `place { source: range | name | printArea,
-ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the placement
-  keeps the name, as the panel's Place does) or a sheet's print area (`_xlnm.Print_Area`,
-  resolved by the engine; `ref` is the sheet) on the page as one table in a new frame, or,
-  with `chain` (a frame of a threaded chain), paginated across the chain with the leading rows
-  repeated, live as the palette's Paginate is. Each placement is one document write and one
-  undo step: the first pagination of a chain is one batch on a host with in-batch handles
-  (core protocol 66), every page's table addressed by its handle and each swatch or style
-  minted once; an older host places table by table. Typed `deleteChart { chart }` removes the
-  chart from the workbook (`delete_chart`: the slot stays, so every other chart keeps its
-  index; the chart journal replays the delete) and every placed copy of it (found on the scene
-  tree by its binding, so a chart placed in an earlier session goes too), one workbook version
-  and one undo step; a `host.objects` delete of `chart/<n>` does the same in its batch.
-  `apps/cli/test/cli-sheet.spec.ts` runs both through `paged-node invoke`. Not a placement
-  kind yet: a frame's view and sizing (`sizing: "window"`, print headings and gridlines, ADR
-  510), whose page side is not wired to placement; a print area of several ranges; a chart read
-  from the workbook stays in the saved xlsx (the writer never re-derives chart parts) and is
-  deleted again from the journal when the version is loaded.
+- **Placement and chart delete** (plan G4, ADR 522). Typed `place { source: range | name |
+printArea, ref, chain?, repeatHeaderRows, sizing, box?, view?, print? }` puts an A1 range, a
+  defined name or table (the placement keeps the name, as the panel's Place does) or a sheet's
+  print area (`_xlnm.Print_Area`, resolved by the engine; `ref` is the sheet) on the page in a
+  new frame, or, with `chain` (a frame of a threaded chain), paginated across the chain with the
+  leading rows repeated, live as the palette's Paginate is. A single frame is a frame view (ADR
+  510): `sizing: "window"` (the default; the size of the range in sheet tracks), `"fixed"` (a
+  window filling the `box` given) or `"fit"` (the earlier fixed range with measured widths);
+  `view: { topLeft, lock }` starts the window at a cell and pins it; `print: { headings,
+gridlines }` prints Excel's headings and gridlines. A print area of several ranges (stored as
+  one formula, `print_areas`) places one table per area, in order, each frame under the one
+  before, or with `chain` paginates the areas in sequence (`paginate_areas`, the next one
+  starting in the room the one before left). Each placement is one document write and one undo
+  step (each area one step); the first pagination of a chain is one batch on a host with
+  in-batch handles (core protocol 66), every page's table addressed by its handle and each
+  swatch or style minted once; an older host places table by table. Typed `deleteChart { chart
+}` removes the chart from the workbook (`delete_chart`: the slot stays, so every other chart
+  keeps its index) and every placed copy of it (found on the scene tree by its binding, so a
+  chart placed in an earlier session goes too), one workbook version and one undo step; a
+  `host.objects` delete of `chart/<n>` does the same in its batch. A chart read from the xlsx
+  leaves the saved file (its drawing anchor, relationship, part and the parts only it reached,
+  with their content types; every other part byte for byte as it was); its slot is a tombstone
+  stored with the bytes and re-opened on load, so the other charts keep their indices. Placed
+  charts are tracked from the page: after a document undo or redo and on open, every copy on
+  the scene tree (by its binding, at the box it records) refreshes with later edits — the art an
+  undone `deleteChart` restored, and a reopened document's charts. `apps/cli/test/
+cli-sheet.spec.ts` runs placement, a view and chart delete through `paged-node invoke`.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
@@ -443,8 +464,14 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   the bars are drawn from the table's top, not from the first workbook row: no read reports the
   band's height.
 - **Rediscovery** finds tables placed by this version; a table placed before the binding
-  carried its table record is not found again. Charts and paginated chains are not
-  rediscovered.
+  carried its table record is not found again. Charts are found by their binding; one placed
+  before the binding recorded its box is tracked at the extent of its elements. Paginated chains
+  are not rediscovered.
+- **Placement.** A view, print options and fixed sizing are for one frame: a chain paginates its
+  range, and a defined name is placed by name. Each area of a print area placed without a chain
+  is its own undo step. A chartsheet's chart stays in the saved file when deleted (the tab is the
+  chart; the journal replays the delete). A version before this one does not read the deleted
+  chart slots: opening bytes saved after a delete, it sees the later charts one index lower.
 - **Colours.** `getStyle` and the page lowering resolve theme and indexed colours through the
   theme part and the workbook palette; conditional-format colour-scale stops still use the
   default Office theme.
@@ -479,9 +506,11 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 - **Interpreting pivot tables, slicers or macros**
   ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
-- **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
-  refused.
-- **Localised function names and argument separators**, and CJK display locales.
+- **Other file formats.** `.xlsx`/`.xlsm`/`.xltx`/`.xltm`, `.ods`/`.ots`, CSV and TSV are read;
+  `.xlsx`, `.xlsm` and CSV are written; a legacy `.xls` is refused, `.xlsb` is not read, ODS is
+  not written.
+- **Localised function names in languages other than German** (they show English names), and
+  CJK display locales.
 - **A worker-hosted engine.** The manifest declares no worker capability.
 - **Three registry rows marked `planned`:** `sheet.chart.design-markers`,
   `sheet.format.locale.cjk-followup`, `sheet.style.doc-style-group`.
