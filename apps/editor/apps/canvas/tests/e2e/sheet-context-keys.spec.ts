@@ -468,6 +468,34 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       await page.keyboard.press("Escape");
     });
 
+    test("AC-FULLSCREEN-1 — the sheet frame goes full screen from its bar and comes back with Esc @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B9");
+      await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="frame-surface"]');
+      await expect(surface).toHaveAttribute("data-presentation", "frame");
+      const small = (await surface.boundingBox())!;
+      await page.getByRole("button", { name: "Full screen" }).click();
+      await expect(surface).toHaveAttribute("data-presentation", "fullscreen");
+      const big = (await surface.boundingBox())!;
+      expect(big.width).toBeGreaterThan(small.width * 2);
+      // Typing still edits the grid in full screen.
+      await page.keyboard.type("77");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowUp");
+      await expect(
+        page.locator('[data-testid="sheet-bar-formula"]'),
+      ).toHaveValue("77");
+      // Esc: back to the frame; Esc again: out of the sheet.
+      await page.keyboard.press("Escape");
+      await expect(surface).toHaveAttribute("data-presentation", "frame");
+      await page.keyboard.press("Escape");
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(
+        0,
+      );
+    });
+
     test("AC-WHEEL-1 — a wheel over the active frame goes to onContentWheel; the canvas pans only when it declines @feat:plugin-platform.modal-edit-session @feat:sheet.grid.inframe @level:gesture", async ({
       page,
     }) => {

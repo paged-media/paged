@@ -45,6 +45,8 @@ export function createFrameSurfaceRegistry(): FrameSurfaceRegistry {
     for (const fn of listeners) fn();
   };
   return {
+    // The canvas shows a surface full screen (editor ADR 283).
+    fullscreen: true,
     register(contribution) {
       if (byType.has(contribution.contextType)) {
         throw new Error(

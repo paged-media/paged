@@ -975,7 +975,9 @@ export {
 export {
   ChromeRegionsProvider,
   chromeRegionsOf,
+  useChromeOverride,
   useChromeRegions,
+  type ChromeOverride,
   type ChromeRegions,
 } from "./state/chrome-regions";
 export {

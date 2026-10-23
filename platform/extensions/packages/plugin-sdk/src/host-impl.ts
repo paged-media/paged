@@ -4559,6 +4559,9 @@ export function createBundleHost(
   }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");
+    if (getEditor()?.registries?.frameSurfaces?.fullscreen) {
+      featureSet.add("editContext.frameSurface.fullscreen@1");
+    }
   }
   if (options?.toolSettings) {
     featureSet.add("tools.settings@1");
