@@ -63,7 +63,8 @@
       "media.paged.sheet.command.findInSheet",
       "media.paged.sheet.command.findNext",
       "media.paged.sheet.command.cutSelection",
-      "media.paged.sheet.command.formatCells"
+      "media.paged.sheet.command.formatCells",
+      "media.paged.sheet.command.pasteSpecial"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -406,6 +407,14 @@
         {
           "id": "media.paged.sheet.command.formatCells",
           "title": "Format cells",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.pasteSpecial",
+          "title": "Paste special",
           "args": {
             "kind": "struct",
             "fields": {}

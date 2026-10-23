@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 383,
+    "command": 384,
     "keybinding": 88,
-    "menu": 277,
+    "menu": 278,
     "panel": 122,
     "tool": 72
   },
@@ -1137,6 +1137,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.pasteSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.pasteSpecial",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2427,6 +2432,11 @@
     },
     {
       "id": "menu:Context/Paste",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Paste special…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
