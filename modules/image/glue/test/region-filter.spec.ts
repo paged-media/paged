@@ -116,7 +116,7 @@ const differs = (a: Uint8Array, b: Uint8Array, x: number, y: number) => {
 
 lane("filterRegion, headless (the CPU twins)", () => {
   it("runs without a GPU: inside the region only, one undo step, the frame baked", async () => {
-    covers(`command:${FILTER}`);
+    covers("command:media.paged.image.command.filterRegion");
     const h = await imageDoc();
     expect(engine.gpuReady()).toBe(false);
     const before = await shown(h);
@@ -239,7 +239,7 @@ const invertWire = () => {
 
 lane("filterRegion with a mask, headless", () => {
   it("a polygon: only its pixels change, as the engine computes; a feather reaches further", async () => {
-    covers(`command:${FILTER}`);
+    covers("command:media.paged.image.command.filterRegion");
     const h = await imageDoc();
     const before = await shown(h);
     // A right triangle over the left half: (0,0)–(8,0)–(0,12).
@@ -495,7 +495,7 @@ lane("filterRegion's polygons: a fill rule and ops", () => {
   }
 
   it("evenodd cuts a hole with an inner polygon; without a rule the polygons union", async () => {
-    covers(`command:${FILTER}`);
+    covers("command:media.paged.image.command.filterRegion");
     const ring = await filtered({
       polygons: [outer, inner],
       fillRule: "evenodd",
