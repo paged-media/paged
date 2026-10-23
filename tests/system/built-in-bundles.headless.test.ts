@@ -37,7 +37,6 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 
 import { PLUGIN_BUNDLES } from "../../apps/editor/apps/canvas/src/plugin-bundle-table";
-import { objectRegistry } from "../../apps/editor/apps/canvas/src/object-model";
 
 import {
   createHeadlessEditor,
@@ -116,7 +115,7 @@ describe("the editor's built-in bundles, activated together in the headless edit
       const tools = has(r.tools.list(), (p) => p.id);
       const importers = has(r.importers?.list() ?? [], (p) => p.id);
       const exporters = has(r.exporters?.list() ?? [], (p) => p.id);
-      const typed = has([...(await objectRegistry.commands())], (p) => p.id);
+      const typed = has([...(await ed.objects.commands())], (p) => p.id);
       const missing = [
         ...(c.panels ?? []).filter((x) => !panels.has(x)),
         ...(c.commands ?? []).filter((x) => !commands.has(x)),
