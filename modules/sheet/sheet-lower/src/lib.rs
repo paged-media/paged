@@ -77,7 +77,9 @@ use sheet_format::{FormatCache, FormatCtx};
 // a tall range across an ordered list of frame content-boxes (S-05: the chain
 // TOPOLOGY is still an SDK gap, so the caller supplies the ordered frames).
 pub mod paginate;
-pub use paginate::{paginate, paginate_lowered, FrameBox, Page, PaginateOptions};
+pub use paginate::{
+    paginate, paginate_lowered, paginate_sequence, FrameBox, Page, PaginateOptions,
+};
 
 // ---- Style resolution (IR v2, M1 style-map track; spec §8.3). ----
 //
@@ -87,10 +89,14 @@ pub use paginate::{paginate, paginate_lowered, FrameBox, Page, PaginateOptions};
 pub mod style;
 /// The per-cell styler both the page lowering and the grid scene call.
 pub mod styler;
+pub use cfdraw::{
+    apply_delta, icon_shapes, place_icon, BarDraw, CellCf, CellCfSource, IconDraw, IconRect,
+    IconShape, NoCf, VisualDelta,
+};
 pub use style::{
-    resolve_delta, resolve_visual, run_attrs, BorderLine, BorderLines, FillGradient,
-    FillGradientStop, FillPattern, NoStyles, StyleResolver, VisualAttrs, VisualStyleSource,
-    INDENT_LEVEL_PT,
+    resolve_delta, resolve_dxf_delta, resolve_visual, run_attrs, BorderLine, BorderLines,
+    FillGradient, FillGradientStop, FillPattern, NoStyles, StyleResolver, VisualAttrs,
+    VisualStyleSource, INDENT_LEVEL_PT,
 };
 pub use styler::CellStyler;
 
@@ -99,6 +105,7 @@ pub use styler::CellStyler;
 // Pure value-comparison + colour-scale evaluation that folds a matched cf rule's
 // differential format into the lowered style (no `sheet-calc` / `sheet-xlsx`
 // dep — the xlsx side converts its parsed cf model into these mirror types).
+pub mod cfdraw;
 pub mod condfmt;
 // ---- Lowering over EXPLICIT tracks (ADR 510: the page side of a frame window). ----
 pub mod table_band;
@@ -107,8 +114,8 @@ pub use condfmt::{
     CfBlock, CfOperator, CfRule, CfRuleKind, ColorScale, DataBar, ScaleStop, SheetCondFmt,
 };
 pub use tracks::{
-    col_width_pt, heading_col_width_pt, lower_tracks, lower_tracks_styled, row_height_pt,
-    TrackOptions, HEADING_INDEX,
+    col_width_pt, heading_col_width_pt, lower_tracks, lower_tracks_cf, lower_tracks_styled,
+    row_height_pt, TrackOptions, HEADING_INDEX,
 };
 
 // ---- T0 geometry rulings (spec §8.2). ----
@@ -161,6 +168,11 @@ pub struct LoweredContent {
     /// empty (data bars come only from [`lower_range_condfmt`]). Additive on
     /// the wire (the TS mirror keeps it optional).
     pub databars: Vec<DataBarRect>,
+    /// Conditional-format ICONS (W2.4, icon sets): each cell's icon as
+    /// filled polygons in content space — the page draws them as paths, the
+    /// grid fills them. Omitted on the wire when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub icons: Vec<IconRect>,
     /// How many leading rows are table HEADER rows (they repeat on every
     /// continuation frame of a threaded table): the frozen rows a frame
     /// window shows, plus the printed column-heading row. Only
@@ -385,6 +397,23 @@ pub struct DataBarRect {
     pub fill_fraction: f64,
     /// The bar fill colour, `#RRGGBB`.
     pub fill: String,
+    /// A negative bar (W2.4; omitted when false).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub negative: bool,
+    /// Drawn as a gradient fading to white (the 2006 look).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub gradient: bool,
+    /// The bar's border colour, `#RRGGBB`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border: Option<String>,
+    /// The axis x (content-space pt) when the bar range holds negatives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_x: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_color: Option<String>,
+    /// The document swatch the bar colour names.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<String>,
 }
 
 /// The horizontal/vertical rule sets (spec §8.2 grid rules).
@@ -551,6 +580,20 @@ pub fn lower_range_condfmt(
     visual: &impl style::VisualStyleSource,
     cf: &condfmt::SheetCondFmt,
 ) -> LoweredContent {
+    lower_range_cf(model, sheet, range, opts, visual, cf, None)
+}
+
+/// [`lower_range_condfmt`] with conditional formatting evaluated through `src` (W2.4,
+/// the session's `sheet_calc::cf` evaluator) instead of the static rules.
+pub fn lower_range_cf(
+    model: &SheetModel,
+    sheet: SheetId,
+    range: CellRange,
+    opts: &ViewOptions,
+    visual: &impl style::VisualStyleSource,
+    cf: &condfmt::SheetCondFmt,
+    src: Option<&dyn crate::cfdraw::CellCfSource>,
+) -> LoweredContent {
     let (top, left, bottom, right) = range.normalized();
     let ws = model.sheet(sheet);
 
@@ -558,7 +601,7 @@ pub fn lower_range_condfmt(
     let mut cache = FormatCache::default();
     // The style table is built as cells are walked (row/col index order —
     // deterministic), base style folded with cf.
-    let mut styler = styler::CellStyler::new(visual, cf, ws);
+    let mut styler = styler::CellStyler::new(visual, cf, ws).with_cf_source(src);
 
     // ---- Columns: range-relative index + width (pt). ----
     let mut cols = Vec::with_capacity((right - left + 1) as usize);
@@ -589,6 +632,7 @@ pub fn lower_range_condfmt(
     // numeric cell under a data-bar cf rule yields one proportional drawn rect
     // in content-space pt (col_x/row_y give the cell box). NOT a style fill.
     let mut databars: Vec<DataBarRect> = Vec::new();
+    let mut icons: Vec<IconRect> = Vec::new();
     let mut rows = Vec::with_capacity((bottom - top + 1) as usize);
     let mut row_y: Vec<f64> = Vec::with_capacity((bottom - top + 2) as usize);
     let mut y = 0.0_f64;
@@ -612,7 +656,7 @@ pub fn lower_range_condfmt(
             }
             let (text, align, style_key, fill, runs) = match ws.and_then(|w| w.cell(r, c)) {
                 Some(cell) => {
-                    let d = lower_cell_display(model, cell, &mut cache, &ctx);
+                    let d = lower_cell_cf(&mut styler, model, r, c, cell, &mut cache, &ctx);
                     // cf evaluates at the cell's MODEL (absolute) coordinates.
                     let key = styler.key_for_display(r, c, cell, d.color);
                     let runs = styler.runs(sheet, r, c, cell, &d.text).map(|rs| {
@@ -623,18 +667,25 @@ pub fn lower_range_condfmt(
                     // Data-bar geometry (the page-draw lane): a separate pass
                     // from the style override — a cell can carry both a dxf
                     // style and a drawn bar (Excel layers them).
-                    if let Some((frac, rgb)) = styler.databar(r, c, cell) {
-                        let cell_x = col_x[(c - left) as usize];
-                        let cell_w = col_x[(c - left + 1) as usize] - cell_x;
-                        databars.push(databar_rect(
+                    let cell_x = col_x[(c - left) as usize];
+                    let cell_w = col_x[(c - left + 1) as usize] - cell_x;
+                    if let Some(bar) = styler.databar(r, c, cell) {
+                        databars.push(bar_rect(
                             r - top,
                             c - left,
+                            (cell_x, y, cell_w, height_pt),
+                            &bar,
+                        ));
+                    }
+                    if let Some(icon) = styler.icon(r, c, cell) {
+                        icons.push(place_icon(
+                            r - top,
+                            c - left,
+                            &icon,
                             cell_x,
                             y,
-                            cell_w,
                             height_pt,
-                            frac,
-                            rgb,
+                            DATABAR_INSET_PT,
                         ));
                     }
                     (d.text, d.align, key, d.fill.map(String::from), runs)
@@ -721,39 +772,64 @@ pub fn lower_range_condfmt(
         merges,
         styles,
         databars,
+        icons,
         header_rows: 0,
     }
 }
 
 /// Build one [`DataBarRect`] for a cell at content-space `(cell_x, cell_y)`
-/// with size `(cell_w, cell_h)`. The bar fills `frac` of the cell WIDTH,
-/// inset by [`DATABAR_INSET_PT`] on every edge so it reads as a bar inside the
-/// cell (not touching the grid rules). A `frac` of 0 still emits a zero-width
-/// rect (deterministic; the host draws nothing visible). `rgb` → `#RRGGBB`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn databar_rect(
+/// with size `(cell_w, cell_h)`: the bar's `start..end` share of the cell's
+/// inner width (inset by [`DATABAR_INSET_PT`] on every edge, so it reads as
+/// a bar inside the cell without touching the rules), its colours, the axis.
+/// Both surfaces build their bars here.
+pub fn bar_rect(
     row: u32,
     col: u32,
-    cell_x: f64,
-    cell_y: f64,
-    cell_w: f64,
-    cell_h: f64,
-    frac: f64,
-    rgb: (u8, u8, u8),
+    (cell_x, cell_y, cell_w, cell_h): (f64, f64, f64, f64),
+    bar: &BarDraw,
 ) -> DataBarRect {
     let inset = DATABAR_INSET_PT.min(cell_w / 4.0).min(cell_h / 4.0);
     let avail_w = (cell_w - 2.0 * inset).max(0.0);
-    let bar_w = avail_w * frac.clamp(0.0, 1.0);
+    let (s, e) = (bar.start.clamp(0.0, 1.0), bar.end.clamp(0.0, 1.0));
+    let hex = |c: (u8, u8, u8)| format!("#{:02X}{:02X}{:02X}", c.0, c.1, c.2);
     DataBarRect {
         row,
         col,
-        x: cell_x + inset,
+        x: cell_x + inset + avail_w * s,
         y: cell_y + inset,
-        w: bar_w,
+        w: avail_w * (e - s).max(0.0),
         h: (cell_h - 2.0 * inset).max(0.0),
-        fill_fraction: frac,
-        fill: format!("#{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2),
+        fill_fraction: (e - s).max(0.0),
+        fill: hex(bar.color),
+        negative: bar.negative,
+        gradient: bar.gradient,
+        border: bar.border.map(hex),
+        axis_x: bar
+            .axis
+            .map(|a| cell_x + inset + avail_w * a.clamp(0.0, 1.0)),
+        axis_color: bar.axis.map(|_| hex(bar.axis_color)),
+        swatch: bar.color_swatch.clone(),
     }
+}
+
+/// A cell's display with its conditional formatting: a differential number
+/// format renders the text, and "show bar / icon only" hides it (W2.4).
+pub fn lower_cell_cf<S: VisualStyleSource>(
+    styler: &mut CellStyler<'_, S>,
+    model: &SheetModel,
+    row: u32,
+    col: u32,
+    cell: &Cell,
+    cache: &mut FormatCache,
+    ctx: &FormatCtx,
+) -> CellDisplay {
+    let code = styler.cf_num_fmt(row, col, cell);
+    let mut d = lower_cell_display_code(model, cell, code.as_deref(), cache, ctx);
+    if styler.hides_value(row, col, cell) {
+        d.text.clear();
+        d.fill = None;
+    }
+    d
 }
 
 /// Lower one cell to `(formatted text, resolved align)`. The text is the
@@ -799,7 +875,19 @@ pub fn lower_cell_display(
     cache: &mut FormatCache,
     ctx: &FormatCtx,
 ) -> CellDisplay {
-    let code = model.styles.num_fmt_of(cell.style);
+    lower_cell_display_code(model, cell, None, cache, ctx)
+}
+
+/// [`lower_cell_display`] through `code` instead of the cell's own number
+/// format (a conditional format's differential number format, W2.4).
+pub fn lower_cell_display_code(
+    model: &SheetModel,
+    cell: &Cell,
+    code: Option<&str>,
+    cache: &mut FormatCache,
+    ctx: &FormatCtx,
+) -> CellDisplay {
+    let code = code.unwrap_or_else(|| model.styles.num_fmt_of(cell.style));
     let (text, color, fill) = match cache.get(code) {
         Ok(fmt) => {
             let d = sheet_format::format_value_display(&cell.value, fmt, ctx);

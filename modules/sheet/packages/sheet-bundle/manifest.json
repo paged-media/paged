@@ -40,6 +40,8 @@
     ],
     "commands": [
       "media.paged.sheet.command.importXlsx",
+      "media.paged.sheet.command.exportCsv",
+      "media.paged.sheet.command.toggleR1C1",
       "media.paged.sheet.command.lowerToFrame",
       "media.paged.sheet.command.lowerChartToFrame",
       "media.paged.sheet.command.openGrid",
@@ -65,13 +67,26 @@
       "media.paged.sheet.command.findNext",
       "media.paged.sheet.command.cutSelection",
       "media.paged.sheet.command.formatCells",
-      "media.paged.sheet.command.pasteSpecial"
+      "media.paged.sheet.command.pasteSpecial",
+      "media.paged.sheet.command.dataValidation",
+      "media.paged.sheet.command.circleInvalid",
+      "media.paged.sheet.command.toggleFilter",
+      "media.paged.sheet.command.hideSelection",
+      "media.paged.sheet.command.unhideSelection",
+      "media.paged.sheet.command.groupSelection",
+      "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
-      "media.paged.sheet.importer.csv"
+      "media.paged.sheet.importer.csv",
+      "media.paged.sheet.importer.ods"
     ],
-    "exporters": ["media.paged.sheet.exporter.xlsx"],
+    "exporters": [
+      "media.paged.sheet.exporter.xlsx",
+      "media.paged.sheet.exporter.xlsm",
+      "media.paged.sheet.exporter.csv"
+    ],
     "editContexts": [
       {
         "type": "sheet",
@@ -422,6 +437,70 @@
           }
         },
         {
+          "id": "media.paged.sheet.command.dataValidation",
+          "title": "Data validation",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.circleInvalid",
+          "title": "Circle invalid data",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.toggleFilter",
+          "title": "Toggle filter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.hideSelection",
+          "title": "Hide rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.unhideSelection",
+          "title": "Unhide rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.groupSelection",
+          "title": "Group rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.ungroupSelection",
+          "title": "Ungroup rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.goalSeek",
+          "title": "Goal Seek",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.sheet.command.clearCells",
           "title": "Clear cells",
           "args": {
@@ -541,6 +620,51 @@
                 "kind": "number",
                 "integer": true,
                 "default": 0
+              },
+              "sizing": {
+                "kind": "enum",
+                "members": ["window", "fixed", "fit"],
+                "default": "window"
+              },
+              "box": {
+                "kind": "struct",
+                "fields": {
+                  "width": {
+                    "kind": "number"
+                  },
+                  "height": {
+                    "kind": "number"
+                  }
+                },
+                "optional": true
+              },
+              "view": {
+                "kind": "struct",
+                "fields": {
+                  "topLeft": {
+                    "kind": "text",
+                    "optional": true
+                  },
+                  "lock": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
+              },
+              "print": {
+                "kind": "struct",
+                "fields": {
+                  "headings": {
+                    "kind": "bool",
+                    "default": false
+                  },
+                  "gridlines": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
               }
             }
           },
@@ -549,6 +673,12 @@
             "fields": {
               "frame": {
                 "kind": "text"
+              },
+              "frames": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
               }
             }
           }
@@ -570,6 +700,87 @@
           },
           "result": {
             "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.importOds",
+          "title": "Import OpenDocument spreadsheet (.ods)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "bytes": {
+                "kind": "bytes",
+                "mime": ["application/vnd.oasis.opendocument.spreadsheet"]
+              },
+              "name": {
+                "kind": "text",
+                "default": "workbook.ods"
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.exportCsv",
+          "title": "Export a sheet as CSV",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sheet": {
+                "kind": "text",
+                "optional": true
+              },
+              "range": {
+                "kind": "text",
+                "optional": true
+              },
+              "delimiter": {
+                "kind": "enum",
+                "members": [",", ";", "tab"],
+                "default": ","
+              },
+              "formatted": {
+                "kind": "bool",
+                "default": true
+              },
+              "bom": {
+                "kind": "bool",
+                "default": false
+              }
+            }
+          },
+          "result": {
+            "kind": "text"
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.toggleR1C1",
+          "title": "R1C1 reference style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "r1c1": {
+                "kind": "bool",
+                "optional": true
+              },
+              "lang": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {
+              "r1c1": {
+                "kind": "bool"
+              },
+              "lang": {
+                "kind": "text"
+              }
+            }
           }
         },
         {

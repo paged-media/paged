@@ -225,6 +225,30 @@ export interface DataBarRect {
   h: number;
   fillFraction: number;
   fill: string;
+  /** W2.4: a negative bar. */
+  negative?: boolean;
+  /** Drawn as a gradient fading to white (the 2006 look). */
+  gradient?: boolean;
+  /** The bar's border colour. */
+  border?: string | null;
+  /** The axis x (content pt) when the bar range holds negatives. */
+  axisX?: number | null;
+  axisColor?: string | null;
+  /** The document swatch the bar colour names. */
+  swatch?: string | null;
+}
+
+/** One conditional-format icon (W2.4, icon sets): filled polygons in
+ *  content space, drawn the same on the page and in the grid. */
+export interface IconRect {
+  row: number;
+  col: number;
+  x: number;
+  y: number;
+  size: number;
+  set: string;
+  index: number;
+  shapes: { points: [number, number][]; fill: string }[];
 }
 
 /** The complete lowered region for one frame: column + row geometry,
@@ -243,6 +267,8 @@ export interface LoweredContent {
    *  lane). ADDITIVE — optional so existing fixtures stay valid; the engine
    *  emits it (empty unless a data-bar cf rule covers numeric cells). */
   databars?: DataBarRect[];
+  /** W2.4 — conditional-format icons. */
+  icons?: IconRect[];
   /** How many leading rows are table HEADER rows (repeat on continuation
    *  frames): a frame page's frozen rows plus its printed heading row.
    *  ADDITIVE — absent means 0 (range lowerings, paginated pages). */
@@ -278,6 +304,10 @@ export interface Page {
   /** `true` when this frame holds a single block/row taller than the whole
    *  frame — the spec's pathological case, placed alone and flagged. */
   oversize: boolean;
+  /** Which range of a sequence this page shows (`paginate_areas`, a print
+   *  area of several ranges); 0 for a single range. Absent from an older
+   *  engine. */
+  area?: number;
 }
 
 /** Total content width (pt) — the sum of column widths. Pure geometry,

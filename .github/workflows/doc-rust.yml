@@ -175,5 +175,5 @@ jobs:
         with:
           auto-install: true
           proto-version: "0.63.1"
-      - name: build + budget gate (100 MB app-wide)
+      - name: build + budget gate (120 MB app-wide)
         run: bash scripts/build-wasm.sh

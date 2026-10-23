@@ -151,7 +151,11 @@ export function useEditContextEntry() {
    */
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const tryEnterEditContext = useCallback(
-    async (hit: DoubleClickHit, objectTypesOnly = false): Promise<boolean> => {
+    async (
+      hit: DoubleClickHit,
+      objectTypesOnly = false,
+      dryRun = false,
+    ): Promise<boolean> => {
       const element = hit.element;
       if (!element) return false;
       // Nothing registered → no work (the common case stays cheap).
@@ -220,6 +224,8 @@ export function useEditContextEntry() {
         },
       );
       if (!resolution) return false;
+      // Editor ADR 282 — "would it enter?" answers here, entering nothing.
+      if (dryRun) return true;
 
       // Select the element (the context's write-scope root) and enter.
       const at = await selectForEntry(
@@ -291,5 +297,20 @@ export function useEditContextEntry() {
     [client, editContexts, enter, setElementSelection, setElementGeometry],
   );
 
-  return { tryEnterEditContext, tryEnterOwnedContent, enterContextByType };
+  /** Editor ADR 282 — whether `element` is content a plugin owns (its
+   *  metadata claims an object type), so Enter on it enters that plugin's
+   *  edit context. Enters nothing. */
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
+  const isOwnedContent = useCallback(
+    (element: ElementId): Promise<boolean> =>
+      tryEnterEditContext({ element, groupChain: [] }, true, true),
+    [tryEnterEditContext],
+  );
+
+  return {
+    tryEnterEditContext,
+    tryEnterOwnedContent,
+    enterContextByType,
+    isOwnedContent,
+  };
 }

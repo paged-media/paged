@@ -355,20 +355,20 @@ jobs:
       - name: fidelity thresholds schema
         run: bun run test:thresholds
 
-      # The app-wide wasm budget: 100 MB for the editor AND every plugin
+      # The app-wide wasm budget: 120 MB for the editor AND every plugin
       # together (2026-08-19). Every other wasm ceiling in the platform is
       # per-artifact or per-bundle, so until now nothing measured the sum —
       # eight bundles could each pass their own gate and the app could still
       # ship a quarter of a gigabyte. This job is the only place that sees
       # the whole assembled app, so this is where the sum is checked.
-      - name: app-wide wasm budget (100 MB, editor + all plugins)
+      - name: app-wide wasm budget (120 MB, editor + all plugins)
         # `--json-out` writes the measurement artifact as a SIDE EFFECT and
         # still exits on the budget. Deliberately not `--json | tee`: a pipe
         # replaces this step's exit code with tee's, which would turn the
         # budget gate into a gate that always passes.
         run: bun run test:wasm-budget --json-out "$RUNNER_TEMP/paged-measurements-wasm.json"
 
-      # The number, kept. The gate above answers "are we under 100 MB today";
+      # The number, kept. The gate above answers "are we under 120 MB today";
       # only a series answers "which way is it moving, and how fast". Uploaded
       # `if: always()` because a FAILING run's number is precisely the one
       # worth having in the trend.

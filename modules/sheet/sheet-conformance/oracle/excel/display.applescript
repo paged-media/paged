@@ -28,11 +28,13 @@ on run argv
         repeat with c from 1 to nCols
           set cl to cell r of column c of ur
           set v to value of cl
-          if v is not missing value and (v as text) is not "" then
+          set ic to (color of interior object of display format of cl) as text
+          -- A cell shows something when it holds a value or is painted (a
+          -- conditional format colours blank cells too).
+          if (v is not missing value and (v as text) is not "") or ic is not "255,255,255" then
             set addr to get address cl without row absolute and column absolute
             set shown to string value of cl
             set fc to (color of font object of display format of cl) as text
-            set ic to (color of interior object of display format of cl) as text
             set out to out & addr & TB & shown & TB & fc & TB & ic & LF
           end if
         end repeat

@@ -61,8 +61,12 @@ field has. So a filler writes the document on the field's frame and nothing else
 to another document is refused. In a table cell the write lands in the cell's poured text,
 checked against the cell's live text first (engine read `cell:<table>/<row>,<col>` `text`):
 a cell edited on the canvas since is refused. Text typed into a cell on the canvas is saved back on
-export: each native cell's `text` is read next to the story and patched into the cell's runs
-(a cell whose paragraphs were added or removed keeps its Word text and is reported). Headers and footers, pictures, paragraphs a
+export: each native cell's `text` is read next to the story and patched into the cell's runs;
+a paragraph added in a cell becomes a copy of its neighbour's paragraph (properties and the
+formatting of the run it continues), a removed one is dropped (the cell's last paragraph is
+kept, as Word requires). The native tables are found by their content, so a placed document
+whose story gained, lost or reordered tables still saves its cells; only a table that is gone
+from the canvas is reported. Headers and footers, pictures, paragraphs a
 page or column break splits and tables poured as text (a row taller than its page) cannot be
 fields yet.
 

@@ -45,8 +45,12 @@
 //! `(sheet, row, col)`. The consumer parses these into model
 //! `FormulaId`s on load and writes printed text back before save.
 
+pub mod chart_write;
 pub mod defined_names;
 pub mod error;
+pub mod kind;
+#[cfg(feature = "ods")]
+pub mod ods;
 pub mod opc;
 pub mod parts;
 mod patch;
@@ -135,6 +139,11 @@ pub struct XlsxDocument {
     /// lowering, never written back. A sheet with no conditional formatting has
     /// no entry.
     pub conditional_formats: BTreeMap<SheetId, parts::conditional_format::SheetConditionalFormats>,
+
+    /// The full conditional-formatting model per sheet (W2.4, sheet ADR
+    /// 520): every rule kind and the `x14` extension, what the evaluator
+    /// (`sheet_calc::cf`) and the authoring API work on.
+    pub cf_models: BTreeMap<SheetId, sheet_core::condfmt::SheetCf>,
 
     /// Parsed DrawingML charts (M2 charts track, spec §8.4), discovered through
     /// each worksheet `.rels`' `/drawing` → drawing `.rels`' `/chart` chain and
@@ -260,6 +269,9 @@ struct ModelSheetResolver<'a> {
 impl SheetResolver for ModelSheetResolver<'_> {
     fn resolve(&self, name: &str) -> Option<SheetId> {
         self.model.sheet_id(name)
+    }
+    fn defined(&self, name: &str) -> Option<String> {
+        parts::chart::defined_reference(self.model, name)
     }
 }
 
@@ -419,6 +431,7 @@ impl XlsxDocument {
             SheetId,
             parts::conditional_format::SheetConditionalFormats,
         > = BTreeMap::new();
+        let mut cf_models: BTreeMap<SheetId, sheet_core::condfmt::SheetCf> = BTreeMap::new();
         let mut freeze_panes: BTreeMap<SheetId, parts::freeze::FreezePanes> = BTreeMap::new();
         let mut data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>> =
             BTreeMap::new();
@@ -578,6 +591,14 @@ impl XlsxDocument {
             if !cf.is_empty() {
                 conditional_formats.insert(sid, cf);
             }
+            // The full model (W2.4): every rule kind and the x14 extension.
+            let full = parts::cf_model::parse_sheet(
+                parsed_ws.captured.after().map(|c| c.bytes.as_slice()),
+                &dxf_models,
+            );
+            if !full.is_empty() {
+                cf_models.insert(sid, full);
+            }
 
             // Freeze panes (spec §8.1): the `<sheetViews><pane>` split sits in
             // the worksheet's BEFORE-sheetData captures (an unmodeled
@@ -619,7 +640,7 @@ impl XlsxDocument {
         // byte-identical on round-trip (the `<drawing>` element on the
         // worksheet is itself a captured unknown child). The resolver maps
         // `c:f` sheet names to model ids; the full model has all sheets now.
-        let mut charts: Vec<ParsedChart> = Vec::new();
+        let mut found: Vec<(ParsedChart, chart_write::Recorded)> = Vec::new();
         let mut sparklines: BTreeMap<SheetId, Vec<sheet_chart::SparklineGroup>> = BTreeMap::new();
         {
             let resolver = ModelSheetResolver { model: &model };
@@ -678,14 +699,20 @@ impl XlsxDocument {
                             {
                                 parsed.part = Some(chart_part.clone());
                                 parsed.drawing = Some(drawing_part.clone());
+                                parsed.rel_id = Some(chart_rel.id.clone());
                                 parsed.chartsheet = chartsheets.contains(&host_sheet);
-                                charts.push(parsed);
+                                let index = chart_write::recorded_index(&chart_bytes);
+                                found.push((parsed, index));
                             }
                         }
                     }
                 }
             }
         }
+
+        // A chart Paged wrote records its session index; the charts keep
+        // their handles across a save and reload (ADR 519).
+        let charts = chart_write::order_by_recorded_index(found);
 
         // 4.6. External-link CACHED values (M3 external-link reads, spec §13;
         // the no-network ruling §1.1). The workbook's `<externalReferences>`
@@ -742,6 +769,7 @@ impl XlsxDocument {
             visual_styles: visual_styles.with_rich(rich_cells),
             dxfs,
             dxf_models,
+            cf_models,
             conditional_formats,
             charts,
             chartsheets,

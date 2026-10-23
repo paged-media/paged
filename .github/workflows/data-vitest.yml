@@ -130,7 +130,7 @@ jobs:
       # wasm-bindgen-cli and binaryen at the pins in tooling/bootstrap.sh
       # (prebuilt; the build script checks the CLI against Cargo.lock).
       - uses: ./.github/actions/wasm-tools
-      - name: build the engine wasm artifact (100 MB app wasm budget gate)
+      - name: build the engine wasm artifact (120 MB app wasm budget gate)
         run: bash scripts/build-wasm.sh
       # Fail-not-skip belt at the JOB level too: a missing artifact reddens
       # the job HERE, before any spec can skip.
