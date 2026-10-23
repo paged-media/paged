@@ -19,12 +19,18 @@
   poured into is now replayed as the engine places tables (`nativePlaces`): the text after a
   table continues in the table's host paragraph, so a body write after a table no longer
   refuses as "edited on the canvas". Anchors also take `{ heading: n }`.
+- Canvas edits in table cells are saved back (editor plan G4): the export reads each native
+  cell's `text` (`src/save-cells.ts`; the story read-back holds no table) and docx-js patches
+  the changed span into the cell paragraph's runs, keeping the runs, their properties and
+  fields (`overlay_cells`). A cell whose paragraphs were added or removed keeps its Word text
+  and is reported in the save-back diagnostics. Runs the engine read back joined (one style)
+  are patched in place the same way, which fixes the duplicated text on export of a document
+  with coalesced runs (it was pinned as an expected failure).
+- A `.docx` opens standalone headless: the SDK's headless host has the native-open door, so
+  `paged-node` opens it as its own document as the editor does, and saves or exports it as
+  `.docx` through the exporter.
 - Open: the embedded place needs engine 0.70
-  (`insertTextFrame` is `notImplemented` on 0.69, so "Place Word document…" fails there);
-  exporting a document with coalesced runs duplicates text (pinned as an expected failure);
-  canvas edits inside a table cell are still not carried by save-back (`overlay` skips
-  tables); opening a `.docx` as its own document headless (`paged-node`) needs a
-  native-open door in the SDK's headless host, so there it is placed in a frame instead.
+  (`insertTextFrame` is `notImplemented` on 0.69, so "Place Word document…" fails there).
 
 ## This pass: M0 (foundation) + M1 Tier-0 read path
 
@@ -282,8 +288,8 @@ ops use.)
   pre-verified against a local v54 build. The in-browser round-trip lands with the
   canvas-wasm v54 publish + SDK sync (a release step, not code).
 - **Standalone true-open** — degrades to embedded placement + a diagnostic when
-  `document.openNative@1` is unwired (the common case today); the `docx →
-native-bytes` producer is a future `plugin-publish` sibling.
+  `document.openNative@1` is unwired; the editor and the SDK's headless host
+  (`paged-node`) both wire it.
 - **Constructs still past the tier line** — tracked changes, floating
   (anchored-with-wrap) images and internal `#anchor` links (a renderer door) →
   surfaced as honest ADR-007 diagnostics on open, not silently dropped.

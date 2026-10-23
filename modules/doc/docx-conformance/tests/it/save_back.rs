@@ -1104,3 +1104,98 @@ fn non_patchable_target_is_skipped_not_errored() {
     assert!(doc_xml.contains(">Plain body text.<"), "unchanged");
     assert!(!doc_xml.contains("nowhere"));
 }
+
+/// The cell patcher: a native table's cells read back (the engine's cell
+/// `text`) next to the story, as the bundle forwards them, patch their edits
+/// into the cells' `<w:t>`s; the runs, their properties and the merge field
+/// stay. A cell whose paragraph count changed keeps its Word text and is
+/// reported. The body reads back as the engine holds it: a paragraph's runs
+/// of one style joined into one.
+#[test]
+#[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
+fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
+    use docx_conformance::cell_fields_docx;
+    use docx_export::{CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn};
+    use docx_lower::ir::{LoweredBlock, LoweredDoc};
+
+    let source = cell_fields_docx();
+    let session = DocSession::load(&source).unwrap();
+    let base = session.lowered();
+    // The body as the engine reads it back: one run per paragraph (no run
+    // carries a character style here).
+    let story = StoryContentIn {
+        self_id: "s".into(),
+        paragraphs: base
+            .story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    paragraph_style: p.para_style_id.clone(),
+                    runs: vec![RunContentIn {
+                        text: p.runs.iter().map(|r| r.text.as_str()).collect(),
+                        character_style: None,
+                    }],
+                }),
+                LoweredBlock::Table(_) => None,
+            })
+            .collect(),
+    };
+    let cell = |cell: usize, text: &str| CellContentIn {
+        block: 1,
+        cell,
+        text: text.into(),
+    };
+    let cells_of = |d: &LoweredDoc| -> Vec<String> {
+        let LoweredBlock::Table(t) = &d.story.blocks[1] else {
+            panic!("block 1 is the table")
+        };
+        t.cells
+            .iter()
+            .map(|c| {
+                c.paragraphs
+                    .iter()
+                    .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect()
+    };
+    let before = cells_of(&base);
+
+    // Read back unchanged: the package is byte-identical.
+    let same: Vec<CellContentIn> = before.iter().enumerate().map(|(k, t)| cell(k, t)).collect();
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(&story, &same)
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+    assert_eq!(doc_xml(&saved), doc_xml(&source));
+
+    // Typed on the canvas: before the bold "les", in a cell's second
+    // paragraph, before a merge field; and a paragraph added in a cell.
+    let edited = vec![
+        cell(0, "Item\nSecond"),
+        cell(2, "Green Apples"),
+        cell(4, "Line one\nLine 2"),
+        cell(5, "Für «Name»"),
+    ];
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(&story, &edited)
+        .unwrap();
+    assert_eq!(skips.len(), 1, "{skips:?}");
+    assert!(skips[0].contains("cell 0"), "{skips:?}");
+    let after = DocSession::load(&saved).unwrap().lowered();
+    let mut want = before.clone();
+    want[2] = "Green Apples".into();
+    want[4] = "Line one\nLine 2".into();
+    want[5] = "Für «Name»".into();
+    assert_eq!(cells_of(&after), want);
+    let xml = doc_xml(&saved);
+    // The bold run and the merge field are still there.
+    assert!(xml.contains("<w:b/></w:rPr><w:t>les</w:t>"), "{xml}");
+    assert_eq!(xml.matches("MERGEFIELD Name").count(), 2, "{xml}");
+}
