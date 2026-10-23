@@ -42,6 +42,15 @@ export const BRIDGED_METHODS = [
 
 export type BridgedMethod = (typeof BRIDGED_METHODS)[number];
 
+/**
+ * Runs `paged.*` script source in the framed editor and answers its console
+ * output and error. Dev and demo builds only (the docs' scripting
+ * playground): a production frame refuses it. It replaces the older
+ * `paged:run` protocol of `playground/IframeScriptBridge.tsx`, which stays
+ * for the docs site until its playground calls this.
+ */
+export const SCRIPT_METHOD = "runScript";
+
 /** What the frame's editor is made with: the config without functions, and
  *  the names of the host actions the host answers. */
 export type FrameConfig = Omit<EditorConfig, "actions"> & {
@@ -50,7 +59,12 @@ export type FrameConfig = Omit<EditorConfig, "actions"> & {
 
 export type HostToFrame =
   | { type: "paged:init"; config: FrameConfig }
-  | { type: "paged:call"; id: number; method: BridgedMethod; args: unknown[] }
+  | {
+      type: "paged:call";
+      id: number;
+      method: BridgedMethod | typeof SCRIPT_METHOD;
+      args: unknown[];
+    }
   | {
       type: "paged:action-reply";
       id: number;

@@ -348,6 +348,11 @@ type Async<F> = F extends (...a: infer A) => infer R
 export type RemoteEditorHandle = {
   [M in BridgedMethod]: Async<EditorHandle[M]>;
 } & {
+  /** Runs `paged.*` script source in the frame (dev and demo builds of the
+   *  editor only; a production frame refuses it). */
+  runScript(
+    source: string,
+  ): Promise<{ output: string[]; error: string | null }>;
   on(listener: (event: EditorEvent) => void): () => void;
   dispose(): void;
 };
