@@ -404,5 +404,12 @@
   "sheet.workbook.validations": "{sheet}: {count, plural, one {# Datenüberprüfung} other {# Datenüberprüfungen}} ({kinds}; erhalten, aber nicht angewendet)",
   "sheet.workbook.valuesAria": "Wertebereich",
   "sheet.workbook.valuesFirst": "Geben Sie zuerst einen Wertebereich ein (zum Beispiel B2:C8).",
-  "sheet.workbook.valuesPlaceholder": "Werte, z. B. B2:C8"
+  "sheet.workbook.valuesPlaceholder": "Werte, z. B. B2:C8",
+  "menu.Export sheet as CSV…": "Tabellenblatt als CSV exportieren…",
+  "menu.R1C1 reference style": "Z1S1-Bezugsart",
+  "sheet.command.exportCsv": "Tabellenblatt als CSV exportieren…",
+  "sheet.command.toggleR1C1": "Z1S1-Bezugsart",
+  "sheet.files.xlsm": "Arbeitsmappe mit Makros (.xlsm)",
+  "sheet.files.ods": "OpenDocument-Tabelle (.ods)",
+  "sheet.files.csv": "Aktives Tabellenblatt als CSV (.csv)"
 }
