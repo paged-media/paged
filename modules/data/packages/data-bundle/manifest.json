@@ -540,6 +540,17 @@
               "documentName": {
                 "kind": "text",
                 "optional": true
+              },
+              "imageBase": {
+                "kind": "text",
+                "optional": true
+              },
+              "imageFields": {
+                "kind": "map",
+                "of": {
+                  "kind": "text"
+                },
+                "optional": true
               }
             }
           }
@@ -692,6 +703,132 @@
             "fields": {
               "xml": {
                 "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.importSource",
+          "title": "Import a data file as a source",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "bytes": {
+                "kind": "bytes"
+              },
+              "fileName": {
+                "kind": "text"
+              },
+              "name": {
+                "kind": "text",
+                "optional": true
+              },
+              "sheet": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.defineBinding",
+          "title": "Define a binding",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "id": {
+                "kind": "text"
+              },
+              "kind": {
+                "kind": "enum",
+                "members": [
+                  "variable",
+                  "image",
+                  "barcode",
+                  "visibility",
+                  "table",
+                  "rule"
+                ]
+              },
+              "query": {
+                "kind": "text"
+              },
+              "target": {
+                "kind": "text",
+                "optional": true
+              },
+              "region": {
+                "kind": "text",
+                "optional": true
+              },
+              "scope": {
+                "kind": "text",
+                "optional": true
+              },
+              "expr": {
+                "kind": "text",
+                "optional": true
+              },
+              "when": {
+                "kind": "text",
+                "optional": true
+              },
+              "symbology": {
+                "kind": "enum",
+                "members": ["ean13", "upca", "code128", "qr"],
+                "optional": true
+              },
+              "columns": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "header": {
+                      "kind": "text",
+                      "optional": true
+                    },
+                    "expr": {
+                      "kind": "text"
+                    }
+                  }
+                },
+                "optional": true
+              },
+              "options": {
+                "kind": "struct",
+                "fields": {},
+                "open": true,
+                "optional": true
+              },
+              "apply": {
+                "kind": "struct",
+                "fields": {},
+                "open": true,
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.planBatch",
+          "title": "Plan a batch: one output per record, per group or one catalogue",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "query": {
+                "kind": "text",
+                "optional": true
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["perRecord", "perGroup", "oneCatalog"]
+              },
+              "by": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                },
+                "optional": true
               }
             }
           }

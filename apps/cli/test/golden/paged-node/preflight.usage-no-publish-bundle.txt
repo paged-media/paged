@@ -1,0 +1,11 @@
+$ paged-node preflight <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "preflight needs paged.publish's typed preflight (media.paged.publish.preflight), and it is not loaded — install @paged-media/publish, or pass --plugins=<its bundle>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

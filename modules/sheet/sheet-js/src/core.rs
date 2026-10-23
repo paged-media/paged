@@ -62,7 +62,8 @@ pub mod sort;
 pub mod tables;
 pub mod validation;
 pub use format::{
-    EdgeArg, MergeResult, NameInfo, ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
+    DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
+    ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
 };
 pub use objects::{ChartPatch, ChartSpec, RawValue, SeriesArg, SeriesSpec, TableInfo};
 pub use ops::{CalcSettingsInfo, FramePageSpec, StructuralEdit, TracksSpec};
@@ -458,6 +459,11 @@ pub struct SheetSession {
     structure_changed: bool,
     /// Bumped for every new password salt (sheet ADR 517).
     salt_counter: u64,
+    /// Charts deleted by [`SheetSession::delete_chart`]: their slots stay so
+    /// every other chart keeps its index (placements, journals and template
+    /// fields name charts by index), but they are no longer listed, drawn or
+    /// patched. A load starts with none.
+    removed_charts: BTreeSet<u32>,
     /// Named filter views (criteria saved beside the workbook, ADR 517).
     filter_views: Vec<filter::FilterViewInfo>,
 }
@@ -725,6 +731,7 @@ impl SheetSession {
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
             salt_counter: 0,
+            removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
         }
     }
@@ -853,6 +860,7 @@ impl SheetSession {
             extra_dirty: BTreeSet::new(),
             structure_changed: false,
             salt_counter: 0,
+            removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
         };
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
@@ -2232,6 +2240,7 @@ impl SheetSession {
             .charts
             .iter()
             .enumerate()
+            .filter(|(i, _)| !self.removed_charts.contains(&(*i as u32)))
             .map(|(i, c)| ChartInfo {
                 index: i as u32,
                 host_sheet: c.host_sheet,
@@ -2367,6 +2376,7 @@ impl SheetSession {
                 self.doc.charts.len()
             ))
         })?;
+        self.live_chart(chart_index)?;
         let model = self.engine().model();
 
         // Resolve each series' values range to a numeric vector, and the shared

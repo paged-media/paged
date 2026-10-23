@@ -164,8 +164,10 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   `createHeadlessHost` on the canvas-wasm it finds (protocol 70 or later), with its own
   driver bundle and every discovered plugin bundle. Verbs from one table: `get`, `set`,
   `query`, `schema`, `batch`, `create`, `delete`, `commands`, `invoke`, `run`, `export`,
-  `apply`, `merge`, `plugins`, `ai` and `describe`. Values are typed by their schema row
-  before they are sent; `export --format pdf` prefers a typed exporter command. The bin is
+  `apply`, `merge`, `generate`, `preflight`, `package`, `plugins`, `ai`, `describe`,
+  `template` and `mcp`. Values are typed by their schema row before they are sent; every PDF
+  the CLI writes goes through a typed exporter command when one is installed. The data verbs
+  drive paged.data through its typed commands only (amendment of 2026-10-23). The bin is
   `paged-node`, not `paged`, which core's Rust CLI installs (ADR 324, amended 2026-10-16).
 - **The model package** (`platform/shared/ai` since wave C,
   [ADR 325](adr/325-claude-agent-package.md)): the model and a per-mode table, the system

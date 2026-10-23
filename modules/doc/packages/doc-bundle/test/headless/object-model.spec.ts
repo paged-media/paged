@@ -287,33 +287,28 @@ describe.skipIf(!docxPresent)(
       expect(await storyTexts(host, story)).toEqual([FIRST, "Order «OrderNo»"]);
     });
 
-    // OPEN BUG (save-back, not the object model): the export overlays the
-    // story read-back on the .docx, and the engine hands back runs it COALESCED
-    // (same style), which the run diff turns into inserts and deletes; the
-    // wrapped field runs cannot be deleted, so the paragraph's text comes out
-    // twice. It happens to an UNEDITED document with fields. `it.failing` keeps
-    // the lane green and flips red the day save-back is fixed.
-    it.failing(
-      "export of an unedited letter keeps its text once (save-back overlay duplicates coalesced runs)",
-      async () => {
-        const exported = (await h.objects.invoke(
-          "media.paged.doc.command.exportDocx",
-          { document: doc },
-        )) as {
-          bytes: Uint8Array;
-        };
-        const engine = await DocEngine.boot();
-        try {
-          engine.loadDocx(exported.bytes);
-          const p0 = engine.lowered().story.blocks[0]!;
-          expect(
-            p0.kind === "paragraph" && p0.runs.map((r) => r.text).join(""),
-          ).toBe(FIRST);
-        } finally {
-          engine.dispose();
-        }
-      },
-    );
+    // The export overlays the story read-back on the .docx, and the engine
+    // hands back runs it COALESCED (same style): the overlay patches the text
+    // into the Word runs instead of diffing them as inserts and deletes, so an
+    // unedited document with fields keeps its text once.
+    it("export of an unedited letter keeps its text once (coalesced runs read back)", async () => {
+      const exported = (await h.objects.invoke(
+        "media.paged.doc.command.exportDocx",
+        { document: doc },
+      )) as {
+        bytes: Uint8Array;
+      };
+      const engine = await DocEngine.boot();
+      try {
+        engine.loadDocx(exported.bytes);
+        const p0 = engine.lowered().story.blocks[0]!;
+        expect(
+          p0.kind === "paragraph" && p0.runs.map((r) => r.text).join(""),
+        ).toBe(FIRST);
+      } finally {
+        engine.dispose();
+      }
+    });
 
     it("placeDoc (typed) places a second letter embedded, and its fields are objects", async () => {
       covers("command:media.paged.doc.command.placeDoc");

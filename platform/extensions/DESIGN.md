@@ -265,7 +265,10 @@ Capability note: two grants under `capabilities.document` —
 kept SEPARATE because `open` is far more powerful than reading. Restrict
 to first-party / trusted-publisher bundles. Always present: honest `null`
 / `[]` / reject with `supports("document.readNative@1"|"…openNative@1")`
-false when the host injects no `nativeDocument` backend. This is the
+false when the host injects no `nativeDocument` backend. The headless
+host (`createHeadlessHost`, and so `paged-node`) injects one over the
+engine: the reads through the part wire ops, `open` = direct load + the
+`documentLoaded` fan-out (`nativeDocument: false` leaves it out). This is the
 core-side door ADR-022 pairs with the IDML adapter leaving the engine —
 the plugin imports/exports, the host owns loading.
 
@@ -2728,3 +2731,7 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `shell.exitEditContext@1`.
 - **Isolate.** React in the host realm, like panels (§6). The isolate form is a transferred
   `OffscreenCanvas`, a plain-data input stream and the host's input-method proxy.
+- **Document styles (ADR 336).** A surface draws with the document's styles through
+  `host.document.styleProperties(collection, styleId)` (resolved through `BasedOn`) and
+  `host.document.swatchDisplay(ids)` (display colours after colour management, CMYK, gamut);
+  probes `document.styleProperties@1`, `document.swatchDisplay@1`.

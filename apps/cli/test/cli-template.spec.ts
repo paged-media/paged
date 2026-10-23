@@ -19,8 +19,9 @@
 // `paged template` (plan task F6): fill and check templates on a server with
 // the same engine messages the browser's form sends.
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
@@ -33,6 +34,12 @@ let tmp: ReturnType<typeof tempDir>;
 let templatePath = "";
 
 const NP = "--no-plugins";
+const PUBLISH_BUNDLE = fileURLToPath(
+  new URL(
+    "../../../modules/publish/packages/publish-bundle/src/index.ts",
+    import.meta.url,
+  ),
+);
 
 /** A card: `headline` (text, at most 20 characters, "Old title") and
  *  `badge` (visibility). */
@@ -157,6 +164,35 @@ describe("paged template", () => {
     expect(r.code).toBe(0);
     expect(r.json.format).toBe("pdf");
     expect(r.json.bytes).toBeGreaterThan(500);
+  });
+
+  it("writes the PDF through paged.publish's typed exporter when it is installed (plan G4)", async () => {
+    const out = join(tmp.dir, "filled-typed.pdf");
+    const r = await cli([
+      "template",
+      "fill",
+      templatePath,
+      "--values",
+      JSON.stringify({ headline: "Print me" }),
+      "-o",
+      out,
+      `--plugins=${PUBLISH_BUNDLE}`,
+    ]);
+    expect(r.code, r.out).toBe(0);
+    expect(r.json).toMatchObject({
+      format: "pdf",
+      via: "media.paged.publish.exportPdf",
+    });
+    const bytes = readFileSync(out);
+    expect(bytes.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    // The filler's value is on the page: the text's characters are the
+    // ones the font's ToUnicode map names (not the template's "Old title").
+    const mapped = [
+      ...bytes.toString("latin1").matchAll(/<[0-9A-F]{4}> <([0-9A-F]{4})>/g),
+    ]
+      .filter((m) => m[0] !== "<0000> <FFFF>") // the codespace range
+      .map((m) => String.fromCharCode(parseInt(m[1]!, 16)));
+    expect([...new Set(mapped)].sort()).toEqual([...new Set("Printme")].sort());
   });
 
   it("refuses values that do not fit, and writes nothing", async () => {

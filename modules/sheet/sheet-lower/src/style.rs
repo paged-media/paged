@@ -81,6 +81,82 @@ pub struct VisualAttrs {
     /// The per-edge border LINES (style, weight, colour) behind the
     /// presence flags above; `None` for an edge without a line.
     pub border_lines: BorderLines,
+    // ---- W2.2 (sheet ADR 518): the full cell visual model, resolved. ----
+    /// The document swatch the fill colour names (beside `fill_rgb`).
+    pub fill_swatch: Option<String>,
+    /// The document swatch the text colour names (beside `text_rgb`).
+    pub text_swatch: Option<String>,
+    /// A pattern fill other than solid; `fill_rgb` then holds the blend a
+    /// surface that cannot draw the pattern shows.
+    pub fill_pattern: Option<FillPattern>,
+    /// A gradient fill; `fill_rgb` then holds its mean colour.
+    pub fill_gradient: Option<FillGradient>,
+    /// The indent (pt; one Excel level is [`INDENT_LEVEL_PT`]).
+    pub indent_pt: Option<f64>,
+    /// `textRotation` (1–180, 255 = stacked); `None` = upright.
+    pub rotation: Option<u32>,
+    /// Shrink the text to fit the cell width.
+    pub shrink: bool,
+    /// Strike-through text.
+    pub strike: bool,
+    /// `"superscript"` / `"subscript"`.
+    pub vert_align: Option<String>,
+    /// The underline beyond single (`"double"`, `"singleAccounting"`,
+    /// `"doubleAccounting"`); `underline` stays the presence flag.
+    pub underline_style: Option<String>,
+    /// The horizontal alignments the frozen `Align` has no slot for:
+    /// `"fill"`, `"justify"`, `"centerContinuous"`, `"distributed"`.
+    pub h_align: Option<String>,
+    /// The Excel named cell style (not Normal).
+    pub named_style: Option<String>,
+    /// Document character / paragraph / cell styles the cell maps to.
+    pub doc_char_style: Option<String>,
+    pub doc_para_style: Option<String>,
+    pub doc_cell_style: Option<String>,
+}
+
+/// One Excel indent level in points (Excel 16 indents by about 9 px — three
+/// spaces' width of the default font — per level at 100 %: 6.75 pt).
+pub const INDENT_LEVEL_PT: f64 = 6.75;
+
+/// A pattern fill as surfaces draw it (W2.2): the xlsx pattern name and its
+/// two colours (`#RRGGBB`, `None` = automatic) with their document swatches.
+#[derive(serde::Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FillPattern {
+    pub pattern: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fg_rgb: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bg_rgb: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fg_swatch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bg_swatch: Option<String>,
+}
+
+/// A gradient fill (W2.2): `"linear"` at `degree`, or `"path"` from the
+/// inner rectangle `left`/`right`/`top`/`bottom` (fractions of the cell).
+#[derive(serde::Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FillGradient {
+    pub kind: String,
+    pub degree: f64,
+    pub left: f64,
+    pub right: f64,
+    pub top: f64,
+    pub bottom: f64,
+    pub stops: Vec<FillGradientStop>,
+}
+
+/// One resolved gradient stop.
+#[derive(serde::Serialize, Clone, Debug, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FillGradientStop {
+    pub position: f64,
+    pub rgb: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<String>,
 }
 
 /// One border edge's line (Wave 6): the xlsx style name (`thin`, `medium`,
@@ -92,6 +168,9 @@ pub struct BorderLine {
     pub style: String,
     pub weight_pt: f64,
     pub rgb: Option<String>,
+    /// The document swatch the line colour names (W2.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<String>,
 }
 
 impl BorderLine {
@@ -121,12 +200,23 @@ pub struct BorderLines {
     pub bottom: Option<BorderLine>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub left: Option<BorderLine>,
+    /// The diagonal from the bottom-left to the top-right corner (W2.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagonal_up: Option<BorderLine>,
+    /// The diagonal from the top-left to the bottom-right corner (W2.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagonal_down: Option<BorderLine>,
 }
 
 impl BorderLines {
     /// True when no edge carries a line.
     pub fn is_empty(&self) -> bool {
-        self.top.is_none() && self.right.is_none() && self.bottom.is_none() && self.left.is_none()
+        self.top.is_none()
+            && self.right.is_none()
+            && self.bottom.is_none()
+            && self.left.is_none()
+            && self.diagonal_up.is_none()
+            && self.diagonal_down.is_none()
     }
 }
 
@@ -155,8 +245,241 @@ impl VisualAttrs {
             v_align: self.v_align,
             wrap: self.wrap,
             border_lines: self.border_lines,
+            fill_swatch: self.fill_swatch,
+            text_swatch: self.text_swatch,
+            fill_pattern: self.fill_pattern,
+            fill_gradient: self.fill_gradient,
+            indent_pt: self.indent_pt,
+            rotation: self.rotation,
+            shrink: self.shrink,
+            strike: self.strike,
+            vert_align: self.vert_align,
+            underline_style: self.underline_style,
+            h_align: self.h_align,
+            named_style: self.named_style,
+            doc_char_style: self.doc_char_style,
+            doc_para_style: self.doc_para_style,
+            doc_cell_style: self.doc_cell_style,
         }
     }
+}
+
+// ---- Resolving the cell visual model (W2.2, sheet ADR 518). ----
+
+use sheet_core::visual::{
+    BorderEdge, BorderStyle, CellBorder, CellFill, CellVisual, ColorRef, DifferentialFormat,
+    FontSpec, GradientKind, HAlign, PatternKind, UnderlineKind, VAlign, VertAlign,
+    ROTATION_STACKED,
+};
+use sheet_format::resolve::{blend, hex, resolve, ColorPalette};
+
+/// One edge → its resolved [`BorderLine`] (`None` without a line).
+fn line_of(edge: &BorderEdge, palette: &ColorPalette) -> Option<BorderLine> {
+    if edge.style == BorderStyle::None {
+        return None;
+    }
+    let style = edge.style.as_xlsx().to_string();
+    let resolved = edge.color.as_ref().and_then(|c| resolve(c, palette));
+    Some(BorderLine {
+        weight_pt: BorderLine::weight_of(&style),
+        style,
+        rgb: resolved.as_ref().map(|r| r.hex()),
+        swatch: resolved.and_then(|r| r.swatch),
+    })
+}
+
+/// A border → the presence flags and lines.
+fn apply_border(a: &mut VisualAttrs, b: &CellBorder, palette: &ColorPalette) {
+    a.border_lines = BorderLines {
+        top: line_of(&b.top, palette),
+        right: line_of(&b.right, palette),
+        bottom: line_of(&b.bottom, palette),
+        left: line_of(&b.left, palette),
+        diagonal_up: b
+            .diagonal_up
+            .then(|| line_of(&b.diagonal, palette))
+            .flatten(),
+        diagonal_down: b
+            .diagonal_down
+            .then(|| line_of(&b.diagonal, palette))
+            .flatten(),
+    };
+    a.border_top = a.border_lines.top.is_some();
+    a.border_right = a.border_lines.right.is_some();
+    a.border_bottom = a.border_lines.bottom.is_some();
+    a.border_left = a.border_lines.left.is_some();
+}
+
+/// A fill → `fill_rgb` (+ swatch) and the pattern / gradient facets.
+fn apply_fill(a: &mut VisualAttrs, fill: &CellFill, palette: &ColorPalette) {
+    let res = |c: &Option<ColorRef>| c.as_ref().and_then(|c| resolve(c, palette));
+    match fill {
+        CellFill::None => {}
+        CellFill::Pattern {
+            pattern: PatternKind::None,
+            ..
+        } => {}
+        CellFill::Pattern {
+            pattern: PatternKind::Solid,
+            fg,
+            ..
+        } => {
+            if let Some(r) = res(fg) {
+                a.fill_rgb = Some(r.hex());
+                a.fill_swatch = r.swatch;
+            }
+        }
+        CellFill::Pattern { pattern, fg, bg } => {
+            let (fg, bg) = (res(fg), res(bg));
+            // An automatic pattern colour is the system foreground (black)
+            // over the system background (white).
+            let fg_rgb = fg.as_ref().map(|r| r.rgb).unwrap_or((0, 0, 0));
+            let bg_rgb = bg.as_ref().map(|r| r.rgb).unwrap_or((255, 255, 255));
+            a.fill_rgb = Some(hex(blend(fg_rgb, bg_rgb, pattern.coverage())));
+            a.fill_pattern = Some(FillPattern {
+                pattern: pattern.as_xlsx().to_string(),
+                fg_rgb: fg.as_ref().map(|r| r.hex()),
+                bg_rgb: bg.as_ref().map(|r| r.hex()),
+                fg_swatch: fg.and_then(|r| r.swatch),
+                bg_swatch: bg.and_then(|r| r.swatch),
+            });
+        }
+        CellFill::Gradient { gradient, stops } => {
+            let stops: Vec<FillGradientStop> = stops
+                .iter()
+                .map(|s| {
+                    let r = resolve(&s.color, palette);
+                    FillGradientStop {
+                        position: s.position,
+                        rgb: r
+                            .as_ref()
+                            .map(|r| r.hex())
+                            .unwrap_or_else(|| "#FFFFFF".into()),
+                        swatch: r.and_then(|r| r.swatch),
+                    }
+                })
+                .collect();
+            if stops.is_empty() {
+                return;
+            }
+            let mean = |i: usize| {
+                let sum: u32 = stops
+                    .iter()
+                    .map(|s| u32::from_str_radix(&s.rgb[1 + 2 * i..3 + 2 * i], 16).unwrap_or(255))
+                    .sum();
+                (sum as f64 / stops.len() as f64).round() as u8
+            };
+            a.fill_rgb = Some(hex((mean(0), mean(1), mean(2))));
+            let mut g = FillGradient {
+                stops,
+                ..FillGradient::default()
+            };
+            match gradient {
+                GradientKind::Linear { degree } => {
+                    g.kind = "linear".into();
+                    g.degree = *degree;
+                }
+                GradientKind::Path {
+                    left,
+                    right,
+                    top,
+                    bottom,
+                } => {
+                    g.kind = "path".into();
+                    (g.left, g.right, g.top, g.bottom) = (*left, *right, *top, *bottom);
+                }
+            }
+            a.fill_gradient = Some(g);
+        }
+    }
+}
+
+/// The font facets of `font` that override `default` (the workbook's base
+/// font: its size and face are the document default, not an override).
+fn apply_font(a: &mut VisualAttrs, font: &FontSpec, default: &FontSpec, palette: &ColorPalette) {
+    a.bold = font.bold;
+    a.italic = font.italic;
+    if font.size != default.size {
+        a.font_size_pt = font.size;
+    }
+    if font.name != default.name {
+        a.font_name = font.name.clone();
+    }
+    if let Some(r) = font.color.as_ref().and_then(|c| resolve(c, palette)) {
+        a.text_rgb = Some(r.hex());
+        a.text_swatch = r.swatch;
+    }
+    a.underline = font.underline != UnderlineKind::None;
+    a.underline_style = match font.underline {
+        UnderlineKind::None | UnderlineKind::Single => None,
+        u => u.as_xlsx().map(str::to_string),
+    };
+    a.strike = font.strike;
+    a.vert_align = match font.vert_align {
+        VertAlign::Baseline => None,
+        v => Some(v.as_xlsx().to_string()),
+    };
+}
+
+/// Resolve a cell visual into the flat [`VisualAttrs`] both surfaces draw
+/// (the one path from the model to the IR; colours through
+/// `sheet_format::resolve`). `default_font` is the workbook's base font.
+pub fn resolve_visual(
+    v: &CellVisual,
+    palette: &ColorPalette,
+    default_font: &FontSpec,
+) -> VisualAttrs {
+    let mut a = VisualAttrs::default();
+    apply_font(&mut a, &v.font.font, default_font, palette);
+    apply_fill(&mut a, &v.fill, palette);
+    apply_border(&mut a, &v.border, palette);
+    let al = &v.alignment;
+    a.v_align = match al.vertical {
+        VAlign::Top => Some("top".into()),
+        VAlign::Center => Some("center".into()),
+        _ => None,
+    };
+    a.wrap = al.wrap;
+    a.h_align = match al.horizontal {
+        HAlign::Fill | HAlign::Justify | HAlign::CenterContinuous | HAlign::Distributed => {
+            Some(al.horizontal.as_xlsx().to_string())
+        }
+        _ => None,
+    };
+    a.indent_pt = (al.indent > 0).then_some(al.indent as f64 * INDENT_LEVEL_PT);
+    a.rotation = (al.rotation > 0 && (al.rotation <= 180 || al.rotation == ROTATION_STACKED))
+        .then_some(al.rotation);
+    a.shrink = al.shrink && !al.wrap;
+    a.named_style = v.named_style.clone();
+    a.doc_char_style = v.font.doc_char_style.clone();
+    a.doc_para_style = v.font.doc_para_style.clone();
+    a.doc_cell_style = v.doc_cell_style.clone();
+    a
+}
+
+/// Resolve a differential format into the facets it sets (an unset facet
+/// stays default — the conditional-formatting bridge).
+pub fn resolve_delta(d: &DifferentialFormat, palette: &ColorPalette) -> VisualAttrs {
+    let mut a = VisualAttrs::default();
+    if let Some(f) = &d.font {
+        a.bold = f.bold.unwrap_or(false);
+        a.italic = f.italic.unwrap_or(false);
+        a.font_size_pt = f.size;
+        a.font_name = f.name.clone();
+        if let Some(r) = f.color.as_ref().and_then(|c| resolve(c, palette)) {
+            a.text_rgb = Some(r.hex());
+            a.text_swatch = r.swatch;
+        }
+        a.underline = f.underline.is_some_and(|u| u != UnderlineKind::None);
+        a.strike = f.strike.unwrap_or(false);
+    }
+    if let Some(fill) = &d.fill {
+        apply_fill(&mut a, fill, palette);
+    }
+    if let Some(b) = &d.border {
+        apply_border(&mut a, b, palette);
+    }
+    a
 }
 
 /// A `StyleId` → [`VisualAttrs`] lookup. The resolver is generic over this
@@ -223,43 +546,18 @@ pub struct StyleResolver<'a, S: VisualStyleSource> {
     dedup: HashMap<StyleKeyless, u32>,
 }
 
-/// A `LoweredStyle` without its `key`, used as the dedup map key. The `key`
-/// is positional (the table index), so it must NOT participate in equality.
+/// A `LoweredStyle` without its `key`, used as the dedup map key: its debug
+/// rendering with the key zeroed (`f64` sizes have no `Hash`; style sizes
+/// are exact small decimals from the xlsx, so the rendering is a faithful
+/// equality).
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct StyleKeyless {
-    bold: bool,
-    italic: bool,
-    /// f64 has no `Eq`/`Hash`; we key on the IEEE bit pattern (style sizes
-    /// are exact small decimals from the xlsx, so bitwise equality is the
-    /// right notion here — two "11.0" sizes share a bucket).
-    font_size_bits: Option<u64>,
-    font_name: Option<String>,
-    fill_rgb: Option<String>,
-    text_rgb: Option<String>,
-    border_top: bool,
-    border_right: bool,
-    border_bottom: bool,
-    border_left: bool,
-    /// The Wave 6 facets (underline, vertical alignment, wrap, border
-    /// lines), keyed by their debug rendering (f64 weights have no `Hash`).
-    extra: String,
-}
+pub(crate) struct StyleKeyless(String);
 
 impl StyleKeyless {
-    fn of(s: &LoweredStyle) -> Self {
-        StyleKeyless {
-            bold: s.bold,
-            italic: s.italic,
-            font_size_bits: s.font_size_pt.map(f64::to_bits),
-            font_name: s.font_name.clone(),
-            fill_rgb: s.fill_rgb.clone(),
-            text_rgb: s.text_rgb.clone(),
-            border_top: s.border_top,
-            border_right: s.border_right,
-            border_bottom: s.border_bottom,
-            border_left: s.border_left,
-            extra: format!("{:?}", (s.underline, &s.v_align, s.wrap, &s.border_lines)),
-        }
+    pub(crate) fn of(s: &LoweredStyle) -> Self {
+        let mut k = s.clone();
+        k.key = 0;
+        StyleKeyless(format!("{k:?}"))
     }
 }
 

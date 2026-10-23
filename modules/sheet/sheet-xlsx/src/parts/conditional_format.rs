@@ -236,7 +236,7 @@ impl CfRule {
         let dxf = self
             .dxf_id
             .and_then(|id| dxfs.get(id as usize))
-            .map(VisualStyle::to_lower_attrs)
+            .cloned()
             .unwrap_or_default();
         sheet_lower::CfRule {
             kind: self.kind.to_lower(),
