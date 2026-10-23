@@ -190,17 +190,20 @@ fn object_edits_address_a_merge_field_by_occurrence__feat__plugin_doc_object_mod
             block: 0,
             run: 0,
             text: "Hello ".into(),
+            ..Default::default()
         }],
         merge_fields: vec![
             MergeFieldEdit {
                 block: 0,
                 occurrence: 0,
                 value: "Grace Hopper".into(),
+                ..Default::default()
             },
             MergeFieldEdit {
                 block: 0,
                 occurrence: 2,
                 value: "Arlington".into(),
+                ..Default::default()
             },
         ],
         ..Default::default()
@@ -236,6 +239,7 @@ fn object_edits_address_a_merge_field_by_occurrence__feat__plugin_doc_object_mod
             block: 1,
             occurrence: 3,
             value: "x".into(),
+            ..Default::default()
         }],
         ..Default::default()
     };
@@ -248,8 +252,139 @@ fn object_edits_address_a_merge_field_by_occurrence__feat__plugin_doc_object_mod
             block: 1,
             run: 9,
             text: "x".into(),
+            ..Default::default()
         }],
         ..Default::default()
     };
     assert!(session.object_edits(&past).is_err());
+}
+
+#[test]
+fn object_edits_write_a_table_cells_runs_and_merge_fields__feat__plugin_doc_object_model() {
+    use docx_conformance::cell_fields_docx;
+    use docx_js::core::{MergeFieldEdit, ObjectEdits, RunTextEdit};
+    let session = DocSession::load(&cell_fields_docx()).unwrap();
+    // Block 1 is the table; cell 2 is row 1's first cell ("App" + "les"),
+    // cell 5 row 2's second (text, then the merge field).
+    let edits = ObjectEdits {
+        runs: vec![
+            RunTextEdit {
+                block: 1,
+                cell: Some(2),
+                para: Some(0),
+                run: 0,
+                text: "Pears".into(),
+            },
+            RunTextEdit {
+                block: 1,
+                cell: Some(2),
+                para: Some(0),
+                run: 1,
+                text: String::new(),
+            },
+            RunTextEdit {
+                block: 1,
+                cell: Some(4),
+                para: Some(1),
+                run: 0,
+                text: "Second line".into(),
+            },
+        ],
+        merge_fields: vec![
+            MergeFieldEdit {
+                block: 1,
+                cell: Some(5),
+                para: Some(0),
+                occurrence: 0,
+                value: "Ada".into(),
+            },
+            MergeFieldEdit {
+                block: 2,
+                occurrence: 0,
+                value: "Ada".into(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let set = session.object_edits(&edits).unwrap();
+    let cells: Vec<(usize, usize, usize, usize, Option<&str>)> = set
+        .cells
+        .iter()
+        .map(|c| (c.block, c.cell, c.para, c.run, c.new_text.as_deref()))
+        .collect();
+    assert_eq!(
+        cells,
+        [
+            (1, 2, 0, 0, Some("Pears")),
+            (1, 2, 0, 1, Some("")),
+            (1, 4, 1, 0, Some("Second line")),
+            (1, 5, 0, 1, Some("Ada")),
+        ]
+    );
+    assert_eq!(set.runs.len(), 1, "the body field is a body run edit");
+    let (saved, skips) = session.save_object_edits(&edits).unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let again = DocSession::load(&saved).unwrap();
+    let ir = again.lowered();
+    let docx_lower::ir::LoweredBlock::Table(t) = &ir.story.blocks[1] else {
+        panic!("block 1 is the table")
+    };
+    let text = |c: usize, p: usize| -> String {
+        t.cells[c].paragraphs[p]
+            .runs
+            .iter()
+            .map(|r| r.text.as_str())
+            .collect()
+    };
+    assert_eq!(text(2, 0), "Pears");
+    assert_eq!(text(4, 0), "Line one");
+    assert_eq!(text(4, 1), "Second line");
+    assert_eq!(text(5, 0), "For Ada");
+    let field = t.cells[5].paragraphs[0].runs[1].merge_field.as_ref();
+    assert_eq!(
+        field.map(|m| m.name.as_str()),
+        Some("Name"),
+        "the field code survived"
+    );
+    // The bookmark stays on the cell paragraph.
+    assert_eq!(t.cells[2].paragraphs[0].bookmarks, ["first-item"]);
+    // Refusals: half a cell address, a cell the table does not have, a
+    // cell address on a paragraph block.
+    let half = ObjectEdits {
+        runs: vec![RunTextEdit {
+            block: 1,
+            cell: Some(0),
+            run: 0,
+            text: "x".into(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    assert!(session.object_edits(&half).unwrap_err().contains("both"));
+    let missing = ObjectEdits {
+        runs: vec![RunTextEdit {
+            block: 1,
+            cell: Some(9),
+            para: Some(0),
+            run: 0,
+            text: "x".into(),
+        }],
+        ..Default::default()
+    };
+    assert!(session
+        .object_edits(&missing)
+        .unwrap_err()
+        .contains("no cell 9"));
+    let not_table = ObjectEdits {
+        runs: vec![RunTextEdit {
+            block: 0,
+            cell: Some(0),
+            para: Some(0),
+            run: 0,
+            text: "x".into(),
+        }],
+        ..Default::default()
+    };
+    assert!(session.object_edits(&not_table).is_err());
 }

@@ -26,8 +26,13 @@
 // An anchor names a paragraph the way an author thinks of it, and survives
 // edits that move blocks: `{ bookmark: "intro" }` (a Word bookmark that
 // starts in it), `{ style: "Heading1", occurrence?: 0 }` (the n-th paragraph
-// in a style, by style id or name, 0-based), or `{ block: 3 }` (the lowered
-// block index). The document is the one placed on the field's item, or on
+// in a style, by style id or name, 0-based, in document order),
+// `{ heading: 2, occurrence?: 0 }` (the n-th heading of that level: a
+// paragraph in Word's "heading n" style or one based on its name), or
+// `{ block: 3 }` (the lowered block index). A table cell's paragraph is
+// named by a bookmark or a style like any other, or as
+// `{ block, cell, paragraph }` (the table block, the cell's index in its
+// lowered cells, the paragraph in the cell). The document is the one placed on the field's item, or on
 // `frame` when the definition names another.
 //
 // Every read and write goes through the object model (`block.text`,
@@ -44,11 +49,12 @@ import type {
   TemplateFieldRef,
   TemplateFieldWrite,
 } from "@paged-media/plugin-api";
-import type { LoweredDoc } from "@paged-media/doc-host-model";
+import type { LoweredDoc, LoweredParagraph } from "@paged-media/doc-host-model";
 
 import { t } from "@paged-media/strings";
 
 import { discoverDocs, readLowered } from "./doc-state.js";
+import { headingLevel, styleNameById } from "./panels/outline-model.js";
 import { TEMPLATE } from "./messages.js";
 
 // The object model's own address shape (object-model.ts, which registers
@@ -65,7 +71,8 @@ export const LIST_ITEMS_KIND = `${PLUGIN_ID}.listItems`;
 export type DocAnchor =
   | { bookmark: string }
   | { style: string; occurrence?: number }
-  | { block: number };
+  | { heading: number; occurrence?: number }
+  | { block: number; cell?: number; paragraph?: number };
 
 type Ctx = { objects: ObjectsSurface };
 
@@ -114,41 +121,102 @@ function styleMatches(ir: LoweredDoc, token: string, named: string): boolean {
   return name !== undefined && name.toLowerCase() === named.toLowerCase();
 }
 
-/** The block a definition's anchor names. */
-export function resolveAnchor(ir: LoweredDoc, def: unknown): number {
+/** A paragraph a definition's anchor names: a body block, or a paragraph
+ *  of a table block's cell. */
+export interface AnchoredParagraph {
+  block: number;
+  cell?: number;
+  paragraph?: number;
+}
+
+/** Every paragraph in document order: body paragraphs, and a table's cell
+ *  paragraphs at the table's place. */
+function documentParagraphs(
+  ir: LoweredDoc,
+): Array<{ at: AnchoredParagraph; p: LoweredParagraph }> {
+  const out: Array<{ at: AnchoredParagraph; p: LoweredParagraph }> = [];
+  ir.story.blocks.forEach((b, block) => {
+    if (b.kind === "paragraph") out.push({ at: { block }, p: b });
+    else
+      b.cells.forEach((c, cell) =>
+        c.paragraphs.forEach((p, paragraph) =>
+          out.push({ at: { block, cell, paragraph }, p }),
+        ),
+      );
+  });
+  return out;
+}
+
+const whole = (v: unknown) =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0;
+
+/** The paragraph a definition's anchor names. A bookmark and a style are
+ *  looked for in document order, table cells included. */
+export function resolveAnchor(ir: LoweredDoc, def: unknown): AnchoredParagraph {
   const anchor = record(record(def)["anchor"]);
   const blocks = ir.story.blocks;
   if (typeof anchor["bookmark"] === "string") {
     const name = anchor["bookmark"];
-    const i = blocks.findIndex(
-      (b) => b.kind === "paragraph" && (b.bookmarks ?? []).includes(name),
+    const hit = documentParagraphs(ir).find((x) =>
+      (x.p.bookmarks ?? []).includes(name),
     );
-    if (i < 0) throw new Problem(t(TEMPLATE.noBookmark, { name }));
-    return i;
+    if (!hit) throw new Problem(t(TEMPLATE.noBookmark, { name }));
+    return hit.at;
   }
   if (typeof anchor["style"] === "string") {
     const style = anchor["style"];
     const nth = anchor["occurrence"] ?? 0;
-    if (typeof nth !== "number" || !Number.isInteger(nth) || nth < 0)
-      throw new Problem(t(TEMPLATE.occurrence));
+    if (!whole(nth)) throw new Problem(t(TEMPLATE.occurrence));
     let seen = 0;
-    for (const [i, b] of blocks.entries()) {
-      if (
-        b.kind === "paragraph" &&
-        b.paraStyleId &&
-        styleMatches(ir, b.paraStyleId, style)
-      ) {
-        if (seen === nth) return i;
+    for (const { at, p } of documentParagraphs(ir)) {
+      if (p.paraStyleId && styleMatches(ir, p.paraStyleId, style)) {
+        if (seen === nth) return at;
         seen += 1;
       }
     }
-    throw new Problem(t(TEMPLATE.noParagraph, { n: nth + 1, style }));
+    throw new Problem(
+      t(TEMPLATE.noParagraph, { n: (nth as number) + 1, style }),
+    );
+  }
+  if (anchor["heading"] !== undefined) {
+    const level = anchor["heading"];
+    const nth = anchor["occurrence"] ?? 0;
+    if (!whole(level) || (level as number) < 1)
+      throw new Problem(t(TEMPLATE.headingLevel));
+    if (!whole(nth)) throw new Problem(t(TEMPLATE.occurrence));
+    const names = styleNameById(ir);
+    let seen = 0;
+    for (const { at, p } of documentParagraphs(ir)) {
+      if (headingLevel(p.paraStyleId, names) === level) {
+        if (seen === nth) return at;
+        seen += 1;
+      }
+    }
+    throw new Problem(
+      t(TEMPLATE.noHeading, { n: (nth as number) + 1, level: String(level) }),
+    );
   }
   if (typeof anchor["block"] === "number") {
     const i = anchor["block"];
     if (!Number.isInteger(i) || i < 0 || i >= blocks.length)
       throw new Problem(t(TEMPLATE.noBlock, { index: String(i) }));
-    return i;
+    const { cell, paragraph } = anchor;
+    if (cell === undefined && paragraph === undefined) return { block: i };
+    const b = blocks[i]!;
+    if (
+      !whole(cell) ||
+      !whole(paragraph) ||
+      b.kind !== "table" ||
+      !b.cells[cell as number]?.paragraphs[paragraph as number]
+    )
+      throw new Problem(
+        t(TEMPLATE.noCell, {
+          index: String(i),
+          cell: String(cell),
+          paragraph: String(paragraph),
+        }),
+      );
+    return { block: i, cell: cell as number, paragraph: paragraph as number };
   }
   throw new Problem(t(TEMPLATE.noAnchor));
 }
@@ -160,7 +228,15 @@ async function anchoredBlock(
 ): Promise<string> {
   const frame = frameOf(field);
   const ir = await loweringOf(host, frame);
-  return docAddress("block", `${frame}/b${resolveAnchor(ir, field.def)}`);
+  const at = resolveAnchor(ir, field.def);
+  return docAddress(
+    "block",
+    [
+      frame,
+      `b${at.block}`,
+      ...(at.cell !== undefined ? [`c${at.cell}`, `p${at.paragraph}`] : []),
+    ].join("/"),
+  );
 }
 
 /** A value read off an object, or null. */
@@ -326,7 +402,7 @@ export function docTemplateFields(
         for (const a of all)
           if ((await readValue(ctx, a, "writable")) === true) writable.push(a);
         if (writable.length === 0)
-          throw new Problem(t(TEMPLATE.mergeFieldInCell));
+          throw new Problem(t(TEMPLATE.mergeFieldUnwritable));
         // Every use of the name takes the value, as a Word merge does: one
         // batch, one undo step.
         return answer(

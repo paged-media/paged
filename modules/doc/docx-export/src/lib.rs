@@ -287,7 +287,8 @@ pub fn apply_edits(
     // Table-cell run edits — their own `w:tbl`/`w:tr`/`w:tc`/`w:p` locator path.
     let mut cell_targets: Vec<ResolvedCellTarget> = Vec::new();
     for c in &edits.cells {
-        let Some((path, run_ord)) = bindings.resolve_cell(c.block, c.cell, c.para, c.run) else {
+        let Some((path, run_ord, wrapper)) = bindings.resolve_cell(c.block, c.cell, c.para, c.run)
+        else {
             skips.push(format!(
                 "cell edit skipped: block {} cell {} para {} run {} is not patchable",
                 c.block, c.cell, c.para, c.run
@@ -307,6 +308,7 @@ pub fn apply_edits(
             cell: path.cell,
             para: path.para,
             run_ord,
+            wrapper,
             new_text: c.new_text.clone(),
             new_rpr,
             label: format!(

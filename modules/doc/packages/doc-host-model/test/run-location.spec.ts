@@ -21,7 +21,14 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { bodyRunLocation, type LoweredDoc } from "../src";
+import {
+  bodyRunLocation,
+  cellRunLocation,
+  nativePlaces,
+  tableLocation,
+  type LoweredBlock,
+  type LoweredDoc,
+} from "../src";
 
 const para = (...texts: string[]) => ({
   kind: "paragraph" as const,
@@ -64,7 +71,7 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
     sections: [section(0, 0), section(4, 1)],
   } as unknown as LoweredDoc;
 
-  it("counts native paragraphs: segments and table hosts each take one", () => {
+  it("counts native paragraphs: segments take one, a table its host", () => {
     expect(bodyRunLocation(ir, 0, 1)).toEqual({
       story: 0,
       paragraph: 0,
@@ -72,10 +79,11 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
       prefix: "Dear ",
       text: "«Name»",
     });
-    // block 0 (1) + block 1 split once (2) + the table (1) = paragraph 4.
+    // block 0 (0), block 1 split once (1, 2), the table in a new paragraph
+    // (3), and the text after it continues in the table's host (3).
     expect(bodyRunLocation(ir, 3, 1)).toMatchObject({
       story: 0,
-      paragraph: 4,
+      paragraph: 3,
       prefix: "Grüße ",
       text: "x",
     });
@@ -94,5 +102,88 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
     expect(bodyRunLocation(ir, 1, 0)).toBeNull();
     expect(bodyRunLocation(ir, 9, 0)).toBeNull();
     expect(bodyRunLocation(ir, 0, 3)).toBeNull();
+  });
+});
+
+describe("nativePlaces, tableLocation, cellRunLocation @feat:plugin-doc.object-model", () => {
+  const table = (cells: string[][][]) => ({
+    kind: "table" as const,
+    rows: 1,
+    cols: cells.length,
+    columnWidthsPt: [],
+    cells: cells.map((paragraphs, col) => ({
+      row: 0,
+      col,
+      rowSpan: 1,
+      colSpan: 1,
+      paragraphs: paragraphs.map((runs) => ({
+        runs: runs.map((text) => ({ text })),
+        sourceIndex: 0,
+      })),
+    })),
+  });
+  const flow = { ...table([]), flow: [para("tall")] };
+
+  it("a table takes the story's last paragraph when it is empty", () => {
+    const places = nativePlaces([
+      table([]),
+      para("after"),
+      para(""),
+      table([]),
+      para("a", "b"),
+      table([]),
+      table([]),
+      flow,
+      para("end"),
+    ] as unknown as LoweredBlock[]);
+    expect(places).toEqual([
+      { paragraph: 0, table: 0 }, // the fresh story's empty paragraph
+      { paragraph: 0 }, // continues in the host
+      { paragraph: 1 }, // empty: the next table takes it
+      { paragraph: 1, table: 1 },
+      { paragraph: 1 },
+      { paragraph: 2, table: 2 },
+      { paragraph: 3, table: 3 }, // a host is never empty
+      null, // poured as text, joining the host
+      { paragraph: 4 },
+    ]);
+  });
+
+  const ir = {
+    swatches: [],
+    styles: [],
+    diagnostics: [],
+    story: {
+      blocks: [
+        para("Price list"),
+        table([[["Item"]], [["Line ", "one"], ["Grüße"]]]),
+        para("Dear ", "«Name»"),
+      ],
+    },
+    section: section(0),
+  } as unknown as LoweredDoc;
+
+  it("locates a table and a run of one of its cells", () => {
+    expect(tableLocation(ir, 1)).toEqual({ story: 0, table: 0, tables: 1 });
+    expect(tableLocation(ir, 0)).toBeNull();
+    expect(cellRunLocation(ir, 1, 1, 1, 0)).toEqual({
+      story: 0,
+      table: 0,
+      tables: 1,
+      row: 0,
+      col: 1,
+      cellText: "Line one\nGrüße",
+      prefix: "Line one\n",
+      text: "Grüße",
+    });
+    expect(cellRunLocation(ir, 1, 1, 0, 1)).toMatchObject({
+      prefix: "Line ",
+      text: "one",
+    });
+    expect(cellRunLocation(ir, 1, 2, 0, 0)).toBeNull();
+    expect(cellRunLocation(ir, 1, 0, 0, 1)).toBeNull();
+    expect(cellRunLocation(ir, 0, 0, 0, 0)).toBeNull();
+    // The paragraph after the table continues in its host paragraph.
+    expect(bodyRunLocation(ir, 2, 1)).toMatchObject({ paragraph: 1 });
   });
 });
