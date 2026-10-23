@@ -88,6 +88,7 @@ export type FrameSurfaceSession = Pick<
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
   | "grabAt"
+  | "selectionAreas"
   | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
@@ -598,6 +599,20 @@ function SheetFrameSurfaceView({
     autoScroll.current = null;
   };
   useEffect(() => stopAutoScroll, []);
+  // Entering: the grid fades in over the page's table (180 ms; none with
+  // reduced motion), so the switch from page to grid is not a jump.
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof el.animate !== "function") return;
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+    el.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 180,
+      easing: "ease-out",
+    });
+  }, []);
   const [resizeGhost, setResizeGhost] = useState<{
     axis: "col" | "row";
     at: number;
@@ -662,6 +677,29 @@ function SheetFrameSurfaceView({
       widthPt: props.widthPt,
       heightPt: props.heightPt,
     });
+    // The other areas of a multi-area selection (the current one is the
+    // scene's own selection).
+    const areas = session.selectionAreas();
+    if (areas.length > 1) {
+      ctx.save();
+      ctx.translate(headW, headH);
+      for (const a of areas.slice(0, -1)) {
+        const box = rangeRect(
+          scene,
+          a.anchorRow,
+          a.anchorCol,
+          a.anchorRow + a.rows - 1,
+          a.anchorCol + a.cols - 1,
+        );
+        if (!box) continue;
+        ctx.fillStyle = "rgba(31, 79, 138, 0.14)";
+        ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+        ctx.strokeStyle = "rgba(31, 79, 138, 0.8)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      }
+      ctx.restore();
+    }
     // Excel colours each reference of the formula being typed.
     if (edit?.text.startsWith("=")) {
       ctx.save();
@@ -749,6 +787,7 @@ function SheetFrameSurfaceView({
     facesLoaded,
     textDefault,
     swatchColors,
+    session,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
@@ -893,6 +932,8 @@ function SheetFrameSurfaceView({
     session.pointerDownInFrame(cx, cy, {
       shift: e.shiftKey,
       copy: e.ctrlKey || e.altKey,
+      // Ctrl-click (Cmd-click on a Mac) adds an area.
+      add: e.metaKey || (e.ctrlKey && !e.altKey),
     });
   };
 
@@ -1597,7 +1638,11 @@ function SheetBarView({
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
       sheetId: st.activeSheet,
-      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
+      sheetList: session.sheets().map((x) => ({
+        id: x.id,
+        name: x.name,
+        chart: x.kind === "chartsheet",
+      })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
@@ -1748,7 +1793,8 @@ function SheetBarView({
           }}
         >
           {view.sheetList.map((sh) => (
-            <option key={sh.id} value={sh.id}>
+            // A chart sheet holds a chart, not cells: a frame cannot show it.
+            <option key={sh.id} value={sh.id} disabled={sh.chart}>
               {sh.name}
             </option>
           ))}

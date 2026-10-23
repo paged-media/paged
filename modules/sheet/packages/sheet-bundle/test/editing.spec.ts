@@ -318,6 +318,38 @@ describe.skipIf(!built)(
       expect(input(s, 1, 1)).toBe("=B1*2");
     });
 
+    it("Ctrl/Cmd-click adds areas; formatting and clearing reach every area in one step; copy refuses", async () => {
+      const { s } = await open([
+        [0, 0, "a"],
+        [2, 2, "c"],
+      ]);
+      const at = await inFrame(s);
+      s.pointerDownInFrame(...at(0, 0));
+      s.pointerUpInFrame(...at(0, 0));
+      s.pointerDownInFrame(...at(2, 2), { add: true });
+      s.pointerUpInFrame(...at(2, 2));
+      expect(s.selectionAreas()).toEqual([
+        { anchorRow: 0, anchorCol: 0, rows: 1, cols: 1 },
+        { anchorRow: 2, anchorCol: 2, rows: 1, cols: 1 },
+      ]);
+      expect(s.setStyle({ bold: true }).ok).toBe(true);
+      const engine = s.state().engine!;
+      expect(engine.getStyle!(0, 0, 0)?.bold).toBe(true);
+      expect(engine.getStyle!(0, 2, 2)?.bold).toBe(true);
+      expect(engine.getStyle!(0, 1, 1)?.bold).toBe(false);
+      // One undo step takes both back.
+      expect(s.undoCellEdit()).toBe(true);
+      expect(engine.getStyle!(0, 0, 0)?.bold).toBe(false);
+      expect(engine.getStyle!(0, 2, 2)?.bold).toBe(false);
+      expect((await s.copySelection()).ok).toBe(false);
+      expect(s.clearSelection().ok).toBe(true);
+      expect([input(s, 0, 0), input(s, 2, 2)]).toEqual(["", ""]);
+      // A plain click starts over with one area.
+      s.pointerDownInFrame(...at(1, 1));
+      s.pointerUpInFrame(...at(1, 1));
+      expect(s.selectionAreas()).toHaveLength(1);
+    });
+
     it("a drag past the bottom edge scrolls the window and extends the selection", async () => {
       const { s } = await open([]);
       const at = await inFrame(s);
