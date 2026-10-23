@@ -206,6 +206,7 @@
   "sheet.properties.namedRange": "Benannter Bereich",
   "sheet.properties.range": "Ausgewählter Bereich",
   "sheet.properties.sheet": "Tabellenblatt",
+  "sheet.properties.table": "Tabelle",
   "sheet.properties.workbook": "Arbeitsmappe",
   "sheet.template.atLeast": "Die Tabelle braucht mindestens {min} Zeilen; angegeben wurden {count}.",
   "sheet.template.atMost": "Die Tabelle nimmt höchstens {max} Zeilen auf; angegeben wurden {count}.",
