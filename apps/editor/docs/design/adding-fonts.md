@@ -66,7 +66,7 @@ can read what the font says about itself:
 ## Limits and costs
 
 - Memory: each face is held twice today (the client's registry, for re-registering after a
-  reload, and the engine's). A 10 MB CJK face costs 20 MB; the WASM budget (100 MB app-wide) is
+  reload, and the engine's). A 10 MB CJK face costs 20 MB; the WASM budget (120 MB app-wide) is
   not touched, but the add path should refuse faces over a stated size (e.g. 32 MB) with a
   message rather than stall.
 - Variable fonts register as one face covering their axes, as Inter does now; named instances
