@@ -32,6 +32,7 @@ export {
   type BorderLine,
   type BorderLines,
   type FillGradient,
+  type IconRect,
   type FillPattern,
   type LoweredRun,
   type Merge,
@@ -140,6 +141,7 @@ export {
   type FramePageSpec,
   type TracksSpec,
   type GridDataBar,
+  type GridSparkline,
   type GridFreeze,
   type GridMerge,
   type GridScene,
@@ -156,6 +158,7 @@ export {
   type HeadingStyle,
   type PaintContext,
   type PaintOptions,
+  hiddenBoundaries,
 } from "./grid-paint";
 
 export {
@@ -257,4 +260,4 @@ export {
 } from "./cell-orientation";
 
 // Wave 9 — conditional-format data bars on the native placed table.
-export { tableDataBarOps, tableDataBars } from "./table-databars";
+export { tableDataBarOps, tableDataBars, tableIcons } from "./table-databars";

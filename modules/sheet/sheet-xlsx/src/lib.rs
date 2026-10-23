@@ -140,6 +140,11 @@ pub struct XlsxDocument {
     /// no entry.
     pub conditional_formats: BTreeMap<SheetId, parts::conditional_format::SheetConditionalFormats>,
 
+    /// The full conditional-formatting model per sheet (W2.4, sheet ADR
+    /// 520): every rule kind and the `x14` extension, what the evaluator
+    /// (`sheet_calc::cf`) and the authoring API work on.
+    pub cf_models: BTreeMap<SheetId, sheet_core::condfmt::SheetCf>,
+
     /// Parsed DrawingML charts (M2 charts track, spec §8.4), discovered through
     /// each worksheet `.rels`' `/drawing` → drawing `.rels`' `/chart` chain and
     /// parsed into the FROZEN `sheet_chart::ChartModel`. ADDITIVE + READ-ONLY:
@@ -426,6 +431,7 @@ impl XlsxDocument {
             SheetId,
             parts::conditional_format::SheetConditionalFormats,
         > = BTreeMap::new();
+        let mut cf_models: BTreeMap<SheetId, sheet_core::condfmt::SheetCf> = BTreeMap::new();
         let mut freeze_panes: BTreeMap<SheetId, parts::freeze::FreezePanes> = BTreeMap::new();
         let mut data_tables: BTreeMap<SheetId, Vec<parts::worksheet::DataTableDef>> =
             BTreeMap::new();
@@ -585,6 +591,14 @@ impl XlsxDocument {
             if !cf.is_empty() {
                 conditional_formats.insert(sid, cf);
             }
+            // The full model (W2.4): every rule kind and the x14 extension.
+            let full = parts::cf_model::parse_sheet(
+                parsed_ws.captured.after().map(|c| c.bytes.as_slice()),
+                &dxf_models,
+            );
+            if !full.is_empty() {
+                cf_models.insert(sid, full);
+            }
 
             // Freeze panes (spec §8.1): the `<sheetViews><pane>` split sits in
             // the worksheet's BEFORE-sheetData captures (an unmodeled
@@ -614,6 +628,7 @@ impl XlsxDocument {
                 sheet_id: sid,
                 part_name: ws_part,
                 captured: parsed_ws.captured,
+                data_tables: parsed_ws.data_tables.iter().map(|d| d.range).collect(),
             });
         }
 
@@ -754,6 +769,7 @@ impl XlsxDocument {
             visual_styles: visual_styles.with_rich(rich_cells),
             dxfs,
             dxf_models,
+            cf_models,
             conditional_formats,
             charts,
             chartsheets,
