@@ -1,102 +1,102 @@
 {
-  "widthPt": 360.0,
   "heightPt": 240.0,
   "prims": [
     {
+      "anchor": "middle",
       "kind": "text",
-      "x": 180.0,
-      "y": 20.0,
+      "role": "title",
       "s": "Pie",
       "sizePt": 14.0,
-      "anchor": "middle",
-      "role": "title"
+      "x": 180.0,
+      "y": 20.0
     },
     {
-      "kind": "rect",
-      "x": 329.1,
-      "y": 114.29999999999998,
-      "w": 7.0,
-      "h": 7.0,
       "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
       "stroke": null,
-      "strokeW": 0.0
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 114.3
     },
     {
+      "anchor": "start",
       "kind": "text",
-      "x": 340.1,
-      "y": 120.94999999999999,
+      "role": "legend",
       "s": "Q1",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
-    },
-    {
-      "kind": "rect",
-      "x": 329.1,
-      "y": 126.89999999999998,
-      "w": 7.0,
-      "h": 7.0,
-      "fill": "#ED7D31",
-      "stroke": null,
-      "strokeW": 0.0
-    },
-    {
-      "kind": "text",
       "x": 340.1,
-      "y": 133.54999999999998,
+      "y": 120.95
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 126.9
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
       "s": "Q2",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
-    },
-    {
-      "kind": "rect",
-      "x": 329.1,
-      "y": 139.5,
-      "w": 7.0,
-      "h": 7.0,
-      "fill": "#A5A5A5",
-      "stroke": null,
-      "strokeW": 0.0
-    },
-    {
-      "kind": "text",
       "x": 340.1,
-      "y": 146.15,
+      "y": 133.55
+    },
+    {
+      "fill": "#A5A5A5",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 139.5
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
       "s": "Q3",
       "sizePt": 9.0,
-      "anchor": "start",
-      "role": "legend"
+      "x": 340.1,
+      "y": 146.15
     },
     {
-      "kind": "wedge",
       "cx": 163.55,
       "cy": 130.4,
-      "r": 93.24,
-      "startDeg": 0.0,
       "endDeg": 60.0,
       "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 0.0,
       "stroke": "#FFFFFF"
     },
     {
-      "kind": "wedge",
       "cx": 163.55,
       "cy": 130.4,
-      "r": 93.24,
-      "startDeg": 60.0,
       "endDeg": 180.0,
       "fill": "#ED7D31",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 60.0,
       "stroke": "#FFFFFF"
     },
     {
-      "kind": "wedge",
       "cx": 163.55,
       "cy": 130.4,
-      "r": 93.24,
-      "startDeg": 180.0,
       "endDeg": 360.0,
       "fill": "#A5A5A5",
+      "kind": "wedge",
+      "r": 93.24,
+      "startDeg": 180.0,
       "stroke": "#FFFFFF"
     }
-  ]
+  ],
+  "widthPt": 360.0
 }
