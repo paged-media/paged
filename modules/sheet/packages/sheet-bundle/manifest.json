@@ -568,6 +568,51 @@
                 "kind": "number",
                 "integer": true,
                 "default": 0
+              },
+              "sizing": {
+                "kind": "enum",
+                "members": ["window", "fixed", "fit"],
+                "default": "window"
+              },
+              "box": {
+                "kind": "struct",
+                "fields": {
+                  "width": {
+                    "kind": "number"
+                  },
+                  "height": {
+                    "kind": "number"
+                  }
+                },
+                "optional": true
+              },
+              "view": {
+                "kind": "struct",
+                "fields": {
+                  "topLeft": {
+                    "kind": "text",
+                    "optional": true
+                  },
+                  "lock": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
+              },
+              "print": {
+                "kind": "struct",
+                "fields": {
+                  "headings": {
+                    "kind": "bool",
+                    "default": false
+                  },
+                  "gridlines": {
+                    "kind": "bool",
+                    "default": false
+                  }
+                },
+                "optional": true
               }
             }
           },
@@ -576,6 +621,12 @@
             "fields": {
               "frame": {
                 "kind": "text"
+              },
+              "frames": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                }
               }
             }
           }
