@@ -624,7 +624,7 @@ impl SheetSession {
                 "a workbook must keep at least one sheet".into(),
             ));
         }
-        if !self.doc.charts.is_empty() {
+        if self.live_chart_count() > 0 {
             return Err(SessionError(
                 "this workbook has charts; deleting a sheet would leave their ranges \
                  pointing at the wrong sheet (not supported yet)"

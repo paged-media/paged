@@ -18,7 +18,9 @@
 
 // paged.sheet's typed commands for what the panels do and the CLI, the SDK
 // and scripts could not (plan G4): delimited text as a workbook, merges,
-// borders, column widths and row heights. Each change is the object
+// borders, column widths and row heights, and placing a range, a defined
+// name or a sheet's print area on the page, in one frame or across a frame
+// chain. Each change is the object
 // model's versioned write (`commandWrite`): applied in the engine, saved as
 // a workbook version, ONE document undo step. All spreadsheet semantics are
 // the engine's (`merge`, `setStyle`'s border edges, `setColWidth`,
@@ -67,6 +69,18 @@ export const BORDER_EDGES = [
   "bottom",
   "left",
 ] as const;
+
+/** What `place` puts on the page: an A1 range (`Sheet!A1:B9`), a defined
+ *  name or table (the placement keeps the NAME, so a redefinition moves
+ *  it), or a sheet's print area (`ref` is the sheet's name). */
+export const PLACE_SOURCES = ["range", "name", "printArea"] as const;
+
+/** The built-in defined name a sheet's print area is stored under. */
+const PRINT_AREA = "_xlnm.Print_Area";
+
+/** `textFrame:<id>` (what `place` and `lowerToFrame` answer) or a bare id. */
+const frameIdOf = (ref: string): string =>
+  ref.startsWith("textFrame:") ? ref.slice("textFrame:".length) : ref;
 
 /** Resolve `Sheet!A1:B2` (or a defined name) through the engine. */
 function resolveRange(engine: SheetEngine, ref: string): ResolvedRange {
@@ -152,6 +166,71 @@ export function layoutCommands(
   });
 
   return [
+    {
+      id: C("place"),
+      title: "Place on the page",
+      args: struct({
+        source: dflt({ kind: "enum", members: PLACE_SOURCES }, "range"),
+        ref: text,
+        chain: optional(text),
+        repeatHeaderRows: dflt(int, 0),
+      }),
+      result: struct({ frame: text }),
+      async handler(_ctx, a) {
+        const { source, ref, chain, repeatHeaderRows } = a as {
+          source: (typeof PLACE_SOURCES)[number];
+          ref: string;
+          chain?: string;
+          repeatHeaderRows: number;
+        };
+        if (!(repeatHeaderRows >= 0))
+          throw new Error("invalidValue: repeatHeaderRows must be 0 or more");
+        if (!(await session.ensureRestored()))
+          throw new Error("no workbook is open");
+        const e = session.state().engine;
+        if (!e?.resolveRange)
+          throw new Error("engine wasm predates resolve_range");
+        // Which sheet and what range the placement binds; every name is
+        // resolved by the engine.
+        let sheet: number;
+        let range: string;
+        if (source === "printArea") {
+          sheet = sheetIdOf(e, ref);
+          try {
+            range = e.resolveRange(sheet, PRINT_AREA).range;
+          } catch {
+            throw new Error(`invalidValue: sheet "${ref}" has no print area`);
+          }
+        } else if (source === "name") {
+          if (ref.includes("!") || ref.includes(":"))
+            throw new Error(`invalidValue: "${ref}" is a range, not a name`);
+          try {
+            sheet = e.resolveRange(e.listSheets()[0]?.id ?? 0, ref).sheet;
+          } catch {
+            throw new Error(`invalidValue: no defined name or table "${ref}"`);
+          }
+          range = ref;
+        } else {
+          const r = resolveRange(e, ref);
+          sheet = r.sheet;
+          range = r.range;
+        }
+        session.setActiveSheet(sheet);
+        session.setRange(range);
+        if (chain === undefined) {
+          const frame = await session.lowerSelection();
+          if (!frame) throw new Error(`could not place ${ref}`);
+          return { frame: `textFrame:${frame}` };
+        }
+        const frameId = frameIdOf(chain);
+        const r = await session.paginateSelection({
+          frameId,
+          repeatHeaderRows,
+        });
+        if (!r.ok) throw new Error(`could not place ${ref}: ${r.message}`);
+        return { frame: `textFrame:${frameId}` };
+      },
+    },
     {
       id: C("importCsv"),
       title: "Import delimited text (.csv, .tsv)",
