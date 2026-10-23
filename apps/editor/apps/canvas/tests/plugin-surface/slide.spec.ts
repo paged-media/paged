@@ -41,7 +41,7 @@
 //     They are RE-REGISTERED whenever the open document starts or stops
 //     being a deck, because the panel rail reads `rail` at registration:
 //     `rail: true` only while a deck is open;
-//   · the object model (four kinds, two typed commands) — only when the
+//   · the object model (four kinds, four typed commands) — only when the
 //     host answers `contribute.objectModel@1`;
 //   · the four property panels (schema panels of property rows) — only
 //     with the object model AND `contribute.schemaPanel@1`. The schema
@@ -104,6 +104,8 @@ const IMPORTER = "media.paged.slide.importer.pptx";
 const EXPORTER = "media.paged.slide.exporter.pptx";
 const NEW_SLIDE = "media.paged.slide.newSlide";
 const IMPORT_PPTX = "media.paged.slide.importPptx";
+const DUPLICATE_SLIDE = "media.paged.slide.duplicateSlide";
+const EXPORT_PPTX = "media.paged.slide.exportPptx";
 
 const KIND = (k: string) => `plugin:media.paged.slide/${k}`;
 
@@ -125,7 +127,7 @@ const DECLARED = {
   exporters: [EXPORTER],
   partTypes: ["pptx", "slideImport"],
   objectKinds: ["deck", "slide", "layout", "placeholder"],
-  typedCommands: [NEW_SLIDE, IMPORT_PPTX],
+  typedCommands: [NEW_SLIDE, IMPORT_PPTX, DUPLICATE_SLIDE, EXPORT_PPTX],
 } as const;
 
 /** Each panel's title, and what it is: the sorter and the notes are
@@ -1074,7 +1076,7 @@ test.describe("plugin surface · paged.slide", () => {
       ),
     ).toHaveCount(0);
 
-    // The two typed commands are titled for a user ("New slide", "Open a
+    // The typed commands are titled for a user ("New slide", "Open a
     // PowerPoint deck") but the editor's typed-command picker (Edit ▸ Run
     // command…) lists CORE commands only, so neither is offered there:
     // they are reachable from scripts, the Node CLI and `host.objects`.
@@ -1104,7 +1106,7 @@ test.describe("plugin surface · paged.slide", () => {
       description:
         "paged.slide's whole front door is File ▸ Open… (or a drop) of a .pptx: no palette " +
         "command, no menu verb (the host curates File ▸ Open PDF… for paged.pdf but nothing for " +
-        "PowerPoint), no tool, no keybinding. Its two typed commands are not offered by Edit ▸ " +
+        "PowerPoint), no tool, no keybinding. Its typed commands are not offered by Edit ▸ " +
         "Run command…, which lists core commands only. New slide is reachable from the Slides " +
         "panel's button.",
     });
