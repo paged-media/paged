@@ -185,6 +185,7 @@ describe("sheet_plugin_bundle_activate", () => {
       "media.paged.sheet.command.findNext",
       "media.paged.sheet.command.cutSelection",
       "media.paged.sheet.command.formatCells",
+      "media.paged.sheet.command.pasteSpecial",
     ]);
   });
 

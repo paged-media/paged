@@ -24,6 +24,7 @@
   "sheet.command.clearCells": "Zellen leeren",
   "sheet.command.cutSelection": "Tabellenauswahl ausschneiden",
   "sheet.command.formatCells": "Zellen formatieren…",
+  "sheet.command.pasteSpecial": "Inhalte einfügen…",
   "sheet.command.copySelection": "Tabellenauswahl kopieren",
   "sheet.command.defaultStyleName": "Zellenformat",
   "sheet.command.deleteColumns": "Spalten löschen",

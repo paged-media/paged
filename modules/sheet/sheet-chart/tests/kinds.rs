@@ -357,6 +357,23 @@ fn fixtures() -> Vec<(&'static str, ChartModel, PlotData)> {
     v
 }
 
+fn rounded(v: serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match v {
+        Value::Number(n) => match n.as_f64() {
+            Some(f) if n.is_f64() => {
+                let r = (f * 1000.0).round() / 1000.0;
+                let r = if r == 0.0 { 0.0 } else { r };
+                serde_json::Number::from_f64(r).map_or(Value::Null, Value::Number)
+            }
+            _ => Value::Number(n),
+        },
+        Value::Array(a) => Value::Array(a.into_iter().map(rounded).collect()),
+        Value::Object(o) => Value::Object(o.into_iter().map(|(k, v)| (k, rounded(v))).collect()),
+        other => other,
+    }
+}
+
 fn snapshots() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots")
 }
@@ -452,7 +469,11 @@ fn every_kind_matches_its_snapshot__feat__sheet_chart_kinds() {
                 _ => {}
             }
         }
-        let json = serde_json::to_string_pretty(&g).unwrap() + "\n";
+        // Rounded to 1/1000 pt: libm differs in the last bits across
+        // platforms, and a snapshot is about where marks land, not ulps.
+        let json = serde_json::to_string_pretty(&rounded(serde_json::to_value(&g).unwrap()))
+            .unwrap()
+            + "\n";
         if let Some(dir) = &svg_dir {
             std::fs::create_dir_all(dir).unwrap();
             std::fs::write(dir.join(format!("{name}.svg")), svg(&g)).unwrap();

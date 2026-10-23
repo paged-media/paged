@@ -432,6 +432,10 @@ export interface WorkbookSession {
    *  binding records it with the next page write. False when no window
    *  frame is known. */
   setFrameViewLock(lock: boolean, frameId?: string): boolean;
+  /** Show sheet `sheetId` in the entered frame (RagTime: the frame is a
+   *  window onto a component): the grid moves to its A1, and a window
+   *  frame's page shows that sheet when the frame is left. */
+  setFrameSheet(sheetId: number): boolean;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -522,9 +526,17 @@ export interface WorkbookSession {
    *  undoes the whole paste). Returns the outcome: `ok:true` with the pasted
    *  row/col counts, or `ok:false` with an honest reason (no selection / no
    *  engine / nothing on the clipboard). Never throws. */
-  pasteAtSelection(): Promise<
+  pasteAtSelection(
+    options?: PasteOptions,
+  ): Promise<
     { ok: true; rows: number; cols: number } | { ok: false; message: string }
   >;
+  /** Paste special (Excel's Ctrl+Alt+V): whether its options card is open,
+   *  and opening / closing it. The card's OK calls `pasteAtSelection` with
+   *  the chosen options. */
+  pasteSpecialOpen(): boolean;
+  openPasteSpecial(): void;
+  closePasteSpecial(): void;
   /** The last answer of copy or paste, for the grid panel to show. Copy and
    *  paste are reached from the panel buttons, the grid keys, the in-frame
    *  keys and the commands; a refusal from any of them is posted here, so
@@ -887,6 +899,54 @@ export function selectionRangeA1(
   return `${start}:${end}`;
 }
 
+/** Paste special's options (Excel's dialog). `"all"` and `"formulas"` both
+ *  paste inputs (formulas re-addressed) — the clipboard carries no formats
+ *  yet; `"values"` pastes what the cells show. `operation` combines a
+ *  numeric source with the target (an empty target counts as 0, a target
+ *  formula is wrapped); text sources leave the target alone. */
+export interface PasteOptions {
+  what?: "all" | "formulas" | "values";
+  transpose?: boolean;
+  skipBlanks?: boolean;
+  operation?: "none" | "add" | "subtract" | "multiply" | "divide";
+}
+
+/** Combine a paste `src` input with the target's `dst` input (paste special
+ *  operations). Null: leave the target as it is. */
+export function combinePaste(
+  dst: string,
+  src: string,
+  op: NonNullable<PasteOptions["operation"]>,
+): string | null {
+  if (op === "none") return src;
+  const num = (t: string) => {
+    const v = t.trim();
+    if (v === "") return 0;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const s = num(src);
+  if (s === null || src.startsWith("=")) return null;
+  if (dst.startsWith("=")) {
+    const sign = { add: "+", subtract: "-", multiply: "*", divide: "/" }[op];
+    return `=(${dst.slice(1)})${sign}${s}`;
+  }
+  const d = num(dst);
+  if (d === null) return null;
+  const r =
+    op === "add"
+      ? d + s
+      : op === "subtract"
+        ? d - s
+        : op === "multiply"
+          ? d * s
+          : s === 0
+            ? null
+            : d / s;
+  if (r === null) return "#DIV/0!";
+  return String(r);
+}
+
 /** K-6 — parse a TSV `text` clipboard half into a rectangular grid (the
  *  fallback when the platform offered no rich `tabular`). Tabs split cells,
  *  newlines split rows; CRLF tolerated; a single trailing newline dropped
@@ -1105,6 +1165,8 @@ export function createWorkbookSession(
   // refresh on exit; `suppressRefresh` keeps a document-driven unwind from
   // writing the page the document just restored.
   let refreshDeferred = false;
+  /** Paste special's options card is open (the sheet bar shows it). */
+  let pasteSpecialCard = false;
   let suppressRefresh = false;
 
   /** Write one cell through the engine AND journal it (the shared Tier-1
@@ -2080,6 +2142,9 @@ export function createWorkbookSession(
       }
       case "formatCells":
         void host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+        return true;
+      case "pasteSpecial":
+        api.openPasteSpecial();
         return true;
       case "calculate": {
         try {
@@ -3724,6 +3789,30 @@ export function createWorkbookSession(
       );
     },
 
+    setFrameSheet(sheetId) {
+      const engine = state.engine;
+      if (!engine || !engine.listSheets().some((x) => x.id === sheetId))
+        return false;
+      if (state.activeSheet === sheetId) return true;
+      api.setActiveSheet(sheetId);
+      const id = lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (id && info?.sizing === "window" && info.view) {
+        loweredTables.set(id, {
+          ...info,
+          sheet: sheetId,
+          view: { ...info.view, topLeft: "A1" },
+          // A sheet switch rewrites every cell: no in-place diff.
+          content: undefined,
+        });
+        viewMoved.add(id);
+      }
+      if (lastGridWindow) lastGridWindow = { ...lastGridWindow, firstRow: 0, firstCol: 0 };
+      if (inFrameActive) void submitInFrameGrid();
+      else if (id && viewMoved.has(id)) void refreshPlacements();
+      return true;
+    },
+
     frameView(frameId) {
       const id = frameId ?? lastFrameId;
       const info = id ? loweredTables.get(id) : undefined;
@@ -3954,7 +4043,22 @@ export function createWorkbookSession(
       };
     },
 
-    async pasteAtSelection() {
+    pasteSpecialOpen() {
+      return pasteSpecialCard;
+    },
+    openPasteSpecial() {
+      if (pasteSpecialCard) return;
+      pasteSpecialCard = true;
+      emitter.emit();
+    },
+    closePasteSpecial() {
+      if (!pasteSpecialCard) return;
+      pasteSpecialCard = false;
+      emitter.emit();
+    },
+
+    async pasteAtSelection(options: PasteOptions = {}) {
+      pasteSpecialCard = false;
       // K-6 / S-14 — read the clipboard, land its grid at the selection anchor
       // through the JOURNALED editCell lane as ONE grouped undo step. Prefers
       // the rich tabular half; falls back to TSV. Thin glue (§3): the engine
@@ -3998,7 +4102,19 @@ export function createWorkbookSession(
         JSON.stringify(copySource.displays) === JSON.stringify(grid)
           ? copySource
           : null;
-      const block = own ? own.inputs : grid;
+      const what = options.what ?? "all";
+      const op = options.operation ?? "none";
+      const useInputs = own !== null && what !== "values";
+      const transpose = (g: string[][]) => {
+        const w = Math.max(...g.map((r) => r.length));
+        return Array.from({ length: w }, (_, c) => g.map((r) => r[c] ?? ""));
+      };
+      const raw = useInputs
+        ? own.inputs
+        : what === "values" && own
+          ? own.displays
+          : grid;
+      const block = options.transpose ? transpose(raw) : raw;
       const bRows = block.length;
       const bCols = Math.max(...block.map((r) => r.length));
       // A selection that is a whole multiple of the block tiles it (copy one
@@ -4021,7 +4137,7 @@ export function createWorkbookSession(
           const top = area.anchorRow + tr;
           const left = area.anchorCol + tc;
           let rows = block;
-          if (own) {
+          if (useInputs && !options.transpose) {
             try {
               rows = engine.shiftFormulas!(
                 sheet,
@@ -4036,15 +4152,49 @@ export function createWorkbookSession(
                 message: "the paste could not adjust its formulas",
               };
             }
+          } else if (useInputs) {
+            // Transposed: each source cell moves by its own offset, so each
+            // formula is re-addressed alone.
+            try {
+              rows = block.map((row, r) =>
+                row.map((input, c) => {
+                  if (!input.startsWith("=")) return input;
+                  // Block cell (r, c) came from source cell (c, r).
+                  const dRow = top + r - (own.rect.anchorRow + c);
+                  const dCol = left + c - (own.rect.anchorCol + r);
+                  return (
+                    engine.shiftFormulas!(
+                      sheet,
+                      [[input]],
+                      dRow,
+                      dCol,
+                    )[0]?.[0] ?? input
+                  );
+                }),
+              );
+            } catch (err) {
+              host.log.warn("pasteAtSelection: formula adjust failed", err);
+              return {
+                ok: false as const,
+                message: "the paste could not adjust its formulas",
+              };
+            }
           }
           rows.forEach((row, r) =>
             row.forEach((next, c) => {
+              if (options.skipBlanks && next === "") return;
+              let input: string | null = next;
+              if (op !== "none") {
+                const dst = engine.getCellInput(sheet, top + r, left + c);
+                input = combinePaste(dst, next, op);
+                if (input === null) return;
+              }
               targets.push({
                 sheet,
                 row: top + r,
                 col: left + c,
                 prevInput: "",
-                nextInput: next,
+                nextInput: input,
               });
             }),
           );
@@ -5283,8 +5433,8 @@ export function createWorkbookSession(
     else postNotice(t(NOTICES.cantCopy, { reason: r.message }), "error");
     return r;
   };
-  api.pasteAtSelection = async () => {
-    const r = await pasteImpl.call(api);
+  api.pasteAtSelection = async (options?: PasteOptions) => {
+    const r = await pasteImpl.call(api, options);
     if (r.ok)
       postNotice(
         t(NOTICES.pasted, {
