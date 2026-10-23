@@ -1,0 +1,150 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Funnel",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 126.9
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S1",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 133.55
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Leads",
+      "sizePt": 9.0,
+      "x": 37.7,
+      "y": 55.85
+    },
+    {
+      "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 279.4,
+      "x": 41.7,
+      "y": 36.513
+    },
+    {
+      "anchor": "middle",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "500",
+      "sizePt": 9.0,
+      "x": 181.4,
+      "y": 55.85
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Calls",
+      "sizePt": 9.0,
+      "x": 37.7,
+      "y": 107.65
+    },
+    {
+      "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 178.816,
+      "x": 91.992,
+      "y": 88.312
+    },
+    {
+      "anchor": "middle",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "320",
+      "sizePt": 9.0,
+      "x": 181.4,
+      "y": 107.65
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Offers",
+      "sizePt": 9.0,
+      "x": 37.7,
+      "y": 159.45
+    },
+    {
+      "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 100.584,
+      "x": 131.108,
+      "y": 140.113
+    },
+    {
+      "anchor": "middle",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "180",
+      "sizePt": 9.0,
+      "x": 181.4,
+      "y": 159.45
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "Won",
+      "sizePt": 9.0,
+      "x": 37.7,
+      "y": 211.25
+    },
+    {
+      "fill": "#4472C4",
+      "h": 32.375,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 33.528,
+      "x": 164.636,
+      "y": 191.913
+    },
+    {
+      "anchor": "middle",
+      "color": "#FFFFFF",
+      "kind": "text",
+      "role": "dataLabel",
+      "s": "60",
+      "sizePt": 9.0,
+      "x": 181.4,
+      "y": 211.25
+    }
+  ],
+  "widthPt": 360.0
+}

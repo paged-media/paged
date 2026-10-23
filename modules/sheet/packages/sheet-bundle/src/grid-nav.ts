@@ -237,6 +237,8 @@ export type GridKeyAction =
   | { kind: "toggleStyle"; style: "bold" | "italic" | "underline" }
   /** Ctrl+1: the cell format panel. */
   | { kind: "formatCells" }
+  /** Ctrl+Shift+V: paste special's options. */
+  | { kind: "pasteSpecial" }
   /** F9: recalculate (manual calculation mode). */
   | { kind: "calculate" }
   /** Alt+PageDown / Alt+PageUp: a screen to the right / left. */
@@ -301,7 +303,11 @@ export function gridKeyAction(
       case "c":
         return editing ? { kind: "none" } : { kind: "copy" };
       case "v":
-        return editing ? { kind: "none" } : { kind: "paste" };
+        return editing
+          ? { kind: "none" }
+          : shift
+            ? { kind: "pasteSpecial" }
+            : { kind: "paste" };
       case "d":
         return editing ? { kind: "none" } : { kind: "fill", dir: "down" };
       case "r":

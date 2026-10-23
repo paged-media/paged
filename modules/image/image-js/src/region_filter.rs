@@ -91,16 +91,81 @@ impl PixelRect {
 /// tool.
 pub const MAX_FEATHER: f32 = 250.0;
 
+/// How the polygons of a mask fill (`fillRule`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FillRule {
+    /// Each polygon filled on its own (even–odd within itself), the
+    /// results unioned: overlapping polygons never cut each other. What a
+    /// mask without a fill rule does.
+    #[default]
+    Union,
+    /// The polygons filled together as one path by winding number: a
+    /// point is inside where the polygons' signed crossings do not cancel,
+    /// so an inner polygon wound the other way cuts a hole.
+    NonZero,
+    /// The polygons filled together as one path, even–odd: a point is
+    /// inside where it lies within an odd number of polygons, so a
+    /// polygon inside another cuts a hole whatever its winding.
+    EvenOdd,
+}
+
+impl FillRule {
+    /// Decode the wire discriminant (0 = union, 1 = non-zero, 2 = even–odd).
+    pub fn from_u8(v: u8) -> Option<FillRule> {
+        match v {
+            0 => Some(FillRule::Union),
+            1 => Some(FillRule::NonZero),
+            2 => Some(FillRule::EvenOdd),
+            _ => None,
+        }
+    }
+}
+
+/// How one polygon folds into the mask (`op`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PolygonOp {
+    /// Part of the shape: the add polygons are filled together under the
+    /// fill rule.
+    #[default]
+    Add,
+    /// Cut out of the shape: `shape · (1 − polygon)`.
+    Subtract,
+    /// Keep only what lies within the polygon too: `min(shape, polygon)`.
+    Intersect,
+}
+
+impl PolygonOp {
+    /// Decode the wire discriminant (0 = add, 1 = subtract, 2 = intersect).
+    pub fn from_u8(v: u8) -> Option<PolygonOp> {
+        match v {
+            0 => Some(PolygonOp::Add),
+            1 => Some(PolygonOp::Subtract),
+            2 => Some(PolygonOp::Intersect),
+            _ => None,
+        }
+    }
+}
+
 /// A mask given as data — what a selection is when there is no session to
 /// hold one. Every part given narrows the filtered area: the polygons'
-/// union, intersected with the alpha mask, feathered, then clipped to
+/// shape, intersected with the alpha mask, feathered, then clipped to
 /// the region.
+///
+/// The polygons' shape: the `Add` polygons filled under `fill_rule`
+/// (all of them together, or each alone and unioned), then every
+/// `Subtract` and `Intersect` polygon folded in, in order, each filled
+/// alone (even–odd, or by the fill rule when one is given). Without an
+/// `Add` polygon the shape starts as the whole image, as a mask without
+/// polygons does.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct RegionMask {
     /// Closed polygons in image pixels (`(x, y)`, fractional allowed),
-    /// each filled even–odd and anti-aliased, unioned. Empty: no polygon
-    /// constraint.
+    /// anti-aliased. Empty: no polygon constraint.
     pub polygons: Vec<Vec<(f32, f32)>>,
+    /// Each polygon's op, in `polygons` order. Empty: every polygon adds.
+    pub ops: Vec<PolygonOp>,
+    /// How the add polygons fill together.
+    pub fill_rule: FillRule,
     /// A Gaussian feather of the mask's edge, σ in image pixels (0: none).
     pub feather: f32,
     /// An 8-bit coverage, `width · height` bytes row-major (0 = untouched,
@@ -113,6 +178,134 @@ impl RegionMask {
     pub fn is_empty(&self) -> bool {
         self.polygons.is_empty() && self.alpha.is_none()
     }
+
+    fn op(&self, i: usize) -> PolygonOp {
+        self.ops.get(i).copied().unwrap_or_default()
+    }
+}
+
+/// Rasterise closed polygons filled TOGETHER as one path under `rule`
+/// (`NonZero` or `EvenOdd`; `Union` is treated as `EvenOdd` per path),
+/// anti-aliased as the lasso is (`SelectionCoverage::rasterize_polygon`):
+/// four sub-scanlines per pixel row, each crossed with every edge, the
+/// inside spans accumulating analytic x-coverage at ¼ weight.
+pub fn rasterize_polygons(
+    width: u32,
+    height: u32,
+    polygons: &[&[(f32, f32)]],
+    rule: FillRule,
+) -> SelectionCoverage {
+    let mut acc = vec![0.0f32; (width as usize) * (height as usize)];
+    // (x, winding direction) per crossing of one sub-scanline.
+    let mut xs: Vec<(f32, i32)> = Vec::with_capacity(16);
+    for y in 0..height {
+        for sub in 0..4u32 {
+            let sy = y as f32 + (sub as f32 * 2.0 + 1.0) / 8.0;
+            xs.clear();
+            for poly in polygons.iter().filter(|p| p.len() >= 3) {
+                let n = poly.len();
+                for i in 0..n {
+                    let (x0, y0) = poly[i];
+                    let (x1, y1) = poly[(i + 1) % n];
+                    // Half-open in y, as the lasso's rasteriser: a vertex
+                    // on the scanline counts once.
+                    let dir = if y0 <= sy && sy < y1 {
+                        1
+                    } else if y1 <= sy && sy < y0 {
+                        -1
+                    } else {
+                        continue;
+                    };
+                    let t = (sy - y0) / (y1 - y0);
+                    xs.push((x0 + t * (x1 - x0), dir));
+                }
+            }
+            xs.sort_by(|a, b| a.0.partial_cmp(&b.0).expect("finite intersections"));
+            let mut winding = 0i32;
+            for k in 0..xs.len() {
+                winding += xs[k].1;
+                let inside = match rule {
+                    FillRule::NonZero => winding != 0,
+                    FillRule::EvenOdd | FillRule::Union => (k + 1) % 2 == 1,
+                };
+                if !inside || k + 1 == xs.len() {
+                    continue;
+                }
+                let (xa, xb) = (xs[k].0.max(0.0), xs[k + 1].0.min(width as f32));
+                if xb <= xa {
+                    continue;
+                }
+                let first = xa.floor() as u32;
+                let last = (xb.ceil() as u32).min(width);
+                for px in first..last {
+                    let cover = (xb.min(px as f32 + 1.0) - xa.max(px as f32)).max(0.0);
+                    acc[(y * width + px) as usize] += cover * 0.25;
+                }
+            }
+        }
+    }
+    let data = acc
+        .iter()
+        .map(|a| (a.clamp(0.0, 1.0) * 255.0).round() as u8)
+        .collect();
+    SelectionCoverage::from_data(width, height, data).expect("width · height bytes")
+}
+
+/// The polygons' shape (see [`RegionMask`]), or `None` without polygons.
+fn polygon_shape(
+    width: u32,
+    height: u32,
+    mask: &RegionMask,
+) -> Result<Option<SelectionCoverage>, String> {
+    if mask.polygons.is_empty() {
+        return Ok(None);
+    }
+    if !mask.ops.is_empty() && mask.ops.len() != mask.polygons.len() {
+        return Err(format!(
+            "{} polygons name {} ops; give every polygon an op, or none",
+            mask.polygons.len(),
+            mask.ops.len()
+        ));
+    }
+    for (i, poly) in mask.polygons.iter().enumerate() {
+        if poly.len() < 3 {
+            return Err(format!(
+                "polygon {i} has {} points; a polygon needs at least 3",
+                poly.len()
+            ));
+        }
+        if poly.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+            return Err(format!("polygon {i} has a point that is not a number"));
+        }
+    }
+    let adds: Vec<&[(f32, f32)]> = (0..mask.polygons.len())
+        .filter(|&i| mask.op(i) == PolygonOp::Add)
+        .map(|i| mask.polygons[i].as_slice())
+        .collect();
+    let mut shape = if adds.is_empty() {
+        SelectionCoverage::full(width, height)
+    } else if mask.fill_rule == FillRule::Union {
+        let mut cov = SelectionCoverage::empty(width, height);
+        for poly in &adds {
+            cov.combine(
+                &SelectionCoverage::rasterize_polygon(width, height, poly),
+                CombineMode::Add,
+            );
+        }
+        cov
+    } else {
+        rasterize_polygons(width, height, &adds, mask.fill_rule)
+    };
+    for (i, poly) in mask.polygons.iter().enumerate() {
+        let mode = match mask.op(i) {
+            PolygonOp::Add => continue,
+            PolygonOp::Subtract => CombineMode::Subtract,
+            PolygonOp::Intersect => CombineMode::Intersect,
+        };
+        let one = rasterize_polygons(width, height, &[poly.as_slice()], mask.fill_rule);
+        shape.combine(&one, mode);
+    }
+    Ok(Some(shape))
 }
 
 /// Rasterise `mask` over a `width × height` image, clipped to `rect`.
@@ -133,23 +326,7 @@ pub fn mask_coverage(
             mask.feather
         ));
     }
-    let mut cov: Option<SelectionCoverage> = None;
-    for (i, poly) in mask.polygons.iter().enumerate() {
-        if poly.len() < 3 {
-            return Err(format!(
-                "polygon {i} has {} points; a polygon needs at least 3",
-                poly.len()
-            ));
-        }
-        if poly.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
-            return Err(format!("polygon {i} has a point that is not a number"));
-        }
-        let shape = SelectionCoverage::rasterize_polygon(width, height, poly);
-        match &mut cov {
-            Some(c) => c.combine(&shape, CombineMode::Add),
-            None => cov = Some(shape),
-        }
-    }
+    let mut cov = polygon_shape(width, height, mask)?;
     if let Some(alpha) = &mask.alpha {
         let expected = width as usize * height as usize;
         if alpha.len() != expected {

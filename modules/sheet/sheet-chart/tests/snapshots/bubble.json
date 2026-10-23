@@ -1,0 +1,395 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Bubble",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 126.9
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S1",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 133.55
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          221.4
+        ],
+        [
+          317.1,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          197.575
+        ],
+        [
+          317.1,
+          197.575
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          173.75
+        ],
+        [
+          317.1,
+          173.75
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          149.925
+        ],
+        [
+          317.1,
+          149.925
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          126.1
+        ],
+        [
+          317.1,
+          126.1
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          102.275
+        ],
+        [
+          317.1,
+          102.275
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          78.45
+        ],
+        [
+          317.1,
+          78.45
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          54.625
+        ],
+        [
+          317.1,
+          54.625
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          30.8
+        ],
+        [
+          317.1,
+          30.8
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "kind": "line",
+      "pts": [
+        [
+          16.95,
+          221.4
+        ],
+        [
+          317.1,
+          221.4
+        ]
+      ],
+      "stroke": "#D9D9D9",
+      "strokeW": 0.75
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "0",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 224.55
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "1",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 200.725
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "2",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 176.9
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "3",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 153.075
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "4",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 129.25
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "5",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 105.425
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "6",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 81.6
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "7",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 57.775
+    },
+    {
+      "anchor": "end",
+      "kind": "text",
+      "role": "tick",
+      "s": "8",
+      "sizePt": 9.0,
+      "x": 12.95,
+      "y": 33.95
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "0",
+      "sizePt": 9.0,
+      "x": 16.95,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "0.5",
+      "sizePt": 9.0,
+      "x": 50.3,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "1",
+      "sizePt": 9.0,
+      "x": 83.65,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "1.5",
+      "sizePt": 9.0,
+      "x": 117.0,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "2",
+      "sizePt": 9.0,
+      "x": 150.35,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "2.5",
+      "sizePt": 9.0,
+      "x": 183.7,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "3",
+      "sizePt": 9.0,
+      "x": 217.05,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "3.5",
+      "sizePt": 9.0,
+      "x": 250.4,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "4",
+      "sizePt": 9.0,
+      "x": 283.75,
+      "y": 232.2
+    },
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "tick",
+      "s": "4.5",
+      "sizePt": 9.0,
+      "x": 317.1,
+      "y": 232.2
+    },
+    {
+      "cx": 83.65,
+      "cy": 173.75,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 11.913,
+      "startDeg": 0.0,
+      "stroke": null
+    },
+    {
+      "cx": 150.35,
+      "cy": 126.1,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 23.825,
+      "startDeg": 0.0,
+      "stroke": null
+    },
+    {
+      "cx": 217.05,
+      "cy": 149.925,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 16.847,
+      "startDeg": 0.0,
+      "stroke": null
+    },
+    {
+      "cx": 283.75,
+      "cy": 54.625,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "kind": "wedge",
+      "r": 8.423,
+      "startDeg": 0.0,
+      "stroke": null
+    }
+  ],
+  "widthPt": 360.0
+}

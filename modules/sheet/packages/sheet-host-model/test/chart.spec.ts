@@ -29,6 +29,7 @@ import {
   chartGeometryToMutations,
   estimateLabelMetrics,
   labelBox,
+  labelAutoSizeOp,
   labelJustification,
   labelStyleOps,
   makeBinding,
@@ -714,5 +715,112 @@ describe("sheet_chart_lower_paged_draw: colour → swatch + colorRef (FINDING 1)
     );
     expect(fillOps).toHaveLength(1);
     expect(ops.filter((o) => o.op === "insertPath")).toHaveLength(2);
+  });
+});
+
+describe("document references in the lowering [sheet.chart.style-roles]", () => {
+  const place: ChartPlacement = { pageId: "p1", bounds: [0, 0, 100, 100] };
+  const bind: Binding = makeBinding("Sheet1", "chart:0", 0);
+
+  it("a fill naming a document swatch is referenced, never minted", () => {
+    const geom: ChartGeometry = {
+      widthPt: 100,
+      heightPt: 100,
+      prims: [
+        {
+          kind: "rect",
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+          fill: "#00A0E0",
+          stroke: null,
+          strokeW: 0,
+          fillSwatchRef: "Color/Brand",
+        },
+      ],
+    };
+    const { batch } = chartGeometryToMutations(geom, place, bind);
+    const ops = (batch as { args: { ops: { op: string; args: any }[] } }).args
+      .ops;
+    expect(ops.some((o) => o.op === "createSwatch")).toBe(false);
+    const fill = ops.find((o) => o.args?.path === "frameFillColor");
+    expect(fill?.args.value).toEqual({
+      type: "colorRef",
+      value: "Color/Brand",
+    });
+  });
+
+  it("a ring segment returns along its inner arc", () => {
+    const geom: ChartGeometry = {
+      widthPt: 100,
+      heightPt: 100,
+      prims: [
+        {
+          kind: "wedge",
+          cx: 50,
+          cy: 50,
+          r: 40,
+          innerR: 20,
+          startDeg: 0,
+          endDeg: 90,
+          fill: "#4472C4",
+          stroke: null,
+        },
+      ],
+    };
+    const { batch } = chartGeometryToMutations(geom, place, bind);
+    const path = (
+      batch as { args: { ops: { op: string; args: any }[] } }
+    ).args.ops.find((o) => o.op === "insertPath");
+    const anchors = path!.args.anchors as { anchor: [number, number] }[];
+    // No centre vertex; the last point lies on the inner circle.
+    const last = anchors[anchors.length - 1].anchor;
+    expect(Math.hypot(last[0] - 50, last[1] - 50)).toBeCloseTo(20, 6);
+    expect(anchors.some((a) => a.anchor[0] === 50 && a.anchor[1] === 50)).toBe(
+      false,
+    );
+  });
+
+  it("a label in a paragraph style applies it instead of the chart's size", () => {
+    const geom: ChartGeometry = {
+      widthPt: 100,
+      heightPt: 100,
+      prims: [
+        {
+          kind: "text",
+          x: 50,
+          y: 20,
+          s: "Title",
+          sizePt: 14,
+          anchor: "middle",
+          paragraphStyle: "ParagraphStyle/Chart Title",
+          role: "title",
+        },
+        {
+          kind: "text",
+          x: 50,
+          y: 40,
+          s: "9",
+          sizePt: 9,
+          anchor: "end",
+          color: "#595959",
+          bold: true,
+        },
+      ],
+    };
+    const { texts } = chartGeometryToMutations(geom, place, bind);
+    const styled = labelStyleOps("s1", texts[0]).map(
+      (o) => (o.args as { path: string }).path,
+    );
+    expect(styled).toContain("appliedParagraphStyle");
+    expect(styled).not.toContain("characterFontSize");
+    const plain = labelStyleOps("s2", texts[1]);
+    const paths = plain.map((o) => (o.args as { path: string }).path);
+    expect(paths).toContain("characterFontSize");
+    expect(paths).toContain("characterFontStyle");
+    expect(paths).toContain("characterFillColor");
+    expect(labelAutoSizeOp("$h:l0", texts[0])).toHaveLength(1);
+    expect(labelAutoSizeOp("$h:l1", texts[1])).toHaveLength(0);
   });
 });

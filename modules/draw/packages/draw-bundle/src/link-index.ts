@@ -560,6 +560,13 @@ export function linkIndex(host: BundleHost): LinkIndex {
   return index;
 }
 
+/** Give `alias` — a view of `host` that changes how some of its doors
+ *  write (the automatic recipe update's amending host) — the link index
+ *  of `host`, so both read one revision instead of walking twice. */
+export function shareLinkIndex(alias: object, host: BundleHost): void {
+  indexes.set(alias, linkIndex(host));
+}
+
 /**
  * Tell every open panel that a recipe part was written.
  *

@@ -46,6 +46,7 @@ const CONTEXT_ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Context/Cut", "cutSelection", "clipboard"],
   ["Context/Copy", "copySelection", "clipboard"],
   ["Context/Paste", "pasteSelection", "clipboard"],
+  ["Context/Paste special…", "pasteSpecial", "clipboard"],
   ["Context/Insert rows", "insertRows", "structure"],
   ["Context/Insert columns", "insertColumns", "structure"],
   ["Context/Delete rows", "deleteRows", "structure"],
