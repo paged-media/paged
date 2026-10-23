@@ -114,8 +114,6 @@ import type { SchemaPanelRenderer as SchemaPanelRendererType } from "@paged-medi
 import { errorIdent, identOf } from "@paged-media/client";
 import {
   journal,
-  installGlobalErrorCapture,
-  exposeJournalForTests,
   setJournalDrainer,
   setDocumentShapeProvider,
   notePluginLoaded,
@@ -287,7 +285,6 @@ import {
   type HostActions,
 } from "./instance";
 import { PRESETS } from "../profiles/presets";
-import { publishDevHandles } from "./dev-handles";
 
 // Default overlay contributions for the canvas app. Order is
 // descriptive — actual paint order is determined by the
@@ -1618,32 +1615,20 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
-      {/* The live-demo playground UI — only in the `demo` build, only when a
-          ?script= is present (renders null otherwise). */}
-      {(import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
-        <PlaygroundController />
-      )}
-      {(import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
-        <IframeScriptBridge />
-      )}
+      {/* The live-demo playground UI and the docs' iframe scripting bridge:
+          the page entry's tools (they drive the page's `__canvas`), only in
+          the dev and `demo` builds, only when the URL asks (they render
+          null otherwise). */}
+      {instance.devTools &&
+        (import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
+          <PlaygroundController />
+        )}
+      {instance.devTools &&
+        (import.meta.env.MODE === "demo" || !import.meta.env.PROD) && (
+          <IframeScriptBridge />
+        )}
     </PagedShell>
   );
-}
-
-// Fail fast + loud if the static host didn't ship the COOP/COEP headers the
-// worker's SharedArrayBuffer needs — otherwise the app dies deep in the worker
-// with an opaque SecurityError far from the real cause (W0.17).
-assertCrossOriginIsolated();
-
-// ADR 025 — the journal's global net. The editor had exactly ONE React error
-// boundary (at the shell root) and NO window.onerror / unhandledrejection
-// handler at all, so any throw outside a React render was invisible: nothing
-// to attribute it to, nothing to put in a bug report. Installed before render
-// so a crash DURING the first render is caught.
-installGlobalErrorCapture();
-if (!import.meta.env.PROD) {
-  // Test affordance, same shape as `__overlaySignals` / `__pagedCrash`.
-  exposeJournalForTests();
 }
 
 // ── THE EDITOR PROFILE ───────────────────────────────────────────────
@@ -1678,6 +1663,10 @@ export interface MountOptions {
   strings?: Strings;
   /** Where the engine's wasm is served; else this build's own asset. */
   engineWasm?: string;
+  /** The page's dev and demo tools: the live-demo playground and the docs'
+   *  iframe scripting bridge, which drive the page's `__canvas`. The page
+   *  entry's (entry.tsx); an embedded editor has none. */
+  devTools?: boolean;
 }
 
 export function createEditorInstance(
@@ -1722,6 +1711,7 @@ export function createEditorInstance(
     onClient: options.onClient,
     onShell: options.onShell,
     role: createRoleStore(profile.role),
+    devTools: options.devTools === true,
     scope,
     services: createEditorServices(scope),
     ...(options.engineWasm ? { engineWasm: options.engineWasm } : {}),
@@ -1761,6 +1751,10 @@ export function mountEditor(
   element: HTMLElement,
   options: MountOptions = {},
 ): MountedEditor {
+  // Fail fast + loud if the static host didn't ship the COOP/COEP headers
+  // the worker's SharedArrayBuffer needs — otherwise the editor dies deep in
+  // the worker with an opaque SecurityError far from the real cause (W0.17).
+  assertCrossOriginIsolated();
   const strings = options.strings ?? createStrings();
   // The words of what is built before the first render (the profile's
   // panels and modes) follow the editor's locale too.
@@ -1777,16 +1771,5 @@ export function mountEditor(
       </StringsProvider>
     </StrictMode>,
   );
-  // The `__*` test handles, in dev and demo builds.
-  const unpublish =
-    !import.meta.env.PROD || import.meta.env.MODE === "demo"
-      ? publishDevHandles(instance)
-      : () => {};
-  return {
-    instance,
-    dispose: () => {
-      unpublish();
-      root.unmount();
-    },
-  };
+  return { instance, dispose: () => root.unmount() };
 }

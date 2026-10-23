@@ -33,6 +33,11 @@
 import { t, useStrings } from "@paged-media/strings";
 import { COMMANDS, LOAD } from "./state/messages";
 import {
+  debugHandlesEnabled,
+  debugHandlesOf,
+  setDebugHandle,
+} from "./state/debug-handles";
+import {
   createEditorScope,
   EditorScopeProvider,
   useEditorScope,
@@ -302,7 +307,7 @@ export function PagedShell({
   const [ownScope] = useState(createEditorScope);
   return (
     <EditorScopeProvider scope={scope ?? ownScope}>
-      <DebugErrorBoundary label="paged-shell">
+      <DebugErrorBoundary label="paged-shell" scope={scope ?? ownScope}>
         <CanvasClientProvider client={client}>
           <ChromeRegionsProvider value={chromeRegions}>
             <SessionPolicyProvider
@@ -1096,26 +1101,19 @@ function ShellChrome({
     };
   }, [registries]);
 
-  // Dev hook. Playwright + ad-hoc browser scripts read
-  // `window.__canvas`. Re-published after every commit so it always
-  // reflects current state. Stripped from production builds via
-  // Vite's `import.meta.env.PROD` constant — typed loosely here so
-  // shell's tsconfig (which doesn't include Vite's ambient types)
-  // still passes.
-  const viteEnv = (
-    import.meta as unknown as { env?: { PROD?: boolean; MODE?: string } }
-  ).env;
-  const isProd = viteEnv?.PROD === true;
-  // The `demo` playground build (vite build --mode demo) is a production bundle
-  // that DELIBERATELY retains the automation handle so a script can drive the
-  // editor live. Everywhere else the handle stays dev-only.
-  const isDemoBuild = viteEnv?.MODE === "demo";
-  // Published after every commit (a layout effect, so before any input
-  // or script can read it): assigning it during render, as before, keeps
-  // the React Compiler from compiling this component (ADR 229).
+  // Dev hook. Playwright + ad-hoc browser scripts read `window.__canvas`,
+  // which the page entry publishes from this editor's debug handles
+  // (state/debug-handles.ts; never the shell itself, plan task E1).
+  // Refreshed after every commit so it always reflects current state.
+  // Dev and demo builds only: the `demo` playground build (vite build
+  // --mode demo) is a production bundle that DELIBERATELY retains the
+  // automation handle so a script can drive the editor live.
+  // After every commit (a layout effect, so before any input or script
+  // can read it): assigning it during render, as before, keeps the React
+  // Compiler from compiling this component (ADR 229).
   useLayoutEffect(() => {
-    if (!isProd || isDemoBuild) {
-      (globalThis as unknown as { __canvas?: unknown }).__canvas = {
+    if (debugHandlesEnabled()) {
+      setDebugHandle(scope, "canvas", {
         client,
         handle,
         ready: handle != null,
@@ -1173,22 +1171,18 @@ function ShellChrome({
         // ADR 323 — the shared object registry: `editor.get/set/query/
         // batch/schema` (demo automation) and specs read it here.
         objects: objectModel?.objects ?? null,
-      };
+      });
       // Demo/automation entry: run a demo script (paged.* + editor.* + demo.*)
       // against the live handle. Trusted first-party scripts only (see runner).
       // Exposed wherever the handle is — dev today; the `demo` playground build
       // (Phase 2) un-gates the same block in a production bundle.
-      (globalThis as unknown as { __demo?: unknown }).__demo = {
-        run: (source: string) =>
-          runDemoScriptWithHandle(
-            source,
-            (
-              globalThis as unknown as {
-                __canvas: Parameters<typeof runDemoScriptWithHandle>[1];
-              }
-            ).__canvas,
-          ),
-      };
+      const live = () =>
+        debugHandlesOf(scope).canvas as Parameters<
+          typeof runDemoScriptWithHandle
+        >[1];
+      setDebugHandle(scope, "demo", {
+        run: (source: string) => runDemoScriptWithHandle(source, live(), live),
+      });
     }
   });
 
@@ -1459,7 +1453,9 @@ function ShellChrome({
   return cockpitActive ? (
     <CockpitStateProvider>
       <UnsavedChangesGuard />
-      {!isProd && <DebugContextProbe targetRef={debugContextRef} />}
+      {debugHandlesEnabled() && (
+        <DebugContextProbe targetRef={debugContextRef} />
+      )}
       {shellBody}
     </CockpitStateProvider>
   ) : (
@@ -1591,7 +1587,7 @@ const MAX_VISIBLE_WARNINGS = 50;
  * visible diagnostic instead of unmounting the whole shell.
  */
 class DebugErrorBoundary extends React.Component<
-  React.PropsWithChildren<{ label: string }>,
+  React.PropsWithChildren<{ label: string; scope: EditorScope }>,
   { error: Error | null }
 > {
   state = { error: null as Error | null };
@@ -1601,8 +1597,11 @@ class DebugErrorBoundary extends React.Component<
   componentDidCatch(error: Error) {
     // eslint-disable-next-line no-console
     console.error(`[${this.props.label}] caught:`, error);
-    (globalThis as unknown as { __pagedCrash?: string }).__pagedCrash =
-      `[${this.props.label}] ${error.message}\n${error.stack ?? ""}`;
+    setDebugHandle(
+      this.props.scope,
+      "crash",
+      `[${this.props.label}] ${error.message}\n${error.stack ?? ""}`,
+    );
     // ADR 025 — record the crash. The console line and `__pagedCrash` are for
     // a developer watching live; this is for the person who hits it once and
     // exports a bundle. Neither the message nor the stack crosses: both

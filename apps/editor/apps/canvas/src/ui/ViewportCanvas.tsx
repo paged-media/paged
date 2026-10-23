@@ -46,6 +46,8 @@ import {
   useOptionalTool,
   useOverlaySignals,
   useSelection,
+  setDebugHandle,
+  useEditorScope,
   type MarqueeRectPageLocal,
   type SelectionState,
 } from "@paged-media/shell";
@@ -197,6 +199,7 @@ const CLICK_DRAG_THRESHOLD_PX = 4;
 const WHEEL_LINE_PX = 16;
 
 export function ViewportCanvas(props: ViewportCanvasProps) {
+  const scope = useEditorScope();
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Set once we've transferred to the worker — guards against re-transfer (illegal). */
@@ -454,13 +457,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     // Dev/test hook (B-08 spec). Headless Chromium can't synthesize a
     // physical-stylus pressure, so the Playwright spec asserts the
     // PLUMBING: it reads the last tool pointer the canvas built and
-    // checks the new fields are present + typed. Stripped from prod
-    // builds; mirrors the `window.__canvas` convention.
-    if (!import.meta.env.PROD) {
-      (
-        globalThis as unknown as { __canvasPointer?: CanvasPointerEvent }
-      ).__canvasPointer = built;
-    }
+    // checks the new fields are present + typed. Dev builds only; the
+    // page entry publishes it as `__canvasPointer`, as it does `__canvas`.
+    if (!import.meta.env.PROD) setDebugHandle(scope, "pointer", built);
     return built;
   };
 

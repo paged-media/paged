@@ -288,6 +288,8 @@ export interface EditorInstance {
   readonly onShell?: (shell: ShellAccess) => void;
   /** The session's role; the profile's at mount. */
   readonly role: RoleStore;
+  /** Renders the page's dev and demo tools (`MountOptions.devTools`). */
+  readonly devTools: boolean;
   /** The editor's own stores (the shell's and the app's), handed to
    *  `<PagedShell scope>`. */
   readonly scope: EditorScope;
