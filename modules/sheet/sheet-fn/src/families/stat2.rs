@@ -619,6 +619,47 @@ fn bool_arg(arg: Option<&Arg>, default: bool) -> Result<bool, CellError> {
     }
 }
 
+/// An ordinary least-squares solve: the coefficients `beta` (one per
+/// regressor column, then the intercept when `with_const`) and the inverse
+/// of `XᵀX` (for the standard errors). `None` when the regressors are
+/// collinear. The one solver behind [`linest`], and what chart trendlines
+/// fit with (sheet-chart), so a trendline equals LINEST/LOGEST on its data.
+pub struct LeastSquares {
+    pub beta: Vec<f64>,
+    pub inv: Vec<Vec<f64>>,
+}
+
+/// See [`LeastSquares`]. `xcols[j][i]` is regressor `j` at observation `i`.
+pub fn least_squares(xcols: &[Vec<f64>], ys: &[f64], with_const: bool) -> Option<LeastSquares> {
+    let k = xcols.len();
+    let p = k + usize::from(with_const);
+    if ys.is_empty() || p == 0 {
+        return None;
+    }
+    let mut xtx = vec![vec![0.0; p]; p];
+    let mut xty = vec![0.0; p];
+    let mut r = vec![0.0; p];
+    for (i, y) in ys.iter().enumerate() {
+        for (j, c) in xcols.iter().enumerate() {
+            r[j] = c[i];
+        }
+        if with_const {
+            r[k] = 1.0;
+        }
+        for a in 0..p {
+            xty[a] += r[a] * y;
+            for b in 0..p {
+                xtx[a][b] += r[a] * r[b];
+            }
+        }
+    }
+    let inv = invert(xtx)?;
+    let beta: Vec<f64> = (0..p)
+        .map(|a| (0..p).map(|b| inv[a][b] * xty[b]).sum())
+        .collect();
+    Some(LeastSquares { beta, inv })
+}
+
 /// `LINEST(known_ys, [known_xs], [const], [stats])` (Microsoft LINEST) —
 /// ordinary least squares over one or more regressors. Returns one row
 /// `m_k … m_1, b` (`b` is 0 when `const` is FALSE); with `stats` four more
@@ -686,23 +727,9 @@ pub fn linest(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
         }
         r
     };
-    let mut xtx = vec![vec![0.0; p]; p];
-    let mut xty = vec![0.0; p];
-    for (i, y) in ys.iter().enumerate() {
-        let r = row(i);
-        for a in 0..p {
-            xty[a] += r[a] * y;
-            for b in 0..p {
-                xtx[a][b] += r[a] * r[b];
-            }
-        }
-    }
-    let Some(inv) = invert(xtx) else {
+    let Some(LeastSquares { beta, inv }) = least_squares(&xcols, &ys, with_const) else {
         return fail(CellError::Num);
     };
-    let beta: Vec<f64> = (0..p)
-        .map(|a| (0..p).map(|b| inv[a][b] * xty[b]).sum())
-        .collect();
     let intercept = if with_const { beta[k] } else { 0.0 };
     // Coefficients right to left: m_k … m_1, then b.
     let mut first: Vec<CellValue> = (0..k).rev().map(|j| finite(beta[j])).collect();
