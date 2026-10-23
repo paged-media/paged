@@ -2282,6 +2282,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             }
         },
     ));
+    xml_structure_cases(c);
     c.push(paints("Batch", "geometry", |m| {
         let id = rect_ids(m)[0].clone();
         let color = some_color(m);
@@ -2723,6 +2724,122 @@ fn pathfinder_cases(c: &mut Vec<Case>) {
 }
 
 // ── conditions, masters, structure ──────────────────────────────────
+
+/// Engine ADR 1002 — tagging marks a template's fields: an author's write.
+fn as_author(m: &mut CanvasModel) {
+    m.set_session_policy(paged_template::SessionPolicy {
+        role: paged_template::Role::Author,
+        overrides: vec![],
+    });
+}
+
+/// The first story holding text, and its length in characters.
+fn a_story(m: &CanvasModel) -> (String, u32) {
+    m.scene()
+        .stories
+        .iter()
+        .map(|s| {
+            (
+                s.self_id.clone(),
+                s.story.flat_text().chars().count() as u32,
+            )
+        })
+        .find(|(_, n)| *n > 2)
+        .expect("a story with text")
+}
+
+/// The first rectangle of the first spread.
+fn a_rectangle(m: &CanvasModel) -> String {
+    m.scene()
+        .spreads
+        .iter()
+        .flat_map(|s| s.spread.rectangles.iter())
+        .find_map(|r| r.self_id.clone())
+        .expect("a rectangle")
+}
+
+const XML_INERT: &str = "the XML structure (engine ADR 1002) is the document's markup for \
+     tag-based tools and template fields; the renderer composes no element, tag or \
+     attribute, so the page cannot change";
+
+fn xml_structure_cases(c: &mut Vec<Case>) {
+    c.push(inert("CreateXmlTag", "geometry", XML_INERT, |_| {
+        Mutation::CreateXmlTag {
+            name: "Sweep".into(),
+            color: None,
+        }
+    }));
+    c.push(inert("DeleteXmlTag", "geometry", XML_INERT, |m| {
+        m.apply_mutation(&Mutation::CreateXmlTag {
+            name: "Sweep".into(),
+            color: None,
+        })
+        .expect("seed a tag");
+        Mutation::DeleteXmlTag {
+            name: "Sweep".into(),
+        }
+    }));
+    c.push(inert("TagItem", "geometry", XML_INERT, |m| {
+        as_author(m);
+        Mutation::TagItem {
+            item: a_rectangle(m),
+            tag: "Sweep".into(),
+            self_id: None,
+        }
+    }));
+    c.push(inert("UntagItem", "geometry", XML_INERT, |m| {
+        as_author(m);
+        let item = a_rectangle(m);
+        m.apply_mutation(&Mutation::TagItem {
+            item: item.clone(),
+            tag: "Sweep".into(),
+            self_id: None,
+        })
+        .expect("seed a tagged item");
+        Mutation::UntagItem { item }
+    }));
+    c.push(inert("TagRange", "geometry", XML_INERT, |m| {
+        as_author(m);
+        let (story_id, _) = a_story(m);
+        Mutation::TagRange {
+            story_id,
+            start: 0,
+            end: 2,
+            tag: "Sweep".into(),
+            self_id: None,
+        }
+    }));
+    c.push(inert("UntagRange", "geometry", XML_INERT, |m| {
+        as_author(m);
+        let (story_id, _) = a_story(m);
+        m.apply_mutation(&Mutation::TagRange {
+            story_id,
+            start: 0,
+            end: 2,
+            tag: "Sweep".into(),
+            self_id: Some("dxSweep".into()),
+        })
+        .expect("seed a tagged range");
+        Mutation::UntagRange {
+            element: "dxSweep".into(),
+        }
+    }));
+    c.push(inert("SetXmlAttribute", "geometry", XML_INERT, |m| {
+        as_author(m);
+        let item = a_rectangle(m);
+        m.apply_mutation(&Mutation::TagItem {
+            item,
+            tag: "Sweep".into(),
+            self_id: Some("dxSweep".into()),
+        })
+        .expect("seed a tagged item");
+        Mutation::SetXmlAttribute {
+            element: "dxSweep".into(),
+            name: "label".into(),
+            value: Some("Swept".into()),
+        }
+    }));
+}
 
 fn structure_cases(c: &mut Vec<Case>) {
     c.push(paints("SetConditionVisible", "conditions", |m| {

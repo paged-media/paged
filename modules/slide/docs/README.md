@@ -38,7 +38,5 @@ its slide (its title, say) or names `slide`.
 
 `placeholderText` grants `text.edit`, which the engine checks on the placeholder's story:
 a filler writes the field's placeholder and is refused on any other. `visibility` declares
-`item.visibility`, but the engine checks a page label write as `document.metadata` on the
-whole document, so a filler can show or hide a slide only in a template that grants
-`document.metadata` document-wide; otherwise the field reports that it needs it. Pictures,
+`item.visibility`; the slide's hidden flag is the slide module's own page label, which a template with a slide field opens to a filler (engine ADR 1000, amendment of 2026-10-23). Pictures,
 charts, tables and notes cannot be fields yet.

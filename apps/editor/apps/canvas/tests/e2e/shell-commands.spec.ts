@@ -427,6 +427,13 @@ test.describe("help, assistant and effects commands", () => {
     await invoke(page, "paged.effects.globalLight");
     await expect(page.locator("#global-light-title")).toBeVisible();
   });
+
+  test("Open as template opens its dialog", async ({ page }) => {
+    covers("command:paged.template.openAsTemplate");
+    await openShell(page, { doc: true });
+    await invoke(page, "paged.template.openAsTemplate");
+    await expect(page.locator("#open-as-template-title")).toBeVisible();
+  });
 });
 
 test.describe("actions: record, stop, play", () => {

@@ -160,6 +160,11 @@ import {
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
 import {
+  OPEN_AS_TEMPLATE_COMMANDS,
+  OPEN_AS_TEMPLATE_MENU_ITEMS,
+  OpenAsTemplateDialog,
+} from "../panels/template/open-as-template-dialog";
+import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
 } from "../core-command-entries";
@@ -1397,6 +1402,7 @@ function CanvasAppIntegration() {
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
       ...buildCoreCommandEntries(),
@@ -1409,6 +1415,7 @@ function CanvasAppIntegration() {
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
       // The profile keeps only the host menus its menu bar names. Whole-
@@ -1620,6 +1627,7 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <OpenAsTemplateDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
           the dev and `demo` builds, only when the URL asks (they render

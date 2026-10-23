@@ -8536,6 +8536,177 @@ pub struct XmlElement {
     pub attributes: Vec<(String, String)>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<XmlElement>,
+    /// For an element that tags a text range: where the range stands, in
+    /// story characters (the contiguous count `StoryRange`, `InsertText`
+    /// and `DeleteRange` use), read while the story's text is (engine ADR
+    /// 1002). Text edits keep it true; `None` for an element that tags a
+    /// story or a page item, or that stands outside the story's body text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<XmlRange>,
+}
+
+/// Where a tagged text range stands in its story: `[start, end)` in story
+/// characters (engine ADR 1002).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct XmlRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+impl XmlRange {
+    /// Moves the range through a replacement of `removed` characters at
+    /// `at` by `inserted` new ones (an insertion when `removed` is 0, a
+    /// deletion when `inserted` is 0). Text typed at a range's end joins
+    /// it, text typed at its start does not; an empty range takes what is
+    /// typed into it. Text replaced inside the range stays inside.
+    pub fn shifted(self, at: u32, removed: u32, inserted: u32) -> XmlRange {
+        let end_of_removed = at.saturating_add(removed);
+        let delta = |p: u32| p - removed + inserted;
+        let empty = self.start == self.end;
+        let start = if self.start < at || (self.start == at && (empty || removed > 0)) {
+            self.start
+        } else if self.start >= end_of_removed {
+            delta(self.start)
+        } else {
+            at
+        };
+        let end = if self.end < at || (self.end == at && removed > 0) {
+            self.end
+        } else if self.end >= end_of_removed {
+            delta(self.end)
+        } else {
+            at + inserted
+        };
+        XmlRange {
+            start,
+            end: end.max(start),
+        }
+    }
+}
+
+impl XmlElement {
+    /// This element and every element below it, depth first.
+    pub fn walk(&self) -> Vec<&XmlElement> {
+        let mut out = vec![self];
+        for child in &self.children {
+            out.extend(child.walk());
+        }
+        out
+    }
+
+    /// The element `self_id` in this tree.
+    pub fn find(&self, self_id: &str) -> Option<&XmlElement> {
+        if self.self_id == self_id {
+            return Some(self);
+        }
+        self.children.iter().find_map(|c| c.find(self_id))
+    }
+
+    /// The element `self_id` in this tree, mutably.
+    pub fn find_mut(&mut self, self_id: &str) -> Option<&mut XmlElement> {
+        if self.self_id == self_id {
+            return Some(self);
+        }
+        self.children.iter_mut().find_map(|c| c.find_mut(self_id))
+    }
+
+    /// Applies `f` to the range of every element in this tree that has one.
+    pub fn for_each_range(&mut self, f: &mut impl FnMut(&str, &mut XmlRange)) {
+        if let Some(range) = self.range.as_mut() {
+            f(&self.self_id, range);
+        }
+        for child in &mut self.children {
+            child.for_each_range(f);
+        }
+    }
+
+    /// The tag's name: `MarkupTag` without its `XMLTag/` prefix.
+    pub fn tag_name(&self) -> &str {
+        self.tag.strip_prefix("XMLTag/").unwrap_or(&self.tag)
+    }
+
+    /// The value of the attribute `name`.
+    pub fn attribute(&self, name: &str) -> Option<&str> {
+        self.attributes
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// The placeholder plugin of a template's text-run fields: a tagged range
+/// opened as a template becomes a placeholder run of this plugin whose key
+/// is the element's `Self` (engine ADR 1002).
+pub const TEMPLATE_PLACEHOLDER_PLUGIN: &str = "media.paged.template";
+
+impl Story {
+    /// Moves every tagged range of the story through a replacement of
+    /// `removed` characters at `at` by `inserted` (see [`XmlRange::shifted`]),
+    /// then lets each template placeholder define the range of the element
+    /// it stands for: the run is the field, so its bounds are the range's.
+    pub fn shift_xml_ranges(&mut self, at: u32, removed: u32, inserted: u32) {
+        if self.xml_elements.is_empty() {
+            return;
+        }
+        for top in &mut self.xml_elements {
+            top.for_each_range(&mut |_, r| *r = r.shifted(at, removed, inserted));
+        }
+        self.sync_placeholder_ranges();
+    }
+
+    /// The span of each template placeholder run, by its key.
+    pub fn template_placeholder_spans(&self) -> Vec<(String, XmlRange)> {
+        let mut out = Vec::new();
+        let mut at = 0u32;
+        for para in &self.paragraphs {
+            for run in &para.runs {
+                let n = run.text.chars().count() as u32;
+                if let Some(p) = run
+                    .placeholder
+                    .as_ref()
+                    .filter(|p| p.plugin == TEMPLATE_PLACEHOLDER_PLUGIN)
+                {
+                    out.push((
+                        p.key.clone(),
+                        XmlRange {
+                            start: at,
+                            end: at + n,
+                        },
+                    ));
+                }
+                at += n;
+            }
+        }
+        out
+    }
+
+    /// Sets the range of each element a template placeholder stands for to
+    /// the placeholder's span.
+    pub fn sync_placeholder_ranges(&mut self) {
+        if self.xml_elements.is_empty() {
+            return;
+        }
+        let spans = self.template_placeholder_spans();
+        if spans.is_empty() {
+            return;
+        }
+        for top in &mut self.xml_elements {
+            top.for_each_range(&mut |id, r| {
+                if let Some((_, span)) = spans.iter().find(|(k, _)| k == id) {
+                    *r = *span;
+                }
+            });
+        }
+    }
+
+    /// The story's text in its contiguous character space.
+    pub fn flat_text(&self) -> String {
+        self.paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .map(|r| r.text.as_str())
+            .collect()
+    }
 }
 
 /// An `<Endnote Self EndnoteTextRange>` reference in a story (ADR 170).
@@ -8830,6 +9001,11 @@ pub struct DesignMap {
     /// here; the story's own [`Story::xml_elements`] carries them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub xml_root: Option<XmlElement>,
+    /// The XML structure was changed in paged (engine ADR 1002): the
+    /// exporter writes `XML/` and the story elements from the model rather
+    /// than copying the source package's parts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub xml_structure_edited: bool,
 }
 
 /// Private-use Unicode codepoint placed inline by the story parser

@@ -51,6 +51,7 @@ import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
+import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
@@ -159,6 +160,7 @@ function tableIds(): string[] {
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
     ...GLOBAL_LIGHT_COMMANDS,
+    ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
     // Registered only when an embedding host supplies the action.
     ...hostCommands({ submit: noop, close: noop, back: noop }),
@@ -236,6 +238,7 @@ describe("the host command inventory", () => {
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
+      "OPEN_AS_TEMPLATE_COMMANDS",
       "SELECT_ALL_COMMAND",
       "buildCoreCommandEntries()",
     ]);

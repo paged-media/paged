@@ -25,7 +25,7 @@
 
 import { defineMessages, defineTranslations } from "@paged-media/strings";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 /** Panel titles and the palette category. */
 export const PANELS = defineMessages("sheet.panel", {

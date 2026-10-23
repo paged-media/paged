@@ -22,6 +22,7 @@ the code as it stood, for decisions made earlier; their status says so.
 | [555](555-batch-reuses-the-engine.md) | Batch generation reuses the interactive engine | Accepted, recorded retroactively 2026-10-02 |
 | [556](556-secrets-never-enter-the-plugin.md) | Secrets never enter the plugin | Accepted, recorded retroactively 2026-10-02 |
 | [557](557-variables-and-data-sets.md) | Variables and data sets are a projection over bindings | Accepted, recorded retroactively 2026-10-02 |
+| [560](560-template-fields-are-binding-targets.md) | Template fields are binding targets | Accepted 2026-10-23 |
 
 Proposed, not yet accepted (in the thoughts register): **558** (one universal binding,
 `Binding::Property`) and **559** (bindings in the `.paged` file stay InDesign-compatible).

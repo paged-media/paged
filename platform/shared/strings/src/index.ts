@@ -37,7 +37,7 @@ import {
   type ReactNode,
 } from "react";
 
-import de from "../locales/de.json";
+import de from "../locales/de.json" with { type: "json" };
 
 export type Params = Readonly<Record<string, string | number>>;
 

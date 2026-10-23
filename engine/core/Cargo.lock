@@ -1572,8 +1572,11 @@ dependencies = [
  "base64",
  "flate2",
  "idml-import",
+ "paged-gen",
  "paged-model",
+ "paged-mutate",
  "paged-scene",
+ "paged-template",
  "paged-test-resources",
  "quick-xml",
  "serde_json",
@@ -2573,6 +2576,7 @@ dependencies = [
  "idml-import",
  "kurbo 0.11.3",
  "paged-compose",
+ "paged-gen",
  "paged-model",
  "paged-renderer",
  "paged-scene",
@@ -2708,6 +2712,7 @@ dependencies = [
  "paged-model",
  "paged-mutate",
  "paged-scene",
+ "paged-template",
  "paged-wire",
  "serde",
  "serde_json",
@@ -2753,6 +2758,8 @@ dependencies = [
 name = "paged-template"
 version = "0.0.0"
 dependencies = [
+ "idml-import",
+ "paged-gen",
  "paged-model",
  "paged-scene",
  "schemars",

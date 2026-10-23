@@ -128,6 +128,10 @@ export interface DataEngineLike {
    *  order) through a record template (`MergeSpec` → `MergePlan`). Optional:
    *  absent on a wasm artifact built before the merge lane. */
   plan_merge?(query: string, spec: unknown): unknown;
+  /** ADR 560: plan a catalogue (`CatalogueSpec` → `CataloguePlan`): per
+   *  record or group, the value each bound template field takes. Optional:
+   *  a wasm built before it lacks it. */
+  plan_catalogue?(query: string, spec: unknown): unknown;
   /** Wave 5: the distinct words of a merge plan's texts per template frame. */
   merge_words?(plan: unknown, frames: number): unknown;
   /** Wave 5: per record, per frame, is the merged text overset (DM-7)? */

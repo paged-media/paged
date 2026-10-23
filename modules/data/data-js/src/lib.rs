@@ -373,6 +373,20 @@ mod wasm {
             to_js(&plan)
         }
 
+        /// ADR 560 — plan a catalogue of `query`'s records through a
+        /// template's fields (`CatalogueSpec` → `CataloguePlan`): per record
+        /// (or group), the value each field takes, or why it takes none.
+        pub fn plan_catalogue(&self, query: &str, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: data_bind::catalogue::CatalogueSpec = from_js(spec)?;
+            let plan = self
+                .session
+                .plan_catalogue(&QueryId::from(query), &spec)
+                .map_err(map_err)?;
+            // Plain objects: a field value's flattened outcome is a map to
+            // serde, which `to_js` would hand over as a JS `Map`.
+            to_js_json(&plan)
+        }
+
         /// The distinct words of a merge plan's texts per template frame
         /// (`string[][]`, the space included) — what the writer measures
         /// against the host's fonts before asking [`merge_overset`].
