@@ -553,6 +553,13 @@ export function activate(host: BundleHost): BundleHandle {
       if (!r.ok) host.log.warn(`ungroupSelection: ${r.message}`);
     },
   });
+  host.contribute.command({
+    id: "media.paged.sheet.command.goalSeek",
+    title: t(COMMANDS.goalSeek),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => void session.openDataCard({ kind: "goalSeek" }),
+  });
   // Keys while a sheet frame is entered and focus is not in a text field.
   // Cmd+D is the editor's Place and Tab its chrome toggle (both registered
   // first, so they win) — those reach the grid through the edit-context

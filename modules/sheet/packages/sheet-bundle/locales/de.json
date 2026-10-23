@@ -32,6 +32,7 @@
   "sheet.command.unhideSelection": "Einblenden",
   "sheet.command.groupSelection": "Gruppieren",
   "sheet.command.ungroupSelection": "Gruppierung aufheben",
+  "sheet.command.goalSeek": "Zielwertsuche…",
   "sheet.command.copySelection": "Tabellenauswahl kopieren",
   "sheet.command.defaultStyleName": "Zellenformat",
   "sheet.command.deleteColumns": "Spalten löschen",

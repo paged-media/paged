@@ -72,7 +72,8 @@
       "media.paged.sheet.command.hideSelection",
       "media.paged.sheet.command.unhideSelection",
       "media.paged.sheet.command.groupSelection",
-      "media.paged.sheet.command.ungroupSelection"
+      "media.paged.sheet.command.ungroupSelection",
+      "media.paged.sheet.command.goalSeek"
     ],
     "importers": [
       "media.paged.sheet.importer.xlsx",
@@ -479,6 +480,14 @@
         {
           "id": "media.paged.sheet.command.ungroupSelection",
           "title": "Ungroup rows or columns",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.sheet.command.goalSeek",
+          "title": "Goal Seek",
           "args": {
             "kind": "struct",
             "fields": {}
