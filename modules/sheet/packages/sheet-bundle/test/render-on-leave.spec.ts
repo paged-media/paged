@@ -122,6 +122,163 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect(tables[0].get("0:0")).toBe("r10c1");
   });
 
+  it("resizing the frame re-windows the page table (P6)", async () => {
+    const { s, frame } = await placed();
+    const [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frame },
+    ]);
+    const [top, left, bottom, right] = g.bounds;
+    // Twice as tall: about twice the rows fit.
+    const r = await host.document.mutate({
+      op: "resizeFrame",
+      args: {
+        frameId: frame,
+        bounds: [top, left, top + 2 * (bottom - top), right],
+      },
+    });
+    expect(r.applied).toBe(true);
+    await settle();
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.view.topLeft).toBe("A1");
+    const [cells] = await exportedTableCells(h);
+    // The range showed rows 1–5; the taller frame shows more of them.
+    expect(cells.get("8:0")).toBe("r8c0");
+    expect(b?.range.startsWith("A1:")).toBe(true);
+    expect(b?.range).not.toBe("A1:C5");
+  });
+
+  it("a frame linked to another becomes one window over both (P6)", async () => {
+    const { s, frame } = await placed();
+    const [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frame },
+    ]);
+    const [top, left, bottom, right] = g.bounds;
+    const pageId = g.pageId!;
+    // A second frame below, as tall as the first, threaded after it.
+    const made = await host.document.mutate({
+      op: "insertTextFrame",
+      args: {
+        pageId,
+        bounds: [bottom + 40, left, bottom + 40 + (bottom - top), right],
+      },
+    });
+    if (!made.applied) throw new Error("insertTextFrame was refused");
+    const next = (made.createdId as { id: string }).id;
+    const link = await host.document.mutate({
+      op: "linkFrames",
+      args: { from: frame, to: next },
+    });
+    expect(link.applied).toBe(true);
+    // The chain read is debounced; then the refresh lowers the window.
+    await new Promise((r) => setTimeout(r, 600));
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.range.startsWith("A1:")).toBe(true);
+    const [cells] = await exportedTableCells(h);
+    // About twice the rows: the table flows into the second frame.
+    expect(cells.get("8:0")).toBe("r8c0");
+    const storyId = (g as { storyId?: string }).storyId!;
+    const chain = await host.document.frameChain(storyId);
+    expect(chain.map((l) => l.frameId)).toEqual([frame, next]);
+    expect(chain.some((l) => l.overflow)).toBe(false);
+
+    // Entering the continuation starts its grid at the rows it holds;
+    // scrolling there and leaving scrolls the chain.
+    expect(await s.showGridInFrame(next)).toBe(true);
+    expect(s.scrollInFrame(3, 0)).toBe(true);
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    expect((await bindingOf(frame))?.view.topLeft).toBe("A4");
+  });
+
+  it("switching the frame's sheet puts that sheet on the page", async () => {
+    const { s, frame } = await placed();
+    expect(s.addSheet("Prices").ok).toBe(true);
+    const id = s.sheets().find((x) => x.name === "Prices")?.id;
+    expect(id).toBeDefined();
+    s.editCell(id!, 0, 0, "price");
+    await s.refreshPlacements();
+    await settle();
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    expect(s.setFrameSheet(id!)).toBe(true);
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.sheet).toBe("Prices");
+    expect(b?.view.topLeft).toBe("A1");
+    const tables = await exportedTableCells(h);
+    expect(tables).toHaveLength(1);
+    expect(tables[0].get("0:0")).toBe("price");
+  });
+
+  it("the document's basic paragraph face is the grid's default (P7)", async () => {
+    const session = createWorkbookSession(host);
+    s = session;
+    const made = await host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "createParagraphStyle",
+            args: {
+              selfId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              name: "$ID/NormalParagraphStyle",
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontFamily",
+              value: { type: "text", value: "Minion Pro" },
+            },
+          },
+          {
+            op: "setStyleProperty",
+            args: {
+              collection: "paragraph",
+              styleId: "ParagraphStyle/$ID/NormalParagraphStyle",
+              path: "characterFontSize",
+              value: { type: "length", value: 9 },
+            },
+          },
+        ],
+      },
+    });
+    expect(made.applied).toBe(true);
+    expect(await session.documentTextDefault()).toEqual({
+      family: "Minion Pro",
+      style: null,
+      sizePt: 9,
+    });
+  });
+
+  it("a document swatch and paragraph style set on a cell reach the page lowering (P7)", async () => {
+    const { s } = await placed();
+    s.selectCell(1, 1);
+    const r = s.setStyle({
+      fontSwatch: { id: "Color/Brand", model: "spot", fallbackRgb: "#C8102E" },
+      docParaStyle: "ParagraphStyle/Table body",
+    });
+    expect(r.ok).toBe(true);
+    const engine = s.state().engine!;
+    const sheet = s.sheets()[0]!.id;
+    const page = engine.getRangePage!(sheet, "B2:B2", {
+      includeGridRules: true,
+    });
+    const key = page.rows[0]?.cells[0]?.styleKey ?? 0;
+    const st = page.styles?.find((x) => x.key === key);
+    expect(st?.textSwatch).toBe("Color/Brand");
+    expect(st?.docParaStyle).toBe("ParagraphStyle/Table body");
+    expect(st?.textRgb?.toUpperCase()).toBe("#C8102E");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);

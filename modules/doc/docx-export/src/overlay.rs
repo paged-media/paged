@@ -90,9 +90,9 @@ fn fold_segments(
 
 /// Overlay the read-back story onto the import `baseline`, producing the EDITED
 /// lowering. Structure-preserving: read-back paragraphs map 1:1 onto the
-/// baseline's PARAGRAPH blocks in order (table blocks are skipped and left as-is
-/// — cell content is not yet round-tripped); a paragraph whose run count no
-/// longer matches is left untouched (structural edits are a later increment).
+/// baseline's PARAGRAPH blocks in order (table blocks are skipped: the read-back
+/// story holds no native table, its cells come through [`overlay_cells`]); a
+/// paragraph whose run list changed in style is replaced (the diff aligns it).
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
     let mut edited = baseline.clone();
     let mut ci = 0usize;
@@ -120,6 +120,18 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
                 run.text = cr.text.clone();
                 run.char_style_id = cr.character_style.clone();
             }
+        } else if same_style_spans(
+            p.runs.iter().map(|r| r.char_style_id.as_deref()),
+            cp.runs.iter().map(|r| r.character_style.as_deref()),
+        ) {
+            // The engine joins neighbouring runs of one style (a merge
+            // field's result after plain text reads back as one run): the
+            // styles still match span for span, so only text changed. Keep
+            // the Word runs and patch the text into them, as a cell's is.
+            let text: String = cp.runs.iter().map(|r| r.text.as_str()).collect();
+            if patch_runs(&mut p.runs, &text).is_err() {
+                continue;
+            }
         } else {
             // Increment 2 — the run list CHANGED (a run was added or removed in
             // the editor). Replace it wholesale; `diff` aligns the two lists by
@@ -137,4 +149,232 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
         }
     }
     edited
+}
+
+/// One native table cell as the host reads it back: the table's `block` in
+/// the lowered story, the `cell`'s index in its lowered cell list, and its
+/// live text — its paragraphs joined by `\n`, as the engine reads a cell's
+/// `text` (the read-back story holds no table, so cells come separately).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellContentIn {
+    pub block: usize,
+    pub cell: usize,
+    pub text: String,
+}
+
+/// Overlay read-back table cells onto the `edited` lowering (the cell
+/// patcher): each cell paragraph whose text changed keeps its run list, and
+/// the changed span — what lies between the text the old and the new share
+/// at the start and at the end — goes into the run it starts in; the runs it
+/// covered further on lose their covered text. Run count and run properties
+/// stay, so `diff` reports run text edits that patch the cell's `<w:t>`s in
+/// place. A cell whose paragraph count changed, a table poured as text, or a
+/// cell that is not in the lowering is left as it was and reported in the
+/// returned ledger (structural cell edits are not saved back).
+pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<String> {
+    let mut skips = Vec::new();
+    for c in cells {
+        let Some(LoweredBlock::Table(t)) = edited.story.blocks.get_mut(c.block) else {
+            skips.push(format!(
+                "block {}: no table to write the cell into",
+                c.block
+            ));
+            continue;
+        };
+        if !t.flow.is_empty() {
+            skips.push(format!(
+                "block {}: a table poured as text keeps its Word cells",
+                c.block
+            ));
+            continue;
+        }
+        let Some(cell) = t.cells.get_mut(c.cell) else {
+            skips.push(format!("block {}: no cell {}", c.block, c.cell));
+            continue;
+        };
+        let texts: Vec<&str> = c.text.split('\n').collect();
+        if texts.len() != cell.paragraphs.len() {
+            skips.push(format!(
+                "block {} cell {}: its paragraphs were added or removed on the canvas; the cell keeps its Word text",
+                c.block, c.cell
+            ));
+            continue;
+        }
+        for (k, (p, new)) in cell.paragraphs.iter_mut().zip(texts).enumerate() {
+            if let Err(why) = patch_runs(&mut p.runs, new) {
+                skips.push(format!(
+                    "block {} cell {} paragraph {k}: {why}",
+                    c.block, c.cell
+                ));
+            }
+        }
+    }
+    skips
+}
+
+/// Two run lists carry the same styles in the same order once neighbouring
+/// runs of one style are taken as one span.
+fn same_style_spans<'a>(
+    a: impl Iterator<Item = Option<&'a str>>,
+    b: impl Iterator<Item = Option<&'a str>>,
+) -> bool {
+    let spans = |it: &mut dyn Iterator<Item = Option<&'a str>>| {
+        let mut out: Vec<Option<&'a str>> = Vec::new();
+        for s in it {
+            if out.last() != Some(&s) {
+                out.push(s);
+            }
+        }
+        out
+    };
+    let (mut a, mut b) = (a, b);
+    spans(&mut a) == spans(&mut b)
+}
+
+/// Rewrite `runs` so their texts concatenate to `new`, keeping the run list:
+/// the span that differs from the old concatenation goes to the run it
+/// starts in. Errors when there is no run to hold new text.
+fn patch_runs(runs: &mut [LoweredRun], new: &str) -> Result<(), String> {
+    let old: Vec<char> = runs.iter().flat_map(|r| r.text.chars()).collect();
+    let next: Vec<char> = new.chars().collect();
+    if old == next {
+        return Ok(());
+    }
+    if runs.is_empty() {
+        return Err("the Word paragraph has no run to hold the text".into());
+    }
+    let prefix = old.iter().zip(&next).take_while(|(a, b)| a == b).count();
+    let max_suffix = old.len().min(next.len()) - prefix;
+    let suffix = old
+        .iter()
+        .rev()
+        .zip(next.iter().rev())
+        .take(max_suffix)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let (cut_from, cut_to) = (prefix, old.len() - suffix);
+    let insert: String = next[prefix..next.len() - suffix].iter().collect();
+    // The run the change starts in: the one holding `cut_from`, or for an
+    // insertion at a run boundary the run before it (it extends that run's
+    // text, as typing at the end of a word does); at 0 the first run.
+    let mut start = 0usize;
+    let mut target = runs.len() - 1;
+    for (i, r) in runs.iter().enumerate() {
+        let len = r.text.chars().count();
+        let end = start + len;
+        if cut_from < end || (cut_from == end && cut_from == cut_to && len > 0) {
+            target = i;
+            break;
+        }
+        start = end;
+    }
+    let mut at = 0usize;
+    for (i, r) in runs.iter_mut().enumerate() {
+        let chars: Vec<char> = r.text.chars().collect();
+        let (s, e) = (at, at + chars.len());
+        at = e;
+        // The run's own chars outside the cut span stay.
+        let keep_head: String = chars[..cut_from.clamp(s, e) - s].iter().collect();
+        let keep_tail: String = chars[cut_to.clamp(s, e) - s..].iter().collect();
+        r.text = if i == target {
+            format!("{keep_head}{insert}{keep_tail}")
+        } else {
+            format!("{keep_head}{keep_tail}")
+        };
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn runs(texts: &[&str]) -> Vec<LoweredRun> {
+        texts
+            .iter()
+            .map(|t| LoweredRun {
+                text: (*t).to_string(),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    fn texts(rs: &[LoweredRun]) -> Vec<&str> {
+        rs.iter().map(|r| r.text.as_str()).collect()
+    }
+
+    #[test]
+    fn a_change_inside_one_run_stays_in_it() {
+        let mut rs = runs(&["Price ", "12.00", " EUR"]);
+        patch_runs(&mut rs, "Price 14.50 EUR").unwrap();
+        assert_eq!(texts(&rs), ["Price ", "14.50", " EUR"]);
+    }
+
+    #[test]
+    fn typing_at_a_run_end_extends_that_run() {
+        let mut rs = runs(&["Apple", " pie"]);
+        patch_runs(&mut rs, "Apples pie").unwrap();
+        assert_eq!(texts(&rs), ["Apples", " pie"]);
+        let mut rs = runs(&["Apple"]);
+        patch_runs(&mut rs, "Apple tart").unwrap();
+        assert_eq!(texts(&rs), ["Apple tart"]);
+    }
+
+    #[test]
+    fn a_change_across_runs_lands_in_the_first() {
+        let mut rs = runs(&["one ", "two ", "three"]);
+        patch_runs(&mut rs, "one 2 three").unwrap();
+        assert_eq!(texts(&rs), ["one ", "2 ", "three"]);
+        let mut rs = runs(&["ab", "cd"]);
+        patch_runs(&mut rs, "aXd").unwrap();
+        assert_eq!(texts(&rs), ["aX", "d"]);
+        let mut rs = runs(&["ab", "cd"]);
+        patch_runs(&mut rs, "").unwrap();
+        assert_eq!(texts(&rs), ["", ""]);
+    }
+
+    #[test]
+    fn an_empty_run_list_cannot_take_text() {
+        let mut rs = runs(&[]);
+        assert!(patch_runs(&mut rs, "x").is_err());
+        assert!(patch_runs(&mut rs, "").is_ok());
+    }
+
+    #[test]
+    fn runs_the_engine_joined_are_patched_in_place() {
+        use docx_lower::ir::LoweredParagraph;
+        let mut base = LoweredDoc::default();
+        base.story
+            .blocks
+            .push(LoweredBlock::Paragraph(LoweredParagraph {
+                runs: runs(&["Dear ", "«Name»"]),
+                ..Default::default()
+            }));
+        let read = |text: &str| StoryContentIn {
+            self_id: "s".into(),
+            paragraphs: vec![ParagraphContentIn {
+                paragraph_style: None,
+                runs: vec![RunContentIn {
+                    text: text.into(),
+                    character_style: None,
+                }],
+            }],
+        };
+        let texts_of = |d: &LoweredDoc| match &d.story.blocks[0] {
+            LoweredBlock::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
+            LoweredBlock::Table(_) => unreachable!(),
+        };
+        let same = overlay_story_content(&base, &read("Dear «Name»"));
+        assert_eq!(texts_of(&same), ["Dear ", "«Name»"]);
+        let edited = overlay_story_content(&base, &read("Dear «Name»!"));
+        assert_eq!(texts_of(&edited), ["Dear ", "«Name»!"]);
+    }
+
+    #[test]
+    fn multibyte_text_is_cut_on_chars() {
+        let mut rs = runs(&["Grüße ", "€5"]);
+        patch_runs(&mut rs, "Grüße €7").unwrap();
+        assert_eq!(texts(&rs), ["Grüße ", "€7"]);
+    }
 }

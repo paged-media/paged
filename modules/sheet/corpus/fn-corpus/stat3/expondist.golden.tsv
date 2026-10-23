@@ -1,0 +1,8 @@
+# EXPONDIST(x,lambda,cumulative) - legacy.
+# id	formula	setup	expected
+edl-0	=EXPONDIST(0.2,10,TRUE)	-	0.864664716763387
+edl-1	=EXPONDIST(0.2,10,FALSE)	-	1.35335283236613
+edl-2	=EXPONDIST(-1,3,TRUE)	-	#NUM!
+edl-3	=EXPONDIST(1,0,TRUE)	-	#NUM!
+edl-4	=EXPONDIST("x",3,TRUE)	-	#VALUE!
+edl-5	=EXPONDIST(5,0.1,TRUE)	-	0.393469340287367

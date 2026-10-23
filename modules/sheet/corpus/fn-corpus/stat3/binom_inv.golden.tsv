@@ -1,0 +1,16 @@
+# BINOM.INV(trials,probability_s,alpha).
+# id	formula	setup	expected
+bni-0	=BINOM.INV(6,0.5,0.75)	-	4
+bni-1	=BINOM.INV(10,0.3,0.5)	-	3
+bni-2	=BINOM.INV(100,0.5,0.025)	-	40
+bni-3	=BINOM.INV(100,0.5,0.975)	-	60
+bni-4	=BINOM.INV(10,0.3,0)	-	#NUM!
+bni-5	=BINOM.INV(10,0.3,1)	-	#NUM!
+bni-6	=BINOM.INV(10,0.3,1.1)	-	#NUM!
+bni-7	=BINOM.INV(-1,0.3,0.5)	-	#NUM!
+bni-8	=BINOM.INV(10,1.3,0.5)	-	#NUM!
+bni-9	=BINOM.INV(1000,0.01,0.9)	-	14
+bni-10	=BINOM.INV(10.7,0.5,0.5)	-	5
+bni-11	=BINOM.INV(10,0,0.5)	-	#NUM!
+bni-12	=BINOM.INV(10,1,0.5)	-	#NUM!
+bni-13	=BINOM.INV("x",0.5,0.5)	-	#VALUE!

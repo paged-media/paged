@@ -115,6 +115,7 @@ import {
   contributeRecipeUpdateCommands,
   RECIPE_UPDATE_COMMAND_IDS,
 } from "./commands/recipe-update";
+import { contributeRecipeAutoUpdate } from "./commands/recipe-auto-update";
 import {
   contributePatternCommands,
   PATTERN_COMMAND_IDS,
@@ -518,6 +519,9 @@ export function activate(host: BundleHost): BundleHandle {
     openPathOptions(host, "widthProfile"),
   );
   const recipeUpdateCommandsSub = contributeRecipeUpdateCommands(host);
+  // …and the same rebuild on its own, inside the edit's undo step, where
+  // the host can amend a step (engine ADR 1004).
+  const recipeAutoUpdateSub = contributeRecipeAutoUpdate(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
   // stroke-weight; no mutation).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
@@ -681,6 +685,7 @@ export function activate(host: BundleHost): BundleHandle {
       cutCommandsSub.dispose();
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
+      recipeAutoUpdateSub.dispose();
       opacityMaskCommandsSub.dispose();
       livePaintCommandsSub.dispose();
       symbolCommandsSub.dispose();

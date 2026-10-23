@@ -1,0 +1,11 @@
+$ paged-node generate
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node generate <template>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

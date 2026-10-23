@@ -228,6 +228,9 @@ pub struct GridCell {
     /// where it stands (see `sheet_lower::LoweredCell::fill`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fill: Option<String>,
+    /// A rich-text cell's runs (see `sheet_lower::LoweredCell::runs`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runs: Option<Vec<sheet_lower::LoweredRun>>,
 }
 
 /// One merged area as shown in a viewport pane. `row` / `col` /
@@ -742,6 +745,12 @@ pub fn grid_scene_styled(
                     if text.is_empty() && key == 0 {
                         continue; // nothing to draw beyond the blank grid
                     }
+                    // Rich-text runs (a merged area shows its anchor plain).
+                    let runs = styler.runs(sheet, r, c, cell, &text).map(|rs| {
+                        rs.into_iter()
+                            .map(|(text, style_key)| sheet_lower::LoweredRun { text, style_key })
+                            .collect::<Vec<_>>()
+                    });
                     meta.push((dr, dc, matches!(cell.value, CellValue::Text(_))));
                     cells.push(GridCell {
                         row: r,
@@ -753,6 +762,40 @@ pub fn grid_scene_styled(
                         v_align: None,
                         overflow_to: None,
                         fill,
+                        runs,
+                    });
+                }
+            }
+        }
+        // Empty cells inside a table carry its style (Excel bands them).
+        for band in &cf.tables {
+            for (dr, &r) in win.rows.iter().enumerate() {
+                for (dc, &c) in win.cols.iter().enumerate() {
+                    if !band.covers(r, c) || ws.cell(r, c).is_some() {
+                        continue;
+                    }
+                    if frags_by_row[dr]
+                        .iter()
+                        .any(|&fi| dc >= frags[fi].dc0 && dc < frags[fi].dc1)
+                    {
+                        continue;
+                    }
+                    let key = styler.key_for_empty(r, c);
+                    if key == 0 {
+                        continue;
+                    }
+                    meta.push((dr, dc, false));
+                    cells.push(GridCell {
+                        row: r,
+                        col: c,
+                        text: String::new(),
+                        align: Align::General,
+                        style_key: key,
+                        wrap: false,
+                        v_align: None,
+                        overflow_to: None,
+                        fill: None,
+                        runs: None,
                     });
                 }
             }
@@ -782,6 +825,12 @@ pub fn grid_scene_styled(
         let s = style_of(cell.style_key);
         cell.wrap = s.wrap;
         cell.v_align = s.v_align.clone();
+        // Stacked text: one character per line, as the page lowers it.
+        if s.rotation == Some(sheet_core::visual::ROTATION_STACKED) {
+            cell.text = sheet_lower::stack_text(&cell.text);
+            cell.runs = None;
+            cell.fill = None;
+        }
     }
     let mut start = 0;
     while start < cells.len() {
@@ -838,6 +887,12 @@ pub fn grid_scene_styled(
                     .cloned()
                     .unwrap_or((String::new(), Align::General, 0, None));
             let s = style_of(key);
+            let stacked = s.rotation == Some(sheet_core::visual::ROTATION_STACKED);
+            let (text, fill) = if stacked {
+                (sheet_lower::stack_text(&text), None)
+            } else {
+                (text, fill)
+            };
             GridMerge {
                 row: f.area.0,
                 col: f.area.1,
@@ -1361,6 +1416,7 @@ mod tests {
     /// uses. Geometry is viewport-local + inside the cell box.
     fn databar_cf(range: (u32, u32, u32, u32), rgb: (u8, u8, u8)) -> SheetCondFmt {
         SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![range],
                 rules: vec![condfmt::CfRule {
@@ -1663,6 +1719,7 @@ mod tests {
                         style: "thin".into(),
                         weight_pt: 0.75,
                         rgb: Some("#000000".into()),
+                        swatch: None,
                     }),
                     ..Default::default()
                 },
@@ -1829,6 +1886,7 @@ mod tests {
             ws.hidden_rows.insert(4);
         }
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(0, 2, 11, 2)],
                 rules: vec![condfmt::CfRule {
@@ -2037,6 +2095,7 @@ mod tests {
         }
         // A cf block far away forces the per-cell (uncached) style path.
         let cf = SheetCondFmt {
+            tables: Vec::new(),
             blocks: vec![condfmt::CfBlock {
                 ranges: vec![(900_000, 0, 900_000, 0)],
                 rules: vec![],

@@ -1,0 +1,11 @@
+$ paged-node preflight
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node preflight <doc>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

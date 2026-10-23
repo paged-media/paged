@@ -57,6 +57,7 @@ import {
   type CalcSettingsInfo,
   type CellEditRecord,
   type CellStylePatch,
+  type DocSwatch,
   type EdgeStyle,
   type NameInfo,
   type SheetLayoutInfo,
@@ -93,6 +94,8 @@ import {
   type LoweredTableInfo,
 } from "./lower";
 import { NOTICES } from "./messages";
+import { createDataTools, type DataToolsApi } from "./data-tools";
+import type { EnterResult } from "./engine-w2";
 import {
   chartPlacement,
   chartSizeOf,
@@ -199,6 +202,13 @@ export interface CellRegion {
 }
 
 const OTHER_CHANGE: SessionChange = { kind: "other" };
+
+/** The IDML styles un-styled story text falls back to: the basic
+ *  paragraph style, else the root "no paragraph style". */
+const BASIC_PARAGRAPH_STYLES = [
+  "ParagraphStyle/$ID/NormalParagraphStyle",
+  "ParagraphStyle/$ID/[No paragraph style]",
+];
 
 /** The regions (one bounding box per sheet) covering `cells`. */
 export function regionsOf(
@@ -337,7 +347,7 @@ export interface SessionState {
   findRequest: number;
 }
 
-export interface WorkbookSession {
+export interface WorkbookSession extends DataToolsApi {
   /** Read the current state snapshot. */
   state(): SessionState;
   /** Subscribe to state changes (the panel's render trigger). The
@@ -438,6 +448,36 @@ export interface WorkbookSession {
    *  binding records it with the next page write. False when no window
    *  frame is known. */
   setFrameViewLock(lock: boolean, frameId?: string): boolean;
+  /** Show sheet `sheetId` in the entered frame (RagTime: the frame is a
+   *  window onto a component): the grid moves to its A1, and a window
+   *  frame's page shows that sheet when the frame is left. */
+  setFrameSheet(sheetId: number): boolean;
+  /** The bytes of a font face the document holds (`host.assets`), so the
+   *  frame surface draws cell text in the faces the page uses. Null when
+   *  the host serves none (no asset door, a family the document lacks). */
+  documentFontFace(
+    family: string,
+    style?: string,
+  ): Promise<{ bytes: Uint8Array; family: string; style?: string } | null>;
+  /** A document swatch as a cell colour reference (sheet ADR 518): its
+   *  colour model and the sRGB the document shows it as, the fallback an
+   *  xlsx reader sees. Null when the document has no such swatch. */
+  documentSwatchRef(id: string): Promise<DocSwatch | null>;
+  /** How document swatches `ids` show on screen now (`#rrggbb`, colour
+   *  managed), for the grid to draw referenced colours as the canvas does.
+   *  Unknown ids are left out. */
+  documentSwatchColors(ids: readonly string[]): Promise<Map<string, string>>;
+  /** Bumps whenever the document's swatches may have changed (a swatch
+   *  edit, an undo): the grid re-reads `documentSwatchColors`. */
+  documentStyleRevision(): number;
+  /** The face and size text takes on the page when a cell names none: the
+   *  document's basic paragraph style (P7 — the grid draws un-styled cells
+   *  in it, as the placed table prints them). Null when unreadable. */
+  documentTextDefault(): Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -528,9 +568,17 @@ export interface WorkbookSession {
    *  undoes the whole paste). Returns the outcome: `ok:true` with the pasted
    *  row/col counts, or `ok:false` with an honest reason (no selection / no
    *  engine / nothing on the clipboard). Never throws. */
-  pasteAtSelection(): Promise<
+  pasteAtSelection(
+    options?: PasteOptions,
+  ): Promise<
     { ok: true; rows: number; cols: number } | { ok: false; message: string }
   >;
+  /** Paste special (Excel's Ctrl+Alt+V): whether its options card is open,
+   *  and opening / closing it. The card's OK calls `pasteAtSelection` with
+   *  the chosen options. */
+  pasteSpecialOpen(): boolean;
+  openPasteSpecial(): void;
+  closePasteSpecial(): void;
   /** The last answer of copy or paste, for the grid panel to show. Copy and
    *  paste are reached from the panel buttons, the grid keys, the in-frame
    *  keys and the commands; a refusal from any of them is posted here, so
@@ -915,6 +963,54 @@ export function selectionRangeA1(
   return `${start}:${end}`;
 }
 
+/** Paste special's options (Excel's dialog). `"all"` and `"formulas"` both
+ *  paste inputs (formulas re-addressed) — the clipboard carries no formats
+ *  yet; `"values"` pastes what the cells show. `operation` combines a
+ *  numeric source with the target (an empty target counts as 0, a target
+ *  formula is wrapped); text sources leave the target alone. */
+export interface PasteOptions {
+  what?: "all" | "formulas" | "values";
+  transpose?: boolean;
+  skipBlanks?: boolean;
+  operation?: "none" | "add" | "subtract" | "multiply" | "divide";
+}
+
+/** Combine a paste `src` input with the target's `dst` input (paste special
+ *  operations). Null: leave the target as it is. */
+export function combinePaste(
+  dst: string,
+  src: string,
+  op: NonNullable<PasteOptions["operation"]>,
+): string | null {
+  if (op === "none") return src;
+  const num = (t: string) => {
+    const v = t.trim();
+    if (v === "") return 0;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const s = num(src);
+  if (s === null || src.startsWith("=")) return null;
+  if (dst.startsWith("=")) {
+    const sign = { add: "+", subtract: "-", multiply: "*", divide: "/" }[op];
+    return `=(${dst.slice(1)})${sign}${s}`;
+  }
+  const d = num(dst);
+  if (d === null) return null;
+  const r =
+    op === "add"
+      ? d + s
+      : op === "subtract"
+        ? d - s
+        : op === "multiply"
+          ? d * s
+          : s === 0
+            ? null
+            : d / s;
+  if (r === null) return "#DIV/0!";
+  return String(r);
+}
+
 /** K-6 — parse a TSV `text` clipboard half into a rectangular grid (the
  *  fallback when the platform offered no rich `tabular`). Tabs split cells,
  *  newlines split rows; CRLF tolerated; a single trailing newline dropped
@@ -1190,6 +1286,8 @@ export function createWorkbookSession(
   // refresh on exit; `suppressRefresh` keeps a document-driven unwind from
   // writing the page the document just restored.
   let refreshDeferred = false;
+  /** Paste special's options card is open (the sheet bar shows it). */
+  let pasteSpecialCard = false;
   let suppressRefresh = false;
 
   /** Write one cell through the engine AND journal it (the shared Tier-1
@@ -1233,6 +1331,59 @@ export function createWorkbookSession(
     markEdited();
     stampRev();
     return true;
+  }
+
+  /** A typed entry through the engine's validation (`enterCell`, sheet ADR
+   *  517) and journaled like `journaledSetCell`: the prior input is read
+   *  first, the format the text implied rides the same step. An engine
+   *  without the door takes `journaledSetCell`. Null when the write failed
+   *  (logged; nothing journaled). */
+  function journaledEnterCell(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed: boolean,
+  ): EnterResult | null {
+    const engine = state.engine;
+    if (!engine) return null;
+    if (!engine.enterCell)
+      return journaledSetCell(sheet, row, col, input)
+        ? { applied: true }
+        : null;
+    let prev: string;
+    let res: EnterResult;
+    try {
+      // Free when the formula bar just showed the cell (a memoised read).
+      prev =
+        cachedRead(`input:${sheet}:${row}:${col}`, () =>
+          engine.getCellInput(sheet, row, col),
+        ) ?? "";
+      res = engine.enterCell(sheet, row, col, input, confirmed);
+    } catch (err) {
+      host.log.warn("enterCell refused", err);
+      return null;
+    }
+    if (!res.applied) return res;
+    const restyled = (res.result as { restyled?: readonly Restyle[] } | null)
+      ?.restyled;
+    editJournal.length = journalCursor; // drop any redo tail
+    const batch = nextJournalBatch++;
+    if (restyled && restyled.length > 0)
+      editJournal.push({
+        sheet,
+        row,
+        col,
+        prev: "",
+        next: "",
+        batch,
+        fmt: restyleStep(restyled),
+      });
+    editJournal.push({ sheet, row, col, prev, next: input, batch });
+    journalCursor = editJournal.length;
+    markEdited();
+    stampRev();
+    return res;
   }
 
   /** Write one cell and return its PRIOR input (the journal's inverse).
@@ -1540,7 +1691,7 @@ export function createWorkbookSession(
     if (ch.length !== 1) return false;
     if (!cellEdit) {
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text: ch };
       cellEditMode = "enter";
     } else {
@@ -1576,6 +1727,7 @@ export function createWorkbookSession(
     if (cellEdit) return true;
     const at = activeOf();
     if (!at || !state.engine || state.activeSheet === null) return false;
+    if (!data.mayEdit(at.row, at.col)) return false;
     let text = "";
     try {
       text = toDisplay(
@@ -1601,7 +1753,13 @@ export function createWorkbookSession(
     cellEdit = null;
     const sheet = state.activeSheet;
     if (state.engine && sheet !== null) {
-      journaledSetCell(sheet, row, col, fromDisplay(row, col, text));
+      // Sheet ADR 517 — protection and validation decide; a held-back
+      // entry waits on its alert (Retry / Yes / OK reopen or apply it).
+      if (!data.enterTyped(sheet, row, col, fromDisplay(row, col, text))) {
+        emitter.emit({ kind: "edit" });
+        void submitInFrameGrid();
+        return false;
+      }
       emitter.emit({
         kind: "cells",
         regions: regionsOf([{ sheet, row, col }]),
@@ -2003,12 +2161,18 @@ export function createWorkbookSession(
         return backspaceEdit();
       case "commit":
         commitEdit();
-        if (m && a.then) applyModel(advance(m, a.then));
+        // A held-back entry stays where it is until its alert is answered.
+        if (m && a.then && !data.api.entryAlert())
+          applyModel(advance(m, a.then));
         return true;
       case "commitMove":
         commitEdit();
-        if (m) applyModel(moveBy(m, a.dRow, a.dCol, false));
+        if (m && !data.api.entryAlert())
+          applyModel(moveBy(m, a.dRow, a.dCol, false));
         return true;
+      case "dropdown":
+        return data.api.openCellDropdown();
+
       case "cancel":
         cancelEdit();
         return true;
@@ -2169,6 +2333,9 @@ export function createWorkbookSession(
       }
       case "formatCells":
         void host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+        return true;
+      case "pasteSpecial":
+        api.openPasteSpecial();
         return true;
       case "calculate": {
         try {
@@ -2681,8 +2848,172 @@ export function createWorkbookSession(
   }
   const foreignChangeSub = host.document.onDidChange((e) => {
     if (e.kind === "mutationApplied" && ownWrites > 0) return;
+    // P7 — a swatch or style the cells reference may have changed: the
+    // grid re-reads the document's colours (debounced with the rest).
+    docStyleRevision += 1;
+    scheduleStyleNotice();
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
+    // ADR 510 (P6) — a window frame's box is its window: a resize shows
+    // what fits now. The engine names the resized frame's content box; a
+    // gesture that resized without saying which (several frames, an older
+    // engine) re-reads the window frames' geometry.
+    if (e.reflow) {
+      rewindow(e.reflow.frameId, {
+        widthPt: e.reflow.contentBox[3] - e.reflow.contentBox[1],
+        heightPt: e.reflow.contentBox[2] - e.reflow.contentBox[0],
+      });
+    } else if (e.kind === "gestureCommitted") {
+      void rereadWindowBoxes();
+    }
+    // A link, an unlink or a resize of a chain frame changes the window.
+    scheduleChainRead();
   });
+
+  /** Give window frame `frameId` a new box; refresh when it changed. */
+  function rewindow(
+    frameId: string,
+    boxPt: { widthPt: number; heightPt: number },
+  ): void {
+    const info = loweredTables.get(frameId);
+    if (!info || info.sizing !== "window") return;
+    if (boxPt.widthPt <= 0 || boxPt.heightPt <= 0) return;
+    const old = info.boxPt;
+    if (
+      old &&
+      Math.abs(old.widthPt - boxPt.widthPt) < 0.5 &&
+      Math.abs(old.heightPt - boxPt.heightPt) < 0.5
+    ) {
+      return;
+    }
+    // The first resize of a placed frame starts from its fitted box, which
+    // the window measured from its range did not use: still a new box.
+    loweredTables.set(frameId, { ...info, boxPt });
+    if (lastFrameId === frameId && lastGridWindow && !surfaceArea) {
+      lastGridWindow = {
+        ...lastGridWindow,
+        wPt: boxPt.widthPt,
+        hPt: boxPt.heightPt,
+      };
+    }
+    viewMoved.add(frameId);
+    scheduleRefresh();
+  }
+
+  /** Re-read every window frame's box (a gesture that did not name one). */
+  async function rereadWindowBoxes(): Promise<void> {
+    const ids = [...loweredTables]
+      .filter(([, i]) => i.sizing === "window")
+      .map(([id]) => id);
+    if (ids.length === 0) return;
+    let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+    try {
+      geom = await host.document.elementGeometry(
+        ids.map((id) => ({ kind: "textFrame", id }) as ElementId),
+      );
+    } catch {
+      return;
+    }
+    geom.forEach((g, i) => {
+      const b = g?.bounds;
+      const id = ids[i];
+      // Only a frame whose box differs from the one it was RESIZED to: a
+      // fitted placement's frame is taller than its range's window.
+      if (!b || !id || !resizedBoxes.has(id)) {
+        if (b && id) resizedBoxes.set(id, `${b[2] - b[0]}x${b[3] - b[1]}`);
+        return;
+      }
+      const key = `${b[2] - b[0]}x${b[3] - b[1]}`;
+      if (resizedBoxes.get(id) === key) return;
+      resizedBoxes.set(id, key);
+      rewindow(id, { widthPt: b[3] - b[1], heightPt: b[2] - b[0] });
+    });
+  }
+  /** The last frame box seen per window frame (`rereadWindowBoxes`). */
+  const resizedBoxes = new Map<string, string>();
+
+  /** P7 — the document style revision the grid follows. */
+  let docStyleRevision = 0;
+  let styleNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleStyleNotice(): void {
+    if (!inFrameActive) return;
+    if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
+    styleNoticeTimer = setTimeout(() => {
+      styleNoticeTimer = null;
+      emitter.emit();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** P6 — continuation frame → the chain's head (a window frame). */
+  const chainHeadOf = new Map<string, string>();
+  /** The continuation the in-frame grid was entered on: the chain head and
+   *  the frame's place in the chain. */
+  let enteredContinuation: { head: string; index: number } | null = null;
+  let chainTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Re-read the thread of every window frame (debounced): a frame linked
+   *  to more frames becomes a chain window, one unlinked goes back. */
+  function scheduleChainRead(): void {
+    if (![...loweredTables.values()].some((i) => i.sizing === "window")) return;
+    if (chainTimer !== null) clearTimeout(chainTimer);
+    chainTimer = setTimeout(() => {
+      chainTimer = null;
+      void rereadChains();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  async function rereadChains(): Promise<void> {
+    for (const [frameId, info] of [...loweredTables]) {
+      if (info.sizing !== "window") continue;
+      let links: Awaited<ReturnType<typeof host.document.frameChain>>;
+      try {
+        links = await host.document.frameChain(info.storyId);
+      } catch {
+        continue;
+      }
+      const order = links.map((l) => l.frameId);
+      // Only the head frame owns the window.
+      if (order.length > 0 && order[0] !== frameId) continue;
+      const rest = order.slice(1);
+      const before = info.chain?.frames ?? [];
+      for (const f of before) if (!rest.includes(f)) chainHeadOf.delete(f);
+      if (rest.length === 0) {
+        if (info.chain) {
+          const { chain: _gone, chainStarts: _starts, ...single } = info;
+          loweredTables.set(frameId, single);
+          viewMoved.add(frameId);
+          scheduleRefresh();
+        }
+        continue;
+      }
+      let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+      try {
+        geom = await host.document.elementGeometry(
+          order.map((id) => ({ kind: "textFrame", id }) as ElementId),
+        );
+      } catch {
+        continue;
+      }
+      const boxes = geom.map((g) => ({
+        widthPt: g ? g.bounds[3] - g.bounds[1] : 0,
+        heightPt: g ? g.bounds[2] - g.bounds[0] : 0,
+      }));
+      const [headBox, ...moreBoxes] = boxes;
+      if (!headBox) continue;
+      for (const f of rest) chainHeadOf.set(f, frameId);
+      const same =
+        JSON.stringify(info.chain ?? null) ===
+          JSON.stringify({ frames: rest, boxes: moreBoxes }) &&
+        JSON.stringify(info.boxPt ?? null) === JSON.stringify(headBox);
+      if (same) continue;
+      loweredTables.set(frameId, {
+        ...info,
+        boxPt: headBox,
+        chain: { frames: rest, boxes: moreBoxes },
+      });
+      viewMoved.add(frameId);
+      scheduleRefresh();
+    }
+  }
 
   /** Wave 4 — after a burst of edits, refresh what this session placed. */
   function scheduleRefresh(): void {
@@ -2724,9 +3055,11 @@ export function createWorkbookSession(
           if (name === null) continue;
           let next: LoweredContent;
           let windowed: string | null = null;
+          let starts: number[] | undefined;
           try {
             const win = placementWindow(engine, info);
             windowed = win?.range ?? null;
+            starts = win?.chainStarts;
             next = win?.content ?? pageContent(engine, info.sheet, info.range);
           } catch (err) {
             host.log.warn(`refresh: could not lower ${info.range}`, err);
@@ -2736,6 +3069,10 @@ export function createWorkbookSession(
           // A window frame's binding names the cells it shows now.
           if (windowed && windowed !== info.range) {
             info = { ...info, range: windowed };
+            loweredTables.set(frameId, info);
+          }
+          if (starts) {
+            info = { ...info, chainStarts: starts };
             loweredTables.set(frameId, info);
           }
           if (info.content) {
@@ -3323,7 +3660,48 @@ export function createWorkbookSession(
     },
   };
 
+  // Sheet ADR 517 — validation, filter, sort, outline, protection and Goal
+  // Seek in the grid (src/data-tools.ts).
+  const data = createDataTools({
+    host,
+    engine: () => state.engine,
+    sheet: () => state.activeSheet,
+    selection: () => {
+      if (state.gridSelection) return state.gridSelection;
+      const at = activeOf();
+      return at
+        ? { anchorRow: at.row, anchorCol: at.col, rows: 1, cols: 1 }
+        : null;
+    },
+    active: () => activeOf(),
+    revision: () => revision,
+    extent: () => {
+      const info = api.sheets().find((x) => x.id === state.activeSheet);
+      return info ? { rows: info.rows, cols: info.cols } : null;
+    },
+    enter: journaledEnterCell,
+    reopenEdit: (row, col, text) => {
+      applyModel(collapsed({ row, col }));
+      cellEdit = { row, col, text };
+      cellEditMode = "edit";
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+    },
+    journal: (edits, step) => journalBatch(edits, step),
+    edited: () => {
+      markEdited();
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    repaint: () => {
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    changedUi: () => emitter.emit(),
+  });
+
   const api: WorkbookSession = {
+    ...data.api,
     objectBridge: () => bridge,
     state: () => state,
     onDidChange: (l) => emitter.on(l),
@@ -3439,7 +3817,19 @@ export function createWorkbookSession(
       // ADR 510 — the frame decides what the grid shows: its bound sheet
       // (made the active sheet while it is edited) and its view's top-left
       // cell. A frame without a binding keeps the active sheet at A1.
-      const start = await frameStart(target);
+      // P6 — a continuation frame of a window chain shows the chain's
+      // window from the rows it holds; its head's binding names the sheet.
+      const head = chainHeadOf.get(target);
+      const headInfo = head ? loweredTables.get(head) : undefined;
+      const index =
+        head && headInfo?.chain ? headInfo.chain.frames.indexOf(target) + 1 : 0;
+      enteredContinuation =
+        head && headInfo && index > 0 ? { head, index } : null;
+      let start = await frameStart(enteredContinuation && head ? head : target);
+      if (enteredContinuation && headInfo) {
+        const row = headInfo.chainStarts?.[index];
+        if (row !== undefined) start = { row, col: start.col };
+      }
       // Size the grid window to the frame's content box (core clips to it).
       let wPt = 480;
       let hPt = 640;
@@ -3552,7 +3942,7 @@ export function createWorkbookSession(
         return ok;
       }
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text };
       cellEditMode = mode;
       emitter.emit({ kind: "edit" });
@@ -3591,6 +3981,7 @@ export function createWorkbookSession(
 
     hideGridInFrame() {
       cellEdit = null;
+      data.reset();
       drag = null;
       fillPreview = null;
       inFrameActive = false;
@@ -3598,9 +3989,30 @@ export function createWorkbookSession(
       // ADR 510 — leaving the frame moves its view to where the user
       // scrolled (a locked view snaps back), and the page shows it.
       let viewChanged = false;
-      const placedInfo = lastFrameId
-        ? loweredTables.get(lastFrameId)
-        : undefined;
+      // P6 — leaving a continuation scrolls the chain: the head's view moves
+      // by as many rows as this frame's grid moved from where it started.
+      const cont = enteredContinuation;
+      enteredContinuation = null;
+      const headInfo = cont ? loweredTables.get(cont.head) : undefined;
+      if (cont && headInfo?.view && !headInfo.view.lock && lastGridWindow) {
+        const head = cellOfA1(headInfo.view.topLeft) ?? { row: 0, col: 0 };
+        const startedAt = headInfo.chainStarts?.[cont.index] ?? head.row;
+        const row = Math.max(
+          0,
+          head.row + (lastGridWindow.firstRow - startedAt),
+        );
+        const topLeft = a1OfCell(row, lastGridWindow.firstCol);
+        if (topLeft !== headInfo.view.topLeft) {
+          loweredTables.set(cont.head, {
+            ...headInfo,
+            view: { ...headInfo.view, topLeft },
+          });
+          viewMoved.add(cont.head);
+          viewChanged = true;
+        }
+      }
+      const placedInfo =
+        !cont && lastFrameId ? loweredTables.get(lastFrameId) : undefined;
       if (
         lastFrameId &&
         placedInfo?.sizing === "window" &&
@@ -3636,6 +4048,130 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    async documentSwatchColors(ids) {
+      const out = new Map<string, string>();
+      if (ids.length === 0 || !host.supports("document.swatchDisplay@1"))
+        return out;
+      try {
+        for (const shown of await host.document.swatchDisplay(ids))
+          out.set(shown.id, shown.rgbHex);
+      } catch (err) {
+        host.log.debug("documentSwatchColors: read failed", err);
+      }
+      return out;
+    },
+
+    documentStyleRevision() {
+      return docStyleRevision;
+    },
+
+    async documentSwatchRef(id) {
+      if (!host.supports("document.swatchDisplay@1")) return null;
+      try {
+        const [shown] = await host.document.swatchDisplay([id]);
+        if (!shown) return null;
+        const m = shown.model.toLowerCase();
+        const model: DocSwatch["model"] = m.includes("spot")
+          ? "spot"
+          : m.includes("lab")
+            ? "lab"
+            : shown.cmyk
+              ? "cmyk"
+              : "rgb";
+        return {
+          id,
+          model,
+          fallbackRgb: `#${shown.rgbHex.replace(/^#/, "").toUpperCase()}`,
+        };
+      } catch (err) {
+        host.log.debug(`documentSwatchRef: ${id} unreadable`, err);
+        return null;
+      }
+    },
+
+    async documentTextDefault() {
+      if (!host.supports("document.styleProperties@1")) return null;
+      try {
+        let props: Awaited<ReturnType<typeof host.document.styleProperties>> =
+          null;
+        for (const id of BASIC_PARAGRAPH_STYLES) {
+          props = await host.document.styleProperties("paragraph", id);
+          if (props) break;
+        }
+        if (!props) return null;
+        const entries = props.entries;
+        const entry = (path: string) =>
+          entries.find((e) => e.path === path)?.value ?? null;
+        // An unset entry reads as "" (text) or null (length): absent.
+        const text = (v: unknown) => {
+          const raw =
+            v && typeof v === "object" && "value" in v
+              ? (v as { value: unknown }).value
+              : null;
+          return raw === null || raw === undefined || raw === ""
+            ? null
+            : String(raw);
+        };
+        const num = (v: unknown) => {
+          const t = text(v);
+          const n = t === null ? NaN : Number(t);
+          return Number.isFinite(n) ? n : null;
+        };
+        const family = text(entry("characterFontFamily"));
+        if (!family) return null;
+        return {
+          family,
+          style: text(entry("characterFontStyle")),
+          sizePt: num(entry("characterFontSize")),
+        };
+      } catch (err) {
+        host.log.debug("documentTextDefault: style read failed", err);
+        return null;
+      }
+    },
+
+    async documentFontFace(family, style) {
+      if (!host.supports("assets.fonts@1")) return null;
+      try {
+        const face = await host.assets.getFontFace(family, style);
+        return face
+          ? {
+              bytes: face.bytes,
+              family: face.family,
+              ...(face.style ? { style: face.style } : {}),
+            }
+          : null;
+      } catch (err) {
+        host.log.debug(`documentFontFace: ${family} unavailable`, err);
+        return null;
+      }
+    },
+
+    setFrameSheet(sheetId) {
+      const engine = state.engine;
+      if (!engine || !engine.listSheets().some((x) => x.id === sheetId))
+        return false;
+      if (state.activeSheet === sheetId) return true;
+      api.setActiveSheet(sheetId);
+      const id = lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (id && info?.sizing === "window" && info.view) {
+        loweredTables.set(id, {
+          ...info,
+          sheet: sheetId,
+          view: { ...info.view, topLeft: "A1" },
+          // A sheet switch rewrites every cell: no in-place diff.
+          content: undefined,
+        });
+        viewMoved.add(id);
+      }
+      if (lastGridWindow)
+        lastGridWindow = { ...lastGridWindow, firstRow: 0, firstCol: 0 };
+      if (inFrameActive) void submitInFrameGrid();
+      else if (id && viewMoved.has(id)) void refreshPlacements();
+      return true;
     },
 
     frameView(frameId) {
@@ -3871,7 +4407,22 @@ export function createWorkbookSession(
       };
     },
 
-    async pasteAtSelection() {
+    pasteSpecialOpen() {
+      return pasteSpecialCard;
+    },
+    openPasteSpecial() {
+      if (pasteSpecialCard) return;
+      pasteSpecialCard = true;
+      emitter.emit();
+    },
+    closePasteSpecial() {
+      if (!pasteSpecialCard) return;
+      pasteSpecialCard = false;
+      emitter.emit();
+    },
+
+    async pasteAtSelection(options: PasteOptions = {}) {
+      pasteSpecialCard = false;
       // K-6 / S-14 — read the clipboard, land its grid at the selection anchor
       // through the JOURNALED editCell lane as ONE grouped undo step. Prefers
       // the rich tabular half; falls back to TSV. Thin glue (§3): the engine
@@ -3915,7 +4466,19 @@ export function createWorkbookSession(
         JSON.stringify(copySource.displays) === JSON.stringify(grid)
           ? copySource
           : null;
-      const block = own ? own.inputs : grid;
+      const what = options.what ?? "all";
+      const op = options.operation ?? "none";
+      const useInputs = own !== null && what !== "values";
+      const transpose = (g: string[][]) => {
+        const w = Math.max(...g.map((r) => r.length));
+        return Array.from({ length: w }, (_, c) => g.map((r) => r[c] ?? ""));
+      };
+      const raw = useInputs
+        ? own.inputs
+        : what === "values" && own
+          ? own.displays
+          : grid;
+      const block = options.transpose ? transpose(raw) : raw;
       const bRows = block.length;
       const bCols = Math.max(...block.map((r) => r.length));
       // A selection that is a whole multiple of the block tiles it (copy one
@@ -3938,7 +4501,7 @@ export function createWorkbookSession(
           const top = area.anchorRow + tr;
           const left = area.anchorCol + tc;
           let rows = block;
-          if (own) {
+          if (useInputs && !options.transpose) {
             try {
               rows = engine.shiftFormulas!(
                 sheet,
@@ -3953,15 +4516,49 @@ export function createWorkbookSession(
                 message: "the paste could not adjust its formulas",
               };
             }
+          } else if (useInputs) {
+            // Transposed: each source cell moves by its own offset, so each
+            // formula is re-addressed alone.
+            try {
+              rows = block.map((row, r) =>
+                row.map((input, c) => {
+                  if (!input.startsWith("=")) return input;
+                  // Block cell (r, c) came from source cell (c, r).
+                  const dRow = top + r - (own.rect.anchorRow + c);
+                  const dCol = left + c - (own.rect.anchorCol + r);
+                  return (
+                    engine.shiftFormulas!(
+                      sheet,
+                      [[input]],
+                      dRow,
+                      dCol,
+                    )[0]?.[0] ?? input
+                  );
+                }),
+              );
+            } catch (err) {
+              host.log.warn("pasteAtSelection: formula adjust failed", err);
+              return {
+                ok: false as const,
+                message: "the paste could not adjust its formulas",
+              };
+            }
           }
           rows.forEach((row, r) =>
             row.forEach((next, c) => {
+              if (options.skipBlanks && next === "") return;
+              let input: string | null = next;
+              if (op !== "none") {
+                const dst = engine.getCellInput(sheet, top + r, left + c);
+                input = combinePaste(dst, next, op);
+                if (input === null) return;
+              }
               targets.push({
                 sheet,
                 row: top + r,
                 col: left + c,
                 prevInput: "",
-                nextInput: next,
+                nextInput: input,
               });
             }),
           );
@@ -5211,6 +5808,8 @@ export function createWorkbookSession(
     dispose() {
       historySub.dispose();
       foreignChangeSub.dispose();
+      if (chainTimer !== null) clearTimeout(chainTimer);
+      if (styleNoticeTimer !== null) clearTimeout(styleNoticeTimer);
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).
@@ -5281,8 +5880,8 @@ export function createWorkbookSession(
     else postNotice(t(NOTICES.cantCopy, { reason: r.message }), "error");
     return r;
   };
-  api.pasteAtSelection = async () => {
-    const r = await pasteImpl.call(api);
+  api.pasteAtSelection = async (options?: PasteOptions) => {
+    const r = await pasteImpl.call(api, options);
     if (r.ok)
       postNotice(
         t(NOTICES.pasted, {

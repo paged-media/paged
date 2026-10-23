@@ -1,0 +1,15 @@
+# PERMUTATIONA(number,number_chosen).
+# id	formula	setup	expected
+pa-0	=PERMUTATIONA(3,2)	-	9
+pa-1	=PERMUTATIONA(2,2)	-	4
+pa-2	=PERMUTATIONA(0,0)	-	1
+pa-3	=PERMUTATIONA(5,0)	-	1
+pa-4	=PERMUTATIONA(3.9,2.9)	-	9
+pa-5	=PERMUTATIONA(-1,2)	-	#NUM!
+pa-6	=PERMUTATIONA(3,-1)	-	#NUM!
+pa-7	=PERMUTATIONA(10,300)	-	1E+300
+pa-8	=PERMUTATIONA(0,3)	-	0
+pa-9	=PERMUTATIONA(1E6,2)	-	1000000000000
+pa-txt	=PERMUTATIONA("x",2)	-	#VALUE!
+pa-err	=PERMUTATIONA(A1,2)	A1=#DIV/0!	#DIV/0!
+pa-numtxt	=PERMUTATIONA("3",2)	-	9

@@ -27,6 +27,7 @@ use crate::core::filter::{CriterionArg, FilterViewInfo};
 use crate::core::outline::Axis;
 use crate::core::protect::ProtectOptions;
 use crate::core::sort::SortSpec;
+use crate::core::tables::TableStyleArg;
 use crate::core::validation::ValidationRuleArg;
 use crate::wasm::{map_err, to_js, SheetEngine};
 
@@ -395,5 +396,136 @@ impl SheetEngine {
         let v: Vec<FilterViewInfo> = arg(views)?;
         self.session.set_filter_views(v);
         Ok(())
+    }
+
+    // ── tables (W2.6) ───────────────────────────────────────────────────
+
+    /// Every table, read whole: `[{name, sheet, range, headerRow, totalsRow,
+    /// columns: [{name, calculatedFormula?, totalsFunction?, totalsFormula?,
+    /// totalsLabel?}], style?, firstColumn, lastColumn, bandedRows,
+    /// bandedColumns}]`.
+    pub fn list_table_details(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.list_table_details())
+    }
+
+    pub fn table_detail(&self, name: &str) -> Result<JsValue, JsValue> {
+        to_js(&self.session.table_detail(name).map_err(map_err)?)
+    }
+
+    pub fn table_style_names(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.table_style_names())
+    }
+
+    /// Insert ▸ Table. `style` / `name` empty: the defaults.
+    pub fn create_table(
+        &mut self,
+        sheet: u16,
+        range: &str,
+        has_headers: bool,
+        style: &str,
+        name: &str,
+    ) -> Result<JsValue, JsValue> {
+        let style = (!style.is_empty()).then_some(style);
+        let name = (!name.is_empty()).then_some(name);
+        to_js(
+            &self
+                .session
+                .create_table(sheet, range, has_headers, style, name)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn resize_table(&mut self, name: &str, range: &str) -> Result<JsValue, JsValue> {
+        to_js(&self.session.resize_table(name, range).map_err(map_err)?)
+    }
+
+    pub fn rename_table(&mut self, name: &str, new_name: &str) -> Result<JsValue, JsValue> {
+        to_js(&self.session.rename_table(name, new_name).map_err(map_err)?)
+    }
+
+    pub fn set_table_totals(&mut self, name: &str, show: bool) -> Result<JsValue, JsValue> {
+        to_js(&self.session.set_table_totals(name, show).map_err(map_err)?)
+    }
+
+    /// `function`: `sum`, `average`, `count`, `countNums`, `max`, `min`,
+    /// `stdDev`, `var`, `custom` (`text` = the formula), `label` (`text` =
+    /// the label), `none`.
+    pub fn set_totals_function(
+        &mut self,
+        name: &str,
+        column: &str,
+        function: &str,
+        text: &str,
+    ) -> Result<JsValue, JsValue> {
+        let text = (!text.is_empty()).then_some(text);
+        to_js(
+            &self
+                .session
+                .set_totals_function(name, column, function, text)
+                .map_err(map_err)?,
+        )
+    }
+
+    /// `formula` empty: remove the calculated formula.
+    pub fn set_calculated_column(
+        &mut self,
+        name: &str,
+        column: &str,
+        formula: &str,
+    ) -> Result<JsValue, JsValue> {
+        let f = (!formula.is_empty()).then_some(formula);
+        to_js(
+            &self
+                .session
+                .set_calculated_column(name, column, f)
+                .map_err(map_err)?,
+        )
+    }
+
+    /// `{style?, firstColumn?, lastColumn?, bandedRows?, bandedColumns?}`.
+    pub fn set_table_style(&mut self, name: &str, arg_v: JsValue) -> Result<JsValue, JsValue> {
+        let a: TableStyleArg = arg(arg_v)?;
+        to_js(&self.session.set_table_style(name, a).map_err(map_err)?)
+    }
+
+    // ── what-if (ADR 517) ───────────────────────────────────────────────
+
+    /// Goal Seek: `{found, value, result, iterations, prevInput}`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn goal_seek(
+        &mut self,
+        sheet: u16,
+        set_row: u32,
+        set_col: u32,
+        target: f64,
+        changing_sheet: u16,
+        changing_row: u32,
+        changing_col: u32,
+    ) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .goal_seek(
+                    sheet,
+                    set_row,
+                    set_col,
+                    target,
+                    changing_sheet,
+                    changing_row,
+                    changing_col,
+                )
+                .map_err(map_err)?,
+        )
+    }
+
+    /// Recalculate the data tables now (the result cells that changed,
+    /// `[[sheet, row, col]]`).
+    pub fn calculate_data_tables(&mut self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.calculate_data_tables().map_err(map_err)?)
+    }
+
+    /// The data tables: `[[sheet, "B6:C10"]]`.
+    pub fn list_data_tables(&self) -> Result<JsValue, JsValue> {
+        to_js(&self.session.list_data_tables())
     }
 }

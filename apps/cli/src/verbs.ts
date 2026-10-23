@@ -27,14 +27,9 @@ import type {
   ObjectCommandInfo,
   ObjectOp,
   ObjectWriteResult,
-  PropertySchema,
   ValueType,
 } from "@paged-media/plugin-api";
-import {
-  normalizeAddress,
-  parseSelector,
-  validateValue,
-} from "@paged-media/plugin-sdk";
+import { normalizeAddress, parseSelector } from "@paged-media/plugin-sdk";
 
 import { AI_OPTIONS, parsePageSize, runAiVerb } from "./ai";
 import {
@@ -47,12 +42,15 @@ import {
 } from "./args";
 import {
   applyBindings,
-  dataSession,
   loadRecords,
   mergeOnce,
+  planBatch,
   readBindings,
-  selectRecord,
+  requireData,
+  selectRecords,
+  undoMerge,
   type MergeFlags,
+  type MergeResult,
 } from "./data";
 import { BIN, CliError, EXIT } from "./errors";
 import {
@@ -62,10 +60,12 @@ import {
   type CliSession,
   type SessionOptions,
 } from "./session";
+import { exporterArgs, pdfCommand, typedPdf } from "./pdf";
 import { describeType, parseCliValue } from "./values";
 import { defaultLibrary } from "./mcp/library";
 import { LocalHost } from "./mcp/host";
 import { serveStdio } from "./mcp/protocol";
+import { packageVerb, preflight } from "./publish";
 import { template } from "./template";
 
 export interface VerbContext {
@@ -716,92 +716,6 @@ const run: Verb = {
   },
 };
 
-/** The first-party typed PDF exporter (paged.publish). */
-export const PUBLISH_EXPORT_PDF = "media.paged.publish.exportPdf";
-
-/** The typed command `paged-node export --format pdf` routes through: `--via`,
- *  else paged.publish's `exportPdf`, else any `<plugin>.exportPdf`; null
- *  = core's own PDF door. */
-async function pdfCommand(
-  s: CliSession,
-  via: string | undefined,
-): Promise<ObjectCommandInfo | null> {
-  const all = await s.h.objects.commands();
-  if (via) {
-    const c = all.find((x) => x.id === via);
-    if (!c)
-      throw new CliError(
-        EXIT.usage,
-        `--via: no typed command "${via}" — known: ${all.map((x) => x.id).join(", ") || "none"}`,
-      );
-    return c;
-  }
-  return (
-    all.find((x) => x.id === PUBLISH_EXPORT_PDF) ??
-    all.find((x) => x.id.endsWith(".exportPdf")) ??
-    null
-  );
-}
-
-/**
- * The args for a typed exporter command from the flags given — ONLY those:
- * every field the user did not name is left out, and the registry's
- * `invoke` fills the struct's defaults (ADR 323 §21.8). Each value is text
- * typed by its field (`coerceValue` → `validateValue`); a field the struct
- * does not have, or a required field without a default, is a usage error
- * naming the fields.
- */
-export function exporterArgs(
-  command: ObjectCommandInfo,
-  given: { standard?: string; pages?: string; options: readonly string[] },
-): Record<string, unknown> {
-  const t = command.args;
-  if (t.kind !== "struct")
-    throw new CliError(
-      EXIT.usage,
-      `${command.id}: args are ${t.kind}, not a record of options`,
-    );
-  const fields = t.fields;
-  const names = Object.keys(fields).join(", ");
-  const rows: PropertySchema[] = Object.entries(fields).map(([path, type]) => ({
-    path,
-    type,
-  }));
-  const out: Record<string, unknown> = {};
-  const put = (key: string, raw: string, flag: string) => {
-    if (!(key in fields))
-      throw new CliError(
-        EXIT.usage,
-        `${flag}: ${command.id} has no option "${key}" — options: ${names}`,
-      );
-    const v = parseCliValue(rows, command.id, key, raw);
-    if (!v.ok) throw new CliError(EXIT.usage, `${flag}: ${v.reason}`);
-    out[key] = v.value;
-  };
-  if (given.standard !== undefined)
-    put("standard", given.standard, "--pdf-standard");
-  if (given.pages !== undefined) {
-    if ("pages" in fields) put("pages", given.pages, "--pages");
-    else {
-      const m = /^(\d+)(?:-(\d+))?$/.exec(given.pages);
-      if (!m)
-        throw new CliError(EXIT.usage, `--pages: "${given.pages}" is not a-b`);
-      put("pageFrom", m[1]!, "--pages");
-      put("pageTo", m[2] ?? m[1]!, "--pages");
-    }
-  }
-  for (const o of given.options) {
-    const eq = o.indexOf("=");
-    if (eq <= 0)
-      throw new CliError(EXIT.usage, `--option: "${o}" is not key=value`);
-    put(o.slice(0, eq), o.slice(eq + 1), "--option");
-  }
-  const why = validateValue(t, out, undefined, "options");
-  if (why)
-    throw new CliError(EXIT.usage, `${command.id}: ${why} — options: ${names}`);
-  return out;
-}
-
 const exportVerb: Verb = {
   name: "export",
   usage: "<doc>",
@@ -865,17 +779,7 @@ const exportVerb: Verb = {
         ...(pages !== undefined ? { pages } : {}),
         options,
       });
-      let r: { bytes?: unknown; diagnostics?: unknown; pageCount?: unknown };
-      try {
-        r = (await s.h.objects.invoke(typed.id, given)) as typeof r;
-      } catch (err) {
-        throw new CliError(
-          EXIT.failed,
-          `export pdf via ${typed.id} failed: ${(err as Error).message}`,
-        );
-      }
-      if (!(r?.bytes instanceof Uint8Array))
-        throw new CliError(EXIT.failed, `${typed.id} answered no bytes`);
+      const r = await typedPdf(s, typed, given);
       writeOutput(path, r.bytes);
       return {
         json: {
@@ -885,7 +789,7 @@ const exportVerb: Verb = {
           options: given,
           bytes: r.bytes.byteLength,
           ...(r.pageCount !== undefined ? { pageCount: r.pageCount } : {}),
-          diagnostics: r.diagnostics ?? [],
+          diagnostics: r.findings,
         },
         text: `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
       };
@@ -906,7 +810,7 @@ const exportVerb: Verb = {
     }
     let done: Awaited<ReturnType<typeof s.exportBytes>>;
     try {
-      done = await s.exportBytes(format, { pdf });
+      done = await s.exportBytes(format, { pdf, via: "core" });
     } catch (err) {
       // PDF/X names an output intent; without --cmyk-profile only a profile
       // the document declares (and the engine knows) can be one.
@@ -948,7 +852,7 @@ const apply: Verb = {
     {
       name: "bindings",
       value: "b.json",
-      help: '{ "bindings": [ { "kind": "property", "target", "path", "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }',
+      help: '{ "bindings": [ { "kind": "property", "target", "path", "expr" | "field" } | session kinds: variable, image, visibility, barcode, table, rule ] }',
     },
     {
       name: "record",
@@ -959,7 +863,7 @@ const apply: Verb = {
     NO_SAVE,
     OUTPUT_FORMAT,
   ],
-  reaches: ["batch", "query", "schema"],
+  reaches: ["batch", "query", "schema", "invoke", "commands", "get"],
   async run({ args, session, cwd }) {
     const [doc] = args.positionals as [string];
     const data = flagStr(args, "data");
@@ -971,14 +875,14 @@ const apply: Verb = {
       );
     const file = readBindings(resolve(cwd, bindingsPath));
     const s = await session(doc);
-    const ds = await dataSession(s);
+    await requireData(s);
     const { query: sql, total } = await loadRecords(
-      ds,
+      s,
       resolve(cwd, data),
       flagStr(args, "query") ?? file.query,
     );
     const record = flagNumber(args, "record", file.record ?? 0);
-    const report = await applyBindings(s, ds, file, sql, record);
+    const report = await applyBindings(s, file, sql, record);
     const saved = await saveIfAsked(s, args, true);
     return {
       json: { records: total, ...report, saved },
@@ -987,101 +891,103 @@ const apply: Verb = {
   },
 };
 
-const merge: Verb = {
-  name: "merge",
-  usage: "<template>",
-  summary:
-    "Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged",
-  min: 1,
-  max: 1,
-  options: [
-    ...MERGE_OPTIONS,
-    { name: "out", value: "dir", help: "output directory (required)" },
-    {
-      name: "format",
-      value: "pdf|idml|paged",
-      help: "output format (default paged)",
-    },
-    {
-      name: "per-record",
-      help: "one document per record instead of one merged document",
-    },
-    {
-      name: "records-per-page",
-      value: "single|multiple",
-      help: "Data Merge layout (default single)",
-    },
-    {
-      name: "arrange",
-      value: "rows|columns",
-      help: "multiple records: fill rows or columns first (default rows)",
-    },
-    {
-      name: "row-spacing",
-      value: "pt",
-      help: "multiple records: spacing between rows",
-    },
-    {
-      name: "column-spacing",
-      value: "pt",
-      help: "multiple records: spacing between columns",
-    },
-    {
-      name: "remove-blank-lines",
-      help: "drop lines whose only content is an empty field",
-    },
-    {
-      name: "image-base",
-      value: "dir",
-      help: "where relative image fields resolve (default: the data file's directory)",
-    },
-    {
-      name: "image-field",
-      value: "rectId=@field",
-      repeat: true,
-      help: "an image placeholder rectangle and its field",
-    },
-  ],
-  reaches: [],
-  async run({ args, session, cwd }) {
-    const [template] = args.positionals as [string];
-    const data = flagStr(args, "data");
-    const outDir = flagStr(args, "out");
-    if (!data || !outDir)
+/** Data Merge's layout options (`merge` and `generate`). */
+const LAYOUT_OPTIONS: readonly OptionSpec[] = [
+  {
+    name: "records-per-page",
+    value: "single|multiple",
+    help: "Data Merge layout (default single)",
+  },
+  {
+    name: "arrange",
+    value: "rows|columns",
+    help: "multiple records: fill rows or columns first (default rows)",
+  },
+  {
+    name: "row-spacing",
+    value: "pt",
+    help: "multiple records: spacing between rows",
+  },
+  {
+    name: "column-spacing",
+    value: "pt",
+    help: "multiple records: spacing between columns",
+  },
+  {
+    name: "remove-blank-lines",
+    help: "drop lines whose only content is an empty field",
+  },
+  {
+    name: "image-base",
+    value: "dir",
+    help: "where relative image fields resolve (default: the data file's directory)",
+  },
+  {
+    name: "image-field",
+    value: "rectId=@field",
+    repeat: true,
+    help: "an image placeholder rectangle and its field",
+  },
+];
+
+const OUT_DIR: OptionSpec = {
+  name: "out",
+  value: "dir",
+  help: "output directory (required)",
+};
+const OUT_FORMAT: OptionSpec = {
+  name: "format",
+  value: "pdf|idml|paged",
+  help: "output format (default paged); pdf through the typed exporter (paged.publish) when installed",
+};
+
+/** The flags `merge` and `generate` share, checked. */
+function mergeInputs(
+  verb: string,
+  args: ParsedArgs,
+  cwd: string,
+): { dataPath: string; dir: string; format: string; flags: MergeFlags } {
+  const data = flagStr(args, "data");
+  const outDir = flagStr(args, "out");
+  if (!data || !outDir)
+    throw new CliError(
+      EXIT.usage,
+      `${verb} needs --data <file> and --out <dir>`,
+    );
+  const format = (flagStr(args, "format") ?? "paged").toLowerCase();
+  if (!["pdf", "idml", "paged"].includes(format))
+    throw new CliError(
+      EXIT.usage,
+      `--format: "${format}" is not pdf | idml | paged`,
+    );
+  const rpp = flagStr(args, "records-per-page") ?? "single";
+  const arrange = flagStr(args, "arrange") ?? "rows";
+  if (rpp !== "single" && rpp !== "multiple")
+    throw new CliError(
+      EXIT.usage,
+      `--records-per-page: "${rpp}" is not single | multiple`,
+    );
+  if (arrange !== "rows" && arrange !== "columns")
+    throw new CliError(
+      EXIT.usage,
+      `--arrange: "${arrange}" is not rows | columns`,
+    );
+  const imageFields: Record<string, string> = {};
+  for (const f of flagList(args, "image-field")) {
+    const m = /^([^=]+)=(.+)$/.exec(f);
+    if (!m)
       throw new CliError(
         EXIT.usage,
-        "merge needs --data <file> and --out <dir>",
+        `--image-field: "${f}" is not rectId=@field`,
       );
-    const format = (flagStr(args, "format") ?? "paged").toLowerCase();
-    if (!["pdf", "idml", "paged"].includes(format))
-      throw new CliError(
-        EXIT.usage,
-        `--format: "${format}" is not pdf | idml | paged`,
-      );
-    const rpp = flagStr(args, "records-per-page") ?? "single";
-    const arrange = flagStr(args, "arrange") ?? "rows";
-    if (rpp !== "single" && rpp !== "multiple")
-      throw new CliError(
-        EXIT.usage,
-        `--records-per-page: "${rpp}" is not single | multiple`,
-      );
-    if (arrange !== "rows" && arrange !== "columns")
-      throw new CliError(
-        EXIT.usage,
-        `--arrange: "${arrange}" is not rows | columns`,
-      );
-    const imageFields: Record<string, string> = {};
-    for (const f of flagList(args, "image-field")) {
-      const m = /^([^=]+)=(.+)$/.exec(f);
-      if (!m)
-        throw new CliError(
-          EXIT.usage,
-          `--image-field: "${f}" is not rectId=@field`,
-        );
-      imageFields[m[1]!] = m[2]!;
-    }
-    const dataPath = resolve(cwd, data);
-    const flags: MergeFlags = {
+    imageFields[m[1]!] = m[2]!;
+  }
+  const dataPath = resolve(cwd, data);
+  return {
+    dataPath,
+    dir: resolve(cwd, outDir),
+    format,
+    flags: {
       recordsPerPage: rpp,
       arrange,
       rowSpacing: flagNumber(args, "row-spacing", 0),
@@ -1089,11 +995,60 @@ const merge: Verb = {
       removeBlankLines: flagBool(args, "remove-blank-lines"),
       imageBase: resolve(cwd, flagStr(args, "image-base") ?? dirname(dataPath)),
       ...(Object.keys(imageFields).length ? { imageFields } : {}),
-    };
+    },
+  };
+}
+
+/** A merge that places nothing is a failure, said as one. */
+function placedNothing(total: number | null, r: MergeResult): CliError | null {
+  return r.records === 0 || r.pages === 0
+    ? new CliError(
+        EXIT.failed,
+        `merge: ${total ?? "some"} record(s) selected, but the merge placed ${r.records} on ${r.pages} page(s) — does the template's first page hold <<field>> placeholders?`,
+      )
+    : null;
+}
+
+/** Write the merged document; a PDF through the typed exporter. */
+async function writeMerged(
+  s: CliSession,
+  format: string,
+  path: string,
+): Promise<{ bytes: number; via?: string }> {
+  const done = await s.exportBytes(format);
+  writeOutput(path, done.bytes);
+  return {
+    bytes: done.bytes.byteLength,
+    ...(done.via ? { via: done.via } : {}),
+  };
+}
+
+const merge: Verb = {
+  name: "merge",
+  usage: "<template>",
+  summary:
+    "Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged (through paged.data's typed commands)",
+  min: 1,
+  max: 1,
+  options: [
+    ...MERGE_OPTIONS,
+    OUT_DIR,
+    OUT_FORMAT,
+    {
+      name: "per-record",
+      help: "one document per record instead of one merged document",
+    },
+    ...LAYOUT_OPTIONS,
+  ],
+  reaches: ["commands", "invoke", "batch"],
+  async run({ args, session, cwd }) {
+    const [template] = args.positionals as [string];
+    const { dataPath, dir, format, flags } = mergeInputs("merge", args, cwd);
+    const data = flagStr(args, "data")!;
     const s = await session(template);
-    const ds = await dataSession(s);
+    await requireData(s);
     const { query: sql, total } = await loadRecords(
-      ds,
+      s,
       dataPath,
       flagStr(args, "query"),
     );
@@ -1109,59 +1064,144 @@ const merge: Verb = {
         EXIT.failed,
         `merge --per-record: the records of ${data} could not be counted (${sql})`,
       );
-    const dir = resolve(cwd, outDir);
     const stem = baseName(template);
     const outputs: Array<Record<string, unknown>> = [];
-    const placedNothing = (r: { records: unknown[]; pages: string[] }) =>
-      r.records.length === 0 || r.pages.length === 0
-        ? new CliError(
-            EXIT.failed,
-            `merge: ${total ?? "some"} record(s) selected, but the merge placed ${r.records.length} on ${r.pages.length} page(s) — does the template's first page hold <<field>> placeholders?`,
-          )
-        : null;
     if (!flagBool(args, "per-record")) {
-      const r = await mergeOnce(ds, flags);
-      const nothing = placedNothing(r);
+      const r = await mergeOnce(s, flags);
+      const nothing = placedNothing(total, r);
       if (nothing) throw nothing;
-      const done = await s.exportBytes(format);
       const path = join(dir, `${stem}-merged.${format}`);
-      writeOutput(path, done.bytes);
+      const wrote = await writeMerged(s, format, path);
       outputs.push({
         path,
-        pages: r.pages.length,
-        records: r.records.length,
-        overset: r.overset,
-        bytes: done.bytes.byteLength,
+        pages: r.pages,
+        records: r.records,
+        overset: r.oversetRecords,
+        ...wrote,
       });
     } else {
       const n = total ?? 0;
       const width = String(Math.max(n, 1)).length;
       for (let i = 0; i < n; i++) {
-        const q = await selectRecord(ds, sql, i);
-        const r = await mergeOnce(ds, flags, q);
-        const nothing = placedNothing(r);
+        const q = await selectRecords(s, sql, [i]);
+        const r = await mergeOnce(s, flags, q);
+        const nothing = placedNothing(total, r);
         if (nothing) throw nothing;
-        const done = await s.exportBytes(format);
         const path = join(
           dir,
           `${stem}-${String(i + 1).padStart(width, "0")}.${format}`,
         );
-        writeOutput(path, done.bytes);
+        const wrote = await writeMerged(s, format, path);
         outputs.push({
           path,
           record: i,
-          pages: r.pages.length,
-          overset: r.overset,
-          bytes: done.bytes.byteLength,
+          pages: r.pages,
+          overset: r.oversetRecords,
+          ...wrote,
         });
-        // Back to the template for the next record (the merge's own undo steps).
-        for (let u = 0; u < r.mutateCalls; u++) await s.driver.document.undo();
+        await undoMerge(s, r);
       }
     }
     return {
       json: { records: total, format, outputs },
       text: outputs
         .map((o) => `${o["path"]} (${o["pages"]} page(s))`)
+        .join("\n"),
+    };
+  },
+};
+
+const generate: Verb = {
+  name: "generate",
+  usage: "<template>",
+  summary:
+    "a batch: one document per record or per group of records (paged.data's planBatch), each a Data Merge of the template, in --out",
+  min: 1,
+  max: 1,
+  options: [
+    ...MERGE_OPTIONS,
+    OUT_DIR,
+    OUT_FORMAT,
+    {
+      name: "per",
+      value: "record|group",
+      help: "one document per record, or per group of records with the same --by values (default record)",
+    },
+    {
+      name: "by",
+      value: "a,b",
+      help: "--per group: the fields that make a group",
+    },
+    ...LAYOUT_OPTIONS,
+  ],
+  reaches: ["commands", "invoke", "batch"],
+  async run({ args, session, cwd }) {
+    const [template] = args.positionals as [string];
+    const { dataPath, dir, format, flags } = mergeInputs("generate", args, cwd);
+    const per = flagStr(args, "per") ?? "record";
+    if (per !== "record" && per !== "group")
+      throw new CliError(EXIT.usage, `--per: "${per}" is not record | group`);
+    const by = (flagStr(args, "by") ?? "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (per === "group" && by.length === 0)
+      throw new CliError(EXIT.usage, "--per group needs --by <field,…>");
+    if (per === "record" && by.length > 0)
+      throw new CliError(EXIT.usage, "--by applies to --per group");
+    const s = await session(template);
+    await requireData(s);
+    const { query: sql, total } = await loadRecords(
+      s,
+      dataPath,
+      flagStr(args, "query"),
+    );
+    const plan = await planBatch(
+      s,
+      per === "group" ? "perGroup" : "perRecord",
+      by,
+    );
+    if (plan.units.length === 0)
+      throw new CliError(
+        EXIT.failed,
+        `generate: the query selects no records from ${flagStr(args, "data")} (${sql})`,
+      );
+    const stem = baseName(template);
+    const width = String(plan.units.length).length;
+    const outputs: Array<Record<string, unknown>> = [];
+    for (const [i, unit] of plan.units.entries()) {
+      const q = await selectRecords(s, sql, unit.records);
+      const r = await mergeOnce(s, flags, q);
+      const nothing = placedNothing(unit.records.length, r);
+      if (nothing) throw nothing;
+      const path = join(
+        dir,
+        `${stem}-${String(i + 1).padStart(width, "0")}.${format}`,
+      );
+      const wrote = await writeMerged(s, format, path);
+      outputs.push({
+        path,
+        unit: unit.label,
+        records: unit.records,
+        pages: r.pages,
+        overset: r.oversetRecords,
+        ...wrote,
+      });
+      await undoMerge(s, r);
+    }
+    return {
+      json: {
+        records: total ?? plan.totalRecords,
+        per,
+        ...(by.length ? { by } : {}),
+        format,
+        outputs,
+      },
+      text: outputs
+        .map(
+          (o) =>
+            `${o["path"]} (${o["unit"]}: ${(o["records"] as number[]).length} record(s), ${o["pages"]} page(s))`,
+        )
         .join("\n"),
     };
   },
@@ -1491,6 +1531,9 @@ export const VERBS: readonly Verb[] = [
   exportVerb,
   apply,
   merge,
+  generate,
+  preflight,
+  packageVerb,
   plugins,
   describe,
   template,

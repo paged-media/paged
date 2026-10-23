@@ -202,10 +202,12 @@ fn full_patch() -> StylePatchArg {
         border_top: Some(EdgeArg {
             style: "thin".into(),
             color: Some("#00FF00".into()),
+            swatch: None,
         }),
         border_bottom: Some(EdgeArg {
             style: "double".into(),
             color: None,
+            swatch: None,
         }),
         h_align: Some("center".into()),
         v_align: Some("top".into()),
@@ -353,6 +355,7 @@ fn set_style_font_name_and_refusals__feat__sheet_format_cell_style() {
             border_left: Some(EdgeArg {
                 style: "wavy".into(),
                 color: None,
+                swatch: None,
             }),
             ..Default::default()
         },

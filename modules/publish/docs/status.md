@@ -32,6 +32,14 @@ What this repository ships and what it does not, read from the code at commit `6
   `framePdfPage` row (engine ADR 1003) through `host.objects`, one undo step, and grants
   `image.replace` on the field's item.
 
+- **From the command line** (`paged-node`, extensions ADR 324): `preflight` through the typed
+  `preflight`; every PDF the CLI writes through the typed `exportPdf` (bookmarks and tagged
+  PDF as options); `package` writes InDesign's package folder or a `.zip` (IDML with its
+  links in `Links/`, the linked files, the fonts it sets in where a face is available and its
+  licence allows copying, instructions and a report), and the document as `.paged`, which
+  carries the module content IDML cannot; the report lists those parts (`--no-paged` leaves
+  the file out, as in the Rust `paged package`).
+
 ## Pending release: core protocol 71
 
 The `om/object-model` branch carries IDML export fixes that need core protocol 71 (core

@@ -162,24 +162,21 @@ export function distinctChartHexes(geom: ChartGeometry): string[] {
     seen.add(h);
     out.push(h);
   };
+  // A colour that names a document swatch is referenced, never minted.
   for (const prim of geom.prims) {
     switch (prim.kind) {
       case "rect":
-        add(prim.fill);
-        add(prim.stroke);
+      case "polygon":
+      case "wedge":
+        if (!prim.fillSwatchRef) add(prim.fill);
+        if (!prim.strokeSwatchRef) add(prim.stroke);
         break;
       case "line":
-        add(prim.stroke);
+        if (!prim.strokeSwatchRef) add(prim.stroke);
         break;
-      case "polygon":
-        add(prim.fill);
-        add(prim.stroke);
+      case "text":
+        if (!prim.colorSwatchRef) add(prim.color ?? null);
         break;
-      case "wedge":
-        add(prim.fill);
-        add(prim.stroke);
-        break;
-      // text carries no fill/stroke colour in the IR.
     }
   }
   return out;
@@ -226,7 +223,8 @@ function distinctStyleHexes(
  *  colours `lower-to-table.ts` mints swatches for before referencing
  *  them from a `cellFillColor`. */
 export function distinctCellFillHexes(content: LoweredContent): string[] {
-  return distinctStyleHexes(content, (s) => s.fillRgb);
+  // A fill that names a document swatch mints nothing (sheet ADR 518).
+  return distinctStyleHexes(content, (s) => (s.fillSwatch ? null : s.fillRgb));
 }
 
 /** The distinct cell BORDER colours across a lowered region (every edge of
@@ -237,8 +235,26 @@ export function distinctCellStrokeHexes(content: LoweredContent): string[] {
   for (const style of content.styles ?? []) {
     if (style.key === 0) continue;
     const l = style.borderLines;
-    for (const line of [l?.top, l?.right, l?.bottom, l?.left]) {
-      const h = line?.rgb == null ? null : normalizePaletteHex(line.rgb);
+    for (const line of [
+      l?.top,
+      l?.right,
+      l?.bottom,
+      l?.left,
+      l?.diagonalUp,
+      l?.diagonalDown,
+    ]) {
+      if (line?.swatch) continue; // a document swatch: nothing to mint
+      // An automatic diagonal is drawn as a page line in black (a table edge
+      // takes the table's default).
+      const auto =
+        line != null &&
+        line.rgb == null &&
+        (line === l?.diagonalUp || line === l?.diagonalDown);
+      const h = auto
+        ? "000000"
+        : line?.rgb == null
+          ? null
+          : normalizePaletteHex(line.rgb);
       if (h == null || seen.has(h)) continue;
       seen.add(h);
       out.push(h);
@@ -252,7 +268,7 @@ export function distinctCellStrokeHexes(content: LoweredContent): string[] {
  *  colours `lower-to-mutations.ts` mints swatches for before
  *  referencing them from a `characterFillColor`. */
 export function distinctCellTextHexes(content: LoweredContent): string[] {
-  return distinctStyleHexes(content, (s) => s.textRgb);
+  return distinctStyleHexes(content, (s) => (s.textSwatch ? null : s.textRgb));
 }
 
 /** What the palette is derived FROM. Both members are optional: a

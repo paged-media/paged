@@ -808,7 +808,7 @@ fn expand_two_digit_year(yy: i32) -> i32 {
 /// `yyyy-mm-dd` (4-digit year, `-` separators) and US `mm/dd/yyyy` (or
 /// `m/d/yy`, applying [`expand_two_digit_year`]). Returns the serial for
 /// `sys`, or `None` if the string does not match or names an impossible date.
-fn parse_date(s: &str, sys: DateSystem) -> Option<f64> {
+pub(crate) fn parse_date(s: &str, sys: DateSystem) -> Option<f64> {
     if s.is_empty() {
         return None;
     }

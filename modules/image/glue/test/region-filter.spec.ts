@@ -422,4 +422,160 @@ lane("filterRegion with a mask, headless", () => {
       }),
     ).rejects.toThrow(/nothing is selected in the editor/);
   });
+
+  it("selection: true maps a selection made on the same image at another size, and refuses another crop", async () => {
+    // The session's selection on the image at twice the size: the left
+    // half selected.
+    const big = new Uint8Array(W * 2 * H * 2);
+    for (let y = 0; y < H * 2; y++) big.fill(255, y * W * 2, y * W * 2 + W);
+    const h = await imageDoc(
+      withSelection(() => ({ width: W * 2, height: H * 2, coverage: big })),
+    );
+    const before = await shown(h);
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      selection: true,
+    });
+    const after = await shown(h);
+    for (const [x, y] of where(() => true))
+      expect(differs(before, after, x, y), `(${x}, ${y})`).toBe(x < W / 2);
+    h.dispose();
+    live = null;
+
+    const cropped = await imageDoc(
+      withSelection(() => ({
+        width: W,
+        height: W,
+        coverage: new Uint8Array(W * W).fill(255),
+      })),
+    );
+    await expect(
+      cropped.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        selection: true,
+      }),
+    ).rejects.toThrow(/16×16 image, the canvas is 16×12: another crop/);
+  });
+});
+
+lane("filterRegion's polygons: a fill rule and ops", () => {
+  // An outer square (1,1)–(15,11) and an inner one (5,3)–(11,9).
+  const outer = [
+    [1, 1],
+    [15, 1],
+    [15, 11],
+    [1, 11],
+  ];
+  const inner = [
+    [5, 3],
+    [11, 3],
+    [11, 9],
+    [5, 9],
+  ];
+  const innerReversed = [...inner].reverse();
+  const inOuter = (x: number, y: number) =>
+    x >= 1 && x < 15 && y >= 1 && y < 11;
+  const inInner = (x: number, y: number) => x >= 5 && x < 11 && y >= 3 && y < 9;
+
+  async function filtered(mask: Record<string, unknown>) {
+    const h = await imageDoc();
+    const before = await shown(h);
+    const r = await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask,
+    });
+    expect(r).toMatchObject({ applied: true, undoSteps: 1 });
+    const after = await shown(h);
+    h.dispose();
+    live = null;
+    return (x: number, y: number) => differs(before, after, x, y);
+  }
+
+  it("evenodd cuts a hole with an inner polygon; without a rule the polygons union", async () => {
+    covers(`command:${FILTER}`);
+    const ring = await filtered({
+      polygons: [outer, inner],
+      fillRule: "evenodd",
+    });
+    for (const [x, y] of where(() => true))
+      expect(ring(x, y), `(${x}, ${y})`).toBe(inOuter(x, y) && !inInner(x, y));
+    const union = await filtered({ polygons: [outer, inner] });
+    for (const [x, y] of where(() => true))
+      expect(union(x, y), `(${x}, ${y})`).toBe(inOuter(x, y));
+  });
+
+  it("nonzero cuts a hole where the inner polygon winds the other way", async () => {
+    const same = await filtered({
+      polygons: [outer, inner],
+      fillRule: "nonzero",
+    });
+    expect(same(7, 5)).toBe(true);
+    const opposite = await filtered({
+      polygons: [outer, innerReversed],
+      fillRule: "nonzero",
+    });
+    for (const [x, y] of where(() => true))
+      expect(opposite(x, y), `(${x}, ${y})`).toBe(
+        inOuter(x, y) && !inInner(x, y),
+      );
+  });
+
+  it("ops: subtract cuts, intersect keeps the overlap, and the engine computes the same", async () => {
+    const cut = await filtered({
+      polygons: [outer, inner],
+      ops: ["add", "subtract"],
+    });
+    for (const [x, y] of where(() => true))
+      expect(cut(x, y), `(${x}, ${y})`).toBe(inOuter(x, y) && !inInner(x, y));
+    const kept = await filtered({
+      polygons: [outer, inner],
+      ops: ["add", "intersect"],
+    });
+    for (const [x, y] of where(() => true))
+      expect(kept(x, y), `(${x}, ${y})`).toBe(inInner(x, y));
+    // Subtract alone starts from the whole canvas.
+    const allBut = await filtered({ polygons: [inner], ops: ["subtract"] });
+    for (const [x, y] of where(() => true))
+      expect(allBut(x, y), `(${x}, ${y})`).toBe(!inInner(x, y));
+
+    const h = await imageDoc();
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask: { polygons: [outer, inner], fillRule: "evenodd" },
+    });
+    const direct = await engine.filterRegion(
+      stripes(),
+      W,
+      H,
+      invertWire(),
+      { x: 0, y: 0, w: W, h: H },
+      {
+        polygons: [outer, inner] as Array<Array<[number, number]>>,
+        fillRule: "evenodd",
+      },
+    );
+    expect(Buffer.from(await shown(h)).equals(Buffer.from(direct))).toBe(true);
+  });
+
+  it("refuses with a reason: ops of the wrong length or word, a fill rule without polygons or of another name", async () => {
+    const h = await imageDoc();
+    const refuse = (mask: unknown) =>
+      h.objects.invoke(FILTER, { layer: L, params: INVERT, mask });
+    await expect(
+      refuse({ polygons: [outer, inner], ops: ["add"] }),
+    ).rejects.toThrow(/one op per polygon \(2\)/);
+    await expect(refuse({ polygons: [outer], ops: ["xor"] })).rejects.toThrow(
+      /add|subtract|intersect/,
+    );
+    await expect(
+      refuse({ polygons: [outer], fillRule: "winding" }),
+    ).rejects.toThrow(/nonzero|evenodd/);
+    await expect(
+      refuse({ alpha: new Uint8Array(W * H).fill(255), fillRule: "evenodd" }),
+    ).rejects.toThrow(/fillRule needs polygons/);
+  });
 });

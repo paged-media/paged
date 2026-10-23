@@ -1,0 +1,11 @@
+$ paged-node package
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node package <doc>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

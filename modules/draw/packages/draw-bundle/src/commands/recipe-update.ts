@@ -46,12 +46,11 @@
 // row, the palette) says why in the log and changes nothing, as the
 // other Update rows do.
 //
-// WHY NOT A LIVE REBUILD ON EVERY EDIT. The engine reports a change after
-// it is committed, so a rebuild on that event would be a second undo step
-// that clears the redo stack, and an undo of the edit would trigger a
-// rebuild of its own. A rebuild that rides in the edit's own batch needs a
-// post-commit continuation on the contract (the gap `recipe-kinds.ts`
-// records). Until then the rebuild is this one explicit command.
+// THE SAME REBUILD ON ITS OWN. Where the host can amend an undo step
+// (engine ADR 1004), `recipe-auto-update.ts` runs `updateRecipe` for the
+// recipes an edit changed the sources of, inside that edit's step. This
+// command stays for a host without it, for a script's edits (which carry
+// no step to join) and for a rebuild that lost the race to the next edit.
 
 import type {
   BundleHost,

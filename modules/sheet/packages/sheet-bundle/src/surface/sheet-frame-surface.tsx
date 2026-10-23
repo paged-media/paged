@@ -56,6 +56,8 @@ import {
   type GridScene,
 } from "../../../sheet-host-model/src";
 import type { WorkbookSession } from "../session";
+import type { DataToolsApi } from "../data-tools";
+import { DataCards } from "./data-cards";
 import {
   REF_COLORS,
   a1Of,
@@ -69,7 +71,15 @@ import {
 export type FrameSurfaceSession = Pick<
   WorkbookSession,
   | "attachFrameSurface"
+  | "pasteSpecialOpen"
+  | "closePasteSpecial"
+  | "pasteAtSelection"
   | "frameView"
+  | "setFrameSheet"
+  | "documentFontFace"
+  | "documentTextDefault"
+  | "documentSwatchColors"
+  | "documentStyleRevision"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -93,6 +103,8 @@ export type FrameSurfaceSession = Pick<
   | "functionList"
   | "sheets"
   | "state"
+  | "undoCellEdit"
+  | keyof DataToolsApi
 >;
 
 const MAX_ROW = 1_048_575;
@@ -195,6 +207,202 @@ export function makeSheetFrameSurface(
   return { render: SheetFrameSurface, bar: SheetBar };
 }
 
+// ── document faces: the grid draws in the fonts the page uses ─────────
+
+/** The faces a session asked for (family|style → loaded), so each face is
+ *  requested once per session. */
+const requestedFaces = new WeakMap<FrameSurfaceSession, Map<string, boolean>>();
+
+/** The CSS face descriptors of a cell style. */
+function faceOfStyle(st: { bold?: boolean; italic?: boolean }): {
+  style: string;
+  weight: string;
+  name: string;
+} {
+  const bold = !!st.bold;
+  const italic = !!st.italic;
+  return {
+    style: italic ? "italic" : "normal",
+    weight: bold ? "700" : "400",
+    name:
+      bold && italic
+        ? "Bold Italic"
+        : bold
+          ? "Bold"
+          : italic
+            ? "Italic"
+            : "Regular",
+  };
+}
+
+/** The document swatch ids a scene's styles reference. */
+function swatchIdsOf(scene: GridScene): string[] {
+  const ids = new Set<string>();
+  for (const st of scene.styles) {
+    if (st.fillSwatch) ids.add(st.fillSwatch);
+    if (st.textSwatch) ids.add(st.textSwatch);
+    for (const line of Object.values(st.borderLines ?? {}))
+      if (line?.swatch) ids.add(line.swatch);
+  }
+  return [...ids].sort();
+}
+
+/** `scene` with every referenced document swatch drawn in the colour the
+ *  document shows it in now (P7): a swatch edited in the document recolours
+ *  the grid, as it recolours the placed table. */
+export function withSwatchColors(
+  scene: GridScene,
+  colors: ReadonlyMap<string, string>,
+): GridScene {
+  if (colors.size === 0) return scene;
+  const pick = (
+    id: string | null | undefined,
+    rgb: string | null | undefined,
+  ) => (id ? colors.get(id) : undefined) ?? rgb ?? null;
+  return {
+    ...scene,
+    styles: scene.styles.map((st) => {
+      if (!st.fillSwatch && !st.textSwatch && !st.borderLines) return st;
+      const lines = st.borderLines
+        ? Object.fromEntries(
+            Object.entries(st.borderLines).map(([edge, line]) => [
+              edge,
+              line?.swatch
+                ? { ...line, rgb: pick(line.swatch, line.rgb) }
+                : line,
+            ]),
+          )
+        : undefined;
+      return {
+        ...st,
+        fillRgb: st.fillSwatch ? pick(st.fillSwatch, st.fillRgb) : st.fillRgb,
+        textRgb: st.textSwatch ? pick(st.textSwatch, st.textRgb) : st.textRgb,
+        ...(lines ? { borderLines: lines } : {}),
+      };
+    }),
+  };
+}
+
+/** The document's current colours for the swatches `scene` references,
+ *  re-read when the document's styles may have changed. */
+function useSwatchColors(
+  session: FrameSurfaceSession,
+  scene: GridScene | null,
+): ReadonlyMap<string, string> {
+  const revision = useSessionView(session, () =>
+    session.documentStyleRevision(),
+  );
+  const [colors, setColors] = useState<ReadonlyMap<string, string>>(
+    () => new Map(),
+  );
+  const key = scene ? swatchIdsOf(scene).join("\u0000") : "";
+  useEffect(() => {
+    if (!key) return;
+    let live = true;
+    void session.documentSwatchColors(key.split("\u0000")).then((next) => {
+      if (live) setColors(next);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session, key, revision]);
+  return colors;
+}
+
+/** The document's default text face per session (asked once). */
+const textDefaults = new WeakMap<
+  FrameSurfaceSession,
+  Promise<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>
+>();
+
+/** The face and size the page gives text that names none (the document's
+ *  basic paragraph style), or null until known / when unreadable. */
+function useDocumentTextDefault(
+  session: FrameSurfaceSession,
+): { family: string; style: string | null; sizePt: number | null } | null {
+  const [value, setValue] = useState<{
+    family: string;
+    style: string | null;
+    sizePt: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let live = true;
+    let pending = textDefaults.get(session);
+    if (!pending) {
+      pending = session.documentTextDefault().catch(() => null);
+      textDefaults.set(session, pending);
+    }
+    void pending.then((d) => {
+      if (live) setValue(d);
+    });
+    return () => {
+      live = false;
+    };
+  }, [session]);
+  return value;
+}
+
+/** Load the document's faces for the families `scene` names into the
+ *  page's font set; answers a counter that moves whenever one arrived, so
+ *  the grid repaints in it. */
+function useDocumentFaces(
+  session: FrameSurfaceSession,
+  scene: GridScene | null,
+  defaultFamily: string | null,
+): number {
+  const [loaded, setLoaded] = useState(0);
+  useEffect(() => {
+    if (!scene || typeof document === "undefined" || !("fonts" in document))
+      return;
+    if (typeof FontFace === "undefined") return;
+    let asked = requestedFaces.get(session);
+    if (!asked) {
+      asked = new Map();
+      requestedFaces.set(session, asked);
+    }
+    let live = true;
+    const wanted = [
+      ...scene.styles,
+      ...(defaultFamily
+        ? [{ fontName: defaultFamily, bold: false, italic: false }]
+        : []),
+    ];
+    for (const st of wanted) {
+      const family = st.fontName ?? defaultFamily;
+      if (!family) continue;
+      const face = faceOfStyle(st);
+      const key = `${family}|${face.name}`;
+      if (asked.has(key)) continue;
+      asked.set(key, false);
+      const memo = asked;
+      void session
+        .documentFontFace(family, face.name)
+        .then(async (got) => {
+          if (!got) return;
+          const ff = new FontFace(family, new Uint8Array(got.bytes), {
+            style: face.style,
+            weight: face.weight,
+          });
+          await ff.load();
+          document.fonts.add(ff);
+          memo.set(key, true);
+          if (live) setLoaded((n) => n + 1);
+        })
+        .catch(() => {
+          // A face the browser cannot load keeps the fallback family.
+        });
+    }
+    return () => {
+      live = false;
+    };
+  }, [session, scene, defaultFamily]);
+  return loaded;
+}
+
 function SheetFrameSurfaceView({
   link,
   ...props
@@ -204,7 +412,23 @@ function SheetFrameSurfaceView({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [scene, setScene] = useState<GridScene | null>(null);
+  const textDefault = useDocumentTextDefault(session);
+  const swatchColors = useSwatchColors(session, scene);
+  const facesLoaded = useDocumentFaces(
+    session,
+    scene,
+    textDefault?.family ?? null,
+  );
   const edit = useSessionView(session, () => session.cellEditState());
+  // Sheet ADR 517 — what sits on the cells: the active cell's input
+  // message and list, the AutoFilter's buttons, the invalid-data circles.
+  const data = useSessionView(session, () => ({
+    prompt: session.cellPrompt(),
+    listOpen: session.validationListOpen(),
+    filter: session.filterButtons(),
+    circles: session.invalidCircles(),
+  }));
+  const [listIndex, setListIndex] = useState(0);
   const [completion, setCompletion] = useState<{
     items: FunctionEntry[];
     index: number;
@@ -275,7 +499,8 @@ function SheetFrameSurfaceView({
   // The grid, at screen resolution, and the formula's reference boxes.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !scene) return;
+    // (Repainted when a document face arrives: `facesLoaded` moves.)
+    if (!canvas || !scene || facesLoaded < 0) return;
     const dpr =
       typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
     const scale = Math.min(props.pxPerPt * dpr, 8);
@@ -286,7 +511,16 @@ function SheetFrameSurfaceView({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    paintGridScene(ctx, scene, {
+    paintGridScene(ctx, withSwatchColors(scene, swatchColors), {
+      // P7 — un-styled cells in the face the page prints them in.
+      ...(textDefault
+        ? {
+            grid: {
+              fontFamily: `"${textDefault.family}", sans-serif`,
+              ...(textDefault.sizePt ? { fontSizePt: textDefault.sizePt } : {}),
+            },
+          }
+        : {}),
       headings: true,
       rowHeadingWidthPt: headW,
       widthPt: props.widthPt,
@@ -305,6 +539,31 @@ function SheetFrameSurfaceView({
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.25;
         ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      }
+      ctx.restore();
+    }
+    // Circle invalid data: a red ellipse around each cell breaking its rule.
+    if (data.circles && data.circles.length > 0) {
+      ctx.save();
+      ctx.translate(headW, headH);
+      ctx.strokeStyle = "#d62020";
+      ctx.lineWidth = 1.25;
+      for (const c of data.circles) {
+        const box = cellRect(scene, c.row, c.col);
+        if (!box) continue;
+        const rx = (box[2] - box[0]) / 2 + 2;
+        const ry = (box[3] - box[1]) / 2 + 1.5;
+        ctx.beginPath();
+        ctx.ellipse(
+          box[0] + rx - 2,
+          box[1] + ry - 1.5,
+          rx,
+          ry,
+          0,
+          0,
+          2 * Math.PI,
+        );
+        ctx.stroke();
       }
       ctx.restore();
     }
@@ -350,6 +609,10 @@ function SheetFrameSurfaceView({
     headW,
     edit?.text,
     resizeGhost,
+    data.circles,
+    facesLoaded,
+    textDefault,
+    swatchColors,
   ]);
 
   // ── pointer ─────────────────────────────────────────────────────────
@@ -626,6 +889,28 @@ function SheetFrameSurfaceView({
     if (composing.current || e.nativeEvent.isComposing) return;
     const el = e.currentTarget;
     const open = session.cellEditState();
+    // An open validation list owns the arrows, Enter and Esc.
+    const listItems = data.listOpen ? (data.prompt?.items ?? null) : null;
+    if (!open && listItems && listItems.length > 0) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        const n = listItems.length;
+        setListIndex((listIndex + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        session.chooseListItem(
+          listItems[Math.min(listIndex, listItems.length - 1)]!,
+        );
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        session.openCellDropdown(false);
+        return;
+      }
+    }
     // The suggestion list owns the arrows, Tab and Enter while it shows.
     if (open && completion) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -725,7 +1010,8 @@ function SheetFrameSurfaceView({
     if (composing.current) return;
     const el = e.currentTarget;
     if (session.cellEditState()) session.setCellEditText(el.value);
-    else session.beginCellEdit(el.value, "enter");
+    // A refused edit (a locked cell) leaves nothing typed behind.
+    else if (!session.beginCellEdit(el.value, "enter")) el.value = "";
     updateCompletion(el.value, el.selectionEnd ?? el.value.length);
   };
 
@@ -889,7 +1175,187 @@ function SheetFrameSurfaceView({
           ))}
         </ul>
       ) : null}
+      <CellChrome
+        session={session}
+        scene={scene}
+        headW={headW}
+        headH={headH}
+        active={active}
+        editing={edit !== null}
+        prompt={data.prompt}
+        listOpen={data.listOpen}
+        listIndex={listIndex}
+        filter={data.filter}
+        onListOpen={() => setListIndex(0)}
+        focusEditor={() => editorRef.current?.focus({ preventScroll: true })}
+      />
     </div>
+  );
+}
+
+/** A small funnel / arrow, drawn in the button's own pt box. */
+function FilterGlyph({ filtered }: { filtered: boolean }) {
+  return (
+    <svg viewBox="0 0 10 10" width="100%" height="100%" aria-hidden="true">
+      {filtered ? (
+        <path d="M1 2h8L6 5.5V9L4 8V5.5z" fill="#2b6cb0" />
+      ) : (
+        <path d="M2 3.5h6L5 7z" fill="#3a3a38" />
+      )}
+    </svg>
+  );
+}
+
+/** What sits on cells, in frame points (sheet ADR 517): the AutoFilter's
+ *  header buttons, the active cell's list button and list, and its input
+ *  message. */
+function CellChrome({
+  session,
+  scene,
+  headW,
+  headH,
+  active,
+  editing,
+  prompt,
+  listOpen,
+  listIndex,
+  filter,
+  onListOpen,
+  focusEditor,
+}: {
+  session: FrameSurfaceSession;
+  scene: GridScene | null;
+  headW: number;
+  headH: number;
+  active: { row: number; col: number } | null;
+  editing: boolean;
+  prompt: ReturnType<FrameSurfaceSession["cellPrompt"]>;
+  listOpen: boolean;
+  listIndex: number;
+  filter: ReturnType<FrameSurfaceSession["filterButtons"]>;
+  onListOpen: () => void;
+  focusEditor: () => void;
+}) {
+  if (!scene) return null;
+  const stop = (e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const rect = active ? cellRect(scene, active.row, active.col) : null;
+  const items = prompt?.items ?? null;
+  const onHeader =
+    !!filter &&
+    !!active &&
+    active.row === filter.row &&
+    active.col >= filter.left &&
+    active.col <= filter.right;
+  const btn: CSSProperties = {
+    position: "absolute",
+    padding: 0,
+    margin: 0,
+    border: "1px solid #a8a8a4",
+    borderRadius: 1,
+    background: "#f3f3f1",
+    cursor: "pointer",
+    boxSizing: "border-box",
+    zIndex: 1,
+  };
+  return (
+    <>
+      {rect && items && !onHeader ? (
+        <button
+          type="button"
+          data-testid="sheet-list-button"
+          aria-label="Choose from list"
+          aria-expanded={listOpen}
+          tabIndex={-1}
+          style={{
+            ...btn,
+            left: headW + rect[2] + 1,
+            top: headH + rect[1],
+            width: Math.min(14, rect[3] - rect[1]),
+            height: rect[3] - rect[1],
+          }}
+          onPointerDown={stop}
+          onClick={() => {
+            if (editing) session.commitCellEdit();
+            if (!listOpen) onListOpen();
+            session.openCellDropdown(!listOpen);
+            focusEditor();
+          }}
+        >
+          <FilterGlyph filtered={false} />
+        </button>
+      ) : null}
+      {rect && items && listOpen ? (
+        <ul
+          data-testid="sheet-list"
+          role="listbox"
+          style={{
+            position: "absolute",
+            left: headW + rect[0],
+            top: headH + rect[3] + 1,
+            minWidth: rect[2] - rect[0] + 14,
+            maxHeight: 8 * 13,
+            overflowY: "auto",
+            margin: 0,
+            padding: 1,
+            listStyle: "none",
+            background: "#ffffff",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.18)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            zIndex: 2,
+          }}
+        >
+          {items.map((it, i) => (
+            <li
+              key={`${i}:${it}`}
+              role="option"
+              aria-selected={i === listIndex}
+              style={{
+                padding: "1px 4px",
+                whiteSpace: "nowrap",
+                background: i === listIndex ? "#dfe7f1" : "transparent",
+              }}
+              onPointerDown={(e) => {
+                stop(e);
+                session.chooseListItem(it);
+                focusEditor();
+              }}
+            >
+              {it === "" ? "\u00a0" : it}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {rect && prompt && (prompt.title || prompt.message) && !listOpen ? (
+        <div
+          data-testid="sheet-input-message"
+          role="note"
+          style={{
+            position: "absolute",
+            left: headW + rect[2] + (items ? 16 : 4),
+            top: headH + rect[3] + 2,
+            maxWidth: 160,
+            padding: "3px 5px",
+            background: "#ffffe1",
+            border: "1px solid #a8a8a4",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+            font: `${EDITOR_FONT_PT - 1}px sans-serif`,
+            color: "#1a1a1a",
+            whiteSpace: "pre-wrap",
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        >
+          {prompt.title ? <strong>{prompt.title}</strong> : null}
+          {prompt.title && prompt.message ? <br /> : null}
+          {prompt.message}
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -912,7 +1378,7 @@ function SheetBarView({
       input: edit
         ? edit.text
         : active
-          ? session.cellInputAt(active.row, active.col)
+          ? formulaShown(session, active.row, active.col)
           : "",
       name: sel
         ? a1Of(
@@ -925,8 +1391,14 @@ function SheetBarView({
           ? a1Of(active.row, active.col)
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
+      sheetId: st.activeSheet,
+      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
+      pasteSpecial: session.pasteSpecialOpen(),
+      alert: session.entryAlert(),
+      card: session.dataCard(),
+      filterHeader: filterHeaderText(session),
       // ADR 510 — a window frame's lock (null: not a window frame).
       lock: session.frameView(props.elementId)?.lock ?? null,
     };
@@ -966,125 +1438,316 @@ function SheetBarView({
     padding: "1px 6px",
   };
   return (
-    <div data-testid="sheet-bar" style={bar}>
-      <span
-        data-testid="sheet-bar-name"
-        style={{ ...box, minWidth: 54, textAlign: "center" }}
-      >
-        {view.name}
-      </span>
-      {view.edit ? (
-        <>
-          <button
-            type="button"
-            aria-label="Cancel"
-            style={button}
-            onClick={() => {
+    <div style={{ position: "relative" }}>
+      <div data-testid="sheet-bar" style={bar}>
+        <span
+          data-testid="sheet-bar-name"
+          style={{ ...box, minWidth: 54, textAlign: "center" }}
+        >
+          {view.name}
+        </span>
+        {view.edit ? (
+          <>
+            <button
+              type="button"
+              aria-label="Cancel"
+              style={button}
+              onClick={() => {
+                session.cancelCellEdit();
+                focusGrid();
+              }}
+            >
+              ✕
+            </button>
+            <button
+              type="button"
+              aria-label="Enter"
+              style={button}
+              onClick={() => {
+                session.commitCellEdit();
+                focusGrid();
+              }}
+            >
+              ✓
+            </button>
+          </>
+        ) : null}
+        <span
+          style={{ color: "var(--pg-muted-fg, #5b5b57)", fontStyle: "italic" }}
+        >
+          fx
+        </span>
+        <input
+          ref={inputRef}
+          data-testid="sheet-bar-formula"
+          aria-label="Formula"
+          spellCheck={false}
+          defaultValue={view.input}
+          style={{ ...box, flex: 1, minWidth: 180 }}
+          onFocus={() => {
+            if (!session.cellEditState()) session.beginCellEdit(null, "edit");
+          }}
+          onInput={(e) => session.setCellEditText(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              session.setCellEditText(e.currentTarget.value);
+              session.handleGridKey({ key: "Enter", shiftKey: e.shiftKey });
+              focusGrid();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
               session.cancelCellEdit();
               focusGrid();
-            }}
-          >
-            ✕
-          </button>
-          <button
-            type="button"
-            aria-label="Enter"
-            style={button}
-            onClick={() => {
-              session.commitCellEdit();
-              focusGrid();
-            }}
-          >
-            ✓
-          </button>
-        </>
-      ) : null}
-      <span
-        style={{ color: "var(--pg-muted-fg, #5b5b57)", fontStyle: "italic" }}
-      >
-        fx
-      </span>
-      <input
-        ref={inputRef}
-        data-testid="sheet-bar-formula"
-        aria-label="Formula"
-        spellCheck={false}
-        defaultValue={view.input}
-        style={{ ...box, flex: 1, minWidth: 180 }}
-        onFocus={() => {
-          if (!session.cellEditState()) session.beginCellEdit(null, "edit");
-        }}
-        onInput={(e) => session.setCellEditText(e.currentTarget.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            session.setCellEditText(e.currentTarget.value);
-            session.handleGridKey({ key: "Enter", shiftKey: e.shiftKey });
-            focusGrid();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            session.cancelCellEdit();
-            focusGrid();
-          }
-        }}
-      />
-      {view.stats && view.stats.count > 0 ? (
-        <span
-          data-testid="sheet-bar-stats"
-          style={{ color: "var(--pg-muted-fg, #5b5b57)", whiteSpace: "nowrap" }}
-        >
-          {view.stats.numbers > 0
-            ? `Sum ${view.stats.sumDisplay} · Average ${view.stats.averageDisplay} · `
-            : ""}
-          Count {view.stats.count}
-        </span>
-      ) : null}
-      <span
-        data-testid="sheet-bar-sheet"
-        style={{ ...box, whiteSpace: "nowrap" }}
-      >
-        {view.sheet}
-      </span>
-      {view.lock !== null ? (
-        <button
-          type="button"
-          data-testid="sheet-bar-lock"
-          aria-label="Lock view"
-          aria-pressed={view.lock}
-          title={
-            view.lock
-              ? "View locked: leaving the frame keeps this window"
-              : "Lock view: keep the page on this window when you leave"
-          }
-          style={{
-            ...button,
-            ...(view.lock
-              ? { background: "var(--pg-accent-bg, #e6eefc)" }
-              : null),
+            }
           }}
-          onClick={() => {
-            session.setFrameViewLock(!view.lock, props.elementId);
+        />
+        {view.stats && view.stats.count > 0 ? (
+          <span
+            data-testid="sheet-bar-stats"
+            style={{
+              color: "var(--pg-muted-fg, #5b5b57)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {view.stats.numbers > 0
+              ? `Sum ${view.stats.sumDisplay} · Average ${view.stats.averageDisplay} · `
+              : ""}
+            Count {view.stats.count}
+          </span>
+        ) : null}
+        <select
+          data-testid="sheet-bar-sheet"
+          aria-label="Sheet"
+          value={view.sheetId ?? ""}
+          style={{ ...box, whiteSpace: "nowrap" }}
+          onChange={(e) => {
+            session.setFrameSheet(Number(e.currentTarget.value));
             requestAnimationFrame(focusGrid);
           }}
         >
-          {view.lock ? "🔒" : "🔓"}
+          {view.sheetList.map((sh) => (
+            <option key={sh.id} value={sh.id}>
+              {sh.name}
+            </option>
+          ))}
+        </select>
+        {view.lock !== null ? (
+          <button
+            type="button"
+            data-testid="sheet-bar-lock"
+            aria-label="Lock view"
+            aria-pressed={view.lock}
+            title={
+              view.lock
+                ? "View locked: leaving the frame keeps this window"
+                : "Lock view: keep the page on this window when you leave"
+            }
+            style={{
+              ...button,
+              ...(view.lock
+                ? { background: "var(--pg-accent-bg, #e6eefc)" }
+                : null),
+            }}
+            onClick={() => {
+              session.setFrameViewLock(!view.lock, props.elementId);
+              requestAnimationFrame(focusGrid);
+            }}
+          >
+            {view.lock ? "🔒" : "🔓"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          aria-label="Full screen"
+          title="Full screen"
+          style={button}
+          onClick={() => {
+            props.requestPresentation(
+              props.presentation === "fullscreen" ? "frame" : "fullscreen",
+            );
+            // The grid keeps the keys, as after any bar button.
+            requestAnimationFrame(focusGrid);
+          }}
+        >
+          ⤢
         </button>
-      ) : null}
-      <button
-        type="button"
-        aria-label="Full screen"
-        title="Full screen"
-        style={button}
-        onClick={() => {
-          props.requestPresentation(
-            props.presentation === "fullscreen" ? "frame" : "fullscreen",
-          );
-          // The grid keeps the keys, as after any bar button.
-          requestAnimationFrame(focusGrid);
+      </div>
+      <DataCards
+        session={session}
+        chrome={{
+          style: bar,
+          button,
+          done: () => requestAnimationFrame(focusGrid),
         }}
-      >
-        ⤢
-      </button>
+        card={view.card}
+        alert={view.alert}
+        filterHeader={view.filterHeader}
+      />
+      {view.pasteSpecial ? (
+        <PasteSpecialCard
+          session={session}
+          style={bar}
+          button={button}
+          done={() => requestAnimationFrame(focusGrid)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The bar's formula: the cell's input, or nothing for a hidden formula on
+ *  a protected sheet (sheet ADR 517). */
+function formulaShown(
+  session: FrameSurfaceSession,
+  row: number,
+  col: number,
+): string {
+  const p = session.cellProtectionAt(row, col);
+  if (p?.sheetProtected && p.formulaHidden) return "";
+  return session.cellInputAt(row, col);
+}
+
+/** The header text of the column the filter menu is open on. */
+function filterHeaderText(session: FrameSurfaceSession): string {
+  const card = session.dataCard();
+  const fb = session.filterButtons();
+  if (card?.kind !== "filter" || !fb) return "";
+  return session.cellInputAt(fb.row, card.col);
+}
+
+// ── paste special: the options card under the bar ─────────────────────
+
+type PasteWhat = "all" | "formulas" | "values";
+type PasteOperation = "none" | "add" | "subtract" | "multiply" | "divide";
+
+const PASTE_WHAT: [PasteWhat, string][] = [
+  ["all", "All"],
+  ["formulas", "Formulas"],
+  ["values", "Values"],
+];
+const PASTE_OPERATIONS: [PasteOperation, string][] = [
+  ["none", "None"],
+  ["add", "Add"],
+  ["subtract", "Subtract"],
+  ["multiply", "Multiply"],
+  ["divide", "Divide"],
+];
+
+function PasteSpecialCard({
+  session,
+  style,
+  button,
+  done,
+}: {
+  session: FrameSurfaceSession;
+  style: CSSProperties;
+  button: CSSProperties;
+  done: () => void;
+}) {
+  const [what, setWhat] = useState<PasteWhat>("all");
+  const [operation, setOperation] = useState<PasteOperation>("none");
+  const [skipBlanks, setSkipBlanks] = useState(false);
+  const [transpose, setTranspose] = useState(false);
+  const paste = () => {
+    void session
+      .pasteAtSelection({ what, operation, skipBlanks, transpose })
+      .then(done);
+  };
+  const cancel = () => {
+    session.closePasteSpecial();
+    done();
+  };
+  const group: CSSProperties = {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    flexWrap: "wrap",
+  };
+  return (
+    <div
+      data-testid="sheet-paste-special"
+      role="dialog"
+      aria-label="Paste special"
+      style={{
+        ...style,
+        position: "absolute",
+        top: "calc(100% + 4px)",
+        left: 0,
+        minWidth: 300,
+        flexDirection: "column",
+        alignItems: "stretch",
+        gap: 8,
+        padding: 10,
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          cancel();
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          paste();
+        }
+      }}
+    >
+      <div role="radiogroup" aria-label="Paste" style={group}>
+        <strong>Paste</strong>
+        {PASTE_WHAT.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="paste-what"
+              checked={what === value}
+              onChange={() => setWhat(value)}
+            />{" "}
+            {label}
+          </label>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="Operation" style={group}>
+        <strong>Operation</strong>
+        {PASTE_OPERATIONS.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="paste-operation"
+              checked={operation === value}
+              onChange={() => setOperation(value)}
+            />{" "}
+            {label}
+          </label>
+        ))}
+      </div>
+      <div style={group}>
+        <label>
+          <input
+            type="checkbox"
+            checked={skipBlanks}
+            onChange={(e) => setSkipBlanks(e.currentTarget.checked)}
+          />{" "}
+          Skip blanks
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={transpose}
+            onChange={(e) => setTranspose(e.currentTarget.checked)}
+          />{" "}
+          Transpose
+        </label>
+      </div>
+      <div style={{ ...group, justifyContent: "flex-end" }}>
+        <button type="button" style={button} onClick={cancel}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-testid="sheet-paste-special-ok"
+          style={button}
+          onClick={paste}
+        >
+          OK
+        </button>
+      </div>
     </div>
   );
 }

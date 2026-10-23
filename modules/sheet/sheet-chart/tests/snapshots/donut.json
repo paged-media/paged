@@ -1,0 +1,141 @@
+{
+  "heightPt": 240.0,
+  "prims": [
+    {
+      "anchor": "middle",
+      "kind": "text",
+      "role": "title",
+      "s": "Donut",
+      "sizePt": 14.0,
+      "x": 180.0,
+      "y": 20.0
+    },
+    {
+      "fill": "#4472C4",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 120.6
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S1",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 127.25
+    },
+    {
+      "fill": "#ED7D31",
+      "h": 7.0,
+      "kind": "rect",
+      "stroke": null,
+      "strokeW": 0.0,
+      "w": 7.0,
+      "x": 329.1,
+      "y": 133.2
+    },
+    {
+      "anchor": "start",
+      "kind": "text",
+      "role": "legend",
+      "s": "S2",
+      "sizePt": 9.0,
+      "x": 340.1,
+      "y": 139.85
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 42.353,
+      "fill": "#4472C4",
+      "innerR": 47.656,
+      "kind": "wedge",
+      "r": 71.484,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 127.059,
+      "fill": "#4472C4",
+      "innerR": 47.656,
+      "kind": "wedge",
+      "r": 71.484,
+      "startDeg": 42.353,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 254.118,
+      "fill": "#4472C4",
+      "innerR": 47.656,
+      "kind": "wedge",
+      "r": 71.484,
+      "startDeg": 127.059,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 360.0,
+      "fill": "#4472C4",
+      "innerR": 47.656,
+      "kind": "wedge",
+      "r": 71.484,
+      "startDeg": 254.118,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 108.0,
+      "fill": "#ED7D31",
+      "innerR": 71.484,
+      "kind": "wedge",
+      "r": 95.312,
+      "startDeg": 0.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 144.0,
+      "fill": "#ED7D31",
+      "innerR": 71.484,
+      "kind": "wedge",
+      "r": 95.312,
+      "startDeg": 108.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 230.4,
+      "fill": "#ED7D31",
+      "innerR": 71.484,
+      "kind": "wedge",
+      "r": 95.312,
+      "startDeg": 144.0,
+      "stroke": "#FFFFFF"
+    },
+    {
+      "cx": 163.55,
+      "cy": 130.4,
+      "endDeg": 360.0,
+      "fill": "#ED7D31",
+      "innerR": 71.484,
+      "kind": "wedge",
+      "r": 95.312,
+      "startDeg": 230.4,
+      "stroke": "#FFFFFF"
+    }
+  ],
+  "widthPt": 360.0
+}

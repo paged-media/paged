@@ -60,6 +60,13 @@ impl Engine {
         })
     }
 
+    /// A sheet's tables, for changes that move no cell and no dependency
+    /// (a table's style name). Anything that renames, resizes or adds a
+    /// table rebuilds the engine instead.
+    pub fn sheet_tables_mut(&mut self, sheet: SheetId) -> Option<&mut Vec<sheet_core::Table>> {
+        self.model.sheet_mut(sheet).map(|ws| &mut ws.tables)
+    }
+
     /// Replace the workbook style table (the xlsx layer re-parses
     /// `styles.xml` after authoring a style; ids are positional, so every
     /// existing cell style keeps its meaning).

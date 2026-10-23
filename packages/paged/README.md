@@ -76,8 +76,15 @@ library's owner to merge.
 Plugin bundles are found where the command runs: `--plugins <a,b>` loads those, otherwise
 every installed dependency of the current directory's `package.json` that declares a paged
 manifest. The built-in modules (sheet, draw, image, data, …) are part of the editor and are
-not on npm, so `apply` and `merge`, which need the paged.data module (and DuckDB-WASM, 34 MiB),
-report that it is not loaded.
+not on npm, so `apply`, `merge` and `generate`, which need the paged.data module (and
+DuckDB-WASM, 34 MiB), and `preflight`, which needs paged.publish's typed preflight, report
+that it is not loaded. `package` needs no module: `npx paged package brochure.idml -o
+brochure-package --fonts ./fonts` writes InDesign's package folder (the IDML with its links in
+`Links/`, the fonts it sets in, `Instructions.txt` and a report; `-o x.zip` for an archive),
+and the document as `.paged`, which keeps the module content (a sheet, a drawing, a web frame)
+an IDML cannot carry; `--no-paged` leaves it out.
+An IDML carries no font binaries, so fonts come from the files `--fonts` names; a face whose
+licence restricts embedding is listed in the report and not copied.
 
 ## Version
 
