@@ -275,6 +275,16 @@ each published canary added is under [Releases](#releases).
   agree, two colour-scale cells differ by one level (a recorded divergence). A 1,000,000-cell
   sheet with 20 rules: 0.7 ms per grid viewport, 46 ms for the first frame after an edit. Not on
   the page: gradient data bars (solid), bars and icons on a paginated chain.
+- **Excel named styles in the document's styles** (P7, ADR 524). "Use document styles" and a
+  table from Excel named styles (Normal for the un-named cells) to document paragraph, character
+  and cell styles, kept in a `styles.xml` extension and folded into every resolved cell style in
+  the engine (conditional formatting > direct formatting > the named style's mapping > table
+  regions > Normal's mapping > Excel defaults), so the placed table applies the mapped styles and
+  the grid draws their faces, sizes and colours. On for workbooks made in paged, offered for
+  imported ones; turning it on maps styles by name and Normal to the basic paragraph style.
+  The workbook panel's Document styles section edits the table, creates document styles from the
+  workbook's named styles and lists the references the document lacks with a remap; a mapped
+  style the document no longer has falls back to the workbook's look.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

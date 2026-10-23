@@ -37,6 +37,7 @@ it stood, for decisions made earlier; their status says so.
 | [521](521-files-and-formula-dialect.md) | Files and the formula dialect: macro workbooks, templates, ODS read, CSV export, R1C1 and localized function names | Accepted 2026-10-23; amends 509 |
 | [522](522-placement-views-print-areas-and-chart-delete.md) | Placement kinds: a frame's view and sizing, print areas of several ranges, a deleted chart leaves the file | Accepted 2026-10-23; extends 510, 503 |
 | [523](523-conditional-formatting-evaluated-in-the-engine.md) | Conditional formatting: one model, evaluated in the calc engine, drawn the same on both surfaces | Accepted 2026-10-23; amends the frozen types |
+| [524](524-excel-named-styles-map-to-document-styles.md) | Excel named styles map to the document's styles: the switch, the mapping table, one fold in the engine | Accepted 2026-10-23 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed
