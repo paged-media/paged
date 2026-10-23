@@ -30,6 +30,7 @@ import type { EditorEvent, EditorHandle } from "./create-editor";
 import type { HostActions } from "../app/instance";
 import {
   BRIDGED_METHODS,
+  SCRIPT_METHOD,
   transferables,
   type BridgedMethod,
   type FrameConfig,
@@ -45,6 +46,11 @@ type Async<F> = F extends (...a: infer A) => infer R
 export type RemoteEditorHandle = {
   [M in BridgedMethod]: Async<EditorHandle[M]>;
 } & {
+  /** Runs `paged.*` script source in the frame (dev and demo builds of the
+   *  editor only; a production frame refuses it). */
+  runScript(
+    source: string,
+  ): Promise<{ output: string[]; error: string | null }>;
   on(listener: (event: EditorEvent) => void): () => void;
   dispose(): void;
 };
@@ -154,7 +160,7 @@ export function connectEditor(
     window.addEventListener("message", onMessage);
 
     const call =
-      (method: BridgedMethod) =>
+      (method: BridgedMethod | typeof SCRIPT_METHOD) =>
       (...args: unknown[]) =>
         new Promise((res, rej) => {
           const id = nextCall++;
@@ -163,6 +169,7 @@ export function connectEditor(
         });
     const handle = {
       ...Object.fromEntries(BRIDGED_METHODS.map((m) => [m, call(m)])),
+      runScript: call(SCRIPT_METHOD),
       on(listener: (event: EditorEvent) => void) {
         listeners.add(listener);
         return () => listeners.delete(listener);

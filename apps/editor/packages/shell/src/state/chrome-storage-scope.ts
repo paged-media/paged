@@ -36,26 +36,34 @@
 // it boots into `prepress`, finds no registered mode of that name, and
 // renders with no left panel at all.
 //
-// SET IT BEFORE `createRoot`. The scope is read at module init by the
-// stores below it; changing it afterwards would leave already-read
-// state under the old key. It is deliberately not React state: the
-// scope is fixed by the URL for the lifetime of the page.
+// SET IT BEFORE THE SHELL MOUNTS. The scope is read when the stores below
+// it first load; changing it afterwards would leave already-read state
+// under the old key. It is deliberately not React state: the scope is
+// fixed by the editor's profile for the editor's lifetime, and kept in
+// the editor's scope (plan task E1), so two editors with different
+// profiles on one page keep their workspaces apart.
 
-let scope = "";
+import { scoped, type EditorScope } from "./editor-scope";
 
-/** Namespace every chrome storage key. `""` is the ordinary editor.
- *  Solo passes `.solo.<profile>`, e.g. `.solo.paged.draw`. */
-export function setChromeStorageScope(suffix: string): void {
-  scope = suffix;
+const SUFFIX = scoped("chromeStorageScope", () => ({ suffix: "" }));
+
+/** Namespace every chrome storage key of `scope`'s editor. `""` is the
+ *  ordinary editor. Solo passes `.solo.<profile>`, e.g. `.solo.paged.draw`. */
+export function setChromeStorageScope(
+  scope: EditorScope,
+  suffix: string,
+): void {
+  scope.get(SUFFIX).suffix = suffix;
 }
 
 /** The scoped form of a base key. */
-export function scopedChromeKey(base: string): string {
-  return scope ? `${base}${scope}` : base;
+export function scopedChromeKey(scope: EditorScope, base: string): string {
+  const { suffix } = scope.get(SUFFIX);
+  return suffix ? `${base}${suffix}` : base;
 }
 
 /** The active scope — for diagnostics and for tests that assert the two
  *  workspaces really are separate. */
-export function chromeStorageScope(): string {
-  return scope;
+export function chromeStorageScope(scope: EditorScope): string {
+  return scope.get(SUFFIX).suffix;
 }

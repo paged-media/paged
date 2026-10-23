@@ -28,9 +28,18 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactElement } from "react";
 
-import type { Derivation, DerivedField } from "@paged-media/client";
+import type {
+  Derivation,
+  DerivedField,
+  TemplateFieldSummary,
+} from "@paged-media/client";
 import {
+  createValueStore,
   FocusScope,
+  scoped,
+  scopeOf,
+  useScoped,
+  type EditorScope,
   useOptionalCanvasClient,
   useSessionRole,
   useSetSessionRole,
@@ -62,6 +71,11 @@ const M = defineMessages("app.openAsTemplate", {
   answered: "The engine answered {kind}.",
   cancel: "Cancel",
   apply: "{count, plural, one {Make # field} other {Make # fields}}",
+  statusNew: "new",
+  statusSame: "already a field",
+  statusChanged: "now a {kind} field",
+  untagged:
+    "{count, plural, one {Kept, though no tag names it:} other {Kept, though no tag names them:}}",
 });
 
 // The menu's segment and the command's category stay English (they are
@@ -71,21 +85,11 @@ defineMessages("commandCategory", { File: "File" });
 
 export const OPEN_AS_TEMPLATE_COMMAND = "paged.template.openAsTemplate";
 
-let isOpen = false;
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => {
-  listeners.add(l);
-  return () => listeners.delete(l);
-};
-const snapshot = () => isOpen;
+/** Whether the dialog is open, per editor (plan task E1). */
+const OPEN = scoped("openAsTemplateDialog", () => createValueStore(false));
 
-function setOpen(next: boolean): void {
-  isOpen = next;
-  for (const l of listeners) l();
-}
-
-export function openAsTemplate(): void {
-  setOpen(true);
+export function openAsTemplate(scope: EditorScope): void {
+  scope.get(OPEN).set(true);
 }
 
 export const OPEN_AS_TEMPLATE_COMMANDS: CommandContribution[] = [
@@ -95,7 +99,7 @@ export const OPEN_AS_TEMPLATE_COMMANDS: CommandContribution[] = [
       return t(M.command);
     },
     category: "File",
-    handler: () => openAsTemplate(),
+    handler: (paged) => openAsTemplate(scopeOf(paged)),
   },
 ];
 
@@ -133,7 +137,8 @@ export function targetText(
 }
 
 export function OpenAsTemplateDialog(): ReactElement | null {
-  const open = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const store = useScoped(OPEN);
+  const open = useSyncExternalStore(store.subscribe, store.get, store.get);
   return open ? <OpenAsTemplateForm /> : null;
 }
 
@@ -143,9 +148,12 @@ function OpenAsTemplateForm(): ReactElement {
   const role = useSessionRole();
   const setRole = useSetSessionRole();
   const [derivation, setDerivation] = useState<Derivation | null>(null);
+  // The fields the document has already: re-deriving lists what changes.
+  const [existing, setExisting] = useState<readonly TemplateFieldSummary[]>([]);
   const [skipped, setSkipped] = useState<readonly string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
-  const close = () => setOpen(false);
+  const store = useScoped(OPEN);
+  const close = () => store.set(false);
 
   useEffect(() => {
     let live = true;
@@ -157,19 +165,35 @@ function OpenAsTemplateForm(): ReactElement {
       .then((d) => {
         if (live) setDerivation(d);
       });
+    void client?.templateFields().then((rows) => {
+      if (live) setExisting(rows);
+    });
     return () => {
       live = false;
     };
   }, [client]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") store.set(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [store]);
 
   const fields = derivation?.fields ?? [];
+  const before = new Map(existing.map((r) => [r.field.name, r.field.kind]));
+  const status = (f: DerivedField) => {
+    const was = before.get(f.field.name);
+    if (was === undefined) return strings.t(M.statusNew);
+    if (was === f.field.kind) return strings.t(M.statusSame);
+    return strings.t(M.statusChanged, {
+      kind: KIND_NAMES[f.field.kind]
+        ? strings.t(KIND_NAMES[f.field.kind]!)
+        : f.field.kind,
+    });
+  };
+  const derivedNames = new Set(fields.map((f) => f.field.name));
+  const untagged = existing.filter((r) => !derivedNames.has(r.field.name));
   const chosen = fields
     .map((f) => f.field.name)
     .filter((n) => !skipped.includes(n));
@@ -276,12 +300,27 @@ function OpenAsTemplateForm(): ReactElement {
                         ? strings.t(KIND_NAMES[f.field.kind]!)
                         : f.field.kind}{" "}
                       — {targetText(f, strings.t)}
+                    </span>{" "}
+                    <span
+                      data-open-as-template-status={f.field.name}
+                      style={{ color: color.mutedFg, fontStyle: "italic" }}
+                    >
+                      ({status(f)})
                     </span>
                   </label>
                 </li>
               ))}
             </ul>
           )}
+          {untagged.length ? (
+            <div
+              data-open-as-template-untagged=""
+              style={{ margin: "8px 0 0", fontSize: 11 }}
+            >
+              {strings.t(M.untagged, { count: untagged.length })}{" "}
+              {untagged.map((r) => r.field.label ?? r.field.name).join(", ")}
+            </div>
+          ) : null}
           {derivation?.skipped.length ? (
             <ul
               data-open-as-template-skipped=""

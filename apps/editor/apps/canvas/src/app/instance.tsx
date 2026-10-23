@@ -18,10 +18,11 @@
  */
 
 // One mounted editor (docs/composable-editor.md §8; plan task E1): the
-// profile it was mounted with, the surfaces that profile registers, and the
-// actions its host supplies. `mountEditor` builds one per mount and hands it
-// down through context, so nothing about the profile lives in module state
-// and two editors on one page can carry different profiles.
+// profile it was mounted with, the surfaces that profile registers, the
+// actions its host supplies, and everything the editor keeps while it runs
+// (its services and its scope's stores). `mountEditor` builds one per mount
+// and hands it down through context, so nothing about one editor lives in
+// module state and two editors on one page stay apart.
 
 import { createContext, useContext, type ReactNode } from "react";
 
@@ -38,7 +39,48 @@ import type {
 } from "@paged-media/shell";
 import { defineMessages, t } from "@paged-media/strings";
 
-import type { BundleEntry } from "../plugin-bundle-loader";
+import {
+  createBindingProviderRegistry,
+  type BindingProviderBackend,
+  type loadBundle,
+} from "@paged-media/plugin-sdk";
+import {
+  createEditorScope,
+  editorStorage,
+  setDocumentSourceSink,
+  type EditorScope,
+} from "@paged-media/shell";
+
+import {
+  createDocumentIdentity,
+  indexedDbHandleStore,
+  type DocumentIdentity,
+} from "../document-identity";
+import { editorObjectsOf, type EditorObjects } from "../object-model";
+import {
+  createBootGate,
+  type BootGate,
+  type BundleActivator,
+  type BundleEntry,
+} from "../plugin-bundle-loader";
+import {
+  createEditorConsentBackend,
+  type EditorConsent,
+} from "../plugin-consent";
+import {
+  createEditorDocuments,
+  type EditorDocuments,
+} from "../plugin-documents";
+import type { EditorHostOptions } from "../plugin-host-options";
+import { pageDoorsOf, type PageDoors } from "../plugin-pages";
+import {
+  createEditorSecretStore,
+  type EditorSecretStore,
+} from "../plugin-secret-store";
+import {
+  createWillSaveRegistry,
+  type WillSaveRegistry,
+} from "../plugin-will-save";
 import type { PluginBundle } from "../plugin-bundle-table";
 import type { AppSurfaces } from "../profiles/apply";
 
@@ -109,6 +151,9 @@ export interface ShellAccess {
   readonly client: CanvasClient;
   /** Switches the editor between its dark and light theme. */
   readonly setThemeMode: (mode: "dark" | "light") => void;
+  /** The editor's root element (`[data-paged-editor]`): its tokens, its
+   *  theme class and its popovers are there, never on the page. */
+  readonly root: HTMLElement;
 }
 
 /** The session's role, changeable while the editor runs (`setRole`). */
@@ -135,6 +180,111 @@ export function createRoleStore(initial: Role): RoleStore {
   };
 }
 
+/** A loaded bundle, as the activator keeps it. */
+export interface LiveBundle {
+  id: string;
+  active: boolean;
+  dispose(): void;
+}
+
+/**
+ * What one editor keeps while it runs: the doors its bundle hosts are built
+ * with and its dialogs and panels share. Each was a module singleton of
+ * main.tsx; now each editor has its own (plan task E1).
+ */
+export interface EditorServices {
+  /** Editor ADR 264 — the open document's identity, as this host knows it:
+   *  the key a remembered grant is kept under. The shell's loader declares
+   *  each load's source to it (through the scope); `PluginBundles` attaches
+   *  the live engine client so it follows the open document. */
+  readonly documentIdentity: DocumentIdentity;
+  /** D-03 — the network-consent backend: `PluginBundles` injects `backend`
+   *  into every bundle host, `<ConsentDialog>` renders the prompts from
+   *  `controller`. */
+  readonly consent: EditorConsent;
+  /** D-26 (ADR 219) — the plugin documents door (host.documents). */
+  readonly documents: EditorDocuments;
+  /** D-11 — the reference credential store (host.secrets) and its prompt. */
+  readonly secrets: EditorSecretStore;
+  /** ADR 023 phase C — THE binding-provider registry of this editor: handed
+   *  to every bundle host AND to `<PagedShell bindingProviders>`; they must
+   *  be the same object. */
+  readonly bindingProviders: BindingProviderBackend;
+  /** v66 — `host.document.onWillSave`: Save (.paged) runs it first. */
+  readonly willSave: WillSaveRegistry;
+  /** ADR 323 — the object registry (in the scope, so panels reach it). */
+  readonly objects: EditorObjects;
+  /** v70 — the page and text-reveal doors (in the scope). */
+  readonly pages: PageDoors;
+  /** ADR 222 — no document opens before the boot bundles are active. */
+  readonly boot: BootGate;
+  /** The bundles while they run: the activator of the mounted
+   *  `PluginBundles` (StrictMode mounts it twice; only the live one may
+   *  settle the boot lane or serve `ensure`) and the host options every
+   *  bundle got. Null before the shell mounts. */
+  readonly bundles: BundleLane;
+}
+
+/** Load one more bundle through the same loader and host options. */
+export type LoadOneBundle = (
+  bundle: Parameters<typeof loadBundle>[1],
+) => ReturnType<typeof loadBundle>;
+
+/** The live bundle lane of the mounted `PluginBundles`. */
+export interface BundleLane {
+  activator(): BundleActivator<LiveBundle> | null;
+  hostOptions(): EditorHostOptions | null;
+  loadBundle(): LoadOneBundle | null;
+  /** What the mounted `PluginBundles` built; returns the release (a no-op
+   *  once a later mount attached its own). */
+  attach(live: {
+    activator: BundleActivator<LiveBundle>;
+    hostOptions: EditorHostOptions;
+    loadBundle: LoadOneBundle;
+  }): () => void;
+}
+
+function createBundleLane(): BundleLane {
+  let live: Parameters<BundleLane["attach"]>[0] | null = null;
+  return {
+    activator: () => live?.activator ?? null,
+    hostOptions: () => live?.hostOptions ?? null,
+    loadBundle: () => live?.loadBundle ?? null,
+    attach(next) {
+      live = next;
+      return () => {
+        if (live === next) live = null;
+      };
+    },
+  };
+}
+
+/** One editor's services, over its scope. */
+export function createEditorServices(scope: EditorScope): EditorServices {
+  const documentIdentity = createDocumentIdentity({
+    store: indexedDbHandleStore(),
+  });
+  setDocumentSourceSink(scope, documentIdentity);
+  return {
+    documentIdentity,
+    // Remembered grants live in the editor's settings store.
+    consent: createEditorConsentBackend({
+      identity: documentIdentity,
+      storage: editorStorage(scope),
+    }),
+    documents: createEditorDocuments(scope),
+    secrets: createEditorSecretStore(),
+    bindingProviders: createBindingProviderRegistry(),
+    willSave: createWillSaveRegistry(),
+    objects: editorObjectsOf(scope),
+    pages: pageDoorsOf(scope),
+    boot: createBootGate(),
+    bundles: createBundleLane(),
+  };
+}
+
+export { createEditorScope };
+
 export interface EditorInstance {
   readonly profile: ResolvedProfile;
   readonly surfaces: EditorSurfaces;
@@ -146,6 +296,17 @@ export interface EditorInstance {
   readonly onShell?: (shell: ShellAccess) => void;
   /** The session's role; the profile's at mount. */
   readonly role: RoleStore;
+  /** Renders the page's dev and demo tools (`MountOptions.devTools`). */
+  readonly devTools: boolean;
+  /** The editor is the page (`MountOptions.ownsPage`). */
+  readonly ownsPage: boolean;
+  /** Asks before the page unloads with unsaved edits. */
+  readonly guardUnload: boolean;
+  /** The editor's own stores (the shell's and the app's), handed to
+   *  `<PagedShell scope>`. */
+  readonly scope: EditorScope;
+  /** What the editor keeps while it runs. */
+  readonly services: EditorServices;
   /** Where the engine's wasm is served, when the host names it; else the
    *  build's own asset. */
   readonly engineWasm?: string;

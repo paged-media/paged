@@ -37,7 +37,14 @@ import { Icon } from "../icons";
 import { paletteScore } from "./palette-score";
 import type { CommandContribution, CommandRegistry } from "../registries";
 import { useRegistries } from "../state/registries-context";
+import {
+  createEmitter,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useRegistryView } from "../state/live";
+import { useEditorStorage, type StorageAdapter } from "../state/storage";
 import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
@@ -45,29 +52,27 @@ import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
 import { categoryLabel, PALETTE } from "./messages";
 
 /**
- * Module-level event emitter for the palette's open/toggle state.
- * Listeners are the mounted palette components; emitters are
- * registered commands (`paged.palette.toggle`, `…open`, `…close`)
- * + the keybinding registry that routes Cmd+K through them.
- *
- * Module scope so external command handlers can fire the toggle
+ * The palette's open/toggle event, one per editor (plan task E1).
+ * The listener is the mounted palette; emitters are registered commands
+ * (`paged.palette.toggle`, …) and the keybinding registry that routes
+ * Cmd+K through them, which reach it through their editor's scope
  * without crossing the React context boundary.
  */
 type PaletteAction = "toggle" | "open" | "close";
-const listeners = new Set<(action: PaletteAction) => void>();
+const PALETTE_EVENT = scoped("palette", () => createEmitter<PaletteAction>());
 
-/** Emit a palette action. Idempotent — safe to call from anywhere. */
-export function notifyPalette(action: PaletteAction): void {
-  for (const fn of listeners) fn(action);
+/** Emit a palette action in `scope`'s editor. Idempotent. */
+export function notifyPalette(scope: EditorScope, action: PaletteAction): void {
+  scope.get(PALETTE_EVENT).emit(action);
 }
 
 /** Recently-run command ids, most recent first. */
 const RECENTS_KEY = "paged.palette.recents.v1";
 const RECENTS_MAX = 5;
 
-function loadRecents(): string[] {
+function loadRecents(storage: StorageAdapter): string[] {
   try {
-    const raw = localStorage.getItem(RECENTS_KEY);
+    const raw = storage.getItem(RECENTS_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(parsed)
       ? parsed.filter((x) => typeof x === "string")
@@ -77,13 +82,13 @@ function loadRecents(): string[] {
   }
 }
 
-function pushRecent(id: string): string[] {
-  const next = [id, ...loadRecents().filter((x) => x !== id)].slice(
+function pushRecent(storage: StorageAdapter, id: string): string[] {
+  const next = [id, ...loadRecents(storage).filter((x) => x !== id)].slice(
     0,
     RECENTS_MAX,
   );
   try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    storage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
     /* convenience only */
   }
@@ -169,23 +174,23 @@ export function CommandPalette() {
   // formatter, MenuBar's `acceleratorLookup`).
   const keyFor = acceleratorLookup(keybindings.list());
   const workflowMode = useOptionalWorkflowMode();
-  const [recents, setRecents] = useState<string[]>(loadRecents);
+  const storage = useEditorStorage();
+  const [recents, setRecents] = useState<string[]>(() => loadRecents(storage));
 
-  useEffect(() => {
-    const handler = (action: PaletteAction) => {
-      if (action === "toggle") {
-        setOpen((v) => !v);
-      } else if (action === "open") {
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
-    };
-    listeners.add(handler);
-    return () => {
-      listeners.delete(handler);
-    };
-  }, []);
+  const palette = useScoped(PALETTE_EVENT);
+  useEffect(
+    () =>
+      palette.subscribe((action) => {
+        if (action === "toggle") {
+          setOpen((v) => !v);
+        } else if (action === "open") {
+          setOpen(true);
+        } else {
+          setOpen(false);
+        }
+      }),
+    [palette],
+  );
 
   // Fresh query each open so the zero-state groups show.
   useEffect(() => {
@@ -204,7 +209,7 @@ export function CommandPalette() {
 
   const run = (cmd: CommandContribution) => {
     setOpen(false);
-    setRecents(pushRecent(cmd.id));
+    setRecents(pushRecent(storage, cmd.id));
     void registries.commands.invoke(cmd.id);
   };
 

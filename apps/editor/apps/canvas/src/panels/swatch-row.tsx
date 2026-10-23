@@ -24,7 +24,8 @@
 // and delete. Reserved swatches ([None]/[Paper]/[Black]/
 // [Registration]) are pinned: no edit/rename/delete affordances.
 //
-// The popover PORTALS to document.body with a fixed position — the
+// The popover PORTALS to the editor's portal container (inside its root,
+// else the page's body) with a fixed position — the
 // dockview panel clips overflow (the tool-rail flyout lesson).
 //
 // ADR 023 phase C/D: this row no longer owns its writes. `onMutate`
@@ -55,6 +56,7 @@ import type {
   Mutation,
   SwatchSummary,
 } from "@paged-media/client";
+import { usePortalContainer } from "@paged-media/shell";
 
 const M = defineMessages("app.swatchRow", {
   unresolved: "No document swatch carries this id — colour unresolved",
@@ -115,6 +117,7 @@ export function SwatchRow({
    *  a provider may own the swatch list without owning the groups.) */
   canAssignGroup?: boolean;
 }) {
+  const portalContainer = usePortalContainer();
   const strings = useStrings();
   const client = useCanvasClient();
   const [preview, setPreview] = useState<ColorPreview | null>(null);
@@ -385,7 +388,7 @@ export function SwatchRow({
               />
             </div>
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </li>
   );

@@ -28,6 +28,7 @@ import {
 import { useContentSelection } from "../state/content-selection-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
+import { useEditorKeys } from "../state/editor-root";
 
 // Concept 1 (T2) — spring-loaded momentary tools. Holding a key pushes
 // a transient override onto the active-tool stack; releasing it pops.
@@ -45,6 +46,7 @@ import { canvasKeyYields } from "../focus/key-ownership";
 // key-ups never arrive.
 
 export function useSpringLoadedTools(): void {
+  const keys = useEditorKeys();
   const { pushOverride, popOverride, clearOverrides } = useTool();
   const { contentSelectionRef } = useContentSelection();
 
@@ -97,13 +99,15 @@ export function useSpringLoadedTools(): void {
       clearOverrides();
     };
 
-    window.addEventListener("keydown", onKeyDown);
+    // A press is this editor's (its root's keys); a release pops only
+    // what this editor pushed, wherever focus went meanwhile.
+    const offKeyDown = keys.listen("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
+      offKeyDown();
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [pushOverride, popOverride, clearOverrides, contentSelectionRef]);
+  }, [keys, pushOverride, popOverride, clearOverrides, contentSelectionRef]);
 }

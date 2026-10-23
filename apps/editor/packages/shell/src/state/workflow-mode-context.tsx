@@ -27,6 +27,8 @@ import {
 } from "react";
 
 import { scopedChromeKey } from "./chrome-storage-scope";
+import { useEditorScope, type EditorScope } from "./editor-scope";
+import { editorStorage } from "./storage";
 
 // Design system (publishing cockpit) — the workflow mode. One
 // product, six purpose-built experiences: each mode re-skins the
@@ -50,11 +52,12 @@ const STORAGE_KEY_BASE = "paged.workflowMode";
  *  INHERIT the mode an ordinary session left behind: booting into
  *  `prepress` when solo registers only one mode leaves the cockpit with
  *  no registered slots and therefore no left panel at all. */
-const storageKey = () => scopedChromeKey(STORAGE_KEY_BASE);
+const storageKey = (scope: EditorScope) =>
+  scopedChromeKey(scope, STORAGE_KEY_BASE);
 
-function loadInitialMode(): WorkflowMode {
+function loadInitialMode(scope: EditorScope): WorkflowMode {
   try {
-    const raw = localStorage.getItem(storageKey());
+    const raw = editorStorage(scope).getItem(storageKey(scope));
     // Any stored id is taken here; the shell falls back to the first
     // registered mode when it is not one of this editor's (PagedShell).
     if (raw && raw.length <= 64) return raw;
@@ -88,18 +91,22 @@ export function WorkflowModeProvider({
   children,
   initialMode,
 }: WorkflowModeProviderProps) {
+  const scope = useEditorScope();
   const [mode, setModeState] = useState<WorkflowMode>(
-    () => initialMode ?? loadInitialMode(),
+    () => initialMode ?? loadInitialMode(scope),
   );
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const setMode = useCallback((m: WorkflowMode) => {
-    setModeState(m);
-    try {
-      localStorage.setItem(storageKey(), m);
-    } catch {
-      /* persistence is a convenience only */
-    }
-  }, []);
+  const setMode = useCallback(
+    (m: WorkflowMode) => {
+      setModeState(m);
+      try {
+        editorStorage(scope).setItem(storageKey(scope), m);
+      } catch {
+        /* persistence is a convenience only */
+      }
+    },
+    [scope],
+  );
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<WorkflowModeValue>(
     () => ({ mode, setMode }),

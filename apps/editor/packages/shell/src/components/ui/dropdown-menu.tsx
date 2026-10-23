@@ -24,6 +24,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 
 import { Icon } from "../../icons/Icon";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../../state/editor-root";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -81,7 +82,7 @@ function DropdownMenuContent({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
-    <DropdownMenuPrimitive.Portal>
+    <DropdownMenuPrimitive.Portal container={usePortalContainer()}>
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
         className={cn(

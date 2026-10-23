@@ -67,6 +67,7 @@ import { useOptionalOverlaySignals } from "../../state/overlay-signals-context";
 import { useSelection } from "../../state/selection-context";
 import { useThreading, type LoadedCursor } from "../../state/threading-context";
 import { layoutPageRects, type ShellPageRect } from "./page-layout";
+import { queryEditor, useEditorRoot } from "../../state/editor-root";
 
 /** Default size (pt) of a frame drawn by a plain CLICK on empty canvas
  *  (no drag): its top-left corner sits at the click and it is kept on
@@ -266,6 +267,7 @@ async function chainStateOf(
   }
 }
 export function ThreadingController() {
+  const root = useEditorRoot();
   const client = useCanvasClient();
   const { camera } = useCamera();
   const { handle } = useDocument();
@@ -292,7 +294,7 @@ export function ThreadingController() {
    *  tags the wrapper). */
   const clientToDoc = useEffectEvent(
     (clientX: number, clientY: number): [number, number] | null => {
-      const wrap = document.querySelector("[data-paged-viewport]");
+      const wrap = queryEditor(root, "[data-paged-viewport]");
       if (!wrap) return null;
       const r = wrap.getBoundingClientRect();
       if (camera.scale <= 0) return null;
@@ -426,7 +428,8 @@ export function ThreadingController() {
   // frame's own out-port turning magenta — an 18px square the user's
   // hand is usually covering.
   //
-  // Written on documentElement rather than a React style, because the
+  // Written on the editor's root element rather than a React style
+  // (the page's <html> only for a shell without one), because the
   // pointer may be over any part of the app (panels, rails, the menu
   // bar) and every one of those subtrees sets its own cursor. `!important`
   // for the same reason. Restored on unload, including when the effect
@@ -434,16 +437,16 @@ export function ThreadingController() {
   // copy cursor would be a worse bug than the one being fixed.
   useEffect(() => {
     if (!cursorLoaded) return;
-    const root = document.documentElement;
-    const previous = root.style.getPropertyValue("cursor");
-    const previousPriority = root.style.getPropertyPriority("cursor");
-    root.style.setProperty("cursor", "copy", "important");
+    const element = root ?? document.documentElement;
+    const previous = element.style.getPropertyValue("cursor");
+    const previousPriority = element.style.getPropertyPriority("cursor");
+    element.style.setProperty("cursor", "copy", "important");
     return () => {
       if (previous)
-        root.style.setProperty("cursor", previous, previousPriority);
-      else root.style.removeProperty("cursor");
+        element.style.setProperty("cursor", previous, previousPriority);
+      else element.style.removeProperty("cursor");
     };
-  }, [cursorLoaded]);
+  }, [cursorLoaded, root]);
 
   useEffect(() => {
     if (!cursorLoaded) return;

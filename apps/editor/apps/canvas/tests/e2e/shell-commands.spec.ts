@@ -93,9 +93,12 @@ const viewToggle = (page: Page, which: string) =>
   page.evaluate(
     async ([path, w]) => {
       const m = (await import(/* @vite-ignore */ `/@fs${path}`)) as {
-        getViewToggle(x: string): boolean;
+        getViewToggle(scope: unknown, x: string): boolean;
       };
-      return m.getViewToggle(w);
+      // The toggles are the editor's (its scope, on the editor handle).
+      const paged = (globalThis as unknown as { __paged: { scope: unknown } })
+        .__paged;
+      return m.getViewToggle(paged.scope, w);
     },
     [VIEW_TOGGLES, which] as const,
   );

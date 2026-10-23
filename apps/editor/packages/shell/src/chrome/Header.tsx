@@ -43,6 +43,7 @@ import { ShareButton } from "./CollabCluster";
 import { FileDrop } from "./FileDrop";
 import { MenuBar, prettyKey } from "./MenuBar";
 import { notifyPalette } from "./CommandPalette";
+import { useEditorScope } from "../state/editor-scope";
 import { useChromeRegions } from "../state/chrome-regions";
 import { RegionItems } from "./RegionItems";
 import { HEADER } from "./messages";
@@ -210,6 +211,7 @@ function Brand() {
  *  460 px and, given less than 220 px, collapses to a search icon. */
 function CommandTrigger() {
   const strings = useStrings();
+  const scope = useEditorScope();
   const ref = useRef<HTMLDivElement | null>(null);
   const [compact, setCompact] = useState(false);
   useEffect(() => {
@@ -238,7 +240,7 @@ function CommandTrigger() {
             ? strings.t(HEADER.searchOrAskKey, { key: prettyKey("cmd+k") })
             : undefined
         }
-        onClick={() => notifyPalette("open")}
+        onClick={() => notifyPalette(scope, "open")}
         style={{
           display: "flex",
           alignItems: "center",

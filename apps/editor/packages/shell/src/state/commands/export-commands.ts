@@ -25,6 +25,7 @@ import { t } from "@paged-media/strings";
 import { COMMANDS } from "../messages";
 import type { CommandContribution } from "../../registries";
 import { notifyExportPdfDialog } from "../../chrome/ExportPdfDialog";
+import { scopeOf } from "../editor-scope";
 
 export const PAGED_FILE_EXPORT_PDF = "paged.file.exportPdf";
 
@@ -33,8 +34,8 @@ export function buildExportPdfCommand(): CommandContribution {
     id: PAGED_FILE_EXPORT_PDF,
     title: t(COMMANDS.exportPdf),
     category: "File",
-    handler: () => {
-      notifyExportPdfDialog("open");
+    handler: (paged) => {
+      notifyExportPdfDialog(scopeOf(paged), "open");
     },
   };
 }

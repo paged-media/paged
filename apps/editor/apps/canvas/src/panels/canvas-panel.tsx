@@ -45,6 +45,7 @@ import {
   type PanelProps,
   type SelectionState,
   type TableCellSelection,
+  useEditorKeys,
 } from "@paged-media/shell";
 
 import type {
@@ -80,6 +81,7 @@ function cellAabb(item: {
 }
 
 export function CanvasPanel(_props: PanelProps) {
+  const keys = useEditorKeys();
   const strings = useStrings();
   // Phase 2 — the gesture spine. `toolGesture` is non-null only while
   // the effective tool carries a handler (Rectangle, …); select/text
@@ -283,9 +285,8 @@ export function CanvasPanel(_props: PanelProps) {
       e.preventDefault();
       climbOut();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [activeGroup, pathEditMode]);
+    return keys.listen("keydown", onKey);
+  }, [activeGroup, keys, pathEditMode]);
 
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onHit = useCallback(

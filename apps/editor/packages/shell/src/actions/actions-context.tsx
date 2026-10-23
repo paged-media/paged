@@ -67,6 +67,7 @@ import {
   type UncapturedTally,
 } from "./model";
 import { loadLibrary, parseImport, saveLibrary } from "./store";
+import { useEditorStorage } from "../state/storage";
 
 export interface RecordingState {
   startedAt: number;
@@ -145,7 +146,11 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   const client = useCanvasClient();
 
-  const [library, setLibrary] = useState<ActionLibrary>(() => loadLibrary());
+  // The editor's settings store (state/storage.ts).
+  const storage = useEditorStorage();
+  const [library, setLibrary] = useState<ActionLibrary>(() =>
+    loadLibrary(storage),
+  );
   const [recording, setRecording] = useState<RecordingState | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<ReplayReport | null>(null);
@@ -161,10 +166,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const replayMutations = useRef(0);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const commit = useCallback((next: ActionLibrary) => {
-    setLibrary(next);
-    setPersisted(saveLibrary(next));
-  }, []);
+  const commit = useCallback(
+    (next: ActionLibrary) => {
+      setLibrary(next);
+      setPersisted(saveLibrary(next, storage));
+    },
+    [storage],
+  );
 
   // Deliberately NOT a functional `setLibrary` updater: React runs
   // updaters during the render phase, so writing localStorage and

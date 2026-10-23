@@ -18,6 +18,8 @@
  */
 
 import { createFeatureStore, type FeatureStore } from "./features";
+import { editorRootOf, ownsEvent } from "./editor-root";
+import { useEditorScope } from "./editor-scope";
 import {
   createContext,
   useContext,
@@ -101,13 +103,23 @@ const Context = createContext<ShellRegistries | null>(null);
  */
 export function createShellRegistries(
   getEditor: () => unknown,
+  options: {
+    /** Whether a key event is this editor's (its root's); absent, every
+     *  key on the page (a headless editor, a test). */
+    ownsKey?: (event: KeyboardEvent) => boolean;
+  } = {},
 ): ShellRegistries {
   const features = createFeatureStore(getEditor);
   const commands = createCommandRegistry(getEditor, features);
   // Pass `getEditor` as the keybinding state thunk too, so `when`
   // predicates (e.g. the tool-shortcut text-suppression guard) read
   // the live editor handle.
-  const keybindings = createKeybindingRegistry(commands, getEditor, features);
+  const keybindings = createKeybindingRegistry(
+    commands,
+    getEditor,
+    features,
+    options.ownsKey,
+  );
   // Tools are supplied by the app via `<PagedShell tools={...}>` and
   // registered in ShellChrome (mirrors panels/overlays), so the rail
   // contains zero hardcoded entries. Bundles add more via
@@ -145,8 +157,12 @@ export function RegistriesProvider({
   // because we want guaranteed identity even if React invokes the
   // memo factory twice (Strict Mode does this in dev).
   const ref = useRef<ShellRegistries | null>(null);
+  const scope = useEditorScope();
   if (!ref.current) {
-    ref.current = createShellRegistries(getEditor);
+    // The keybindings answer the keys of this editor's root only.
+    ref.current = createShellRegistries(getEditor, {
+      ownsKey: (event) => ownsEvent(editorRootOf(scope), event),
+    });
   }
 
   // Keydown listener lifecycle — symmetric attach/detach so

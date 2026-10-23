@@ -54,8 +54,6 @@ const realPrompt = globalThis.prompt;
 const realConfirm = globalThis.confirm;
 afterEach(() => {
   unmountAll();
-  setLibrary(null);
-  setCurrentLibraryDocument(null);
   globalThis.prompt = realPrompt;
   globalThis.confirm = realConfirm;
   prompted = [];
@@ -89,8 +87,8 @@ async function withDocument(saves = 1): Promise<{
     await lib.save(entry.id, await h.client.exportPaged(), `Save ${i + 1}`);
   }
   await h.act(() => {
-    setLibrary(lib as unknown as LibraryClient);
-    setCurrentLibraryDocument(entry);
+    setLibrary(h.scope, lib as unknown as LibraryClient);
+    setCurrentLibraryDocument(h.scope, entry);
   });
   return { h, lib, entry };
 }
@@ -113,6 +111,7 @@ describe("Library panel", () => {
     const h = await mountPanel(LibraryPanel, { id: "paged.library" });
     await h.act(() =>
       setLibrary(
+        h.scope,
         new Library(memoryFs(), {
           createRepository: (owner) => new Repository(owner),
         }) as unknown as LibraryClient,

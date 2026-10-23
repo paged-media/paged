@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { getViewToggle, toggleViewToggle } from "@paged-media/shell";
+import { getViewToggle, scopeOf, toggleViewToggle } from "@paged-media/shell";
 
 // SDK Phase 4 — canvas-app-specific commands.
 //
@@ -345,24 +345,24 @@ export function buildAppCommands(
       id: PAGED_VIEW_TOGGLE_TEXT_THREADS,
       title: t(M.showTextThreads),
       category: "View",
-      handler: () => {
-        toggleViewToggle("textThreads");
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "textThreads");
       },
     },
     {
       id: PAGED_VIEW_TOGGLE_SNAP_TO_POINTS,
       title: t(M.snapToPoints),
       category: "View",
-      handler: () => {
-        toggleViewToggle("snapToPoints");
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "snapToPoints");
       },
     },
     {
       id: PAGED_VIEW_TOGGLE_HEADING_ANCHORS,
       title: t(M.showHeadingAnchors),
       category: "View",
-      handler: () => {
-        toggleViewToggle("headingAnchors");
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "headingAnchors");
       },
     },
     ...HELP_LINKS.map((l) => ({
@@ -520,7 +520,7 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
   {
     path: "View/Show text threads",
     command: PAGED_VIEW_TOGGLE_TEXT_THREADS,
-    checked: () => getViewToggle("textThreads"),
+    checked: (paged) => getViewToggle(scopeOf(paged), "textThreads"),
     order: 60,
     // Its own group so a separator divides "how big is the page" from
     // "what extra structure is drawn on it" — InDesign splits Zoom from
@@ -530,14 +530,14 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
   {
     path: "View/Snap to points",
     command: PAGED_VIEW_TOGGLE_SNAP_TO_POINTS,
-    checked: () => getViewToggle("snapToPoints"),
+    checked: (paged) => getViewToggle(scopeOf(paged), "snapToPoints"),
     order: 70,
     group: "extras",
   },
   {
     path: "View/Show heading anchors",
     command: PAGED_VIEW_TOGGLE_HEADING_ANCHORS,
-    checked: () => getViewToggle("headingAnchors"),
+    checked: (paged) => getViewToggle(scopeOf(paged), "headingAnchors"),
     order: 65,
     group: "extras",
   },

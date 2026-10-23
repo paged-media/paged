@@ -27,9 +27,11 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { openCanvas } from "./fidelity/canvas-driver";
 
+/** The theme is the editor's: the class on its root element (plan task
+ *  E1; the app's page mirrors it onto <html> for its own canvas). */
 async function htmlIsDark(page: Page): Promise<boolean> {
   return page.evaluate(() =>
-    document.documentElement.classList.contains("dark"),
+    document.querySelector("[data-paged-editor]")!.classList.contains("dark"),
   );
 }
 
@@ -40,12 +42,13 @@ test.describe("Design system — theme", () => {
     await openCanvas(page);
     expect(await htmlIsDark(page)).toBe(true);
     const probes = await page.evaluate(() => {
-      const s = getComputedStyle(document.documentElement);
+      const root = document.querySelector("[data-paged-editor]")!;
+      const s = getComputedStyle(root);
       return {
         railBg: s.getPropertyValue("--chrome-rail-bg").trim(),
         surround: s.getPropertyValue("--canvas-surround").trim(),
         fontSans: s.getPropertyValue("--font-sans").trim(),
-        bodyFont: getComputedStyle(document.body).fontFamily,
+        bodyFont: getComputedStyle(root).fontFamily,
       };
     });
     expect(probes.railBg).toBe("#1f1f23");
@@ -61,7 +64,7 @@ test.describe("Design system — theme", () => {
     await page.evaluate(() => window.__canvas.setTheme("light"));
     await expect.poll(() => htmlIsDark(page)).toBe(false);
     const railBg = await page.evaluate(() =>
-      getComputedStyle(document.documentElement)
+      getComputedStyle(document.querySelector("[data-paged-editor]")!)
         .getPropertyValue("--chrome-rail-bg")
         .trim(),
     );

@@ -17,7 +17,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 import animate from "tailwindcss-animate";
 
 // shadcn-flavoured Tailwind config for @paged-media/shell. Apps that
@@ -25,8 +29,68 @@ import animate from "tailwindcss-animate";
 // package import) and append their own content globs so Tailwind
 // scans the app's JSX in addition to shell's.
 
+// The editor's root element (plan task E1, packages/shell
+// state/editor-root.tsx). `:where()` keeps the scope at no specificity, so
+// a utility class still wins over a preflight rule as it did unscoped.
+const EDITOR = ":where([data-paged-editor])";
+
+/** One preflight selector, scoped to the editor's root: `html`, `:host`
+ *  and `body` become the root itself, `*` the root and everything in it,
+ *  a bare pseudo-element the root's and its descendants', anything else
+ *  a descendant of the root. */
+function scopeSelector(selector: string): string {
+  const s = selector.trim();
+  if (s === "html" || s === ":host" || s === "body") return EDITOR;
+  if (s === "*") return `${EDITOR}, ${EDITOR} *`;
+  if (s.startsWith("::")) return `${EDITOR}${s}, ${EDITOR} *${s}`;
+  return `${EDITOR} ${s}`;
+}
+
+/**
+ * Tailwind's preflight, scoped to the editor's root: the editor mounts
+ * into a host's page (docs/composable-editor.md §8), so its reset must
+ * not restyle the host's own elements. The rules are Tailwind's own,
+ * read from the installed package as its `preflight` core plugin reads
+ * them, with each selector scoped; that core plugin is off below.
+ */
+/** The part of the plugin API this uses: Tailwind hands its plugins the
+ *  postcss it runs with (not in the published `PluginAPI` type). */
+interface PostcssApi {
+  postcss: {
+    parse(css: string): {
+      walkRules(
+        fn: (rule: {
+          selectors: string[];
+          walkDecls(prop: string, fn: (decl: { remove(): void }) => void): void;
+        }) => void,
+      ): void;
+      nodes: unknown[];
+    };
+  };
+}
+
+const scopedPreflight = plugin((api) => {
+  const { addBase } = api;
+  const { postcss } = api as unknown as PostcssApi;
+  const require = createRequire(import.meta.url);
+  const css = postcss.parse(
+    readFileSync(require.resolve("tailwindcss/src/css/preflight.css"), "utf8"),
+  );
+  css.walkRules((rule) => {
+    // `html` and `body` both become the root: the root keeps html's
+    // line-height, which body's `line-height: inherit` would undo (on the
+    // page, body inherited it from html).
+    if (rule.selectors.length === 1 && rule.selectors[0]?.trim() === "body")
+      rule.walkDecls("line-height", (decl) => decl.remove());
+    rule.selectors = rule.selectors.map(scopeSelector);
+  });
+  addBase(css.nodes as never);
+});
+
 const config: Config = {
   darkMode: ["class"],
+  // Preflight comes scoped to the editor's root (`scopedPreflight`).
+  corePlugins: { preflight: false },
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     container: {
@@ -129,7 +193,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [animate],
+  plugins: [scopedPreflight, animate],
 };
 
 export default config;

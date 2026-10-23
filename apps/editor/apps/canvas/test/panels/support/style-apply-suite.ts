@@ -27,7 +27,7 @@ import { describe, expect, test } from "bun:test";
 import type { ComponentType } from "react";
 
 import type { CollectionName, ElementId } from "@paged-media/client";
-import { cockpitActions } from "@paged-media/shell";
+import { cockpitActionsOf } from "@paged-media/shell";
 
 import { StyleOptionsPanel } from "../../../src/panels/style-options-panel";
 import { richScene, type RichScene } from "../fixtures";
@@ -236,10 +236,13 @@ export function styleApplySuite(c: StyleApplyCase): void {
         component: StyleOptionsPanel,
       });
       await h.click(button);
-      expect(cockpitActions.activeTab?.()).toBe("paged.style-options");
+      expect(cockpitActionsOf(h.scope).activeTab?.()).toBe(
+        "paged.style-options",
+      );
       const options = await mountPanel(StyleOptionsPanel, {
         id: "paged.style-options",
         scene: richScene,
+        scope: h.scope,
       });
       expect(
         options.root

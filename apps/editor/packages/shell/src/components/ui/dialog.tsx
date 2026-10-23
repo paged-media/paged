@@ -25,6 +25,7 @@ import { useStrings } from "@paged-media/strings";
 import { Icon } from "../../icons/Icon";
 import { DIALOG } from "../messages";
 import { cn } from "../../lib/utils";
+import { usePortalContainer } from "../../state/editor-root";
 
 const Dialog = DialogPrimitive.Root;
 
@@ -63,7 +64,7 @@ function DialogContent({
   const openerRef = React.useRef<Element | null>(null);
   const strings = useStrings();
   return (
-    <DialogPortal>
+    <DialogPortal container={usePortalContainer()}>
       <DialogOverlay />
       <DialogPrimitive.Content
         onOpenAutoFocus={(event) => {

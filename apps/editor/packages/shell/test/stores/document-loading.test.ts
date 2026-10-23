@@ -44,8 +44,8 @@ import {
 import {
   currentLibraryDocument,
   setCurrentLibraryDocument,
-  setLibrary,
 } from "../../src/state/library-document";
+import { createEditorScope } from "../../src/state/editor-scope";
 import { followScriptSelection } from "../../src/state/script-selection";
 
 const TRUETYPE = new Uint8Array([0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -83,6 +83,7 @@ function recorder() {
     resetForNewDocument: () => log.push("reset"),
     pushWarning: (w) => log.push(`warning ${w}`),
     setSourceName: (n) => log.push(`name ${n}`),
+    scope,
   };
   return { log, cb };
 }
@@ -113,9 +114,10 @@ function client(opts: {
   return { c, loads };
 }
 
+// One editor per test.
+let scope = createEditorScope();
 beforeEach(() => {
-  setLibrary(null);
-  setCurrentLibraryDocument(null);
+  scope = createEditorScope();
 });
 afterEach(() => unstubAllGlobals());
 
@@ -198,7 +200,7 @@ describe("loading a file", () => {
       ...cb,
       libraryDocument: entry,
     });
-    expect(currentLibraryDocument()).toBe(entry);
+    expect(currentLibraryDocument(scope)).toBe(entry);
   });
 
   // Finding SH-105 (fixed, ADR 248): nothing tied a snapshot pass to the
@@ -238,7 +240,7 @@ describe("loading a file", () => {
 describe("File > New", () => {
   test("a blank page of the given size, with no source name and no library entry yet", async () => {
     serveFont(TRUETYPE);
-    setCurrentLibraryDocument({
+    setCurrentLibraryDocument(scope, {
       id: "old",
       name: "o",
       createdAt: 1,
@@ -249,7 +251,7 @@ describe("File > New", () => {
     const { c, loads } = client({ handle: handleOf("blank", ["b1"]) });
     await createBlankDocument(c, { widthPt: 612, heightPt: 792 }, cb);
     expect(loads).toEqual([{ bytes: 612 * 1000 + 792, font: true }]);
-    expect(currentLibraryDocument()).toBeNull();
+    expect(currentLibraryDocument(scope)).toBeNull();
     expect(log).toEqual([
       "status creating new document…",
       "loading Untitled",

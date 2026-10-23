@@ -44,15 +44,18 @@ import {
   replacePrompts,
   type PendingReplace,
 } from "../state/replace-guard";
+import { useEditorScope } from "../state/editor-scope";
 import { REPLACE } from "./messages";
 import { richText } from "./rich";
 
 export function ReplaceDocumentPrompt() {
-  useEffect(() => attachReplacePromptSurface(), []);
+  const scope = useEditorScope();
+  useEffect(() => attachReplacePromptSurface(scope), [scope]);
+  const prompts = replacePrompts(scope);
   const pending = useSyncExternalStore(
-    replacePrompts.subscribe,
-    replacePrompts.current,
-    replacePrompts.current,
+    prompts.subscribe,
+    prompts.current,
+    prompts.current,
   );
   const sourceName = useOptionalDocument()?.sourceName ?? null;
   return pending ? (

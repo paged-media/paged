@@ -67,8 +67,10 @@ import {
   canvasSurfaceOf,
   elementSupportsPathEdit,
   useCanvasClient,
+  useEditorScope,
   useOptionalTool,
   useSelection,
+  useEditorKeys,
 } from "@paged-media/shell";
 import {
   DirectSelectSession,
@@ -76,12 +78,14 @@ import {
   isPathEditKey,
 } from "@paged-media/tools";
 
-import { problemsSink } from "../panels/problems-store";
+import { useProblems } from "../panels/problems-store";
 
 /** Diagnostics source for path-edit refusals in the Problems panel. */
 export const PATH_EDIT_DIAGNOSTIC_SOURCE = "paged.pathEdit";
 
 export function usePathEditMode() {
+  const keys = useEditorKeys();
+  const problemsSink = useProblems();
   const {
     activeTool,
     elementSelection,
@@ -93,6 +97,7 @@ export function usePathEditMode() {
     setElementGeometry,
   } = useSelection();
   const client = useCanvasClient();
+  const scope = useEditorScope();
   // The tool the user PICKED, not the effective one: holding Cmd
   // spring-loads Direct Selection over every Cmd chord, and that is
   // modifier posture, not a request to edit points.
@@ -127,6 +132,7 @@ export function usePathEditMode() {
         subscribe: client.subscribe.bind(client),
       },
       target: element,
+      scope,
       onSelectionChange: setSelectedAnchors,
       // v67 (RFI C-68) — the engine snaps a dragged anchor to everything
       // on the page; an older engine answers nothing and the session
@@ -164,6 +170,8 @@ export function usePathEditMode() {
     // hands back a new array and must not tear the session down.
   }, [
     client,
+    problemsSink,
+    scope,
     targetKind,
     targetId,
     setSelectedAnchors,
@@ -213,9 +221,15 @@ export function usePathEditMode() {
       }
       pathEditSession?.key(e);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pathEditMode, pathEditSession, elementSelection, setPathEditMode]);
+    return keys.listen("keydown", onKey);
+  }, [
+    keys,
+    pathEditMode,
+    pathEditSession,
+    elementSelection,
+    problemsSink,
+    setPathEditMode,
+  ]);
 
   // Auto-exit when the selection isn't a single path-bearing
   // element any more (cleared, or grew to a multi-select).

@@ -33,7 +33,11 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import {
   CanvasContextMenu,
+  editorRootOf,
   openCanvasContextMenu,
+  ownsEvent,
+  queryEditor,
+  scopeOf,
   usePaged,
   type CommandContribution,
   type ContextMenuEntry,
@@ -130,7 +134,7 @@ async function selectUnder(
 /** Where the keyboard opens the menu: the selection's centre on screen,
  *  else the view's. */
 function keyboardPoint(paged: PagedEditor): [number, number] {
-  const viewport = document.querySelector(VIEWPORT);
+  const viewport = queryEditor(editorRootOf(scopeOf(paged)), VIEWPORT);
   const r = viewport?.getBoundingClientRect();
   if (!r) return [window.innerWidth / 2, window.innerHeight / 2];
   const geo = paged.selection.elementGeometry;
@@ -162,7 +166,7 @@ export const CANVAS_CONTEXT_MENU_COMMAND: CommandContribution = {
   category: "Edit",
   handler: (paged) => {
     const [x, y] = keyboardPoint(paged as PagedEditor);
-    openCanvasContextMenu(x, y);
+    openCanvasContextMenu(scopeOf(paged), x, y);
   },
 };
 
@@ -184,12 +188,16 @@ export function CanvasContextMenuHost() {
     const onContextMenu = (e: MouseEvent) => {
       const target = e.target as Element | null;
       const viewport = target?.closest?.(VIEWPORT);
-      if (!viewport) return;
+      // This editor's viewport only: a page may hold two.
+      if (!viewport || !ownsEvent(editorRootOf(scopeOf(pagedRef.current)), e))
+        return;
       e.preventDefault();
       const { clientX, clientY } = e;
       void selectUnder(pagedRef.current, viewport, clientX, clientY)
         .catch(() => undefined)
-        .then(() => openCanvasContextMenu(clientX, clientY));
+        .then(() =>
+          openCanvasContextMenu(scopeOf(pagedRef.current), clientX, clientY),
+        );
     };
     document.addEventListener("contextmenu", onContextMenu, true);
     return () =>

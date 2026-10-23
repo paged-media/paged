@@ -90,7 +90,7 @@ const SITES: Record<string, number> = {
   "packages/shell/src/bundles/loader.ts": 1,
   "packages/shell/src/bundles/sample-bundle.worker.ts": 1,
   // The app tables, and the host actions as commands (hostCommands).
-  "apps/canvas/src/main.tsx": 2,
+  "apps/canvas/src/app/mount.tsx": 2,
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": 1,
   "apps/canvas/src/panels/schema-tree-demo-panel.tsx": 2,
   "apps/canvas/src/panels/layers-panel.tsx": 1,
@@ -129,7 +129,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.actions.play",
   ],
   "packages/shell/src/bundles/sample-bundle.worker.ts": ["paged.sample.hello"],
-  "apps/canvas/src/main.tsx": [AI_ASK_COMMAND, ALIGN_COMMAND],
+  "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND, ALIGN_COMMAND],
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": [
     "paged.demo.applySwatchStroke",
   ],
@@ -201,7 +201,7 @@ describe("the host command inventory", () => {
           ),
         ].some((m) => m[2] === id && src.includes(`id: ${m[1]}`));
         const viaImport =
-          file === "apps/canvas/src/main.tsx" &&
+          file === "apps/canvas/src/app/mount.tsx" &&
           ((id === AI_ASK_COMMAND && src.includes("id: AI_ASK_COMMAND")) ||
             (id === ALIGN_COMMAND && src.includes("id: ALIGN_COMMAND")));
         const viaBuilder =
@@ -220,7 +220,7 @@ describe("the host command inventory", () => {
   });
 
   test("main.tsx registers exactly the tables this inventory builds", () => {
-    const src = readFileSync(at("apps/canvas/src/main.tsx"), "utf8");
+    const src = readFileSync(at("apps/canvas/src/app/mount.tsx"), "utf8");
     const start = src.indexOf("const cmdDisposables = [");
     const block = src.slice(
       start,

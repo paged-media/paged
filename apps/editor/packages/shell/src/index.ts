@@ -29,6 +29,49 @@ import "./translations";
 export { categoryLabel, menuLabel } from "./chrome/messages";
 
 // ── State contexts ─────────────────────────────────────────────
+// One editor's own stores (plan task E1).
+export {
+  createEditorScope,
+  createEmitter,
+  createValueStore,
+  detachedEditorScope,
+  EditorScopeProvider,
+  scoped,
+  scopeOf,
+  useEditorScope,
+  useScoped,
+  type EditorScope,
+  type Emitter,
+  type ScopedKey,
+  type ValueStore,
+} from "./state/editor-scope";
+export {
+  editorStorage,
+  memoryStorage,
+  noStorage,
+  pageStorage,
+  setEditorStorage,
+  useEditorStorage,
+  type StorageAdapter,
+} from "./state/storage";
+export {
+  EditorRoot,
+  editorRootOf,
+  listenForEditorKeys,
+  ownsEvent,
+  queryEditor,
+  useEditorKeys,
+  useEditorRoot,
+  usePortalContainer,
+  type EditorKeys,
+} from "./state/editor-root";
+export {
+  debugHandlesEnabled,
+  debugHandlesOf,
+  setDebugHandle,
+  type DebugHandles,
+} from "./state/debug-handles";
+
 export {
   CanvasClientProvider,
   useCanvasClient,
@@ -439,11 +482,14 @@ export {
   CockpitStateProvider,
   PanelHost,
   RightDock,
-  cockpitActions,
+  cockpitActionsOf,
+  useCockpitActions,
+  type CockpitActions,
   groupSpreads,
   isIdLikeLabel,
   navigateToPages,
   setCockpitPageNavigator,
+  usePageNavigation,
   useCockpitState,
   useOptionalCockpitState,
   type CockpitLayoutProps,
@@ -649,12 +695,10 @@ export {
   type AssistantKind,
 } from "./components/cockpit/ai-assistant";
 export {
-  dismissAssistantRun,
-  getAssistantState,
+  assistantSession,
   openAssistant,
   setAssistantOpener,
-  startAssistantRun,
-  subscribeAssistant,
+  type AssistantSession,
   type AssistantRun,
   type AssistantState,
   type AssistantView,

@@ -39,6 +39,7 @@ import {
   ExportPdfDialog,
   notifyExportPdfDialog,
 } from "../../src/chrome/ExportPdfDialog";
+import { detachedEditorScope } from "../../src/state/editor-scope";
 import { CanvasClientProvider } from "../../src/state/canvas-client-context";
 import {
   DocumentProvider,
@@ -110,7 +111,7 @@ function mount(client: CanvasClient) {
       </DocumentProvider>
     </CanvasClientProvider>,
   );
-  act(() => notifyExportPdfDialog("open"));
+  act(() => notifyExportPdfDialog(detachedEditorScope(), "open"));
   return view;
 }
 

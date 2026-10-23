@@ -32,7 +32,7 @@ test.describe("journey · embedding demos", () => {
     page,
   }) => {
     await page.goto("/demos/index.html");
-    await expect(page.locator("main.gallery a")).toHaveCount(10);
+    await expect(page.locator("main.gallery a")).toHaveCount(11);
   });
 
   test("business card: fill a field, Submit hands the values to the host @feat:editor-shell.solo-mode @level:happy", async ({
@@ -99,11 +99,15 @@ test.describe("journey · embedding demos", () => {
       timeout: 60_000,
     });
     await page.locator("[data-demo-accent]").selectOption("160 84% 30%");
+    // On the editor's root element, not the host's page (plan task E1).
     expect(
-      await page.evaluate(() =>
+      await page.evaluate(() => [
+        document
+          .querySelector<HTMLElement>("[data-paged-editor]")!
+          .style.getPropertyValue("--paged-primary"),
         document.documentElement.style.getPropertyValue("--paged-primary"),
-      ),
-    ).toBe("160 84% 30%");
+      ]),
+    ).toEqual(["160 84% 30%", ""]);
     // The form in German: the card's empty picture field.
     await expect(page.locator('[data-field-picture="photo"]')).toHaveText(
       "Kein Bild",
@@ -126,5 +130,89 @@ test.describe("journey · embedding demos", () => {
     await frame.locator('[data-region-command="paged.host.submit"]').click();
     await expect(page.getByRole("status")).toHaveText("submitted");
     await expect(messages).toContainText('"Mary Example"');
+    // Scripts reach the frame too (dev and demo builds).
+    await page.locator("[data-demo-run-script]").click();
+    await expect(messages).toContainText("pages: 1");
+  });
+
+  test("two editors on one page: each fills, submits and answers its own keys @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/two-editors.html");
+    await ready(page);
+    const left = page.locator('[data-demo-editor="left"]');
+    const right = page.locator('[data-demo-editor="right"]');
+    // Two roots, nothing of either written on the host's page.
+    await expect(page.locator("[data-paged-editor]")).toHaveCount(2);
+    expect(
+      await page.evaluate(() => ({
+        html: document.documentElement.getAttribute("class"),
+        style: document.documentElement.getAttribute("style"),
+        body: document.body.getAttribute("style"),
+        canvas: "__canvas" in globalThis,
+      })),
+    ).toEqual({ html: null, style: null, body: null, canvas: false });
+
+    const name = (side: typeof left) =>
+      side.locator('[data-field-input="name"]');
+    await expect(name(left)).toBeVisible({ timeout: 15_000 });
+    await expect(name(right)).toBeVisible({ timeout: 15_000 });
+    await name(left).fill("Ada Example");
+    await name(left).press("Enter");
+    await name(right).fill("Grace Example");
+    await name(right).press("Enter");
+    // The left field keeps its value: the right editor wrote its own.
+    await expect(name(left)).toHaveValue("Ada Example");
+
+    await left.locator('[data-region-command="paged.host.submit"]').click();
+    await right.locator('[data-region-command="paged.host.submit"]').click();
+    const submitted = (side: string) =>
+      page.locator(`[data-demo-submitted="${side}"]`);
+    await expect(submitted("left")).toContainText('"name": "Ada Example"', {
+      timeout: 15_000,
+    });
+    await expect(submitted("right")).toContainText('"name": "Grace Example"', {
+      timeout: 15_000,
+    });
+    await expect(submitted("left")).not.toContainText("Grace");
+    await expect(submitted("right")).not.toContainText("Ada");
+
+    // Undo in the right editor's field undoes the right editor's fill only.
+    await name(right).click();
+    await page.keyboard.press("ControlOrMeta+z");
+    await expect(name(left)).toHaveValue("Ada Example");
+  });
+
+  test("an editor disposed and mounted again in place works, and leaves nothing behind @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/two-editors.html");
+    await ready(page);
+    const left = page.locator('[data-demo-editor="left"]');
+    const right = page.locator('[data-demo-editor="right"]');
+    await right.locator('[data-field-input="name"]').fill("Grace Example");
+    await right.locator('[data-field-input="name"]').press("Enter");
+
+    await page.locator("[data-demo-remount]").click();
+    await expect(page.getByRole("status")).toHaveText(
+      "ready: the left editor again",
+      { timeout: 60_000 },
+    );
+    // One root per editor: the disposed one is gone, not stacked.
+    await expect(left.locator("[data-paged-editor]")).toHaveCount(1);
+    await expect(page.locator("[data-paged-editor]")).toHaveCount(2);
+    const name = left.locator('[data-field-input="name"]');
+    await expect(name).toBeVisible({ timeout: 15_000 });
+    await name.fill("Ada Again");
+    await name.press("Enter");
+    await left.locator('[data-region-command="paged.host.submit"]').click();
+    await expect(page.locator('[data-demo-submitted="left"]')).toContainText(
+      '"name": "Ada Again"',
+      { timeout: 15_000 },
+    );
+    // The other editor kept its document through the remount.
+    await expect(right.locator('[data-field-input="name"]')).toHaveValue(
+      "Grace Example",
+    );
   });
 });

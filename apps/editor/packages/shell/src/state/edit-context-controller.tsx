@@ -38,12 +38,14 @@ import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { useBindingProviderHost } from "../catalog/binding-providers";
 import { panelServedBy } from "../catalog/panel-binding-surface";
-import { cockpitActions } from "../cockpit/cockpit-state-context";
+import { useEditorScope } from "./editor-scope";
+import { useCockpitActions } from "../cockpit/cockpit-state-context";
 import { useEditContextStack } from "./edit-context-stack";
 import { useSelection } from "./selection-context";
 import { SELECT_TOOL_ID, VIEW_TOOL_IDS, useOptionalTool } from "./tool-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
+import { useEditorKeys } from "./editor-root";
 
 const MODIFIER_KEYS = new Set([
   "Shift",
@@ -56,6 +58,9 @@ const MODIFIER_KEYS = new Set([
 ]);
 
 export function EditContextController() {
+  const keys = useEditorKeys();
+  const scope = useEditorScope();
+  const cockpitActions = useCockpitActions();
   const { active, activeContribution, commit, cancel, isActiveDirty, exitAll } =
     useEditContextStack();
   const { elementSelection } = useSelection();
@@ -170,10 +175,10 @@ export function EditContextController() {
       onContentKey(e);
       if (e.defaultPrevented) e.stopPropagation();
     };
-    // Capture so we win these keys while a context is active.
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [commit, cancel]);
+    // Capture so we win these keys while a context is active (this
+    // editor's keys only).
+    return keys.listen("keydown", onKey, true);
+  }, [commit, cancel, keys]);
 
   // On the active frame ENTER → emphasize panels + focus the first tool.
   // Keyed by the frame identity (type + scope root) so re-running only
@@ -231,6 +236,7 @@ export function EditContextController() {
       onScreen !== null &&
       host !== null &&
       panelServedBy(
+        scope,
         onScreen,
         host
           .activeProviders()
@@ -264,7 +270,7 @@ export function EditContextController() {
     // would exit itself the instant it opened, since every tool is
     // outside an empty set including the one the user already held.
     toolAtEntryRef.current = primary ?? activeToolRef.current ?? null;
-  }, [active, enteredKey, tool]);
+  }, [active, cockpitActions, enteredKey, scope, tool]);
 
   // ADR 024 — LEAVING BY TOOL, derived rather than wired per entry point.
   //

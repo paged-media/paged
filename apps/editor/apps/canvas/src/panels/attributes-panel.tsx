@@ -48,7 +48,7 @@ import {
 } from "@paged-media/shell";
 import type { Value } from "@paged-media/client";
 
-import { addressOfElement } from "../object-model";
+import { useAddressOfElement } from "../object-model";
 import { refusalText, status } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
@@ -230,6 +230,7 @@ const LABEL_NS = "x-paged:";
  * step, "Bind to data…").
  */
 function LabelsSection() {
+  const addressOfElement = useAddressOfElement();
   const strings = useStrings();
   const { elementSelection } = useSelection();
   const model = useObjectModel();
@@ -237,7 +238,7 @@ function LabelsSection() {
   // eslint-disable-next-line no-restricted-syntax -- handed to a component that may compare it (ADR 229)
   const address = useMemo(
     () => (first ? addressOfElement(first) : null),
-    [first],
+    [addressOfElement, first],
   );
   const targets = address ? [address] : [];
   const map = useObjectField({

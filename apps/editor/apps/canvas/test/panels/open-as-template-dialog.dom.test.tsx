@@ -61,12 +61,13 @@ describe("paged.template.openAsTemplate", () => {
     expect(OPEN_AS_TEMPLATE_MENU_ITEMS.map((m) => [m.path, m.command])).toEqual(
       [["File/Open as template…", "paged.template.openAsTemplate"]],
     );
-    const registry = createCommandRegistry(() => null);
-    for (const c of OPEN_AS_TEMPLATE_COMMANDS) registry.register(c);
     const h = await mountPanel(OpenAsTemplateDialog, {
       id: "paged.template.openAsTemplate",
       document: "blank",
     });
+    // The command runs in the dialog's editor (its scope).
+    const registry = createCommandRegistry(() => ({ scope: h.scope }));
+    for (const c of OPEN_AS_TEMPLATE_COMMANDS) registry.register(c);
     expect(q(h, "[data-open-as-template-dialog]")).toBeNull();
     await h.act(() => registry.invoke("paged.template.openAsTemplate"));
     await until(h, "[data-open-as-template-empty]");
@@ -112,9 +113,14 @@ describe("paged.template.openAsTemplate", () => {
     await h.client.setSessionPolicy({ role: "editor", overrides: [] });
 
     await h.act(() =>
-      OPEN_AS_TEMPLATE_COMMANDS[0]!.handler(undefined as never),
+      OPEN_AS_TEMPLATE_COMMANDS[0]!.handler({ scope: h.scope } as never),
     );
     await until(h, '[data-open-as-template-field="Who"]');
+    // Nothing is a field yet: every derived field is new.
+    await h.settle();
+    expect(q(h, '[data-open-as-template-status="Who"]')?.textContent).toBe(
+      "(new)",
+    );
     expect(
       q(h, '[data-open-as-template-field="Photo"]')?.textContent,
     ).toContain("Picture");

@@ -27,7 +27,7 @@ import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 import {
   createCommandRegistry,
   getViewToggle,
-  resetViewToggles,
+  createEditorScope,
 } from "@paged-media/shell";
 
 import {
@@ -54,13 +54,13 @@ function harness() {
       ] as const
     ).map((name) => [name, () => void calls.push(name)]),
   ) as unknown as AppCommandHandlers;
-  const registry = createCommandRegistry(() => ({}));
+  const scope = createEditorScope();
+  const registry = createCommandRegistry(() => ({ scope }) as never);
   for (const c of buildAppCommands(handlers)) registry.register(c);
-  return { calls, registry };
+  return { calls, registry, scope };
 }
 
 afterEach(() => {
-  resetViewToggles();
   unstubAllGlobals();
 });
 
@@ -113,11 +113,11 @@ describe("View toggles flip the store their overlay reads", () => {
       "command:paged.view.toggleSnapToPoints",
       "command:paged.view.toggleHeadingAnchors",
     );
-    const { registry } = harness();
+    const { registry, scope } = harness();
     const flags = () => ({
-      textThreads: getViewToggle("textThreads"),
-      snapToPoints: getViewToggle("snapToPoints"),
-      headingAnchors: getViewToggle("headingAnchors"),
+      textThreads: getViewToggle(scope, "textThreads"),
+      snapToPoints: getViewToggle(scope, "snapToPoints"),
+      headingAnchors: getViewToggle(scope, "headingAnchors"),
     });
     const defaults = {
       textThreads: false,

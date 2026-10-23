@@ -25,6 +25,7 @@
 import type { EditorHandle } from "./create-editor";
 import {
   BRIDGED_METHODS,
+  SCRIPT_METHOD,
   transferables,
   type FrameToHost,
   type HostToFrame,
@@ -139,9 +140,25 @@ export function serveBridge(
           post({ type: "paged:reply", id: msg.id, ...r });
         if (!handle)
           return reply({ ok: false, error: "the editor is not ready" });
-        if (!(BRIDGED_METHODS as readonly string[]).includes(msg.method))
-          return reply({ ok: false, error: `no method ${String(msg.method)}` });
-        const fn = handle[msg.method] as (...a: unknown[]) => unknown;
+        if (msg.method === SCRIPT_METHOD) {
+          // The docs' scripting playground: dev and demo builds only.
+          if (import.meta.env.PROD && import.meta.env.MODE !== "demo")
+            return reply({
+              ok: false,
+              error: "scripts run in dev and demo builds only",
+            });
+          const source = String(msg.args?.[0] ?? "");
+          handle.client.executeScript(source).then(
+            (r) =>
+              reply({ ok: true, value: { output: r.output, error: r.error } }),
+            (err: unknown) => reply({ ok: false, error: String(err) }),
+          );
+          return;
+        }
+        const method = msg.method;
+        if (!(BRIDGED_METHODS as readonly string[]).includes(method))
+          return reply({ ok: false, error: `no method ${String(method)}` });
+        const fn = handle[method] as (...a: unknown[]) => unknown;
         Promise.resolve()
           .then(() => fn.apply(handle, msg.args ?? []))
           .then(

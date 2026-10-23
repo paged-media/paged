@@ -19,23 +19,83 @@
 
 // The editor's page entry: one editor in `#root`, configured by the URL
 // (`?profile=`, `?solo=`, `?locale=`). An embedding host calls `mountEditor`
-// itself (docs/composable-editor.md §8; plan task E1).
+// itself (docs/composable-editor.md §8; plan task E1); what this page adds
+// around it is the page's: the journal's error net, and in dev and demo
+// builds the `__*` handles the tests and the playground drive the editor
+// by, and the playground's tools.
 
-import { loadLocale } from "@paged-media/strings";
+import { pageStorage } from "@paged-media/shell";
+import { loadLocale, type Strings } from "@paged-media/strings";
 
+import { publishDevHandles } from "./app/dev-handles";
+import {
+  exposeJournalForTests,
+  installGlobalErrorCapture,
+} from "./journal-sink";
 import { mountEditor } from "./main";
 
-const root = document.getElementById("root");
-if (!root) {
+// ADR 025 — the journal's global net. Without a window.onerror /
+// unhandledrejection handler any throw outside a React render is invisible:
+// nothing to attribute it to, nothing to put in a bug report. Installed
+// before the first render so a crash DURING it is caught.
+installGlobalErrorCapture();
+const devBuild = !import.meta.env.PROD || import.meta.env.MODE === "demo";
+if (!import.meta.env.PROD) {
+  // Test affordance, same shape as `__overlaySignals` / `__pagedCrash`.
+  exposeJournalForTests();
+}
+
+const found = document.getElementById("root");
+if (!found) {
   throw new Error("missing #root");
 }
+const root: HTMLElement = found;
+
+/** The page is the editor's, so its <html> follows the editor's theme:
+ *  the page's canvas (index.html's body background) wears the editor's
+ *  surface. The editor itself writes nothing on the page; this page does,
+ *  for itself. */
+function mirrorTheme(host: HTMLElement): void {
+  const html = document.documentElement;
+  let watched: Element | null = null;
+  const onClass = new MutationObserver(() => {
+    html.classList.toggle("dark", watched?.classList.contains("dark") ?? true);
+  });
+  const follow = () => {
+    const root = host.querySelector(":scope > [data-paged-editor]");
+    if (!root || root === watched) return;
+    watched = root;
+    onClass.disconnect();
+    onClass.observe(root, { attributes: true, attributeFilter: ["class"] });
+    html.classList.toggle("dark", root.classList.contains("dark"));
+  };
+  new MutationObserver(follow).observe(host, { childList: true });
+  html.classList.add("dark");
+  follow();
+}
+
+function mount(strings?: Strings): void {
+  const mounted = mountEditor(root, {
+    search: location.search,
+    devTools: true,
+    ownsPage: true,
+    guardUnload: true,
+    // The page is the editor's: its settings live in the page's storage,
+    // under the keys scripts/settings-inventory.json lists.
+    storage: pageStorage(),
+    ...(strings ? { strings } : {}),
+  });
+  if (devBuild) publishDevHandles(mounted.instance);
+  mirrorTheme(root);
+}
+
 const locale = new URLSearchParams(location.search).get("locale");
 if (locale) {
   void loadLocale(locale).then(({ strings, problem }) => {
     if (problem) console.warn(`[editor locale] ${problem}`);
     else document.documentElement.lang = locale;
-    mountEditor(root, { search: location.search, strings });
+    mount(strings);
   });
 } else {
-  mountEditor(root, { search: location.search });
+  mount();
 }
