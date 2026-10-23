@@ -82,6 +82,10 @@ export interface SheetInfo {
   cols: number;
   /** The tab's visibility as the workbook saved it (read-only). */
   state?: "visible" | "hidden" | "veryHidden";
+  /** A tab that is one chart (sheet ADR 519); absent = worksheet. */
+  kind?: "worksheet" | "chartsheet";
+  /** A chartsheet's chart (an index into `listCharts`). */
+  chart?: number;
 }
 
 /** One changed cell after an edit — the engine returns the recomputed
