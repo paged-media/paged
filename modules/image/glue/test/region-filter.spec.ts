@@ -5,7 +5,10 @@
 // GPU exists, so the engine runs the shipped CPU twins of the adjustment
 // chain's kernels. The pixels inside the region change, the ones outside
 // do not, the write is one undo step, and what the object model bakes is
-// what the engine's own `filterRegion` computes.
+// what the engine's own `filterRegion` computes. A mask given as data
+// (polygons with a feather, an alpha coverage as raw bytes or as an image)
+// narrows the region headless; `selection: true` reads the editor
+// session's selection and is refused where there is none.
 //
 // REQUIRE_REAL_WASM=1 turns a missing artifact into a failure (the
 // wasm-exec convention).
@@ -17,14 +20,22 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
   createHeadlessHost,
+  defineBundle,
   type HeadlessHost,
   silentConsole as silent,
 } from "@paged-media/plugin-sdk";
+import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
+import manifestJson from "@paged-media/image-manifest/manifest.json";
 import { covers } from "@paged-media/test-kit";
 
 import { imageBundle } from "../src/index";
 import { bootEngine, type ImageEngine } from "../src/engine";
 import { defaultAdjust, writeAdjust } from "../src/object-model/adjust";
+import {
+  contributeImageObjectModel,
+  engineCodec,
+} from "../src/object-model/contribute";
+import type { SelectionSource } from "../src/object-model/image-objects";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
@@ -76,13 +87,13 @@ const decode = (bytes: Uint8Array) => {
   }
 };
 
-async function imageDoc() {
+async function imageDoc(bundle = imageBundle) {
   const h = (live = await createHeadlessHost({
     resolveFrom: ENGINE_ANCHOR,
     console: silent,
   }));
   await h.load(minimalIdml());
-  h.loadBundle(imageBundle);
+  h.loadBundle(bundle);
   const out = await h.host.document.mutate({
     op: "replaceImageBytes",
     args: {
@@ -188,5 +199,227 @@ lane("filterRegion, headless (the CPU twins)", () => {
         params: { "noSuch.path": 1 },
       }),
     ).rejects.toThrow(/no adjustment parameter "noSuch.path"/);
+  });
+});
+
+/** The object model alone with `selection` standing in for the editor
+ *  session's live selection. */
+function withSelection(selection: SelectionSource) {
+  return defineBundle({
+    manifest: manifestJson as PluginManifest,
+    activate(host: BundleHost) {
+      const om = contributeImageObjectModel(
+        host,
+        [],
+        engineCodec(),
+        undefined,
+        selection,
+      );
+      return {
+        dispose: () => (om?.objects.dispose(), om?.handle.dispose()),
+      } as never;
+    },
+  });
+}
+
+/** Every pixel's (x, y) where `pred` holds. */
+const where = (pred: (x: number, y: number) => boolean) => {
+  const out: Array<[number, number]> = [];
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++) if (pred(x, y)) out.push([x, y]);
+  return out;
+};
+
+const INVERT = { "invert.enabled": true };
+const invertWire = () => {
+  const wire = defaultAdjust();
+  writeAdjust(wire, "invert.enabled", true);
+  return wire;
+};
+
+lane("filterRegion with a mask, headless", () => {
+  it("a polygon: only its pixels change, as the engine computes; a feather reaches further", async () => {
+    covers(`command:${FILTER}`);
+    const h = await imageDoc();
+    const before = await shown(h);
+    // A right triangle over the left half: (0,0)–(8,0)–(0,12).
+    const polygons = [
+      [
+        [0, 0],
+        [8, 0],
+        [0, 12],
+      ],
+    ];
+    const r = await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask: { polygons },
+    });
+    expect(r).toMatchObject({ applied: true, undoSteps: 1 });
+    const after = await shown(h);
+    // Well outside the triangle (x + 2y/3 > 9): untouched.
+    for (const [x, y] of where((x, y) => x + (2 * y) / 3 > 9))
+      expect(differs(before, after, x, y), `(${x}, ${y})`).toBe(false);
+    // Well inside: inverted exactly.
+    expect(Array.from(after.subarray(0, 4))).toEqual([55, 195, 235, 255]);
+    const direct = await engine.filterRegion(
+      stripes(),
+      W,
+      H,
+      invertWire(),
+      { x: 0, y: 0, w: W, h: H },
+      {
+        polygons: [
+          [
+            [0, 0],
+            [8, 0],
+            [0, 12],
+          ],
+        ],
+      },
+    );
+    expect(Buffer.from(after).equals(Buffer.from(direct))).toBe(true);
+
+    // The same triangle feathered changes pixels the hard one left.
+    await h.host.document.undo();
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask: { polygons, feather: 2 },
+      region: [0, 0, 12, 12],
+    });
+    const soft = await shown(h);
+    const reach = (img: Uint8Array) =>
+      where((x, y) => differs(before, img, x, y)).length;
+    expect(reach(soft)).toBeGreaterThan(reach(after));
+    // The region still clips hard: nothing at x ≥ 12.
+    for (const [x, y] of where((x) => x >= 12))
+      expect(differs(before, soft, x, y), `(${x}, ${y})`).toBe(false);
+  });
+
+  it("an alpha mask, raw bytes or an image: 0 untouched, 255 filtered, 128 half way", async () => {
+    const h = await imageDoc();
+    const before = await shown(h);
+    // Columns 0–3 full, 4 half, the rest none.
+    const alpha = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < 5; x++) alpha[y * W + x] = x < 4 ? 255 : 128;
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask: { alpha },
+    });
+    const after = await shown(h);
+    for (const [x, y] of where((x) => x > 4))
+      expect(differs(before, after, x, y), `(${x}, ${y})`).toBe(false);
+    // Column 0 is (200, 60, 20) → inverted; column 4 is the same stripe
+    // colour half inverted: mix(200, 55, ½) ≈ 127.
+    expect(Array.from(after.subarray(0, 4))).toEqual([55, 195, 235, 255]);
+    const half = after.subarray(16, 20);
+    expect(Math.abs(half[0]! - 127)).toBeLessThanOrEqual(1);
+    expect(Math.abs(half[1]! - 127)).toBeLessThanOrEqual(1);
+    expect(half[3]).toBe(255);
+
+    // The same coverage as a grey PNG of the canvas size.
+    await h.host.document.undo();
+    const grey = new Uint8Array(W * H * 4);
+    for (let i = 0; i < W * H; i++)
+      grey.set([alpha[i]!, alpha[i]!, alpha[i]!, 255], i * 4);
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      mask: { alpha: engine.encode(grey, W, H, "png") },
+    });
+    expect(Buffer.from(await shown(h)).equals(Buffer.from(after))).toBe(true);
+  });
+
+  it("refuses with a reason: a short polygon, a mis-sized alpha, a mask over nothing, no selection headless", async () => {
+    const h = await imageDoc();
+    await expect(
+      h.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        mask: {
+          polygons: [
+            [
+              [0, 0],
+              [4, 4],
+            ],
+          ],
+        },
+      }),
+    ).rejects.toThrow(/at least 3/);
+    await expect(
+      h.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        mask: { alpha: new Uint8Array(7) },
+      }),
+    ).rejects.toThrow(/16×12 = 192 coverage bytes/);
+    await expect(
+      h.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        mask: { alpha: new Uint8Array(W * H) },
+      }),
+    ).rejects.toThrow(/covers no pixel/);
+    await expect(
+      h.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        mask: { feather: 3 },
+      }),
+    ).rejects.toThrow(/needs polygons or an alpha/);
+    // The bundle's session has no image open headless.
+    await expect(
+      h.objects.invoke(FILTER, { layer: L, params: INVERT, selection: true }),
+    ).rejects.toThrow(/no image is open in the editor/);
+  });
+
+  it("selection: true filters within the session's selection (intersected with a mask)", async () => {
+    // The session's coverage: the top half.
+    const top = new Uint8Array(W * H).fill(255, 0, W * (H / 2));
+    const asked: string[] = [];
+    const h = await imageDoc(
+      withSelection((frameId) => {
+        asked.push(frameId);
+        return { width: W, height: H, coverage: top };
+      }),
+    );
+    const before = await shown(h);
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      selection: true,
+      mask: {
+        polygons: [
+          [
+            [0, 0],
+            [8, 0],
+            [8, 12],
+            [0, 12],
+          ],
+        ],
+      },
+    });
+    expect(asked).toEqual([FRAME]);
+    const after = await shown(h);
+    for (const [x, y] of where(() => true))
+      expect(differs(before, after, x, y), `(${x}, ${y})`).toBe(
+        x < 8 && y < H / 2,
+      );
+    h.dispose();
+    live = null;
+
+    const elsewhere = await imageDoc(
+      withSelection(() => ({ refused: "nothing is selected in the editor" })),
+    );
+    await expect(
+      elsewhere.objects.invoke(FILTER, {
+        layer: L,
+        params: INVERT,
+        selection: true,
+      }),
+    ).rejects.toThrow(/nothing is selected in the editor/);
   });
 });

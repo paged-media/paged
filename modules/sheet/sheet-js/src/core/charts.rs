@@ -340,6 +340,7 @@ impl SheetSession {
             .charts
             .iter()
             .enumerate()
+            .filter(|(i, _)| !self.removed_charts.contains(&(*i as u32)))
             .map(|(i, c)| ChartInfo {
                 index: i as u32,
                 host_sheet: c.host_sheet,
@@ -459,6 +460,7 @@ impl SheetSession {
                 self.doc.charts.len()
             ))
         })?;
+        self.live_chart(chart_index)?;
         let data = self.plot_data(&chart.model);
         Ok(generate_chart(&chart.model, &data, w_pt, h_pt))
     }

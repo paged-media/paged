@@ -1235,11 +1235,20 @@ Per module:
   region: the typed `filterRegion { layer, params, region? }` runs the adjustment chain (blur,
   sharpen, hue, invert and the adjustment paths) on a rectangle of a pixel layer, on the GPU where
   one exists and headless on shipped CPU twins of the same kernels, held to the GPU's tolerance
-  (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it through `paged-node invoke`. A region
-  is a rectangle: filtering within a selection stays the editor's Apply
-  (`modules/image/docs/status.md`).
-- **sheet:** a placement kind (range, view, print, sizing) with `paginateToChain` and
-  `placeName`; merge, borders, column widths and row heights; `importCsv`; chart delete.
+  (image ADR 465); `apps/cli/test/cli-image.spec.ts` runs it through `paged-node invoke`. A
+  selection is data there: `mask { polygons?, alpha?, feather? }` (polygons in image pixels, an
+  8-bit coverage as bytes or an image, a feather) narrows the region, partial coverage blending,
+  on both paths alike; in the editor `selection: true` filters within the live selection, and
+  headless it is refused with the reason (`modules/image/docs/status.md`).
+- **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
+  `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
+chain?, repeatHeaderRows }` that places a range, a defined name (kept by name) or a sheet's
+  print area in a new frame or paginates it across a frame chain; a typed `deleteChart` that
+  removes the chart and every placed copy of it. Each is one undo step (the chain's first
+  pagination is one batch on a host with in-batch handles); `apps/cli/test/cli-sheet.spec.ts`
+  runs placement and chart delete through `paged-node invoke`. A frame's view and sizing
+  (`sizing: "window"`, printed headings and gridlines) wait for the page side of the frame
+  window (sheet ADR 510) to be wired to placement (`modules/sheet/docs/status.md`).
 - **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per
   record or group; read-only inspection commands (preview, expression check, refresh diff).
 - **doc:** done: the exporter works after reopening a saved document; `block.text` writable;

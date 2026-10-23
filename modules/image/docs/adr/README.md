@@ -28,7 +28,7 @@ stood, for decisions made earlier; their status says so.
 | [462](462-sessions-persist-in-parts.md) | Raster sessions persist in container parts and bake into the frame | Accepted 2026-10-04 |
 | [463](463-one-undo-list.md) | One undo list for pixels and the layer stack, reachable from the host | Accepted 2026-10-04 |
 | [464](464-layers-at-their-own-bounds.md) | Layers live at their own bounds | Accepted 2026-10-05 |
-| [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450) |
+| [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
