@@ -171,6 +171,7 @@ function fakeSession(shown: GridScene = scene) {
     styleAtTarget: () => null,
     grabAt: () => "cell" as const,
     selectionAreas: () => [],
+    pageWindowsOnLeave: () => [],
     scrollInFrame: (dRows, dCols) => (
       calls.push(["scroll", dRows, dCols]),
       true
