@@ -42,6 +42,7 @@ const dialog = await import("../../../src/core-command-dialog");
 mock.module("../../../src/core-command-dialog", () => ({
   ...dialog,
   openCoreCommand: (
+    _scope: unknown,
     op: string | null,
     prefill: unknown = {},
     opts: unknown = {},

@@ -41,6 +41,7 @@
 // `host.text.measureString` is available, else estimated. A refused batch
 // bakes nothing and says why.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type { BundleHost, ElementId, PageId } from "@paged-media/plugin-api";
 import { PX_PER_PT } from "@paged-media/helpers";
 import { asFrameTarget, type WebDiagnostic } from "../../web-model/src";
@@ -61,6 +62,20 @@ import { loadWebEngine, type WebEngine } from "./engine-loader";
 import { publishRenderReport } from "./render-report";
 import { resolveFlowChain } from "./render-flow-command";
 import { describeRefusal, loadWebSource } from "./source-part";
+
+const M = defineMessages("web.bake", {
+  selectOne: "select a single web frame to bake to the document",
+  notWebFrame: "the selected frame is not a web frame",
+  noGeometry: "could not resolve the frame's page geometry",
+  engineNotLoaded:
+    "web rendering engine not loaded — the bake needs the engine",
+  refused: "the document refused the bake: {reason}",
+  // `{detail}` comes in its parentheses (see web.source.tags).
+  deferred:
+    "baked {created} native item(s); {total} unsupported item(s) not baked {detail}",
+  selectChain: "select a web frame plus one or more target frames",
+  noLayers: "flow render produced no layers",
+});
 
 /** The outcome of a bake-to-document — surfaced to the command handler. */
 export interface FrameBakeToDocOutcome {
@@ -120,14 +135,14 @@ export async function bakeWebFrameToDocument(
   });
 
   const target = asFrameTarget(id);
-  if (!target) return fail("select a single web frame to bake to the document");
+  if (!target) return fail(t(M.selectOne));
 
   const source = await loadWebSource(host, id);
-  if (!source) return fail("the selected frame is not a web frame");
+  if (!source) return fail(t(M.notWebFrame));
 
   const [geo] = await host.document.elementGeometry([id]);
   if (!geo?.bounds || !geo.pageId) {
-    return fail("could not resolve the frame's page geometry");
+    return fail(t(M.noGeometry));
   }
   const [top, left, bottom, right] = geo.bounds;
   const pageId = geo.pageId as PageId;
@@ -136,7 +151,7 @@ export async function bakeWebFrameToDocument(
 
   const engine = engineIn ?? (await loadWebEngine(host));
   if (!engine) {
-    return fail("web rendering engine not loaded — the bake needs the engine");
+    return fail(t(M.engineNotLoaded));
   }
 
   const { html } = engineDocument(source);
@@ -147,7 +162,7 @@ export async function bakeWebFrameToDocument(
     Math.round(frameHeightPt * PX_PER_PT),
   );
   if (layer === null) {
-    return fail("web rendering engine not loaded — the bake needs the engine");
+    return fail(t(M.engineNotLoaded));
   }
 
   const missing = resourceDiagnostics(engine);
@@ -259,7 +274,7 @@ async function applyBake(
   });
   if (!outcome.applied) {
     return {
-      refused: `the document refused the bake: ${describeRefusal(outcome.error)}`,
+      refused: t(M.refused, { reason: describeRefusal(outcome.error) }),
     };
   }
   const named = new Set([
@@ -290,7 +305,7 @@ function deferredDiagnostics(
   return [
     {
       severity: "warning",
-      message: `baked ${created} native item(s); ${total} unsupported item(s) not baked (${detail})`,
+      message: t(M.deferred, { created, total, detail: `(${detail})` }),
       source: "render",
     },
   ];
@@ -353,19 +368,15 @@ export async function bakeWebFlowToDocument(
     diagnostics: [{ severity: "info", message, source: "render" }],
   });
 
-  if (chain.length < 2)
-    return fail("select a web frame plus one or more target frames");
+  if (chain.length < 2) return fail(t(M.selectChain));
 
   const engine = engineIn ?? (await loadWebEngine(host));
-  if (!engine)
-    return fail("web rendering engine not loaded — the bake needs the engine");
+  if (!engine) return fail(t(M.engineNotLoaded));
 
   // Render the flow → one layer per chain frame (no ephemeral submit).
   const flow = await bakeWebFlow(host, chain, engine, { submit: false });
   if (!flow.rendered)
-    return fail(
-      flow.diagnostics[0]?.message ?? "flow render produced no layers",
-    );
+    return fail(flow.diagnostics[0]?.message ?? t(M.noLayers));
   // The shaped advance of every text item, one list per frame.
   const advances = engine.takeTextAdvances?.() ?? [];
 

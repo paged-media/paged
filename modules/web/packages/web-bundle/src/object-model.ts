@@ -65,20 +65,27 @@ import {
   parseAddress,
 } from "@paged-media/plugin-sdk";
 import { labelKey } from "@paged-media/helpers";
+import { defineMessages, t } from "@paged-media/strings";
 
 import manifest from "../manifest.json";
 import {
   boundNamesIn,
   cssVarNames,
   DEFAULT_SOURCE,
+  diagnoseHtml,
   isCssVarName,
+  namedFlowDiagnostics,
   normalizeFlowChain,
   normalizeTemplateVars,
   OVERFLOW_POLICIES,
   parseFlowInto,
+  renderWebFrameSource,
   scanCssVars,
   setCssVar,
+  sourceFromHtmlFile,
+  sourceFromTemplate,
   sourceRefOf,
+  templateById,
   withRecipient,
   type WebFrameSource,
   type WebSourceEnvelope,
@@ -89,8 +96,9 @@ import {
   bakeWebFlowToDocument,
   bakeWebFrameToDocument,
 } from "./bake-to-document";
-import { resolveDocumentVars } from "./bindings";
+import { resolveBindings, resolveDocumentVars } from "./bindings";
 import { loadWebEngine } from "./engine-loader";
+import { ingestHtml } from "./panels/ingest";
 import {
   DOCUMENT_VALUE_KEY,
   documentValuesMutation,
@@ -98,7 +106,16 @@ import {
   planSourceWrite,
   readDocumentValues,
   readWebLabel,
+  writeWebSource,
 } from "./source-part";
+import { webTemplateFields } from "./template-fields";
+
+/** The object kinds as a user names them. */
+const KIND_TITLE = defineMessages("web.objects", {
+  webFrame: "Web frame",
+  templateVar: "Template value",
+  cssVar: "CSS variable",
+});
 
 export const PLUGIN_ID = manifest.id;
 const LABEL_KEY = labelKey(PLUGIN_ID);
@@ -235,6 +252,24 @@ async function storageOf(
   }
 }
 
+/** What the source panel lints, without the panel: the template pass over
+ *  the bound values, the HTML policy and balance scan and the named-flow
+ *  lint. (The font parity lane needs the editor's font list; the render's
+ *  own findings come from `renderWebFrame`.) */
+async function sourceDiagnostics(
+  host: BundleHost,
+  id: ElementId,
+  source: WebFrameSource,
+): Promise<Array<{ severity: string; message: string }>> {
+  const bound = (await resolveBindings(host, id, source)).vars;
+  const rendered = renderWebFrameSource(source, bound);
+  return [
+    ...rendered.diagnostics,
+    ...diagnoseHtml(rendered.html),
+    ...namedFlowDiagnostics(rendered.css),
+  ].map((d) => ({ severity: d.severity, message: d.message }));
+}
+
 class Rejected extends Error {}
 
 /** Apply one `set` of a webFrame path to a source; throws `Rejected`. */
@@ -348,7 +383,7 @@ function writeOf(
 function webFrameKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "webFrame",
-    title: "Web frame",
+    title: t(KIND_TITLE.webFrame),
     schema: schemaOf("webFrame"),
     content: { kind: "html", mime: ["text/html"] },
     hostOf: (address) => {
@@ -423,6 +458,8 @@ function webFrameKind(host: BundleHost): ObjectKindContribution {
           return val(boundNamesIn(source));
         case "cssVars":
           return val(cssVarNames(source.css));
+        case "diagnostics":
+          return val(await sourceDiagnostics(host, elementId, source));
         default:
           return refuse("unknownPath", `webFrame has no path "${path}"`);
       }
@@ -497,7 +534,7 @@ function templateVarKind(host: BundleHost): ObjectKindContribution {
   };
   return {
     kind: "templateVar",
-    title: "Template value",
+    title: t(KIND_TITLE.templateVar),
     schema: schemaOf("templateVar"),
     hostOf: () => "doc",
     async list() {
@@ -555,7 +592,7 @@ function split(address: Address): { frame: string; name: string } | null {
 function cssVarKind(host: BundleHost): ObjectKindContribution {
   return {
     kind: "cssVar",
-    title: "CSS variable",
+    title: t(KIND_TITLE.cssVar),
     schema: schemaOf("cssVar"),
     hostOf: (address) => {
       const s = split(address);
@@ -813,53 +850,116 @@ function typedCommands(host: BundleHost): TypedCommandContribution[] {
     };
     return id(a) === id(b);
   };
+  /** Insert a frame on `page` at `bounds` carrying `source`: ONE batch
+   *  (insertFrame + the label on the frame it mints), one undo step. */
+  const insertSource = async (
+    page: string,
+    bounds: [number, number, number, number],
+    source: WebFrameSource,
+  ): Promise<{ webFrame: Address; frame: Address }> => {
+    const pageId = await resolvePage(host, page);
+    if (!pageId)
+      throw new Error(`invalidValue: ${page} is not a page of this document`);
+    const plan = planSourceWrite(host, source);
+    if ("refused" in plan) throw new Error(`failed: ${plan.refused}`);
+    for (const p of plan.parts) await host.parts.write(p.path, p.bytes!);
+    const outcome = await host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertFrame",
+            args: {
+              pageId,
+              bounds,
+            },
+          },
+          {
+            op: "setPluginMetadata",
+            args: {
+              elementId: { kind: "rectangle", id: "$created" },
+              key: LABEL_KEY,
+              value: plan.labelValue,
+            },
+          },
+        ],
+      },
+    } as never);
+    if (!outcome.applied || !outcome.createdId)
+      throw new Error(`failed: the document created no frame`);
+    return {
+      webFrame: webAddress(
+        "webFrame",
+        (outcome.createdId as { id: string }).id,
+      ),
+      frame: fromElementId(outcome.createdId),
+    };
+  };
   return [
     cmd<{ page: string; bounds: number[]; html: string; css: string }, unknown>(
       "media.paged.web.command.insertWebFrame",
-      async (_ctx, args) => {
-        const pageId = await resolvePage(host, args.page);
-        if (!pageId)
-          throw new Error(
-            `invalidValue: ${args.page} is not a page of this document`,
-          );
+      (_ctx, args) => {
         const blank = args.html.length === 0 && args.css.length === 0;
         const source: WebFrameSource = blank
           ? DEFAULT_SOURCE
           : { ...DEFAULT_SOURCE, html: args.html, css: args.css };
-        const plan = planSourceWrite(host, source);
-        if ("refused" in plan) throw new Error(`failed: ${plan.refused}`);
-        for (const p of plan.parts) await host.parts.write(p.path, p.bytes!);
-        const outcome = await host.document.mutate({
-          op: "batch",
-          args: {
-            ops: [
-              {
-                op: "insertFrame",
-                args: {
-                  pageId,
-                  bounds: args.bounds as [number, number, number, number],
-                },
-              },
-              {
-                op: "setPluginMetadata",
-                args: {
-                  elementId: { kind: "rectangle", id: "$created" },
-                  key: LABEL_KEY,
-                  value: plan.labelValue,
-                },
-              },
-            ],
-          },
-        } as never);
-        if (!outcome.applied || !outcome.createdId)
-          throw new Error(`failed: the document created no frame`);
-        return {
-          webFrame: webAddress(
-            "webFrame",
-            (outcome.createdId as { id: string }).id,
-          ),
-          frame: fromElementId(outcome.createdId),
-        };
+        return insertSource(
+          args.page,
+          args.bounds as [number, number, number, number],
+          source,
+        );
+      },
+    ),
+    cmd<
+      { html: string; css?: string; page: string; bounds: number[] },
+      unknown
+    >("media.paged.web.command.importHtml", async (_ctx, args) => {
+      // A whole file splits into its lanes (its style elements are the
+      // css); with `css` given, `html` is the html lane. Either way the html
+      // is sanitised on the way in, as a paste is (page JavaScript never
+      // runs).
+      const imported =
+        args.css === undefined
+          ? sourceFromHtmlFile(args.html)
+          : (() => {
+              const { html, removed } = ingestHtml(args.html);
+              return {
+                source: { ...DEFAULT_SOURCE, html, css: args.css },
+                removed,
+              };
+            })();
+      const made = await insertSource(
+        args.page,
+        args.bounds as [number, number, number, number],
+        imported.source,
+      );
+      return { ...made, removed: [...imported.removed] };
+    }),
+    cmd<{ frame: string; template?: string }, unknown>(
+      "media.paged.web.command.makeWebFrame",
+      async (_ctx, args) => {
+        const { frames, items } = await webFrames(host);
+        const e = resolveFrameRef(args.frame, items);
+        if (!e)
+          throw new Error(`invalidValue: ${args.frame} is not a page item`);
+        const id = (e as { id: string }).id;
+        if (frames.has(id))
+          throw new Error(`invalidValue: ${args.frame} is a web frame already`);
+        let source: WebFrameSource = DEFAULT_SOURCE;
+        if (args.template !== undefined) {
+          const t = templateById(args.template);
+          if (!t)
+            throw new Error(
+              `invalidValue: no starter template "${args.template}"`,
+            );
+          source = sourceFromTemplate(t, DEFAULT_SOURCE.options);
+        }
+        const out = await writeWebSource(host, e, source);
+        if (!out.applied)
+          throw new Error(
+            `failed: ${out.reason ?? "the document refused the change"}`,
+          );
+        return { webFrame: webAddress("webFrame", id) };
       },
     ),
     cmd<FrameArgs, unknown>(
@@ -975,6 +1075,7 @@ export function createWebObjectModel(
   return {
     kinds: [webFrameKind(host), templateVarKind(host), cssVarKind(host)],
     commands: typedCommands(host),
+    templateFields: webTemplateFields(host),
     batch: (ops) => planWebOps(host, ops),
   };
 }

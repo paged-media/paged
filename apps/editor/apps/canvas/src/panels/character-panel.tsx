@@ -76,6 +76,12 @@ import type { FontSummary, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { characterComposition } from "./character.composition";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.characterPanel", {
+  otfFeature: "OpenType feature {tag}",
+  family: "Family",
+});
 
 // W2.4 — UI chip label → the OpenType feature tag it toggles in the
 // `characterOtfFeatures` string. Standard 4-char OT feature tags:
@@ -102,6 +108,7 @@ function parseTags(v: Value | null): Set<string> {
 /** OpenType feature chips — each toggles its tag in the run's
  *  `characterOtfFeatures` string, preserving the other tags (W2.4). */
 function OpenTypeChips() {
+  const strings = useStrings();
   const { otf } = useObjectBindings(OTF_BINDING);
   const active = parseTags(otf.value);
   const disabled = otf.onCommit == null;
@@ -139,7 +146,7 @@ function OpenTypeChips() {
                 data-opentype-chip={label}
                 data-otf-tag={tag}
                 data-active={on ? "" : undefined}
-                title={`OpenType feature ${tag}`}
+                title={strings.t(M.otfFeature, { tag })}
                 className="h-[26px] rounded-[6px] border px-[9px] text-[11px]"
                 style={{
                   fontFamily: "var(--font-mono)",
@@ -262,6 +269,7 @@ function unwrapText(v: Value | null): string | null {
  *  the catalog CollectionSelect leaf can't read the `family`-keyed
  *  row shape, and the wire value is the family name string). */
 function FamilySelect() {
+  const strings = useStrings();
   const fonts = useCollection<FontSummary>("fonts");
   const { family, characterStyle, paragraphStyle } =
     useObjectBindings(FAMILY_BINDING);
@@ -291,10 +299,10 @@ function FamilySelect() {
         className="text-[11.5px] mb-[5px]"
         style={{ color: "var(--pg-muted-fg)" }}
       >
-        Family
+        {strings.t(M.family)}
       </div>
       <KitSelect
-        aria-label="Family"
+        aria-label={strings.t(M.family)}
         value={resolved ? current : "__mixed__"}
         soft={!resolved || own === ""}
         data-inherited={own === "" && resolved ? "" : undefined}
@@ -325,11 +333,12 @@ function FamilySelect() {
 }
 
 export function CharacterPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3 flex flex-col gap-[9px]" data-character-panel="ready">
         <FamilySelect />
-        <CompositionRenderer composition={characterComposition} />
+        <CompositionRenderer composition={characterComposition(strings)} />
         <OpenTypeChips />
       </div>
     </CatalogRegistryProvider>

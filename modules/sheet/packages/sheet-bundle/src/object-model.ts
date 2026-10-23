@@ -458,6 +458,12 @@ export interface SheetObjectModel {
   /** Re-read the version label and load the version it names (document
    *  undo / redo / open). Serialised; never rejects. */
   reconcile(): Promise<void>;
+  /** A typed command's write (`layout-commands.ts`): applied to the
+   *  engine, saved as a version and labelled as ONE undo step. `touched`
+   *  names the cells it changed, for the placements' refresh. */
+  commandWrite(
+    apply: (engine: SheetEngine, touched: (r: ResolvedRange) => void) => void,
+  ): Promise<void>;
   dispose(): void;
 }
 
@@ -1743,6 +1749,24 @@ export function contributeObjectModel(
     fill("fillDown", "Fill down", true),
     fill("fillRight", "Fill right", false),
     {
+      // Sheet ADR 510 — Excel's cut on the grid's selection.
+      id: C("cutSelection"),
+      title: "Cut sheet selection",
+      args: struct({}),
+      async handler() {
+        session.cutSelection();
+      },
+    },
+    {
+      // Sheet ADR 510 — Ctrl+1: the cell format panel.
+      id: C("formatCells"),
+      title: "Format cells",
+      args: struct({}),
+      async handler() {
+        await host.shell?.openPanel?.("media.paged.sheet.panel.properties");
+      },
+    },
+    {
       id: C("clearCells"),
       title: "Clear cells",
       args: struct({ range: text }),
@@ -1834,6 +1858,10 @@ export function contributeObjectModel(
 
   return {
     reconcile,
+    commandWrite: (apply) =>
+      commandWrite((engine, p) =>
+        apply(engine, (r) => p.regions.push(regionOf(r))),
+      ),
     dispose() {
       historySub.dispose();
       changeSub.dispose();

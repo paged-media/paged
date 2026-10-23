@@ -21,8 +21,11 @@
 // from ShellChrome so every app gets the palette toggle + panel
 // toggles without writing them itself.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS } from "../messages";
 import { notifyPalette } from "../../chrome/CommandPalette";
-import { cockpitActions } from "../../cockpit/cockpit-state-context";
+import { scopeOf } from "../editor-scope";
+import { cockpitActionsOf } from "../../cockpit/cockpit-state-context";
 import type { PanelContribution, CommandContribution } from "../../registries";
 
 export const PAGED_PALETTE_TOGGLE = "paged.palette.toggle";
@@ -33,10 +36,12 @@ export const PAGED_PALETTE_TOGGLE = "paged.palette.toggle";
  */
 export const PALETTE_TOGGLE_COMMAND: CommandContribution = {
   id: PAGED_PALETTE_TOGGLE,
-  title: "Toggle command palette",
+  get title() {
+    return t(COMMANDS.togglePalette);
+  },
   category: "View",
-  handler: () => {
-    notifyPalette("toggle");
+  handler: (paged) => {
+    notifyPalette(scopeOf(paged), "toggle");
   },
 };
 
@@ -74,18 +79,18 @@ export function buildPanelToggleCommands(
 ): [CommandContribution, CommandContribution] {
   const show: CommandContribution = {
     id: `paged.panel.show.${panel.id}`,
-    title: `Show: ${panel.title}`,
+    title: t(COMMANDS.showPanel, { panel: panel.title }),
     category: "View",
-    handler: () => {
-      cockpitActions.openPanel?.(panel.id);
+    handler: (paged) => {
+      cockpitActionsOf(scopeOf(paged)).openPanel?.(panel.id);
     },
   };
   const hide: CommandContribution = {
     id: `paged.panel.hide.${panel.id}`,
-    title: `Hide: ${panel.title}`,
+    title: t(COMMANDS.hidePanel, { panel: panel.title }),
     category: "View",
-    handler: () => {
-      cockpitActions.closeTab?.(panel.id);
+    handler: (paged) => {
+      cockpitActionsOf(scopeOf(paged)).closeTab?.(panel.id);
     },
   };
   return [show, hide];

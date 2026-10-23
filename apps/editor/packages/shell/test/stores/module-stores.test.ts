@@ -29,6 +29,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { createEditorScope } from "../../src/state/editor-scope";
 import type { DocumentEntry, LibraryClient } from "@paged-media/repository";
 import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
@@ -61,30 +62,32 @@ import {
 
 afterEach(() => unstubAllGlobals());
 
-describe("chrome storage scope", () => {
-  afterEach(() => setChromeStorageScope(""));
+// One editor per test (plan task E1): its stores start empty.
+let scope = createEditorScope();
+beforeEach(() => {
+  scope = createEditorScope();
+});
 
+describe("chrome storage scope", () => {
   test("the ordinary editor uses the bare key", () => {
-    setChromeStorageScope("");
-    expect(chromeStorageScope()).toBe("");
-    expect(scopedChromeKey("paged.cockpit.v1")).toBe("paged.cockpit.v1");
+    setChromeStorageScope(scope, "");
+    expect(chromeStorageScope(scope)).toBe("");
+    expect(scopedChromeKey(scope, "paged.cockpit.v1")).toBe("paged.cockpit.v1");
   });
 
   test("a solo workspace suffixes every key with its scope", () => {
-    setChromeStorageScope(".solo.paged.sheet");
-    expect(chromeStorageScope()).toBe(".solo.paged.sheet");
-    expect(scopedChromeKey("paged.cockpit.v1")).toBe(
+    setChromeStorageScope(scope, ".solo.paged.sheet");
+    expect(chromeStorageScope(scope)).toBe(".solo.paged.sheet");
+    expect(scopedChromeKey(scope, "paged.cockpit.v1")).toBe(
       "paged.cockpit.v1.solo.paged.sheet",
     );
-    expect(scopedChromeKey("paged.workflowMode")).toBe(
+    expect(scopedChromeKey(scope, "paged.workflowMode")).toBe(
       "paged.workflowMode.solo.paged.sheet",
     );
   });
 });
 
 describe("open file handle (Save writes back to the opened file)", () => {
-  afterEach(() => setOpenFileHandle(null));
-
   function handle(opts: {
     permission?: PermissionState;
     request?: PermissionState;
@@ -120,16 +123,19 @@ describe("open file handle (Save writes back to the opened file)", () => {
   }
 
   test("no handle: nothing to write back, the caller downloads", async () => {
-    expect(getOpenFileHandle()).toBeNull();
-    expect(await writeToOpenFile(new Uint8Array([1]), "x/y")).toBe(false);
+    expect(getOpenFileHandle(scope)).toBeNull();
+    expect(await writeToOpenFile(scope, new Uint8Array([1]), "x/y")).toBe(
+      false,
+    );
   });
 
   test("granted: the bytes are written and the file closed", async () => {
     const f = handle({ permission: "granted" });
-    setOpenFileHandle(f.h);
-    expect(getOpenFileHandle()).toBe(f.h);
+    setOpenFileHandle(scope, f.h);
+    expect(getOpenFileHandle(scope)).toBe(f.h);
     expect(
       await writeToOpenFile(
+        scope,
         new Uint8Array([1, 2, 3]),
         "application/x-paged+zip",
       ),
@@ -142,29 +148,35 @@ describe("open file handle (Save writes back to the opened file)", () => {
 
   test("prompt: asks, and writes only when the user grants", async () => {
     const yes = handle({ permission: "prompt", request: "granted" });
-    setOpenFileHandle(yes.h);
-    expect(await writeToOpenFile(new Uint8Array([1]), "a/b")).toBe(true);
+    setOpenFileHandle(scope, yes.h);
+    expect(await writeToOpenFile(scope, new Uint8Array([1]), "a/b")).toBe(true);
     expect(yes.log).toEqual(["query", "request", "open", "write", "close"]);
     const no = handle({ permission: "prompt", request: "denied" });
-    setOpenFileHandle(no.h);
-    expect(await writeToOpenFile(new Uint8Array([1]), "a/b")).toBe(false);
+    setOpenFileHandle(scope, no.h);
+    expect(await writeToOpenFile(scope, new Uint8Array([1]), "a/b")).toBe(
+      false,
+    );
     expect(no.log).toEqual(["query", "request"]);
   });
 
   test("denied, or a write that throws: false (never a save that did not happen)", async () => {
     const denied = handle({ permission: "denied" });
-    setOpenFileHandle(denied.h);
-    expect(await writeToOpenFile(new Uint8Array([1]), "a/b")).toBe(false);
+    setOpenFileHandle(scope, denied.h);
+    expect(await writeToOpenFile(scope, new Uint8Array([1]), "a/b")).toBe(
+      false,
+    );
     expect(denied.log).toEqual(["query"]);
     const broken = handle({ permission: "granted", failWrite: true });
-    setOpenFileHandle(broken.h);
-    expect(await writeToOpenFile(new Uint8Array([1]), "a/b")).toBe(false);
+    setOpenFileHandle(scope, broken.h);
+    expect(await writeToOpenFile(scope, new Uint8Array([1]), "a/b")).toBe(
+      false,
+    );
   });
 
   test("a handle without permission probes is written directly", async () => {
     const f = handle({});
-    setOpenFileHandle(f.h);
-    expect(await writeToOpenFile(new Uint8Array([9]), "a/b")).toBe(true);
+    setOpenFileHandle(scope, f.h);
+    expect(await writeToOpenFile(scope, new Uint8Array([9]), "a/b")).toBe(true);
     expect(f.log).toEqual(["open", "write", "close"]);
   });
 
@@ -178,13 +190,13 @@ describe("open file handle (Save writes back to the opened file)", () => {
 
 describe("pending import source", () => {
   test("a take returns the parked name once, then null", () => {
-    expect(takePendingImportSource()).toBeNull();
-    setPendingImportSource("Q3 report.xlsx");
-    expect(takePendingImportSource()).toBe("Q3 report.xlsx");
-    expect(takePendingImportSource()).toBeNull();
-    setPendingImportSource("a.docx");
-    setPendingImportSource(null);
-    expect(takePendingImportSource()).toBeNull();
+    expect(takePendingImportSource(scope)).toBeNull();
+    setPendingImportSource(scope, "Q3 report.xlsx");
+    expect(takePendingImportSource(scope)).toBe("Q3 report.xlsx");
+    expect(takePendingImportSource(scope)).toBeNull();
+    setPendingImportSource(scope, "a.docx");
+    setPendingImportSource(scope, null);
+    expect(takePendingImportSource(scope)).toBeNull();
   });
 });
 
@@ -221,72 +233,72 @@ describe("library document", () => {
   const settle = () => new Promise((r) => setTimeout(r, 0));
 
   beforeEach(() => {
-    setLibrary(null);
-    setCurrentLibraryDocument(null);
+    setLibrary(scope, null);
+    setCurrentLibraryDocument(scope, null);
   });
 
   test("set, read and subscribe: every change bumps the version", () => {
     const seen: number[] = [];
-    const off = subscribeLibrary(() => seen.push(libraryVersion()));
+    const off = subscribeLibrary(scope, () => seen.push(libraryVersion(scope)));
     const { lib } = fakeLibrary();
-    setLibrary(lib);
-    expect(getLibrary()).toBe(lib);
-    setCurrentLibraryDocument(entry("d1"));
-    expect(currentLibraryDocument()?.id).toBe("d1");
+    setLibrary(scope, lib);
+    expect(getLibrary(scope)).toBe(lib);
+    setCurrentLibraryDocument(scope, entry("d1"));
+    expect(currentLibraryDocument(scope)?.id).toBe("d1");
     off();
-    setCurrentLibraryDocument(null);
+    setCurrentLibraryDocument(scope, null);
     expect(seen).toHaveLength(2);
     expect(seen[1]).toBe(seen[0] + 1);
   });
 
   test("without a library: an opened file is no library document and a save commits nothing", async () => {
-    rememberOpenedFile(new Uint8Array([1]), "a.idml");
-    expect(currentLibraryDocument()).toBeNull();
-    expect(await commitSave(new Uint8Array([1]), "a.paged")).toBeNull();
+    rememberOpenedFile(scope, new Uint8Array([1]), "a.idml");
+    expect(currentLibraryDocument(scope)).toBeNull();
+    expect(await commitSave(scope, new Uint8Array([1]), "a.paged")).toBeNull();
   });
 
   test("an opened file becomes the library document once its import lands", async () => {
     const f = fakeLibrary();
-    setLibrary(f.lib);
-    rememberOpenedFile(new Uint8Array([1]), "a.idml");
-    expect(currentLibraryDocument()).toBeNull();
+    setLibrary(scope, f.lib);
+    rememberOpenedFile(scope, new Uint8Array([1]), "a.idml");
+    expect(currentLibraryDocument(scope)).toBeNull();
     f.resolveImport(0, entry("a"));
     await settle();
-    expect(currentLibraryDocument()?.id).toBe("a");
+    expect(currentLibraryDocument(scope)?.id).toBe("a");
   });
 
   test("a save that races the open waits for it instead of minting a second document", async () => {
     const f = fakeLibrary();
-    setLibrary(f.lib);
-    rememberOpenedFile(new Uint8Array([1]), "a.idml");
-    const saved = commitSave(new Uint8Array([2]), "a.paged");
+    setLibrary(scope, f.lib);
+    rememberOpenedFile(scope, new Uint8Array([1]), "a.idml");
+    const saved = commitSave(scope, new Uint8Array([2]), "a.paged");
     await settle();
     expect(f.calls).toEqual(["import a.idml"]);
     f.resolveImport(0, entry("a"));
     expect(await saved).toEqual({ head: "a-h1", changed: true });
     expect(f.calls).toEqual(["import a.idml", "save a"]);
-    expect(currentLibraryDocument()?.head).toBe("a-h1");
+    expect(currentLibraryDocument(scope)?.head).toBe("a-h1");
   });
 
   test("a second open supersedes the first: the late import does not become current", async () => {
     const f = fakeLibrary();
-    setLibrary(f.lib);
-    rememberOpenedFile(new Uint8Array([1]), "first.idml");
-    rememberOpenedFile(new Uint8Array([2]), "second.idml");
+    setLibrary(scope, f.lib);
+    rememberOpenedFile(scope, new Uint8Array([1]), "first.idml");
+    rememberOpenedFile(scope, new Uint8Array([2]), "second.idml");
     f.resolveImport(1, entry("second"));
     await settle();
     f.resolveImport(0, entry("first"));
     await settle();
-    expect(currentLibraryDocument()?.id).toBe("second");
+    expect(currentLibraryDocument(scope)?.id).toBe("second");
   });
 
   test("a document with no library entry yet (File > New) is imported on its first save", async () => {
     const f = fakeLibrary();
-    setLibrary(f.lib);
-    const saved = commitSave(new Uint8Array([3]), "Untitled.paged");
+    setLibrary(scope, f.lib);
+    const saved = commitSave(scope, new Uint8Array([3]), "Untitled.paged");
     await settle();
     f.resolveImport(0, entry("new", "n0"));
     expect(await saved).toEqual({ head: "n0", changed: true });
-    expect(currentLibraryDocument()?.id).toBe("new");
+    expect(currentLibraryDocument(scope)?.id).toBe("new");
   });
 });

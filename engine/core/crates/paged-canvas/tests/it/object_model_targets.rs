@@ -139,6 +139,50 @@ fn table_and_cell_addresses_set_without_their_story() {
     assert_eq!(reply.unwrap(), Value::Text(next.into()));
 }
 
+/// A cell's `text` reads its paragraphs joined by `\n`, the stream a
+/// cell-addressed `insertText` writes, and follows a write into it.
+#[test]
+fn a_cell_reads_its_text() {
+    let mut m = load(paged_gen::samples::tables::build());
+    let cell = m.query("cell").unwrap().into_iter().next().expect("a cell");
+    let Address::Cell {
+        table_id, row, col, ..
+    } = &cell
+    else {
+        unreachable!()
+    };
+    let Value::Text(before) = m.get_property_at(&cell, "text").unwrap() else {
+        panic!("a cell's text is text")
+    };
+    let story_id = m
+        .scene()
+        .stories
+        .iter()
+        .find(|s| {
+            s.story
+                .paragraphs
+                .iter()
+                .any(|p| p.table.as_ref().and_then(|t| t.self_id.as_deref()) == Some(table_id))
+        })
+        .map(|s| s.self_id.clone())
+        .expect("the table's story");
+    m.apply_mutation(&Mutation::InsertText {
+        story_id,
+        offset: 0,
+        text: "A\nB".into(),
+        cell: Some(paged_wire::TextCellAddr {
+            table_id: table_id.clone(),
+            row: *row,
+            col: *col,
+        }),
+    })
+    .expect("write into the cell");
+    assert_eq!(
+        m.get_property_at(&cell, "text").unwrap(),
+        Value::Text(format!("A\nB{before}"))
+    );
+}
+
 /// v71 polish — `RequestGet` tells a MIXED value (a range whose runs
 /// disagree) from a path the object does not have, and both from an
 /// address that names nothing or does not parse: each refusal carries a

@@ -21,18 +21,21 @@
 // and the export loop (progress + cancel); this command only opens
 // it, so palette/menu/keybinding all converge on one code path.
 
+import { t } from "@paged-media/strings";
+import { COMMANDS } from "../messages";
 import type { CommandContribution } from "../../registries";
 import { notifyExportPdfDialog } from "../../chrome/ExportPdfDialog";
+import { scopeOf } from "../editor-scope";
 
 export const PAGED_FILE_EXPORT_PDF = "paged.file.exportPdf";
 
 export function buildExportPdfCommand(): CommandContribution {
   return {
     id: PAGED_FILE_EXPORT_PDF,
-    title: "Export PDF…",
+    title: t(COMMANDS.exportPdf),
     category: "File",
-    handler: () => {
-      notifyExportPdfDialog("open");
+    handler: (paged) => {
+      notifyExportPdfDialog(scopeOf(paged), "open");
     },
   };
 }

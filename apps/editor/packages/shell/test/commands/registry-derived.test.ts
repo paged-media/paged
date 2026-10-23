@@ -34,7 +34,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
-import { cockpitActions } from "../../src/cockpit/cockpit-state-context";
+import { cockpitActionsOf } from "../../src/cockpit/cockpit-state-context";
+import { detachedEditorScope } from "../../src/state/editor-scope";
+
+// The commands run against an editor without a scope: the page's
+// detached one (state/editor-scope.tsx).
+const cockpitActions = cockpitActionsOf(detachedEditorScope());
 import { createCommandRegistry } from "../../src/registries/command";
 import { createEditContextRegistry } from "../../src/registries/edit-context";
 import { createKeybindingRegistry } from "../../src/registries/keybinding";

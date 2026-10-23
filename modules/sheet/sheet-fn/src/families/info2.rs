@@ -109,80 +109,27 @@ pub fn type_fn(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 
 /// `ERROR.TYPE(error_val)` — map an error value to its 1-based index
 /// (ECMA-376 §18.17.7): `1` `#NULL!`, `2` `#DIV/0!`, `3` `#VALUE!`,
-/// `4` `#REF!`, `5` `#NAME?`, `6` `#NUM!`, `7` `#N/A`. A **non-error**
-/// argument yields `#N/A` (Excel's ruling — there is no error to index).
-/// Like `TYPE`, this **inspects**: the error is the subject, never returned.
-///
-/// `#SPILL!` (an Excel-365 dynamic-array error) has no classic 1..7 index in
-/// the ECMA-376 table. We map it to `#N/A` rather than invent a code — the
-/// conservative, documented ruling (registry row); revisit if the spill track
-/// settles on Excel's modern `ERROR.TYPE(#SPILL!) = 9`.
+/// `4` `#REF!`, `5` `#NAME?`, `6` `#NUM!`, `7` `#N/A`, then Excel 365's
+/// newer codes ([`CellError::type_number`]: `#SPILL!` 9 … `#CALC!` 14,
+/// recorded against Excel). A **non-error** argument yields `#N/A` (Excel's
+/// ruling — there is no error to index). Like `TYPE`, this **inspects**: the
+/// error is the subject, never returned.
 pub fn error_type(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
     match subject(&args[0]) {
-        CellValue::Error(e) => match e {
-            CellError::Null => CellValue::Number(1.0),
-            CellError::Div0 => CellValue::Number(2.0),
-            CellError::Value => CellValue::Number(3.0),
-            CellError::Ref => CellValue::Number(4.0),
-            CellError::Name => CellValue::Number(5.0),
-            CellError::Num => CellValue::Number(6.0),
-            CellError::Na => CellValue::Number(7.0),
-            // No classic index for the modern spill error — ruled #N/A.
-            CellError::Spill => CellValue::Error(CellError::Na),
-        },
+        CellValue::Error(e) => CellValue::Number(f64::from(e.type_number())),
         // A non-error subject has no error code.
         _ => CellValue::Error(CellError::Na),
     }
 }
 
-/// `SHEET([value])` — the 1-based sheet index of a reference (Microsoft
-/// SHEET, public docs). With no argument it returns the sheet of the cell
-/// being evaluated ([`EvalCtx::current`] `+ 1`). With a **range** argument it
-/// returns the sheet of the reference's top-left
-/// ([`crate::arg::RangeView::origin`] `+ 1`).
-///
-/// # T1 limitation
-///
-/// A **scalar** argument (a value, not a recoverable reference) cannot name a
-/// sheet — the calling convention has erased the reference's address by the
-/// time it reaches this kernel. Excel's `SHEET("Name")` (a sheet *name* text
-/// argument) is therefore **not** supported at T1: a scalar argument falls
-/// back to the current cell's sheet (the conservative total answer). Name
-/// resolution needs a workbook→sheet-id lookup the pure kernel lacks (an
-/// additive `EvalCtx` hook); flagged in the track report.
-pub fn sheet(args: &[Arg], ctx: &EvalCtx) -> CellValue {
-    let sheet_id = match args.first() {
-        Some(Arg::Range(rv)) => rv.origin().sheet,
-        // A non-reference, non-name value (SHEET(99)) is #N/A (Excel 16).
-        Some(Arg::Scalar(v)) if !matches!(v, CellValue::Text(_)) => {
-            return CellValue::Error(CellError::Na)
-        }
-        // No arg, or sheet-name text (unsupported): the current cell.
-        _ => ctx.current.sheet,
-    };
-    CellValue::Number((sheet_id as u32 + 1) as f64)
-}
+// `SHEET` / `SHEETS` read the workbook: evaluator special forms since W3
+// (`sheet-calc/src/eval/info.rs`).
 
-/// `SHEETS([reference])` — the number of sheets a reference spans (Microsoft
-/// SHEETS, public docs).
-///
-/// # T1 limitation — always `1`
-///
-/// A 3-D reference (`Sheet1:Sheet3!A1`) spans multiple sheets, but the
-/// calling convention has no 3-D-range [`Arg`] shape: a range always lands as
-/// a single contiguous [`crate::arg::RangeView`] on one sheet. With **no
-/// argument**, `SHEETS()` is the workbook's total sheet count, which the pure
-/// [`EvalCtx`] does **not** carry. Both cases therefore return `1` at T1: a
-/// single contiguous reference, and (lacking a workbook sheet-count field) a
-/// no-argument call. The honest fix is an additive `EvalCtx::sheet_count`
-/// field plus a 3-D `Arg` variant — flagged in the track report, not faked.
-pub fn sheets(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
-    // A non-reference argument is #N/A (Excel 16: SHEETS(7)).
-    if matches!(args.first(), Some(Arg::Scalar(_))) {
-        return CellValue::Error(CellError::Na);
-    }
-    // T1: one contiguous reference spans one sheet; no workbook sheet count.
-    CellValue::Number(1.0)
+/// `ISNONTEXT(value)` — TRUE for anything but text: a number, a logical, a
+/// blank, an error (Microsoft reference; Excel-recorded, `info3/isnontext`).
+/// A reference reads its top-left cell.
+pub fn isnontext(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
+    CellValue::Bool(!matches!(subject(&args[0]), CellValue::Text(_)))
 }
 
 /// `ISEVEN(number)` — `TRUE` iff the **truncated** number is even (ECMA-376
@@ -332,45 +279,15 @@ mod tests {
             error_type(&[s(txt("x"))], &ctx()),
             CellValue::Error(CellError::Na)
         );
-        // The ruled #SPILL! → #N/A (no classic 1..7 index).
+        // Excel 365's codes: #SPILL! 9, #CALC! 14.
         assert_eq!(
             error_type(&[s(CellValue::Error(CellError::Spill))], &ctx()),
-            CellValue::Error(CellError::Na)
+            CellValue::Number(9.0)
         );
-    }
-
-    #[test]
-    fn sheet_no_arg_is_current_plus_one() {
-        // current.sheet == 0 → SHEET() == 1 (1-based).
-        let c = EvalCtx::new(DateSystem::Date1900, cr_at(2, 0, 0), 0.0, 1);
-        assert_eq!(sheet(&[], &c), num(3.0));
-    }
-
-    #[test]
-    fn sheet_range_arg_uses_origin_sheet() {
-        use crate::arg::RangeView;
-        let cells = [num(1.0)];
-        // Origin on sheet id 4 → SHEET(ref) == 5.
-        let rv = RangeView::from_slice(cr_at(4, 0, 0), 1, 1, &cells);
-        assert_eq!(sheet(&[Arg::Range(rv)], &ctx()), num(5.0));
-    }
-
-    #[test]
-    fn sheet_scalar_arg_falls_back_to_current() {
-        // A non-reference value is #N/A (Excel 16); name text falls back.
-        let c = EvalCtx::new(DateSystem::Date1900, cr_at(1, 0, 0), 0.0, 1);
-        assert_eq!(sheet(&[s(num(99.0))], &c), CellValue::Error(CellError::Na));
-        assert_eq!(sheet(&[s(txt("Sheet1"))], &c), num(2.0));
-    }
-
-    #[test]
-    fn sheets_is_one_t1() {
-        // T1 limitation: always 1 (no 3-D range, no workbook sheet count).
-        assert_eq!(sheets(&[], &ctx()), num(1.0));
-        use crate::arg::RangeView;
-        let cells = [num(1.0), num(2.0)];
-        let rv = RangeView::from_slice(cr_at(0, 0, 0), 1, 2, &cells);
-        assert_eq!(sheets(&[Arg::Range(rv)], &ctx()), num(1.0));
+        assert_eq!(
+            error_type(&[s(CellValue::Error(CellError::Calc))], &ctx()),
+            CellValue::Number(14.0)
+        );
     }
 
     #[test]

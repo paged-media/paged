@@ -25,6 +25,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { useStrings, type Strings } from "@paged-media/strings";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -48,6 +49,12 @@ import { Icon, hasIcon } from "../icons";
 import { useRovingFocus } from "../focus/roving-focus";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
+import { MENU_BAR, menuLabel } from "./messages";
+import {
+  queryEditor,
+  useEditorKeys,
+  useEditorRoot,
+} from "../state/editor-root";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -92,6 +99,9 @@ export const CORE_MENUS: readonly string[] = [
 const INSERT_VERB = /^Insert (.+)$/;
 
 export function MenuBar() {
+  const keys = useEditorKeys();
+  const root = useEditorRoot();
+  const strings = useStrings();
   const registries = useRegistries();
   const chrome = useChromeRegions();
   // Every registry this bar reads during render, as a view that changes
@@ -145,16 +155,16 @@ export function MenuBar() {
       if (e.key !== "F10" || e.shiftKey || e.altKey || e.metaKey || e.ctrlKey)
         return;
       if (e.defaultPrevented) return;
-      const first = document.querySelector<HTMLElement>(
+      const first = queryEditor<HTMLElement>(
+        root,
         '[role="menubar"] [data-menu-trigger]',
       );
       if (!first) return;
       e.preventDefault();
       first.focus();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    return keys.listen("keydown", onKey);
+  }, [keys, root]);
   const navRef = useRef<MenuNavigation>({
     origin: "keyboard",
     returnTo: null,
@@ -240,6 +250,7 @@ export function MenuBar() {
     state: paged,
     keyFor,
     iconFor,
+    strings,
   };
 
   // F-49 / R9 (ADR 234) — the bar is a WAI-ARIA menubar: one tab stop
@@ -292,7 +303,7 @@ export function MenuBar() {
           navRef.current.returnTo = null;
         }}
       >
-        {label}
+        {menuLabel(strings, label)}
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
@@ -327,10 +338,10 @@ export function MenuBar() {
   );
 
   return (
-    <nav aria-label="Main menu" style={menuBarStyle}>
+    <nav aria-label={strings.t(MENU_BAR.mainMenu)} style={menuBarStyle}>
       <div
         role="menubar"
-        aria-label="Main menu"
+        aria-label={strings.t(MENU_BAR.mainMenu)}
         style={menuBarStyle}
         {...roving}
       >
@@ -375,6 +386,9 @@ export interface MenuLeaf {
   icon?: string;
   accelerator?: string;
   kind?: "item" | "label";
+  /** A plugin panel moved into its namesake submenu: the panel's own
+   *  label, shown as "<name> panel" in the editor's language. */
+  panelOf?: string;
 }
 
 export interface MenuSubmenu {
@@ -394,6 +408,9 @@ function capitalise(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** The reserved first path segment of right-click rows (extensions ADR 334). */
+export const CONTEXT_MENU_ROOT = "Context";
+
 export function buildMenuTree(
   items: MenuItemContribution[],
 ): Array<[string, MenuNode[]]> {
@@ -401,6 +418,9 @@ export function buildMenuTree(
   for (const item of items) {
     let segments = item.path.split("/").filter(Boolean);
     if (segments.length < 2) continue; // No top-level menu to live in.
+    // `Context/…` rows belong to a frame surface's right-click menu
+    // (extensions ADR 334), not to the menu bar.
+    if (segments[0] === CONTEXT_MENU_ROOT) continue;
     // Insert verbs filed under a CORE menu gather in the Insert menu (see
     // the header comment). A context menu's own verbs stay put: "Insert
     // rows" belongs to the sheet, not to the page.
@@ -551,6 +571,7 @@ function nestPanelsUnderNamesakes(nodes: MenuNode[]): void {
     namesake.children.unshift({
       ...n,
       label: `${n.label} panel`,
+      panelOf: n.label,
       group: "namesake-panel",
       groupLabel: undefined,
       order: first - 1,
@@ -700,14 +721,26 @@ interface RenderCtx {
   state: unknown;
   keyFor: (commandId: string) => string | null;
   iconFor: (leaf: MenuLeaf) => string | null;
+  /** The editor's language: paths stay English, their segments show
+   *  translated (`menuLabel`). */
+  strings: Strings;
 }
 
-function displayLabel(item: MenuLeaf, state: unknown): string {
-  if (!item.labelFor) return item.label;
+/** A leaf's static label, in the editor's language. */
+function staticLabel(item: MenuLeaf, strings: Strings): string {
+  return item.panelOf !== undefined
+    ? strings.t(MENU_BAR.namesakePanel, {
+        name: menuLabel(strings, item.panelOf),
+      })
+    : menuLabel(strings, item.label);
+}
+
+function displayLabel(item: MenuLeaf, ctx: RenderCtx): string {
+  if (!item.labelFor) return staticLabel(item, ctx.strings);
   try {
-    return item.labelFor(state) ?? item.label;
+    return item.labelFor(ctx.state) ?? staticLabel(item, ctx.strings);
   } catch {
-    return item.label;
+    return staticLabel(item, ctx.strings);
   }
 }
 
@@ -741,7 +774,7 @@ function renderNodes(nodes: MenuNode[], ctx: RenderCtx): ReactNode[] {
           className="pg-mono-meta"
           style={{ padding: "4px 8px 2px", opacity: 0.55 }}
         >
-          {node.groupLabel}
+          {menuLabel(ctx.strings, node.groupLabel)}
         </div>,
       );
     }
@@ -751,7 +784,7 @@ function renderNodes(nodes: MenuNode[], ctx: RenderCtx): ReactNode[] {
         <DropdownMenuSub key={`sub-${node.label}`}>
           <DropdownMenuSubTrigger data-menu-submenu={node.label}>
             {iconColumn && <span style={iconSlotStyle} aria-hidden />}
-            {node.label}
+            {menuLabel(ctx.strings, node.label)}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent style={contentStyle}>
             {renderNodes(node.children, ctx)}
@@ -791,7 +824,7 @@ function renderLeaf(
         }}
       >
         {iconSlot}
-        {displayLabel(item, ctx.state)}
+        {displayLabel(item, ctx)}
       </div>
     );
   }
@@ -813,7 +846,7 @@ function renderLeaf(
       className="pg-mono-meta"
       style={{ marginLeft: "auto", paddingLeft: 16 }}
     >
-      soon
+      {ctx.strings.t(MENU_BAR.soon)}
     </span>
   ) : (
     accel && (
@@ -843,7 +876,7 @@ function renderLeaf(
         checked={on}
         onSelect={onSelect}
       >
-        {displayLabel(item, ctx.state)}
+        {displayLabel(item, ctx)}
         {trailing}
       </DropdownMenuCheckboxItem>
     );
@@ -851,7 +884,7 @@ function renderLeaf(
   return (
     <DropdownMenuItem key={item.command} disabled={greyed} onSelect={onSelect}>
       {iconSlot}
-      {displayLabel(item, ctx.state)}
+      {displayLabel(item, ctx)}
       {/* E2 — the accelerator column; a seam shows `soon` instead, since
           a blank column beside a greyed item reads as a missing key. */}
       {trailing}

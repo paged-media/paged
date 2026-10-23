@@ -1,0 +1,8 @@
+# PHONETIC(reference).
+# id	formula	setup	expected
+ph-0	=PHONETIC(A1)	A1=text:漢字	漢字
+ph-1	=PHONETIC(A1)	A1=123	123
+ph-2	=PHONETIC(A1)	-	
+ph-3	=PHONETIC(A1:B1)	A1=text:ab;B1=text:cd	ab
+ph-4	=PHONETIC("x")	-	x
+ph-5	=PHONETIC(A1)	A1=#N/A	#N/A

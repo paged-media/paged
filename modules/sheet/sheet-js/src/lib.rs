@@ -438,6 +438,22 @@ mod wasm {
             to_js(&window)
         }
 
+        /// Where Ctrl+arrow lands: `[row, col]`.
+        pub fn data_edge(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            d_row: i32,
+            d_col: i32,
+        ) -> Result<Vec<u32>, JsValue> {
+            let (r, c) = self
+                .session
+                .data_edge(sheet, row, col, d_row, d_col)
+                .map_err(map_err)?;
+            Ok(vec![r, c])
+        }
+
         /// Status-bar statistics of a range: `{count, numbers, sum, average,
         /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
         pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
@@ -589,6 +605,40 @@ mod wasm {
             max_change: f64,
         ) -> Result<JsValue, JsValue> {
             to_js(&self.session.set_iterative(on, max_iter, max_change))
+        }
+
+        /// Set the calculation mode (`auto` | `autoNoTable` | `manual`;
+        /// written back to `<calcPr calcMode>`): `{changed,circular}`.
+        pub fn set_calc_mode(&mut self, mode: &str) -> Result<JsValue, JsValue> {
+            let r = self.session.set_calc_mode(mode).map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// Calculate Now (F9): every pending cell and the volatile ones.
+        pub fn calculate_now(&mut self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.calculate_now())
+        }
+
+        /// Calculate Sheet (Shift+F9): the pending cells of one sheet.
+        pub fn calculate_sheet(&mut self, sheet: u16) -> Result<JsValue, JsValue> {
+            let r = self.session.calculate_sheet(sheet).map_err(map_err)?;
+            to_js(&r)
+        }
+
+        /// Whether edits wait for a calculation (manual mode).
+        pub fn is_calc_pending(&self) -> bool {
+            self.session.is_calc_pending()
+        }
+
+        /// Precision as displayed (`<calcPr fullPrecision>`).
+        pub fn set_full_precision(&mut self, full: bool) {
+            self.session.set_full_precision(full);
+        }
+
+        /// Name the document for `CELL("filename")` (empty: unsaved).
+        pub fn set_document_name(&mut self, name: &str) -> Result<JsValue, JsValue> {
+            let r = self.session.set_document_name(name);
+            to_js(&r)
         }
 
         /// Add a worksheet at the end (empty name = next free `SheetN`);

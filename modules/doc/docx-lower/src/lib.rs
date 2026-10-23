@@ -49,9 +49,10 @@ use sections::{SectionColumns, SectionPlacement};
 
 use ir::{
     Diagnostic, LoweredBlock, LoweredCell, LoweredDoc, LoweredFloat, LoweredFloatPosition,
-    LoweredHeaderFooter, LoweredHeaderFooterParts, LoweredImage, LoweredNoteNumbering,
-    LoweredParagraph, LoweredRun, LoweredSection, LoweredSegment, LoweredStory, LoweredStyle,
-    LoweredSwatch, LoweredTabStop, LoweredTable, PropValue, StyleCollection, StyleProp,
+    LoweredHeaderFooter, LoweredHeaderFooterParts, LoweredImage, LoweredListRef,
+    LoweredNoteNumbering, LoweredParagraph, LoweredRun, LoweredSection, LoweredSegment,
+    LoweredStory, LoweredStyle, LoweredSwatch, LoweredTabStop, LoweredTable, PropValue,
+    StyleCollection, StyleProp,
 };
 
 const PARA_PREFIX: &str = "ParagraphStyle/docx-";
@@ -1612,6 +1613,11 @@ impl Lowering {
                 images,
                 source_index,
                 segments,
+                bookmarks: p.bookmarks.clone(),
+                list: p.list.as_ref().map(|l| LoweredListRef {
+                    num_id: l.num_id,
+                    level: l.level,
+                }),
             },
             tail,
         )
@@ -2785,6 +2791,7 @@ mod tests {
         };
         let bullet = ListMarker {
             kind: ListKind::Bullet,
+            num_id: 1,
             level: 0,
             bullet_char: Some("\u{2022}".into()),
             number_format: None,
@@ -2804,6 +2811,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                bookmarks: Vec::new(),
             }));
         }
         let lowered = lower(&doc);
@@ -2859,6 +2867,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                bookmarks: Vec::new(),
             })
         };
         // Body, a 24 pt heading, body, body.
@@ -2925,6 +2934,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                bookmarks: Vec::new(),
             }));
         }
         let lowered = lower(&doc);
@@ -2960,6 +2970,7 @@ mod tests {
                     mark_half_pts: None,
                     source_para_ord: 0,
                     source_cell: None,
+                    bookmarks: Vec::new(),
                 }],
                 grid_span: 1,
                 v_merge: VMerge::None,
@@ -3003,6 +3014,7 @@ mod tests {
                 mark_half_pts: size,
                 source_para_ord: 0,
                 source_cell: None,
+                bookmarks: Vec::new(),
             }));
         }
         let lowered = lower(&doc);
@@ -3084,6 +3096,7 @@ mod tests {
             mark_half_pts: None,
             source_para_ord: 0,
             source_cell: None,
+            bookmarks: Vec::new(),
         }));
 
         let lowered = lower(&doc);

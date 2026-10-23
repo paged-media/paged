@@ -36,6 +36,18 @@ import { ReferencePointGrid } from "@paged-media/shell";
 import { LengthInput } from "@paged-media/ui";
 
 import { usePagePosition } from "./page-position";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.pageBoundsLeaf", {
+  x: "X",
+  y: "Y",
+  w: "W",
+  h: "H",
+  xLabel: "x",
+  yLabel: "y",
+  widthLabel: "width",
+  heightLabel: "height",
+});
 
 export const PAGED_INPUT_PAGE_BOUNDS = "paged.input.pageBounds";
 
@@ -45,6 +57,7 @@ function anchorFractions(index: number): { fx: number; fy: number } {
 }
 
 function PageBoundsLeaf({ props }: LeafProps) {
+  const strings = useStrings();
   const { box, edgeLeaf, moveBy, setEdges } = usePagePosition();
   const [anchor, setAnchor] = useState(0);
   const label = typeof props?.label === "string" ? props.label : null;
@@ -78,27 +91,27 @@ function PageBoundsLeaf({ props }: LeafProps) {
         />
         <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
           <LengthInput
-            prefix="X"
+            prefix={strings.t(M.x)}
             valuePt={x}
             disabled={!box}
             onChangePt={() => {}}
             onCommitPt={(nx) => {
               if (x !== null) void moveBy(nx - x, 0);
             }}
-            aria-label="x"
+            aria-label={strings.t(M.xLabel)}
           />
           <LengthInput
-            prefix="Y"
+            prefix={strings.t(M.y)}
             valuePt={y}
             disabled={!box}
             onChangePt={() => {}}
             onCommitPt={(ny) => {
               if (y !== null) void moveBy(0, ny - y);
             }}
-            aria-label="y"
+            aria-label={strings.t(M.yLabel)}
           />
           <LengthInput
-            prefix="W"
+            prefix={strings.t(M.w)}
             valuePt={w}
             min={0}
             disabled={!edgeLeaf}
@@ -106,10 +119,10 @@ function PageBoundsLeaf({ props }: LeafProps) {
             onCommitPt={(nw) => {
               if (h !== null) resize(nw, h);
             }}
-            aria-label="width"
+            aria-label={strings.t(M.widthLabel)}
           />
           <LengthInput
-            prefix="H"
+            prefix={strings.t(M.h)}
             valuePt={h}
             min={0}
             disabled={!edgeLeaf}
@@ -117,7 +130,7 @@ function PageBoundsLeaf({ props }: LeafProps) {
             onCommitPt={(nh) => {
               if (w !== null) resize(w, nh);
             }}
-            aria-label="height"
+            aria-label={strings.t(M.heightLabel)}
           />
         </div>
       </div>

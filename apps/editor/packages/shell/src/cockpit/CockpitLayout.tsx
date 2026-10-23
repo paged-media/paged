@@ -37,6 +37,8 @@
 // subscription while hidden; showing it again does not mount it again
 // (the viewport keeps its transferred canvas and its camera).
 
+import { useStrings } from "@paged-media/strings";
+import { COCKPIT } from "./messages";
 import { Activity, useState, type ComponentType } from "react";
 
 import { canvasViewportSurfaceProps } from "../focus/canvas-surface";
@@ -71,6 +73,7 @@ export function CockpitLayout({
   panelsHidden,
   onFile,
 }: CockpitLayoutProps) {
+  const strings = useStrings();
   const paged = usePaged();
   const chrome = useChromeRegions();
   const features = useRegistryView(useRegistries().features);
@@ -121,7 +124,7 @@ export function CockpitLayout({
             data-left-panel={leftId}
             // F-50 (ADR 259): the docks are complementary landmarks.
             role="complementary"
-            aria-label="Left panels"
+            aria-label={strings.t(COCKPIT.leftPanels)}
             style={{
               width: 262,
               flexShrink: 0,
@@ -149,7 +152,7 @@ export function CockpitLayout({
       {/* Canvas column — the main landmark (F-50, ADR 259). */}
       <main
         data-cockpit-main
-        aria-label="Document"
+        aria-label={strings.t(COCKPIT.document)}
         style={{
           flex: 1,
           minWidth: 0,
@@ -215,7 +218,7 @@ export function CockpitLayout({
         >
           <div
             role="complementary"
-            aria-label="Panels"
+            aria-label={strings.t(COCKPIT.panels)}
             style={{
               width: 320,
               flexShrink: 0,

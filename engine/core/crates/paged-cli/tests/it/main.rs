@@ -21,3 +21,4 @@ mod read_surface;
 mod repo_digest;
 mod session_compat;
 mod session_subcommand;
+mod template;

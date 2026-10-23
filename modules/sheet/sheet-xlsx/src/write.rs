@@ -118,6 +118,7 @@ pub fn save(
     formula_texts: &BTreeMap<(SheetId, u32, u32), String>,
     overrides: &BTreeMap<String, Vec<u8>>,
     dynamic: &DynamicArrays<'_>,
+    shared: &[compact_str::CompactString],
 ) -> Result<Vec<u8>, XlsxError> {
     let drop_calc_chain = container.part(CALC_CHAIN_PART).is_some();
 
@@ -182,13 +183,25 @@ pub fn save(
                                             "dirty worksheet {name} has no binding"
                                         ))
                                     })?;
-                                Cow::Owned(encode_worksheet(
-                                    model,
-                                    binding,
-                                    raw,
-                                    formula_texts,
-                                    dynamic,
-                                )?)
+                                let patched =
+                                    crate::patch::patch_worksheet(&crate::patch::PatchInput {
+                                        model,
+                                        binding,
+                                        original: raw,
+                                        formula_texts,
+                                        dynamic,
+                                        shared,
+                                    })?;
+                                match patched {
+                                    Some(bytes) => Cow::Owned(bytes),
+                                    None => Cow::Owned(encode_worksheet(
+                                        model,
+                                        binding,
+                                        raw,
+                                        formula_texts,
+                                        dynamic,
+                                    )?),
+                                }
                             } else {
                                 Cow::Borrowed(raw)
                             }
@@ -450,7 +463,7 @@ fn root_attrs(xml: &[u8]) -> Result<Vec<(String, String)>, XlsxError> {
 
 /// The `<worksheet>` children that sit between `<sheetData>` and
 /// `<mergeCells>` (ECMA-376 §18.3.1.99 child order).
-const BEFORE_MERGE_CELLS: &[&str] = &[
+pub(crate) const BEFORE_MERGE_CELLS: &[&str] = &[
     "sheetCalcPr",
     "sheetProtection",
     "protectedRanges",
@@ -570,9 +583,20 @@ fn encode_cell(
 /// there and refuses to open a worksheet that caches `#SPILL!`; it caches a
 /// blocked spill as `#VALUE!` itself (the real error rides a rich value Paged
 /// does not write). The anchor's formula recomputes `#SPILL!` on load.
-fn stored_error(e: sheet_core::value::CellError) -> &'static str {
+pub(crate) fn stored_error(e: sheet_core::value::CellError) -> &'static str {
+    use sheet_core::value::CellError;
     match e {
-        sheet_core::value::CellError::Spill => "#VALUE!",
+        // The errors newer than the file format have no `<v>` literal: Excel
+        // writes `#VALUE!` (plus a rich value naming the real error, which
+        // this writer does not emit) and refuses a workbook that stores the
+        // token itself.
+        CellError::Spill
+        | CellError::Calc
+        | CellError::Field
+        | CellError::Busy
+        | CellError::Connect
+        | CellError::Blocked
+        | CellError::Unknown => "#VALUE!",
         e => e.as_str(),
     }
 }
@@ -580,7 +604,7 @@ fn stored_error(e: sheet_core::value::CellError) -> &'static str {
 /// Format an f64 for `<v>` / width / height. Integers print without a
 /// decimal point (Excel convention); other values use Rust's shortest
 /// round-trip representation (the std `{}` formatter is shortest-round-trip).
-fn fmt_f64(n: f64) -> String {
+pub(crate) fn fmt_f64(n: f64) -> String {
     if n.fract() == 0.0 && n.is_finite() && n.abs() < 1e15 {
         format!("{}", n as i64)
     } else {

@@ -100,6 +100,7 @@ mod overprint;
 mod page_labels;
 mod paged;
 mod paragraph_props;
+mod pdf_attribute;
 pub mod preferences;
 mod reorder;
 pub mod resources;
@@ -111,6 +112,7 @@ pub mod text_frame_prefs;
 mod text_variables;
 pub mod text_wrap;
 pub mod transparency;
+pub mod xml_structure;
 pub mod zip_layout;
 
 /// The `Self` of the one `<CrossReferenceFormat>` the exporter emits for
@@ -678,7 +680,40 @@ pub(crate) fn write_package(
     // placed is unaffected (byte-identical when unmutated).
     let placed = placed_story_ids(doc);
     let mut dropped_story_srcs: Vec<String> = Vec::new();
+    // Engine ADR 1002 — a structure changed in paged is written from the
+    // model: each story part is written from its text without the source's
+    // elements, its ranges marked, and gets the model's elements back.
+    let xml_edited = doc.designmap.xml_structure_edited;
+    let xml_source = |orig: &[u8], entry: &str| -> Result<Vec<u8>, WriteError> {
+        if xml_edited {
+            xml_structure::strip_story_elements(orig).map_err(|source| WriteError::Rewrite {
+                entry: entry.to_string(),
+                source,
+            })
+        } else {
+            Ok(orig.to_vec())
+        }
+    };
+    let xml_place =
+        |part: Vec<u8>, story: &ParsedStory, entry: &str| -> Result<Vec<u8>, WriteError> {
+            if xml_edited {
+                xml_structure::place_elements(&part, &story.story).map_err(|source| {
+                    WriteError::Rewrite {
+                        entry: entry.to_string(),
+                        source,
+                    }
+                })
+            } else {
+                Ok(part)
+            }
+        };
     for story in &doc.stories {
+        let marked = if xml_edited {
+            xml_structure::mark_ranges(&story.story)
+        } else {
+            None
+        };
+        let text_of = marked.as_ref().unwrap_or(&story.story);
         if !story_is_placed(&placed, &story.self_id) {
             dropped_story_srcs.push(story_entry_src(story));
             continue;
@@ -691,17 +726,17 @@ pub(crate) fn write_package(
                     source,
                 })?;
             needs_xref_format |= unformatted > 0;
-            let injected = rewrite::inject_story_navigation(&orig, &anchors, Some(XREF_FORMAT_ID))
+            let base = xml_source(&orig, &story.src)?;
+            let injected = rewrite::inject_story_navigation(&base, &anchors, Some(XREF_FORMAT_ID))
                 .map_err(|source| WriteError::Rewrite {
                     entry: story.src.clone(),
                     source,
                 })?;
-            let new =
-                rewrite::rewrite_story_in_frame(&injected, &story.story, host_width_for(story))
-                    .map_err(|source| WriteError::Rewrite {
-                        entry: story.src.clone(),
-                        source,
-                    })?;
+            let new = rewrite::rewrite_story_in_frame(&injected, text_of, host_width_for(story))
+                .map_err(|source| WriteError::Rewrite {
+                    entry: story.src.clone(),
+                    source,
+                })?;
             let new = face::patch_story_face(&new, &doc.styles).map_err(|source| {
                 WriteError::Rewrite {
                     entry: story.src.clone(),
@@ -725,6 +760,7 @@ pub(crate) fn write_package(
                     entry: story.src.clone(),
                     source,
                 })?;
+            let new = xml_place(new, story, &story.src)?;
             if new != orig.as_slice() {
                 patched.insert(story.src.clone(), new);
             }
@@ -754,14 +790,15 @@ pub(crate) fn write_package(
                     }
                 })?;
                 needs_xref_format |= unformatted > 0;
+                let base = xml_source(&orig, &entry_src)?;
                 let injected =
-                    rewrite::inject_story_navigation(&orig, &anchors, Some(XREF_FORMAT_ID))
+                    rewrite::inject_story_navigation(&base, &anchors, Some(XREF_FORMAT_ID))
                         .map_err(|source| WriteError::Rewrite {
                             entry: entry_src.clone(),
                             source,
                         })?;
                 let new =
-                    rewrite::rewrite_story_in_frame(&injected, &story.story, host_width_for(story))
+                    rewrite::rewrite_story_in_frame(&injected, text_of, host_width_for(story))
                         .map_err(|source| WriteError::Rewrite {
                             entry: entry_src.clone(),
                             source,
@@ -792,6 +829,7 @@ pub(crate) fn write_package(
                         entry: entry_src.clone(),
                         source,
                     })?;
+                let new = xml_place(new, story, &entry_src)?;
                 if new != orig.as_slice() {
                     patched.insert(entry_src, new);
                 }
@@ -799,7 +837,7 @@ pub(crate) fn write_package(
             }
             let body = emit::story_part(
                 &emit::sanitize_id(&story.self_id),
-                &story.story,
+                text_of,
                 &dom_version,
                 &anchors_for(story),
                 host_width_for(story),
@@ -827,6 +865,7 @@ pub(crate) fn write_package(
                     entry: entry_src.clone(),
                     source,
                 })?;
+            let body = xml_place(body, story, &entry_src)?;
             new_entries.push((entry_src.clone(), body));
             new_story_srcs.push(entry_src);
         }
@@ -937,8 +976,56 @@ pub(crate) fn write_package(
             patched.insert(PREFERENCES_SRC.to_string(), new);
         }
     }
+    // Engine ADR 1002 — the structure's own parts, written from the model
+    // once it changed; a package without them gains them.
+    let mut mint_xml_refs = false;
+    if xml_edited {
+        const TAGS_SRC: &str = "XML/Tags.xml";
+        const BACKING_SRC: &str = "XML/BackingStory.xml";
+        let keeps = |content: &str| {
+            doc.stories.iter().any(|s| {
+                s.self_id == content && s.story.xml_elements.iter().any(|e| e.content.is_some())
+            })
+        };
+        let parts = [
+            (
+                TAGS_SRC,
+                xml_structure::tags_part(&doc.designmap.xml_tags, &dom_version),
+            ),
+            (
+                BACKING_SRC,
+                xml_structure::backing_story_part(
+                    doc.designmap.xml_root.as_ref(),
+                    &dom_version,
+                    &keeps,
+                ),
+            ),
+        ];
+        for (entry, body) in parts {
+            let body = body.map_err(|source| WriteError::Rewrite {
+                entry: entry.to_string(),
+                source,
+            })?;
+            match entry_bytes(&mut src, entry)? {
+                Some(orig) if orig == body => {}
+                Some(_) => {
+                    patched.insert(entry.to_string(), body);
+                }
+                None => {
+                    new_entries.push((entry.to_string(), body));
+                    mint_xml_refs = true;
+                }
+            }
+        }
+    }
     if let Some(orig) = entry_bytes(&mut src, DESIGNMAP_SRC)? {
         let mut new = orig.clone();
+        if mint_xml_refs {
+            new = xml_structure::ensure_xml_refs(&new).map_err(|source| WriteError::Rewrite {
+                entry: DESIGNMAP_SRC.to_string(),
+                source,
+            })?;
+        }
         if !(new_spread_refs.is_empty() && new_story_srcs.is_empty()) {
             new = emit::patch_designmap(&new, &new_spread_refs, &new_story_srcs, &[]).map_err(
                 |source| WriteError::Rewrite {

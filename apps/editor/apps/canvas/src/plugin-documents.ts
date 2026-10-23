@@ -32,7 +32,8 @@
 import type { OpenDocumentResult } from "@paged-media/plugin-api";
 import type { DocumentsBackend } from "@paged-media/plugin-sdk";
 import type { CanvasClient, DocumentHandle } from "@paged-media/client";
-import { confirmReplace } from "@paged-media/shell";
+import { confirmReplace, type EditorScope } from "@paged-media/shell";
+import { defineMessages, t } from "@paged-media/strings";
 
 export type { OpenDocumentResult };
 
@@ -57,7 +58,10 @@ export interface EditorDocuments {
   attach(deps: DocumentsDeps): () => void;
 }
 
-const DEFAULT_NAME = "Untitled document";
+const M = defineMessages("app.pluginDocuments", {
+  untitled: "Untitled document",
+  opening: "Opening {name}",
+});
 
 /** IDML and `.paged` are both ZIP packages. Checked BEFORE the prompt and
  *  before the open resets the view, so junk bytes cost the user nothing. */
@@ -65,7 +69,8 @@ function looksLikePackage(bytes: Uint8Array): boolean {
   return bytes.byteLength >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
-export function createEditorDocuments(): EditorDocuments {
+/** `scope` is the editor's: its replace question is asked. */
+export function createEditorDocuments(scope: EditorScope): EditorDocuments {
   let deps: DocumentsDeps | null = null;
   let busy = false;
 
@@ -89,9 +94,9 @@ export function createEditorDocuments(): EditorDocuments {
       if (busy) throw new Error("another document is being opened");
       busy = true;
       try {
-        const name = request.name ?? DEFAULT_NAME;
-        const proceed = await confirmReplace(client, {
-          action: `Opening ${name}`,
+        const name = request.name ?? t(M.untitled);
+        const proceed = await confirmReplace(scope, client, {
+          action: t(M.opening, { name }),
           requester: request.requester.name,
           documentName: name,
         });

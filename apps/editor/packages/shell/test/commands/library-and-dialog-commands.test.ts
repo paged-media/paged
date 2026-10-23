@@ -39,12 +39,14 @@ const exportPdfCalls: unknown[] = [];
 const palette = await import("../../src/chrome/CommandPalette");
 mock.module("../../src/chrome/CommandPalette", () => ({
   ...palette,
-  notifyPalette: (action: unknown) => void paletteCalls.push(action),
+  notifyPalette: (_scope: unknown, action: unknown) =>
+    void paletteCalls.push(action),
 }));
 const exportDialog = await import("../../src/chrome/ExportPdfDialog");
 mock.module("../../src/chrome/ExportPdfDialog", () => ({
   ...exportDialog,
-  notifyExportPdfDialog: (action: unknown) => void exportPdfCalls.push(action),
+  notifyExportPdfDialog: (_scope: unknown, action: unknown) =>
+    void exportPdfCalls.push(action),
 }));
 
 const { createCommandRegistry } = await import("../../src/registries/command");

@@ -56,34 +56,71 @@ import {
   About,
   color,
   font,
-  humanize,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { elementKindLabel, PanelIntro } from "./panel-parts";
+import { elementKindLabel, PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.objectsOnPathPanel", {
+  summary:
+    "Move the selected objects onto a path, spaced evenly or at a set distance; the path is the object you select last.",
+  note: "This moves the objects you selected; it does not copy them (for copies, use a repeat). Text frames work too. Release puts every object back exactly where it was. Objects are kept on the page: an object moved far off the page could not be measured to place it again. Making, updating, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
+  selectObjectsThenPath: "Select the objects, then the path last",
+  selectAtLeastOne: "Select at least one object and then the path",
+  lastIsPath: "The last object you select is used as the path.",
+  targetLine:
+    "Path: the {kind} you selected last. {count, plural, one {# object} other {# objects}} will move onto it.",
+  rowEven: "{count} even",
+  rowEvery: "every {distance} pt",
+  rowAligned: " · aligned",
+  rowPivot: " · pivot {pivot}",
+  rowOffset: " · offset {offset} pt",
+  rowReversed: " · reversed",
+  rowOnPath: "({count, plural, one {# object} other {# objects}} on the path)",
+  heading: "Objects on path",
+  makeHint: "Move the selected objects onto the object you selected last",
+  onPath: "+ On path",
+  degraded:
+    "This editor cannot save data into the document, so the distribution settings are not kept. Release and update still work.",
+  distribute: "Distribute",
+  by: "By",
+  count: "Count (evenly)",
+  spacing: "Spacing",
+  countNote:
+    "One position per selected object; nothing is copied. For more copies, use a repeat.",
+  spacingPt: "Spacing (pt)",
+  moveAlong: "Move along path (pt)",
+  placement: "Placement",
+  alignToPath: "Align to the path",
+  pivot: "Pivot",
+  reverseOrder: "Reverse the order",
+  keepOnPage: "Keep objects on the page",
+  empty:
+    "Nothing on a path yet. Select some objects, then the path, and choose + On path.",
+  updateHint: "Place the objects again with the settings above",
+  update: "Update",
+  selectHint: "Select the objects on this path",
+  select: "Select",
+  expandHint: "Stop tracking and leave the objects on the path",
+  expand: "Expand",
+  releaseHint: "Put every object back exactly where it was",
+  release: "Release",
+  title: "Objects on path",
+});
 
 export const OBJECTS_ON_PATH_PANEL_ID = "media.paged.draw.panel.objectsOnPath";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const OBJECTS_ON_PATH_SUMMARY =
-  "Move the selected objects onto a path, spaced evenly or at a set " +
-  "distance; the path is the object you select last.";
+export const OBJECTS_ON_PATH_SUMMARY = M.summary;
 
 /** The "About" text. Pinned by a test. */
-export const OBJECTS_ON_PATH_PANEL_NOTE =
-  "This moves the objects you selected; it does not copy them (for " +
-  "copies, use a repeat). Text frames work too. Release puts every object " +
-  "back exactly where it was. Objects are kept on the page: an object " +
-  "moved far off the page could not be measured to place it again. " +
-  "Making, updating, expanding and releasing are one undo step each; the " +
-  "saved settings are kept outside undo.";
+export const OBJECTS_ON_PATH_PANEL_NOTE = M.note;
 
 /** Why "+ On path" is unavailable, or null when it is available. */
 export function onPathMakeBlocker(selected: number): string | null {
   if (selected >= 2) return null;
-  return selected === 0
-    ? "Select the objects, then the path last"
-    : "Select at least one object and then the path";
+  return selected === 0 ? t(M.selectObjectsThenPath) : t(M.selectAtLeastOne);
 }
 
 /** The line that names which selected object is the path. */
@@ -92,13 +129,10 @@ export function onPathTargetLine(
   selected: number,
 ): string {
   if (last === null || selected < 2) {
-    return "The last object you select is used as the path.";
+    return t(M.lastIsPath);
   }
   const others = selected - 1;
-  return (
-    `Path: the ${elementKindLabel(last)} you selected last. ` +
-    `${others} object${others === 1 ? "" : "s"} will move onto it.`
-  );
+  return t(M.targetLine, { kind: elementKindLabel(last), count: others });
 }
 
 const rowStyle: React.CSSProperties = {
@@ -141,13 +175,13 @@ export function objectsOnPathRowLabel(
   const p = record.params;
   const how =
     p.distribute === "count"
-      ? `${record.objects.length} even`
-      : `every ${p.spacingPt} pt`;
+      ? t(M.rowEven, { count: record.objects.length })
+      : t(M.rowEvery, { distance: p.spacingPt });
   return (
-    `${how}${p.alignToPath ? " · aligned" : ""} · pivot ${humanize(p.pivot).toLowerCase()}` +
-    `${p.startOffsetPt !== 0 ? ` · offset ${p.startOffsetPt} pt` : ""}` +
-    `${p.reverseOrder ? " · reversed" : ""} ` +
-    `(${placed} object${placed === 1 ? "" : "s"} on the path)`
+    `${how}${p.alignToPath ? t(M.rowAligned) : ""}${t(M.rowPivot, { pivot: tokenLabel(p.pivot).toLowerCase() })}` +
+    `${p.startOffsetPt !== 0 ? t(M.rowOffset, { offset: p.startOffsetPt }) : ""}` +
+    `${p.reverseOrder ? t(M.rowReversed) : ""} ` +
+    t(M.rowOnPath, { count: placed })
   );
 }
 
@@ -157,6 +191,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [records, setRecords] = React.useState<ObjectsOnPathRecord[]>([]);
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
@@ -248,27 +283,24 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         data-draw-onpath-active={active ?? ""}
       >
         <PanelIntro
-          summary={OBJECTS_ON_PATH_SUMMARY}
+          summary={s.t(OBJECTS_ON_PATH_SUMMARY)}
           attr="data-draw-onpath-intro"
         />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Objects on path ({records.length})
+            {s.t(M.heading)} ({records.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title={
-              onPathMakeBlocker(selected) ??
-              "Move the selected objects onto the object you selected last"
-            }
+            title={onPathMakeBlocker(selected) ?? s.t(M.makeHint)}
             data-draw-onpath-make
             disabled={onPathMakeBlocker(selected) !== null}
             onClick={() =>
               void run(() => applyMakeObjectsOnPath(host, { ...draft }))
             }
           >
-            + On path
+            {s.t(M.onPath)}
           </button>
         </div>
 
@@ -280,14 +312,13 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-onpath-degraded>
-            This editor cannot save data into the document, so the distribution
-            settings are not kept. Release and update still work.
+            {s.t(M.degraded)}
           </div>
         )}
 
-        <div style={sectionStyle}>Distribute</div>
+        <div style={sectionStyle}>{s.t(M.distribute)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>By</span>
+          <span style={{ flex: 1 }}>{s.t(M.by)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-onpath-distribute
@@ -301,40 +332,37 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           >
             {ON_PATH_DISTRIBUTIONS.map((d) => (
               <option key={d} value={d}>
-                {d === "count" ? "Count (evenly)" : "Spacing"}
+                {d === "count" ? s.t(M.count) : s.t(M.spacing)}
               </option>
             ))}
           </select>
         </div>
         {draft.distribute === "count" ? (
-          <div style={mutedStyle}>
-            One position per selected object; nothing is copied. For more
-            copies, use a repeat.
-          </div>
+          <div style={mutedStyle}>{s.t(M.countNote)}</div>
         ) : (
           numberRow(
-            "Spacing (pt)",
+            s.t(M.spacingPt),
             draft.spacingPt,
             (n) => setDraft({ ...draft, spacingPt: n }),
             "spacingPt",
           )
         )}
         {numberRow(
-          "Move along path (pt)",
+          s.t(M.moveAlong),
           draft.startOffsetPt,
           (n) => setDraft({ ...draft, startOffsetPt: n }),
           "startOffsetPt",
         )}
 
-        <div style={sectionStyle}>Placement</div>
+        <div style={sectionStyle}>{s.t(M.placement)}</div>
         {checkRow(
-          "Align to the path",
+          s.t(M.alignToPath),
           draft.alignToPath,
           (b) => setDraft({ ...draft, alignToPath: b }),
           "alignToPath",
         )}
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Pivot</span>
+          <span style={{ flex: 1 }}>{s.t(M.pivot)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-onpath-pivot
@@ -345,29 +373,26 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           >
             {ON_PATH_PIVOTS.map((k) => (
               <option key={k} value={k}>
-                {humanize(k)}
+                {tokenLabel(k)}
               </option>
             ))}
           </select>
         </div>
         {checkRow(
-          "Reverse the order",
+          s.t(M.reverseOrder),
           draft.reverseOrder,
           (b) => setDraft({ ...draft, reverseOrder: b }),
           "reverseOrder",
         )}
         {checkRow(
-          "Keep objects on the page",
+          s.t(M.keepOnPage),
           draft.fitToArtboard,
           (b) => setDraft({ ...draft, fitToArtboard: b }),
           "fitToArtboard",
         )}
 
         {records.length === 0 ? (
-          <div style={mutedStyle}>
-            Nothing on a path yet. Select some objects, then the path, and
-            choose + On path.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           records.map((record) => (
             <div key={record.id} data-draw-onpath-row={record.id}>
@@ -387,7 +412,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Place the objects again with the settings above"
+                  title={s.t(M.updateHint)}
                   data-draw-onpath-update
                   onClick={() =>
                     void run(() =>
@@ -398,12 +423,12 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Update
+                  {s.t(M.update)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select the objects on this path"
+                  title={s.t(M.selectHint)}
                   data-draw-onpath-select
                   onClick={() =>
                     void run(() =>
@@ -411,12 +436,12 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Select
+                  {s.t(M.select)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking and leave the objects on the path"
+                  title={s.t(M.expandHint)}
                   data-draw-onpath-expand
                   onClick={() =>
                     void run(() =>
@@ -424,12 +449,12 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Expand
+                  {s.t(M.expand)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Put every object back exactly where it was"
+                  title={s.t(M.releaseHint)}
                   data-draw-onpath-release
                   onClick={() =>
                     void run(() =>
@@ -437,7 +462,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Release
+                  {s.t(M.release)}
                 </button>
               </div>
               <div style={mutedStyle}>
@@ -447,12 +472,14 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           ))
         )}
 
-        <About attr="data-draw-onpath-note">{OBJECTS_ON_PATH_PANEL_NOTE}</About>
+        <About attr="data-draw-onpath-note">
+          {s.t(OBJECTS_ON_PATH_PANEL_NOTE)}
+        </About>
       </div>
     );
   };
   return {
-    title: "Objects on path",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

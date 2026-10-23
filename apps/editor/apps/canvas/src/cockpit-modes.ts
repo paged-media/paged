@@ -33,16 +33,45 @@ import {
   PrepressToolbar,
   ReviewToolbar,
 } from "./cockpit/toolbars";
+import { defineMessages, t } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitModes", {
+  design: "Design",
+  designBlurb: "Composition, typography, grids, components",
+  content: "Content",
+  contentBlurb: "Safe text editing, stories, review flow",
+  prepress: "Prepress",
+  prepressBlurb: "Preflight, bleed, colour, output readiness",
+  dataLayout: "Data layout",
+  dataLayoutBlurb: "Structured data → repeatable pages",
+  review: "Review",
+  reviewBlurb: "Comments, approvals, versions",
+  export: "Export",
+  exportBlurb: "Multi-format publishing",
+  railText: "Text",
+  railImage: "Image",
+  railStyles: "Styles",
+  railSwatches: "Swatches",
+  railData: "Data",
+  railPages: "Pages",
+  railComments: "Comments",
+  railPreflight: "Preflight",
+  railProblems: "Problems",
+});
 
 export const COCKPIT_MODES: ModeContribution[] = [
   {
     id: "design",
     toolbarLeft: DesignToolbar,
     paletteSuggestions: ["paged.file.openIdml"],
-    title: "Design",
+    get title() {
+      return t(M.design);
+    },
     icon: "panel-canvas",
     order: 10,
-    blurb: "Composition, typography, grids, components",
+    get blurb() {
+      return t(M.designBlurb);
+    },
     slots: {
       left: "paged.document-map",
       // Layers, not the component library: the library is a "coming
@@ -54,10 +83,14 @@ export const COCKPIT_MODES: ModeContribution[] = [
   {
     id: "content",
     toolbarLeft: ContentToolbar,
-    title: "Content",
+    get title() {
+      return t(M.content);
+    },
     icon: "panel-character",
     order: 20,
-    blurb: "Safe text editing, stories, review flow",
+    get blurb() {
+      return t(M.contentBlurb);
+    },
     slots: {
       left: "paged.stories",
       inspector: "paged.story-inspector",
@@ -66,10 +99,14 @@ export const COCKPIT_MODES: ModeContribution[] = [
   {
     id: "prepress",
     toolbarLeft: PrepressToolbar,
-    title: "Prepress",
+    get title() {
+      return t(M.prepress);
+    },
     icon: "ui-target",
     order: 30,
-    blurb: "Preflight, bleed, colour, output readiness",
+    get blurb() {
+      return t(M.prepressBlurb);
+    },
     slots: {
       left: "paged.preflight",
       inspector: "paged.output-readiness",
@@ -82,10 +119,14 @@ export const COCKPIT_MODES: ModeContribution[] = [
       "media.paged.data.command.importData",
       "media.paged.data.command.lowerBinding",
     ],
-    title: "Data layout",
+    get title() {
+      return t(M.dataLayout);
+    },
     icon: "ui-database",
     order: 40,
-    blurb: "Structured data → repeatable pages",
+    get blurb() {
+      return t(M.dataLayoutBlurb);
+    },
     // The Data menu is a context menu (it shows while a binding is
     // selected or entered); in this mode it is the workspace's own.
     menus: ["Data"],
@@ -107,10 +148,14 @@ export const COCKPIT_MODES: ModeContribution[] = [
   {
     id: "review",
     toolbarLeft: ReviewToolbar,
-    title: "Review",
+    get title() {
+      return t(M.review);
+    },
     icon: "ui-comment",
     order: 50,
-    blurb: "Comments, approvals, versions",
+    get blurb() {
+      return t(M.reviewBlurb);
+    },
     slots: {
       left: "paged.comments",
       inspector: "paged.review-inspector",
@@ -120,10 +165,14 @@ export const COCKPIT_MODES: ModeContribution[] = [
     id: "export",
     toolbarLeft: ExportToolbar,
     paletteSuggestions: ["paged.file.exportPdf", "paged.library.exportAse"],
-    title: "Export",
+    get title() {
+      return t(M.export);
+    },
     icon: "ui-export",
     order: 60,
-    blurb: "Multi-format publishing",
+    get blurb() {
+      return t(M.exportBlurb);
+    },
     slots: {
       left: "paged.outputs",
       inspector: "paged.export-inspector",
@@ -139,38 +188,66 @@ export const COCKPIT_MODES: ModeContribution[] = [
 export const PANEL_RAIL: PanelRailItem[] = [
   {
     panelId: "paged.properties",
-    title: "Text",
+    get title() {
+      return t(M.railText);
+    },
     icon: "panel-character",
     inspectorContext: "text",
   },
   {
     panelId: "paged.properties",
-    title: "Image",
+    get title() {
+      return t(M.railImage);
+    },
     icon: "panel-frame-fitting",
     inspectorContext: "image",
   },
   {
     panelId: "paged.object-styles",
-    title: "Styles",
+    get title() {
+      return t(M.railStyles);
+    },
     icon: "panel-object-styles",
   },
-  { panelId: "paged.swatches", title: "Swatches", icon: "panel-swatches" },
+  {
+    panelId: "paged.swatches",
+    get title() {
+      return t(M.railSwatches);
+    },
+    icon: "panel-swatches",
+  },
   // The live paged.data bindings panel (the rail's first plugin panel).
   // U8: the ComingSoon mapping stub it replaced (`paged.data-mapping`)
   // is retired — the live panel owns the surface.
   {
     panelId: "media.paged.data.panel.bindings",
-    title: "Data",
+    get title() {
+      return t(M.railData);
+    },
     icon: "ui-database",
   },
   {
     panelId: "paged.properties",
-    title: "Pages",
+    get title() {
+      return t(M.railPages);
+    },
     icon: "panel-pages",
     inspectorContext: "page",
   },
-  { panelId: "paged.comments", title: "Comments", icon: "ui-comment" },
-  { panelId: "paged.preflight", title: "Preflight", icon: "ui-target" },
+  {
+    panelId: "paged.comments",
+    get title() {
+      return t(M.railComments);
+    },
+    icon: "ui-comment",
+  },
+  {
+    panelId: "paged.preflight",
+    get title() {
+      return t(M.railPreflight);
+    },
+    icon: "ui-target",
+  },
   // Problems. The app writes genuinely good refusal sentences into this
   // panel — "Insert rectangle inserts page items, and you are editing
   // inside a vectorGraphic. Leave the frame (Esc) to insert into the
@@ -179,5 +256,11 @@ export const PANEL_RAIL: PanelRailItem[] = [
   // could read it. Save and export failures now land here too, which
   // makes reachability the difference between a reported failure and a
   // silent one.
-  { panelId: "paged.problems", title: "Problems", icon: "ui-warn" },
+  {
+    panelId: "paged.problems",
+    get title() {
+      return t(M.railProblems);
+    },
+    icon: "ui-warn",
+  },
 ];

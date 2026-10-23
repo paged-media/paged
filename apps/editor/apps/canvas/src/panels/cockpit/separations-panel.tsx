@@ -53,22 +53,83 @@ import {
   CockpitPanelHeader,
   CockpitSection,
   StatusPill,
-  navigateToPages,
+  usePageNavigation,
   useCollection,
 } from "@paged-media/shell";
 import type { SwatchSummary } from "@paged-media/client";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import type { InkCoverageSummary } from "./separations-wire";
+
+const M = defineMessages("app.cockpitSeparationsPanel", {
+  sheetFedCoated: "Sheet-fed coated",
+  webCoated: "Web coated",
+  uncoated: "Uncoated",
+  newsprint: "Newsprint",
+  title: "Separations & Ink Limit",
+  pressInkLimit: "Press ink limit",
+  tacNote:
+    "Total area coverage — the sum of every plate’s ink. Re-reads the " +
+    "stored distribution; no re-render.",
+  swatchLimit: "Ink limit — swatches",
+  withinLimit: "Within limit",
+  over: "{count} over",
+  swatchNote:
+    "Exact, from the palette. Works with or without a colour profile, and " +
+    "at any size — a 0.25 pt rich-black hairline is caught here even " +
+    "though the page reading below under-samples it.",
+  unseparable:
+    "{count} swatch(es) — RGB, Lab or mixed-ink — have no ink breakdown " +
+    "here; they separate at the RIP against the output intent, so their " +
+    "ink limit cannot be checked before export.",
+  plates: "Plates",
+  openToSeparate: "Open a document to separate it.",
+  noProfile:
+    "No CMYK working profile is active, so the renderer resolves every " +
+    "CMYK and spot swatch straight to display RGB and there are no plates " +
+    "to read. This is not the same as the document carrying no ink. Add a " +
+    "profile in Color Settings and this section fills in. The swatch " +
+    "ink-limit check above is unaffected.",
+  noPlates:
+    "A profile is active, but nothing on any page carries ink the " +
+    "renderer can separate — the artwork is RGB, gradients or placed " +
+    "images. That content separates at the RIP; check the exported PDF " +
+    "in Acrobat’s Output Preview.",
+  spot: "spot",
+  process: "process",
+  coverageByPage: "Coverage by page",
+  pagesOver: "{count, plural, one {# page over} other {# pages over}}",
+  page: "Page {page}",
+  pageStats: "max {max} · measured {measured}",
+  pxOver: " · {count} px over",
+  caveat:
+    "“measured” is the share of the page the renderer could break into " +
+    "inks. Placed images, RGB/Lab swatches and gradients are excluded — " +
+    "unknown here, not ink-free — so a low figure means the page-level " +
+    "numbers describe only part of the page. Sampled at {dpi} dpi, so " +
+    "sub-pixel hairlines under-report; the swatch check above covers those.",
+  platePreview: "Plate preview",
+  platePreviewBefore:
+    "Isolating a single plate on the canvas is not wired. The canvas " +
+    "renders through WebGPU, which keeps no page-level ink-plane state — " +
+    "only the CPU rasterizer does, and that is what the numbers above " +
+    "come from. Rather than show a second, differently-rendered image " +
+    "beside the real canvas, the plate rasters ship in the engine:",
+  platePreviewAfter:
+    "writes one PNG per plate plus an ink-limit overlay, with unmeasured " +
+    "pixels left transparent.",
+});
 
 /** Histogram bucket width in percent — mirrors core's `TAC_BUCKET_PCT`. */
 const BUCKET_PCT = 10;
 
 /** Presets an operator actually prints against. */
 const LIMIT_PRESETS = [
-  { label: "Sheet-fed coated", value: 300 },
-  { label: "Web coated", value: 280 },
-  { label: "Uncoated", value: 260 },
-  { label: "Newsprint", value: 240 },
+  { label: M.sheetFedCoated, value: 300 },
+  { label: M.webCoated, value: 280 },
+  { label: M.uncoated, value: 260 },
+  { label: M.newsprint, value: 240 },
 ];
 
 /**
@@ -89,6 +150,8 @@ function overLimitFromHistogram(histogram: number[], limit: number): number {
 const pct = (v: number, digits = 1) => `${v.toFixed(digits)}%`;
 
 export function SeparationsPanel() {
+  const navigateToPages = usePageNavigation();
+  const strings = useStrings();
   const coverage = useCollection<InkCoverageSummary>("inkCoverage");
   const swatches = useCollection<SwatchSummary>("swatches");
   const [limit, setLimit] = useState(300);
@@ -135,9 +198,9 @@ export function SeparationsPanel() {
 
   return (
     <div data-separations-panel style={{ overflowY: "auto", height: "100%" }}>
-      <CockpitPanelHeader title="Separations & Ink Limit" />
+      <CockpitPanelHeader title={strings.t(M.title)} />
 
-      <CockpitSection title="Press ink limit">
+      <CockpitSection title={strings.t(M.pressInkLimit)}>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {LIMIT_PRESETS.map((p) => (
@@ -158,19 +221,16 @@ export function SeparationsPanel() {
                   cursor: "pointer",
                 }}
               >
-                {p.label} {p.value}%
+                {strings.t(p.label)} {p.value}%
               </button>
             ))}
           </div>
-          <span className="pg-ui-xs">
-            Total area coverage — the sum of every plate&rsquo;s ink. Re-reads
-            the stored distribution; no re-render.
-          </span>
+          <span className="pg-ui-xs">{strings.t(M.tacNote)}</span>
         </div>
       </CockpitSection>
 
       <CockpitSection
-        title="Ink limit — swatches"
+        title={strings.t(M.swatchLimit)}
         right={
           swatches ? (
             <StatusPill
@@ -178,18 +238,14 @@ export function SeparationsPanel() {
               testId="swatch-limit-state"
             >
               {overLimitSwatches.length === 0
-                ? "Within limit"
-                : `${overLimitSwatches.length} over`}
+                ? strings.t(M.withinLimit)
+                : strings.t(M.over, { count: overLimitSwatches.length })}
             </StatusPill>
           ) : undefined
         }
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <span className="pg-ui-xs">
-            Exact, from the palette. Works with or without a colour profile, and
-            at any size — a 0.25 pt rich-black hairline is caught here even
-            though the page reading below under-samples it.
-          </span>
+          <span className="pg-ui-xs">{strings.t(M.swatchNote)}</span>
           {overLimitSwatches.map((s) => (
             <div
               key={s.selfId}
@@ -213,16 +269,14 @@ export function SeparationsPanel() {
           ))}
           {unseparableSwatches.length > 0 && (
             <span className="pg-ui-xs" data-swatch-unseparable>
-              {unseparableSwatches.length} swatch(es) — RGB, Lab or mixed-ink —
-              have no ink breakdown here; they separate at the RIP against the
-              output intent, so their ink limit cannot be checked before export.
+              {strings.t(M.unseparable, { count: unseparableSwatches.length })}
             </span>
           )}
         </div>
       </CockpitSection>
 
       <CockpitSection
-        title="Plates"
+        title={strings.t(M.plates)}
         right={
           <span className="pg-mono-meta">
             {pages.length === 0 ? "—" : jobPlates.length}
@@ -230,7 +284,7 @@ export function SeparationsPanel() {
         }
       >
         {pages.length === 0 ? (
-          <span className="pg-ui-xs">Open a document to separate it.</span>
+          <span className="pg-ui-xs">{strings.t(M.openToSeparate)}</span>
         ) : !separationAvailable ? (
           <div
             data-separations-unavailable
@@ -243,20 +297,13 @@ export function SeparationsPanel() {
               lineHeight: 1.4,
             }}
           >
-            No CMYK working profile is active, so the renderer resolves every
-            CMYK and spot swatch straight to display RGB and there are no plates
-            to read. This is <em>not</em> the same as the document carrying no
-            ink. Add a profile in Color Settings and this section fills in. The
-            swatch ink-limit check above is unaffected.
+            {strings.t(M.noProfile)}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {jobPlates.length === 0 ? (
               <span className="pg-ui-xs" data-separations-no-plates>
-                A profile is active, but nothing on any page carries ink the
-                renderer can separate — the artwork is RGB, gradients or placed
-                images. That content separates at the RIP; check the exported
-                PDF in Acrobat&rsquo;s Output Preview.
+                {strings.t(M.noPlates)}
               </span>
             ) : (
               jobPlates.map((p) => (
@@ -272,7 +319,7 @@ export function SeparationsPanel() {
                 >
                   <span>{p.name}</span>
                   <span className="pg-mono-meta">
-                    {p.isSpot ? "spot" : "process"}
+                    {p.isSpot ? strings.t(M.spot) : strings.t(M.process)}
                   </span>
                 </div>
               ))
@@ -283,15 +330,15 @@ export function SeparationsPanel() {
 
       {separationAvailable && (
         <CockpitSection
-          title="Coverage by page"
+          title={strings.t(M.coverageByPage)}
           right={
             <StatusPill
               tone={pagesOverLimit.length === 0 ? "ok" : "error"}
               testId="page-limit-state"
             >
               {pagesOverLimit.length === 0
-                ? "Within limit"
-                : `${pagesOverLimit.length} page(s) over`}
+                ? strings.t(M.withinLimit)
+                : strings.t(M.pagesOver, { count: pagesOverLimit.length })}
             </StatusPill>
           }
         >
@@ -321,37 +368,29 @@ export function SeparationsPanel() {
                     textAlign: "left",
                   }}
                 >
-                  <span>Page {page.pageIndex + 1}</span>
+                  <span>{strings.t(M.page, { page: page.pageIndex + 1 })}</span>
                   <span className="pg-mono-meta">
-                    max {pct(page.maxTacPct, 0)} · measured{" "}
-                    {pct(page.separatedPct, 0)}
-                    {over > 0 ? ` · ${over} px over` : ""}
+                    {strings.t(M.pageStats, {
+                      max: pct(page.maxTacPct, 0),
+                      measured: pct(page.separatedPct, 0),
+                    })}
+                    {over > 0 ? strings.t(M.pxOver, { count: over }) : ""}
                   </span>
                 </button>
               );
             })}
             <span className="pg-ui-xs" data-separations-caveat>
-              &ldquo;measured&rdquo; is the share of the page the renderer could
-              break into inks. Placed images, RGB/Lab swatches and gradients are
-              excluded — unknown here, not ink-free — so a low figure means the
-              page-level numbers describe only part of the page. Sampled at{" "}
-              {pages[0]?.analysisDpi ?? 72} dpi, so sub-pixel hairlines
-              under-report; the swatch check above covers those.
+              {strings.t(M.caveat, { dpi: pages[0]?.analysisDpi ?? 72 })}
             </span>
           </div>
         </CockpitSection>
       )}
 
-      <CockpitSection title="Plate preview">
+      <CockpitSection title={strings.t(M.platePreview)}>
         <span className="pg-ui-xs" data-separations-preview-seam>
-          Isolating a single plate on the canvas is not wired. The canvas
-          renders through WebGPU, which keeps no page-level ink-plane state —
-          only the CPU rasterizer does, and that is what the numbers above come
-          from. Rather than show a second, differently-rendered image beside the
-          real canvas, the plate rasters ship in the engine:{" "}
+          {strings.t(M.platePreviewBefore)}{" "}
           <code>paged-inspect --separations DIR --cmyk-profile PROFILE</code>{" "}
-          writes one PNG per plate plus an ink-limit overlay, with unmeasured
-          pixels left transparent.
+          {strings.t(M.platePreviewAfter)}
         </span>
       </CockpitSection>
     </div>

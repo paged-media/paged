@@ -42,6 +42,7 @@ import {
 import { objectsOf } from "./property-lane";
 import type { PropertyBindingSpec } from "./property-session";
 import type { DataSourceSession } from "./session";
+import { dataTemplateFields, inspectionCommands } from "./template-fields";
 
 export const PLUGIN_ID = "media.paged.data";
 
@@ -608,6 +609,44 @@ function commands(
     cmd<{ save: boolean }>("media.paged.data.exportDataMergeTemplate", (a) =>
       session.exportDataMergeTemplate({ save: a.save }),
     ),
+    // ADR 560: a template's fields as binding targets, and the catalogue.
+    cmd<Record<string, never>>(
+      "media.paged.data.templateFieldTargets",
+      async () => {
+        await session.whenRestored();
+        return session.templateFieldTargets();
+      },
+    ),
+    cmd<{ field: string; query: string; expr: string; invert?: boolean }>(
+      "media.paged.data.bindTemplateField",
+      async (a) => {
+        await session.whenRestored();
+        const r = await session.bindTemplateField({
+          field: a.field,
+          query: a.query,
+          expr: a.expr,
+          ...(a.invert ? { invert: true } : {}),
+        });
+        if (r.ok) await session.flushPersist();
+        return r;
+      },
+    ),
+    cmd<{
+      query?: string;
+      template?: string;
+      mode?: "perRecord" | "perGroup";
+      by?: string[];
+    }>("media.paged.data.runCatalogue", async (a) => {
+      await session.whenRestored();
+      const r = await session.runCatalogue({
+        ...(a?.query ? { query: a.query } : {}),
+        ...(a?.template ? { page: a.template } : {}),
+        ...(a?.mode ? { mode: a.mode } : {}),
+        ...(a?.by?.length ? { by: a.by } : {}),
+      });
+      await session.flushPersist();
+      return r;
+    }),
     // Data Merge from a script: the menu command's own path (merge-command.ts).
     cmd<MergeCommandArgs>("media.paged.data.merge", async (a) =>
       mergeCommandResult(
@@ -632,6 +671,11 @@ export function contributeObjectModel(
   if (!host.supports("contribute.objectModel@1")) return null;
   return host.contribute.objectModel({
     kinds: kinds(host, session),
-    commands: commands(host, session, panels),
+    commands: [
+      ...commands(host, session, panels),
+      ...inspectionCommands(session),
+    ],
+    // Plan G3: the parts of the data a template opens to a filler.
+    templateFields: dataTemplateFields(session),
   });
 }

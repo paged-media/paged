@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 5ff8f97a440f4d651618484336ca85c1a9ee2cf901736796b7fe550da94a77c7 # shrinks to seed = [(2, 2, "=IF(A1>B4,1,2)")], batch = [(0, 0, "=IF(A4>A4,1,2)"), (3, 0, "=SUM(A1:A1)")]

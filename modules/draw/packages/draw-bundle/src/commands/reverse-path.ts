@@ -65,6 +65,12 @@ import { framePathMutationFor } from "./compound-path";
 import { supportsPathOps } from "./path-ops";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.reversePath", {
+  title: "Path: Reverse path direction",
+});
 export const REVERSE_PATH_COMMAND_ID =
   "media.paged.draw.command.reversePathDirection";
 
@@ -163,7 +169,7 @@ export async function applyReversePath(host: BundleHost): Promise<ElementId[]> {
 export function contributeReversePathCommands(host: BundleHost): Disposable {
   const sub = registerCommand(host, {
     id: REVERSE_PATH_COMMAND_ID,
-    title: "Path: Reverse path direction",
+    title: M.title,
     category: REVERSE_PATH_COMMAND_CATEGORY,
     handler: () => applyReversePath(host),
   });

@@ -58,6 +58,7 @@ fn field(name: &str, kind: TemplateFieldKind, constraints: Constraints) -> Field
         group: None,
         required: false,
         constraints,
+        module: None,
     }
 }
 
@@ -317,4 +318,96 @@ fn a_template_survives_idml_and_paged_round_trips() {
     let reloaded =
         CanvasModel::load("paged", &paged, CanvasOptions::default()).expect("reload paged");
     assert_eq!(strip(reloaded.template_fields()), strip(before));
+}
+
+/// Editor plan F3: the template's preflight names what is wrong with its
+/// policy — a picture field on a text frame, two fields of one name, a
+/// required field on a hidden item — errors first, in the
+/// `templateFindings` collection.
+#[test]
+fn preflight_names_what_is_wrong_with_a_template() {
+    let mut m = model();
+    role(&mut m, Role::Author);
+    let insert = |m: &mut CanvasModel, text: bool, y: f32| {
+        let op = if text {
+            Mutation::InsertTextFrame {
+                page_id: page(m),
+                bounds: (y, 40.0, y + 40.0, 300.0),
+            }
+        } else {
+            Mutation::InsertFrame {
+                page_id: page(m),
+                bounds: (y, 40.0, y + 40.0, 120.0),
+            }
+        };
+        m.apply_mutation(&op)
+            .expect("insert")
+            .created_id
+            .expect("id")
+    };
+    let headline = insert(&mut m, true, 100.0);
+    let photo_on_text = insert(&mut m, true, 160.0);
+    let badge = insert(&mut m, false, 220.0);
+    let twin = insert(&mut m, false, 280.0);
+    policy(
+        &mut m,
+        &headline,
+        field("title", TemplateFieldKind::Text, Constraints::default()),
+    );
+    policy(
+        &mut m,
+        &photo_on_text,
+        field("photo", TemplateFieldKind::Image, Constraints::default()),
+    );
+    let mut required = field(
+        "badge",
+        TemplateFieldKind::Visibility,
+        Constraints::default(),
+    );
+    required.required = true;
+    policy(&mut m, &badge, required);
+    policy(
+        &mut m,
+        &twin,
+        field(
+            "title",
+            TemplateFieldKind::Visibility,
+            Constraints::default(),
+        ),
+    );
+    m.apply_mutation(&Mutation::SetElementProperty {
+        element_id: badge.clone(),
+        path: paged_mutate::PropertyPath::ElementVisible,
+        value: paged_mutate::Value::Bool(false),
+    })
+    .expect("hide the badge");
+
+    let findings = paged_template::preflight(m.scene());
+    let codes: Vec<(&str, Option<&str>)> = findings
+        .iter()
+        .map(|f| (f.code.as_str(), f.field.as_deref()))
+        .collect();
+    assert!(
+        codes.contains(&("imageNotReplaceable", Some("photo"))),
+        "{codes:?}"
+    );
+    assert!(
+        codes.contains(&("fieldDuplicate", Some("title"))),
+        "{codes:?}"
+    );
+    assert!(
+        codes.contains(&("requiredHidden", Some("badge"))),
+        "{codes:?}"
+    );
+    // Errors come first.
+    let first_warning = findings
+        .iter()
+        .position(|f| f.severity == paged_template::FindingSeverity::Warning)
+        .unwrap();
+    assert!(findings[..first_warning]
+        .iter()
+        .all(|f| f.severity == paged_template::FindingSeverity::Error));
+    // The same through the collection the editor reads.
+    let collection = m.collection(paged_canvas::channel::CollectionName::TemplateFindings);
+    assert_eq!(collection.as_array().map(Vec::len), Some(findings.len()));
 }

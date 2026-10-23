@@ -30,6 +30,17 @@ import type {
 import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
 import { color, font, space, status } from "@paged-media/panel-kit";
+import { t as tActive, useStrings } from "@paged-media/strings";
+import { QUERY as M } from "../messages";
+
+/** The filter operators written as words, by message key; the symbols
+ *  (=, <, …) read the same in every language. */
+const OP_LABEL: Partial<Record<FilterOp, string>> = {
+  contains: M.opContains,
+  "starts with": M.opStartsWith,
+  "is empty": M.opIsEmpty,
+  "is not empty": M.opIsNotEmpty,
+};
 
 const wrap: CSSProperties = {
   display: "flex",
@@ -73,7 +84,9 @@ export const PREVIEW_ROWS = 50;
 export function describeDiagnostic(d: SqlDiagnostic): string {
   const at =
     d.line !== undefined
-      ? ` (line ${d.line}${d.column !== undefined ? `, column ${d.column}` : ""})`
+      ? (d.column !== undefined
+          ? tActive(M.lineColumn, { line: d.line, column: d.column })
+          : tActive(M.line, { line: d.line })) + ")"
       : "";
   return `${d.kind}${at}: ${d.message}`;
 }
@@ -86,6 +99,7 @@ export function makeQueryPanel(
   // see `return function QueryPanel()`, editor ADR 229).
   function QueryPanel(): ReactElement {
     const [snapshot, refresh] = useSessionSnapshot(session);
+    const { t } = useStrings();
     const [queryId, setQueryId] = useState("q");
     const [sql, setSql] = useState("");
     const [source, setSource] = useState("");
@@ -134,7 +148,7 @@ export function makeQueryPanel(
     async function onSave(): Promise<void> {
       const id = queryId.trim();
       if (!id) {
-        setDiagnostic({ kind: "Guard", message: "name the query first" });
+        setDiagnostic({ kind: "Guard", message: t(M.nameFirst) });
         return;
       }
       const d = await session.saveQuery(id, runSql);
@@ -159,14 +173,14 @@ export function makeQueryPanel(
       <div style={wrap}>
         <div style={row}>
           <label>
-            Source{" "}
+            {t(M.source)}{" "}
             <select
               data-data-query-source
               value={chosen}
               onChange={(e) => void onPickSource(e.target.value)}
             >
               {snapshot.sources.length === 0 ? (
-                <option value="">no sources</option>
+                <option value="">{t(M.noSources)}</option>
               ) : null}
               {snapshot.sources.map((s) => (
                 <option key={s} value={s}>
@@ -180,11 +194,11 @@ export function makeQueryPanel(
             data-data-query-columns
             onClick={() => void onPickSource(chosen)}
           >
-            Read columns
+            {t(M.readColumns)}
           </button>
           {columns.length > 0 ? (
             <span style={note}>
-              {columns.length} column(s):{" "}
+              {t(M.columns, { count: columns.length })}{" "}
               {columns.map((c) => `${c.name} ${c.type}`).join(", ")}
             </span>
           ) : null}
@@ -195,7 +209,7 @@ export function makeQueryPanel(
           data-data-query-builders
           style={{ display: "flex", flexDirection: "column", gap: 6 }}
         >
-          <legend>Filter, sort, group</legend>
+          <legend>{t(M.builders)}</legend>
           {filters.map((f, i) => (
             <div key={`f${i}`} style={row} data-data-query-filter={i}>
               <select
@@ -220,14 +234,14 @@ export function makeQueryPanel(
               >
                 {FILTER_OPS.map((op) => (
                   <option key={op} value={op}>
-                    {op}
+                    {OP_LABEL[op] ? t(OP_LABEL[op]!) : op}
                   </option>
                 ))}
               </select>
               {f.op === "is empty" || f.op === "is not empty" ? null : (
                 <input
                   value={f.value ?? ""}
-                  placeholder="value"
+                  placeholder={t(M.value)}
                   onChange={(e) =>
                     setFilters(setAt(filters, i, { value: e.target.value }))
                   }
@@ -237,13 +251,13 @@ export function makeQueryPanel(
                 type="button"
                 onClick={() => setFilters(filters.filter((_, j) => j !== i))}
               >
-                Remove
+                {t(M.remove)}
               </button>
             </div>
           ))}
           {sort.map((s, i) => (
             <div key={`s${i}`} style={row} data-data-query-sort={i}>
-              Sort by
+              {t(M.sortBy)}
               <select
                 value={s.column}
                 onChange={(e) =>
@@ -264,20 +278,20 @@ export function makeQueryPanel(
                   )
                 }
               >
-                <option value="asc">ascending</option>
-                <option value="desc">descending</option>
+                <option value="asc">{t(M.ascending)}</option>
+                <option value="desc">{t(M.descending)}</option>
               </select>
               <button
                 type="button"
                 onClick={() => setSort(sort.filter((_, j) => j !== i))}
               >
-                Remove
+                {t(M.remove)}
               </button>
             </div>
           ))}
           {groupBy.length > 0 ? (
             <div style={row} data-data-query-group>
-              Group by <span style={mono}>{groupBy.join(", ")}</span>
+              {t(M.groupBy)} <span style={mono}>{groupBy.join(", ")}</span>
               {aggregates.map((a, i) => (
                 <span key={`a${i}`} style={row}>
                   <select
@@ -306,7 +320,7 @@ export function makeQueryPanel(
                       )
                     }
                   >
-                    <option value="">(rows)</option>
+                    <option value="">{t(M.rows)}</option>
                     {names.map((n) => (
                       <option key={n} value={n}>
                         {n}
@@ -321,7 +335,7 @@ export function makeQueryPanel(
                   setAggregates([...aggregates, { fn: "sum", column: first }])
                 }
               >
-                Add total
+                {t(M.addTotal)}
               </button>
               <button
                 type="button"
@@ -330,7 +344,7 @@ export function makeQueryPanel(
                   setAggregates([]);
                 }}
               >
-                Ungroup
+                {t(M.ungroup)}
               </button>
             </div>
           ) : null}
@@ -343,7 +357,7 @@ export function makeQueryPanel(
                 setFilters([...filters, { column: first, op: "=", value: "" }])
               }
             >
-              Add filter
+              {t(M.addFilter)}
             </button>
             <button
               type="button"
@@ -351,7 +365,7 @@ export function makeQueryPanel(
               disabled={!first}
               onClick={() => setSort([...sort, { column: first, dir: "asc" }])}
             >
-              Add sort
+              {t(M.addSort)}
             </button>
             <select
               data-data-query-group-by
@@ -363,7 +377,7 @@ export function makeQueryPanel(
                 setGroupBy([...groupBy, e.target.value])
               }
             >
-              <option value="">Group by…</option>
+              <option value="">{t(M.groupByPick)}</option>
               {names.map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -376,14 +390,10 @@ export function makeQueryPanel(
               disabled={!chosen}
               onClick={onBuild}
             >
-              Write SQL
+              {t(M.writeSql)}
             </button>
           </div>
-          {!first ? (
-            <span style={note}>
-              Read the source&apos;s columns to build a query.
-            </span>
-          ) : null}
+          {!first ? <span style={note}>{t(M.readColumnsFirst)}</span> : null}
         </fieldset>
 
         {/* ── the SQL field ──────────────────────────────────────────────── */}
@@ -409,10 +419,10 @@ export function makeQueryPanel(
             disabled={!runSql.trim()}
             onClick={() => void onPreview()}
           >
-            Preview
+            {t(M.preview)}
           </button>
           <label>
-            Query id{" "}
+            {t(M.queryId)}{" "}
             <input
               data-data-query-id
               style={mono}
@@ -427,11 +437,11 @@ export function makeQueryPanel(
             disabled={!runSql.trim()}
             onClick={() => void onSave()}
           >
-            Save query
+            {t(M.saveQuery)}
           </button>
           {saved ? (
             <span style={note} data-data-query-saved>
-              Saved as {saved}.
+              {t(M.savedAs, { id: saved })}
             </span>
           ) : null}
         </div>
@@ -452,7 +462,10 @@ export function makeQueryPanel(
             style={{ overflow: "auto", maxHeight: 280 }}
           >
             <span style={note}>
-              {preview.rows.length} of {preview.total ?? "?"} row(s)
+              {t(M.rowsOf, {
+                shown: preview.rows.length,
+                total: preview.total ?? "?",
+              })}
             </span>
             <table style={{ borderCollapse: "collapse" }}>
               <thead>
@@ -484,11 +497,9 @@ export function makeQueryPanel(
 
         {/* ── saved queries ──────────────────────────────────────────────── */}
         <div>
-          <strong>Queries</strong>
+          <strong>{t(M.queries)}</strong>
           {snapshot.queries.length === 0 ? (
-            <p style={note}>
-              No saved queries. Bindings read a query by its id.
-            </p>
+            <p style={note}>{t(M.noQueries)}</p>
           ) : (
             <ul>
               {snapshot.queries.map((id) => (

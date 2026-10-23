@@ -23,7 +23,9 @@
 export { CockpitLayout, type CockpitLayoutProps } from "./CockpitLayout";
 export {
   CockpitStateProvider,
-  cockpitActions,
+  cockpitActionsOf,
+  useCockpitActions,
+  type CockpitActions,
   useCockpitState,
   useOptionalCockpitState,
   type CockpitState,
@@ -39,5 +41,6 @@ export {
 export {
   navigateToPages,
   setCockpitPageNavigator,
+  usePageNavigation,
   type PageNavigator,
 } from "./cockpit-navigation";

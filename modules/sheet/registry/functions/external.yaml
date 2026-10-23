@@ -1,0 +1,228 @@
+# sheet.fn.external.* — functions this engine never runs (W1.0 amendment,
+# docs/adr/513-calc-model-amendment.md). Schema: see math.yaml. A
+# `cached_only` row has no kernel: a formula calling it keeps the value its
+# workbook cached; with none it shows the row's error (#BLOCKED! for a
+# network call, #CONNECT! for a cube function without its connection).
+
+- id: sheet.fn.external.webservice
+  name: WEBSERVICE
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft WEBSERVICE function (public docs)", "spec §1.1 no-network ruling"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::cached_only_functions_keep_the_cached_value__feat__sheet_calc_model"]
+
+- id: sheet.fn.external.cubevalue
+  name: CUBEVALUE
+  family: external
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBEVALUE)", "spec §1.1 no-network ruling"]
+  tests:
+    rust: ["sheet-conformance/tests/it/calc_model.rs::cached_only_functions_keep_the_cached_value__feat__sheet_calc_model"]
+
+- id: sheet.fn.external.cubekpimember
+  name: CUBEKPIMEMBER
+  family: external
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBEKPIMEMBER)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.cubemember
+  name: CUBEMEMBER
+  family: external
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBEMEMBER)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.cubememberproperty
+  name: CUBEMEMBERPROPERTY
+  family: external
+  arity: { min: 3, max: 3 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBEMEMBERPROPERTY)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.cuberankedmember
+  name: CUBERANKEDMEMBER
+  family: external
+  arity: { min: 3, max: 4 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBERANKEDMEMBER)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.cubeset
+  name: CUBESET
+  family: external
+  arity: { min: 2, max: 5 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBESET)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.cubesetcount
+  name: CUBESETCOUNT
+  family: external
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  cached_only: connect
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CUBESETCOUNT)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.rtd
+  name: RTD
+  family: external
+  arity: { min: 3, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (RTD) — a real-time data server", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.stockhistory
+  name: STOCKHISTORY
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 2, max: 11 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft STOCKHISTORY function (public docs) — an online data service", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.image
+  name: IMAGE
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: 5 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft IMAGE function (public docs) — fetches a URL", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.translate
+  name: TRANSLATE
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: 3 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft TRANSLATE function (public docs) — an online service", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.detectlanguage
+  name: DETECTLANGUAGE
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft DETECTLANGUAGE function (public docs) — an online service", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.copilot
+  name: COPILOT
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft COPILOT function (public docs) — an online service", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.py
+  name: PY
+  xlfn_prefix: "_xlfn."
+  family: external
+  arity: { min: 2, max: 2 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["Microsoft Python in Excel (public docs) — runs in a cloud container", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.call
+  name: CALL
+  family: external
+  arity: { min: 1, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (CALL) — calls a native library", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.register-id
+  name: REGISTER.ID
+  family: external
+  arity: { min: 2, max: 3 }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (REGISTER.ID) — registers a native library", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]
+
+- id: sheet.fn.external.getpivotdata
+  name: GETPIVOTDATA
+  family: external
+  arity: { min: 2, max: null }
+  volatility: none
+  range_aware: false
+  cached_only: blocked
+  status: implemented
+  provenance: ["ECMA-376 §18.17.7 (GETPIVOTDATA) — reads an interactive pivot table, which stays preserve-only (ADR 504)", "spec §1.1 no-network ruling; W3: cached value kept, else the row's error"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fix_model.rs::cached_only_w3_functions_keep_their_error"]

@@ -29,13 +29,27 @@ import { createElement } from "react";
 
 import type { FrameSurfaceProps } from "@paged-media/plugin-api";
 
-import { DEFAULT_HEADING_STYLE, rowHeadingWidthPt, type GridScene } from "../../sheet-host-model/src";
-import { makeSheetFrameSurface, type FrameSurfaceSession } from "../src/surface/sheet-frame-surface";
+import {
+  DEFAULT_HEADING_STYLE,
+  rowHeadingWidthPt,
+  type GridScene,
+} from "../../sheet-host-model/src";
+import {
+  makeSheetFrameSurface,
+  type FrameSurfaceSession,
+} from "../src/surface/sheet-frame-surface";
 
 afterEach(cleanup);
 
 const scene: GridScene = {
-  viewport: { firstRow: 0, firstCol: 0, rows: 3, cols: 3, xOffsets: [0, 44, 88, 132], yOffsets: [0, 15, 30, 45] },
+  viewport: {
+    firstRow: 0,
+    firstCol: 0,
+    rows: 3,
+    cols: 3,
+    xOffsets: [0, 44, 88, 132],
+    yOffsets: [0, 15, 30, 45],
+  },
   cells: [],
   styles: [],
   gridlines: { h: [], v: [] },
@@ -44,7 +58,12 @@ const scene: GridScene = {
 
 function fakeSession() {
   const calls: Array<[string, ...unknown[]]> = [];
-  let edit: { row: number; col: number; text: string; mode: "enter" | "edit" } | null = null;
+  let edit: {
+    row: number;
+    col: number;
+    text: string;
+    mode: "enter" | "edit";
+  } | null = null;
   const listeners = new Set<() => void>();
   const changed = () => {
     for (const l of listeners) l();
@@ -81,7 +100,12 @@ function fakeSession() {
       changed();
       return true;
     },
-    commitCellEdit: () => (calls.push(["commit"]), (edit = null), changed(), true),
+    commitCellEdit: () => (
+      calls.push(["commit"]),
+      (edit = null),
+      changed(),
+      true
+    ),
     cancelCellEdit: () => {
       calls.push(["cancel"]);
       edit = null;
@@ -98,7 +122,9 @@ function fakeSession() {
     setRowHeight: (h) => (calls.push(["height", h]), { ok: true as const }),
     selectionStats: () => null,
     cellInputAt: () => "12",
-    functionList: () => [{ name: "SUM", family: "math", minArgs: 1, maxArgs: null }],
+    functionList: () => [
+      { name: "SUM", family: "math", minArgs: 1, maxArgs: null },
+    ],
     sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
     state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
   };
@@ -132,9 +158,16 @@ describe("sheet frame surface", () => {
 
   it("a click on the cells reaches the session in cell-area points", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).render, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
     const root = r.getByTestId("sheet-frame-surface");
-    fireEvent.pointerDown(root, { button: 0, clientX: hw + 10, clientY: hh + 5, shiftKey: true });
+    fireEvent.pointerDown(root, {
+      button: 0,
+      clientX: hw + 10,
+      clientY: hh + 5,
+      shiftKey: true,
+    });
     fireEvent.pointerUp(root, { button: 0, clientX: hw + 10, clientY: hh + 5 });
     expect(calls).toContainEqual(["down", 10, 5, { shift: true }]);
     expect(calls).toContainEqual(["up", 10, 5]);
@@ -142,7 +175,9 @@ describe("sheet frame surface", () => {
 
   it("a column heading selects its whole column; the corner selects all", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).render, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
     const root = r.getByTestId("sheet-frame-surface");
     fireEvent.pointerDown(root, { button: 0, clientX: hw + 60, clientY: 4 });
     expect(calls).toContainEqual(["select", 0, 1]);
@@ -154,7 +189,9 @@ describe("sheet frame surface", () => {
 
   it("dragging a column heading's border sets the column width", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).render, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
     const root = r.getByTestId("sheet-frame-surface");
     fireEvent.pointerDown(root, { button: 0, clientX: hw + 44, clientY: 4 });
     fireEvent.pointerMove(root, { clientX: hw + 65, clientY: 4 });
@@ -167,7 +204,10 @@ describe("sheet frame surface", () => {
     const { session, calls } = fakeSession();
     const exits: boolean[] = [];
     const r = render(
-      createElement(makeSheetFrameSurface(session).render, props({ exit: ({ commit }) => exits.push(commit) })),
+      createElement(
+        makeSheetFrameSurface(session).render,
+        props({ exit: ({ commit }) => exits.push(commit) }),
+      ),
     );
     const editor = r.getByTestId("sheet-cell-editor") as HTMLTextAreaElement;
     fireEvent.keyDown(editor, { key: "ArrowDown" });
@@ -183,7 +223,9 @@ describe("sheet frame surface", () => {
 
   it("F4 cycles the reference at the caret", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).render, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
     const editor = r.getByTestId("sheet-cell-editor") as HTMLTextAreaElement;
     act(() => {
       session.beginCellEdit("=A1", "edit");
@@ -196,7 +238,9 @@ describe("sheet frame surface", () => {
 
   it("the bar shows the cell and commits the formula on Enter", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).bar, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
     expect(r.getByTestId("sheet-bar-name").textContent).toBe("A1");
     const formula = r.getByTestId("sheet-bar-formula") as HTMLInputElement;
     expect(formula.value).toBe("12");
@@ -211,7 +255,9 @@ describe("sheet frame surface", () => {
 
   it("detaches on unmount", () => {
     const { session, calls } = fakeSession();
-    const r = render(createElement(makeSheetFrameSurface(session).render, props()));
+    const r = render(
+      createElement(makeSheetFrameSurface(session).render, props()),
+    );
     act(() => r.unmount());
     expect(calls.at(-1)).toEqual(["detach"]);
   });

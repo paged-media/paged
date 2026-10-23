@@ -17,9 +17,8 @@
  */
 
 //! Workbook-STRUCTURE writes (Wave 4): the `<calcPr>` iteration knobs, adding
-//! / renaming / deleting a worksheet, and the structural-edit preservation
-//! check (which preserved content would a row/column insert or delete leave
-//! pointing at the wrong cells).
+//! / renaming / deleting a worksheet. (What a row/column insert or delete
+//! does to the preserved content is `shift.rs`.)
 //!
 //! Every write here is a byte splice (`splice.rs`) of the one element it
 //! changes — the workbook part, the workbook `.rels` and `[Content_Types].xml`
@@ -32,7 +31,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sheet_core::calc_settings::CalcSettings;
-use sheet_core::{SheetId, SheetModel};
+use sheet_core::SheetId;
 
 use crate::error::XlsxError;
 use crate::opc::{ModeledKind, PartEntry, CONTENT_TYPES_PART};
@@ -53,13 +52,18 @@ pub const CT_WORKSHEET: &str =
 pub const REL_TYPE_WORKSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
 
-/// The `<calcPr>` iteration knobs as written (ECMA-376 §18.2.2). Absent
-/// attributes stay `None` so the loader can keep Excel's defaults.
+/// The `<calcPr>` knobs as written (ECMA-376 §18.2.2): iteration, and (W1.0,
+/// sheet ADR 513) the calculation mode, precision as displayed and full calc
+/// on load. Absent attributes stay `None` so the loader can keep Excel's
+/// defaults.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct CalcPr {
     pub iterate: Option<bool>,
     pub iterate_count: Option<u32>,
     pub iterate_delta: Option<f64>,
+    pub calc_mode: Option<sheet_core::calc_settings::CalcMode>,
+    pub full_precision: Option<bool>,
+    pub full_calc_on_load: Option<bool>,
 }
 
 impl CalcPr {
@@ -74,36 +78,17 @@ impl CalcPr {
         if let Some(d) = self.iterate_delta {
             calc.max_change = d;
         }
+        if let Some(m) = self.calc_mode {
+            calc.calc_mode = m;
+        }
+        if let Some(p) = self.full_precision {
+            calc.full_precision = p;
+        }
+        if let Some(f) = self.full_calc_on_load {
+            calc.full_calc_on_load = f;
+        }
     }
 }
-
-/// `<worksheet>` children whose content addresses cells of THIS sheet and
-/// which the writer re-emits verbatim — a row/column insert or delete would
-/// leave them pointing at the wrong cells. (`<mergeCells>`, `<cols>` and the
-/// rows are modelled and shift with the edit; a `<sheetViews>` selection is
-/// cosmetic and allowed to go stale.)
-const ADDRESSED_CHILDREN: &[&str] = &[
-    "conditionalFormatting",
-    "dataValidations",
-    "hyperlinks",
-    "autoFilter",
-    "sortState",
-    "protectedRanges",
-    "scenarios",
-    "dataConsolidate",
-    "customSheetViews",
-    "rowBreaks",
-    "colBreaks",
-    "ignoredErrors",
-    "smartTags",
-    "cellWatches",
-    "tableParts",
-    "drawing",
-    "legacyDrawing",
-    "oleObjects",
-    "controls",
-    "webPublishItems",
-];
 
 /// Format `true`/`false` as the OOXML boolean the writer emits.
 fn xml_bool(b: bool) -> String {
@@ -120,8 +105,10 @@ fn xml_num(n: f64) -> String {
 }
 
 /// Rewrite (or insert) the workbook's `<calcPr>` so it carries `calc`'s
-/// iteration knobs. Every other attribute (calcId, fullCalcOnLoad, …) and
-/// every other byte of the part is kept.
+/// iteration knobs, calculation mode, precision as displayed and full calc on
+/// load. An attribute at its default that the part does not carry stays
+/// absent; every other attribute (calcId, …) and every other byte of the part
+/// is kept.
 pub fn patch_calc_pr(xml: &[u8], calc: &CalcSettings) -> Result<Vec<u8>, XlsxError> {
     let defaults = CalcSettings::default();
     let (kids, close) = root_children(xml)?;
@@ -144,6 +131,7 @@ pub fn patch_calc_pr(xml: &[u8], calc: &CalcSettings) -> Result<Vec<u8>, XlsxErr
             "iterateDelta",
             keep_delta.then(|| xml_num(calc.max_change)),
         );
+        patch_w10_attrs(&mut a, calc, &defaults);
         return Ok(replace_start_tag(
             xml,
             span,
@@ -169,16 +157,44 @@ pub fn patch_calc_pr(xml: &[u8], calc: &CalcSettings) -> Result<Vec<u8>, XlsxErr
         .find(|k| k.local == "sheets")
         .map(|k| prefix_of(&k.qname).to_string())
         .unwrap_or_default();
-    let tag = render_tag(
-        &format!("{prefix}calcPr"),
-        &[
-            ("iterate".into(), xml_bool(calc.iterative)),
-            ("iterateCount".into(), calc.max_iter.to_string()),
-            ("iterateDelta".into(), xml_num(calc.max_change)),
-        ],
-        true,
-    );
+    let mut a = vec![
+        ("iterate".into(), xml_bool(calc.iterative)),
+        ("iterateCount".into(), calc.max_iter.to_string()),
+        ("iterateDelta".into(), xml_num(calc.max_change)),
+    ];
+    patch_w10_attrs(&mut a, calc, &defaults);
+    let tag = render_tag(&format!("{prefix}calcPr"), &a, true);
     Ok(splice(xml, anchor, anchor, tag.as_bytes()))
+}
+
+/// `calcMode`, `fullPrecision`, `fullCalcOnLoad`: written when they differ
+/// from Excel's default or the part already carries them.
+fn patch_w10_attrs(a: &mut Vec<(String, String)>, calc: &CalcSettings, d: &CalcSettings) {
+    let keep = |a: &Vec<(String, String)>, name: &str, differs: bool| {
+        differs || attr_local(a, name).is_some()
+    };
+    let mode = keep(a, "calcMode", calc.calc_mode != d.calc_mode);
+    set_attr(
+        a,
+        "calcMode",
+        mode.then(|| calc.calc_mode.as_str().to_string()),
+    );
+    let prec = keep(a, "fullPrecision", calc.full_precision != d.full_precision);
+    set_attr(
+        a,
+        "fullPrecision",
+        prec.then(|| xml_bool(calc.full_precision)),
+    );
+    let full = keep(
+        a,
+        "fullCalcOnLoad",
+        calc.full_calc_on_load != d.full_calc_on_load,
+    );
+    set_attr(
+        a,
+        "fullCalcOnLoad",
+        full.then(|| xml_bool(calc.full_calc_on_load)),
+    );
 }
 
 /// True when an identifier char (a sheet name run continues through it).
@@ -406,7 +422,7 @@ impl XlsxDocument {
     }
 
     /// Remove the `<Relationship Id=id>` row from a `.rels` part.
-    fn remove_rel(&mut self, rels_part: &str, id: &str) -> Result<(), XlsxError> {
+    pub(crate) fn remove_rel(&mut self, rels_part: &str, id: &str) -> Result<(), XlsxError> {
         let Some(raw) = self.part_bytes(rels_part) else {
             return Ok(());
         };
@@ -452,7 +468,7 @@ impl XlsxDocument {
     }
 
     /// Remove a `[Content_Types]` override (model + bytes).
-    fn remove_override(&mut self, part: &str) -> Result<(), XlsxError> {
+    pub(crate) fn remove_override(&mut self, part: &str) -> Result<(), XlsxError> {
         let pn = format!("/{part}");
         self.container
             .content_types
@@ -530,6 +546,7 @@ impl XlsxDocument {
             dirty: true,
         });
         self.bindings.push(SheetBinding {
+            edits: Vec::new(),
             sheet_id,
             part_name: part,
             captured: CapturedSubtrees::default(),
@@ -730,57 +747,13 @@ impl XlsxDocument {
         Ok(out)
     }
 
-    /// The preserved content that a row/column insert or delete on `sheet_id`
-    /// cannot carry along — each entry names one blocker. EMPTY means the
-    /// structural edit is safe for the package (the modelled cells, merges,
-    /// column widths and row heights shift with the edit; formulas are
-    /// re-printed by the consumer).
-    pub fn structural_edit_blockers(&self, sheet_id: SheetId, model: &SheetModel) -> Vec<String> {
-        let mut out = Vec::new();
-        if let Some(b) = self.bindings.iter().find(|b| b.sheet_id == sheet_id) {
-            for c in &b.captured.items {
-                let local = element_local_name(&c.bytes);
-                if ADDRESSED_CHILDREN.contains(&local.as_str()) {
-                    out.push(format!("<{local}>"));
-                } else if local == "extLst" {
-                    let s = String::from_utf8_lossy(&c.bytes);
-                    if s.contains("sqref") || s.contains(":f>") {
-                        out.push("<extLst> with cell references".into());
-                    }
-                }
-            }
-            let rels_part = rels_part_name(&b.part_name);
-            if let Some(p) = self.container.part(&rels_part) {
-                if let Ok(rels) = parse_rels(p.bytes()) {
-                    for kind in ["/table", "/drawing", "/comments", "/pivotTable"] {
-                        if rels.items.iter().any(|r| r.is_type(kind)) {
-                            out.push(format!("{} part", &kind[1..]));
-                        }
-                    }
-                }
-            }
+    /// Record a row/column insert or delete the consumer applied to its
+    /// model of `sheet_id`, so the next save finds each original row and cell
+    /// of the part at its new address (patch.rs).
+    pub fn record_structural_edit(&mut self, sheet_id: SheetId, edit: sheet_parser::Edit) {
+        if let Some(b) = self.bindings.iter_mut().find(|b| b.sheet_id == sheet_id) {
+            b.edits.push(edit);
         }
-        if self.charts.iter().any(|c| {
-            c.host_sheet == sheet_id
-                || c.model.series.iter().any(|s| {
-                    s.values.start.sheet == sheet_id
-                        || s.categories.is_some_and(|r| r.start.sheet == sheet_id)
-                })
-        }) {
-            out.push("chart".into());
-        }
-        if let Some(ws) = model.sheet(sheet_id) {
-            for (_, def) in model.names.iter() {
-                if let sheet_core::names::NameTarget::Formula(text) = &def.target {
-                    if rewrite_sheet_refs(text, &ws.name, "X").1 {
-                        out.push(format!("defined name {}", def.name));
-                    }
-                }
-            }
-        }
-        out.sort();
-        out.dedup();
-        out
     }
 
     /// The `<calcPr>` the workbook part needs for `model`'s calc settings, or
@@ -796,24 +769,15 @@ impl XlsxDocument {
         if now.iterative == was.iterative
             && now.max_iter == was.max_iter
             && now.max_change == was.max_change
+            && now.calc_mode == was.calc_mode
+            && now.full_precision == was.full_precision
+            && now.full_calc_on_load == was.full_calc_on_load
         {
             return Ok(None);
         }
         let wb = self.workbook_bytes()?;
         Ok(Some(patch_calc_pr(&wb, now)?))
     }
-}
-
-/// The local name of the element a captured subtree starts with.
-fn element_local_name(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    let s = s.trim_start();
-    let s = s.strip_prefix('<').unwrap_or(s);
-    let end = s
-        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-        .unwrap_or(s.len());
-    let q = &s[..end];
-    q.rsplit(':').next().unwrap_or(q).to_string()
 }
 
 #[cfg(test)]
@@ -854,14 +818,5 @@ mod tests {
         assert_eq!(quote_sheet("Plain_1"), "Plain_1");
         assert_eq!(quote_sheet("It's"), "'It''s'");
         assert_eq!(quote_sheet("1st"), "'1st'");
-    }
-
-    #[test]
-    fn captured_local_name() {
-        assert_eq!(
-            element_local_name(b"<x:hyperlinks><a/></x:hyperlinks>"),
-            "hyperlinks"
-        );
-        assert_eq!(element_local_name(b"<extLst>"), "extLst");
     }
 }

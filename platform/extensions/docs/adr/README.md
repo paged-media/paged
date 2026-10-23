@@ -53,7 +53,9 @@ and each one names the plugins that follow it and those that do not.
 | [330](330-a-document-face-lives-as-long-as-its-document.md) | A face given to a document lives as long as that document | Accepted 2026-10-15 |
 | [331](331-the-host-adapter-stays-public.md) | The host adapter stays in the public SDK; the first-party packages leave this tree | Accepted 2026-10-19 |
 | [332](332-one-property-row-shape.md) | One property row shape: the engine publishes the contract's rows, the SDK adds none | Accepted 2026-10-20 |
+| [333](333-a-bundles-words-follow-the-editors-language.md) | A bundle's words follow the editor's language | Accepted 2026-10-23 |
 | [334](334-a-frame-surface-for-live-editing.md) | A frame surface: a bundle's live DOM editing surface over its frame | Accepted 2026-10-22 |
+| [335](335-modules-contribute-template-field-kinds.md) | Modules contribute template field kinds | Accepted 2026-10-23 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

@@ -17,6 +17,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+// Legacy: the embedding bridge (src/embed/bridge.ts) runs scripts too, as
+// `runScript` over `connectEditor`; this older `paged:run` protocol stays
+// until the docs site's playground calls that instead.
+//
 // Iframe scripting bridge (demo build) — lets an embedding page (the docs
 // scripting playground at docs.paged.media) run paged.* source against this
 // live editor over postMessage. Mounted only when the URL carries `?embed=script`.

@@ -58,3 +58,12 @@
   # TRUSTED_TYPES_POLICY (the dev server sends it from there;
   # scripts/trusted-types.test.mjs keeps the two equal).
   Content-Security-Policy: require-trusted-types-for 'script'; report-uri /api/csp-report
+
+# Embedding plan E6 — embed.html is the editor a host drives through an
+# iframe. Which pages may frame it is a deploy-time list: the floor is the
+# editor's own origin, and a build with VITE_EMBED_ORIGINS (comma-separated
+# https origins) widens it in the output's copy (vite.config.ts
+# `embedFrameAncestors`). The bridge checks every message against the same
+# list (src/embed/protocol.ts `embedOrigins`).
+/embed.html
+  Content-Security-Policy: frame-ancestors 'self'

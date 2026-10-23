@@ -57,13 +57,20 @@ pub enum StructuralEdit {
     DeleteCols,
 }
 
-/// The calc settings the panel shows (`<calcPr>` iteration knobs).
+/// The calc settings the panel shows (`<calcPr>`): the iteration knobs and
+/// (sheet ADR 513) the calculation mode, precision as displayed, full calc on
+/// load, and whether edits wait for a calculation.
 #[derive(serde::Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CalcSettingsInfo {
     pub iterative: bool,
     pub max_iter: u32,
     pub max_change: f64,
+    /// `auto` | `autoNoTable` | `manual`.
+    pub calc_mode: String,
+    pub full_precision: bool,
+    pub full_calc_on_load: bool,
+    pub calc_pending: bool,
 }
 
 /// Excel's sheet-name rules: 1–31 chars, none of `: \ / ? * [ ]`, not
@@ -141,10 +148,61 @@ fn drop_sheet_refs(e: &mut Expr, gone: SheetId) -> bool {
             let x = drop_sheet_refs(callee, gone);
             drop_sheet_refs_all(args.iter_mut(), gone) || x
         }
-        Expr::Lit(_) | Expr::Name(_) | Expr::StructuredRef(_) | Expr::Local(_) | Expr::Missing => {
-            false
-        }
+        // A 3D span loses the deleted sheet: an end moves inward, an empty
+        // span is `#REF!` (Excel's rule for deleting a sheet of a 3D reference).
+        Expr::Ref3D(r) => match shrink_span(r.sheets, gone) {
+            Some(sheets) => {
+                r.sheets = sheets;
+                r.cell.sheet = sheets.first;
+                false
+            }
+            None => {
+                *e = Expr::Lit(LitValue::Error(CellError::Ref));
+                true
+            }
+        },
+        Expr::Range3D(r) => match shrink_span(r.sheets, gone) {
+            Some(sheets) => {
+                r.sheets = sheets;
+                r.range.start.sheet = sheets.first;
+                r.range.end.sheet = sheets.first;
+                false
+            }
+            None => {
+                *e = Expr::Lit(LitValue::Error(CellError::Ref));
+                true
+            }
+        },
+        Expr::UnknownFunc(_, args) => drop_sheet_refs_all(args.iter_mut(), gone),
+        Expr::Lit(_)
+        | Expr::Name(_)
+        | Expr::StructuredRef(_)
+        | Expr::Local(_)
+        | Expr::Missing
+        | Expr::UnknownName(_) => false,
     }
+}
+
+/// A 3D sheet span after sheet `gone` is deleted (later ids shift down one),
+/// or `None` when it held only that sheet.
+fn shrink_span(
+    span: sheet_core::ast::SheetSpan,
+    gone: SheetId,
+) -> Option<sheet_core::ast::SheetSpan> {
+    if span.first == gone && span.last == gone {
+        return None;
+    }
+    let first = if span.first > gone {
+        span.first - 1
+    } else {
+        span.first
+    };
+    let last = if span.last >= gone {
+        span.last - 1
+    } else {
+        span.last
+    };
+    Some(sheet_core::ast::SheetSpan { first, last })
 }
 
 impl SheetSession {
@@ -163,7 +221,7 @@ impl SheetSession {
     }
 
     /// Map an engine recalc result to the wire shape (formatted displays).
-    fn changes_of(&self, result: &sheet_calc::RecalcResult) -> SetCellResult {
+    pub(crate) fn changes_of(&self, result: &sheet_calc::RecalcResult) -> SetCellResult {
         let model = self.engine().model();
         let mut cache = FormatCache::default();
         let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
@@ -270,7 +328,57 @@ impl SheetSession {
             iterative: c.iterative,
             max_iter: c.max_iter,
             max_change: c.max_change,
+            calc_mode: c.calc_mode.as_str().to_string(),
+            full_precision: c.full_precision,
+            full_calc_on_load: c.full_calc_on_load,
+            calc_pending: self.engine().is_calc_pending(),
         }
+    }
+
+    /// Set the calculation mode (`auto` | `autoNoTable` | `manual`), written
+    /// back to `<calcPr calcMode>` on save. Leaving manual calculates what is
+    /// pending.
+    pub fn set_calc_mode(&mut self, mode: &str) -> Result<SetCellResult, SessionError> {
+        let m = sheet_core::CalcMode::parse(mode)
+            .ok_or_else(|| SessionError(format!("unknown calculation mode {mode:?}")))?;
+        let result = self.engine_mut().set_calc_mode(m);
+        self.structure_changed = true;
+        Ok(self.changes_of(&result))
+    }
+
+    /// Calculate Now (F9): every pending cell, and the volatile ones.
+    pub fn calculate_now(&mut self) -> SetCellResult {
+        let result = self.engine_mut().calculate_now();
+        self.changes_of(&result)
+    }
+
+    /// Calculate Sheet (Shift+F9): the pending cells of one sheet.
+    pub fn calculate_sheet(&mut self, sheet: u16) -> Result<SetCellResult, SessionError> {
+        self.validate_sheet(sheet)?;
+        let result = self.engine_mut().calculate_sheet(sheet);
+        Ok(self.changes_of(&result))
+    }
+
+    /// Whether edits are waiting for a calculation (manual mode).
+    pub fn is_calc_pending(&self) -> bool {
+        self.engine().is_calc_pending()
+    }
+
+    /// Precision as displayed (`<calcPr fullPrecision>`): with `false`, a
+    /// number entered from now on is stored rounded to its cell's format.
+    /// Written back on save.
+    pub fn set_full_precision(&mut self, full: bool) {
+        self.engine_mut().set_full_precision(full);
+        self.structure_changed = true;
+    }
+
+    /// Name the document for `CELL("filename")` (an empty name: unsaved).
+    /// Not written to the file; the volatile `CELL` cells see it on their
+    /// next recalculation, which this triggers.
+    pub fn set_document_name(&mut self, name: &str) -> SetCellResult {
+        let name = (!name.is_empty()).then_some(name);
+        self.engine_mut().set_document_name(name);
+        self.recalc_volatile()
     }
 
     /// Toggle iterative calculation; written back to `<calcPr>` on save.
@@ -541,38 +649,93 @@ impl SheetSession {
                 "{axis} span {at}+{n} is past the sheet edge"
             )));
         }
-        let mut blockers = self
-            .doc
-            .structural_edit_blockers(sheet, self.engine().model());
-        // A formula kept verbatim (unparsed) cannot have its references
-        // rewritten — on this sheet, or elsewhere naming this sheet.
-        let sheet_name = self.engine().model().sheets[sheet as usize]
-            .name
-            .to_string();
-        let model = self.engine().model();
-        if self.doc.formula_texts.iter().any(|(&(s, r, c), t)| {
-            let unparsed = model
-                .sheet(s)
-                .and_then(|ws| ws.cell(r, c))
-                .is_none_or(|cell| cell.formula.is_none());
-            unparsed && (s == sheet || rewrite_sheet_refs(t, &sheet_name, "X").1)
-        }) {
-            blockers.push("a formula Paged keeps verbatim (unparsed)".into());
-        }
-        if !blockers.is_empty() {
-            return Err(SessionError(format!(
-                "cannot insert/delete {axis}s here without breaking preserved content: {}",
-                blockers.join(", ")
-            )));
-        }
-
         let edit = match kind {
             StructuralEdit::InsertRows => Edit::InsertRows { sheet, at, n },
             StructuralEdit::DeleteRows => Edit::DeleteRows { sheet, at, n },
             StructuralEdit::InsertCols => Edit::InsertCols { sheet, at, n },
             StructuralEdit::DeleteCols => Edit::DeleteCols { sheet, at, n },
         };
+        let sheet_names: Vec<String> = self
+            .engine()
+            .model()
+            .sheets
+            .iter()
+            .map(|w| w.name.to_string())
+            .collect();
+        let sheet_name = sheet_names[sheet as usize].clone();
+        let shift = |text: &str, host: bool| {
+            sheet_parser::shift_ref_text(
+                text,
+                &sheet_parser::TextShift {
+                    edit,
+                    sheet_name: &sheet_name,
+                    host_is_target: host,
+                    sheets: &sheet_names,
+                },
+            )
+        };
+
+        // Plan everything before anything changes: a formula kept verbatim
+        // (unparsed) is shifted as text; defined names are shifted; the
+        // package's preserved content is shifted by the document. Anything
+        // that cannot be shifted refuses the edit, the model untouched.
+        let mut blockers: Vec<String> = Vec::new();
+        let mut unparsed: Vec<((SheetId, u32, u32), String)> = Vec::new();
+        {
+            let model = self.engine().model();
+            for (&(s, r, c), t) in &self.doc.formula_texts {
+                let parsed = model
+                    .sheet(s)
+                    .and_then(|ws| ws.cell(r, c))
+                    .is_some_and(|cell| cell.formula.is_some());
+                if parsed {
+                    continue;
+                }
+                match shift(t, s == sheet) {
+                    Ok(new) => unparsed.push(((s, r, c), new)),
+                    Err(e) => blockers.push(format!(
+                        "a formula Paged keeps verbatim ({}!{}{}: {e})",
+                        sheet_names.get(s as usize).map_or("?", String::as_str),
+                        sheet_core::col_to_a1(c),
+                        r + 1
+                    )),
+                }
+            }
+        }
+        let mut names_err = Vec::new();
+        let new_names = rebuild_names(&self.engine().model().names, |scope, target| {
+            let host = scope == NameScope::Sheet(sheet);
+            let target = match target {
+                NameTarget::Formula(text) => match shift(text, host) {
+                    Ok(t) => NameTarget::Formula(t.into()),
+                    Err(e) => {
+                        names_err.push(format!("a defined name ({e})"));
+                        target.clone()
+                    }
+                },
+                NameTarget::Range(r) => {
+                    NameTarget::Range(sheet_parser::shift_range_ref(*r, &edit).unwrap_or(*r))
+                }
+            };
+            (Some(scope), target)
+        });
+        blockers.extend(names_err);
+        if !blockers.is_empty() {
+            return Err(SessionError(format!(
+                "cannot insert/delete {axis}s here without breaking preserved content: {}",
+                blockers.join(", ")
+            )));
+        }
+        let dirty = self.doc.shift_for_edit(&sheet_names, edit).map_err(|b| {
+            SessionError(format!(
+                "cannot insert/delete {axis}s here without breaking preserved content: {}",
+                b.join(", ")
+            ))
+        })?;
+
+        self.with_model(false, |m| m.names = new_names);
         let result = self.engine_mut().apply_edit(&edit);
+        self.extra_dirty.extend(dirty);
 
         // The edited sheet's stored formula texts are positional: drop them
         // all and re-print every formula cell there (and re-encode the sheet,
@@ -580,6 +743,25 @@ impl SheetSession {
         self.doc.formula_texts.retain(|&(s, _, _), _| s != sheet);
         self.edited.retain(|&(s, _, _)| s != sheet);
         self.extra_dirty.insert(sheet);
+        // The verbatim formulas, shifted: those on the edited sheet at their
+        // new cells (a deleted cell takes its formula with it), the others
+        // in place.
+        for ((s, r, c), text) in unparsed {
+            if s == sheet {
+                let rows = sheet_parser::edit_is_rows(&edit);
+                let moved = if rows {
+                    sheet_parser::shift_index(&edit, r).map(|r| (r, c))
+                } else {
+                    sheet_parser::shift_index(&edit, c).map(|c| (r, c))
+                };
+                if let Some((r, c)) = moved {
+                    self.doc.formula_texts.insert((s, r, c), text);
+                }
+            } else if self.doc.formula_texts.get(&(s, r, c)) != Some(&text) {
+                self.doc.formula_texts.insert((s, r, c), text);
+                self.extra_dirty.insert(s);
+            }
+        }
         let mut reprint: BTreeSet<(SheetId, u32, u32)> = BTreeSet::new();
         {
             let model = self.engine().model();

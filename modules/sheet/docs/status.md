@@ -19,8 +19,24 @@ each published canary added is under [Releases](#releases).
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
   A reopened document restores its workbook when the host reports the open
   (`document.onDidOpen`).
-- **Calculation.** 263 registered functions, all implemented, among them `LET`, `LAMBDA` and its
-  helpers; dynamic arrays that spill and nest; Excel tables with structured references;
+- **Calculation.** 389 registered functions: 371 evaluated, and 18 that need a network, a cube
+  connection, a native library or a pivot table (`WEBSERVICE`, `CUBE*`, `RTD`, `STOCKHISTORY`,
+  `IMAGE`, `TRANSLATE`, `DETECTLANGUAGE`, `COPILOT`, `PY`, `CALL`, `REGISTER.ID`, `GETPIVOTDATA`)
+  keep the value the workbook cached (else `#BLOCKED!` / `#CONNECT!`). Among them `LET`, `LAMBDA` and its
+  helpers, the engineering set (radix and bit functions, `CONVERT` with Excel's full unit table and
+  prefixes, the complex-number `IM*` functions on Excel's text form, the error and Bessel
+  functions with Excel's own approximations) and the modern math set (`CEILING.MATH`,
+  `FLOOR.MATH`, `MDETERM`/`MINVERSE`/`MUNIT`, the reciprocal trigonometric functions), the regular-expression functions (PCRE syntax through
+  `fancy-regex`; Unicode property classes limited to `\p{L}`/`\p{N}`), `ARRAYTOTEXT`,
+  `VALUETOTEXT`, `BAHTTEXT`, `ENCODEURL`, `FILTERXML` (an XPath location-path subset) and
+  `EUROCONVERT`; numbers convert to text as Excel's `CONCAT` does (fixed notation up to 20
+  characters); `CELL`, `INFO`, `SHEET`/`SHEETS` over the whole workbook (sheet names, 3D spans,
+  the document name the host gives) and `ISOMITTED` for omitted LAMBDA arguments; `EXPAND`, `WRAPROWS`/`WRAPCOLS`, `TRIMRANGE`,
+  `AREAS` and `GROUPBY`/`PIVOTBY` (headers, totals and subtotals, sort orders, filters, LAMBDA or
+  eta-reduced aggregations such as `SUM`, stored `_xleta.SUM`; the trim-reference operators `.:`
+  `:.` are not parsed yet); AGGREGATE's full set (functions 12–19, every option) and SUBTOTAL
+  101–111 over hidden rows, ROMAN's five forms, TREND over several regressors, TEXTBEFORE/TEXTAFTER
+  `match_end`, INDIRECT with R1C1 addresses, and TEXT in the workbook's locale; dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies, and range
   accelerators within a recalc (column snapshots, anchored prefix aggregates for SUM/COUNT/
   COUNTA/AVERAGE/MIN/MAX, exact-match indexes for VLOOKUP/MATCH/XMATCH/XLOOKUP/COUNTIF/SUMIF,
@@ -28,7 +44,7 @@ each published canary added is under [Releases](#releases).
   and 10,000 lookups into an edited 10,000-row table in about 9 ms natively; dependents of
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
-  locales. Expected values are recorded from Excel and replayed in CI: 1,470 of 1,485 function
+  locales. Expected values are recorded from Excel and replayed in CI: 5,156 of 5,222 function
   cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
@@ -36,6 +52,18 @@ each published canary added is under [Releases](#releases).
   and whole-row references, omitted arguments, legacy array formulas and element-wise array
   arguments evaluate as Excel does. A number literal beyond the double-precision range is a
   formula error, as in Excel.
+- **Calculation model** (ADRs 513, 514). A typed formula that can produce an array spills by its
+  result (`=A1:A3`, `=A1:A3*2`, `=IF(A1:A3>1,A1:A3,0)`, `=OFFSET(A1,0,0,3)`, a LAMBDA over a
+  range); a formula loaded without Excel's dynamic-array mark keeps implicit intersection; `@`;
+  3D references (`Jan:Mar!A1`) for the aggregates; a defined name called as a function is a
+  named LAMBDA; an unknown name or function is `#NAME?` and keeps its spelling; IF, IFS,
+  IFERROR, IFNA, CHOOSE and SWITCH evaluate only the branch they return; `#CALC!` and Excel 365's
+  other errors; comparisons and COUNTIF/SUMIF criteria at 15 significant digits and the
+  final-operation cancellation snap (`=0.1+0.2=0.3` is TRUE, `=0.1+0.2-0.3` is 0); a cycle keeps
+  its last values (0 when never calculated) with the circular warning; manual calculation
+  (`calcMode`, Calculate Now / Calculate Sheet) and precision as displayed, read from and written
+  to `<calcPr>`. Recorded from Excel and replayed in CI: 400 of 415 probed cells (135 cases)
+  agree, every disagreement a recorded ruling or a listed defect.
 - **Typed entry.** What a person types into a cell is stored as Excel stores it (ADR 511):
   percentages, currency, group separators, fractions, scientific notation, dates, times and
   date-times become numbers with the number format Excel gives them, a leading `'` forces text
@@ -43,6 +71,19 @@ each published canary added is under [Releases](#releases).
   through the same parser. Recorded from Excel and replayed in CI: 741 of 742 en-US entries
   through the session agree (215 of 216 through the parser), de-DE, es-ES and it-IT 71 of 71,
   fr-FR 63 of 71, every disagreement a recorded ruling.
+- **Insert and delete rows and columns** on any sheet (ADR 515): references move in every
+  formula, and so does what the workbook keeps beside its cells — conditional formats,
+  validations, hyperlinks, filters and sorts, page breaks, sheet views, sparklines, tables (a
+  column inserted inside one becomes `ColumnN`; a table deleted whole goes with its part),
+  drawings and pictures, notes and threaded comments, defined names and print areas, chart
+  series, row and column attributes. What the delete removes entirely goes with its cells, as
+  in Excel. Still refused, with the reason: a pivot table on the sheet or a pivot cache over it,
+  and an extension Paged does not know that holds cell references. Over the Excel-written
+  workbooks of the private corpus, 1778 inserts and deletes: none refused. Excel 16 opens what
+  Paged saves after these edits without a repair and keeps what it holds (the open-check lane,
+  `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
+  11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
+  the edit deletes reads `#REF!`, as Excel rewrites it.
 - **Workbook panel.** File and sheet controls on top (open, new, and sheets: add, rename,
   delete), then collapsible sections: Place on page (open by default), Rows and columns, Format
   and layout (borders, merge, column width, row height, freeze), Names, Sort range (formula cells
@@ -68,6 +109,19 @@ each published canary added is under [Releases](#releases).
   a grid drawn on the main thread over the frame, with row and column headings inside it,
   instead of the scene layer; pointer, wheel and keys go straight to it. The page table does not
   follow the scrolled window yet: it still shows the placed range.
+- **The live grid looks like the page (ADR 510).** `get_grid_scene` builds on `frame_window`:
+  the frozen rows and columns stay pinned while the body scrolls, hidden and filtered rows are
+  skipped, and the viewport lists the shown sheet rows and columns (`rowIndices`/`colIndices`,
+  `frozenRows`/`frozenCols`, `partialRow`/`partialCol`). Cells take the workbook's styles
+  through `CellStyler`, the per-cell path the page lowering (`get_range_page`) uses as well —
+  fills, fonts, text colour, per-edge borders, vertical alignment, wrap, the number-format text,
+  and conditional formatting (dxf rules, colour scales, data bars) — so a cell has the same style
+  key and style on both surfaces (pinned by a property test over random sheets). Merged areas
+  come as rects with the anchor's text and style, split at the frozen band, with the gridlines
+  inside them left out; text cells name the empty neighbours they may overflow into. The
+  painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
+  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
+  text onto the page.
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
@@ -121,7 +175,16 @@ each published canary added is under [Releases](#releases).
   formula is stored the way Excel stores a dynamic array (an array formula over its spill range,
   flagged by the `XLDAPR` cell metadata) and reloads as a live spill; Excel's own dynamic arrays
   load the same way. A workbook saved before that (each anchor a plain formula next to its
-  spilled values) reads those values back as the spill when they match.
+  spilled values) reads those values back as the spill when they match. An edited worksheet is
+  patched, not regenerated: rows and cells whose content did not change keep their bytes, a
+  changed cell keeps its start tag (`ph`, `vm`, unknown attributes) and a text cell that still
+  holds its shared string keeps the index, so rich-text runs survive. Hidden, styled and
+  outlined columns, row styles, outline levels and the `collapsed`/`thickTop`/`thickBot` flags
+  are read into the model (`RowMeta`, `ColMeta`) and written back; hidden columns are skipped
+  by the page lowering and the frame window like hidden rows. `listSheets` reports each tab's
+  `state` (`visible`, `hidden`, `veryHidden`), read-only. A rich-text string can be appended to
+  the shared-string table without renumbering it (`XlsxDocument::append_shared_string`); no
+  editing surface writes one yet.
 
 - **Object model.** On `main` and published since 0.1.0-canary.15. The contract is plugin-sdk's
   [`DESIGN.md`](https://github.com/paged-media/paged/blob/main/platform/extensions/DESIGN.md) §21, with the
@@ -143,6 +206,35 @@ each published canary added is under [Releases](#releases).
   budget). Typed commands (16 typed twins of palette commands, plus `publishDataset` /
   `unpublishDataset`) take value-typed arguments; 8 commands remain untyped. The bundle boots in
   `createHeadlessHost` with the real engine for get, set, batch and undo.
+- **Template fields** (editor plan G3; extensions ADR 335). Three module field kinds, in
+  `packages/sheet-bundle/src/template-fields.ts`, are the parts of a workbook a template can
+  open to a filler; each reads and writes through `host.objects` (one batch, one undo step,
+  checked by the engine against the session's role) and refuses a value with one sentence:
+  - `media.paged.sheet.cell` `{ ref, type?, allowed?, min?, max? }`: one cell's constant
+    (`ref` is `Sheet!A1` or a defined name); a text, a number (`type: "number"`, with bounds)
+    or a choice (`allowed`). Grants `text.edit` and `text.style`.
+  - `media.paged.sheet.range` `{ ref, columns?, rows? }`: a range's values as a table (rows of
+    strings, column order; `columns` titles them). `rows: "fixed"` (the default) takes exactly
+    the range's rows; `rows: { min?, max? }` takes up to the range's own rows and clears the
+    rest. Grants `text.edit` and `text.style`.
+  - `media.paged.sheet.chartSource` `{ chart, allowed: [{ name, label?, series }] }`: which of
+    the author's series lists a chart draws.
+
+  A cell holding a formula, and a value starting with `=`, are refused. The workbook's version
+  label is the sheet's own document-level state, which a template with a sheet field opens to
+  a filler (engine ADR 1000, amendment of 2026-10-23). Every placed table that shows a written cell is re-poured
+  after the write: each must be a sheet field itself (its grants say it may be re-poured), or
+  the write is refused before anything changes. A placed chart is redrawn by replacing its art,
+  so a chart's source is writable only where the template lets a filler add and delete items.
+  Not a field kind yet: a list data validation as a cell's choice (the engine reports how many
+  validations a sheet has, not their lists), and a growable range that inserts rows (a placed
+  table keeps the range it was placed with).
+
+- **Layout commands** (plan G4; `src/layout-commands.ts`). Typed `importCsv { text, name }`,
+  `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
+bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
+size? }` (no size clears it), each one workbook version and one undo step. Deleting a chart
+  is not a command: the engine has no door that removes one.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
@@ -181,15 +273,23 @@ each published canary added is under [Releases](#releases).
 - **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
   panel calls them yet.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
-  keeps its cached value: an unregistered function, an external defined name or DDE item
-  (`[1]!Name`).
+  keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
+  calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
+- **Calculation model limits** (ADR 513): a root in parentheses is snapped where Excel does not; SUM's own cancellation is not snapped; a row
+  insert does not move a 3D reference; a recursive LAMBDA stops at 128 nested calls (`#NUM!`);
+  a load always calculates, also in manual mode; loaded rich-value errors read as `#VALUE!` until
+  recalculated.
   `TREND` fits one regressor only.
 - **Typed entry** follows Excel (ADR 511): month names and `TRUE`/`FALSE` are English in every
   locale; `#GETTING_DATA` typed stays text; a number re-entered by undo keeps 15 significant
   digits.
 - **Locale.** The display locale is taken from the workbook's number formats on load.
-- **Saving an edited sheet** drops unknown attributes on its rows and cells and unknown elements
-  inside `<sheetData>`; unknown children of `<worksheet>` are kept.
+- **Saving an edited sheet** writes a new or changed literal text cell as an inline string
+  (`t="inlineStr"`), not into the shared-string table. A sheet's tab state cannot be changed.
+  Two calculation findings show on a save of an edited sheet (measured on the Excel-converted
+  corpus): the members of a legacy array formula (`{=MINVERSE(…)}`) are not kept as cells, so
+  their cached values are not written; and a pre-dynamic-array formula that returns an array
+  (`MMULT` in one cell) is written back as a dynamic array.
 
 ## Not built
 

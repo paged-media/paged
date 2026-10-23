@@ -1,0 +1,6 @@
+$ paged template check t.paged filled.paged
+--- exit: 0
+--- stdout
+ok: only the template's fields differ
+--- stderr
+(empty)

@@ -41,8 +41,10 @@ import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
 import { Segment } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 import { filterByRegion } from "../profile/region-filter";
 import { useChromeRegions } from "../state/chrome-regions";
+import { PANEL_RAIL } from "./messages";
 
 export interface PanelRailItem {
   /** A registered panel id (`paged.swatches`, …). */
@@ -67,6 +69,7 @@ export function PanelRail({
   panelsHidden?: boolean;
   onRevealPanels?: () => void;
 }) {
+  const strings = useStrings();
   const cockpit = useOptionalCockpitState();
   // K-8 — the rail DOOR: registered panels that opted in (`rail: true`)
   // render as launcher items after the app's built-ins. Registry-derived
@@ -172,7 +175,7 @@ export function PanelRail({
     <div
       data-panel-rail
       role="toolbar"
-      aria-label="Panels"
+      aria-label={strings.t(PANEL_RAIL.label)}
       aria-orientation="vertical"
       style={railStyle}
       {...roving}

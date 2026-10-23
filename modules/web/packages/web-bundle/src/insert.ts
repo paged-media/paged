@@ -34,7 +34,16 @@ import {
   type WebFrameSource,
 } from "../../web-model/src";
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import { describeRefusal, prepareSourceLabel } from "./source-part";
+
+const M = defineMessages("web.insert", {
+  notInserted: "Web frame not inserted: {reason}",
+  noPage: "there is no page to insert into",
+  noFrame: "the document created no frame",
+  notAFrame: "the created element is not a frame",
+});
 
 /** Diagnostics key for insert/import refusals. */
 export const INSERT_DIAG_KEY = "media.paged.web#insert";
@@ -69,7 +78,7 @@ export async function insertWebFrame(
   // Problems lane) so a panel can show it inline.
   const refuse = (message: string, detail?: unknown): string => {
     host.log.warn(`insertWebFrame: ${message}`, detail);
-    const text = `Web frame not inserted: ${message}`;
+    const text = t(M.notInserted, { reason: message });
     host.diagnostics.set(INSERT_DIAG_KEY, [
       { severity: "error", message: text, source: "insert" },
     ]);
@@ -77,7 +86,7 @@ export async function insertWebFrame(
   };
   const pageId = await activePageId(host);
   if (!pageId) {
-    return refuse("there is no page to insert into");
+    return refuse(t(M.noPage));
   }
   const prepared = await prepareSourceLabel(host, source);
   if ("refused" in prepared) {
@@ -104,14 +113,12 @@ export async function insertWebFrame(
   });
   if (!outcome.applied || !outcome.createdId) {
     return refuse(
-      outcome.applied
-        ? "the document created no frame"
-        : describeRefusal(outcome.error),
+      outcome.applied ? t(M.noFrame) : describeRefusal(outcome.error),
       outcome,
     );
   }
   if (!asFrameTarget(outcome.createdId)) {
-    return refuse("the created element is not a frame");
+    return refuse(t(M.notAFrame));
   }
   host.diagnostics.set(INSERT_DIAG_KEY, []);
   await host.selection.set([outcome.createdId]);

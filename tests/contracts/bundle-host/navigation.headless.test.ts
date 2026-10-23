@@ -31,9 +31,8 @@ import { fileURLToPath } from "node:url";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 import {
-  publishActivePage,
-  setPageGoTo,
-  setTextReveal,
+  pageDoorsOf,
+  type PageDoors,
 } from "../../../apps/editor/apps/canvas/src/plugin-pages";
 
 import {
@@ -49,13 +48,19 @@ import {
 
 describe("host.viewport pages and revealText — the editor's canvas", () => {
   let t: HostUnderTest;
+  // The canvas's side of the doors: this editor's own (its scope's).
+  let doors: PageDoors;
   beforeAll(async () => {
     t = await editorAdapter();
+    doors = pageDoorsOf(
+      (t.editor as unknown as { scope: Parameters<typeof pageDoorsOf>[0] })
+        .scope,
+    );
   });
   afterAll(async () => {
-    setPageGoTo(null);
-    setTextReveal(null);
-    publishActivePage(null);
+    doors.setPageGoTo(null);
+    doors.setTextReveal(null);
+    doors.publishActivePage(null);
     await t.dispose();
   });
 
@@ -65,10 +70,10 @@ describe("host.viewport pages and revealText — the editor's canvas", () => {
   });
 
   test("goToPage reaches the canvas's navigation with the fit; false while the canvas has none", async () => {
-    setPageGoTo(null);
+    doors.setPageGoTo(null);
     expect(await t.host.viewport.goToPage("p2")).toBe(false);
     const calls: unknown[] = [];
-    setPageGoTo((pageId, fit) => {
+    doors.setPageGoTo((pageId: string, fit: "page" | "width") => {
       calls.push([pageId, fit]);
       return pageId === "p2";
     });
@@ -83,18 +88,18 @@ describe("host.viewport pages and revealText — the editor's canvas", () => {
   test("activePage follows the canvas, and only a change is announced", () => {
     const seen: Array<string | null> = [];
     const sub = t.host.viewport.onDidChangeActivePage((p) => seen.push(p));
-    publishActivePage("p1");
-    publishActivePage("p1");
-    publishActivePage("p3");
+    doors.publishActivePage("p1");
+    doors.publishActivePage("p1");
+    doors.publishActivePage("p3");
     expect(t.host.viewport.activePage()).toBe("p3");
     sub.dispose();
-    publishActivePage("p4");
+    doors.publishActivePage("p4");
     expect(seen).toEqual(["p1", "p3"]);
   });
 
   test("revealText hands the range and the select flag (default true) to the canvas", async () => {
     const calls: unknown[] = [];
-    setTextReveal(async (range, select) => {
+    doors.setTextReveal(async (range, select) => {
       calls.push([range, select]);
       return range.storyId === "s1";
     });

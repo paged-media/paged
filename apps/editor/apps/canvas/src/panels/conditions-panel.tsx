@@ -39,17 +39,32 @@ import {
   useCollection,
 } from "@paged-media/shell";
 import type { ConditionSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { invokeCoreCommand } from "../core-command-dialog";
+import { useEditorObjects, type EditorObjects } from "../object-model";
 
-function toggleVisible(cond: ConditionSummary): void {
-  void invokeCoreCommand("setConditionVisible", {
+const M = defineMessages("app.conditionsPanel", {
+  loading: "Loading conditions…",
+  newCondition: "New condition — awaiting engine support",
+  filter: "Filter — awaiting engine support",
+  empty: "No conditions in this document.",
+  hide: "Hide condition",
+  show: "Show condition",
+  conditionalText: "Conditional text",
+  appliedToSelection: "Applied to selection",
+});
+
+function toggleVisible(objects: EditorObjects, cond: ConditionSummary): void {
+  void invokeCoreCommand(objects.registry, "setConditionVisible", {
     condition: `condition:${cond.selfId}`,
     visible: !cond.visible,
   }).catch(() => {});
 }
 
 export function ConditionsPanel() {
+  const objects = useEditorObjects();
+  const strings = useStrings();
   const conditions = useCollection<ConditionSummary>("conditions");
   if (conditions === null) {
     return (
@@ -57,25 +72,22 @@ export function ConditionsPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-conditions-panel="loading"
       >
-        Loading conditions…
+        {strings.t(M.loading)}
       </div>
     );
   }
   return (
     <div data-conditions-panel="ready">
       <PanelToolbar>
-        <ToolbarBtn
-          icon="ui-plus"
-          label="New condition — awaiting engine support"
-        />
-        <ToolbarBtn icon="ui-filter" label="Filter — awaiting engine support" />
+        <ToolbarBtn icon="ui-plus" label={strings.t(M.newCondition)} />
+        <ToolbarBtn icon="ui-filter" label={strings.t(M.filter)} />
       </PanelToolbar>
       {conditions.length === 0 ? (
         <div
           className="p-3 text-xs text-muted-foreground"
           data-empty-conditions
         >
-          No conditions in this document.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-condition-list>
@@ -90,10 +102,10 @@ export function ConditionsPanel() {
                   type="button"
                   data-condition-visible={cond.visible ? "true" : "false"}
                   data-condition-toggle={cond.selfId}
-                  title={cond.visible ? "Hide condition" : "Show condition"}
+                  title={cond.visible ? strings.t(M.hide) : strings.t(M.show)}
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleVisible(cond);
+                    toggleVisible(objects, cond);
                   }}
                   className="inline-flex cursor-pointer border-0 bg-transparent p-0"
                   style={{ color: "var(--pg-fg)" }}
@@ -108,11 +120,11 @@ export function ConditionsPanel() {
           />
         </div>
       )}
-      <CockpitSection title="Conditional text">
+      <CockpitSection title={strings.t(M.conditionalText)}>
         <div className="flex flex-col gap-1.5 pb-2" data-conditional-text="">
           <PropertyField
             path="appliedConditions"
-            label="Applied to selection"
+            label={strings.t(M.appliedToSelection)}
             scope="content"
             schemaKind="storyRange"
             style="collection"

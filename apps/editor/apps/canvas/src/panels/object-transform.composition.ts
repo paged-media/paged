@@ -33,33 +33,42 @@ import {
 } from "@paged-media/shell";
 
 import { PAGED_INPUT_PAGE_BOUNDS } from "./page-bounds-leaf";
+import { defineMessages, type Strings } from "@paged-media/strings";
+
+const M = defineMessages("app.objectTransformComposition", {
+  object: "Object",
+  bounds: "Bounds",
+  opacity: "Opacity",
+});
 
 // ADR 323 — every live field is a schema-driven `PropertyField`: the
 // type comes from the target's schema row, reads/writes go through
 // `host.objects` (one batch = one undo step over a multi-selection), and
 // each field offers "Bind to data…" with a binding badge. Seams stay seams.
-export const objectTransformComposition: CompositionNode = asPropertyFields({
-  catalogId: PAGED_LAYOUT_SECTION,
-  props: { title: "Object" },
-  bindings: {},
-  children: [
-    {
-      catalogId: PAGED_INPUT_PAGE_BOUNDS,
-      props: { label: "Bounds" },
-      // The leaf reads the selection's geometry itself: a footprint is
-      // two paths composed, which a single binding cannot express.
-      bindings: {},
-    },
-    {
-      catalogId: PAGED_INPUT_LENGTH,
-      props: { label: "Opacity" },
-      bindings: {
-        value: {
-          kind: "selectionProperty",
-          scope: "element",
-          path: "frameOpacity",
+export function objectTransformComposition(strings: Strings): CompositionNode {
+  return asPropertyFields({
+    catalogId: PAGED_LAYOUT_SECTION,
+    props: { title: strings.t(M.object) },
+    bindings: {},
+    children: [
+      {
+        catalogId: PAGED_INPUT_PAGE_BOUNDS,
+        props: { label: strings.t(M.bounds) },
+        // The leaf reads the selection's geometry itself: a footprint is
+        // two paths composed, which a single binding cannot express.
+        bindings: {},
+      },
+      {
+        catalogId: PAGED_INPUT_LENGTH,
+        props: { label: strings.t(M.opacity) },
+        bindings: {
+          value: {
+            kind: "selectionProperty",
+            scope: "element",
+            path: "frameOpacity",
+          },
         },
       },
-    },
-  ],
-});
+    ],
+  });
+}

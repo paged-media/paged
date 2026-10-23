@@ -67,7 +67,8 @@ async function resolveAttrs(
       svg.appendChild(el);
       return { attr, el };
     });
-    document.body.appendChild(svg);
+    // Inside the editor's root: its tokens (and its theme) are there.
+    document.querySelector("[data-paged-editor]")!.appendChild(svg);
     const out = els.map(({ attr, el }) => {
       const cs = getComputedStyle(el);
       return attr === "stroke" ? cs.stroke : cs.fill;
@@ -97,7 +98,8 @@ test.describe("Styleguide — overlay tokens", () => {
       const guide = mk("stroke", "var(--overlay-guide)");
       const snap = mk("stroke", "var(--overlay-snap)");
       const target = mk("stroke", "var(--overlay-target)");
-      document.body.appendChild(svg);
+      // Inside the editor's root: its tokens (and its theme) are there.
+      document.querySelector("[data-paged-editor]")!.appendChild(svg);
       const out = {
         selection: getComputedStyle(sel).stroke,
         guide: getComputedStyle(guide).stroke,

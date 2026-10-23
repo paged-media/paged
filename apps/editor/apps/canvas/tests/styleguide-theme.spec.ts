@@ -35,9 +35,10 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { openCanvas } from "./fidelity/canvas-driver";
 
+/** The theme is the editor's root element's (plan task E1). */
 function isDark(page: Page): Promise<boolean> {
   return page.evaluate(() =>
-    document.documentElement.classList.contains("dark"),
+    document.querySelector("[data-paged-editor]")!.classList.contains("dark"),
   );
 }
 
@@ -46,7 +47,7 @@ async function readTokens(
   names: string[],
 ): Promise<Record<string, string>> {
   return page.evaluate((names) => {
-    const cs = getComputedStyle(document.documentElement);
+    const cs = getComputedStyle(document.querySelector("[data-paged-editor]")!);
     const out: Record<string, string> = {};
     for (const n of names) out[n] = cs.getPropertyValue(n).trim();
     return out;

@@ -1272,6 +1272,14 @@ fn every_derived_row_reads_what_its_collection_reports() {
                 Some(Value::Text(swatch.kind.clone())),
             ),
             ("table", _) => (table_target.clone(), None),
+            // A frame that places no PDF reads no page count (ADR 1003;
+            // `placed_pdf_page.rs` reads one that does).
+            ("frame", "pdfPageCount") => (
+                VirtualTarget::Element {
+                    element_id: t.frame.clone(),
+                },
+                Some(Value::Length(None)),
+            ),
             ("style", "basedOn") => {
                 // Every family's definition answers it; probed on each.
                 for (family, id) in &t.styles {

@@ -55,6 +55,10 @@ pub enum TemplateFieldKind {
     Visibility,
     /// A `paged.data` binding.
     Data,
+    /// A part of a module's content (a sheet's cell, a doc's block, an
+    /// edited image's picture): the field's `module` names the module's
+    /// field kind, which reads and writes the value through its own door.
+    Module,
 }
 
 impl TemplateFieldKind {
@@ -70,6 +74,8 @@ impl TemplateFieldKind {
             TemplateFieldKind::Choice => PermSet::of([P::Select]),
             TemplateFieldKind::Visibility => PermSet::of([P::Select, P::ItemVisibility]),
             TemplateFieldKind::Data => PermSet::of([P::Select, P::TextEdit, P::ImageReplace]),
+            // A module keeps its content in its own label on the item.
+            TemplateFieldKind::Module => PermSet::of([P::Select, P::DocumentMetadata]),
         }
     }
 }
@@ -113,6 +119,28 @@ pub struct Constraints {
     pub fit: Option<String>,
 }
 
+/// A module field's own part of its definition. The engine lists the field
+/// and grants its permissions; the module reads and writes its value.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleField {
+    /// The module's field kind, `<module id>.<name>`
+    /// (`media.paged.sheet.cell`).
+    pub kind: String,
+    /// What filling the field takes beyond selecting the item and writing
+    /// the module's label on it (`text.edit` for a cell's text). The
+    /// template's own permission is never granted this way.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grants: Vec<Permission>,
+    /// The module's definition: which part of its content is open (a cell
+    /// reference, a block anchor, a layer name).
+    #[serde(default)]
+    #[tsify(type = "unknown")]
+    pub def: serde_json::Value,
+}
+
 /// A field: an open part of the template.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
@@ -132,6 +160,27 @@ pub struct FieldDef {
     pub required: bool,
     #[serde(default)]
     pub constraints: Constraints,
+    /// A module field's kind and definition (`kind` is `module`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module: Option<ModuleField>,
+}
+
+impl FieldDef {
+    /// The permissions this field grants on its item: its kind's, and for
+    /// a module field the ones its module declares.
+    pub fn grants(&self) -> PermSet {
+        let mut set = self.kind.grants();
+        if let (TemplateFieldKind::Module, Some(module)) = (self.kind, &self.module) {
+            set = set.union(PermSet::of(
+                module
+                    .grants
+                    .iter()
+                    .copied()
+                    .filter(|p| *p != Permission::TemplateAuthor),
+            ));
+        }
+        set
+    }
 }
 
 /// One item's policy.
@@ -167,6 +216,12 @@ pub struct DocumentPolicy {
     /// Fields that are text variables, by variable `Self` id.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub variables: BTreeMap<String, FieldDef>,
+    /// Fields that are runs of text inside a story (`text-run`), by the
+    /// key of the placeholder run that holds the value: the `Self` of the
+    /// XML element tagging the range for a field made from a tag (engine
+    /// ADR 1002), or a plugin placeholder's key.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub runs: BTreeMap<String, FieldDef>,
 }
 
 /// A policy label that could not be read. The document still opens; the

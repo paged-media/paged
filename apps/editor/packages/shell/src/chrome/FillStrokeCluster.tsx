@@ -26,6 +26,7 @@ import {
   type CSSProperties,
 } from "react";
 import { createPortal } from "react-dom";
+import { t, useStrings } from "@paged-media/strings";
 
 import type {
   GradientSummary,
@@ -43,6 +44,8 @@ import {
 } from "../state/formatting-affects-context";
 import { contentSelectionInactive } from "../state/commands/tool-commands";
 import { IconButton } from "@paged-media/panel-kit";
+import { FILL_STROKE } from "./messages";
+import { usePortalContainer } from "../state/editor-root";
 
 // Concept 1 (T3) — the fill/stroke/apply foot cluster. NOT a tool: a
 // small composition over Concept 2's colour model. The wells read +
@@ -79,8 +82,14 @@ function unwrapColorRef(v: Value | null): string | null {
 }
 
 export function FillStrokeCluster() {
+  const portalContainer = usePortalContainer();
+  const strings = useStrings();
   const { activeWell, setActiveWell, affects, toggleAffects } =
     useFormattingAffects();
+  const affectsTarget =
+    affects === "text"
+      ? strings.t(FILL_STROKE.affectsText)
+      : strings.t(FILL_STROKE.affectsContainer);
 
   // Fill path follows the J toggle (container frame vs. the text
   // inside it); stroke stays frame-level (text stroke isn't a path).
@@ -371,19 +380,19 @@ export function FillStrokeCluster() {
     const disposables = [
       registries.commands.register({
         id: "paged.fillStroke.swap",
-        title: "Swap fill and stroke",
+        title: t(FILL_STROKE.swap),
         category: "Color",
         handler: () => onSwap(),
       }),
       registries.commands.register({
         id: "paged.fillStroke.default",
-        title: "Default fill and stroke",
+        title: t(FILL_STROKE.default),
         category: "Color",
         handler: () => onDefault(),
       }),
       registries.commands.register({
         id: "paged.fillStroke.toggleAffects",
-        title: "Toggle formatting affects container/text",
+        title: t(FILL_STROKE.toggleAffects),
         category: "Color",
         handler: () => onToggleAffects(),
       }),
@@ -450,8 +459,8 @@ export function FillStrokeCluster() {
       {/* Swap (X) + default (D). */}
       <div style={miniRow}>
         <IconButton
-          label="Swap fill and stroke"
-          title="Swap fill and stroke (X)"
+          label={strings.t(FILL_STROKE.swap)}
+          title={strings.t(FILL_STROKE.swapKey)}
           data-fs-swap
           onClick={swap}
           style={miniBtn}
@@ -459,8 +468,8 @@ export function FillStrokeCluster() {
           ⇄
         </IconButton>
         <IconButton
-          label="Default fill and stroke"
-          title="Default fill and stroke (D)"
+          label={strings.t(FILL_STROKE.default)}
+          title={strings.t(FILL_STROKE.defaultKey)}
           data-fs-default
           disabled={!fill.onCommit && !stroke.onCommit && !docDefaults}
           onClick={applyDefault}
@@ -473,8 +482,8 @@ export function FillStrokeCluster() {
       {/* Apply: [colour] · [gradient (disabled)] · [None]. */}
       <div style={miniRow}>
         <IconButton
-          label="Apply last colour"
-          title="Apply last colour"
+          label={strings.t(FILL_STROKE.applyColor)}
+          title={strings.t(FILL_STROKE.applyColor)}
           data-fs-apply-color
           disabled={!canApply}
           onClick={() => apply(lastSolid.current)}
@@ -490,8 +499,8 @@ export function FillStrokeCluster() {
           type="button"
           title={
             gradients.length > 0
-              ? "Apply last gradient"
-              : "No gradient swatches in this document"
+              ? strings.t(FILL_STROKE.applyGradient)
+              : strings.t(FILL_STROKE.noGradients)
           }
           data-fs-apply-gradient
           disabled={!canApply || gradients.length === 0}
@@ -509,7 +518,7 @@ export function FillStrokeCluster() {
         />
         <button
           type="button"
-          title="Apply None"
+          title={strings.t(FILL_STROKE.applyNone)}
           data-fs-apply-none
           disabled={!canApply}
           onClick={() => apply(null)}
@@ -521,8 +530,12 @@ export function FillStrokeCluster() {
 
       {/* J — formatting affects container vs. text. */}
       <IconButton
-        label={`Formatting affects ${affects}`}
-        title={`Formatting affects: ${affects} (J)`}
+        label={strings.t(FILL_STROKE.affects, {
+          target: affectsTarget,
+        })}
+        title={strings.t(FILL_STROKE.affectsKey, {
+          target: affectsTarget,
+        })}
         data-fs-affects={affects}
         onClick={toggleAffects}
         style={{
@@ -541,7 +554,7 @@ export function FillStrokeCluster() {
       </IconButton>
 
       {!canApply && (
-        <div style={hintStyle} title="Waiting for the document to load">
+        <div style={hintStyle} title={strings.t(FILL_STROKE.waiting)}>
           —
         </div>
       )}
@@ -571,7 +584,7 @@ export function FillStrokeCluster() {
               }}
             />
           </>,
-          document.body,
+          portalContainer ?? document.body,
         )}
     </div>
   );
@@ -598,12 +611,17 @@ function Well({
   onOpen: () => void;
   ring?: boolean;
 }) {
+  const strings = useStrings();
   return (
     <button
       type="button"
       data-well={kind}
       data-active={active ? "true" : "false"}
-      title={`${kind === "fill" ? "Fill" : "Stroke"} — click to choose a colour`}
+      title={
+        kind === "fill"
+          ? strings.t(FILL_STROKE.fillWell)
+          : strings.t(FILL_STROKE.strokeWell)
+      }
       onClick={onOpen}
       style={{
         position: "absolute",
@@ -680,6 +698,7 @@ function SwatchPicker({
   onPick: (id: string) => void;
   onNone: () => void;
 }) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const [swatches, setSwatches] = useState<SwatchSummary[]>([]);
   const [hexes, setHexes] = useState<Record<string, string>>({});
@@ -716,7 +735,7 @@ function SwatchPicker({
     >
       <button
         type="button"
-        title="None"
+        title={strings.t(FILL_STROKE.none)}
         data-swatch-none
         onClick={onNone}
         style={swatchChip}

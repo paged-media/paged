@@ -27,6 +27,7 @@
 // tool letter) cannot act on the canvas behind a modal question.
 
 import { useEffect, useSyncExternalStore } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import { Button } from "../components/ui/button";
 import {
@@ -43,13 +44,18 @@ import {
   replacePrompts,
   type PendingReplace,
 } from "../state/replace-guard";
+import { useEditorScope } from "../state/editor-scope";
+import { REPLACE } from "./messages";
+import { richText } from "./rich";
 
 export function ReplaceDocumentPrompt() {
-  useEffect(() => attachReplacePromptSurface(), []);
+  const scope = useEditorScope();
+  useEffect(() => attachReplacePromptSurface(scope), [scope]);
+  const prompts = replacePrompts(scope);
   const pending = useSyncExternalStore(
-    replacePrompts.subscribe,
-    replacePrompts.current,
-    replacePrompts.current,
+    prompts.subscribe,
+    prompts.current,
+    prompts.current,
   );
   const sourceName = useOptionalDocument()?.sourceName ?? null;
   return pending ? (
@@ -64,9 +70,10 @@ function ReplaceQuestion({
   pending: PendingReplace;
   openName: string | null;
 }) {
+  const strings = useStrings();
   const title = openName
-    ? `Save changes to “${openName}” first?`
-    : "Save changes to this document first?";
+    ? strings.t(REPLACE.titleNamed, { name: openName })
+    : strings.t(REPLACE.title);
   return (
     <Dialog
       open
@@ -103,33 +110,32 @@ function ReplaceQuestion({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription data-testid="replace-document-body">
-            {pending.requester ? (
-              <>
-                <strong data-testid="replace-document-requester">
-                  {pending.requester}
-                </strong>{" "}
-                wants to open{" "}
-                <strong data-testid="replace-document-name">
-                  {pending.documentName ?? "a document"}
-                </strong>{" "}
-                in place of this document.
-              </>
-            ) : (
-              <>
-                {pending.action} replaces this document
-                {pending.documentName ? (
-                  <>
-                    {" "}
-                    with{" "}
-                    <strong data-testid="replace-document-name">
-                      {pending.documentName}
+            {pending.requester
+              ? richText(strings.t(REPLACE.wantsToOpen), {
+                  requester: (
+                    <strong data-testid="replace-document-requester">
+                      {pending.requester}
                     </strong>
-                  </>
-                ) : null}
-                .
-              </>
-            )}{" "}
-            It has unsaved edits; if you don’t save, they are lost.
+                  ),
+                  document: (
+                    <strong data-testid="replace-document-name">
+                      {pending.documentName ?? strings.t(REPLACE.aDocument)}
+                    </strong>
+                  ),
+                })
+              : pending.documentName
+                ? richText(
+                    strings.t(REPLACE.replacesWith, { action: pending.action }),
+                    {
+                      document: (
+                        <strong data-testid="replace-document-name">
+                          {pending.documentName}
+                        </strong>
+                      ),
+                    },
+                  )
+                : strings.t(REPLACE.replaces, { action: pending.action })}{" "}
+            {strings.t(REPLACE.unsaved)}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:justify-between">
@@ -139,7 +145,7 @@ function ReplaceQuestion({
             data-testid="replace-document-discard"
             onClick={() => pending.answer("discard")}
           >
-            Don’t save
+            {strings.t(REPLACE.dontSave)}
           </Button>
           <div className="flex gap-2">
             <Button
@@ -148,7 +154,7 @@ function ReplaceQuestion({
               data-testid="replace-document-keep"
               onClick={() => pending.answer("cancel")}
             >
-              Cancel
+              {strings.t(REPLACE.cancel)}
             </Button>
             {pending.canSave && (
               <Button
@@ -156,7 +162,7 @@ function ReplaceQuestion({
                 data-testid="replace-document-save"
                 onClick={() => pending.answer("save")}
               >
-                Save
+                {strings.t(REPLACE.save)}
               </Button>
             )}
           </div>

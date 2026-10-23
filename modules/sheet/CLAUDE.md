@@ -184,7 +184,8 @@ Rules for every code change in this repo:
 - **Interface freeze.** `sheet-core` types, the AST, the `sheet-fn`
   calling convention (`Arg`/`EvalCtx`), and the registry YAML schema are
   FROZEN (M0 phase 0). Changes go through the orchestrator as versioned
-  amendments, never drive-by edits.
+  amendments, never drive-by edits. (So far: W1.0, ADR 513; `SheetModel::document_name`
+  and `EvalCtx::locale`, ADR 516.)
 
 ## Two-registry split
 
@@ -222,4 +223,8 @@ bun run validate:manifest
 cargo test -p sheet-conformance --test it excel_oracle::
 # re-record (maintainer, macOS + Excel): sheet-conformance/oracle/excel/
 #   python3 generate.py && ./drive.sh && python3 read.py
+# the calculation-model lane (spill shapes, @, 3D, LAMBDA, cycles, 15 digits):
+#   python3 calcmodel.py generate && ./drive.sh calcmodel && python3 calcmodel.py read
+# the open-check lane (Excel opens what Paged saves after edits, no repair):
+#   see the header of sheet-conformance/tests/it/excel_opencheck.rs
 ```

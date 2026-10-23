@@ -657,6 +657,7 @@ impl NumberingTable {
             self.abstract_levels.get(abstract_id)?.get(&level)?;
         let marker = |kind, bullet_char, number_format| ListMarker {
             kind,
+            num_id,
             level,
             bullet_char,
             number_format,
@@ -731,10 +732,18 @@ fn map_body(body: &wml::Body, ctx: &ImportCtx) -> MappedBody {
     let mut sections = Vec::new();
     let mut refs = Vec::new();
     let mut section_start = 0usize;
+    // Bookmarks started between paragraphs belong to the next one.
+    let mut pending_bookmarks: Vec<String> = Vec::new();
     for choice in &body.body_choice {
         match choice {
+            wml::BodyChoice::BookmarkStart(b) => pending_bookmarks.push(b.name.clone()),
             wml::BodyChoice::Paragraph(p) => {
-                blocks.push(Block::Paragraph(map_paragraph(p, ctx, para_ord, None)));
+                let mut para = map_paragraph(p, ctx, para_ord, None);
+                if !pending_bookmarks.is_empty() {
+                    pending_bookmarks.append(&mut para.bookmarks);
+                    para.bookmarks = std::mem::take(&mut pending_bookmarks);
+                }
+                blocks.push(Block::Paragraph(para));
                 para_ord += 1;
                 if let Some(sp) = p
                     .paragraph_properties
@@ -834,8 +843,10 @@ fn map_paragraph(
     let mut field_ord = 0u32;
     // Ordinal of the next MERGEFIELD in this paragraph (both field forms).
     let mut merge_ord = 0u32;
+    let mut bookmarks = Vec::new();
     for choice in &p.paragraph_choice {
         match choice {
+            wml::ParagraphChoice::BookmarkStart(b) => bookmarks.push(b.name.clone()),
             wml::ParagraphChoice::WRun(r) => {
                 let ord = wrun_ord;
                 wrun_ord += 1;
@@ -950,6 +961,7 @@ fn map_paragraph(
         mark_half_pts,
         source_para_ord: para_ord,
         source_cell,
+        bookmarks,
     }
 }
 

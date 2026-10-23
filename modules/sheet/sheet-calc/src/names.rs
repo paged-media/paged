@@ -76,9 +76,15 @@ fn has_relative(e: &Expr) -> bool {
         Expr::Func(_, args) => args.iter().any(has_relative),
         Expr::Call(c, args) => has_relative(c) || args.iter().any(has_relative),
         Expr::Array(rows) => rows.iter().flatten().any(has_relative),
-        Expr::Lit(_) | Expr::Name(_) | Expr::StructuredRef(_) | Expr::Local(_) | Expr::Missing => {
-            false
-        }
+        Expr::Ref3D(r) => rel(&r.cell),
+        Expr::Range3D(r) => rel(&r.range.start) || rel(&r.range.end),
+        Expr::UnknownFunc(_, args) => args.iter().any(has_relative),
+        Expr::Lit(_)
+        | Expr::Name(_)
+        | Expr::StructuredRef(_)
+        | Expr::Local(_)
+        | Expr::Missing
+        | Expr::UnknownName(_) => false,
     }
 }
 
@@ -113,9 +119,24 @@ fn rebase(e: &Expr, at: CellRef) -> Expr {
         Expr::Array(rows) => Expr::Array(rows.iter().map(|r| r.iter().map(f).collect()).collect()),
         Expr::SpillRef(a) => Expr::SpillRef(Box::new(f(a))),
         Expr::Call(c, args) => Expr::Call(Box::new(f(c)), args.iter().map(f).collect()),
-        Expr::Lit(_) | Expr::Name(_) | Expr::StructuredRef(_) | Expr::Local(_) | Expr::Missing => {
-            e.clone()
-        }
+        Expr::Ref3D(r) => Expr::Ref3D(sheet_core::ast::Ref3D {
+            cell: rebase_cell(r.cell, at),
+            ..*r
+        }),
+        Expr::Range3D(r) => Expr::Range3D(sheet_core::ast::Range3D {
+            range: RangeRef {
+                start: rebase_cell(r.range.start, at),
+                end: rebase_cell(r.range.end, at),
+            },
+            ..*r
+        }),
+        Expr::UnknownFunc(n, args) => Expr::UnknownFunc(n.clone(), args.iter().map(f).collect()),
+        Expr::Lit(_)
+        | Expr::Name(_)
+        | Expr::StructuredRef(_)
+        | Expr::Local(_)
+        | Expr::Missing
+        | Expr::UnknownName(_) => e.clone(),
     }
 }
 
@@ -162,4 +183,99 @@ pub fn refs_with_names(model: &SheetModel, f: &sheet_core::ast::Formula, cell: C
         }
     }
     refs
+}
+
+/// Visit every node of `e`, children first.
+fn walk_mut(e: &mut Expr, f: &mut impl FnMut(&mut Expr)) {
+    match e {
+        Expr::Unary(_, a) | Expr::SpillRef(a) => walk_mut(a, f),
+        Expr::Binary(_, a, b) => {
+            walk_mut(a, f);
+            walk_mut(b, f);
+        }
+        Expr::Func(_, args) | Expr::UnknownFunc(_, args) => {
+            args.iter_mut().for_each(|a| walk_mut(a, f));
+        }
+        Expr::Call(c, args) => {
+            walk_mut(c, f);
+            args.iter_mut().for_each(|a| walk_mut(a, f));
+        }
+        Expr::Array(rows) => rows.iter_mut().flatten().for_each(|a| walk_mut(a, f)),
+        Expr::Lit(_)
+        | Expr::Ref(_)
+        | Expr::Range(_)
+        | Expr::Name(_)
+        | Expr::StructuredRef(_)
+        | Expr::Local(_)
+        | Expr::Missing
+        | Expr::Ref3D(_)
+        | Expr::Range3D(_)
+        | Expr::UnknownName(_) => {}
+    }
+    f(e);
+}
+
+/// Resolve the unknown names and functions of `e` that a defined name now
+/// spells, as seen from `sheet`: `Foo` becomes the name, `Foo(…)` a call of
+/// it (a named LAMBDA). Returns whether anything changed.
+fn resolve_in(e: &mut Expr, model: &SheetModel, sheet: sheet_core::SheetId) -> bool {
+    let mut changed = false;
+    walk_mut(e, &mut |node| match node {
+        Expr::UnknownName(n) => {
+            if let Some(id) = model.names.resolve(n, sheet) {
+                *node = Expr::Name(id);
+                changed = true;
+            }
+        }
+        Expr::UnknownFunc(n, args) => {
+            if let Some(id) = model.names.resolve(n, sheet) {
+                *node = Expr::Call(Box::new(Expr::Name(id)), std::mem::take(args));
+                changed = true;
+            }
+        }
+        _ => {}
+    });
+    changed
+}
+
+/// Whether `e` holds an unknown name or function anywhere.
+fn has_unknown(e: &Expr) -> bool {
+    let any = |xs: &[Expr]| xs.iter().any(has_unknown);
+    match e {
+        Expr::UnknownName(_) | Expr::UnknownFunc(_, _) => true,
+        Expr::Unary(_, a) | Expr::SpillRef(a) => has_unknown(a),
+        Expr::Binary(_, a, b) => has_unknown(a) || has_unknown(b),
+        Expr::Func(_, args) => any(args),
+        Expr::Call(c, args) => has_unknown(c) || any(args),
+        Expr::Array(rows) => rows.iter().any(|r| any(r)),
+        _ => false,
+    }
+}
+
+/// Re-resolve every formula's unknown names and functions against the names
+/// the workbook defines now (sheet ADR 513): defining `Foo` turns a formula's
+/// `#NAME?` from `=Foo(2)` into a call of the named LAMBDA. Run when the
+/// engine is built — every name definition rebuilds it.
+pub fn resolve_unknowns(model: &mut SheetModel) {
+    let mut updates = Vec::new();
+    for (si, ws) in model.sheets.iter().enumerate() {
+        for (&(r, c), cell) in ws.iter_cells() {
+            let Some(f) = cell.formula.and_then(|fid| model.formula(fid)) else {
+                continue;
+            };
+            if !has_unknown(&f.root) {
+                continue;
+            }
+            let mut root = f.root.clone();
+            if resolve_in(&mut root, model, si as sheet_core::SheetId) {
+                updates.push((si, r, c, root));
+            }
+        }
+    }
+    for (si, r, c, root) in updates {
+        let fid = model.intern_formula(sheet_core::ast::Formula { root });
+        if let Some(cell) = model.sheets[si].cells.get_mut(&(r, c)) {
+            cell.formula = Some(fid);
+        }
+    }
 }

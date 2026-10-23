@@ -83,66 +83,119 @@ import {
   About,
   color,
   font,
-  humanize,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { PanelIntro } from "./panel-parts";
+import { PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.pathOptionsPanel", {
+  summary:
+    "Set the values for the path commands in the Draw menu, then apply them to the selected paths or insert a new shape.",
+  note: "Apply runs the operation with these values and remembers them: the same command run from the menu or the command palette repeats the values last applied here, except Outline stroke, which then uses each path's own stroke. Offset, Simplify and Outline stroke are one undo step per selected path; each Insert, Stroke dashes and Reflect are one undo step; Select same only changes the selection. Image Trace has no options here yet.",
+  dashNote:
+    "Shows the first selected path's own dash and follows the selection. A pair whose dash and gap are both 0 is not used; untick Dashed for a solid stroke. Apply writes this pattern to every selected path.",
+  reflectNote:
+    "Mirrors the selection across an axis at this angle through the centre of the selection's box: 90° flips left and right, 0° top and bottom. Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.",
+  selectSameNote:
+    "Matches every object whose stroke weight is within this many points of the first selected object's, the reference included; 0 is an exact match. Colours take no tolerance: an object's fill and stroke are read as swatch references, and this plugin cannot read a swatch's colour values to compare them yet.",
+  widthProfileNote:
+    "Replaces each selected open path with its outline, its width running from the start through the middle to the end. The outline is a filled shape and cannot be edited as a stroke again; closed and compound paths are left as they are.",
+  reflectCopyUnavailable:
+    "Copy needs a newer engine (version {version} or later).",
+  hiddenPairs:
+    "This path's dash has {count} pairs; the editor shows the first {shown}, and Apply writes only those.",
+  solid: "Solid",
+  ownStroke: "{width} pt · {cap} cap · {join} join · miter limit {miterLimit}",
+  fromPath: "From the path",
+  offsetDelta: "Offset (pt, negative shrinks)",
+  joins: "Joins",
+  miterLimit: "Miter limit",
+  tolerance: "Tolerance (pt)",
+  overrideWidth: "Override the width",
+  width: "Width (pt)",
+  caps: "Caps",
+  overrideMiterLimit: "Override the miter limit",
+  dashed: "Dashed line",
+  dash1: "Dash 1 (pt)",
+  gap1: "Gap 1 (pt)",
+  dash2: "Dash 2 (pt)",
+  gap2: "Gap 2 (pt)",
+  dash3: "Dash 3 (pt)",
+  gap3: "Gap 3 (pt)",
+  axisAngle: "Axis angle (°)",
+  copy: "Copy (reflect a copy)",
+  centreX: "Centre X (pt)",
+  centreY: "Centre Y (pt)",
+  radiusX: "Radius X (pt)",
+  radiusY: "Radius Y (pt)",
+  startAngle: "Start angle (°)",
+  sweep: "Sweep (°, negative reverses)",
+  closeChord: "Close with the chord",
+  startRadius: "Start radius (pt)",
+  decay: "Radius per turn (×)",
+  turns: "Turns",
+  segmentsPerTurn: "Segments per turn",
+  left: "Left (pt)",
+  top: "Top (pt)",
+  height: "Height (pt)",
+  rows: "Rows",
+  columns: "Columns",
+  radius: "Radius (pt)",
+  rings: "Rings",
+  spokes: "Spokes",
+  ownStrokeIs: "The path's own stroke: {stroke}.",
+  ownStrokeEach: "Each path is outlined at its own stroke unless overridden.",
+  needReference: "Select the reference object first.",
+  needSomething: "Select something first.",
+  needPath: "Select a path first.",
+  selectMatching: "Select matching",
+  reflectN: "{count, plural, one {Reflect # object} other {Reflect # objects}}",
+  applyToN: "{count, plural, one {Apply to # path} other {Apply to # paths}}",
+  insert: "Insert",
+  profileStart: "Width at the start (pt)",
+  profileMiddle: "Width in the middle (pt)",
+  profileEnd: "Width at the end (pt)",
+  title: "Path options",
+});
 
 export { PATH_OPTIONS_PANEL_ID };
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const PATH_OPTIONS_SUMMARY =
-  "Set the values for the path commands in the Draw menu, then apply " +
-  "them to the selected paths or insert a new shape.";
+export const PATH_OPTIONS_SUMMARY = M.summary;
 
 /** The "About" text. Pinned by a test. */
-export const PATH_OPTIONS_PANEL_NOTE =
-  "Apply runs the operation with these values and remembers them: the " +
-  "same command run from the menu or the command palette repeats the " +
-  "values last applied here, except Outline stroke, which then uses each " +
-  "path's own stroke. Offset, Simplify and Outline stroke are one undo " +
-  "step per selected path; each Insert, Stroke dashes and Reflect are " +
-  "one undo step; Select same only changes the selection. Image Trace " +
-  "has no options here yet.";
+export const PATH_OPTIONS_PANEL_NOTE = M.note;
 
 /** What the Stroke dashes section says, verbatim (pinned by a test). */
-export const DASH_SECTION_NOTE =
-  "Shows the first selected path's own dash and follows the selection. " +
-  "A pair whose dash and gap are both 0 is not used; untick Dashed for a " +
-  "solid stroke. Apply writes this pattern to every selected path.";
+export const DASH_SECTION_NOTE = M.dashNote;
 
 /** What the section says when the path's dash has more pairs than the
  *  editor shows — an Apply would rewrite it with the three shown. */
 export function hiddenPairsNote(hidden: number): string {
-  return (
-    `This path's dash has ${MAX_DASH_PAIRS + hidden} pairs; the editor shows ` +
-    `the first ${MAX_DASH_PAIRS}, and Apply writes only those.`
-  );
+  return t(M.hiddenPairs, {
+    count: MAX_DASH_PAIRS + hidden,
+    shown: MAX_DASH_PAIRS,
+  });
 }
 
 /** "6 · 3 · 1 · 3 pt", or "Solid" — the pattern an Apply writes. Pure. */
 export function dashPatternLabel(lengths: readonly number[]): string {
-  return lengths.length === 0 ? "Solid" : `${lengths.join(" · ")} pt`;
+  return lengths.length === 0 ? t(M.solid) : `${lengths.join(" · ")} pt`;
 }
 
 /** What the Reflect section says, verbatim (pinned by a test). */
-export const REFLECT_SECTION_NOTE =
-  "Mirrors the selection across an axis at this angle through the centre " +
-  "of the selection's box: 90° flips left and right, 0° top and bottom. " +
-  "Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.";
+export const REFLECT_SECTION_NOTE = M.reflectNote;
 
 /** What the Reflect section says when the engine cannot copy. */
-export const REFLECT_COPY_UNAVAILABLE_NOTE = `Copy needs a newer engine (version ${DUPLICATE_ENGINE} or later).`;
+export const REFLECT_COPY_UNAVAILABLE_NOTE = M.reflectCopyUnavailable;
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
-export const SELECT_SAME_TOLERANCE_NOTE =
-  "Matches every object whose stroke weight is within this many points " +
-  "of the first selected object's, the reference included; 0 is an exact " +
-  "match. Colours take no tolerance: an object's fill and stroke are read " +
-  "as swatch references, and this plugin cannot read a swatch's colour " +
-  "values to compare them yet.";
+export const SELECT_SAME_TOLERANCE_NOTE = M.selectSameNote;
+
+/** What the Width profile section says, verbatim (pinned by a test). */
+export const WIDTH_PROFILE_SECTION_NOTE = M.widthProfileNote;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -188,10 +241,12 @@ const selectStyle: React.CSSProperties = {
  *  stroke says, i.e. what an untouched Outline stroke section applies.
  *  Pure; exported so the spec pins the wording without a DOM. */
 export function ownStrokeLabel(own: OutlineStrokeParams): string {
-  return (
-    `${own.width} pt · ${own.cap} cap · ${own.join} join · ` +
-    `miter limit ${own.miterLimit}`
-  );
+  return t(M.ownStroke, {
+    width: own.width,
+    cap: own.cap,
+    join: own.join,
+    miterLimit: own.miterLimit,
+  });
 }
 
 export function makePathOptionsPanel(host: BundleHost): {
@@ -243,6 +298,7 @@ export function makePathOptionsPanel(host: BundleHost): {
   };
 
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     // The first mount starts from the stored values; a later one from
     // the draft the last one left.
     if (session.draft === null) followStored();
@@ -454,9 +510,9 @@ export function makePathOptionsPanel(host: BundleHost): {
     );
 
     const tokens = (list: readonly string[]) =>
-      list.map((value) => ({ value, label: humanize(value) }));
+      list.map((value) => ({ value, label: tokenLabel(value) }));
     const withElement = (list: readonly string[]) => [
-      { value: FROM_ELEMENT, label: "From the path" },
+      { value: FROM_ELEMENT, label: s.t(M.fromPath) },
       ...tokens(list),
     ];
 
@@ -465,24 +521,24 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "offset":
           return (
             <>
-              {numberRow("offset", "delta", "Offset (pt, negative shrinks)", {
+              {numberRow("offset", "delta", s.t(M.offsetDelta), {
                 step: 0.5,
               })}
-              {selectRow("offset", "join", "Joins", tokens(STROKE_JOINS))}
-              {numberRow("offset", "miterLimit", "Miter limit", {
+              {selectRow("offset", "join", s.t(M.joins), tokens(STROKE_JOINS))}
+              {numberRow("offset", "miterLimit", s.t(M.miterLimit), {
                 step: 0.5,
                 min: 1,
                 disabled: draft.offset.join !== "miter",
               })}
               {copyAvailable === false && (
                 <div style={mutedStyle} data-draw-pathopts-offset-join-note>
-                  {OFFSET_JOIN_NOTE}
+                  {s.t(OFFSET_JOIN_NOTE)}
                 </div>
               )}
             </>
           );
         case "simplify":
-          return numberRow("simplify", "tolerance", "Tolerance (pt)", {
+          return numberRow("simplify", "tolerance", s.t(M.tolerance), {
             step: 0.25,
             min: 0,
           });
@@ -491,11 +547,11 @@ export function makePathOptionsPanel(host: BundleHost): {
             <>
               <div style={mutedStyle} data-draw-pathopts-own>
                 {own
-                  ? `The path's own stroke: ${ownStrokeLabel(own)}.`
-                  : "Each path is outlined at its own stroke unless overridden."}
+                  ? s.t(M.ownStrokeIs, { stroke: ownStrokeLabel(own) })
+                  : s.t(M.ownStrokeEach)}
               </div>
-              {checkRow("outlineStroke", "overrideWidth", "Override the width")}
-              {numberRow("outlineStroke", "width", "Width (pt)", {
+              {checkRow("outlineStroke", "overrideWidth", s.t(M.overrideWidth))}
+              {numberRow("outlineStroke", "width", s.t(M.width), {
                 step: 0.25,
                 min: 0,
                 disabled: !draft.outlineStroke.overrideWidth,
@@ -503,21 +559,21 @@ export function makePathOptionsPanel(host: BundleHost): {
               {selectRow(
                 "outlineStroke",
                 "cap",
-                "Caps",
+                s.t(M.caps),
                 withElement(STROKE_CAPS),
               )}
               {selectRow(
                 "outlineStroke",
                 "join",
-                "Joins",
+                s.t(M.joins),
                 withElement(STROKE_JOINS),
               )}
               {checkRow(
                 "outlineStroke",
                 "overrideMiterLimit",
-                "Override the miter limit",
+                s.t(M.overrideMiterLimit),
               )}
-              {numberRow("outlineStroke", "miterLimit", "Miter limit", {
+              {numberRow("outlineStroke", "miterLimit", s.t(M.miterLimit), {
                 step: 0.5,
                 min: 1,
                 disabled: !draft.outlineStroke.overrideMiterLimit,
@@ -528,33 +584,33 @@ export function makePathOptionsPanel(host: BundleHost): {
           const off = !draft.dash.dashed;
           return (
             <>
-              {checkRow("dash", "dashed", "Dashed line")}
-              {numberRow("dash", "dash1", "Dash 1 (pt)", {
+              {checkRow("dash", "dashed", s.t(M.dashed))}
+              {numberRow("dash", "dash1", s.t(M.dash1), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
               })}
-              {numberRow("dash", "gap1", "Gap 1 (pt)", {
+              {numberRow("dash", "gap1", s.t(M.gap1), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
               })}
-              {numberRow("dash", "dash2", "Dash 2 (pt)", {
+              {numberRow("dash", "dash2", s.t(M.dash2), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
               })}
-              {numberRow("dash", "gap2", "Gap 2 (pt)", {
+              {numberRow("dash", "gap2", s.t(M.gap2), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
               })}
-              {numberRow("dash", "dash3", "Dash 3 (pt)", {
+              {numberRow("dash", "dash3", s.t(M.dash3), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
               })}
-              {numberRow("dash", "gap3", "Gap 3 (pt)", {
+              {numberRow("dash", "gap3", s.t(M.gap3), {
                 step: 0.5,
                 min: 0,
                 disabled: off,
@@ -568,7 +624,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                 </div>
               )}
               <div style={mutedStyle} data-draw-pathopts-dash-note>
-                {DASH_SECTION_NOTE}
+                {s.t(DASH_SECTION_NOTE)}
               </div>
             </>
           );
@@ -576,54 +632,56 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "reflect":
           return (
             <>
-              {numberRow("reflect", "angleDeg", "Axis angle (°)", {
+              {numberRow("reflect", "angleDeg", s.t(M.axisAngle), {
                 min: -360,
                 max: 360,
               })}
-              {checkRow("reflect", "copy", "Copy (reflect a copy)", {
+              {checkRow("reflect", "copy", s.t(M.copy), {
                 disabled: copyAvailable !== true,
               })}
               {copyAvailable === false && (
                 <div style={mutedStyle} data-draw-pathopts-reflect-copy-note>
-                  {REFLECT_COPY_UNAVAILABLE_NOTE}
+                  {s.t(REFLECT_COPY_UNAVAILABLE_NOTE, {
+                    version: DUPLICATE_ENGINE,
+                  })}
                 </div>
               )}
               <div style={mutedStyle} data-draw-pathopts-reflect-note>
-                {REFLECT_SECTION_NOTE}
+                {s.t(REFLECT_SECTION_NOTE)}
               </div>
             </>
           );
         case "arc":
           return (
             <>
-              {numberRow("arc", "cx", "Centre X (pt)")}
-              {numberRow("arc", "cy", "Centre Y (pt)")}
-              {numberRow("arc", "rx", "Radius X (pt)", { min: 0 })}
-              {numberRow("arc", "ry", "Radius Y (pt)", { min: 0 })}
-              {numberRow("arc", "startAngleDeg", "Start angle (°)")}
-              {numberRow("arc", "sweepDeg", "Sweep (°, negative reverses)", {
+              {numberRow("arc", "cx", s.t(M.centreX))}
+              {numberRow("arc", "cy", s.t(M.centreY))}
+              {numberRow("arc", "rx", s.t(M.radiusX), { min: 0 })}
+              {numberRow("arc", "ry", s.t(M.radiusY), { min: 0 })}
+              {numberRow("arc", "startAngleDeg", s.t(M.startAngle))}
+              {numberRow("arc", "sweepDeg", s.t(M.sweep), {
                 min: -360,
                 max: 360,
               })}
-              {checkRow("arc", "closed", "Close with the chord")}
+              {checkRow("arc", "closed", s.t(M.closeChord))}
             </>
           );
         case "spiral":
           return (
             <>
-              {numberRow("spiral", "cx", "Centre X (pt)")}
-              {numberRow("spiral", "cy", "Centre Y (pt)")}
-              {numberRow("spiral", "r0", "Start radius (pt)", { min: 0 })}
-              {numberRow("spiral", "decay", "Radius per turn (×)", {
+              {numberRow("spiral", "cx", s.t(M.centreX))}
+              {numberRow("spiral", "cy", s.t(M.centreY))}
+              {numberRow("spiral", "r0", s.t(M.startRadius), { min: 0 })}
+              {numberRow("spiral", "decay", s.t(M.decay), {
                 step: 0.05,
                 min: 0,
               })}
-              {numberRow("spiral", "turns", "Turns", {
+              {numberRow("spiral", "turns", s.t(M.turns), {
                 step: 0.25,
                 min: 0,
                 max: INSERT_SHAPE_LIMITS.maxTurns,
               })}
-              {numberRow("spiral", "segmentsPerTurn", "Segments per turn", {
+              {numberRow("spiral", "segmentsPerTurn", s.t(M.segmentsPerTurn), {
                 min: 2,
                 max: INSERT_SHAPE_LIMITS.maxSegmentsPerTurn,
               })}
@@ -632,15 +690,15 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "rectGrid":
           return (
             <>
-              {numberRow("rectGrid", "x", "Left (pt)")}
-              {numberRow("rectGrid", "y", "Top (pt)")}
-              {numberRow("rectGrid", "width", "Width (pt)", { min: 0 })}
-              {numberRow("rectGrid", "height", "Height (pt)", { min: 0 })}
-              {numberRow("rectGrid", "rows", "Rows", {
+              {numberRow("rectGrid", "x", s.t(M.left))}
+              {numberRow("rectGrid", "y", s.t(M.top))}
+              {numberRow("rectGrid", "width", s.t(M.width), { min: 0 })}
+              {numberRow("rectGrid", "height", s.t(M.height), { min: 0 })}
+              {numberRow("rectGrid", "rows", s.t(M.rows), {
                 min: 1,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
-              {numberRow("rectGrid", "cols", "Columns", {
+              {numberRow("rectGrid", "cols", s.t(M.columns), {
                 min: 1,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
@@ -649,14 +707,14 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "polarGrid":
           return (
             <>
-              {numberRow("polarGrid", "cx", "Centre X (pt)")}
-              {numberRow("polarGrid", "cy", "Centre Y (pt)")}
-              {numberRow("polarGrid", "r", "Radius (pt)", { min: 0 })}
-              {numberRow("polarGrid", "rings", "Rings", {
+              {numberRow("polarGrid", "cx", s.t(M.centreX))}
+              {numberRow("polarGrid", "cy", s.t(M.centreY))}
+              {numberRow("polarGrid", "r", s.t(M.radius), { min: 0 })}
+              {numberRow("polarGrid", "rings", s.t(M.rings), {
                 min: 0,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
-              {numberRow("polarGrid", "radials", "Spokes", {
+              {numberRow("polarGrid", "radials", s.t(M.spokes), {
                 min: 0,
                 max: INSERT_SHAPE_LIMITS.maxCount,
               })}
@@ -665,13 +723,33 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "selectSameWeight":
           return (
             <>
-              {numberRow("selectSameWeight", "tolerance", "Tolerance (pt)", {
+              {numberRow("selectSameWeight", "tolerance", s.t(M.tolerance), {
                 step: 0.25,
                 min: 0,
                 max: MAX_STROKE_WEIGHT_TOLERANCE,
               })}
               <div style={mutedStyle} data-draw-pathopts-select-note>
-                {SELECT_SAME_TOLERANCE_NOTE}
+                {s.t(SELECT_SAME_TOLERANCE_NOTE)}
+              </div>
+            </>
+          );
+        case "widthProfile":
+          return (
+            <>
+              {numberRow("widthProfile", "start", s.t(M.profileStart), {
+                step: 0.5,
+                min: 0,
+              })}
+              {numberRow("widthProfile", "middle", s.t(M.profileMiddle), {
+                step: 0.5,
+                min: 0,
+              })}
+              {numberRow("widthProfile", "end", s.t(M.profileEnd), {
+                step: 0.5,
+                min: 0,
+              })}
+              <div style={mutedStyle} data-draw-pathopts-width-note>
+                {s.t(WIDTH_PROFILE_SECTION_NOTE)}
               </div>
             </>
           );
@@ -685,7 +763,7 @@ export function makePathOptionsPanel(host: BundleHost): {
         data-draw-pathopts-targets={targets}
       >
         <PanelIntro
-          summary={PATH_OPTIONS_SUMMARY}
+          summary={s.t(PATH_OPTIONS_SUMMARY)}
           attr="data-draw-pathopts-intro"
         />
         <Refusal text={refusal} />
@@ -711,7 +789,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                 onClick={() => setOpen(section)}
               >
                 <span style={{ flex: 1 }}>
-                  {PATH_OPTION_SECTION_TITLES[section]}
+                  {s.t(PATH_OPTION_SECTION_TITLES[section])}
                 </span>
                 <span aria-hidden>{isOpen ? "–" : "+"}</span>
               </button>
@@ -721,10 +799,10 @@ export function makePathOptionsPanel(host: BundleHost): {
                   {needsSelection && have === 0 && (
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
                       {selects
-                        ? "Select the reference object first."
+                        ? s.t(M.needReference)
                         : reflects
-                          ? "Select something first."
-                          : "Select a path first."}
+                          ? s.t(M.needSomething)
+                          : s.t(M.needPath)}
                     </div>
                   )}
                   <button
@@ -739,12 +817,12 @@ export function makePathOptionsPanel(host: BundleHost): {
                     }
                   >
                     {selects
-                      ? "Select matching"
+                      ? s.t(M.selectMatching)
                       : reflects
-                        ? `Reflect ${selected} object${selected === 1 ? "" : "s"}`
+                        ? s.t(M.reflectN, { count: selected })
                         : needsSelection
-                          ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
-                          : "Insert"}
+                          ? s.t(M.applyToN, { count: targets })
+                          : s.t(M.insert)}
                   </button>
                 </div>
               )}
@@ -752,12 +830,14 @@ export function makePathOptionsPanel(host: BundleHost): {
           );
         })}
 
-        <About attr="data-draw-pathopts-note">{PATH_OPTIONS_PANEL_NOTE}</About>
+        <About attr="data-draw-pathopts-note">
+          {s.t(PATH_OPTIONS_PANEL_NOTE)}
+        </About>
       </div>
     );
   };
   return {
-    title: "Path options",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

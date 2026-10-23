@@ -21,9 +21,10 @@
 //! runs it on a port). Stateless: each call brings the working document and
 //! takes back what the engine made of it, so any instance can answer any call.
 //!
-//! `POST /run` with JSON `{file, script?, render?: {page, dpi?}, export?,
-//! cmykProfile?}`: `file` is the `.paged` (or `.idml`) as base64; the engine
-//! loads it, runs the script, renders a page (1-based) and/or exports, and
+//! `POST /run` with JSON `{file, template?, script?, render?: {page, dpi?},
+//! export?, cmykProfile?}`: `file` is the `.paged` (or `.idml`) as base64;
+//! the engine loads it, fills the template's fields, runs the script,
+//! renders a page (1-based) and/or exports, and
 //! answers `{output, error, png?, file?, format?, files?}` with bytes as
 //! base64. `GET /healthz` answers `ok`. Nothing else is served, and nothing
 //! is kept between calls.
@@ -39,6 +40,13 @@
 //! data colour space is CMYK: a call whose `cmykProfile` is not (empty,
 //! not base64, an RGB profile) is answered 400 with a JSON error, and a
 //! server whose `--cmyk-profile` is not refuses to start.
+//!
+//! `template` is `{values, role?}`: the session takes `role` (`filler` by
+//! default) and sets the template's fields to `values` (`[{name, value}]`,
+//! as `setTemplateFields` spells them) before the script runs, so the
+//! engine checks them against the template's policy as the editor does. A
+//! value that does not fit its field, or a refusal, answers 422 with the
+//! problems; nothing is exported (editor plan F7).
 //!
 //! Each call's engine is opened with the server's font flags, as every
 //! other command opens its documents: `--fonts` / `--font-family` register
@@ -147,6 +155,19 @@ impl std::fmt::Display for BadCall {
 
 impl std::error::Error for BadCall {}
 
+/// Field values the template refused: answered 422 with the engine's
+/// problems or refusal.
+#[derive(Debug)]
+struct TemplateRefused(Value);
+
+impl std::fmt::Display for TemplateRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the template refused the values: {}", self.0)
+    }
+}
+
+impl std::error::Error for TemplateRefused {}
+
 /// The call's own CMYK profile, held to the check the server's flag is.
 fn call_cmyk_profile(icc: &str) -> Result<Vec<u8>> {
     let bytes = b64()
@@ -199,6 +220,22 @@ pub fn run_call(assets: &DocumentOptions, call: &Value) -> Result<Value> {
         }
         let mut engine = EngineSession::new(call_assets);
         engine.request(json!({ "cmd": "load", "path": input }))?;
+        if let Some(template) = call.get("template").filter(|t| !t.is_null()) {
+            let values = template
+                .get("values")
+                .cloned()
+                .ok_or_else(|| BadCall("`template` needs `values`".into()))?;
+            let mut req = json!({ "cmd": "template", "values": values });
+            if let Some(role) = template.get("role").filter(|r| !r.is_null()) {
+                req["role"] = role.clone();
+            }
+            let r = engine
+                .request(req)
+                .map_err(|e| BadCall(format!("`template`: {e}")))?;
+            if r["ok"] != json!(true) {
+                return Err(TemplateRefused(r).into());
+            }
+        }
         let mut out = json!({ "output": [], "error": null });
         if let Some(source) = call["script"].as_str() {
             let r = engine.request(json!({ "cmd": "run-script", "source": source }))?;
@@ -297,6 +334,16 @@ fn handle(mut stream: TcpStream, assets: &DocumentOptions) -> Result<()> {
             match run_call(assets, &call) {
                 Ok(out) => respond(&mut stream, 200, &out),
                 Err(e) => {
+                    if let Some(TemplateRefused(r)) = e.downcast_ref::<TemplateRefused>() {
+                        let mut body = json!({ "error": "the template refused the values" });
+                        if let Some(p) = r.get("problems") {
+                            body["problems"] = p.clone();
+                        }
+                        if let Some(err) = r.get("error") {
+                            body["refusal"] = err.clone();
+                        }
+                        return respond(&mut stream, 422, &body);
+                    }
                     let status = if e.is::<BadCall>() { 400 } else { 422 };
                     respond(&mut stream, status, &json!({ "error": format!("{e:#}") }))
                 }

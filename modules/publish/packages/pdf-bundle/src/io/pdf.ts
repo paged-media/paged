@@ -37,6 +37,8 @@
 // Capability-gated on `document.openNative@1`; a failure fails LOUD in the log
 // rather than throwing past the host (the mutate-never-throws convention).
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import type {
   BundleHost,
   Disposable,
@@ -48,6 +50,13 @@ import { extractPdf, rasterizePdf } from "../pdfium";
 import { loadPdfMapper } from "../engine-loader";
 
 import importPdfArgs from "../../schema/import-pdf.args.json";
+
+const M = defineMessages("publish.pdfImport", {
+  pdf: "PDF",
+  maxPagesRange: "maxPages is 1–2000 (absent = the path's default)",
+  dpiRange: "dpi is 36–600",
+  editableFailed: "the editable reconstruction could not run",
+});
 
 export const PDF_IMPORTER_ID = "media.paged.pdf.importer.pdf";
 export const PDF_MIME = "application/pdf";
@@ -126,12 +135,10 @@ export async function openPdf(
       options.maxPages < 1 ||
       options.maxPages > 2000)
   ) {
-    throw new Error(
-      "invalidValue: maxPages is 1–2000 (absent = the path's default)",
-    );
+    throw new Error(`invalidValue: ${t(M.maxPagesRange)}`);
   }
   if (options.dpi < 36 || options.dpi > 600)
-    throw new Error("invalidValue: dpi is 36–600");
+    throw new Error(`invalidValue: ${t(M.dpiRange)}`);
   const maxPages = options.maxPages;
   if (options.mode !== "image") {
     // Phase 1 — the editable reconstruction (wasm mapper present).
@@ -141,7 +148,7 @@ export async function openPdf(
       return { mode: "editable", pageCount: editable.pageCount };
     }
     if (options.mode === "editable")
-      throw new Error("failed: the editable reconstruction could not run");
+      throw new Error(`failed: ${t(M.editableFailed)}`);
   }
   // Phase 0 — image-only fallback (mapper unavailable or reconstruction failed).
   const pages = await rasterizePdf(bytes, {
@@ -187,7 +194,7 @@ export function contributePdfIo(host: BundleHost): Disposable {
     disposers.push(
       host.contribute.importer({
         id: PDF_IMPORTER_ID,
-        title: "PDF",
+        title: t(M.pdf),
         extensions: [".pdf"],
         mimeTypes: [PDF_MIME],
         import: (file) => importPdf(host, file),

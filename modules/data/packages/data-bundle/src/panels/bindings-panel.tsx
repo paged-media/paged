@@ -50,10 +50,13 @@ import type {
   SyncStatus,
 } from "../review";
 import { defineBinding } from "../object-model";
-import { hasDocumentsDoors, NO_NEW_DOCUMENT_DOOR } from "../session";
+import { hasDocumentsDoors } from "../session";
 import { DiagnosticsList } from "./diagnostics";
+import { TemplateFieldsSection } from "./template-fields-section";
 import { useSessionSnapshot } from "./use-session";
 import { color, font, space, status } from "@paged-media/panel-kit";
+import { t as tActive, useStrings } from "@paged-media/strings";
+import { BINDINGS as M } from "../messages";
 
 /** The binding kinds the panel defines. */
 type BindKind =
@@ -65,22 +68,15 @@ type BindKind =
   | "rule"
   | "recordFlow";
 
+/** `label` and `field` are message keys (../messages). */
 const KIND_OPTIONS: { value: BindKind; label: string; field: string }[] = [
-  { value: "variable", label: "variable field", field: "field (column name)" },
-  { value: "image", label: "image", field: "field with the image path or URL" },
-  { value: "barcode", label: "barcode / QR", field: "field to encode" },
-  { value: "table", label: "table", field: "columns, comma-separated" },
-  {
-    value: "visibility",
-    label: "show / hide",
-    field: "field or expression (true = shown)",
-  },
-  { value: "rule", label: "style rule", field: "condition, e.g. stock < 5" },
-  {
-    value: "recordFlow",
-    label: "record flow (catalog)",
-    field: "fields per record, comma-separated",
-  },
+  { value: "variable", label: M.kindVariable, field: M.fieldVariable },
+  { value: "image", label: M.kindImage, field: M.fieldImage },
+  { value: "barcode", label: M.kindBarcode, field: M.fieldBarcode },
+  { value: "table", label: M.kindTable, field: M.fieldTable },
+  { value: "visibility", label: M.kindVisibility, field: M.fieldVisibility },
+  { value: "rule", label: M.kindRule, field: M.fieldRule },
+  { value: "recordFlow", label: M.kindRecordFlow, field: M.fieldRecordFlow },
 ];
 
 /** The rule actions — each applies a document style by name. */
@@ -88,9 +84,9 @@ const RULE_ACTIONS: {
   value: "characterStyle" | "paragraphStyle" | "tableStyle";
   label: string;
 }[] = [
-  { value: "characterStyle", label: "character style" },
-  { value: "paragraphStyle", label: "paragraph style" },
-  { value: "tableStyle", label: "cell style (table column)" },
+  { value: "characterStyle", label: M.ruleCharacter },
+  { value: "paragraphStyle", label: M.ruleParagraph },
+  { value: "tableStyle", label: M.ruleCell },
 ];
 
 /** The document style collection each rule action picks from. */
@@ -100,13 +96,14 @@ const RULE_STYLE_KIND = {
   tableStyle: "cell",
 } as const;
 
-/** How the engine's sync statuses read in the panel (ADR 553). */
+/** How the engine's sync statuses read in the panel (ADR 553), as
+ *  message keys. */
 const SYNC_LABEL: Record<SyncStatus, string> = {
-  linked: "synced",
-  stale: "stale",
-  pinned: "pinned",
-  overridden: "overridden",
-  error: "error",
+  linked: M.syncLinked,
+  stale: M.syncStale,
+  pinned: M.syncPinned,
+  overridden: M.syncOverridden,
+  error: M.syncError,
 };
 const SYNC_COLOR: Record<SyncStatus, string> = {
   linked: status.ok,
@@ -118,11 +115,11 @@ const SYNC_COLOR: Record<SyncStatus, string> = {
 
 /** The display patterns a variable field can take. */
 const FORMAT_KINDS: { value: FormatPattern["kind"]; label: string }[] = [
-  { value: "plain", label: "as is" },
-  { value: "number", label: "number" },
-  { value: "currency", label: "currency" },
-  { value: "percent", label: "percent" },
-  { value: "date", label: "date" },
+  { value: "plain", label: M.formatPlain },
+  { value: "number", label: M.formatNumber },
+  { value: "currency", label: M.formatCurrency },
+  { value: "percent", label: M.formatPercent },
+  { value: "date", label: M.formatDate },
 ];
 
 /** A pattern draft as the format editor edits it. */
@@ -184,19 +181,19 @@ const splitList = (v: string): string[] =>
 
 /** The IDML FittingOnEmptyFrame choices an image binding offers (D-14). */
 const FIT_OPTIONS: { value: IdmlFit; label: string }[] = [
-  { value: "Proportionally", label: "Fit (proportional)" },
-  { value: "FillProportionally", label: "Fill (proportional, crop)" },
-  { value: "FitContentToFrame", label: "Fit content to frame" },
-  { value: "ContentAwareFit", label: "Content-aware" },
-  { value: "", label: "None (no fitting)" },
+  { value: "Proportionally", label: M.fitProportional },
+  { value: "FillProportionally", label: M.fitFill },
+  { value: "FitContentToFrame", label: M.fitContent },
+  { value: "ContentAwareFit", label: M.fitContentAware },
+  { value: "", label: M.fitNone },
 ];
 
 /** The barcode symbologies the panel offers (§9.7). */
 const SYMBOLOGY_OPTIONS: { value: BarcodeSymbology; label: string }[] = [
-  { value: "ean13", label: "EAN-13 (retail)" },
-  { value: "upca", label: "UPC-A (retail)" },
-  { value: "code128", label: "Code-128 (general 1D)" },
-  { value: "qr", label: "QR (2D)" },
+  { value: "ean13", label: M.symbologyEan13 },
+  { value: "upca", label: M.symbologyUpca },
+  { value: "code128", label: M.symbologyCode128 },
+  { value: "qr", label: M.symbologyQr },
 ];
 
 const wrap: CSSProperties = {
@@ -255,7 +252,7 @@ export function queryOptions(
     if (existing) {
       out.push({
         value: `s:${source}`,
-        label: `All rows of ${source}`,
+        label: tActive(M.allRowsOf, { source }),
         query: existing,
         title: sqlOf.get(existing) ?? "",
       });
@@ -267,7 +264,7 @@ export function queryOptions(
     const sql = `SELECT * FROM ${source}`;
     out.push({
       value: `s:${source}`,
-      label: `All rows of ${source}`,
+      label: tActive(M.allRowsOf, { source }),
       query: id,
       sql,
       title: sql,
@@ -278,7 +275,7 @@ export function queryOptions(
     if (used.has(q)) continue;
     out.push({
       value: `q:${q}`,
-      label: `Query ${q}`,
+      label: tActive(M.queryOption, { query: q }),
       query: q,
       title: sqlOf.get(q) ?? "",
     });
@@ -301,6 +298,7 @@ function PropertyDraftRow(props: {
   onDone: () => void;
 }): ReactElement | null {
   const { host, session, queries, onDone } = props;
+  const { t } = useStrings();
   const draft = session.getPropertyDraft?.() ?? null;
   const [query, setQuery] = useState("");
   const [expr, setExpr] = useState("");
@@ -309,7 +307,7 @@ function PropertyDraftRow(props: {
   const bind = async () => {
     const q = query || queries[0];
     if (!q || !expr.trim()) {
-      setMsg("pick a query and write an expression");
+      setMsg(t(M.draftNeeds));
       return;
     }
     const id = `${draft.path}-${Date.now().toString(36)}`;
@@ -322,7 +320,7 @@ function PropertyDraftRow(props: {
       expr: expr.trim(),
       ...(draft.schema ? { schema: draft.schema } : {}),
     });
-    setMsg(r.ok ? null : (r.reason ?? "refused"));
+    setMsg(r.ok ? null : (r.reason ?? t(M.refused)));
     if (r.ok) {
       session.setPropertyDraft(null);
       await session.applyProperties({ ids: [id] });
@@ -340,7 +338,8 @@ function PropertyDraftRow(props: {
       data-data-bind-property
     >
       <span>
-        Bind <code>{draft.path}</code> of <code>{draft.selector}</code> to
+        {t(M.draftBind)} <code>{draft.path}</code> {t(M.draftOf)}{" "}
+        <code>{draft.selector}</code> {t(M.draftTo)}
       </span>
       <select
         data-data-bind-property-query
@@ -357,7 +356,7 @@ function PropertyDraftRow(props: {
         data-data-bind-property-expr
         type="text"
         value={expr}
-        placeholder="expression, e.g. MM(width) or tint"
+        placeholder={t(M.exprPlaceholder)}
         onChange={(e) => setExpr(e.target.value)}
         style={{ flex: "1 1 140px", minWidth: 0 }}
       />
@@ -366,13 +365,13 @@ function PropertyDraftRow(props: {
         data-data-bind-property-define
         onClick={() => void bind()}
       >
-        Bind
+        {t(M.bind)}
       </button>
       <button
         type="button"
         onClick={() => (session.setPropertyDraft(null), onDone())}
       >
-        Cancel
+        {t(M.cancel)}
       </button>
       {msg && <span data-data-bind-property-msg>{msg}</span>}
     </div>
@@ -388,6 +387,7 @@ export function makeBindingsPanel(
   function BindingsPanel(): ReactElement {
     // `live`: the session read during render, renewed with the snapshot.
     const [snapshot, refresh, live] = useSessionSnapshot(session);
+    const { t } = useStrings();
     const [fit, setFit] = useState<IdmlFit>("Proportionally");
     const [symbology, setSymbology] = useState<BarcodeSymbology>("ean13");
     // Binding AUTHORING: kind + query + field drive a real addBinding flow.
@@ -440,7 +440,7 @@ export function makeBindingsPanel(
     async function runMerge(): Promise<void> {
       const query = ensurePicked();
       if (!query) {
-        setMergeMsg("Import a data source first, in Data sources.");
+        setMergeMsg(t(M.importFirst));
         return;
       }
       const r = await session.mergeRecords({
@@ -460,9 +460,14 @@ export function makeBindingsPanel(
       });
       setMergeMsg(
         r.ok
-          ? `merged ${r.records.length} record(s) onto ${r.pages.length} page(s)` +
-              (r.overset.length ? ` — ${r.overset.length} overset` : "")
-          : `merge failed: ${r.diagnostics.join("; ")}`,
+          ? t(M.merged, {
+              records: r.records.length,
+              pages: r.pages.length,
+            }) +
+              (r.overset.length
+                ? t(M.mergedOverset, { count: r.overset.length })
+                : "")
+          : t(M.mergeFailed, { reasons: r.diagnostics.join("; ") }),
       );
       refresh();
     }
@@ -583,7 +588,7 @@ export function makeBindingsPanel(
     async function openWizard(): Promise<void> {
       const q = ensurePicked();
       if (!q) {
-        setBindMsg("Import a data source first, in Data sources.");
+        setBindMsg(t(M.importFirst));
         return;
       }
       await session.refreshData();
@@ -591,10 +596,7 @@ export function makeBindingsPanel(
       setWizardQuery(q);
       setMappings(cols);
       setChosen(new Set(cols.filter((c) => c.mappable).map((c) => c.column)));
-      if (cols.length === 0)
-        setBindMsg(
-          `No columns to map — "${q}" returned no data. Refresh data and try again.`,
-        );
+      if (cols.length === 0) setBindMsg(t(M.noColumns, { query: q }));
       refresh();
     }
 
@@ -619,7 +621,7 @@ export function makeBindingsPanel(
         total = (await session.recordCount(q)) ?? 0;
       }
       if (total === 0) {
-        setStepMsg("No records yet — refresh data first.");
+        setStepMsg(t(M.noRecordsYet));
         refresh();
         return;
       }
@@ -702,13 +704,15 @@ export function makeBindingsPanel(
     async function addBinding(): Promise<void> {
       const opt = picked();
       if (!opt) {
-        setBindMsg("Import a data source first, in Data sources.");
+        setBindMsg(t(M.importFirst));
         return;
       }
       const field = bindField.trim();
       if (!field) {
         setBindMsg(
-          `enter the ${KIND_OPTIONS.find((k) => k.value === bindKind)!.field}`,
+          t(M.enterField, {
+            field: t(KIND_OPTIONS.find((k) => k.value === bindKind)!.field),
+          }),
         );
         return;
       }
@@ -728,18 +732,24 @@ export function makeBindingsPanel(
           // the engine resolves per record (a column the DSL cannot reference
           // bare shows up as a resolve diagnostic, never a silent blank).
           session.addVariableBinding(id, field, q, field);
-          setBindMsg(`variable binding ${id} — Lower places the field`);
+          setBindMsg(t(M.variableBound, { id }));
           break;
         case "image":
         case "barcode":
           if (!rect) {
-            setBindMsg(`select a rectangle to bind the ${bindKind} into`);
+            setBindMsg(
+              t(
+                bindKind === "image"
+                  ? M.selectRectangleImage
+                  : M.selectRectangleBarcode,
+              ),
+            );
             return;
           }
           ensure();
           if (bindKind === "image") {
             session.addImageBinding(id, rect.id as string, q, field, { fit });
-            setBindMsg(`image binding ${id} → the selected rectangle (${fit})`);
+            setBindMsg(t(M.imageBound, { id, fit }));
           } else {
             session.addBarcodeBinding(
               id,
@@ -751,9 +761,7 @@ export function makeBindingsPanel(
                 missing: "skip",
               },
             );
-            setBindMsg(
-              `barcode binding ${id} → the selected rectangle (${symbology})`,
-            );
+            setBindMsg(t(M.barcodeBound, { id, symbology }));
           }
           break;
         case "table": {
@@ -765,9 +773,7 @@ export function makeBindingsPanel(
             q,
             cols.map((c) => ({ header: c, expr: c })),
           );
-          setBindMsg(
-            `table binding ${id} (${cols.length} column(s)) — Lower places the table`,
-          );
+          setBindMsg(t(M.tableBound, { id, count: cols.length }));
           break;
         }
         case "visibility": {
@@ -775,7 +781,7 @@ export function makeBindingsPanel(
             VISIBILITY_KINDS.includes(e.kind),
           ) as (ElementId & { id: string }) | undefined;
           if (!el) {
-            setBindMsg("select the frame, shape or group to show or hide");
+            setBindMsg(t(M.selectVisibilityTarget));
             return;
           }
           ensure();
@@ -784,21 +790,20 @@ export function makeBindingsPanel(
             kind: el.kind as VisibilityTargetKind,
           });
           setBindMsg(
-            `show/hide binding ${id} → the selected ${el.kind}${invert ? " (hidden when true)" : ""}`,
+            t(M.visibilityBound, { id, kind: el.kind }) +
+              (invert ? t(M.hiddenWhenTrue) : ""),
           );
           break;
         }
         case "rule": {
           const style = ruleStyle.trim();
           if (!style) {
-            setBindMsg("enter the name of the document style the rule applies");
+            setBindMsg(t(M.ruleNeedsStyle));
             return;
           }
           const target = await ruleTarget();
           if (!target) {
-            setBindMsg(
-              "select a table cell, or put the text cursor in the story to style",
-            );
+            setBindMsg(t(M.ruleNeedsTarget));
             return;
           }
           if (
@@ -806,9 +811,11 @@ export function makeBindingsPanel(
             (target.kind === "tableColumn")
           ) {
             setBindMsg(
-              ruleAction === "tableStyle"
-                ? "a cell style rule needs a selected table cell"
-                : "a character or paragraph rule needs the text cursor in a story",
+              t(
+                ruleAction === "tableStyle"
+                  ? M.ruleCellNeedsCell
+                  : M.ruleTextNeedsCaret,
+              ),
             );
             return;
           }
@@ -818,7 +825,9 @@ export function makeBindingsPanel(
           if (check && !check.ok) {
             setRuleCheck(check);
             setBindMsg(
-              `the condition is not usable: ${check.error ?? "it does not parse"}`,
+              t(M.conditionUnusable, {
+                error: check.error ?? t(M.conditionNoParse),
+              }),
             );
             return;
           }
@@ -833,13 +842,14 @@ export function makeBindingsPanel(
           const styleName =
             ruleStyles.find((st) => st.selfId === style)?.name ?? style;
           setBindMsg(
-            `style rule ${id}: when ${field} → ${styleName} on the ${
+            t(
               target.kind === "tableColumn"
-                ? "selected column"
+                ? M.ruleBoundColumn
                 : target.kind === "storyParagraphs"
-                  ? "paragraph of each record that fires"
-                  : "story"
-            } — Lower applies it`,
+                  ? M.ruleBoundParagraphs
+                  : M.ruleBoundStory,
+              { id, field, style: styleName },
+            ),
           );
           break;
         }
@@ -852,7 +862,7 @@ export function makeBindingsPanel(
             fields.map((f) => ({ expr: f })),
             { groupBy: splitList(groupBy) },
           );
-          setBindMsg(`record flow ${id} — Preview lists what it places`);
+          setBindMsg(t(M.flowBound, { id }));
           break;
         }
       }
@@ -872,9 +882,7 @@ export function makeBindingsPanel(
       <div style={wrap}>
         {(snapshot.relink ?? []).length > 0 && (
           <div style={note} data-data-relink>
-            Re-link data: {(snapshot.relink ?? []).join(", ")} — the bindings
-            came back from the document&apos;s labels, the data did not (import
-            the file again in Data sources).
+            {t(M.relink, { sources: (snapshot.relink ?? []).join(", ") })}
           </div>
         )}
         {/* A "Bind to data…" draft (from any panel's field) shows whether
@@ -889,7 +897,7 @@ export function makeBindingsPanel(
         {options.length === 0 ? (
           <div style={{ ...row, alignItems: "center" }} data-data-bind-empty>
             <p style={{ ...note, margin: 0, flexBasis: "100%" }}>
-              Import a data source to start binding.
+              {t(M.emptyStart)}
             </p>
             <button
               type="button"
@@ -902,7 +910,7 @@ export function makeBindingsPanel(
                 }
               }}
             >
-              Open Data sources
+              {t(M.openSources)}
             </button>
           </div>
         ) : (
@@ -911,7 +919,7 @@ export function makeBindingsPanel(
               style={{ ...row, alignItems: "center" }}
               data-data-bind-query
             >
-              Records from{" "}
+              {t(M.recordsFrom)}{" "}
               <select
                 data-data-bind-query-pick
                 value={picked()?.value ?? ""}
@@ -937,7 +945,7 @@ export function makeBindingsPanel(
               >
                 {KIND_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.label)}
                   </option>
                 ))}
               </select>
@@ -946,9 +954,9 @@ export function makeBindingsPanel(
                 type="text"
                 value={bindField}
                 onChange={(e) => setBindField(e.target.value)}
-                placeholder={
-                  KIND_OPTIONS.find((k) => k.value === bindKind)!.field
-                }
+                placeholder={t(
+                  KIND_OPTIONS.find((k) => k.value === bindKind)!.field,
+                )}
                 style={{ flex: "1 1 120px", minWidth: 0 }}
               />
               {bindKind === "visibility" && (
@@ -959,7 +967,7 @@ export function makeBindingsPanel(
                     checked={invert}
                     onChange={(e) => setInvert(e.target.checked)}
                   />{" "}
-                  hide when true
+                  {t(M.hideWhenTrue)}
                 </label>
               )}
               {bindKind === "rule" && (
@@ -975,7 +983,7 @@ export function makeBindingsPanel(
                   >
                     {RULE_ACTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {t(o.label)}
                       </option>
                     ))}
                   </select>
@@ -984,7 +992,7 @@ export function makeBindingsPanel(
                       data-data-bind-rule-style
                       value={ruleStyle}
                       onChange={(e) => setRuleStyle(e.target.value)}
-                      title="A style defined in this document"
+                      title={t(M.styleTitle)}
                     >
                       {ruleStyles.map((st) => (
                         <option key={st.selfId} value={st.selfId}>
@@ -998,20 +1006,20 @@ export function makeBindingsPanel(
                       type="text"
                       value={ruleStyle}
                       onChange={(e) => setRuleStyle(e.target.value)}
-                      placeholder="style name"
-                      title="No styles of this kind were read from the document — type a style id"
+                      placeholder={t(M.stylePlaceholder)}
+                      title={t(M.noStylesTitle)}
                       style={{ width: 110 }}
                     />
                   )}
                   <button
                     type="button"
                     data-data-rule-styles
-                    title="Read this document's styles for the chosen action"
+                    title={t(M.stylesTitle)}
                     onClick={() => {
                       void loadRuleStyles(ruleAction);
                     }}
                   >
-                    styles
+                    {t(M.styles)}
                   </button>
                   {ruleAction !== "tableStyle" && (
                     <select
@@ -1020,25 +1028,21 @@ export function makeBindingsPanel(
                       onChange={(e) =>
                         setRuleScope(e.target.value as "story" | "paragraphs")
                       }
-                      title="Where in the story the style lands"
+                      title={t(M.scopeTitle)}
                     >
-                      <option value="story">
-                        whole story, when any record fires
-                      </option>
-                      <option value="paragraphs">
-                        one paragraph per record, from the cursor
-                      </option>
+                      <option value="story">{t(M.scopeStory)}</option>
+                      <option value="paragraphs">{t(M.scopeParagraphs)}</option>
                     </select>
                   )}
                   <button
                     type="button"
                     data-data-rule-preview
-                    title="Check the condition and list the records it fires on"
+                    title={t(M.rulePreviewTitle)}
                     onClick={() => {
                       void previewRule();
                     }}
                   >
-                    Preview
+                    {t(M.preview)}
                   </button>
                 </>
               )}
@@ -1048,20 +1052,20 @@ export function makeBindingsPanel(
                   type="text"
                   value={groupBy}
                   onChange={(e) => setGroupBy(e.target.value)}
-                  placeholder="group by (optional)"
+                  placeholder={t(M.groupByPlaceholder)}
                   style={{ width: 120 }}
                 />
               )}
               {bindKind === "image" && (
                 <label style={note}>
-                  fit:{" "}
+                  {t(M.fit)}{" "}
                   <select
                     value={fit}
                     onChange={(e) => setFit(e.target.value as IdmlFit)}
                   >
                     {FIT_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {t(o.label)}
                       </option>
                     ))}
                   </select>
@@ -1069,7 +1073,7 @@ export function makeBindingsPanel(
               )}
               {bindKind === "barcode" && (
                 <label style={note}>
-                  symbology:{" "}
+                  {t(M.symbology)}{" "}
                   <select
                     value={symbology}
                     onChange={(e) =>
@@ -1078,7 +1082,7 @@ export function makeBindingsPanel(
                   >
                     {SYMBOLOGY_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
-                        {o.label}
+                        {t(o.label)}
                       </option>
                     ))}
                   </select>
@@ -1091,7 +1095,7 @@ export function makeBindingsPanel(
                   void addBinding();
                 }}
               >
-                Add binding
+                {t(M.addBinding)}
               </button>
             </div>
             {bindMsg && (
@@ -1103,7 +1107,7 @@ export function makeBindingsPanel(
               <p style={note} data-data-rule-preview-out>
                 {ruleCheck && !ruleCheck.ok ? (
                   <span style={{ color: status.error }}>
-                    {ruleCheck.error ?? "the condition does not parse"}
+                    {ruleCheck.error ?? t(M.conditionDoesNotParse)}
                   </span>
                 ) : rulePreview ? (
                   rulePreview.error ? (
@@ -1112,9 +1116,10 @@ export function makeBindingsPanel(
                     </span>
                   ) : (
                     <>
-                      fires on {rulePreview.fires.length} of {rulePreview.total}{" "}
-                      record
-                      {rulePreview.total === 1 ? "" : "s"}
+                      {t(M.firesOn, {
+                        fired: rulePreview.fires.length,
+                        total: rulePreview.total,
+                      })}
                       {rulePreview.fires.length > 0 &&
                         `: ${rulePreview.fires
                           .slice(0, 20)
@@ -1128,9 +1133,7 @@ export function makeBindingsPanel(
               </p>
             )}
             <div style={row} data-data-merge>
-              <strong title="Merges the records picked under Records from">
-                Data Merge
-              </strong>
+              <strong title={t(M.mergeTitle)}>{t(M.dataMerge)}</strong>
               <select
                 data-data-merge-mode
                 value={mergeMode}
@@ -1138,8 +1141,8 @@ export function makeBindingsPanel(
                   setMergeMode(e.target.value as "single" | "multiple")
                 }
               >
-                <option value="single">Single record per page</option>
-                <option value="multiple">Multiple records per page</option>
+                <option value="single">{t(M.mergeSingle)}</option>
+                <option value="multiple">{t(M.mergeMultiple)}</option>
               </select>
               {mergeMode === "multiple" && (
                 <>
@@ -1150,11 +1153,11 @@ export function makeBindingsPanel(
                       setMergeArrange(e.target.value as "rows" | "columns")
                     }
                   >
-                    <option value="rows">Rows first</option>
-                    <option value="columns">Columns first</option>
+                    <option value="rows">{t(M.rowsFirst)}</option>
+                    <option value="columns">{t(M.columnsFirst)}</option>
                   </select>
                   <label>
-                    row spacing{" "}
+                    {t(M.rowSpacing)}{" "}
                     <input
                       type="number"
                       value={mergeRowSpacing}
@@ -1165,7 +1168,7 @@ export function makeBindingsPanel(
                     />
                   </label>
                   <label>
-                    column spacing{" "}
+                    {t(M.columnSpacing)}{" "}
                     <input
                       type="number"
                       value={mergeColSpacing}
@@ -1183,21 +1186,21 @@ export function makeBindingsPanel(
                   checked={mergeBlank}
                   onChange={(e) => setMergeBlank(e.target.checked)}
                 />{" "}
-                remove blank lines
+                {t(M.removeBlankLines)}
               </label>
-              <label title="Keep the template page and put the merged records on new pages after it">
+              <label title={t(M.keepTemplateTitle)}>
                 <input
                   type="checkbox"
                   checked={mergeKeep}
                   onChange={(e) => setMergeKeep(e.target.checked)}
                 />{" "}
-                keep template
+                {t(M.keepTemplate)}
               </label>
               <label
                 title={
                   hasDocumentsDoors(host)
-                    ? "Copy this document, open the copy and merge into it, consuming the template (the current document is kept as it is)"
-                    : NO_NEW_DOCUMENT_DOOR
+                    ? t(M.newDocumentTitle)
+                    : t(M.noNewDocumentDoor)
                 }
               >
                 <input
@@ -1207,17 +1210,17 @@ export function makeBindingsPanel(
                   checked={mergeNewDoc}
                   onChange={(e) => setMergeNewDoc(e.target.checked)}
                 />{" "}
-                into a new document
+                {t(M.intoNewDocument)}
               </label>
               <button
                 type="button"
                 data-data-merge-run
-                title="Merge every record through the <<field>> frames on this page (one document; a second merge replaces the first)"
+                title={t(M.mergeRunTitle)}
                 onClick={() => {
                   void runMerge();
                 }}
               >
-                Merge records
+                {t(M.mergeRecords)}
               </button>
             </div>
             {mergeMsg && (
@@ -1225,6 +1228,11 @@ export function makeBindingsPanel(
                 {mergeMsg}
               </p>
             )}
+            <TemplateFieldsSection
+              session={session}
+              pickQuery={ensurePicked}
+              version={snapshot}
+            />
             <div style={row}>
               <button
                 type="button"
@@ -1232,16 +1240,16 @@ export function makeBindingsPanel(
                   void session.refreshData().then(refresh);
                 }}
               >
-                Refresh data
+                {t(M.refreshData)}
               </button>
               <button
                 type="button"
-                title="Refresh, then show what changed since the last sync"
+                title={t(M.whatChangedTitle)}
                 onClick={() => {
                   void refreshAndReport();
                 }}
               >
-                What changed?
+                {t(M.whatChanged)}
               </button>
               <button
                 type="button"
@@ -1249,31 +1257,31 @@ export function makeBindingsPanel(
                   void session.lowerAll().then(refresh);
                 }}
               >
-                Lower to document
+                {t(M.lower)}
               </button>
               <button
                 type="button"
                 // Technical detail (kept for developers): re-resolves every
                 // placed variable FIELD from the live data — the D-01 lane.
-                title="Bindings re-resolve when you refresh data."
+                title={t(M.reresolveNote)}
                 onClick={() => {
                   void session.refreshFields().then(refresh);
                 }}
               >
-                Refresh fields
+                {t(M.refreshFields)}
               </button>
             </div>
             <div style={row} data-testid="preview-stepper">
-              <span style={note}>preview record:</span>
+              <span style={note}>{t(M.previewRecord)}</span>
               <button
                 type="button"
-                title="Show the document resolved against the previous record"
+                title={t(M.previousTitle)}
                 disabled={recordTotal === 0 || previewIndex <= 0}
                 onClick={() => {
                   void stepTo(previewIndex - 1);
                 }}
               >
-                ‹ prev
+                {t(M.previous)}
               </button>
               <span data-testid="preview-position">
                 {recordTotal === 0
@@ -1282,7 +1290,7 @@ export function makeBindingsPanel(
               </span>
               <button
                 type="button"
-                title="Show the document resolved against the next record"
+                title={t(M.nextTitle)}
                 // Before the query ran, "next" runs it and shows record 1.
                 disabled={
                   recordTotal === 0
@@ -1293,7 +1301,7 @@ export function makeBindingsPanel(
                   void stepTo(recordTotal === 0 ? 0 : previewIndex + 1);
                 }}
               >
-                next ›
+                {t(M.next)}
               </button>
               {stepMsg && (
                 <span style={note} data-data-step-msg>
@@ -1301,7 +1309,7 @@ export function makeBindingsPanel(
                 </span>
               )}
               <label style={note}>
-                jump to:{" "}
+                {t(M.jumpTo)}{" "}
                 <input
                   type="number"
                   min={1}
@@ -1318,12 +1326,12 @@ export function makeBindingsPanel(
             <div style={row} data-testid="field-mapping-wizard">
               <button
                 type="button"
-                title="Map the source's columns to variable bindings"
+                title={t(M.mapFieldsTitle)}
                 onClick={() => {
                   void openWizard();
                 }}
               >
-                Map fields…
+                {t(M.mapFields)}
               </button>
               {mappings.length > 0 && (
                 <button
@@ -1331,7 +1339,7 @@ export function makeBindingsPanel(
                   onClick={confirmWizard}
                   data-testid="wizard-confirm"
                 >
-                  Create {chosen.size} binding{chosen.size === 1 ? "" : "s"}
+                  {t(M.createBindings, { count: chosen.size })}
                 </button>
               )}
             </div>
@@ -1344,7 +1352,7 @@ export function makeBindingsPanel(
                   <label
                     key={m.column}
                     style={note}
-                    title={m.mappable ? m.expr : "needs a manual expression"}
+                    title={m.mappable ? m.expr : t(M.manualExprTitle)}
                   >
                     <input
                       type="checkbox"
@@ -1365,7 +1373,7 @@ export function makeBindingsPanel(
                       <code>{m.expr}</code>
                     ) : (
                       <span style={{ color: status.warn }}>
-                        manual expr needed
+                        {t(M.manualExpr)}
                       </span>
                     )}
                   </label>
@@ -1380,10 +1388,14 @@ export function makeBindingsPanel(
             style={{ display: "flex", flexDirection: "column", gap: "4px" }}
           >
             <strong>
-              changed since last sync: {changes.changed} changed ·{" "}
-              {changes.unchanged} unchanged
-              {changes.added ? ` · ${changes.added} added` : ""}
-              {changes.removed ? ` · ${changes.removed} removed` : ""}
+              {t(M.changedSinceSync, {
+                changed: changes.changed,
+                unchanged: changes.unchanged,
+              })}
+              {changes.added ? t(M.changedAdded, { count: changes.added }) : ""}
+              {changes.removed
+                ? t(M.changedRemoved, { count: changes.removed })
+                : ""}
             </strong>
             {changes.entries
               .filter((c) => c.kind !== "unchanged")
@@ -1400,13 +1412,18 @@ export function makeBindingsPanel(
                           : status.error,
                   }}
                 >
-                  {c.binding}: {c.kind}
+                  {c.binding}:{" "}
+                  {c.kind === "changed"
+                    ? t(M.changeChanged)
+                    : c.kind === "added"
+                      ? t(M.changeAdded)
+                      : c.kind === "removed"
+                        ? t(M.changeRemoved)
+                        : c.kind}
                 </span>
               ))}
             {changes.changed + changes.added + changes.removed === 0 && (
-              <span style={note}>
-                nothing changed — every bound region is up to date.
-              </span>
+              <span style={note}>{t(M.nothingChanged)}</span>
             )}
           </div>
         )}
@@ -1416,7 +1433,7 @@ export function makeBindingsPanel(
             style={{ display: "flex", flexDirection: "column", gap: 4 }}
           >
             {rowDiff.length === 0 && (
-              <span style={note}>no query has data yet — refresh first.</span>
+              <span style={note}>{t(M.noQueryData)}</span>
             )}
             {rowDiff.map((d) => (
               <div
@@ -1427,11 +1444,16 @@ export function makeBindingsPanel(
                 <strong>
                   {d.query}:{" "}
                   {d.baseline
-                    ? `${d.insertedCount} row(s) — nothing was written from this data yet`
-                    : `+${d.insertedCount} added · −${d.removedCount} removed · ${d.updatedCount} changed · ${d.unchanged} unchanged`}
+                    ? t(M.rowDiffBaseline, { count: d.insertedCount })
+                    : t(M.rowDiffSummary, {
+                        inserted: d.insertedCount,
+                        removed: d.removedCount,
+                        updated: d.updatedCount,
+                        unchanged: d.unchanged,
+                      })}
                 </strong>
                 <label style={note}>
-                  rows matched by{" "}
+                  {t(M.rowsMatchedBy)}{" "}
                   <select
                     data-row-diff-key
                     value={d.key.length === 1 ? d.key[0] : ""}
@@ -1440,7 +1462,7 @@ export function makeBindingsPanel(
                     }}
                   >
                     <option value="">
-                      {d.key.length === 0 ? "the whole row" : "automatic"}
+                      {d.key.length === 0 ? t(M.wholeRow) : t(M.automatic)}
                     </option>
                     {d.columns.map((c) => (
                       <option key={c} value={c}>
@@ -1483,15 +1505,11 @@ export function makeBindingsPanel(
                 ))}
                 {d.updatedCount + d.insertedCount + d.removedCount >
                   d.updated.length + d.inserted.length + d.removed.length &&
-                  !d.baseline && (
-                    <span style={note}>… more rows than listed</span>
-                  )}
+                  !d.baseline && <span style={note}>{t(M.moreRows)}</span>}
                 {d.affected.length > 0 ? (
-                  <span style={note}>reaches:</span>
+                  <span style={note}>{t(M.reaches)}</span>
                 ) : (
-                  !d.baseline && (
-                    <span style={note}>no binding reads what changed.</span>
-                  )
+                  !d.baseline && <span style={note}>{t(M.noBindingReads)}</span>
                 )}
                 {d.affected.map((a) => (
                   <span
@@ -1508,19 +1526,19 @@ export function makeBindingsPanel(
           </div>
         )}
         <div data-data-bindings>
-          bindings:{" "}
+          {t(M.bindingsLabel)}{" "}
           <button
             type="button"
             data-data-sync-reload
-            title="Show each binding's sync state"
+            title={t(M.syncStatesTitle)}
             onClick={() => {
               void reloadSync();
             }}
           >
-            sync states
+            {t(M.syncStates)}
           </button>
           {snapshot.bindings.length === 0 ? (
-            <span style={note}>none</span>
+            <span style={note}>{t(M.none)}</span>
           ) : (
             <ul style={{ margin: 0, paddingLeft: space[3] }}>
               {(live.listBindings() ?? []).map((b) => {
@@ -1533,10 +1551,10 @@ export function makeBindingsPanel(
                     {status && (
                       <span
                         data-sync-status={status}
-                        title="Pinned and overridden content is never replaced by a refresh"
+                        title={t(M.syncStatusTitle)}
                         style={{ marginLeft: 6, color: SYNC_COLOR[status] }}
                       >
-                        {SYNC_LABEL[status]}
+                        {t(SYNC_LABEL[status])}
                       </span>
                     )}
                     {sync?.locale && <span style={note}> · {sync.locale}</span>}
@@ -1547,46 +1565,46 @@ export function makeBindingsPanel(
                         <button
                           type="button"
                           data-data-sync-pin
-                          title="Keep this content as it is; refreshes leave it alone"
+                          title={t(M.pinTitle)}
                           onClick={() => {
                             void decide(() => session.pin(b.id));
                           }}
                         >
-                          Pin
+                          {t(M.pin)}
                         </button>
                       )}
                     {status === "pinned" && (
                       <button
                         type="button"
                         data-data-sync-unpin
-                        title="Follow the source again from the next refresh"
+                        title={t(M.unpinTitle)}
                         onClick={() => {
                           void decide(() => session.unpin(b.id));
                         }}
                       >
-                        Unpin
+                        {t(M.unpin)}
                       </button>
                     )}
                     {(status === "pinned" || status === "overridden") && (
                       <button
                         type="button"
                         data-data-sync-accept
-                        title="Replace this content with the source's value now"
+                        title={t(M.acceptTitle)}
                         onClick={() => {
                           void decide(() => session.acceptSource(b.id));
                         }}
                       >
-                        Accept source
+                        {t(M.accept)}
                       </button>
                     )}
                     {b.kind === "variable" && sync && (
                       <button
                         type="button"
                         data-data-format-open
-                        title="Number, currency or date pattern and locale for this field"
+                        title={t(M.formatTitle)}
                         onClick={() => openFormat(sync)}
                       >
-                        Format…
+                        {t(M.format)}
                       </button>
                     )}
                     {formatOpen === b.id && draft && (
@@ -1607,7 +1625,7 @@ export function makeBindingsPanel(
                         >
                           {FORMAT_KINDS.map((k) => (
                             <option key={k.value} value={k.value}>
-                              {k.label}
+                              {t(k.label)}
                             </option>
                           ))}
                         </select>
@@ -1615,7 +1633,7 @@ export function makeBindingsPanel(
                           draft.kind === "currency" ||
                           draft.kind === "percent") && (
                           <label style={note}>
-                            decimals{" "}
+                            {t(M.decimals)}{" "}
                             <input
                               data-data-format-decimals
                               type="number"
@@ -1638,7 +1656,7 @@ export function makeBindingsPanel(
                             data-data-format-symbol
                             type="text"
                             value={draft.symbol}
-                            placeholder="symbol (locale's)"
+                            placeholder={t(M.symbolPlaceholder)}
                             style={{ width: 90 }}
                             onChange={(e) => {
                               setDraft({ ...draft, symbol: e.target.value });
@@ -1651,7 +1669,7 @@ export function makeBindingsPanel(
                             data-data-format-date
                             type="text"
                             value={draft.date}
-                            placeholder="DD.MM.YYYY (locale's)"
+                            placeholder={t(M.datePlaceholder)}
                             style={{ width: 110 }}
                             onChange={(e) => {
                               setDraft({ ...draft, date: e.target.value });
@@ -1662,14 +1680,14 @@ export function makeBindingsPanel(
                         <select
                           data-data-format-locale
                           value={draft.locale}
-                          title="Format this field for another locale than the session's"
+                          title={t(M.localeTitle)}
                           onChange={(e) => {
                             setDraft({ ...draft, locale: e.target.value });
                             refresh();
                           }}
                         >
                           <option value="">
-                            session locale ({live.getLocale()})
+                            {t(M.sessionLocale, { locale: live.getLocale() })}
                           </option>
                           {locales.map((l) => (
                             <option key={l.tag} value={l.tag}>
@@ -1684,7 +1702,7 @@ export function makeBindingsPanel(
                             void applyFormat(b.id);
                           }}
                         >
-                          Apply
+                          {t(M.apply)}
                         </button>
                         {formatPreview !== null && (
                           <span data-data-format-preview style={mono}>
@@ -1701,7 +1719,7 @@ export function makeBindingsPanel(
                           void previewFlow(b.id);
                         }}
                       >
-                        Preview
+                        {t(M.preview)}
                       </button>
                     )}
                   </li>
@@ -1716,7 +1734,10 @@ export function makeBindingsPanel(
             style={{ display: "flex", flexDirection: "column", gap: 2 }}
           >
             <strong>
-              {flowPreview.id}: {flowPreview.preview.total} record(s)
+              {t(M.flowRecords, {
+                id: flowPreview.id,
+                total: flowPreview.preview.total,
+              })}
             </strong>
             {flowPreview.preview.blocks.slice(0, 50).map((b, i) => (
               <span
@@ -1731,12 +1752,10 @@ export function makeBindingsPanel(
             ))}
             {flowPreview.preview.blocks.length > 50 && (
               <span style={note}>
-                … {flowPreview.preview.blocks.length - 50} more
+                {t(M.more, { count: flowPreview.preview.blocks.length - 50 })}
               </span>
             )}
-            <span style={note}>
-              Placing the flow into frames comes with merge.
-            </span>
+            <span style={note}>{t(M.flowNote)}</span>
           </div>
         )}
         <div
@@ -1772,7 +1791,7 @@ export function makeBindingsPanel(
             user's text caret when the host exposes one (C-9,
             host.text.caret), else at the start of the selected frame's
             story, else in a fresh frame. */}
-        <p style={note}>Bindings re-resolve when you refresh data.</p>
+        <p style={note}>{t(M.reresolveNote)}</p>
       </div>
     );
   }

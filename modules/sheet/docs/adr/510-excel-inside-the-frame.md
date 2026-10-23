@@ -55,3 +55,9 @@ leaves, the window that fits the frame is written into the page as a native tabl
   non-contiguous tracks.
 - Later work replaces the scene-layer grid with a host frame surface; the window model above
   does not change with it.
+- The live grid scene stands on `frame_window` and takes its styles through the page
+  lowering's per-cell styler (`sheet_lower::CellStyler`), so the two surfaces share the tracks
+  and the style table. The scene's viewport names the shown tracks (`rowIndices`/`colIndices`,
+  frozen ones first) and `firstRow`/`firstCol` the first body track; a consumer finds a cell's
+  position through the index arrays, never by subtracting `firstRow`. Merged areas are drawn
+  from the anchor cell, also when the anchor is scrolled out of the window.

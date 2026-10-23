@@ -33,6 +33,7 @@
 
 - id: sheet.fn.stat.stdev-s
   name: STDEV.S
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: null }
   volatility: none
@@ -46,6 +47,7 @@
 
 - id: sheet.fn.stat.stdev-p
   name: STDEV.P
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: null }
   volatility: none
@@ -59,6 +61,7 @@
 
 - id: sheet.fn.stat.var-s
   name: VAR.S
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: null }
   volatility: none
@@ -72,6 +75,7 @@
 
 - id: sheet.fn.stat.var-p
   name: VAR.P
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: null }
   volatility: none
@@ -137,6 +141,7 @@
 
 - id: sheet.fn.stat.percentile-inc
   name: PERCENTILE.INC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 2 }
   volatility: none
@@ -150,6 +155,7 @@
 
 - id: sheet.fn.stat.quartile-inc
   name: QUARTILE.INC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 2 }
   volatility: none
@@ -163,6 +169,7 @@
 
 - id: sheet.fn.stat.rank-eq
   name: RANK.EQ
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 3 }
   volatility: none
@@ -254,6 +261,7 @@
 
 - id: sheet.fn.stat.maxifs
   name: MAXIFS
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 3, max: null }
   volatility: none
@@ -267,6 +275,7 @@
 
 - id: sheet.fn.stat.minifs
   name: MINIFS
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 3, max: null }
   volatility: none
@@ -425,6 +434,7 @@
 
 - id: sheet.fn.stat.percentile-exc
   name: PERCENTILE.EXC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 2 }
   volatility: none
@@ -438,6 +448,7 @@
 
 - id: sheet.fn.stat.quartile-exc
   name: QUARTILE.EXC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 2 }
   volatility: none
@@ -451,6 +462,7 @@
 
 - id: sheet.fn.stat.mode-sngl
   name: MODE.SNGL
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: null }
   volatility: none
@@ -477,6 +489,7 @@
 
 - id: sheet.fn.stat.forecast-linear
   name: FORECAST.LINEAR
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 3, max: 3 }
   volatility: none
@@ -511,13 +524,14 @@
   returns_array: true
   rust: stat2::trend
   status: implemented
-  provenance: ["Microsoft TREND (public docs) — known_ys, [known_xs], [new_xs], [const]; single-regressor fit (multiple regression is a recorded #VALUE! scope limit)"]
+  provenance: ["Microsoft TREND (public docs) — known_ys, [known_xs], [new_xs], [const]; one or several regressors (least squares on the normal equations, as LINEST); collinear regressors #NUM! (Excel drops them; listed divergence)"]
   tests:
     rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_trend"]
-    corpus: ["corpus/fn-corpus/stat/trend.golden.tsv"]
+    corpus: ["corpus/fn-corpus/stat/trend.golden.tsv", "corpus/fn-corpus/fix3/trend3.golden.tsv"]
 
 - id: sheet.fn.stat.norm-dist
   name: NORM.DIST
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 4, max: 4 }
   volatility: none
@@ -531,6 +545,7 @@
 
 - id: sheet.fn.stat.norm-inv
   name: NORM.INV
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 3, max: 3 }
   volatility: none
@@ -544,6 +559,7 @@
 
 - id: sheet.fn.stat.norm-s-dist
   name: NORM.S.DIST
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 2 }
   volatility: none
@@ -557,6 +573,7 @@
 
 - id: sheet.fn.stat.norm-s-inv
   name: NORM.S.INV
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 1, max: 1 }
   volatility: none
@@ -583,6 +600,7 @@
 
 - id: sheet.fn.stat.percentrank-inc
   name: PERCENTRANK.INC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 3 }
   volatility: none
@@ -596,6 +614,7 @@
 
 - id: sheet.fn.stat.percentrank-exc
   name: PERCENTRANK.EXC
+  xlfn_prefix: "_xlfn."
   family: stat
   arity: { min: 2, max: 3 }
   volatility: none

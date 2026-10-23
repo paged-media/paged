@@ -1,0 +1,60 @@
+# sheet.fn.info.* (W3 additions) — CELL, INFO, ISNONTEXT, ISOMITTED.
+# CELL / INFO / ISOMITTED are evaluator special forms
+# (sheet-calc/src/eval/info.rs); ISNONTEXT is info2::isnontext. SHEET and
+# SHEETS (info2.yaml) became special forms in the same wave. Expected values
+# recorded from Excel (oracle/excel/recorded/info3.tsv).
+
+- id: sheet.fn.info.cell
+  name: CELL
+  family: info
+  arity: { min: 1, max: 2 }
+  volatility: volatile
+  range_aware: false
+  ref_args: true
+  returns_array: true
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (CELL) — address/col/row/contents/type/format/color/parentheses/prefix/protect/width/filename of a reference's top-left cell; evaluator special form"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_info3.rs::sheet_fn_info3_cell"]
+    corpus: ["corpus/fn-corpus/info3/cell.golden.tsv"]
+
+- id: sheet.fn.info.info
+  name: INFO
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: volatile
+  range_aware: false
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (INFO) — numfile/recalc/release/system/origin/directory/osversion answered for the engine"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_info3.rs::sheet_fn_info3_info"]
+    corpus: ["corpus/fn-corpus/info3/info.golden.tsv"]
+
+- id: sheet.fn.info.isnontext
+  name: ISNONTEXT
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  rust: info2::isnontext
+  status: implemented
+  provenance: ["Microsoft function reference (ISNONTEXT) — TRUE for anything but text"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_info3.rs::sheet_fn_info3_isnontext"]
+    corpus: ["corpus/fn-corpus/info3/isnontext.golden.tsv"]
+
+- id: sheet.fn.info.isomitted
+  name: ISOMITTED
+  xlfn_prefix: "_xlfn."
+  family: info
+  arity: { min: 1, max: 1 }
+  volatility: none
+  range_aware: false
+  special_form: true
+  status: implemented
+  provenance: ["Microsoft function reference (ISOMITTED) — TRUE for an empty LAMBDA argument"]
+  tests:
+    rust: ["sheet-conformance/tests/it/fn_info3.rs::sheet_fn_info3_isomitted"]
+    corpus: ["corpus/fn-corpus/info3/isomitted.golden.tsv"]

@@ -84,6 +84,9 @@ pub struct ResolvedCellTarget {
     pub cell: u32,
     pub para: u32,
     pub run_ord: u32,
+    /// When set, `run_ord` counts the `<w:r>` inside the n-th `<w:hyperlink>`
+    /// / `<w:fldSimple>` child of the cell paragraph.
+    pub wrapper: Option<crate::bindings::Wrapper>,
     pub new_text: Option<String>,
     pub new_rpr: Option<Vec<u8>>,
     /// How a refusal names this run.
@@ -219,6 +222,11 @@ pub fn patch_document_xml_cols(
     let mut fld_ord: i64 = -1;
     let mut wrap_run_ord: i64 = -1;
     let mut open_wrapper: Option<crate::bindings::Wrapper> = None;
+    // The same locator inside the open cell paragraph.
+    let mut c_hl_ord: i64 = -1;
+    let mut c_fld_ord: i64 = -1;
+    let mut c_wrap_run_ord: i64 = -1;
+    let mut open_cell_wrapper: Option<crate::bindings::Wrapper> = None;
     let mut open_row: Option<ResolvedRowTarget> = None;
     // Column locator: the `<w:gridCol>` index inside the open `<w:tblGrid>`.
     let mut gc_ord: i64 = -1;
@@ -382,12 +390,67 @@ pub fn patch_document_xml_cols(
                 if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
                     cp_ord += 1;
                     cr_ord = -1;
+                    c_hl_ord = -1;
+                    c_fld_ord = -1;
+                    open_cell_wrapper = None;
+                }
+                // A cell paragraph's wrappers, and the runs inside the open one.
+                if parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1 {
+                    if ln == b"hyperlink" {
+                        c_hl_ord += 1;
+                        c_wrap_run_ord = -1;
+                        open_cell_wrapper =
+                            Some(crate::bindings::Wrapper::Hyperlink(c_hl_ord as u32));
+                    } else if ln == b"fldSimple" {
+                        c_fld_ord += 1;
+                        c_wrap_run_ord = -1;
+                        open_cell_wrapper = Some(crate::bindings::Wrapper::Field(c_fld_ord as u32));
+                    }
+                }
+                if ln == b"r"
+                    && open_cell_wrapper.is_some()
+                    && parent != Some(b"p".as_ref())
+                    && in_cell(&stack)
+                    && tbl_depth == 1
+                {
+                    c_wrap_run_ord += 1;
+                    if let Some(ct) = cells.iter().find(|c| {
+                        c.wrapper == open_cell_wrapper
+                            && c.table_ord as i64 == tbl_ord
+                            && c.row as i64 == tr_ord
+                            && c.cell as i64 == tc_ord
+                            && c.para as i64 == cp_ord
+                            && c.run_ord as i64 == c_wrap_run_ord
+                    }) {
+                        let t = ResolvedTarget {
+                            para_ord: 0,
+                            run_ord: 0,
+                            new_text: ct.new_text.clone(),
+                            new_rpr: ct.new_rpr.clone(),
+                            delete: false,
+                            insert_after: Vec::new(),
+                            wrapper: None,
+                            label: ct.label.clone(),
+                        };
+                        let run_open_end = reader.buffer_position() as usize;
+                        splice_run(
+                            &mut reader,
+                            src,
+                            &t,
+                            run_open_end,
+                            &mut out,
+                            &mut cursor,
+                            &mut refusals,
+                        );
+                        continue;
+                    }
                 }
                 if ln == b"r" && parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1
                 {
                     cr_ord += 1;
                     if let Some(ct) = cells.iter().find(|c| {
-                        c.table_ord as i64 == tbl_ord
+                        c.wrapper.is_none()
+                            && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
                             && c.cell as i64 == tc_ord
                             && c.para as i64 == cp_ord
@@ -518,6 +581,7 @@ pub fn patch_document_xml_cols(
                 }
                 if ln == b"hyperlink" || ln == b"fldSimple" {
                     open_wrapper = None;
+                    open_cell_wrapper = None;
                 }
                 if ln == b"tr" {
                     if let Some(rt) = open_row.take() {
@@ -552,6 +616,91 @@ pub fn patch_document_xml_cols(
 
     out.extend_from_slice(&src[cursor..]);
     (out, refusals)
+}
+
+/// A new `<w:p>` like the body paragraph `para_ord` of `src`: its `<w:pPr>`
+/// bytes verbatim and one `<w:r>` carrying `text` with the paragraph's first
+/// direct run's `<w:rPr>` bytes verbatim. `None` when there is no such
+/// paragraph, or its `<w:pPr>` holds a `<w:sectPr>` (the copy would start a
+/// section of its own).
+pub fn clone_paragraph(src: &[u8], para_ord: u32, text: &str) -> Option<Vec<u8>> {
+    let mut reader = Reader::from_reader(src);
+    let mut stack: Vec<Vec<u8>> = Vec::new();
+    let mut p_ord: i64 = -1;
+    let mut inside = false;
+    let mut ppr: Option<&[u8]> = None;
+    let mut rpr: Option<&[u8]> = None;
+    loop {
+        let event_start = reader.buffer_position() as usize;
+        let ev = reader.read_event().ok()?;
+        match ev {
+            Event::Eof => return None,
+            Event::Start(e) => {
+                let name = e.name().as_ref().to_vec();
+                let ln = local_name(&name).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"p" && parent == Some(b"body".as_ref()) {
+                    p_ord += 1;
+                    inside = p_ord == para_ord as i64;
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"pPr" {
+                    reader.read_to_end(QName(&name)).ok()?;
+                    ppr = Some(&src[event_start..reader.buffer_position() as usize]);
+                    continue;
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"r" {
+                    // The run's first child is its `<w:rPr>`, when it has one.
+                    let child_start = reader.buffer_position() as usize;
+                    match reader.read_event().ok()? {
+                        Event::Start(c) if local_name(c.name().as_ref()) == b"rPr" => {
+                            let cname = c.name().as_ref().to_vec();
+                            reader.read_to_end(QName(&cname)).ok()?;
+                            rpr = Some(&src[child_start..reader.buffer_position() as usize]);
+                        }
+                        Event::Empty(c) if local_name(c.name().as_ref()) == b"rPr" => {
+                            rpr = Some(&src[child_start..reader.buffer_position() as usize]);
+                        }
+                        _ => {}
+                    }
+                    break;
+                }
+                stack.push(ln);
+            }
+            Event::Empty(e) => {
+                let ln = local_name(e.name().as_ref()).to_vec();
+                let parent = stack.last().map(Vec::as_slice);
+                if ln == b"p" && parent == Some(b"body".as_ref()) {
+                    p_ord += 1;
+                    if p_ord == para_ord as i64 {
+                        break;
+                    }
+                } else if inside && parent == Some(b"p".as_ref()) && ln == b"pPr" {
+                    ppr = Some(&src[event_start..reader.buffer_position() as usize]);
+                }
+            }
+            Event::End(e) => {
+                stack.pop();
+                if inside
+                    && local_name(e.name().as_ref()) == b"p"
+                    && stack.last().map(Vec::as_slice) == Some(b"body".as_ref())
+                {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if p_ord != para_ord as i64 {
+        return None;
+    }
+    if ppr.is_some_and(|b| b.windows(6).any(|w| w == b"sectPr")) {
+        return None;
+    }
+    let mut out = b"<w:p>".to_vec();
+    out.extend_from_slice(ppr.unwrap_or_default());
+    out.extend_from_slice(b"<w:r>");
+    out.extend_from_slice(rpr.unwrap_or_default());
+    out.extend_from_slice(&crate::rpr::render_wt(text));
+    out.extend_from_slice(b"</w:r></w:p>");
+    Some(out)
 }
 
 fn find_target(targets: &[ResolvedTarget], p: i64, r: i64) -> Option<&ResolvedTarget> {

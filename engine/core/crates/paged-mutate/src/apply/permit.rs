@@ -39,7 +39,8 @@ use crate::operation::{NodeId, NodeSpec, Operation, PropertyPath, Value};
 /// What a permission is asked of.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Target {
-    /// A page item, by `Self` id.
+    /// A page item, or a page, by `Self` id (a page's policy is its label,
+    /// keyed by its id like an item's).
     Item(String),
     /// A story; decided by the frame that hosts it.
     Story(String),
@@ -47,6 +48,9 @@ pub enum Target {
     Variable(String),
     /// The document as a whole.
     Document,
+    /// The document- or page-level label a plugin keeps, by plugin id
+    /// (`x-paged:<plugin>`): decided by the fields of that plugin.
+    ModuleLabel(String),
 }
 
 /// One permission an operation needs.
@@ -105,6 +109,42 @@ fn page_item(node: &NodeId) -> Option<&str> {
     }
 }
 
+/// A plugin's document- or page-level label (`x-paged:<plugin>`).
+fn module_label(key: &str) -> Requirement {
+    match key.strip_prefix("x-paged:") {
+        Some(plugin) if !plugin.is_empty() => req(
+            Permission::DocumentMetadata,
+            Target::ModuleLabel(plugin.to_string()),
+        ),
+        _ => doc(Permission::DocumentMetadata),
+    }
+}
+
+/// The page item a story on a path is drawn along: a story with no text
+/// frame is decided by the item whose `<TextPath>` carries it.
+fn path_host_of(doc: &Document, story: &str) -> Option<String> {
+    let on = |paths: &[paged_model::TextPath]| paths.iter().any(|t| t.parent_story == story);
+    doc.spreads.iter().find_map(|s| {
+        let sp = &s.spread;
+        sp.rectangles
+            .iter()
+            .find(|r| on(&r.text_paths))
+            .and_then(|r| r.self_id.clone())
+            .or_else(|| {
+                sp.polygons
+                    .iter()
+                    .find(|p| on(&p.text_paths))
+                    .and_then(|p| p.self_id.clone())
+            })
+            .or_else(|| {
+                sp.graphic_lines
+                    .iter()
+                    .find(|l| on(&l.text_paths))
+                    .and_then(|l| l.self_id.clone())
+            })
+    })
+}
+
 fn item(permission: Permission, node: &NodeId) -> Requirement {
     match page_item(node) {
         Some(id) => req(permission, Target::Item(id.to_string())),
@@ -122,6 +162,8 @@ fn item_property(path: PropertyPath) -> Permission {
         Pp::FrameRotationAngle => P::ItemRotate,
         Pp::FrameFlipH | Pp::FrameFlipV => P::ItemFlip,
         Pp::ImageContentTransform => P::ImageCrop,
+        // Which page of a placed PDF shows: the picture, not its look.
+        Pp::FramePdfPage => P::ImageReplace,
         Pp::ElementVisible => P::ItemVisibility,
         p if super::lock::moves_geometry(p) => P::ItemResize,
         p => {
@@ -155,6 +197,12 @@ fn set_property(node: &NodeId, path: PropertyPath, value: &Value) -> Vec<Require
         let template = matches!(value, Value::PluginMetadata { key, .. } if key == TEMPLATE_KEY);
         return vec![if template {
             doc(P::TemplateAuthor)
+        } else if page_item(node).is_none() {
+            // A page's or the document's label: the plugin's own state.
+            match value {
+                Value::PluginMetadata { key, .. } => module_label(key),
+                _ => doc(P::DocumentMetadata),
+            }
         } else {
             item(P::DocumentMetadata, node)
         }];
@@ -201,8 +249,15 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         O::ReplaceStoryParagraphs { story_id, .. } | O::RestoreParagraphs { story_id, .. } => {
             vec![story(P::TextEdit, story_id)]
         }
+        // Removing or duplicating a page is asked of that page: its own
+        // policy (an `x-paged:template` label keyed by the page's id) may
+        // grant `document.pages` beyond the document's defaults, so a
+        // template can open the pages a data flow generates, and the page
+        // they are copied from, without opening every page (data ADR 560).
+        // A copy carries its source's labels, so it is open as well.
+        O::RemovePage { page_id } => vec![req(P::DocumentPages, Target::Item(page_id.clone()))],
+        O::DuplicatePage { page, .. } => vec![req(P::DocumentPages, Target::Item(page.clone()))],
         O::InsertPage { .. }
-        | O::RemovePage { .. }
         | O::MoveLayer { .. }
         | O::InsertLayer { .. }
         | O::RemoveLayer { .. } => vec![doc(P::DocumentPages)],
@@ -235,7 +290,18 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::DeleteNumberingList { .. }
         | O::SetStyleProperty { .. }
         | O::CreateTextVariable { .. }
-        | O::DeleteTextVariable { .. } => vec![doc(P::DocumentStyles)],
+        | O::DeleteTextVariable { .. }
+        // Tag definitions are the document's vocabulary, like its styles
+        // (engine ADR 1002).
+        | O::CreateXmlTag { .. }
+        | O::DeleteXmlTag { .. } => vec![doc(P::DocumentStyles)],
+        // Tagging is how a template's fields are marked: the author's.
+        O::TagItem { .. }
+        | O::UntagItem { .. }
+        | O::TagRange { .. }
+        | O::UntagRange { .. }
+        | O::SetXmlAttribute { .. }
+        | O::RestoreXmlStructure { .. } => vec![doc(P::TemplateAuthor)],
         O::CreateGroup { spec } => spec.members.iter().map(|m| item(P::ItemRestack, m)).collect(),
         O::DissolveGroup { group_id, .. } => {
             vec![req(P::ItemRestack, Target::Item(group_id.clone()))]
@@ -333,16 +399,12 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::OnMaster { .. }
         | O::MovePage { .. }
         | O::SetSpreadOrder { .. }
-        | O::DuplicatePage { .. }
         | O::RemovePageClone { .. }
         | O::InsertSection { .. }
         | O::EditSection { .. }
         | O::DeleteSection { .. } => vec![doc(P::DocumentPages)],
-        O::SetDocumentMetadata { key, .. } => vec![doc(if key == TEMPLATE_KEY {
-            P::TemplateAuthor
-        } else {
-            P::DocumentMetadata
-        })],
+        O::SetDocumentMetadata { key, .. } if key == TEMPLATE_KEY => vec![doc(P::TemplateAuthor)],
+        O::SetDocumentMetadata { key, .. } => vec![module_label(key)],
     }
 }
 
@@ -353,6 +415,7 @@ fn refused(r: &Requirement, permission: Permission) -> OperationError {
         Target::Story(id) => format!("story {id}"),
         Target::Variable(id) => format!("variable {id}"),
         Target::Document => "the document".to_string(),
+        Target::ModuleLabel(plugin) => format!("the document's {plugin} state"),
     };
     OperationError::NotPermitted {
         permission: permission.name().to_string(),
@@ -383,7 +446,11 @@ pub fn check_requirements(
     let unbound = session.unbound();
     let needs_index = unbound.is_none() || requirements.iter().any(|r| r.also_author_if_field);
     let index = needs_index.then(|| PolicyIndex::build(doc).0);
-    let item_of_story = |story_id: &str| doc.frame_for(story_id).and_then(|f| f.self_id.clone());
+    let item_of_story = |story_id: &str| {
+        doc.frame_for(story_id)
+            .and_then(|f| f.self_id.clone())
+            .or_else(|| path_host_of(doc, story_id))
+    };
 
     for r in requirements {
         let allowed = match (&unbound, &index) {
@@ -393,6 +460,7 @@ pub fn check_requirements(
                 Target::Story(s) => ix.effective(session, item_of_story(s).as_deref()),
                 Target::Variable(v) => ix.effective_for_variable(session, v),
                 Target::Document => ix.effective(session, None),
+                Target::ModuleLabel(plugin) => ix.effective_for_module_label(session, plugin),
             },
             (None, None) => unreachable!("an index is built whenever the session is bound"),
         };

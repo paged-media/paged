@@ -1,0 +1,17 @@
+# IMARGUMENT.
+# id	formula	setup	expected
+imargument-0	=IMARGUMENT("3+4i")	-	0.927295218001612
+imargument-1	=IMARGUMENT("3-4i")	-	-0.927295218001612
+imargument-2	=IMARGUMENT("-2.5+0.5j")	-	2.94419709373991
+imargument-3	=IMARGUMENT("i")	-	1.5707963267949
+imargument-4	=IMARGUMENT("-i")	-	-1.5707963267949
+imargument-5	=IMARGUMENT("5")	-	0
+imargument-6	=IMARGUMENT("0")	-	#DIV/0!
+imargument-7	=IMARGUMENT("4j")	-	1.5707963267949
+imargument-8	=IMARGUMENT("1E2+1E-3i")	-	9.99999999966667E-06
+imargument-9	=IMARGUMENT("0.5-i")	-	-1.10714871779409
+imargument-10	=IMARGUMENT("abc")	-	#NUM!
+imargument-11	=IMARGUMENT("-1")	-	3.14159265358979
+imargument-12	=IMARGUMENT("-1-0.0000001i")	-	-3.14159255358979
+imargument-x0	=IMARGUMENT(A1)	A1=#N/A	#N/A
+imargument-x1	=SUM(IMARGUMENT({"1+i","i"}))	-	2.35619449019234

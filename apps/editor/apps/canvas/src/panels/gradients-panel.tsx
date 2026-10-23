@@ -33,23 +33,30 @@ import { appCatalogRegistry } from "./catalog-registry";
 import { gradientsComposition } from "./gradients.composition";
 import { GradientEditor } from "./gradient-editor";
 import { CoreCommandButton } from "../core-command-dialog";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.gradientsPanel", {
+  newGradientButton: "New gradient…",
+  newGradientName: "New gradient",
+});
 
 export function GradientsPanel() {
+  const strings = useStrings();
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3" data-gradients-panel="ready">
-        <CompositionRenderer composition={gradientsComposition} />
+        <CompositionRenderer composition={gradientsComposition(strings)} />
         {/* ADR 323 §4 — a new gradient through core.createGradient (the
             generated form; delete lives on Gradient Options). */}
         <div className="mb-2 flex gap-[5px]" data-gradient-actions="">
           <CoreCommandButton
             op="createGradient"
-            label="New gradient…"
+            label={strings.t(M.newGradientButton)}
             testId="gradient-new"
             prefill={{
               spec: {
                 selfId: `Gradient/u${Date.now().toString(36)}`,
-                name: "New gradient",
+                name: strings.t(M.newGradientName),
                 kind: "Linear",
                 stops: [
                   { stopColor: "Color/Paper", locationPct: 0 },

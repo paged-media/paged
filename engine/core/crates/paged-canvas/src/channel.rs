@@ -711,7 +711,13 @@ export type WorkerToMain = WorkerToMainKind & {
 //   failure `NotPermitted`. A filler session's hit test skips items it may
 //   not select. A new message kind an older worker cannot answer, hence
 //   the bump.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(75);
+// v76 — XML tags carry template fields (engine ADR 1002): the XML structure
+//   mutations createXmlTag, deleteXmlTag, tagItem, untagItem, tagRange,
+//   untagRange and setXmlAttribute; `RequestDerivedTemplateFields { options }`
+//   → `DerivedTemplateFields { derivation }`; `OpenAsTemplate { options,
+//   only }` (replies as `SetTemplateFields` does); `XmlElementSummary.range`.
+//   New message kinds an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -1314,6 +1320,25 @@ pub enum MainToWorkerKind {
     /// value does not fit its field (then nothing is applied).
     SetTemplateFields {
         values: Vec<crate::template::TemplateFieldValue>,
+    },
+    /// v76 (engine ADR 1002) — the fields the document's XML tags describe
+    /// (and its item names and plugin placeholders, as `options` asks).
+    /// Reads only. Reply: `DerivedTemplateFields`.
+    RequestDerivedTemplateFields {
+        #[serde(default)]
+        options: paged_template::DeriveOptions,
+    },
+    /// v76 — "Open as template": the derived fields (those named in
+    /// `only`, when given) written as the template's policy, and each
+    /// tagged range made a placeholder run, as ONE batch mutation (one undo
+    /// step; writing the policy takes the author's role). Reply as for
+    /// `SetTemplateFields`: `MutationApplied` / `MutationFailed`, or
+    /// `TemplateFieldsRefused` when nothing is tagged as a field.
+    OpenAsTemplate {
+        #[serde(default)]
+        options: paged_template::DeriveOptions,
+        #[serde(default)]
+        only: Option<Vec<String>>,
     },
     /// B-06 (protocol v30) — closest on-curve point on the element's
     /// path. `point` is in the element's LOCAL coordinate space (the
@@ -2140,6 +2165,10 @@ pub enum WorkerToMainKind {
     TemplateFieldsRefused {
         problems: Vec<crate::template::TemplateFieldProblem>,
     },
+    /// v76 — `RequestDerivedTemplateFields` reply. Empty with no document.
+    DerivedTemplateFields {
+        derivation: paged_template::Derivation,
+    },
     /// B-22 (protocol v57) — `RequestPlanarRegions` reply.
     PlanarRegions { result: PlanarRegionsResult },
     /// B-06 — `RequestNearestPathPoint` reply. `None` when the id
@@ -2882,6 +2911,10 @@ pub enum CollectionName {
     /// v75 — the template's fields (engine ADR 1001), in form order, with
     /// their definitions and current values (`TemplateFieldSummary`).
     TemplateFields,
+    /// v76 — the template's preflight (editor plan F3): what is wrong with
+    /// its policy before anyone fills it, errors first
+    /// (`paged_template::TemplateFinding`).
+    TemplateFindings,
     /// D-02 — the document's XML structure depth-first, one row per
     /// element: its tag, depth, what it tags, its attributes. An element
     /// tagging a story is followed by the elements tagging its ranges.
@@ -2954,6 +2987,7 @@ impl CollectionName {
             Self::Notes => "notes",
             Self::XmlTags => "xmlTags",
             Self::TemplateFields => "templateFields",
+            Self::TemplateFindings => "templateFindings",
             Self::XmlElements => "xmlElements",
             Self::TrackedChanges => "trackedChanges",
             Self::Endnotes => "endnotes",
@@ -2995,6 +3029,7 @@ impl CollectionName {
             "notes" => Self::Notes,
             "xmlTags" => Self::XmlTags,
             "templateFields" => Self::TemplateFields,
+            "templateFindings" => Self::TemplateFindings,
             "xmlElements" => Self::XmlElements,
             "trackedChanges" => Self::TrackedChanges,
             "endnotes" => Self::Endnotes,
@@ -3717,6 +3752,9 @@ pub struct XmlElementSummary {
     /// The story its text range stands in, when it tags a range.
     pub story_id: Option<String>,
     pub attributes: Vec<(String, String)>,
+    /// v76 — where its range stands, `[start, end)` in story characters,
+    /// when it tags a range.
+    pub range: Option<[u32; 2]>,
 }
 
 /// ADR 172 — one editorial note. Backs `documentCollection:notes`.
@@ -4719,8 +4757,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v74() {
-        assert_eq!(PROTOCOL_VERSION.0, 75);
+    fn protocol_version_is_v76() {
+        assert_eq!(PROTOCOL_VERSION.0, 76);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

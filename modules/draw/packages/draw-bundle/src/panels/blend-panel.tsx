@@ -67,47 +67,100 @@ import {
   About,
   color,
   font,
-  humanize,
   IconButton,
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
-import { PanelIntro } from "./panel-parts";
+import { PanelIntro, tokenLabel } from "./panel-parts";
+import { defineMessages, t, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("draw.blendPanel", {
+  summary:
+    "Fill the space between two selected objects with intermediate shapes that change step by step in shape and colour.",
+  note: "A blend makes real intermediate shapes and remembers how it built them. Editing a key object does not change the intermediates until you choose Update. The step count shown under Spacing is worked out from the settings; the artwork is only rebuilt when you build or update. The intermediates follow a straight line between the two objects unless you replace it with a path of your own (Spine): that path keeps its own colour and stays outside the blend's group, so you can still edit it. Reverse spine swaps which end each shape travels to; reverse front to back only changes which shapes paint on top. Building, updating, reversing, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
+  selectTwo: "Select two objects to blend",
+  selectExactlyTwo: "Select exactly two objects to blend ({count} selected)",
+  smoothColor: "Smooth colour",
+  specifiedSteps: "Specified steps",
+  specifiedDistance: "Specified distance",
+  rowSteps: "{count} steps",
+  rowEvery: "every {distance} pt",
+  rowSmooth: "smooth colour",
+  rowReplacedSpine: " · replaced spine",
+  rowAligned: " · aligned",
+  rowReversedSpine: " · reversed spine",
+  rowReversedOrder: " · reversed order",
+  rowPlaced:
+    "({count, plural, one {# intermediate} other {# intermediates}} placed)",
+  heading: "Blends",
+  blendTwo: "Blend the two selected objects",
+  plusBlend: "+ Blend",
+  degraded:
+    "This editor cannot save data into the document, so blend settings are not kept. A blend can still be expanded or released.",
+  spacing: "Spacing",
+  mode: "Mode",
+  steps: "Steps",
+  distance: "Distance (pt)",
+  previewSteps:
+    "{count, plural, one {# intermediate step.} other {# intermediate steps.}}",
+  tooMany: "Too many steps: at most {max}.",
+  measuredAlongSpine:
+    "The step count is measured along the spine when you build.",
+  fromColour:
+    "The step count comes from the colour difference between the two objects when you build.",
+  orientation: "Orientation",
+  alignTo: "Align to",
+  page: "Page",
+  path: "Path",
+  easing: "Easing",
+  shape: "Shape",
+  strength: "Strength (0 = none)",
+  independentColour: "Independent colour acceleration",
+  colour: "Colour",
+  colourStrength: "Colour strength",
+  spine: "Spine",
+  reverseSpineCheck: "Reverse spine (the shapes swap ends)",
+  reverseOrderCheck: "Reverse front to back (paint order only)",
+  fitToArtboard: "Keep intermediates on the page",
+  empty: "No blends yet. Select two objects and choose + Blend.",
+  updateHint:
+    "Rebuild with the settings above and the key objects' current shapes",
+  update: "Update",
+  spineHint: "Use the selected path (not part of this blend) as the spine",
+  reverseSpine: "Reverse spine",
+  reverseSpineHint: "Travel the spine the other way (geometry moves)",
+  reverseOrder: "Reverse front to back",
+  reverseOrderHint: "Flip paint order (nothing moves)",
+  keysHint: "Select the key objects — edit them, then Update",
+  keys: "Keys",
+  expandHint: "Stop tracking and keep every intermediate as ordinary artwork",
+  expand: "Expand",
+  releaseHint: "Remove the intermediates and keep the key objects",
+  release: "Release",
+  title: "Blend options",
+});
 
 export const BLEND_PANEL_ID = "media.paged.draw.panel.blend";
 
 /** What the panel is for, in one sentence (shown at the top). */
-export const BLEND_SUMMARY =
-  "Fill the space between two selected objects with intermediate shapes " +
-  "that change step by step in shape and colour.";
+export const BLEND_SUMMARY = M.summary;
 
 /** The "About" text. Exported so the conformance spec pins the wording. */
-export const BLEND_PANEL_NOTE =
-  "A blend makes real intermediate shapes and remembers how it built " +
-  "them. Editing a key object does not change the intermediates until " +
-  "you choose Update. The step count shown under Spacing is worked out " +
-  "from the settings; the artwork is only rebuilt when you build or " +
-  "update. The intermediates follow a straight line between the two " +
-  "objects unless you replace it with a path of your own (Spine): that " +
-  "path keeps its own colour and stays outside the blend's group, so you " +
-  "can still edit it. Reverse spine swaps which end each shape travels " +
-  "to; reverse front to back only changes which shapes paint on top. " +
-  "Building, updating, reversing, expanding and releasing are one undo " +
-  "step each; the saved settings are kept outside undo.";
+export const BLEND_PANEL_NOTE = M.note;
 
 /** Why "+ Blend" is unavailable, or null when it is available. */
 export function blendMakeBlocker(selected: number): string | null {
   if (selected === 2) return null;
   return selected === 0
-    ? "Select two objects to blend"
-    : `Select exactly two objects to blend (${selected} selected)`;
+    ? t(M.selectTwo)
+    : t(M.selectExactlyTwo, { count: selected });
 }
 
 /** Human labels for the spacing modes. */
 const SPACING_LABELS: Readonly<Record<BlendSpacing, string>> = {
-  smoothColor: "Smooth colour",
-  steps: "Specified steps",
-  distance: "Specified distance",
+  smoothColor: M.smoothColor,
+  steps: M.specifiedSteps,
+  distance: M.specifiedDistance,
 };
 
 const rowStyle: React.CSSProperties = {
@@ -147,16 +200,16 @@ export function blendRowLabel(record: BlendRecord, placed: number): string {
   const p = record.params;
   const asked =
     p.spacing === "steps"
-      ? `${p.steps} steps`
+      ? t(M.rowSteps, { count: p.steps })
       : p.spacing === "distance"
-        ? `every ${p.distancePt} pt`
-        : "smooth colour";
+        ? t(M.rowEvery, { distance: p.distancePt })
+        : t(M.rowSmooth);
   return (
-    `${asked}${record.spine ? " · replaced spine" : ""}` +
-    `${p.orientation === "path" ? " · aligned" : ""}` +
-    `${p.reverseSpine ? " · reversed spine" : ""}` +
-    `${p.reverseFrontToBack ? " · reversed order" : ""} ` +
-    `(${placed} intermediate${placed === 1 ? "" : "s"} placed)`
+    `${asked}${record.spine ? t(M.rowReplacedSpine) : ""}` +
+    `${p.orientation === "path" ? t(M.rowAligned) : ""}` +
+    `${p.reverseSpine ? t(M.rowReversedSpine) : ""}` +
+    `${p.reverseFrontToBack ? t(M.rowReversedOrder) : ""} ` +
+    t(M.rowPlaced, { count: placed })
   );
 }
 
@@ -166,6 +219,7 @@ export function makeBlendPanel(host: BundleHost): {
   defaultDock: "right";
 } {
   const Component: React.FC<PanelProps> = () => {
+    const s = useStrings();
     const [records, setRecords] = React.useState<BlendRecord[]>([]);
     const [active, setActive] = React.useState<string | null>(null);
     const [placed, setPlaced] = React.useState<Record<string, number>>({});
@@ -267,22 +321,20 @@ export function makeBlendPanel(host: BundleHost): {
         data-draw-blend-portable={portable ? "true" : "false"}
         data-draw-blend-active={active ?? ""}
       >
-        <PanelIntro summary={BLEND_SUMMARY} attr="data-draw-blend-intro" />
+        <PanelIntro summary={s.t(BLEND_SUMMARY)} attr="data-draw-blend-intro" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
-            Blends ({records.length})
+            {s.t(M.heading)} ({records.length})
           </span>
           <button
             type="button"
             style={iconBtn}
-            title={
-              blendMakeBlocker(selected) ?? "Blend the two selected objects"
-            }
+            title={blendMakeBlocker(selected) ?? s.t(M.blendTwo)}
             data-draw-blend-make
             disabled={blendMakeBlocker(selected) !== null}
             onClick={() => void run(() => applyMakeBlend(host, { ...draft }))}
           >
-            + Blend
+            {s.t(M.plusBlend)}
           </button>
         </div>
 
@@ -296,14 +348,13 @@ export function makeBlendPanel(host: BundleHost): {
 
         {!portable && (
           <div style={mutedStyle} data-draw-blend-degraded>
-            This editor cannot save data into the document, so blend settings
-            are not kept. A blend can still be expanded or released.
+            {s.t(M.degraded)}
           </div>
         )}
 
-        <div style={sectionStyle}>Spacing</div>
+        <div style={sectionStyle}>{s.t(M.spacing)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Mode</span>
+          <span style={{ flex: 1 }}>{s.t(M.mode)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-blend-spacing
@@ -314,21 +365,21 @@ export function makeBlendPanel(host: BundleHost): {
           >
             {BLEND_SPACINGS.map((s) => (
               <option key={s} value={s}>
-                {SPACING_LABELS[s]}
+                {t(SPACING_LABELS[s])}
               </option>
             ))}
           </select>
         </div>
         {draft.spacing === "steps" &&
           numberRow(
-            "Steps",
+            s.t(M.steps),
             draft.steps,
             (n) => setDraft({ ...draft, steps: n }),
             "steps",
           )}
         {draft.spacing === "distance" &&
           numberRow(
-            "Distance (pt)",
+            s.t(M.distance),
             draft.distancePt,
             (n) => setDraft({ ...draft, distancePt: n }),
             "distancePt",
@@ -336,16 +387,16 @@ export function makeBlendPanel(host: BundleHost): {
         <div style={mutedStyle} data-draw-blend-preview={preview.steps}>
           {draft.spacing === "steps"
             ? preview.steps > 0
-              ? `${preview.steps} intermediate step${preview.steps === 1 ? "" : "s"}.`
-              : `Too many steps: at most ${BLEND_MAX_STEPS}.`
+              ? s.t(M.previewSteps, { count: preview.steps })
+              : s.t(M.tooMany, { max: BLEND_MAX_STEPS })
             : draft.spacing === "distance"
-              ? "The step count is measured along the spine when you build."
-              : "The step count comes from the colour difference between the two objects when you build."}
+              ? s.t(M.measuredAlongSpine)
+              : s.t(M.fromColour)}
         </div>
 
-        <div style={sectionStyle}>Orientation</div>
+        <div style={sectionStyle}>{s.t(M.orientation)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Align to</span>
+          <span style={{ flex: 1 }}>{s.t(M.alignTo)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-blend-orientation
@@ -359,15 +410,15 @@ export function makeBlendPanel(host: BundleHost): {
           >
             {BLEND_ORIENTATIONS.map((o) => (
               <option key={o} value={o}>
-                {o === "page" ? "Page" : "Path"}
+                {o === "page" ? s.t(M.page) : s.t(M.path)}
               </option>
             ))}
           </select>
         </div>
 
-        <div style={sectionStyle}>Easing</div>
+        <div style={sectionStyle}>{s.t(M.easing)}</div>
         <div style={rowStyle}>
-          <span style={{ flex: 1 }}>Shape</span>
+          <span style={{ flex: 1 }}>{s.t(M.shape)}</span>
           <select
             style={{ font: `12px ${font.sans}` }}
             data-draw-blend-easing
@@ -378,20 +429,20 @@ export function makeBlendPanel(host: BundleHost): {
           >
             {EASE_KINDS.map((k) => (
               <option key={k} value={k}>
-                {humanize(k)}
+                {tokenLabel(k)}
               </option>
             ))}
           </select>
         </div>
         {numberRow(
-          "Strength (0 = none)",
+          s.t(M.strength),
           draft.easingStrength,
           (n) => setDraft({ ...draft, easingStrength: n }),
           "easingStrength",
           0.1,
         )}
         {checkRow(
-          "Independent colour acceleration",
+          s.t(M.independentColour),
           draft.colorEasing !== null,
           (b) => setDraft({ ...draft, colorEasing: b ? "easeIn" : null }),
           "independentColor",
@@ -399,7 +450,7 @@ export function makeBlendPanel(host: BundleHost): {
         {draft.colorEasing !== null && (
           <>
             <div style={rowStyle}>
-              <span style={{ flex: 1 }}>Colour</span>
+              <span style={{ flex: 1 }}>{s.t(M.colour)}</span>
               <select
                 style={{ font: `12px ${font.sans}` }}
                 data-draw-blend-color-easing
@@ -413,13 +464,13 @@ export function makeBlendPanel(host: BundleHost): {
               >
                 {EASE_KINDS.map((k) => (
                   <option key={k} value={k}>
-                    {humanize(k)}
+                    {tokenLabel(k)}
                   </option>
                 ))}
               </select>
             </div>
             {numberRow(
-              "Colour strength",
+              s.t(M.colourStrength),
               draft.colorEasingStrength,
               (n) => setDraft({ ...draft, colorEasingStrength: n }),
               "colorEasingStrength",
@@ -428,30 +479,28 @@ export function makeBlendPanel(host: BundleHost): {
           </>
         )}
 
-        <div style={sectionStyle}>Spine</div>
+        <div style={sectionStyle}>{s.t(M.spine)}</div>
         {checkRow(
-          "Reverse spine (the shapes swap ends)",
+          s.t(M.reverseSpineCheck),
           draft.reverseSpine,
           (b) => setDraft({ ...draft, reverseSpine: b }),
           "reverseSpine",
         )}
         {checkRow(
-          "Reverse front to back (paint order only)",
+          s.t(M.reverseOrderCheck),
           draft.reverseFrontToBack,
           (b) => setDraft({ ...draft, reverseFrontToBack: b }),
           "reverseFrontToBack",
         )}
         {checkRow(
-          "Keep intermediates on the page",
+          s.t(M.fitToArtboard),
           draft.fitToArtboard,
           (b) => setDraft({ ...draft, fitToArtboard: b }),
           "fitToArtboard",
         )}
 
         {records.length === 0 ? (
-          <div style={mutedStyle}>
-            No blends yet. Select two objects and choose + Blend.
-          </div>
+          <div style={mutedStyle}>{s.t(M.empty)}</div>
         ) : (
           records.map((record) => (
             <div key={record.id} data-draw-blend-row={record.id}>
@@ -471,7 +520,7 @@ export function makeBlendPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Rebuild with the settings above and the key objects' current shapes"
+                  title={s.t(M.updateHint)}
                   data-draw-blend-update
                   onClick={() =>
                     void run(() =>
@@ -479,12 +528,12 @@ export function makeBlendPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Update
+                  {s.t(M.update)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Use the selected path (not part of this blend) as the spine"
+                  title={s.t(M.spineHint)}
                   data-draw-blend-spine
                   onClick={() =>
                     void run(() =>
@@ -492,12 +541,12 @@ export function makeBlendPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Spine
+                  {s.t(M.spine)}
                 </button>
                 <IconButton
-                  label="Reverse spine"
+                  label={s.t(M.reverseSpine)}
                   style={iconBtn}
-                  title="Travel the spine the other way (geometry moves)"
+                  title={s.t(M.reverseSpineHint)}
                   data-draw-blend-reverse-spine
                   onClick={() =>
                     void run(() =>
@@ -508,9 +557,9 @@ export function makeBlendPanel(host: BundleHost): {
                   ⇄
                 </IconButton>
                 <IconButton
-                  label="Reverse front to back"
+                  label={s.t(M.reverseOrder)}
                   style={iconBtn}
-                  title="Flip paint order (nothing moves)"
+                  title={s.t(M.reverseOrderHint)}
                   data-draw-blend-reverse-order
                   onClick={() =>
                     void run(() =>
@@ -523,7 +572,7 @@ export function makeBlendPanel(host: BundleHost): {
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Select the key objects — edit them, then Update"
+                  title={s.t(M.keysHint)}
                   data-draw-blend-select
                   onClick={() =>
                     void run(() =>
@@ -531,12 +580,12 @@ export function makeBlendPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Keys
+                  {s.t(M.keys)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Stop tracking and keep every intermediate as ordinary artwork"
+                  title={s.t(M.expandHint)}
                   data-draw-blend-expand
                   onClick={() =>
                     void run(() =>
@@ -544,12 +593,12 @@ export function makeBlendPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Expand
+                  {s.t(M.expand)}
                 </button>
                 <button
                   type="button"
                   style={iconBtn}
-                  title="Remove the intermediates and keep the key objects"
+                  title={s.t(M.releaseHint)}
                   data-draw-blend-release
                   onClick={() =>
                     void run(() =>
@@ -557,7 +606,7 @@ export function makeBlendPanel(host: BundleHost): {
                     )
                   }
                 >
-                  Release
+                  {s.t(M.release)}
                 </button>
               </div>
               <div style={mutedStyle}>
@@ -567,12 +616,12 @@ export function makeBlendPanel(host: BundleHost): {
           ))
         )}
 
-        <About attr="data-draw-blend-note">{BLEND_PANEL_NOTE}</About>
+        <About attr="data-draw-blend-note">{s.t(BLEND_PANEL_NOTE)}</About>
       </div>
     );
   };
   return {
-    title: "Blend options",
+    title: t(M.title),
     component: Component,
     defaultDock: "right",
   };

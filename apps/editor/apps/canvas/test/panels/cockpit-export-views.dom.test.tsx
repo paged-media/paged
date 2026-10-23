@@ -36,10 +36,7 @@ import {
   ExportInspectorPanel,
   OutputsPanel,
 } from "../../src/panels/cockpit/export-views";
-import {
-  setImageSettings,
-  setSelectedExportTarget,
-} from "../../src/panels/cockpit/export-targets";
+import { setSelectedExportTarget } from "../../src/panels/cockpit/export-targets";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 import {
   action,
@@ -51,14 +48,16 @@ import {
 let capture: ReturnType<typeof captureDownloads>;
 
 beforeEach(() => {
-  setSelectedExportTarget("pdf-x4");
-  setImageSettings({
-    dpi: 72,
-    scope: "all",
-    format: "png",
-    quality: 0.9,
-    range: "",
-  });
+  localStorage.setItem(
+    "paged.export.image.v1",
+    JSON.stringify({
+      dpi: 72,
+      scope: "all",
+      format: "png",
+      quality: 0.9,
+      range: "",
+    }),
+  );
   capture = captureDownloads();
 });
 afterEach(() => {
@@ -223,7 +222,7 @@ describe("Export inspector", () => {
       "No document",
     );
     expect(action(h.root, "export-inspector-run").disabled).toBe(true);
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     expect(action(h.root, "export-inspector-run-image").disabled).toBe(true);
     expect((settings(h, "dpi") as HTMLSelectElement).disabled).toBe(true);
   });
@@ -231,7 +230,7 @@ describe("Export inspector", () => {
   test("an honest output: Coming soon and its note, no run action", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount();
-    await h.act(() => setSelectedExportTarget("web"));
+    await h.act(() => setSelectedExportTarget(h.scope, "web"));
     expect(pill(h.root, "export-inspector-readiness")?.text).toBe(
       "Coming soon",
     );
@@ -244,7 +243,7 @@ describe("Export inspector", () => {
   test("Page images: every setting changes what the run sends", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount(linksDocument());
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     expect(
       [...(settings(h, "dpi") as HTMLSelectElement).options].map(
         (o) => o.value,
@@ -269,7 +268,7 @@ describe("Export inspector", () => {
   test("Format JPEG offers a quality; PNG does not", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount();
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     expect(settings(h, "quality")).toBeNull();
     await h.choose(settings(h, "format")!, "jpeg");
     expect(
@@ -286,7 +285,7 @@ describe("Export inspector", () => {
   test("Pages: a range exports only the pages it names", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount(linksDocument());
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     expect(settings(h, "range")).toBeNull();
     await h.choose(settings(h, "scope")!, "range");
     await h.user.type(settings(h, "range")!, "2");
@@ -305,7 +304,7 @@ describe("Export inspector", () => {
   test("Pages: a range that names no page is refused and says why, nothing renders", async () => {
     covers("panel:paged.export-inspector");
     const h = await mount(linksDocument());
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     await h.choose(settings(h, "scope")!, "range");
     await h.user.type(settings(h, "range")!, "9-12");
     await h.settle();
@@ -324,7 +323,7 @@ describe("Export inspector", () => {
     const h = await mount(linksDocument());
     await h.act(() => h.client.setActivePage("cp2"));
     expect((await h.client.documentMeta()).activePage).toBe("cp2");
-    await h.act(() => setSelectedExportTarget("image"));
+    await h.act(() => setSelectedExportTarget(h.scope, "image"));
     await h.choose(settings(h, "scope")!, "current");
     const from = h.mark();
     await h.click(action(h.root, "export-inspector-run-image"));

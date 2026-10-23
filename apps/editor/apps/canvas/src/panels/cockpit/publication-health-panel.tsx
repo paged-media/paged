@@ -34,7 +34,7 @@ import {
   CockpitPanelHeader,
   CockpitSection,
   Icon,
-  cockpitActions,
+  useCockpitActions,
   MetricTile,
   StatusPill,
   printOutputFacts,
@@ -48,6 +48,33 @@ import type { FontSummary, LinkSummary } from "@paged-media/client";
 import { exportReadiness, exportTargetById } from "./export-targets";
 
 import { severityCounts, usePreflightFindings } from "./preflight-findings";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.cockpitPublicationHealthPanel", {
+  oversetStories: "Overset stories",
+  showOversetStories: "Show the overset stories",
+  missingLinks: "Missing links",
+  showMissingLinks: "Show the missing links",
+  lowRes: "Low-res images",
+  showLowRes: "Show the low-res images",
+  missingFonts: "Missing fonts",
+  showMissingFonts: "Show the missing fonts",
+  preflightFindings: "Preflight findings",
+  showPreflightFindings: "Show the preflight findings",
+  title: "Publication health",
+  document: "Document",
+  pages: "Pages",
+  stories: "Stories",
+  frames: "Frames",
+  glyphs: "Glyphs",
+  placedLinks: "Placed links",
+  colorMode: "Color mode",
+  risks: "Risks",
+  risksNote:
+    "Preflight findings populate after Prepress ▸ Validate output; the " +
+    "other counts read live from the document.",
+  notWired: "This risk's data source isn't wired yet",
+});
 
 /** Low-res convention — screen/preflight floor below which a placed
  *  image is flagged. The print floor is 300 ppi; 150 is the editor's
@@ -57,6 +84,8 @@ const LOW_RES_PPI = 150;
 interface RiskRow {
   key: string;
   label: string;
+  /** The tooltip of a row with findings, which opens them. */
+  show: string;
   /** The panel that lists this risk's findings, opened by the row. */
   panel: string;
   /** `null` when the data source for this risk isn't available yet
@@ -65,6 +94,7 @@ interface RiskRow {
 }
 
 export function PublicationHealthPanel() {
+  const strings = useStrings();
   const client = useCanvasClient();
   const meta = useDocumentMeta();
   const stats = useDocumentStats();
@@ -99,31 +129,36 @@ export function PublicationHealthPanel() {
   const riskRows: RiskRow[] = [
     {
       key: "overset",
-      label: "Overset stories",
+      label: strings.t(M.oversetStories),
+      show: strings.t(M.showOversetStories),
       count: oversetStories,
       panel: "paged.stories",
     },
     {
       key: "missing-links",
-      label: "Missing links",
+      label: strings.t(M.missingLinks),
+      show: strings.t(M.showMissingLinks),
       count: missingLinks,
       panel: "paged.links",
     },
     {
       key: "low-res",
-      label: "Low-res images",
+      label: strings.t(M.lowRes),
+      show: strings.t(M.showLowRes),
       count: lowRes,
       panel: "paged.links",
     },
     {
       key: "fonts",
-      label: "Missing fonts",
+      label: strings.t(M.missingFonts),
+      show: strings.t(M.showMissingFonts),
       count: missingFonts,
       panel: "paged.fonts",
     },
     {
       key: "preflight",
-      label: "Preflight findings",
+      label: strings.t(M.preflightFindings),
+      show: strings.t(M.showPreflightFindings),
       count: preflightCount,
       panel: "paged.preflight",
     },
@@ -132,7 +167,7 @@ export function PublicationHealthPanel() {
   return (
     <div data-publication-health style={{ overflowY: "auto", height: "100%" }}>
       <CockpitPanelHeader
-        title="Publication health"
+        title={strings.t(M.title)}
         action={
           loaded ? (
             <StatusPill
@@ -145,7 +180,7 @@ export function PublicationHealthPanel() {
           ) : undefined
         }
       />
-      <CockpitSection title="Document">
+      <CockpitSection title={strings.t(M.document)}>
         <div
           style={{
             display: "grid",
@@ -154,32 +189,32 @@ export function PublicationHealthPanel() {
           }}
         >
           <MetricTile
-            label="Pages"
+            label={strings.t(M.pages)}
             value={loaded ? String(meta.pageCount) : "—"}
           />
           <MetricTile
-            label="Stories"
+            label={strings.t(M.stories)}
             value={stats ? String(stats.stories) : "—"}
           />
           <MetricTile
-            label="Frames"
+            label={strings.t(M.frames)}
             value={stats ? String(stats.frames) : "—"}
           />
           <MetricTile
-            label="Glyphs"
+            label={strings.t(M.glyphs)}
             value={stats ? String(stats.glyphs) : "—"}
           />
           <MetricTile
-            label="Placed links"
+            label={strings.t(M.placedLinks)}
             value={links ? String(links.length) : "—"}
           />
           <MetricTile
-            label="Color mode"
+            label={strings.t(M.colorMode)}
             value={meta?.colorMode ? meta.colorMode.toUpperCase() : "—"}
           />
         </div>
       </CockpitSection>
-      <CockpitSection title="Risks">
+      <CockpitSection title={strings.t(M.risks)}>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {riskRows.map((r) => (
             <RiskRowView key={r.key} row={r} />
@@ -188,8 +223,7 @@ export function PublicationHealthPanel() {
             className="pg-ui-xs"
             style={{ paddingTop: 8, lineHeight: 1.45 }}
           >
-            Preflight findings populate after Prepress ▸ Validate output; the
-            other counts read live from the document.
+            {strings.t(M.risksNote)}
           </span>
         </div>
       </CockpitSection>
@@ -198,6 +232,8 @@ export function PublicationHealthPanel() {
 }
 
 function RiskRowView({ row }: { row: RiskRow }) {
+  const cockpitActions = useCockpitActions();
+  const strings = useStrings();
   const seam = row.count == null;
   const clean = row.count === 0;
   const danger = (row.count ?? 0) > 0;
@@ -250,7 +286,7 @@ function RiskRowView({ row }: { row: RiskRow }) {
       <button
         type="button"
         {...common}
-        title={`Show the ${row.label.toLowerCase()}`}
+        title={row.show}
         onClick={() => cockpitActions.openPanel?.(row.panel)}
         style={{
           ...common.style,
@@ -268,10 +304,7 @@ function RiskRowView({ row }: { row: RiskRow }) {
       </button>
     );
   return (
-    <div
-      {...common}
-      title={seam ? "This risk's data source isn't wired yet" : `${row.count}`}
-    >
+    <div {...common} title={seam ? strings.t(M.notWired) : `${row.count}`}>
       {content}
     </div>
   );

@@ -7,6 +7,7 @@ mod automation;
 mod barcode;
 mod batch_run;
 mod bind;
+mod catalogue;
 mod decimal_scale;
 mod expr_engine;
 mod expr_format;

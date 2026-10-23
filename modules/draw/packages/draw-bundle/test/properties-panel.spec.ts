@@ -32,7 +32,7 @@ import { fillPanel } from "../src/panels/fill-panel";
 import {
   DRAW_PANEL_FIELDS,
   DRAW_PANEL_ITEM_ROWS,
-  DRAW_PROPERTIES_PANEL,
+  drawPropertiesPanel,
   DRAW_PROPERTIES_PANEL_ID,
 } from "../src/panels/properties-panel";
 import { strokePanel } from "../src/panels/stroke-panel";
@@ -66,7 +66,7 @@ const CORE_STROKE_FILL = [
 describe("draw panels — property rows (ADR 323)", () => {
   it("the properties panel validates (own-plugin kinds, paths on the manifest schemas)", () => {
     expect(
-      validatePanelSchema(DRAW_PROPERTIES_PANEL, {
+      validatePanelSchema(drawPropertiesPanel(), {
         pluginId: manifest.id,
         schemaOf,
       }),
@@ -75,13 +75,13 @@ describe("draw panels — property rows (ADR 323)", () => {
   // Core-path rows: no `pluginId` (the validator then reads a kind-less
   // "selection" row as a plugin property); core kinds have no schemaOf.
   it.each(
-    [strokePanel.schema, fillPanel.schema].map((p) => [p.id, p] as const),
+    [strokePanel().schema, fillPanel().schema].map((p) => [p.id, p] as const),
   )("%s validates", (_id, p: PanelSchema) => {
     expect(validatePanelSchema(p, { schemaOf })).toEqual([]);
   });
 
   it("stroke + fill edit every core path through a selection property row (no selectionProperty widget left)", () => {
-    const rows = [strokePanel.schema, fillPanel.schema].flatMap((p) =>
+    const rows = [strokePanel().schema, fillPanel().schema].flatMap((p) =>
       propertyRowsOf(p).map((r) => r.field),
     );
     expect(
@@ -90,7 +90,7 @@ describe("draw panels — property rows (ADR 323)", () => {
     expect(rows.map((r) => r.path).sort()).toEqual(
       [...CORE_STROKE_FILL].sort(),
     );
-    const widgets = [strokePanel.schema, fillPanel.schema].flatMap((p) =>
+    const widgets = [strokePanel().schema, fillPanel().schema].flatMap((p) =>
       p.sections.flatMap((s) => s.rows),
     );
     expect(widgets.some((r) => r.value?.kind === "selectionProperty")).toBe(
@@ -111,7 +111,7 @@ describe("draw panels — property rows (ADR 323)", () => {
       );
       expect([...listed, ...items].sort(), k.kind).toEqual(writable(k).sort());
     }
-    const declared = propertyRowsOf(DRAW_PROPERTIES_PANEL).map(
+    const declared = propertyRowsOf(drawPropertiesPanel()).map(
       (r) => `${r.field.kind!.slice(PREFIX.length)}.${r.field.path}`,
     );
     const expected = Object.entries(DRAW_PANEL_FIELDS).flatMap(([k, ps]) =>
@@ -121,7 +121,7 @@ describe("draw panels — property rows (ADR 323)", () => {
   });
 
   it("each documented item row is an item (field) of a list row the panel declares with items", () => {
-    const rows = propertyRowsOf(DRAW_PROPERTIES_PANEL).map((r) => r.field);
+    const rows = propertyRowsOf(drawPropertiesPanel()).map((r) => r.field);
     for (const [row, { via }] of Object.entries(DRAW_PANEL_ITEM_ROWS)) {
       const [kind, path] = [
         row.slice(0, row.indexOf(".")),
@@ -139,7 +139,7 @@ describe("draw panels — property rows (ADR 323)", () => {
 
   it("list and struct rows carry their presentation (stacks top-first, point items, overlap fields)", () => {
     const row = (kind: string, path: string) =>
-      propertyRowsOf(DRAW_PROPERTIES_PANEL).find(
+      propertyRowsOf(drawPropertiesPanel()).find(
         (r) => r.field.kind === `${PREFIX}${kind}` && r.field.path === path,
       )!.field;
     for (const k of ["appearance", "graphicStyle"])
@@ -165,7 +165,7 @@ describe("draw panels — property rows (ADR 323)", () => {
     expect(manifest.contributes.panels).toContain(DRAW_PROPERTIES_PANEL_ID);
     // Vector stroke / Vector fill: merged into the host's Stroke, Object
     // Options and Gradients panels; their schemas stay exported only.
-    for (const id of [strokePanel.id, fillPanel.id]) {
+    for (const id of [strokePanel().id, fillPanel().id]) {
       expect(manifest.contributes.panels).not.toContain(id);
     }
   });

@@ -23,6 +23,8 @@
 // proxy at /api/ai (ADR 221), which holds the key. Nothing here talks to
 // Anthropic directly — the CSP would refuse it anyway (ADR 218).
 
+import { t } from "@paged-media/strings";
+import { AI } from "./messages";
 import {
   complete,
   createProxyTransport,
@@ -133,16 +135,14 @@ export function describeAiError(err: unknown): string {
     message?: string;
   };
   if (e?.name === "AbortError" || e?.name === "APIUserAbortError")
-    return "Stopped.";
+    return t(AI.stopped);
   const type = e?.error?.error?.type;
   const message = e?.error?.error?.message;
   if (e?.status === 503 || type === "ai_unavailable")
-    return message ?? "The AI service is not available on this deployment.";
-  if (e?.status === 429)
-    return message ?? "Too many AI requests right now. Try again shortly.";
-  if (e?.status === 529)
-    return "Claude is overloaded right now. Try again shortly.";
-  if (e?.status === 404) return "This deployment has no AI service.";
+    return message ?? t(AI.serviceUnavailable);
+  if (e?.status === 429) return message ?? t(AI.tooManyRequests);
+  if (e?.status === 529) return t(AI.overloaded);
+  if (e?.status === 404) return t(AI.noService);
   return message ?? e?.message ?? String(err);
 }
 

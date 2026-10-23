@@ -43,6 +43,7 @@
 // scaled, so a point on the canvas does not name one place in the layout
 // the inspected render reads.
 
+import { defineMessages, t } from "@paged-media/strings";
 import type {
   BundleHost,
   ElementId,
@@ -71,6 +72,11 @@ import type { DraftSession } from "./panels/draft-store";
 import { contentToPage, reportCanvasPick } from "./outline-highlight";
 import { overlayChannel } from "./overlay-channel";
 import { loadWebSource, writeWebSource } from "./source-part";
+
+const M = defineMessages("web.inFrame", {
+  notSaved: "the edit was not saved: {reason}",
+  documentRefused: "the document refused it",
+});
 
 /** Debounce between a keystroke and the frame's re-render, ms. */
 export const IN_FRAME_RENDER_MS = 80;
@@ -474,9 +480,7 @@ export function createInFrameEditSession(
       if (!next || next.html === prev.html) return false;
       const out = await writeWebSource(host, frame.id, next);
       if (!out.applied) {
-        note(
-          `the edit was not saved: ${out.reason ?? "the document refused it"}`,
-        );
+        note(t(M.notSaved, { reason: out.reason ?? t(M.documentRefused) }));
         await submit(frame.base.layer);
         return false;
       }

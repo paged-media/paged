@@ -2,9 +2,8 @@
   {
     "path": "index",
     "type": { "kind": "number", "integer": true },
-    "access": "derived",
     "title": "Slide number",
-    "summary": "1-based position in the deck (the page index)."
+    "summary": "1-based position in the deck (the page index). Writing it moves the slide there; past the end it goes last."
   },
   {
     "path": "page",

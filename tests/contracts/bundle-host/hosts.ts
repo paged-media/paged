@@ -64,7 +64,6 @@ import type { EditorSecretStore } from "../../../apps/editor/apps/canvas/src/plu
 import type { createEditorDocuments } from "../../../apps/editor/apps/canvas/src/plugin-documents";
 import type { WillSaveRegistry } from "../../../apps/editor/apps/canvas/src/plugin-will-save";
 import type { ProblemEntry } from "../../../apps/editor/apps/canvas/src/panels/problems-store";
-import { resetProblems } from "../../../apps/editor/apps/canvas/src/panels/problems-store";
 import type { ModuleManifest } from "../../../apps/editor/apps/canvas/src/plugin-modules";
 import type { BundleWorkerModuleResolver } from "../../../apps/editor/apps/canvas/src/plugin-worker";
 
@@ -296,7 +295,6 @@ export async function editorAdapter(): Promise<HostUnderTest> {
   const restoreStorage = fakeLocalStorage();
   const restoreOpfs = opfs.install();
   const restoreClipboard = clipboard.install();
-  resetProblems();
   const ed = await createHeadlessEditor({
     blank: [612, 792],
     moduleManifest: PROBE_MODULES,
@@ -352,7 +350,6 @@ export async function editorAdapter(): Promise<HostUnderTest> {
     },
     async dispose() {
       await ed.dispose();
-      resetProblems();
       restoreClipboard();
       restoreOpfs();
       restoreStorage();

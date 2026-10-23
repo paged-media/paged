@@ -41,11 +41,18 @@ import {
   CockpitBtn,
   ObjectFieldFrame,
   useCanvasClient,
+  useEditorScope,
   type ObjectField,
 } from "@paged-media/shell";
 import type { CollectionName, Mutation, Value } from "@paged-media/client";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { openStyleOptions, type StyleFamily } from "./style-options-panel";
+
+const M = defineMessages("app.styleApply", {
+  styleOptions: "Style Options…",
+});
 
 interface StyleRow {
   selfId: string;
@@ -99,6 +106,8 @@ export function StyleApplyPanel({
   newName,
   caret,
 }: StyleApplyPanelProps) {
+  const scope = useEditorScope();
+  const strings = useStrings();
   const client = useCanvasClient();
   const appliedId = caret?.held ?? unwrapAppliedId(applied.value);
   const onCommit = applied.onCommit;
@@ -169,9 +178,9 @@ export function StyleApplyPanel({
           sm
           testId={`${testId}-options`}
           disabled={items.length === 0}
-          onClick={() => openStyleOptions(family, appliedId || null)}
+          onClick={() => openStyleOptions(scope, family, appliedId || null)}
         >
-          Style Options…
+          {strings.t(M.styleOptions)}
         </CockpitBtn>
       </div>
     </ObjectFieldFrame>

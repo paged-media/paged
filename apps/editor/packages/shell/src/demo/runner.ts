@@ -81,7 +81,10 @@ export async function runDemoScript(
 export async function runDemoScriptWithHandle(
   source: string,
   handle: CanvasHandleLike,
+  /** The live handle, read on every call (the editor's debug handle);
+   *  absent, the page's `window.__canvas`. */
+  live?: () => CanvasHandleLike | undefined,
 ): Promise<RunResult> {
   demoResetOverlay();
-  return runDemoScript(source, buildAutomation(handle));
+  return runDemoScript(source, buildAutomation(handle, live ? { live } : {}));
 }

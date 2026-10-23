@@ -1,0 +1,688 @@
+# paged.sheet calculation-model cases, recorded against Excel by
+# sheet-conformance/oracle/excel/calcmodel.py (format documented there).
+# id	kind	address	value
+spill-range	cell	A1	1
+spill-range	cell	A2	2
+spill-range	cell	A3	3
+spill-range	cell	B1	=A1:A3
+spill-range	probe	B1:B4	
+spill-mul	cell	A1	1
+spill-mul	cell	A2	2
+spill-mul	cell	A3	3
+spill-mul	cell	B1	=A1:A3*2
+spill-mul	probe	B1:B4	
+spill-if	cell	A1	1
+spill-if	cell	A2	2
+spill-if	cell	A3	3
+spill-if	cell	B1	=IF(A1:A3>1,A1:A3,0)
+spill-if	probe	B1:B4	
+spill-2d	cell	A1	1
+spill-2d	cell	B1	2
+spill-2d	cell	A2	3
+spill-2d	cell	B2	4
+spill-2d	cell	D1	=A1:B2+10
+spill-2d	probe	D1:F3	
+spill-broadcast	cell	A1	1
+spill-broadcast	cell	A2	2
+spill-broadcast	cell	A3	3
+spill-broadcast	cell	B1	10
+spill-broadcast	cell	C1	20
+spill-broadcast	cell	D1	30
+spill-broadcast	cell	F1	=A1:A3+B1:D1
+spill-broadcast	probe	F1:I4	
+spill-mismatch	cell	A1	1
+spill-mismatch	cell	A2	2
+spill-mismatch	cell	A3	3
+spill-mismatch	cell	B1	10
+spill-mismatch	cell	B2	20
+spill-mismatch	cell	D1	=A1:A3+B1:B2
+spill-mismatch	probe	D1:D4	
+spill-abs	cell	A1	-1
+spill-abs	cell	A2	2
+spill-abs	cell	A3	-3
+spill-abs	cell	B1	=ABS(A1:A3)
+spill-abs	probe	B1:B4	
+spill-len	cell	A1	text:a
+spill-len	cell	A2	text:bb
+spill-len	cell	A3	text:ccc
+spill-len	cell	B1	=LEN(A1:A3)
+spill-len	probe	B1:B4	
+spill-blocked	cell	A1	1
+spill-blocked	cell	A2	2
+spill-blocked	cell	A3	3
+spill-blocked	cell	B2	text:x
+spill-blocked	cell	B1	=A1:A3
+spill-blocked	probe	B1:B3	
+spill-single	cell	A1	1
+spill-single	cell	A2	2
+spill-single	cell	A3	3
+spill-single	cell	B1	=A1:A1
+spill-single	probe	B1:B2	
+spill-index-col	cell	A1	1
+spill-index-col	cell	A2	2
+spill-index-col	cell	A3	3
+spill-index-col	cell	B1	4
+spill-index-col	cell	B2	5
+spill-index-col	cell	B3	6
+spill-index-col	cell	D1	=INDEX(A1:B3,0,2)
+spill-index-col	probe	D1:D4	
+spill-offset	cell	A1	1
+spill-offset	cell	A2	2
+spill-offset	cell	A3	3
+spill-offset	cell	B1	=OFFSET(A1,0,0,3,1)
+spill-offset	probe	B1:B4	
+spill-sum-scalar	cell	A1	1
+spill-sum-scalar	cell	A2	2
+spill-sum-scalar	cell	A3	3
+spill-sum-scalar	cell	B1	=SUM(A1:A3)
+spill-sum-scalar	probe	B1:B2	
+spill-concat	cell	A1	1
+spill-concat	cell	A2	2
+spill-concat	cell	A3	3
+spill-concat	cell	B1	=A1:A3&"x"
+spill-concat	probe	B1:B4	
+spill-compare	cell	A1	1
+spill-compare	cell	A2	2
+spill-compare	cell	A3	3
+spill-compare	cell	B1	=A1:A3=2
+spill-compare	probe	B1:B4	
+spill-neg	cell	A1	1
+spill-neg	cell	A2	2
+spill-neg	cell	A3	3
+spill-neg	cell	B1	=-A1:A3
+spill-neg	probe	B1:B4	
+spill-percent	cell	A1	1
+spill-percent	cell	A2	2
+spill-percent	cell	A3	3
+spill-percent	cell	B1	=A1:A3%
+spill-percent	probe	B1:B4	
+spill-ref-of-spill	cell	A1	1
+spill-ref-of-spill	cell	A2	2
+spill-ref-of-spill	cell	A3	3
+spill-ref-of-spill	cell	B1	=A1:A3*2
+spill-ref-of-spill	cell	C1	=SUM(B1#)
+spill-ref-of-spill	probe	C1	
+spill-dependent	cell	A1	1
+spill-dependent	cell	A2	2
+spill-dependent	cell	A3	3
+spill-dependent	cell	B1	=A1:A3*2
+spill-dependent	cell	C1	=B2+1
+spill-dependent	probe	C1	
+spill-blank	cell	A1	1
+spill-blank	cell	A3	3
+spill-blank	cell	B1	=A1:A3
+spill-blank	probe	B1:B3	
+spill-row	cell	A1	1
+spill-row	cell	B1	2
+spill-row	cell	C1	3
+spill-row	cell	A3	=A1:C1*3
+spill-row	probe	A3:D3	
+spill-name	sheet	p_n	
+spill-name	cell	p_n!A1	5
+spill-name	cell	p_n!A2	6
+spill-name	name	cmVals	=p_n!$A$1:$A$2
+spill-name	cell	B1	=cmVals*2
+spill-name	probe	B1:B3	
+spill-if-scalar-cond	cell	A1	1
+spill-if-scalar-cond	cell	A2	2
+spill-if-scalar-cond	cell	A3	3
+spill-if-scalar-cond	cell	B1	=IF(TRUE,A1:A3,0)
+spill-if-scalar-cond	probe	B1:B4	
+spill-iferror	cell	A1	1
+spill-iferror	cell	A2	#DIV/0!
+spill-iferror	cell	A3	3
+spill-iferror	cell	B1	=IFERROR(A1:A3,"e")
+spill-iferror	probe	B1:B4	
+legacy-range-row	cell	A1	1
+legacy-range-row	cell	A2	2
+legacy-range-row	cell	A3	3
+legacy-range-row	legacy	B2	=A1:A3
+legacy-range-row	probe	B2:B3	
+legacy-range-outside	cell	A1	1
+legacy-range-outside	cell	A2	2
+legacy-range-outside	cell	A3	3
+legacy-range-outside	legacy	B5	=A1:A3
+legacy-range-outside	probe	B5	
+legacy-mul	cell	A1	1
+legacy-mul	cell	A2	2
+legacy-mul	cell	A3	3
+legacy-mul	legacy	B2	=A1:A3*2
+legacy-mul	probe	B2:B3	
+legacy-row-range	cell	A1	1
+legacy-row-range	cell	B1	2
+legacy-row-range	cell	C1	3
+legacy-row-range	legacy	B3	=A1:C1
+legacy-row-range	probe	B3:C3	
+legacy-sum	cell	A1	1
+legacy-sum	cell	A2	2
+legacy-sum	cell	A3	3
+legacy-sum	legacy	B2	=SUM(A1:A3)
+legacy-sum	probe	B2	
+legacy-if	cell	A1	1
+legacy-if	cell	A2	2
+legacy-if	cell	A3	3
+legacy-if	legacy	B2	=IF(A1:A3>1,"y","n")
+legacy-if	probe	B2:B3	
+legacy-abs	cell	A1	-1
+legacy-abs	cell	A2	-2
+legacy-abs	cell	A3	-3
+legacy-abs	legacy	B3	=ABS(A1:A3)
+legacy-abs	probe	B3:B4	
+legacy-2d-inside-cols	cell	A1	1
+legacy-2d-inside-cols	cell	B1	2
+legacy-2d-inside-cols	cell	A2	3
+legacy-2d-inside-cols	cell	B2	4
+legacy-2d-inside-cols	legacy	D2	=A1:B2
+legacy-2d-inside-cols	probe	D2	
+at-range	cell	A1	1
+at-range	cell	A2	2
+at-range	cell	A3	3
+at-range	cell	B2	=@(A1:A3)
+at-range	probe	B2:B3	
+at-range-outside	cell	A1	1
+at-range-outside	cell	A2	2
+at-range-outside	cell	A3	3
+at-range-outside	cell	B5	=@(A1:A3)
+at-range-outside	probe	B5	
+at-row	cell	A1	1
+at-row	cell	B1	2
+at-row	cell	C1	3
+at-row	cell	B4	=@(A1:C1)
+at-row	probe	B4	
+at-scalar	cell	A1	1
+at-scalar	cell	A2	2
+at-scalar	cell	A3	3
+at-scalar	cell	B1	=@(A3)
+at-scalar	probe	B1	
+at-arith	cell	A1	1
+at-arith	cell	A2	2
+at-arith	cell	A3	3
+at-arith	cell	B2	=@(A1:A3)*10
+at-arith	probe	B2:B3	
+at-2d	cell	A1	1
+at-2d	cell	B1	2
+at-2d	cell	A2	3
+at-2d	cell	B2	4
+at-2d	cell	C2	=@(A1:B2)
+at-2d	probe	C2	
+at-sequence	cell	B1	=@(SEQUENCE(3))
+at-sequence	probe	B1:B2	
+at-array-literal	cell	B1	=@({7,8,9})
+at-array-literal	probe	B1:C1	
+3d-sum	sheet	p_a	
+3d-sum	sheet	p_b	
+3d-sum	sheet	p_c	
+3d-sum	cell	p_a!A1	1
+3d-sum	cell	p_b!A1	2
+3d-sum	cell	p_c!A1	4
+3d-sum	cell	p_a!A2	10
+3d-sum	cell	p_b!A2	20
+3d-sum	cell	p_c!A2	text:t
+3d-sum	cell	B1	=SUM(p_a:p_c!A1)
+3d-sum	cell	B2	=SUM(p_a:p_c!A1:A2)
+3d-sum	cell	B3	=SUM(p_a:p_b!A1)
+3d-sum	cell	B4	=COUNT(p_a:p_c!A1:A2)
+3d-sum	cell	B5	=COUNTA(p_a:p_c!A1:A2)
+3d-sum	cell	B6	=AVERAGE(p_a:p_c!A1)
+3d-sum	cell	B7	=MAX(p_a:p_c!A1:A2)
+3d-sum	cell	B8	=MIN(p_a:p_c!A1)
+3d-sum	cell	B9	=PRODUCT(p_a:p_c!A1)
+3d-sum	cell	B10	=STDEV(p_a:p_c!A1)
+3d-sum	cell	B11	=VAR.P(p_a:p_c!A1)
+3d-sum	cell	B12	=SUM(p_b:p_b!A1)
+3d-sum	cell	B13	=SUM(p_a:p_c!A1,100)
+3d-sum	cell	B14	=AVERAGEA(p_a:p_c!A2)
+3d-sum	probe	B1:B14	
+3d-quoted	sheet	q one	
+3d-quoted	sheet	q two	
+3d-quoted	cell	q one!A1	5
+3d-quoted	cell	q two!A1	7
+3d-quoted	cell	B1	=SUM('q one:q two'!A1)
+3d-quoted	probe	B1	
+3d-other-uses	sheet	r_a	
+3d-other-uses	sheet	r_b	
+3d-other-uses	cell	r_a!A1	1
+3d-other-uses	cell	r_b!A1	2
+3d-other-uses	cell	B1	=r_a:r_b!A1
+3d-other-uses	cell	B2	=r_a:r_b!A1+1
+3d-other-uses	cell	B3	=COUNTIF(r_a:r_b!A1,">0")
+3d-other-uses	cell	B4	=ROWS(r_a:r_b!A1:A3)
+3d-other-uses	cell	B5	=ISREF(r_a:r_b!A1)
+3d-other-uses	probe	B1:B5	
+lambda-named	name	cmAddOne	=LAMBDA(x,x+1)
+lambda-named	name	cmHyp	=LAMBDA(a,b,SQRT(a^2+b^2))
+lambda-named	name	cmFact	=LAMBDA(n,IF(n<=1,1,n*cmFact(n-1)))
+lambda-named	cell	A1	1
+lambda-named	cell	A2	2
+lambda-named	cell	A3	3
+lambda-named	cell	B1	=cmAddOne(41)
+lambda-named	cell	B2	=cmHyp(3,4)
+lambda-named	cell	B3	=cmFact(5)
+lambda-named	cell	B4	=cmAddOne(1,2)
+lambda-named	cell	B5	=cmAddOne
+lambda-named	cell	D1	=cmAddOne(A1:A3)
+lambda-named	probe	B1:B5	
+lambda-named	probe	D1:D4	
+unknown-names	cell	B1	=cmNoSuchFn(1)
+unknown-names	cell	B2	=cmNoSuchName+1
+unknown-names	cell	B3	=ISERROR(cmNoSuchName)
+unknown-names	cell	B4	=IFERROR(cmNoSuchFn(1),"caught")
+unknown-names	cell	B5	=ERROR.TYPE(cmNoSuchName)
+unknown-names	probe	B1:B5	
+circ-self	cell	A1	=A1+1
+circ-self	probe	A1	
+circ-pair	cell	A1	=B1+1
+circ-pair	cell	B1	=A1+1
+circ-pair	probe	A1:B1	
+circ-downstream	cell	A1	=B1+1
+circ-downstream	cell	B1	=A1+1
+circ-downstream	cell	C1	=A1+10
+circ-downstream	probe	A1:C1	
+circ-const	cell	A1	=B1+A2
+circ-const	cell	A2	5
+circ-const	cell	B1	=A1
+circ-const	probe	A1:B1	
+circ-sum	cell	A1	1
+circ-sum	cell	A2	2
+circ-sum	cell	A3	3
+circ-sum	cell	A4	=SUM(A1:A4)
+circ-sum	cell	B4	=A4*2
+circ-sum	probe	A4:B4	
+digits-01	cell	B1	=0.1+0.2=0.3
+digits-01	probe	B1	
+digits-02	cell	B1	=0.1+0.2-0.3
+digits-02	probe	B1	
+digits-03	cell	B1	=1*(0.1+0.2-0.3)
+digits-03	probe	B1	
+digits-04	cell	B1	=(0.1+0.2-0.3)
+digits-04	probe	B1	
+digits-05	cell	B1	=0.5-0.4-0.1
+digits-05	probe	B1	
+digits-06	cell	B1	=1*(0.5-0.4-0.1)
+digits-06	probe	B1	
+digits-07	cell	B1	=0.1+0.2<>0.3
+digits-07	probe	B1	
+digits-08	cell	B1	=0.1+0.2>0.3
+digits-08	probe	B1	
+digits-09	cell	B1	=0.1+0.2<0.3
+digits-09	probe	B1	
+digits-10	cell	B1	=0.1+0.2>=0.3
+digits-10	probe	B1	
+digits-11	cell	B1	=1+1E-15=1
+digits-11	probe	B1	
+digits-12	cell	B1	=1+1E-14=1
+digits-12	probe	B1	
+digits-13	cell	B1	=1+1E-15-1
+digits-13	probe	B1	
+digits-14	cell	B1	=1+2E-16-1
+digits-14	probe	B1	
+digits-15	cell	B1	=10.1-10
+digits-15	probe	B1	
+digits-16	cell	B1	=SUM(0.1,0.2)-0.3
+digits-16	probe	B1	
+digits-17	cell	B1	=SUM(0.1,0.2,-0.3)
+digits-17	probe	B1	
+digits-18	cell	B1	=0.1*3=0.3
+digits-18	probe	B1	
+digits-19	cell	B1	=IF(0.1+0.2=0.3,1,0)
+digits-19	probe	B1	
+digits-20	cell	B1	=0.1*3-0.3
+digits-20	probe	B1	
+digits-21	cell	B1	=-0.3+0.1+0.2
+digits-21	probe	B1	
+digits-22	cell	B1	=1E+15+0.3-1E+15
+digits-22	probe	B1	
+digits-23	cell	B1	=123456789012345+0.4=123456789012345
+digits-23	probe	B1	
+digits-24	cell	B1	=0.3=0.1+0.2
+digits-24	probe	B1	
+digits-25	cell	B1	=2.675-2.67-0.005
+digits-25	probe	B1	
+digits-26	cell	B1	=1-0.9-0.1
+digits-26	probe	B1	
+digits-cells	cell	A1	=0.1+0.2
+digits-cells	cell	A2	0.3
+digits-cells	cell	B1	=A1=A2
+digits-cells	cell	B2	=A1-A2
+digits-cells	cell	B3	=A1-0.3
+digits-cells	cell	B4	=MATCH(A2,A1:A1,0)
+digits-cells	cell	B5	=COUNTIF(A1:A1,A2)
+digits-cells	cell	B6	=VLOOKUP(A2,A1:A1,1,FALSE)
+digits-cells	cell	B7	=XMATCH(A2,A1:A1)
+digits-cells	cell	B8	=SUMIF(A1:A1,A2)
+digits-cells	cell	B9	=EXACT(A1,A2)
+digits-cells	cell	B10	=A1-A2=0
+digits-cells	probe	B1:B10	
+calc-errors	cell	A1	1
+calc-errors	cell	A2	2
+calc-errors	cell	A3	3
+calc-errors	cell	B1	=FILTER(A1:A3,A1:A3>5)
+calc-errors	cell	B2	=SEQUENCE(0)
+calc-errors	cell	B3	=DROP(A1:A3,3)
+calc-errors	cell	B4	=LAMBDA(x,x)
+calc-errors	cell	B5	=ISERROR(SEQUENCE(0))
+calc-errors	cell	B6	=ERROR.TYPE(SEQUENCE(0))
+calc-errors	cell	B7	=IFERROR(FILTER(A1:A3,A1:A3>5),"none")
+calc-errors	probe	B1:B7	
+lazy-values	cell	B1	=IF(TRUE,1,1/0)
+lazy-values	cell	B2	=IFERROR(1,NA())
+lazy-values	cell	B3	=CHOOSE(2,1/0,5)
+lazy-values	cell	B4	=SWITCH(1,1,"a",1/0)
+lazy-values	cell	B5	=IFS(TRUE,1,1/0,2)
+lazy-values	cell	B6	=IFNA(NA(),7)
+lazy-values	cell	B7	=IF(FALSE,1/0)
+lazy-values	cell	B8	=IF(TRUE,,1)
+lazy-values	probe	B1:B8	
+spill2-row-vector	cell	A1	1
+spill2-row-vector	cell	A2	2
+spill2-row-vector	cell	A3	3
+spill2-row-vector	cell	B1	4
+spill2-row-vector	cell	B2	5
+spill2-row-vector	cell	B3	6
+spill2-row-vector	cell	D1	=A1:B3*{10,100}
+spill2-row-vector	probe	D1:F4	
+spill2-outer	cell	A1	1
+spill2-outer	cell	A2	2
+spill2-outer	cell	A3	3
+spill2-outer	cell	C1	=A1:A3>TRANSPOSE(A1:A3)
+spill2-outer	probe	C1:F4	
+spill2-concat-cols	cell	A1	1
+spill2-concat-cols	cell	A2	2
+spill2-concat-cols	cell	A3	3
+spill2-concat-cols	cell	B1	4
+spill2-concat-cols	cell	B2	5
+spill2-concat-cols	cell	B3	6
+spill2-concat-cols	cell	D1	=A1:A3&B1:B3
+spill2-concat-cols	probe	D1:D4	
+spill2-if-blank	cell	A1	1
+spill2-if-blank	cell	A3	3
+spill2-if-blank	cell	B1	=IF(A1:A3="","empty",A1:A3)
+spill2-if-blank	probe	B1:B4	
+spill2-paren-neg	cell	A1	1
+spill2-paren-neg	cell	A2	2
+spill2-paren-neg	cell	A3	3
+spill2-paren-neg	cell	B1	=-(A1:A3)
+spill2-paren-neg	probe	B1:B4	
+spill2-pow	cell	A1	1
+spill2-pow	cell	A2	2
+spill2-pow	cell	A3	3
+spill2-pow	cell	B1	=A1:A3^2
+spill2-pow	probe	B1:B4	
+spill2-round	cell	A1	1
+spill2-round	cell	A2	2
+spill2-round	cell	A3	3
+spill2-round	cell	B1	=ROUND(A1:A3/3,2)
+spill2-round	probe	B1:B4	
+spill2-max-scalar	cell	A1	1
+spill2-max-scalar	cell	A2	2
+spill2-max-scalar	cell	A3	3
+spill2-max-scalar	cell	B1	=MAX(A1:A3)
+spill2-max-scalar	probe	B1:B2	
+spill2-index-row	cell	A1	1
+spill2-index-row	cell	A2	2
+spill2-index-row	cell	A3	3
+spill2-index-row	cell	B1	4
+spill2-index-row	cell	B2	5
+spill2-index-row	cell	B3	6
+spill2-index-row	cell	D1	=INDEX(A1:B3,2,0)
+spill2-index-row	probe	D1:F1	
+spill2-offset-2d	cell	A1	1
+spill2-offset-2d	cell	A2	2
+spill2-offset-2d	cell	A3	3
+spill2-offset-2d	cell	B1	4
+spill2-offset-2d	cell	B2	5
+spill2-offset-2d	cell	B3	6
+spill2-offset-2d	cell	D1	=OFFSET(A1,1,0,2,2)
+spill2-offset-2d	probe	D1:F3	
+spill2-choose-array	cell	A1	1
+spill2-choose-array	cell	A2	2
+spill2-choose-array	cell	A3	3
+spill2-choose-array	cell	B1	4
+spill2-choose-array	cell	B2	5
+spill2-choose-array	cell	B3	6
+spill2-choose-array	cell	D1	=CHOOSE({1,2},A1:A3,B1:B3)
+spill2-choose-array	probe	D1:F4	
+spill2-iferror-div	cell	A1	1
+spill2-iferror-div	cell	A2	0
+spill2-iferror-div	cell	A3	4
+spill2-iferror-div	cell	B1	=IFERROR(1/A1:A3,"x")
+spill2-iferror-div	probe	B1:B4	
+spill2-ifs	cell	A1	1
+spill2-ifs	cell	A2	2
+spill2-ifs	cell	A3	3
+spill2-ifs	cell	B1	=IFS(A1:A3>2,"big",TRUE,"small")
+spill2-ifs	probe	B1:B4	
+spill2-switch	cell	A1	1
+spill2-switch	cell	A2	2
+spill2-switch	cell	A3	3
+spill2-switch	cell	B1	=SWITCH(A1:A3,1,"one",2,"two","other")
+spill2-switch	probe	B1:B4	
+spill2-seq-plus	cell	A1	10
+spill2-seq-plus	cell	A2	20
+spill2-seq-plus	cell	C1	=SEQUENCE(2,2)+A1:A2
+spill2-seq-plus	probe	C1:E3	
+spill2-countif-lift	cell	A1	1
+spill2-countif-lift	cell	A2	2
+spill2-countif-lift	cell	A3	1
+spill2-countif-lift	cell	B1	=COUNTIF(A1:A3,A1:A3)
+spill2-countif-lift	probe	B1:B4	
+spill2-match-lift	cell	A1	1
+spill2-match-lift	cell	A2	2
+spill2-match-lift	cell	A3	3
+spill2-match-lift	cell	B1	4
+spill2-match-lift	cell	B2	5
+spill2-match-lift	cell	B3	6
+spill2-match-lift	cell	C1	5
+spill2-match-lift	cell	C2	4
+spill2-match-lift	cell	C3	9
+spill2-match-lift	cell	D1	=MATCH(C1:C3,B1:B3,0)
+spill2-match-lift	probe	D1:D4	
+spill2-vlookup-lift	cell	A1	1
+spill2-vlookup-lift	cell	A2	2
+spill2-vlookup-lift	cell	A3	3
+spill2-vlookup-lift	cell	B1	4
+spill2-vlookup-lift	cell	B2	5
+spill2-vlookup-lift	cell	B3	6
+spill2-vlookup-lift	cell	C1	2
+spill2-vlookup-lift	cell	C2	3
+spill2-vlookup-lift	cell	D1	=VLOOKUP(C1:C2,A1:B3,2,FALSE)
+spill2-vlookup-lift	probe	D1:D3	
+spill2-len-cmp	cell	A1	text:a
+spill2-len-cmp	cell	A2	text:bbb
+spill2-len-cmp	cell	B1	=LEN(A1:A2)>1
+spill2-len-cmp	probe	B1:B3	
+spill2-blocked-formula	cell	A1	1
+spill2-blocked-formula	cell	A2	2
+spill2-blocked-formula	cell	A3	3
+spill2-blocked-formula	cell	B3	=1+1
+spill2-blocked-formula	cell	B1	=A1:A3*2
+spill2-blocked-formula	probe	B1:B3	
+spill2-name-formula	sheet	p_x	
+spill2-name-formula	cell	p_x!A1	1
+spill2-name-formula	cell	p_x!A2	2
+spill2-name-formula	cell	p_x!A3	3
+spill2-name-formula	name	cmDbl	=p_x!$A$1:$A$3*2
+spill2-name-formula	cell	B1	=cmDbl
+spill2-name-formula	probe	B1:B4	
+spill2-sumproduct	cell	A1	1
+spill2-sumproduct	cell	A2	2
+spill2-sumproduct	cell	A3	3
+spill2-sumproduct	cell	B1	=SUMPRODUCT(A1:A3*2)
+spill2-sumproduct	probe	B1:B2	
+spill2-ref-arith-of-spill	cell	A1	1
+spill2-ref-arith-of-spill	cell	A2	2
+spill2-ref-arith-of-spill	cell	A3	3
+spill2-ref-arith-of-spill	cell	B1	=A1:A3*2
+spill2-ref-arith-of-spill	cell	C1	=B1#+1
+spill2-ref-arith-of-spill	probe	C1:C4	
+legacy2-sum-array	cell	A1	1
+legacy2-sum-array	cell	A2	2
+legacy2-sum-array	cell	A3	3
+legacy2-sum-array	legacy	B2	=SUM(A1:A3*2)
+legacy2-sum-array	probe	B2	
+legacy2-sumproduct	cell	A1	1
+legacy2-sumproduct	cell	A2	2
+legacy2-sumproduct	cell	A3	3
+legacy2-sumproduct	legacy	B2	=SUMPRODUCT(A1:A3*2)
+legacy2-sumproduct	probe	B2	
+legacy2-index	cell	A1	1
+legacy2-index	cell	A2	2
+legacy2-index	cell	A3	3
+legacy2-index	legacy	B2	=INDEX(A1:A3,2)
+legacy2-index	probe	B2	
+legacy2-max	cell	A1	1
+legacy2-max	cell	A2	2
+legacy2-max	cell	A3	3
+legacy2-max	legacy	B2	=MAX(A1:A3)
+legacy2-max	probe	B2	
+legacy2-name	sheet	p_y	
+legacy2-name	cell	p_y!A1	5
+legacy2-name	cell	p_y!A2	6
+legacy2-name	name	cmVals2	=p_y!$A$1:$A$2
+legacy2-name	legacy	B2	=cmVals2
+legacy2-name	probe	B2	
+legacy2-other-sheet	sheet	p_z	
+legacy2-other-sheet	cell	p_z!A1	7
+legacy2-other-sheet	cell	p_z!A2	8
+legacy2-other-sheet	cell	p_z!A3	9
+legacy2-other-sheet	legacy	B3	=p_z!A1:A3
+legacy2-other-sheet	probe	B3	
+legacy2-concat	cell	A1	text:a
+legacy2-concat	cell	A2	text:b
+legacy2-concat	legacy	B2	=A1:A2&"!"
+legacy2-concat	probe	B2	
+at2-sum	cell	A1	1
+at2-sum	cell	A2	2
+at2-sum	cell	A3	3
+at2-sum	cell	B2	=SUM(@(A1:A3))
+at2-sum	probe	B2	
+at2-plus	cell	A1	1
+at2-plus	cell	A2	2
+at2-plus	cell	A3	3
+at2-plus	cell	B1	4
+at2-plus	cell	B2	5
+at2-plus	cell	B3	6
+at2-plus	cell	C2	=@(A1:A3)+@(B1:B3)
+at2-plus	probe	C2:C3	
+at2-index	cell	A1	1
+at2-index	cell	A2	2
+at2-index	cell	A3	3
+at2-index	cell	B3	=@(INDEX(A1:A3,0,1))
+at2-index	probe	B3	
+at2-other-sheet	sheet	p_w	
+at2-other-sheet	cell	p_w!A1	7
+at2-other-sheet	cell	p_w!A2	8
+at2-other-sheet	cell	p_w!A3	9
+at2-other-sheet	cell	B2	=@(p_w!A1:A3)
+at2-other-sheet	probe	B2	
+at2-name	sheet	p_v	
+at2-name	cell	p_v!A1	5
+at2-name	cell	p_v!A2	6
+at2-name	name	cmVals3	=p_v!$A$1:$A$2
+at2-name	cell	B2	=@(cmVals3)
+at2-name	probe	B2:B3	
+3d2-more	sheet	s_a	
+3d2-more	sheet	s_b	
+3d2-more	sheet	s_c	
+3d2-more	cell	s_a!A1	1
+3d2-more	cell	s_b!A1	2
+3d2-more	cell	s_c!A1	3
+3d2-more	cell	s_a!B2	10
+3d2-more	cell	s_b!B2	#DIV/0!
+3d2-more	cell	s_c!B2	30
+3d2-more	cell	B1	=SUM(s_a:s_c!A1:B2)
+3d2-more	cell	B2	=SUMIF(s_a:s_c!A1,">1")
+3d2-more	cell	B3	=COUNTBLANK(s_a:s_c!A1:A2)
+3d2-more	cell	B4	=AVERAGE(s_a:s_c!A1,s_a!B2)
+3d2-more	cell	B5	=SUM(s_a:s_c!B2)
+3d2-more	cell	B6	=MAX(s_a:s_b!A1)
+3d2-more	cell	B7	=VARA(s_a:s_c!A1)
+3d2-more	cell	B8	=STDEV.P(s_a:s_c!A1)
+3d2-more	cell	B9	=COUNTA(s_a:s_c!B2)
+3d2-more	cell	B10	=s_a:s_c!A1:A2
+3d2-more	probe	B1:B10	
+lambda2	name	cmSeq	=LAMBDA(n,SEQUENCE(n))
+lambda2	name	cmLetty	=LAMBDA(x,LET(y,x*2,y+1))
+lambda2	name	cmRate	=0.25
+lambda2	name	cmInc	=LAMBDA(v,v+1)
+lambda2	name	cmFact2	=LAMBDA(n,IF(n<=1,1,n*cmFact2(n-1)))
+lambda2	cell	A1	1
+lambda2	cell	A2	2
+lambda2	cell	A3	3
+lambda2	cell	B1	=cmSeq(3)
+lambda2	cell	C1	=cmLetty(5)
+lambda2	cell	C2	=cmRate*4
+lambda2	cell	D1	=MAP(A1:A3,cmInc)
+lambda2	cell	C3	=cmFact2(20)
+lambda2	cell	C4	=cmSeq(0)
+lambda2	probe	B1:B4	
+lambda2	probe	C1:C4	
+lambda2	probe	D1:D4	
+lazy2	name	cmRun	=LAMBDA(n,cmRun(n+1))
+lazy2	cell	A1	5
+lazy2	cell	B1	=IF(FALSE,SEQUENCE(1E9),1)
+lazy2	cell	B2	=IF(TRUE,1,cmNoSuchFn2())
+lazy2	cell	B3	=IFERROR(1,cmRun(1))
+lazy2	cell	B4	=CHOOSE(3,1/0,NA(),"c")
+lazy2	cell	B5	=IF(A1>0,"pos",1/0)
+lazy2	cell	B6	=cmRun(1)
+lazy2	cell	B7	=SWITCH(A1,5,"five",1/0)
+lazy2	cell	B8	=IFNA(A1,1/0)
+lazy2	probe	B1:B8	
+circ2-range	cell	A1	1
+circ2-range	cell	A2	=SUM(A1:A3)
+circ2-range	cell	A3	2
+circ2-range	probe	A2	
+digits2-01	cell	B1	=0.3-0.1-0.2
+digits2-01	probe	B1	
+digits2-02	cell	B1	=100.1-100
+digits2-02	probe	B1	
+digits2-03	cell	B1	=1E+15+1-1E+15
+digits2-03	probe	B1	
+digits2-04	cell	B1	=1E+16+1-1E+16
+digits2-04	probe	B1	
+digits2-05	cell	B1	=0.1+0.7=0.8
+digits2-05	probe	B1	
+digits2-06	cell	B1	=ROUND(0.1+0.2,15)=0.3
+digits2-06	probe	B1	
+digits2-07	cell	B1	=3*0.1=0.3
+digits2-07	probe	B1	
+digits2-08	cell	B1	=(0.1+0.2)*10=3
+digits2-08	probe	B1	
+digits2-09	cell	B1	=0.1+0.2-0.3+0
+digits2-09	probe	B1	
+digits2-10	cell	B1	=-(0.1+0.2-0.3)
+digits2-10	probe	B1	
+digits2-11	cell	B1	=0.1+0.2<=0.3
+digits2-11	probe	B1	
+digits2-12	cell	B1	=4.35*100-435
+digits2-12	probe	B1	
+digits2-13	cell	B1	=1.1+2.2-3.3
+digits2-13	probe	B1	
+digits2-14	cell	B1	=1-0.99-0.01
+digits2-14	probe	B1	
+digits2-15	cell	B1	=1000000.1-1000000
+digits2-15	probe	B1	
+digits2-cells	cell	A1	=0.1+0.2
+digits2-cells	cell	A2	0.3
+digits2-cells	cell	B1	=COUNTIF(A1:A1,">=0.3")
+digits2-cells	cell	B2	=COUNTIF(A1:A1,">0.3")
+digits2-cells	cell	B3	=COUNTIF(A1:A1,"0.3")
+digits2-cells	cell	B4	=SUMPRODUCT(--(A1:A1=A2))
+digits2-cells	cell	B5	=XLOOKUP(A2,A1:A1,A1:A1)
+digits2-cells	cell	B6	=COUNTIFS(A1:A1,A2)
+digits2-cells	cell	B7	=MATCH(A2,A1:A1,1)
+digits2-cells	cell	B8	=IF(A1=A2,"eq","ne")
+digits2-cells	probe	B1:B8	
+calc2	cell	A1	1
+calc2	cell	A2	2
+calc2	cell	A3	3
+calc2	cell	B1	4
+calc2	cell	B2	5
+calc2	cell	B3	6
+calc2	cell	D1	=MAP(A1:A2,LAMBDA(x,SEQUENCE(2)))
+calc2	cell	D2	=BYROW(A1:B2,LAMBDA(r,r))
+calc2	cell	D3	=UNIQUE(A1:A3,FALSE,TRUE)+0
+calc2	cell	D4	=TAKE(A1:A3,0)
+calc2	cell	D5	=ISERR(SEQUENCE(0))
+calc2	probe	D1:D5	

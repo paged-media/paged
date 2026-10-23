@@ -100,6 +100,14 @@ import { frameTransformMutationFor } from "./objects-on-path";
 import { batchMutationFor } from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
+import { defineMessages } from "@paged-media/strings";
+
+/** Command titles, message keys `registerCommand` reads in the editor's locale. */
+const M = defineMessages("draw.transform", {
+  reflectH: "Transform: Reflect horizontally",
+  reflectV: "Transform: Reflect vertically",
+  again: "Transform: Transform again",
+});
 export const TRANSFORM_COMMAND_CATEGORY = "Transform";
 
 const C = "media.paged.draw.command";
@@ -458,7 +466,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
   const disposers = [
     registerCommand(host, {
       id: REFLECT_HORIZONTAL_COMMAND_ID,
-      title: "Transform: Reflect horizontally",
+      title: M.reflectH,
       category: TRANSFORM_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
@@ -467,7 +475,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: REFLECT_VERTICAL_COMMAND_ID,
-      title: "Transform: Reflect vertically",
+      title: M.reflectV,
       category: TRANSFORM_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
@@ -476,7 +484,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
     }),
     registerCommand(host, {
       id: TRANSFORM_AGAIN_COMMAND_ID,
-      title: "Transform: Transform again",
+      title: M.again,
       category: TRANSFORM_COMMAND_CATEGORY,
       handler: () => applyTransformAgain(host),
     }),

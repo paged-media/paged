@@ -76,6 +76,7 @@ import {
   type SpreadEntry,
 } from "@paged-media/shell";
 import { lengthIn, useDocumentUnit, type LengthUnit } from "@paged-media/ui";
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
 import type {
   CanvasClient,
   ElementId,
@@ -91,6 +92,44 @@ import type {
 import { layoutPages, fitCamera } from "../../ui/layout";
 import { exportReadiness, exportTargetById } from "./export-targets";
 import { useAnimatedCamera } from "../../ui/useAnimatedCamera";
+
+const M = defineMessages("app.cockpitDocumentMapPanel", {
+  title: "Document Map",
+  searchPages: "Search pages",
+  noDocument: "No document loaded.",
+  sections: "Sections",
+  noPrefix: "(no prefix)",
+  sectionTitle: "{prefix} · {numbering} · pages {range}",
+  addSectionTitle: "Start a section at the first page (insertSection)",
+  adding: "Adding…",
+  addSection: "Add section",
+  margins: "M {value} {unit}",
+  columns: "{count} col",
+  missingLinksTitle:
+    "{count, plural, one {# missing link} other {# missing links}} on this " +
+    "page — go to page",
+  missingLinks: "{count, plural, one {# missing link} other {# missing links}}",
+  oversetSeamTitle:
+    "Overset text cannot be traced to a page yet: it is only known per " +
+    "story, not per page. {count, plural, one {# overset story} other " +
+    "{# overset stories}} in the document.",
+  oversetSeam: "overset: doc-level",
+  fontsSeamTitle:
+    "Missing fonts cannot be traced to a page yet: they are only known " +
+    "for the whole document. {count, plural, one {# missing font} other " +
+    "{# missing fonts}} in the document.",
+  fontsSeam: "fonts: doc-level",
+  pages: "Pages",
+  stories: "Stories",
+  frames: "Frames",
+  placedLinks: "Placed links",
+  oversetStories: "Overset stories",
+  missingLinksRisk: "Missing links",
+  missingFonts: "Missing fonts",
+  publicationHealth: "Publication Health",
+  printPdf: "Print PDF",
+  openToSeeHealth: "Open a document to see its health.",
+});
 
 /** Map a `LinkSummary.hostKind` (parse-side frame kind: `"Rectangle"`,
  *  `"Oval"`, `"Polygon"`, `"GraphicLine"`) to the `ElementId` the
@@ -212,6 +251,7 @@ function numberingLabel(style: string): string {
 }
 
 export function DocumentMapPanel(_props: PanelProps) {
+  const strings = useStrings();
   const client = useCanvasClient();
   const { handle, snapshots } = useDocument();
   const spreads = useCollection<SpreadSummary>("spreads");
@@ -318,7 +358,7 @@ export function DocumentMapPanel(_props: PanelProps) {
         }}
       >
         <span style={{ fontSize: 14, fontWeight: 600, whiteSpace: "nowrap" }}>
-          Document Map
+          {strings.t(M.title)}
         </span>
       </div>
       <div style={{ padding: "0 12px 8px" }}>
@@ -337,7 +377,7 @@ export function DocumentMapPanel(_props: PanelProps) {
           <Icon name="ui-search" size={15} />
           <input
             data-document-map-search
-            placeholder="Search pages"
+            placeholder={strings.t(M.searchPages)}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
@@ -357,14 +397,14 @@ export function DocumentMapPanel(_props: PanelProps) {
       <div style={{ flex: 1, overflowY: "auto", padding: "2px 6px" }}>
         {!handle || handle.pageCount === 0 ? (
           <div className="pg-ui-xs" style={{ padding: "10px 8px" }}>
-            No document loaded.
+            {strings.t(M.noDocument)}
           </div>
         ) : (
           <>
             {sections && sections.length > 0 && (
               <div data-section-chips style={{ padding: "2px 4px 6px" }}>
                 <div className="pg-label" style={{ marginBottom: 5 }}>
-                  Sections
+                  {strings.t(M.sections)}
                 </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                   {sections.map((s) => {
@@ -381,9 +421,11 @@ export function DocumentMapPanel(_props: PanelProps) {
                         key={s.selfId}
                         type="button"
                         data-section-chip={s.selfId}
-                        title={`${s.prefix || "(no prefix)"} · ${numberingLabel(
-                          s.labelStyle,
-                        )} · pages ${range}`}
+                        title={strings.t(M.sectionTitle, {
+                          prefix: s.prefix || strings.t(M.noPrefix),
+                          numbering: numberingLabel(s.labelStyle),
+                          range,
+                        })}
                         onClick={() => {
                           if (s.startPageIndex != null)
                             jumpToIndices([s.startPageIndex]);
@@ -439,7 +481,7 @@ export function DocumentMapPanel(_props: PanelProps) {
             data-add-section
             disabled={adding}
             onClick={addSection}
-            title="Start a section at the first page (insertSection)"
+            title={strings.t(M.addSectionTitle)}
             style={{
               display: "flex",
               alignItems: "center",
@@ -459,7 +501,7 @@ export function DocumentMapPanel(_props: PanelProps) {
             }}
           >
             <Icon name="ui-plus" size={14} />{" "}
-            {adding ? "Adding…" : "Add section"}
+            {adding ? strings.t(M.adding) : strings.t(M.addSection)}
           </button>
         )}
       </div>
@@ -472,6 +514,7 @@ export function DocumentMapPanel(_props: PanelProps) {
 /** Compact margin/column readout for a page — only the non-default
  *  bits ("M 36 pt", "2 col") so the row stays terse. */
 function pageMetaLabel(
+  strings: Strings,
   p: PageSummary | undefined,
   unit: LengthUnit,
 ): string | null {
@@ -486,12 +529,16 @@ function pageMetaLabel(
   const uniform = margins.every((m) => m === margins[0]);
   if (margins.some((m) => m > 0)) {
     parts.push(
-      uniform
-        ? `M ${lengthIn(margins[0], unit)} ${unit}`
-        : `M ${margins.map((m) => lengthIn(m, unit)).join("/")} ${unit}`,
+      strings.t(M.margins, {
+        value: uniform
+          ? String(lengthIn(margins[0], unit))
+          : margins.map((m) => lengthIn(m, unit)).join("/"),
+        unit,
+      }),
     );
   }
-  if ((p.columnCount ?? 1) > 1) parts.push(`${p.columnCount} col`);
+  if ((p.columnCount ?? 1) > 1)
+    parts.push(strings.t(M.columns, { count: p.columnCount ?? 1 }));
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
@@ -518,8 +565,13 @@ function SpreadRow({
   onClick: () => void;
   onChipJump: (pageIndices: number[]) => void;
 }) {
+  const strings = useStrings();
   const unit = useDocumentUnit();
-  const metaLabel = pageMetaLabel(pageByIndex.get(entry.pageIndices[0]), unit);
+  const metaLabel = pageMetaLabel(
+    strings,
+    pageByIndex.get(entry.pageIndices[0]),
+    unit,
+  );
   // REAL — missing links attributed to any page in this spread.
   const missingLinks = entry.pageIndices.reduce(
     (sum, i) => sum + (missingLinksByPage?.get(i) ?? 0),
@@ -635,6 +687,7 @@ function PageChips({
   missingFonts: number;
   onJump: (pageIndices: number[]) => void;
 }) {
+  const strings = useStrings();
   const isFirstRow = pageIndices.includes(0);
   const showOversetSeam = isFirstRow && oversetStories > 0;
   const showFontSeam = isFirstRow && missingFonts > 0;
@@ -649,46 +702,32 @@ function PageChips({
           type="button"
           data-page-chip="missing-links"
           data-page-chip-spread={spreadKey}
-          title={`${missingLinks} missing link${
-            missingLinks === 1 ? "" : "s"
-          } on this page — go to page`}
+          title={strings.t(M.missingLinksTitle, { count: missingLinks })}
           onClick={(e) => {
             e.stopPropagation();
             onJump(pageIndices);
           }}
           style={chipStyle(statusColor("error"), false)}
         >
-          {missingLinks} missing link{missingLinks === 1 ? "" : "s"}
+          {strings.t(M.missingLinks, { count: missingLinks })}
         </button>
       )}
       {showOversetSeam && (
         <span
           data-page-chip="overset-seam"
-          title={
-            "Overset text cannot be traced to a page yet: it is only known " +
-            "per story, not per page. " +
-            `${oversetStories} overset stor${
-              oversetStories === 1 ? "y" : "ies"
-            } in the document.`
-          }
+          title={strings.t(M.oversetSeamTitle, { count: oversetStories })}
           style={chipStyle("var(--pg-muted-fg)", true)}
         >
-          overset: doc-level
+          {strings.t(M.oversetSeam)}
         </span>
       )}
       {showFontSeam && (
         <span
           data-page-chip="fonts-seam"
-          title={
-            "Missing fonts cannot be traced to a page yet: they are only " +
-            "known for the whole document. " +
-            `${missingFonts} missing font${
-              missingFonts === 1 ? "" : "s"
-            } in the document.`
-          }
+          title={strings.t(M.fontsSeamTitle, { count: missingFonts })}
           style={chipStyle("var(--pg-muted-fg)", true)}
         >
-          fonts: doc-level
+          {strings.t(M.fontsSeam)}
         </span>
       )}
     </div>
@@ -719,6 +758,7 @@ function chipStyle(color: string, seam: boolean): CSSProperties {
  *  fonts) from the W0.6 wire summaries. Low-res / preflight findings
  *  live in the fuller Publication-health panel. */
 function HealthFooter() {
+  const strings = useStrings();
   const meta = useDocumentMeta();
   const stats = useDocumentStats();
   const links = useCollection<LinkSummary>("links");
@@ -727,10 +767,10 @@ function HealthFooter() {
 
   const rows: Array<[string, string]> = loaded
     ? [
-        [String(meta.pageCount), "Pages"],
-        [stats ? String(stats.stories) : "—", "Stories"],
-        [stats ? String(stats.frames) : "—", "Frames"],
-        [links ? String(links.length) : "—", "Placed links"],
+        [String(meta.pageCount), strings.t(M.pages)],
+        [stats ? String(stats.stories) : "—", strings.t(M.stories)],
+        [stats ? String(stats.frames) : "—", strings.t(M.frames)],
+        [links ? String(links.length) : "—", strings.t(M.placedLinks)],
       ]
     : [];
 
@@ -746,10 +786,12 @@ function HealthFooter() {
     loaded,
     printOutputFacts(meta),
   );
-  const riskRows: Array<[string, number | null]> = [
-    ["Overset stories", overset],
-    ["Missing links", missingLinks],
-    ["Missing fonts", missingFonts],
+  // The first name is the row's stable id (`data-health-risk`), the
+  // second its words.
+  const riskRows: Array<[string, string, number | null]> = [
+    ["Overset stories", strings.t(M.oversetStories), overset],
+    ["Missing links", strings.t(M.missingLinksRisk), missingLinks],
+    ["Missing fonts", strings.t(M.missingFonts), missingFonts],
   ];
 
   return (
@@ -762,7 +804,7 @@ function HealthFooter() {
       }}
     >
       <div className="pg-label" style={{ marginBottom: 7 }}>
-        Publication Health
+        {strings.t(M.publicationHealth)}
       </div>
       {loaded ? (
         <>
@@ -802,7 +844,7 @@ function HealthFooter() {
               padding: "2px 0",
             }}
           >
-            <span className="pg-ui-xs">Print PDF</span>
+            <span className="pg-ui-xs">{strings.t(M.printPdf)}</span>
             <StatusPill
               tone={print.tone}
               testId="map-print-readiness"
@@ -818,10 +860,10 @@ function HealthFooter() {
               margin: "7px 0",
             }}
           />
-          {riskRows.map(([label, count]) => (
+          {riskRows.map(([id, label, count]) => (
             <div
-              key={label}
-              data-health-risk={label}
+              key={id}
+              data-health-risk={id}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -847,7 +889,7 @@ function HealthFooter() {
           ))}
         </>
       ) : (
-        <span className="pg-ui-xs">Open a document to see its health.</span>
+        <span className="pg-ui-xs">{strings.t(M.openToSeeHealth)}</span>
       )}
     </div>
   );

@@ -213,6 +213,23 @@ describe.skipIf(!docxPresent)(
       expect((await h.objects.set(run, "text", 3)).code).toBe("invalidValue");
     });
 
+    it("block.text writes a paragraph: its first run takes the text, a merge field's runs included", async () => {
+      const b1 = docAddress("block", "docx_f0/b1");
+      expect(await h.objects.set(b1, "text", "Order closed")).toMatchObject({
+        applied: true,
+        undoSteps: 1,
+      });
+      expect(await storyTexts(host, story)).toEqual([FIRST, "Order closed"]);
+      expect(await h.objects.get(b1, "text")).toEqual(value("Order closed"));
+      // The field's result run is emptied (its code stays in the .docx), so
+      // the block shows no merge field until one is merged into it again.
+      expect(
+        await h.objects.query(`${b1} > plugin:media.paged.doc/mergeField`),
+      ).toEqual([]);
+      await host.document.undo();
+      expect(await storyTexts(host, story)).toEqual([FIRST, "Order «OrderNo»"]);
+    });
+
     it("a paragraph edited on the canvas since is refused, never written over", async () => {
       await host.document.mutate({
         op: "insertText",

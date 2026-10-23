@@ -70,6 +70,8 @@ export async function applyScissorsAt(
   target: ElementId,
   pageId: string,
   pagePoint: [number, number],
+  /** The pick tolerance in page pt; default a constant 6 px on screen. */
+  tolerancePt?: number,
 ): Promise<ScissorsResult | null> {
   if (!CUTTABLE.has(target.kind)) return null;
   const read = await host.document.pathAnchors(target).catch(() => null);
@@ -77,7 +79,8 @@ export async function applyScissorsAt(
   const m = (read.itemTransform ?? null) as Affine | null;
   const local = inverseApplyAffine(m, pagePoint[0], pagePoint[1]);
   if (!local) return null;
-  const tolerance = host.viewport.pxToPt(PICK_TOLERANCE_PX) / affineScale(m);
+  const tolerance =
+    (tolerancePt ?? host.viewport.pxToPt(PICK_TOLERANCE_PX)) / affineScale(m);
   const plan = planScissorsAt(
     {
       anchors: read.anchors,

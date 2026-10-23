@@ -42,12 +42,14 @@ import type {
   BundleHost,
   Diagnostic,
 } from "@paged-media/plugin-api";
+import { t } from "@paged-media/strings";
 
 import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
+import { DECK, NOTES, SLIDES } from "./messages.js";
 import { contributeSlideObjectModel } from "./object-model.js";
-import { SLIDE_PANELS } from "./panels.js";
+import { slidePanels } from "./panels.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
 import { SlidesStore } from "./slides-model.js";
@@ -88,7 +90,7 @@ export function reportDiagnostics(report: ImportReport): Diagnostic[] {
   if (report.fonts.length > 0) {
     out.push({
       severity: "info",
-      message: `Fonts used: ${report.fonts.join(", ")}`,
+      message: t(DECK.fontsUsed, { fonts: report.fonts.join(", ") }),
       source: "pptx",
     });
   }
@@ -182,8 +184,7 @@ export function activate(host: BundleHost): BundleHandle {
       host.diagnostics.set(IMPORT_DIAGNOSTICS, [
         {
           severity: "error",
-          message:
-            "This host cannot open a native document, so a PowerPoint deck cannot be opened.",
+          message: t(DECK.cannotOpen),
         },
       ]);
       return null;
@@ -224,7 +225,7 @@ export function activate(host: BundleHost): BundleHandle {
     return report;
   }
 
-  const model = contributeSlideObjectModel(host, { openDeck });
+  const model = contributeSlideObjectModel(host, { openDeck, exportDeck });
   if (model) disposers.push(() => model.dispose());
 
   // A deck document opened another way (File ▸ Open of a saved document,
@@ -247,7 +248,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.importer({
         id: IMPORTER_ID,
-        title: "PowerPoint presentation (.pptx)",
+        title: t(DECK.format),
         extensions: [".pptx", ".ppsx", ".potx"],
         mimeTypes: [PPTX_MIME],
         import: async ({ name, bytes }) => {
@@ -260,13 +261,13 @@ export function activate(host: BundleHost): BundleHandle {
   // PPTX export: the deck the document was imported from, rewritten for
   // the document's slides (order, duplicates, deletions, hidden, notes).
   async function exportDeck() {
+    if (!host.supports("storage.parts@1")) return null;
     const original = await host.parts.read(SOURCE_PART);
     if (!original) {
       host.diagnostics.set(EXPORT_DIAGNOSTICS, [
         {
           severity: "error",
-          message:
-            "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
+          message: t(DECK.notFromDeck),
         },
       ]);
       return null;
@@ -293,7 +294,11 @@ export function activate(host: BundleHost): BundleHandle {
     const name =
       (meta as { documentName?: string }).documentName?.trim() ||
       "presentation";
-    return { bytes: out.bytes, fileName: `${name}.pptx` };
+    return {
+      bytes: out.bytes,
+      fileName: `${name}.pptx`,
+      diagnostics: out.diagnostics,
+    };
   }
 
   if (
@@ -303,7 +308,7 @@ export function activate(host: BundleHost): BundleHandle {
     disposers.push(
       host.contribute.exporter({
         id: EXPORTER_ID,
-        title: "PowerPoint presentation (.pptx)",
+        title: t(DECK.format),
         extension: ".pptx",
         mimeType: PPTX_MIME,
         export: exportDeck,
@@ -332,7 +337,7 @@ export function activate(host: BundleHost): BundleHandle {
       panelDisposers.push(
         host.contribute.panel({
           id: SLIDES_PANEL_ID,
-          title: "Slides",
+          title: t(SLIDES.title),
           component: makeSlidesPanel(host, store),
           defaultDock: "left",
           rail,
@@ -344,7 +349,7 @@ export function activate(host: BundleHost): BundleHandle {
         }).dispose,
         host.contribute.panel({
           id: NOTES_PANEL_ID,
-          title: "Notes",
+          title: t(NOTES.title),
           component: makeNotesPanel(host, store),
           defaultDock: "bottom",
           rail,
@@ -372,7 +377,7 @@ export function activate(host: BundleHost): BundleHandle {
   // notes panel id where it is contributed; the notes property row is the
   // fallback for hosts without the page doors.
   if (model && host.supports("contribute.schemaPanel@1")) {
-    for (const schema of SLIDE_PANELS) {
+    for (const schema of slidePanels()) {
       if (richPanels && schema.id === NOTES_PANEL_ID) continue;
       const d = host.contribute.schemaPanel({
         id: schema.id,

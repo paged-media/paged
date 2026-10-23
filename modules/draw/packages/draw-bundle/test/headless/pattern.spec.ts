@@ -43,6 +43,7 @@
 //       source with no readable geometry is skipped, nothing selected
 //       is a no-op.
 
+import { t } from "@paged-media/strings";
 import {
   describe,
   expect,
@@ -285,19 +286,21 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
       expect(PATTERN_SWATCH_NOTE).not.toMatch(/RFI|\b[A-Z]-\d+\b/);
       // The panel says it in plain words AND adds the two limits its own
       // form cannot hide.
-      expect(PATTERN_PANEL_NOTE).toContain(
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
         "It is not a fill you can apply to other objects",
       );
-      expect(PATTERN_PANEL_NOTE).toContain(
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
         "The copies always sit above the original",
       );
-      expect(PATTERN_PANEL_NOTE).toContain("Dimming sets the copies' opacity");
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
+        "Dimming sets the copies' opacity",
+      );
       // Baking and re-planning are ONE undo step each (measured below);
       // the note said TWO until it was corrected to match.
-      expect(PATTERN_PANEL_NOTE).toContain(
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
         "Making, re-planning, releasing and deleting the copies are one undo step each",
       );
-      expect(PATTERN_PANEL_NOTE).not.toContain("two undo steps");
+      expect(t(PATTERN_PANEL_NOTE)).not.toContain("two undo steps");
     });
 
     it("every command TITLE carries what the contract has no field to say", () => {

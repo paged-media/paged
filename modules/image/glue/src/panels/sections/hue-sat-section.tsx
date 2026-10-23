@@ -2,7 +2,10 @@
 // each with hue, saturation and lightness; Colorize. Moves go through
 // setParams, so they preview live and edit a bound adjustment layer.
 
+import { defineMessages, t } from "@paged-media/strings";
+
 import { HUE_SAT_RANGES, type HueSatParams } from "../../engine";
+import { hueSatRangeLabel } from "../../words";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
 
@@ -34,6 +37,22 @@ const slider = (
     </span>
   </div>
 );
+
+const M = defineMessages("image.hueSat", {
+  title: "Hue / Saturation",
+  range: "Range",
+  master: "Master",
+  hue: "Hue",
+  saturation: "Saturation",
+  lightness: "Lightness",
+  colorize: "Colorize",
+  colorizeHue: "Colorize hue",
+  colorizeSaturation: "Colorize saturation",
+  note:
+    "A colour range is fully affected within 15° of its centre and fades out " +
+    "by 45°; greys belong to no range. Colorize tints every pixel with one " +
+    "hue.",
+});
 
 export function HueSatSection({
   session,
@@ -67,9 +86,9 @@ export function HueSatSection({
   const off = disabled || hueSat.colorize.on;
   return (
     <>
-      <div style={sectionTitle}>Hue / Saturation</div>
+      <div style={sectionTitle}>{t(M.title)}</div>
       <div style={row}>
-        <label htmlFor="pg-image-hs-range">Range</label>
+        <label htmlFor="pg-image-hs-range">{t(M.range)}</label>
         <select
           id="pg-image-hs-range"
           data-image-hs-range
@@ -77,16 +96,16 @@ export function HueSatSection({
           disabled={disabled}
           onChange={(e) => onRange(Number(e.target.value))}
         >
-          <option value={-1}>Master</option>
+          <option value={-1}>{t(M.master)}</option>
           {HUE_SAT_RANGES.map((name, i) => (
             <option key={name} value={i}>
-              {name}
+              {hueSatRangeLabel(name)}
             </option>
           ))}
         </select>
       </div>
       {slider(
-        "Hue",
+        t(M.hue),
         "pg-image-hs-hue",
         -180,
         180,
@@ -96,7 +115,7 @@ export function HueSatSection({
         "°",
       )}
       {slider(
-        "Saturation",
+        t(M.saturation),
         "pg-image-hs-sat",
         -100,
         100,
@@ -105,7 +124,7 @@ export function HueSatSection({
         off,
       )}
       {slider(
-        "Lightness",
+        t(M.lightness),
         "pg-image-hs-light",
         -100,
         100,
@@ -114,7 +133,7 @@ export function HueSatSection({
         disabled,
       )}
       <div style={row}>
-        <label htmlFor="pg-image-hs-colorize">Colorize</label>
+        <label htmlFor="pg-image-hs-colorize">{t(M.colorize)}</label>
         <input
           id="pg-image-hs-colorize"
           type="checkbox"
@@ -126,7 +145,7 @@ export function HueSatSection({
       </div>
       {hueSat.colorize.on &&
         slider(
-          "Colorize hue",
+          t(M.colorizeHue),
           "pg-image-hs-c-hue",
           0,
           360,
@@ -137,7 +156,7 @@ export function HueSatSection({
         )}
       {hueSat.colorize.on &&
         slider(
-          "Colorize saturation",
+          t(M.colorizeSaturation),
           "pg-image-hs-c-sat",
           0,
           100,
@@ -145,11 +164,7 @@ export function HueSatSection({
           (v) => setColorize({ saturation: v / 100 }),
           disabled,
         )}
-      <div style={note}>
-        A colour range is fully affected within 15° of its centre and fades out
-        by 45°; greys belong to no range. Colorize tints every pixel with one
-        hue.
-      </div>
+      <div style={note}>{t(M.note)}</div>
     </>
   );
 }

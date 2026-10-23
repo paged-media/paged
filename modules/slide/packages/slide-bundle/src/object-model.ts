@@ -69,8 +69,18 @@ import type {
 } from "@paged-media/plugin-api";
 import { formatAddress, parseAddress } from "@paged-media/plugin-sdk";
 import { encodeEnvelope, labelKey } from "@paged-media/helpers";
+import { t } from "@paged-media/strings";
 
 import type { ImportReport, SlideReport, Transition } from "./engine.js";
+import { MODEL } from "./messages.js";
+import { slideTemplateFields } from "./template-fields.js";
+import {
+  layouts,
+  moveMutation,
+  newSlide as newSlideFromLayout,
+  type Layout,
+  type Slide,
+} from "./slides-model.js";
 
 import deckRows from "../schema/deck.json" with { type: "json" };
 import layoutRows from "../schema/layout.json" with { type: "json" };
@@ -80,6 +90,10 @@ import importPptxArgs from "../schema/import-pptx.args.json" with { type: "json"
 import importPptxResult from "../schema/import-pptx.result.json" with { type: "json" };
 import newSlideArgs from "../schema/new-slide.args.json" with { type: "json" };
 import newSlideResult from "../schema/new-slide.result.json" with { type: "json" };
+import duplicateSlideArgs from "../schema/duplicate-slide.args.json" with { type: "json" };
+import duplicateSlideResult from "../schema/duplicate-slide.result.json" with { type: "json" };
+import exportPptxArgs from "../schema/export-pptx.args.json" with { type: "json" };
+import exportPptxResult from "../schema/export-pptx.result.json" with { type: "json" };
 
 export const PLUGIN_ID = "media.paged.slide";
 /** The label key every slide label is written under (the host derives the
@@ -93,6 +107,8 @@ const LABEL_BUDGET = 60_000;
 
 export const NEW_SLIDE_COMMAND = "media.paged.slide.newSlide";
 export const IMPORT_PPTX_COMMAND = "media.paged.slide.importPptx";
+export const DUPLICATE_SLIDE_COMMAND = "media.paged.slide.duplicateSlide";
+export const EXPORT_PPTX_COMMAND = "media.paged.slide.exportPptx";
 
 export const SLIDE_SCHEMA = slideRows as unknown as readonly PropertySchema[];
 export const LAYOUT_SCHEMA = layoutRows as unknown as readonly PropertySchema[];
@@ -500,6 +516,13 @@ function setSlidePath(rec: SlideData, path: string, v: unknown): boolean {
 export interface SlideObjectModelOptions {
   /** Open a deck (the importer's path); the typed import command calls it. */
   openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null>;
+  /** The deck as a .pptx (the exporter's path); the typed export command
+   *  calls it. Null when the document was not opened from a deck. */
+  exportDeck(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+    diagnostics: string[];
+  } | null>;
 }
 
 /** Register the slide object model on `host`. Headless: no DOM, no edit
@@ -602,7 +625,7 @@ export function contributeSlideObjectModel(
 
   const slideKind: ObjectKindContribution = {
     kind: SLIDE_KIND,
-    title: "Slide",
+    title: t(MODEL.kindSlide),
     schema: SLIDE_SCHEMA,
     // A slide IS its page: its label lives there, and `page:#2 > slide`
     // selects through it.
@@ -658,7 +681,7 @@ export function contributeSlideObjectModel(
 
   const layoutKind: ObjectKindContribution = {
     kind: LAYOUT_KIND,
-    title: "Slide layout",
+    title: t(MODEL.kindLayout),
     schema: LAYOUT_SCHEMA,
     hostOf: (address) => {
       const id = ownId(address, LAYOUT_KIND);
@@ -744,7 +767,7 @@ export function contributeSlideObjectModel(
 
   const placeholderKind: ObjectKindContribution = {
     kind: PLACEHOLDER_KIND,
-    title: "Placeholder",
+    title: t(MODEL.kindPlaceholder),
     schema: PLACEHOLDER_SCHEMA,
     content: { kind: "text" },
     hostOf: (address) => {
@@ -829,7 +852,7 @@ export function contributeSlideObjectModel(
 
   const deckKind: ObjectKindContribution = {
     kind: DECK_KIND,
-    title: "Deck",
+    title: t(MODEL.kindDeck),
     schema: DECK_SCHEMA,
     hostOf: () => "doc",
     async list() {
@@ -916,6 +939,8 @@ export function contributeSlideObjectModel(
     const seen = new Set<string>();
     let stories: readonly { selfId: string; characterCount: number }[] | null =
       null;
+    /** The page order as this batch's moves leave it. */
+    const order = deck.pages.map((p) => p.id);
     for (const op of ops) {
       if (op.op === "invoke") continue;
       const kind =
@@ -946,6 +971,21 @@ export function contributeSlideObjectModel(
         mutations.push({ op: "deletePage", args: { pageId: id } });
         deleted.add(id);
         touched.delete(id);
+        order.splice(order.indexOf(id), 1);
+        continue;
+      }
+      if (op.path === "index") {
+        const to = op.value as number;
+        if (!Number.isInteger(to) || to < 1)
+          return rejected(
+            `slide index ${String(to)}: a slide number starts at 1`,
+          );
+        const move = moveMutation(order, id, to - 1);
+        if (move) {
+          mutations.push(move);
+          order.splice(order.indexOf(id), 1);
+          order.splice(Math.min(to - 1, order.length), 0, id);
+        }
         continue;
       }
       let rec = touched.get(id);
@@ -984,12 +1024,28 @@ export function contributeSlideObjectModel(
 
   // ------------------------------------------------------------ commands
 
+  /** The layouts a new slide can be copied from (slides-model.ts), from
+   *  the deck's own reading of each slide's layout. */
+  async function layoutsOf(deck: Deck): Promise<Layout[]> {
+    const slides: Slide[] = [];
+    for (const p of deck.pages) {
+      const layout = await layoutOf(deck, p.id);
+      slides.push({
+        pageId: p.id,
+        number: p.index,
+        sizePt: [0, 0],
+        state: layout ? { layout } : {},
+      });
+    }
+    return layouts(host, slides);
+  }
+
   const newSlide: TypedCommandContribution<
     { after?: string; layout?: string },
     { slide: Address }
   > = {
     id: NEW_SLIDE_COMMAND,
-    title: "New slide",
+    title: t(MODEL.newSlide),
     args: newSlideArgs as ValueType,
     result: newSlideResult as ValueType,
     async handler(_ctx, args) {
@@ -1011,6 +1067,20 @@ export function contributeSlideObjectModel(
       } else if (afterId !== null) {
         master = await layoutOf(deck, afterId);
       }
+      // A layout some slide was made from: copy that slide's placeholders,
+      // emptied, as the Slides panel's New slide does (one undo step).
+      const layout = master
+        ? (await layoutsOf(deck)).find((l) => l.masterId === master)
+        : undefined;
+      if (layout) {
+        const made = await newSlideFromLayout(host, layout, afterId);
+        if (!made)
+          throw new Error(
+            "failed: the new slide could not be made from its layout",
+          );
+        return { slide: slideAddress(made) };
+      }
+      // A layout no slide uses yet (or none): a page with the master alone.
       const outcome = await host.document.mutate({
         op: "insertPage",
         args: { afterPageId: afterId, masterId: master },
@@ -1030,7 +1100,7 @@ export function contributeSlideObjectModel(
     { slides: Address[]; fonts: string[]; diagnostics: string[] }
   > = {
     id: IMPORT_PPTX_COMMAND,
-    title: "Open a PowerPoint deck",
+    title: t(MODEL.importPptx),
     args: importPptxArgs as ValueType,
     result: importPptxResult as ValueType,
     async handler(_ctx, args) {
@@ -1044,9 +1114,70 @@ export function contributeSlideObjectModel(
     },
   };
 
+  const duplicateSlide: TypedCommandContribution<
+    { slide: string },
+    { slide: Address }
+  > = {
+    id: DUPLICATE_SLIDE_COMMAND,
+    title: t(MODEL.duplicateSlide),
+    args: duplicateSlideArgs as ValueType,
+    result: duplicateSlideResult as ValueType,
+    async handler(_ctx, args) {
+      const deck = await loadDeck();
+      if (!deck) throw new Error("failed: this document is not a slide deck");
+      const source = slidePageId(args.slide);
+      if (!deck.pages.some((p) => p.id === source))
+        throw new Error(`unknownAddress: no slide ${args.slide}`);
+      // The copy, right after its source, in one undo step: the engine
+      // names the copy, the batch's handle moves it.
+      const outcome = await host.document.mutate({
+        op: "batch",
+        args: {
+          ops: [
+            { op: "duplicatePage", args: { page: source } },
+            { op: "bindCreated", args: { handle: "copy" } },
+            { op: "movePage", args: { page: "$h:copy", after: source } },
+          ],
+        },
+      } as MutationInput);
+      if (!outcome.applied)
+        throw new Error(
+          `failed: duplicatePage was refused (${JSON.stringify(outcome.error)})`,
+        );
+      const created = outcome.createdPages?.[0];
+      if (!created) throw new Error("failed: the engine reported no new page");
+      return { slide: slideAddress(created) };
+    },
+  };
+
+  const exportPptx: TypedCommandContribution<
+    Record<string, never>,
+    { bytes: Uint8Array; fileName: string; diagnostics: string[] }
+  > = {
+    id: EXPORT_PPTX_COMMAND,
+    title: t(MODEL.exportPptx),
+    args: exportPptxArgs as ValueType,
+    result: exportPptxResult as ValueType,
+    async handler() {
+      const out = await options.exportDeck();
+      if (!out)
+        throw new Error(
+          "failed: this document was not opened from a PowerPoint deck, so it cannot be exported as one",
+        );
+      return out;
+    },
+  };
+
   return host.contribute.objectModel({
     kinds: [deckKind, slideKind, layoutKind, placeholderKind],
-    commands: [newSlide, importPptx] as readonly TypedCommandContribution[],
+    commands: [
+      newSlide,
+      importPptx,
+      duplicateSlide,
+      exportPptx,
+    ] as readonly TypedCommandContribution[],
+    // Editor plan G3a: a placeholder's text, whether a slide is shown.
+    templateFields: slideTemplateFields(host),
     batch: planBatch,
   });
 }

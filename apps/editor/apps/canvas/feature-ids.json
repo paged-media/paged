@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 335,
+    "command": 368,
     "keybinding": 88,
-    "menu": 257,
-    "panel": 121,
+    "menu": 260,
+    "panel": 122,
     "tool": 72
   },
   "features": [
@@ -46,7 +46,22 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.bindTemplateField",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.captureDataSet",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.captureEveryRecord",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.checkExpression",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -111,7 +126,27 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "command:media.paged.data.exportVariableLibrary",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.importVariableLibrary",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "command:media.paged.data.merge",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.previewQuery",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.previewRecordFlow",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -122,6 +157,21 @@
     },
     {
       "id": "command:media.paged.data.refresh",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.refreshDiff",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.runCatalogue",
+      "kind": "command",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "command:media.paged.data.templateFieldTargets",
       "kind": "command",
       "owner": "media.paged.data"
     },
@@ -351,6 +401,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.knife",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.makeCompoundPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -576,6 +631,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.scissorsAt",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.selectBlendObjects",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -617,6 +677,11 @@
     },
     {
       "id": "command:media.paged.draw.command.selectSameStrokeWeightOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.shapeBuild",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -666,12 +731,22 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.updateLinkedRecipes",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.updateObjectsOnPath",
       "kind": "command",
       "owner": "media.paged.draw"
     },
     {
       "id": "command:media.paged.draw.command.updateRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.widthProfile",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -696,6 +771,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.applyAdjustment",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.applyToFile",
       "kind": "command",
       "owner": "media.paged.image"
@@ -707,6 +787,11 @@
     },
     {
       "id": "command:media.paged.image.command.bakeAdjustToLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.canvasSize",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -737,6 +822,11 @@
     },
     {
       "id": "command:media.paged.image.command.convertLayerToSmart",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.cropImage",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -901,6 +991,11 @@
       "owner": "media.paged.publish"
     },
     {
+      "id": "command:media.paged.publish.preflight",
+      "kind": "command",
+      "owner": "media.paged.publish"
+    },
+    {
       "id": "command:media.paged.sheet.command.addSheet",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -956,6 +1051,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.importCsv",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.importXlsx",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -977,6 +1077,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.lowerToFrame",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.mergeCells",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1006,6 +1111,21 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.setBorders",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.setColumnWidth",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.setRowHeight",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.sheetFromDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1026,9 +1146,24 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.unmergeCells",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.unpublishDataset",
       "kind": "command",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.slide.duplicateSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.exportPptx",
+      "kind": "command",
+      "owner": "media.paged.slide"
     },
     {
       "id": "command:media.paged.slide.importPptx",
@@ -1046,7 +1181,17 @@
       "owner": "media.paged.web"
     },
     {
+      "id": "command:media.paged.web.command.importHtml",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
       "id": "command:media.paged.web.command.insertWebFrame",
+      "kind": "command",
+      "owner": "media.paged.web"
+    },
+    {
+      "id": "command:media.paged.web.command.makeWebFrame",
       "kind": "command",
       "owner": "media.paged.web"
     },
@@ -1406,6 +1551,21 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.host.back",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.close",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.host.submit",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.insert.deletePage",
       "kind": "command",
       "owner": "editor"
@@ -1622,6 +1782,11 @@
     },
     {
       "id": "command:paged.sample.hello",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.template.openAsTemplate",
       "kind": "command",
       "owner": "editor"
     },
@@ -2496,6 +2661,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Stroke/Width profile…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Symbol/Break link",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -2552,6 +2722,11 @@
     },
     {
       "id": "menu:Draw/Type/Create outlines",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Update linked recipes",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -2652,6 +2827,11 @@
     },
     {
       "id": "menu:File/Open PDF…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:File/Open as template…",
       "kind": "menu",
       "owner": "editor"
     },
@@ -4002,6 +4182,11 @@
     },
     {
       "id": "panel:paged.tabs",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.template",
       "kind": "panel",
       "owner": "editor"
     },

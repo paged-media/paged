@@ -106,18 +106,20 @@ fn sheet_calc_iterative_enable_flag_off_by_default() {
         r.non_converged.is_empty(),
         "iteration off: `non_converged` is always empty"
     );
-    assert_eq!(val(&e, 0, 0), CellValue::Error(CellError::Ref));
-    assert_eq!(val(&e, 0, 1), CellValue::Error(CellError::Ref));
+    // Not calculated (sheet ADR 514): A1 keeps the 10 it had before B1
+    // closed the cycle; B1, never calculated, is 0.
+    assert_eq!(val(&e, 0, 0), CellValue::Number(10.0));
+    assert_eq!(val(&e, 0, 1), CellValue::Number(0.0));
 }
 
 #[test]
 fn sheet_calc_iterative_enable_flag_on_switches_policy() {
-    // Enter the cycle with iteration OFF -> #REF!. Turning it ON recalcs and the
+    // Enter the cycle with iteration OFF (not calculated). Turning it ON recalcs and the
     // SAME cells settle (set_iterative triggers a full recalc — enable flag is
     // the only thing that changed).
     let mut e = engine();
     convergent_system(&mut e);
-    assert_eq!(val(&e, 0, 0), CellValue::Error(CellError::Ref));
+    assert_eq!(val(&e, 0, 0), CellValue::Number(10.0));
 
     let r = e.set_iterative(true, 1000, 1e-9);
     assert!(
@@ -128,10 +130,10 @@ fn sheet_calc_iterative_enable_flag_on_switches_policy() {
     approx(&e, 0, 0, 25.0, 1e-6);
     approx(&e, 0, 1, 30.0, 1e-6);
 
-    // And toggling back off restores the #REF! ruling.
+    // And toggling back off: the cycle is reported and keeps its values.
     let r2 = e.set_iterative(false, 100, 0.001);
     assert!(!r2.circular.is_empty());
-    assert_eq!(val(&e, 0, 0), CellValue::Error(CellError::Ref));
+    approx(&e, 0, 0, 25.0, 1e-6);
 }
 
 // =================================================================
@@ -278,7 +280,7 @@ fn sheet_calc_iterative_circular_with_iteration_supersedes_ref() {
     let mut off = engine();
     convergent_system(&mut off);
     off.enter(0, 0, 1, "=A1+5").unwrap();
-    assert_eq!(val(&off, 0, 0), CellValue::Error(CellError::Ref));
+    assert_eq!(val(&off, 0, 0), CellValue::Number(10.0));
 
     let mut on = engine();
     on.set_iterative(true, 1000, 1e-9);

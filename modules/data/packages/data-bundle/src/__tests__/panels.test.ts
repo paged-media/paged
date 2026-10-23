@@ -38,6 +38,8 @@ mock.module("react", () => ({
   },
   // No renderer here: effects (the session subscription) do not run.
   useEffect: () => {},
+  // No provider: `useStrings` falls back to the active strings.
+  useContext: () => null,
   // Each call recomputes: a render reads the session as it is now.
   useMemo: (make: () => unknown) => make(),
   useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) =>

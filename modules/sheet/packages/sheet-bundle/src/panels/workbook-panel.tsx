@@ -53,13 +53,15 @@ import {
   status,
   useConfirm,
 } from "@paged-media/panel-kit";
+import { useStrings } from "@paged-media/strings";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { FunctionEntry } from "../../../sheet-host-model/src";
 import { DELIMITED_MIMES, importBytes, XLSX_MIME } from "../import-xlsx";
 import { columnLabel, type WorkbookSession } from "../session";
-import { FormatSection, labelOf, NamesSection } from "./format-section";
+import { COMMANDS, WORKBOOK as M } from "../messages";
+import { FormatSection, NamesSection, tokenLabel } from "./format-section";
 import { PROPERTIES_PANEL_ID } from "./properties-panel";
 
 const GRID_PANEL_ID = "media.paged.sheet.panel.grid";
@@ -187,6 +189,7 @@ export function makeWorkbookPanel(
     // session as a render value (react-live, editor ADR 229), a new view
     // after every change, so what is read from it is read again.
     const live = useLive(session, onDidChangeOf);
+    const { t } = useStrings();
     const fileRef = useRef<HTMLInputElement | null>(null);
 
     const st = live.state();
@@ -231,10 +234,7 @@ export function makeWorkbookPanel(
     const onPlace = () => {
       setPlaceMsg(null);
       void session.lowerSelection().then((id) => {
-        if (id === null)
-          setPlaceMsg(
-            "The range could not be placed. Check that it is a valid range like A1:D20.",
-          );
+        if (id === null) setPlaceMsg(t(M.placeFailed));
       });
     };
 
@@ -258,7 +258,7 @@ export function makeWorkbookPanel(
       const r = await session.paginateSelection({
         repeatHeaderRows: Math.max(0, Math.floor(headerRows)),
       });
-      setPlaceMsg(r.ok ? "Paginated into the frame chain (live)." : r.message);
+      setPlaceMsg(r.ok ? t(M.paginated) : r.message);
     };
 
     // Sort-range controls (thin glue — the engine owns the sort semantics;
@@ -273,13 +273,15 @@ export function makeWorkbookPanel(
         sortAsc,
         sortHeader,
       );
-      setSortMsg(res.ok ? "Sorted." : res.message);
+      setSortMsg(res.ok ? t(M.sorted) : res.message);
     };
 
     // New cell style from the selected cell (S-04). Thin glue over
     // session.newCellStyleFromSelection — the engine owns the lowering, the
     // platform owns the style mint + the cell read; this only routes the name.
-    const [styleName, setStyleName] = useState("Cell style");
+    const [styleName, setStyleName] = useState(() =>
+      t(COMMANDS.defaultStyleName),
+    );
     const [styleMsg, setStyleMsg] = useState<string | null>(null);
 
     // Chart authoring (editor-ui-coverage M — the model was import-only).
@@ -292,7 +294,7 @@ export function makeWorkbookPanel(
     const [chartMsg, setChartMsg] = useState<string | null>(null);
     const onAuthorChart = () => {
       if (!chartValues.trim()) {
-        setChartMsg("Enter a values range (for example B2:C8) first.");
+        setChartMsg(t(M.valuesFirst));
         return;
       }
       const res = session.authorChart(
@@ -302,11 +304,7 @@ export function makeWorkbookPanel(
         chartTitle.trim(),
         chartSeriesIn,
       );
-      setChartMsg(
-        res.ok
-          ? "Chart created. Place it on the page from the list below; it is not saved into the .xlsx."
-          : res.message,
-      );
+      setChartMsg(res.ok ? t(M.chartCreated) : res.message);
     };
 
     // Function browser (editor-ui-coverage M): filter + copy-to-clipboard.
@@ -314,29 +312,31 @@ export function makeWorkbookPanel(
     const [fnMsg, setFnMsg] = useState<string | null>(null);
     const onCopyFunction = async (name: string) => {
       if (!host.supports("clipboard@1")) {
-        setFnMsg(`Copying isn't available here; type ${name}( in a cell.`);
+        setFnMsg(t(M.noClipboard, { name }));
         return;
       }
       try {
         await host.clipboard.write({ text: `${name}()` });
-        setFnMsg(`${name}() copied; paste it into a cell.`);
+        setFnMsg(t(M.fnCopied, { name }));
       } catch (e) {
-        setFnMsg(`Couldn't copy ${name}: ${String(e)}.`);
+        setFnMsg(t(M.fnCopyFailed, { name, error: String(e) }));
       }
     };
     const onNewCellStyle = async () => {
       const res = await session.newCellStyleFromSelection(
-        styleName.trim() || "Cell style",
+        styleName.trim() || t(COMMANDS.defaultStyleName),
       );
       if (!res.ok) {
         setStyleMsg(res.message);
         return;
       }
-      const captured = `Captured ${res.capturedCount} propert${res.capturedCount === 1 ? "y" : "ies"}`;
       setStyleMsg(
         res.applied
-          ? `${captured}; style applied to the cell.`
-          : `${captured}; ${res.applyMessage ?? "style created (not applied)"}.`,
+          ? t(M.styleApplied, { count: res.capturedCount })
+          : t(M.styleNotApplied, {
+              count: res.capturedCount,
+              reason: res.applyMessage ?? t(M.styleCreatedOnly),
+            }),
       );
     };
 
@@ -362,7 +362,7 @@ export function makeWorkbookPanel(
     const chartKinds = live.chartKinds();
     const hasRange = !!st.selectedRange;
     const deleteLabel = (key: string, label: string) =>
-      armed === key ? "Confirm delete" : label;
+      armed === key ? t(M.confirmDelete) : label;
 
     return (
       <div
@@ -373,7 +373,7 @@ export function makeWorkbookPanel(
           flexDirection: "column",
         }}
       >
-        <div style={{ ...kicker, marginTop: 0 }}>Workbook</div>
+        <div style={{ ...kicker, marginTop: 0 }}>{t(M.kicker)}</div>
         {/* S-11 RESOLVED: the host file picker is the primary path; the
          *  panel's own `<input>` is the honest fallback when no picker is
          *  wired (headless / a host that predates the door). */}
@@ -385,7 +385,7 @@ export function makeWorkbookPanel(
               onClick={() => void onPick()}
               style={primaryButton}
             >
-              Open .xlsx or .csv…
+              {t(M.open)}
             </button>
           ) : (
             <input
@@ -393,7 +393,7 @@ export function makeWorkbookPanel(
               data-sheet-file
               type="file"
               accept=".xlsx,.csv,.tsv"
-              aria-label="Open a workbook"
+              aria-label={t(M.openAria)}
               onChange={onFile}
               style={{ ...body, maxWidth: "100%" }}
             />
@@ -402,11 +402,7 @@ export function makeWorkbookPanel(
             data-sheet-new
             type="button"
             data-armed={armed === "new" ? "" : undefined}
-            title={
-              sheets.length > 0
-                ? "Replaces the open workbook; this can't be undone"
-                : undefined
-            }
+            title={sheets.length > 0 ? t(M.replacesWorkbook) : undefined}
             onClick={() => {
               const run = () => void session.newWorkbook();
               if (sheets.length > 0) confirm("new", run);
@@ -414,7 +410,7 @@ export function makeWorkbookPanel(
             }}
             style={secondaryButton}
           >
-            {armed === "new" ? "Confirm replace" : "New blank workbook"}
+            {armed === "new" ? t(M.confirmReplace) : t(M.newWorkbook)}
           </button>
         </div>
 
@@ -432,30 +428,30 @@ export function makeWorkbookPanel(
               borderRadius: radius.sm,
             }}
           >
-            The spreadsheet engine could not start: {st.bootError}.
+            {t(M.bootError, { error: st.bootError })}
           </div>
         )}
 
         {!st.bootError && sheets.length === 0 && (
           <p data-sheet-empty style={{ ...note, marginTop: 0 }}>
-            Open a workbook or start a blank one to place a table on the page.
+            {t(M.empty)}
           </p>
         )}
 
         {st.fileName && (
           <p style={{ ...body, margin: `0 0 ${space[1]}` }}>
-            Imported{" "}
+            {t(M.imported)}{" "}
             <span style={{ fontFamily: font.mono }}>{st.fileName}</span>.
           </p>
         )}
 
         {sheets.length > 0 && (
           <>
-            <div style={kicker}>Sheet</div>
+            <div style={kicker}>{t(M.sheetKicker)}</div>
             <select
               data-sheet-select
               value={st.activeSheet ?? sheets[0].id}
-              aria-label="Active sheet"
+              aria-label={t(M.activeSheet)}
               onChange={(e) => session.setActiveSheet(Number(e.target.value))}
               style={input}
             >
@@ -471,17 +467,17 @@ export function makeWorkbookPanel(
                 type="button"
                 data-sheet-add
                 style={secondaryButton}
-                onClick={() => reportSheet(session.addSheet(), "Sheet added.")}
+                onClick={() => reportSheet(session.addSheet(), t(M.sheetAdded))}
               >
-                Add sheet
+                {t(M.addSheet)}
               </button>
               <input
                 data-sheet-rename-to
                 type="text"
                 value={renameTo}
                 onChange={(e) => setRenameTo(e.target.value)}
-                placeholder="New name"
-                aria-label="New sheet name"
+                placeholder={t(M.newName)}
+                aria-label={t(M.newNameAria)}
                 style={{ ...input, width: 110, marginTop: 0 }}
               />
               <button
@@ -489,15 +485,15 @@ export function makeWorkbookPanel(
                 data-sheet-rename
                 style={secondaryButton}
                 disabled={renameTo.trim().length === 0}
-                title={renameTo.trim() ? undefined : "Type a new name first"}
+                title={renameTo.trim() ? undefined : t(M.typeNameFirst)}
                 onClick={() =>
                   reportSheet(
                     session.renameSheet(st.activeSheet ?? 0, renameTo.trim()),
-                    "Sheet renamed.",
+                    t(M.sheetRenamed),
                   )
                 }
               >
-                Rename
+                {t(M.rename)}
               </button>
               <button
                 type="button"
@@ -507,19 +503,19 @@ export function makeWorkbookPanel(
                 disabled={sheets.length <= 1}
                 title={
                   sheets.length <= 1
-                    ? "A workbook needs at least one sheet"
-                    : "Delete this sheet; this can't be undone"
+                    ? t(M.oneSheetNeeded)
+                    : t(M.deleteSheetTitle)
                 }
                 onClick={() =>
                   confirm("sheet", () =>
                     reportSheet(
                       session.deleteSheet(st.activeSheet ?? 0),
-                      "Sheet deleted.",
+                      t(M.sheetDeleted),
                     ),
                   )
                 }
               >
-                {deleteLabel("sheet", "Delete sheet")}
+                {deleteLabel("sheet", t(M.deleteSheet))}
               </button>
             </div>
             {sheetMsg && (
@@ -534,7 +530,7 @@ export function makeWorkbookPanel(
 
             <div style={{ height: space[2] }} />
 
-            <Section id="place" title="Place on page" open>
+            <Section id="place" title={t(M.placeSection)} open>
               <label
                 style={{
                   ...body,
@@ -543,7 +539,7 @@ export function makeWorkbookPanel(
                   gap: 2,
                 }}
               >
-                Range
+                {t(M.range)}
                 <input
                   data-sheet-range
                   type="text"
@@ -559,18 +555,14 @@ export function makeWorkbookPanel(
                   data-sheet-lower
                   onClick={onPlace}
                   disabled={!hasRange}
-                  title={
-                    hasRange
-                      ? "Place the range on the page as a table"
-                      : "Enter a range first"
-                  }
+                  title={hasRange ? t(M.placeTitle) : t(M.rangeFirst)}
                   style={{
                     ...primaryButton,
                     opacity: hasRange ? 1 : 0.5,
                     cursor: hasRange ? "pointer" : "not-allowed",
                   }}
                 >
-                  Place on page
+                  {t(M.place)}
                 </button>
               </div>
               <div style={row}>
@@ -580,13 +572,9 @@ export function makeWorkbookPanel(
                   onClick={() => void onPaginate()}
                   disabled={!hasRange}
                   style={secondaryButton}
-                  title={
-                    hasRange
-                      ? "Select a text frame of a threaded chain first"
-                      : "Enter a range first"
-                  }
+                  title={hasRange ? t(M.chainFirst) : t(M.rangeFirst)}
                 >
-                  Paginate into threaded frames
+                  {t(M.paginate)}
                 </button>
                 <label
                   style={{
@@ -595,9 +583,9 @@ export function makeWorkbookPanel(
                     alignItems: "center",
                     gap: 4,
                   }}
-                  title="Rows repeated at the top of every frame of the chain"
+                  title={t(M.headerRowsTitle)}
                 >
-                  Header rows
+                  {t(M.headerRows)}
                   <input
                     data-sheet-paginate-header-rows
                     type="number"
@@ -619,10 +607,8 @@ export function makeWorkbookPanel(
               )}
             </Section>
 
-            <Section id="structure" title="Rows and columns">
-              <p style={{ ...note, marginTop: 0 }}>
-                Acts on the rows or columns selected in the grid.
-              </p>
+            <Section id="structure" title={t(M.structureSection)}>
+              <p style={{ ...note, marginTop: 0 }}>{t(M.structureNote)}</p>
               <div style={row}>
                 <button
                   type="button"
@@ -631,28 +617,28 @@ export function makeWorkbookPanel(
                   onClick={() =>
                     report(
                       session.structuralEdit("insertRows"),
-                      "Rows inserted.",
+                      t(M.rowsInserted),
                     )
                   }
                 >
-                  Insert rows
+                  {t(M.insertRows)}
                 </button>
                 <button
                   type="button"
                   data-sheet-delete-rows
                   style={secondaryButton}
                   data-armed={armed === "rows" ? "" : undefined}
-                  title="Delete the selected rows; this can't be undone"
+                  title={t(M.deleteRowsTitle)}
                   onClick={() =>
                     confirm("rows", () =>
                       report(
                         session.structuralEdit("deleteRows"),
-                        "Rows deleted.",
+                        t(M.rowsDeleted),
                       ),
                     )
                   }
                 >
-                  {deleteLabel("rows", "Delete rows")}
+                  {deleteLabel("rows", t(M.deleteRows))}
                 </button>
                 <button
                   type="button"
@@ -661,28 +647,28 @@ export function makeWorkbookPanel(
                   onClick={() =>
                     report(
                       session.structuralEdit("insertCols"),
-                      "Columns inserted.",
+                      t(M.colsInserted),
                     )
                   }
                 >
-                  Insert columns
+                  {t(M.insertCols)}
                 </button>
                 <button
                   type="button"
                   data-sheet-delete-cols
                   style={secondaryButton}
                   data-armed={armed === "cols" ? "" : undefined}
-                  title="Delete the selected columns; this can't be undone"
+                  title={t(M.deleteColsTitle)}
                   onClick={() =>
                     confirm("cols", () =>
                       report(
                         session.structuralEdit("deleteCols"),
-                        "Columns deleted.",
+                        t(M.colsDeleted),
                       ),
                     )
                   }
                 >
-                  {deleteLabel("cols", "Delete columns")}
+                  {deleteLabel("cols", t(M.deleteCols))}
                 </button>
               </div>
               {structMsg && (
@@ -696,7 +682,7 @@ export function makeWorkbookPanel(
               )}
             </Section>
 
-            <Section id="format" title="Format and layout">
+            <Section id="format" title={t(M.formatSection)}>
               <FormatSection
                 session={session}
                 styles={{ kicker, body, input, button: secondaryButton, row }}
@@ -704,7 +690,7 @@ export function makeWorkbookPanel(
               />
             </Section>
 
-            <Section id="names" title="Names">
+            <Section id="names" title={t(M.namesSection)}>
               <NamesSection
                 session={session}
                 styles={{ kicker, body, input, button: secondaryButton, row }}
@@ -714,7 +700,7 @@ export function makeWorkbookPanel(
             {/* Sort range — thin controls over engine.sortRange (the
              *  values-only honest subset; a formula range refuses and the
              *  engine's message shows verbatim). */}
-            <Section id="sort" title="Sort range">
+            <Section id="sort" title={t(M.sortSection)}>
               <div style={{ ...row, marginTop: 0 }}>
                 <label
                   style={{
@@ -724,26 +710,26 @@ export function makeWorkbookPanel(
                     gap: 4,
                   }}
                 >
-                  Key column
+                  {t(M.keyColumn)}
                   <input
                     data-sheet-sort-key
                     type="number"
                     min={1}
                     value={sortKey}
                     onChange={(e) => setSortKey(Number(e.target.value))}
-                    title="1 = the first column of the range"
+                    title={t(M.keyColumnTitle)}
                     style={{ ...input, width: 52 }}
                   />
                 </label>
                 <select
                   data-sheet-sort-dir
                   value={sortAsc ? "asc" : "desc"}
-                  aria-label="Sort direction"
+                  aria-label={t(M.sortDirection)}
                   onChange={(e) => setSortAsc(e.target.value === "asc")}
                   style={input}
                 >
-                  <option value="asc">Ascending</option>
-                  <option value="desc">Descending</option>
+                  <option value="asc">{t(M.ascending)}</option>
+                  <option value="desc">{t(M.descending)}</option>
                 </select>
                 <label
                   style={{
@@ -759,7 +745,7 @@ export function makeWorkbookPanel(
                     checked={sortHeader}
                     onChange={(e) => setSortHeader(e.target.checked)}
                   />
-                  Has header row
+                  {t(M.hasHeader)}
                 </label>
               </div>
               <div style={row}>
@@ -768,14 +754,14 @@ export function makeWorkbookPanel(
                   data-sheet-sort
                   onClick={onSort}
                   disabled={!hasRange}
-                  title={hasRange ? undefined : "Enter a range first"}
+                  title={hasRange ? undefined : t(M.rangeFirst)}
                   style={{
                     ...primaryButton,
                     opacity: hasRange ? 1 : 0.5,
                     cursor: hasRange ? "pointer" : "not-allowed",
                   }}
                 >
-                  Sort
+                  {t(M.sort)}
                 </button>
               </div>
               {sortMsg && (
@@ -791,14 +777,14 @@ export function makeWorkbookPanel(
             {/* New cell style from the selected cell (S-04): the style is
              *  minted + populated from the cell's appearance and applied
              *  back to the cell (the message reports whether the apply took). */}
-            <Section id="cell-style" title="Cell styles">
+            <Section id="cell-style" title={t(M.stylesSection)}>
               <input
                 data-sheet-cellstyle-name
                 type="text"
                 value={styleName}
                 onChange={(e) => setStyleName(e.target.value)}
-                placeholder="Style name"
-                aria-label="Style name"
+                placeholder={t(M.styleName)}
+                aria-label={t(M.styleName)}
                 style={input}
               />
               <div style={row}>
@@ -808,7 +794,7 @@ export function makeWorkbookPanel(
                   onClick={() => void onNewCellStyle()}
                   style={secondaryButton}
                 >
-                  New style from selected cell
+                  {t(M.newStyle)}
                 </button>
               </div>
               {styleMsg && (
@@ -820,8 +806,7 @@ export function makeWorkbookPanel(
                 </p>
               )}
               <p data-sheet-cellstyle-note style={note}>
-                Takes the fill and borders of the selected cell in a placed
-                table.
+                {t(M.styleNote)}
               </p>
             </Section>
 
@@ -832,18 +817,18 @@ export function makeWorkbookPanel(
              *  The kind list is READ FROM THE ENGINE (session.chartKinds),
              *  never hard-coded here: which kinds exist is a Rust decision,
              *  so the panel cannot offer one the engine refuses. */}
-            <Section id="charts" title="Charts">
+            <Section id="charts" title={t(M.chartsSection)}>
               <div style={{ ...row, marginTop: 0 }}>
                 <select
                   data-sheet-chart-kind
                   value={chartKind}
-                  aria-label="Chart type"
+                  aria-label={t(M.chartType)}
                   onChange={(e) => setChartKind(e.target.value)}
                   style={input}
                 >
                   {chartKinds.map((k) => (
                     <option key={k} value={k}>
-                      {labelOf(k)}
+                      {tokenLabel(t, k)}
                     </option>
                   ))}
                 </select>
@@ -853,12 +838,12 @@ export function makeWorkbookPanel(
                   data-sheet-chart-series-in
                   value={chartSeriesIn}
                   onChange={(e) => setChartSeriesIn(e.target.value)}
-                  title="Which axis of the values block is a series"
-                  aria-label="Series in"
+                  title={t(M.seriesInTitle)}
+                  aria-label={t(M.seriesIn)}
                   style={input}
                 >
-                  <option value="columns">Series in columns</option>
-                  <option value="rows">Series in rows</option>
+                  <option value="columns">{t(M.seriesInColumns)}</option>
+                  <option value="rows">{t(M.seriesInRows)}</option>
                 </select>
               </div>
               <div style={row}>
@@ -867,8 +852,8 @@ export function makeWorkbookPanel(
                   type="text"
                   value={chartValues}
                   onChange={(e) => setChartValues(e.target.value)}
-                  placeholder="Values, e.g. B2:C8"
-                  aria-label="Values range"
+                  placeholder={t(M.valuesPlaceholder)}
+                  aria-label={t(M.valuesAria)}
                   style={{ ...input, flex: "1 1 110px" }}
                 />
                 <input
@@ -876,8 +861,8 @@ export function makeWorkbookPanel(
                   type="text"
                   value={chartCats}
                   onChange={(e) => setChartCats(e.target.value)}
-                  placeholder="Labels (optional)"
-                  aria-label="Labels range"
+                  placeholder={t(M.labelsPlaceholder)}
+                  aria-label={t(M.labelsAria)}
                   style={{ ...input, flex: "1 1 110px" }}
                 />
               </div>
@@ -887,8 +872,8 @@ export function makeWorkbookPanel(
                   type="text"
                   value={chartTitle}
                   onChange={(e) => setChartTitle(e.target.value)}
-                  placeholder="Title (optional)"
-                  aria-label="Chart title"
+                  placeholder={t(M.titlePlaceholder)}
+                  aria-label={t(M.titleAria)}
                   style={{ ...input, flex: "1 1 110px" }}
                 />
                 <button
@@ -897,7 +882,7 @@ export function makeWorkbookPanel(
                   onClick={onAuthorChart}
                   style={secondaryButton}
                 >
-                  Create chart
+                  {t(M.createChart)}
                 </button>
               </div>
               {chartMsg && (
@@ -934,11 +919,14 @@ export function makeWorkbookPanel(
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {c.title || `${labelOf(c.kind)} chart`}
+                          {c.title ||
+                            t(M.untitledChart, {
+                              kind: tokenLabel(t, c.kind),
+                            })}
                           <span style={{ color: "var(--pg-muted-fg)" }}>
                             {" "}
-                            · {c.title ? `${labelOf(c.kind)}, ` : ""}
-                            {c.seriesCount} series
+                            · {c.title ? `${tokenLabel(t, c.kind)}, ` : ""}
+                            {t(M.chartSeries, { count: c.seriesCount })}
                           </span>
                         </span>
                         <button
@@ -947,7 +935,7 @@ export function makeWorkbookPanel(
                           onClick={() => void session.lowerChart(c.index)}
                           style={secondaryButton}
                         >
-                          Place on page
+                          {t(M.place)}
                         </button>
                       </div>
                     ))}
@@ -961,14 +949,14 @@ export function makeWorkbookPanel(
              *  family, arg counts from the engine's own registry (never a
              *  hand-kept list). Click copies `NAME(` for pasting into a cell
              *  when the clipboard door is wired. */}
-            <Section id="functions" title="Functions">
+            <Section id="functions" title={t(M.functionsSection)}>
               <input
                 data-sheet-fn-filter
                 type="text"
                 value={fnFilter}
                 onChange={(e) => setFnFilter(e.target.value)}
-                placeholder="Filter functions"
-                aria-label="Filter functions"
+                placeholder={t(M.filterFunctions)}
+                aria-label={t(M.filterFunctions)}
                 style={input}
               />
               {fnMsg && (
@@ -1012,20 +1000,30 @@ export function makeWorkbookPanel(
                           margin: `${space[1]} 0 2px`,
                         }}
                       >
-                        {labelOf(family)} ({fns.length})
+                        {tokenLabel(t, family)} ({fns.length})
                       </div>
                       {fns.map((f) => (
                         <button
                           key={f.name}
                           type="button"
                           data-sheet-fn={f.name}
-                          title={`${f.name}: ${f.minArgs}${
+                          title={
                             f.maxArgs === null
-                              ? " or more"
+                              ? t(M.fnArgsOrMore, {
+                                  name: f.name,
+                                  count: f.minArgs,
+                                })
                               : f.maxArgs === f.minArgs
-                                ? ""
-                                : ` to ${f.maxArgs}`
-                          } argument${f.maxArgs === 1 && f.minArgs === 1 ? "" : "s"}. Click to copy.`}
+                                ? t(M.fnArgs, {
+                                    name: f.name,
+                                    count: f.minArgs,
+                                  })
+                                : t(M.fnArgsRange, {
+                                    name: f.name,
+                                    min: f.minArgs,
+                                    max: f.maxArgs,
+                                  })
+                          }
                           onClick={() => void onCopyFunction(f.name)}
                           style={{
                             display: "block",
@@ -1064,7 +1062,7 @@ export function makeWorkbookPanel(
                 return null;
               }
               return (
-                <Section id="inventory" title="Workbook contents">
+                <Section id="inventory" title={t(M.contentsSection)}>
                   <div data-sheet-inspect>
                     {freezes.map((f, i) => (
                       <p
@@ -1072,10 +1070,13 @@ export function makeWorkbookPanel(
                         data-sheet-freeze
                         style={{ ...body, margin: 0 }}
                       >
-                        {sheets[f.sheet]?.name ?? `Sheet ${f.sheet + 1}`}:
-                        frozen {f.rows} row{f.rows === 1 ? "" : "s"}, {f.cols}{" "}
-                        column
-                        {f.cols === 1 ? "" : "s"}
+                        {t(M.frozen, {
+                          sheet:
+                            sheets[f.sheet]?.name ??
+                            t(M.sheetN, { n: f.sheet + 1 }),
+                          rows: f.rows,
+                          cols: f.cols,
+                        })}
                       </p>
                     ))}
                     {validations.map((v, i) => (
@@ -1084,22 +1085,29 @@ export function makeWorkbookPanel(
                         data-sheet-validation
                         style={{ ...body, margin: 0 }}
                       >
-                        {sheets[v.sheet]?.name ?? `Sheet ${v.sheet + 1}`}:{" "}
-                        {v.count} data validation{v.count === 1 ? "" : "s"} (
-                        {v.kinds.join(", ")}), kept but not enforced
+                        {t(M.validations, {
+                          sheet:
+                            sheets[v.sheet]?.name ??
+                            t(M.sheetN, { n: v.sheet + 1 }),
+                          count: v.count,
+                          kinds: v.kinds.join(", "),
+                        })}
                       </p>
                     ))}
                     {comments.length > 0 && (
                       <p data-sheet-comments style={{ ...body, margin: 0 }}>
-                        {comments.length} comment
-                        {comments.length === 1 ? "" : "s"} (read-only):{" "}
-                        {comments
-                          .slice(0, 3)
-                          .map(
-                            (c) =>
-                              `${c.author || "Unknown"} at ${columnLabel(c.col)}${c.row + 1}`,
-                          )
-                          .join(" · ")}
+                        {t(M.comments, {
+                          count: comments.length,
+                          list: comments
+                            .slice(0, 3)
+                            .map((c) =>
+                              t(M.commentAt, {
+                                author: c.author || t(M.unknownAuthor),
+                                cell: `${columnLabel(c.col)}${c.row + 1}`,
+                              }),
+                            )
+                            .join(" · "),
+                        })}
                         {comments.length > 3 ? " · …" : ""}
                       </p>
                     )}
@@ -1109,7 +1117,7 @@ export function makeWorkbookPanel(
             })()}
 
             <p data-sheet-find-pointer style={{ ...note, marginTop: space[2] }}>
-              Find and replace are in the{" "}
+              {t(M.findPointer)}{" "}
               <button
                 type="button"
                 data-sheet-open-grid
@@ -1119,7 +1127,7 @@ export function makeWorkbookPanel(
                 }}
                 style={linkButton}
               >
-                Grid panel
+                {t(M.gridPanel)}
               </button>
               .
             </p>
@@ -1131,10 +1139,10 @@ export function makeWorkbookPanel(
          *  is wired, else this browser's local store, else in-memory. */}
         <p data-sheet-honesty style={{ ...note, marginTop: space[2] }}>
           {host.supports("storage.parts@1")
-            ? "The workbook is saved inside the document and travels with the .paged file."
+            ? t(M.savedInDocument)
             : host.supports("storage.blob@1")
-              ? "The workbook is saved in this browser and restored on reload."
-              : "The workbook lives in memory only; open it again after a reload."}
+              ? t(M.savedInBrowser)
+              : t(M.inMemory)}
         </p>
       </div>
     );

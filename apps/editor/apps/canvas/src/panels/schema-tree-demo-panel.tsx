@@ -51,6 +51,8 @@ import { useCallback, useEffect } from "react";
 import {
   CatalogRegistryProvider,
   createLocalBindingsSurface,
+  scoped,
+  useScoped,
   PAGED_LIST,
   SchemaPanelRenderer,
   useCanvasClient,
@@ -60,6 +62,12 @@ import {
   type ShellSchemaReorderPayload,
 } from "@paged-media/shell";
 import type { SceneTreeNode } from "@paged-media/client";
+import {
+  defineMessages,
+  t,
+  useStrings,
+  type Strings,
+} from "@paged-media/strings";
 
 import { appCatalogRegistry } from "./catalog-registry";
 
@@ -70,10 +78,21 @@ export const DEMO_MOVE_LAYER_COMMAND = "paged.demo.moveLayer";
 const STRUCTURE_BINDING = "demo.structureRows";
 const STRUCTURE_SELECTED = "demo.structureSelected";
 
-// Module-scoped so the published rows + expansion survive a dock tab
+// In the editor's scope so the published rows + expansion survive a dock tab
 // close/reopen (UI state, not document state) — the schema-list demo
 // panel's convention.
-const demoBindings = createLocalBindingsSurface();
+const DEMO_BINDINGS = scoped("schema-tree-demo-panel", () =>
+  createLocalBindingsSurface(),
+);
+
+const M = defineMessages("app.schemaTreeDemoPanel", {
+  title: "Structure (schema tree)",
+  structure: "Structure",
+  collapsed: "Collapsed",
+  layers: "Layers",
+  renameLayer: "Rename layer (schema tree demo)",
+  moveLayer: "Move layer (schema tree demo)",
+});
 
 /** One published row: flat, with a parent pointer — the shape the
  *  tree spec reads and the shape `LayerSummary` already has. */
@@ -108,12 +127,12 @@ function flattenSceneTree(roots: SceneTreeNode[]): StructureRow[] {
   return out;
 }
 
-const DEMO_SCHEMA: ShellPanelSchema = {
+const demoSchema = (strings: Strings): ShellPanelSchema => ({
   id: SCHEMA_TREE_DEMO_PANEL_ID,
-  title: "Structure (schema tree)",
+  title: strings.t(M.title),
   sections: [
     {
-      title: "Structure",
+      title: strings.t(M.structure),
       rows: [
         {
           widget: PAGED_LIST,
@@ -138,7 +157,7 @@ const DEMO_SCHEMA: ShellPanelSchema = {
       // panel over a deep tree needs, and the reason a large tree does
       // not have to fight the render window. No reorder here either,
       // so a tree WITHOUT drag renders as a plain (non-draggable) one.
-      title: "Collapsed",
+      title: strings.t(M.collapsed),
       rows: [
         {
           widget: PAGED_LIST,
@@ -152,7 +171,7 @@ const DEMO_SCHEMA: ShellPanelSchema = {
       ],
     },
     {
-      title: "Layers",
+      title: strings.t(M.layers),
       rows: [
         {
           widget: PAGED_LIST,
@@ -174,9 +193,11 @@ const DEMO_SCHEMA: ShellPanelSchema = {
       ],
     },
   ],
-};
+});
 
 export function SchemaTreeDemoPanel() {
+  const demoBindings = useScoped(DEMO_BINDINGS);
+  const strings = useStrings();
   const client = useCanvasClient();
   const registries = useRegistries();
 
@@ -190,7 +211,7 @@ export function SchemaTreeDemoPanel() {
         demoBindings.publish(STRUCTURE_BINDING, flattenSceneTree(roots)),
       )
       .catch(() => demoBindings.publish(STRUCTURE_BINDING, []));
-  }, [client]);
+  }, [client, demoBindings]);
 
   useEffect(() => {
     refresh();
@@ -215,7 +236,7 @@ export function SchemaTreeDemoPanel() {
       handles.push(
         registries.commands.register({
           id: DEMO_RENAME_LAYER_COMMAND,
-          title: "Rename layer (schema tree demo)",
+          title: t(M.renameLayer),
           category: "Demo",
           handler: (_paged, payload) => {
             const p = payload as ShellSchemaRenamePayload | undefined;
@@ -234,7 +255,7 @@ export function SchemaTreeDemoPanel() {
       handles.push(
         registries.commands.register({
           id: DEMO_MOVE_LAYER_COMMAND,
-          title: "Move layer (schema tree demo)",
+          title: t(M.moveLayer),
           category: "Demo",
           handler: (_paged, payload) => {
             const p = payload as ShellSchemaReorderPayload | undefined;
@@ -255,7 +276,10 @@ export function SchemaTreeDemoPanel() {
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
-      <SchemaPanelRenderer schema={DEMO_SCHEMA} bindings={demoBindings} />
+      <SchemaPanelRenderer
+        schema={demoSchema(strings)}
+        bindings={demoBindings}
+      />
     </CatalogRegistryProvider>
   );
 }

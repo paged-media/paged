@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useStrings } from "@paged-media/strings";
 
 import {
   CommandDialog,
@@ -29,43 +30,49 @@ import {
   CommandSeparator,
 } from "../components/ui/command";
 import { AI_ASK_COMMAND } from "../ai/editor-ai";
-import { AI_UNAVAILABLE_TEXT, useAiAvailability } from "../ai/availability";
+import { aiUnavailableText, useAiAvailability } from "../ai/availability";
 import { acceleratorLookup } from "./MenuBar";
 import { PoweredByClaude } from "../ai/powered-by-claude";
 import { Icon } from "../icons";
 import { paletteScore } from "./palette-score";
 import type { CommandContribution, CommandRegistry } from "../registries";
 import { useRegistries } from "../state/registries-context";
+import {
+  createEmitter,
+  scoped,
+  useScoped,
+  type EditorScope,
+} from "../state/editor-scope";
 import { useRegistryView } from "../state/live";
+import { useEditorStorage, type StorageAdapter } from "../state/storage";
 import { useOptionalPaged } from "../state/paged-editor";
 import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
 import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
+import { categoryLabel, PALETTE } from "./messages";
 
 /**
- * Module-level event emitter for the palette's open/toggle state.
- * Listeners are the mounted palette components; emitters are
- * registered commands (`paged.palette.toggle`, `…open`, `…close`)
- * + the keybinding registry that routes Cmd+K through them.
- *
- * Module scope so external command handlers can fire the toggle
+ * The palette's open/toggle event, one per editor (plan task E1).
+ * The listener is the mounted palette; emitters are registered commands
+ * (`paged.palette.toggle`, …) and the keybinding registry that routes
+ * Cmd+K through them, which reach it through their editor's scope
  * without crossing the React context boundary.
  */
 type PaletteAction = "toggle" | "open" | "close";
-const listeners = new Set<(action: PaletteAction) => void>();
+const PALETTE_EVENT = scoped("palette", () => createEmitter<PaletteAction>());
 
-/** Emit a palette action. Idempotent — safe to call from anywhere. */
-export function notifyPalette(action: PaletteAction): void {
-  for (const fn of listeners) fn(action);
+/** Emit a palette action in `scope`'s editor. Idempotent. */
+export function notifyPalette(scope: EditorScope, action: PaletteAction): void {
+  scope.get(PALETTE_EVENT).emit(action);
 }
 
 /** Recently-run command ids, most recent first. */
 const RECENTS_KEY = "paged.palette.recents.v1";
 const RECENTS_MAX = 5;
 
-function loadRecents(): string[] {
+function loadRecents(storage: StorageAdapter): string[] {
   try {
-    const raw = localStorage.getItem(RECENTS_KEY);
+    const raw = storage.getItem(RECENTS_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : [];
     return Array.isArray(parsed)
       ? parsed.filter((x) => typeof x === "string")
@@ -75,13 +82,13 @@ function loadRecents(): string[] {
   }
 }
 
-function pushRecent(id: string): string[] {
-  const next = [id, ...loadRecents().filter((x) => x !== id)].slice(
+function pushRecent(storage: StorageAdapter, id: string): string[] {
+  const next = [id, ...loadRecents(storage).filter((x) => x !== id)].slice(
     0,
     RECENTS_MAX,
   );
   try {
-    localStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    storage.setItem(RECENTS_KEY, JSON.stringify(next));
   } catch {
     /* convenience only */
   }
@@ -140,6 +147,7 @@ function applicableCommands(
 }
 
 export function CommandPalette() {
+  const strings = useStrings();
   const paged = useOptionalPaged();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -166,23 +174,23 @@ export function CommandPalette() {
   // formatter, MenuBar's `acceleratorLookup`).
   const keyFor = acceleratorLookup(keybindings.list());
   const workflowMode = useOptionalWorkflowMode();
-  const [recents, setRecents] = useState<string[]>(loadRecents);
+  const storage = useEditorStorage();
+  const [recents, setRecents] = useState<string[]>(() => loadRecents(storage));
 
-  useEffect(() => {
-    const handler = (action: PaletteAction) => {
-      if (action === "toggle") {
-        setOpen((v) => !v);
-      } else if (action === "open") {
-        setOpen(true);
-      } else {
-        setOpen(false);
-      }
-    };
-    listeners.add(handler);
-    return () => {
-      listeners.delete(handler);
-    };
-  }, []);
+  const palette = useScoped(PALETTE_EVENT);
+  useEffect(
+    () =>
+      palette.subscribe((action) => {
+        if (action === "toggle") {
+          setOpen((v) => !v);
+        } else if (action === "open") {
+          setOpen(true);
+        } else {
+          setOpen(false);
+        }
+      }),
+    [palette],
+  );
 
   // Fresh query each open so the zero-state groups show.
   useEffect(() => {
@@ -201,7 +209,7 @@ export function CommandPalette() {
 
   const run = (cmd: CommandContribution) => {
     setOpen(false);
-    setRecents(pushRecent(cmd.id));
+    setRecents(pushRecent(storage, cmd.id));
     void registries.commands.invoke(cmd.id);
   };
 
@@ -251,20 +259,22 @@ export function CommandPalette() {
       filter={paletteScore}
     >
       <CommandInput
-        placeholder="Ask or search anything…"
+        placeholder={strings.t(PALETTE.placeholder)}
         value={query}
         onValueChange={setQuery}
       />
       <CommandList>
         {/* The ask row answers any prompt, so a prompt is never "no results". */}
-        {!showAiSeam && <CommandEmpty>No results.</CommandEmpty>}
+        {!showAiSeam && (
+          <CommandEmpty>{strings.t(PALETTE.noResults)}</CommandEmpty>
+        )}
 
         {showAiSeam && (
           <>
             {/* forceMount on the group too: cmdk does not register a
                 force-mounted item for filtering, so a group of only that
                 item never counts as matched and is hidden. */}
-            <CommandGroup heading="Assistant" forceMount>
+            <CommandGroup heading={strings.t(PALETTE.assistant)} forceMount>
               <CommandItem
                 value={`assistant ${query}`}
                 // The assistant answers any query; ranking must not hide it.
@@ -283,14 +293,14 @@ export function CommandPalette() {
                   size={15}
                   style={{ color: "var(--pg-primary)", marginRight: 8 }}
                 />
-                <span>Ask Claude: “{query}”</span>
+                <span>{strings.t(PALETTE.askClaude, { query })}</span>
                 <span className="ml-auto">
                   {aiUnavailable ? (
                     <span
                       className="text-xs opacity-60"
                       data-palette-ai-unavailable
                     >
-                      {AI_UNAVAILABLE_TEXT}
+                      {aiUnavailableText()}
                     </span>
                   ) : (
                     <PoweredByClaude size={9} />
@@ -304,7 +314,7 @@ export function CommandPalette() {
 
         {query.length === 0 && recentItems.length > 0 && (
           <>
-            <CommandGroup heading="Recent">
+            <CommandGroup heading={strings.t(PALETTE.recent)}>
               {recentItems.map((cmd) => (
                 <CommandItem
                   key={`recent-${cmd.id}`}
@@ -327,7 +337,13 @@ export function CommandPalette() {
 
         {query.length === 0 && suggested.length > 0 && (
           <>
-            <CommandGroup heading={`Suggested in ${modeTitle ?? "this mode"}`}>
+            <CommandGroup
+              heading={
+                modeTitle
+                  ? strings.t(PALETTE.suggestedIn, { mode: modeTitle })
+                  : strings.t(PALETTE.suggestedHere)
+              }
+            >
               {suggested.map((cmd) => (
                 <CommandItem
                   key={`suggested-${cmd.id}`}
@@ -353,14 +369,19 @@ export function CommandPalette() {
         {visibleGroups.map(([category, items], idx) => (
           <div key={category}>
             {idx > 0 && <CommandSeparator />}
-            <CommandGroup heading={category}>
+            <CommandGroup heading={categoryLabel(strings, category)}>
               {items.map((cmd) => (
                 <CommandItem
                   key={cmd.id}
                   // Ranked by `paletteScore`: the id is the value (unique),
-                  // the title and category the words a person searches.
+                  // the title and category the words a person searches
+                  // (the category in English and in the editor's language).
                   value={cmd.id}
-                  keywords={[cmd.title, category]}
+                  keywords={[
+                    cmd.title,
+                    category,
+                    categoryLabel(strings, category),
+                  ]}
                   onSelect={() => run(cmd)}
                 >
                   <span>{cmd.title}</span>
@@ -389,10 +410,10 @@ export function CommandPalette() {
         }}
       >
         <span>
-          <kbd style={kbdStyle}>↵</kbd> run
+          <kbd style={kbdStyle}>↵</kbd> {strings.t(PALETTE.run)}
         </span>
         <span>
-          <kbd style={kbdStyle}>↑↓</kbd> navigate
+          <kbd style={kbdStyle}>↑↓</kbd> {strings.t(PALETTE.navigate)}
         </span>
         {/* E8 — the footer once claimed "AI-assisted" beside a
               disabled assistant row. The row is live now (ADR 221), so

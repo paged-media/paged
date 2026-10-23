@@ -106,8 +106,12 @@ def sheet_xml(case: oc.Case, skip: bool) -> str:
     if skip:
         return (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
                 f'<worksheet xmlns="{NS}"><sheetData/></worksheet>\n')
+    hidden = set()
     for addr, raw in case.setup:
         if addr == "-" or addr.startswith("@"):
+            continue
+        if addr == "hide":
+            hidden.add(int(raw))
             continue
         kind, payload = oc.typed_setup(raw)
         x = cell_xml(addr, kind, payload)
@@ -117,9 +121,12 @@ def sheet_xml(case: oc.Case, skip: bool) -> str:
     rows: dict[int, list[tuple[int, str]]] = {}
     for (r, c), x in cells.items():
         rows.setdefault(r, []).append((c, x))
+    for r in hidden:
+        rows.setdefault(r, [])
     body = []
     for r in sorted(rows):
-        body.append(f'<row r="{r}">' + "".join(x for _, x in sorted(rows[r])) + "</row>")
+        attr = ' hidden="1"' if r in hidden else ""
+        body.append(f'<row r="{r}"{attr}>' + "".join(x for _, x in sorted(rows[r])) + "</row>")
     return (f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
             f'<worksheet xmlns="{NS}" xmlns:r="{RNS}"><sheetData>'
             + "".join(body) + "</sheetData></worksheet>\n")

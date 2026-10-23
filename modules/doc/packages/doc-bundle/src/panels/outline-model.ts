@@ -21,6 +21,9 @@
 // placement record. No React, no host: unit-testable as plain functions.
 
 import type { Diagnostic, LoweredDoc } from "@paged-media/doc-host-model";
+import { t } from "@paged-media/strings";
+
+import { OUTLINE } from "../messages.js";
 
 /** One outline row: a heading-styled paragraph or a table marker. */
 export type OutlineEntry =
@@ -42,7 +45,7 @@ export const OUTLINE_CAP = 300;
 const PREVIEW_CHARS = 80;
 
 /** `ParagraphStyle/docx-Heading1` / a style NAMED "heading 2" → level. */
-function headingLevel(
+export function headingLevel(
   styleId: string | null | undefined,
   styleNameById: Map<string, string>,
 ): number | null {
@@ -88,7 +91,7 @@ export function outlineEntries(ir: LoweredDoc): OutlineEntry[] {
       out.push({
         kind: "heading",
         level: Math.min(Math.max(level, 1), 6),
-        text: paragraphText(block.runs) || "(empty heading)",
+        text: paragraphText(block.runs) || t(OUTLINE.emptyHeading),
         blockIndex,
       });
     }
@@ -121,9 +124,11 @@ export function summarize(ir: LoweredDoc): DocSummary {
     if (headingLevel(block.paraStyleId, names) != null) headings += 1;
   }
   const s = ir.section;
-  const pageLine = `${Math.round(s.pageWidthPt)} × ${Math.round(s.pageHeightPt)} pt · ${
-    s.columns
-  } column${s.columns === 1 ? "" : "s"}`;
+  const pageLine = t(OUTLINE.pageLine, {
+    width: Math.round(s.pageWidthPt),
+    height: Math.round(s.pageHeightPt),
+    columns: s.columns,
+  });
   return { paragraphs, tables, images, hyperlinks, headings, pageLine };
 }
 

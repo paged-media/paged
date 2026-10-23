@@ -33,10 +33,22 @@ import {
   useDocument,
 } from "@paged-media/shell";
 import type { MasterPageSummary } from "@paged-media/client";
+import { defineMessages, useStrings } from "@paged-media/strings";
 
 import { CoreCommandButton, newMasterPrefill } from "../core-command-dialog";
 
+const M = defineMessages("app.masterPagesPanel", {
+  loading: "Loading master pages…",
+  newMaster: "New master…",
+  empty: "No master pages.",
+  pages: "{count, plural, one {# page} other {# pages}}",
+  apply: "Apply…",
+  rename: "Rename…",
+  delete: "Delete",
+});
+
 export function MasterPagesPanel() {
+  const strings = useStrings();
   const items = useCollection<MasterPageSummary>("masterPages");
   const pageSize = useDocument().handle?.pageSizesPt[0] ?? null;
   if (items === null) {
@@ -45,7 +57,7 @@ export function MasterPagesPanel() {
         className="p-3 text-xs text-muted-foreground"
         data-master-pages-panel="loading"
       >
-        Loading master pages…
+        {strings.t(M.loading)}
       </div>
     );
   }
@@ -54,7 +66,7 @@ export function MasterPagesPanel() {
       <div className="flex gap-[5px] px-3 pb-1 pt-2" data-master-actions="">
         <CoreCommandButton
           op="createMaster"
-          label="New master…"
+          label={strings.t(M.newMaster)}
           testId="master-new"
           prefill={newMasterPrefill(pageSize)}
         />
@@ -64,7 +76,7 @@ export function MasterPagesPanel() {
           className="p-3 text-xs text-muted-foreground"
           data-empty-master-pages
         >
-          No master pages.
+          {strings.t(M.empty)}
         </div>
       ) : (
         <div data-master-page-list>
@@ -73,24 +85,24 @@ export function MasterPagesPanel() {
               key: m.selfId,
               icon: "panel-master-pages",
               primary: displayName(m.label),
-              secondary: `${m.pageCount} page${m.pageCount === 1 ? "" : "s"}`,
+              secondary: strings.t(M.pages, { count: m.pageCount }),
               trail: (
                 <span className="flex gap-[4px]" data-master-row={m.selfId}>
                   <CoreCommandButton
                     op="applyMasterToPage"
-                    label="Apply…"
+                    label={strings.t(M.apply)}
                     testId="master-apply"
                     prefill={{ master: `master:${m.selfId}` }}
                   />
                   <CoreCommandButton
                     op="renameMaster"
-                    label="Rename…"
+                    label={strings.t(M.rename)}
                     testId="master-rename"
                     prefill={{ master: `master:${m.selfId}`, name: m.label }}
                   />
                   <CoreCommandButton
                     op="deleteMaster"
-                    label="Delete"
+                    label={strings.t(M.delete)}
                     testId="master-delete"
                     args={{ master: `master:${m.selfId}` }}
                   />

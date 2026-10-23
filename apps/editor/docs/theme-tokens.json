@@ -1,0 +1,520 @@
+{
+  "$comment": "The editor's theme tokens: what handle.setTheme({ tokens }) may set. Generated from packages/shell/src/styles/theme.css by scripts/theme-tokens.mjs; do not edit.",
+  "tokens": {
+    "--accent": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-accent)",
+      "dark": "var(--paged-accent)"
+    },
+    "--accent-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-accent-fg)",
+      "dark": "var(--paged-accent-fg)"
+    },
+    "--background": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-bg)",
+      "dark": "var(--paged-bg)"
+    },
+    "--border": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-border)",
+      "dark": "var(--paged-border)"
+    },
+    "--canvas-surround": {
+      "group": "lavender tint — AI surface, selection",
+      "light": "#9a9a9e",
+      "dark": "#0e0e10"
+    },
+    "--card": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-card)",
+      "dark": "var(--paged-card)"
+    },
+    "--card-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-card-fg)",
+      "dark": "var(--paged-card-fg)"
+    },
+    "--chrome-border": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#dddddd",
+      "dark": "#2c2c31"
+    },
+    "--chrome-divider": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#d4d4d8",
+      "dark": "#34343b"
+    },
+    "--chrome-icon": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#3f3f46",
+      "dark": "#b6b6c0"
+    },
+    "--chrome-icon-active": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#ffffff",
+      "dark": "#ffffff"
+    },
+    "--chrome-label": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#71717a",
+      "dark": "#7e7e8a"
+    },
+    "--chrome-menu-text": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#374151",
+      "dark": "#c7c7d0"
+    },
+    "--chrome-panel-bg": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#fafafa",
+      "dark": "#1c1c20"
+    },
+    "--chrome-rail-bg": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#f4f4f5",
+      "dark": "#1f1f23"
+    },
+    "--chrome-slot-active": {
+      "group": "chrome neutrals — tool rail / menu bar / panel chrome",
+      "light": "#1f2937",
+      "dark": "hsl(263 90% 72%)"
+    },
+    "--destructive": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-destructive)",
+      "dark": "var(--paged-destructive)"
+    },
+    "--destructive-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-destructive-fg)",
+      "dark": "var(--paged-destructive-fg)"
+    },
+    "--dur-base": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "200ms",
+      "dark": "200ms"
+    },
+    "--dur-fast": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "120ms",
+      "dark": "120ms"
+    },
+    "--dur-slow": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "320ms",
+      "dark": "320ms"
+    },
+    "--ease-in-out": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "cubic-bezier(0.5, 0, 0.2, 1)",
+      "dark": "cubic-bezier(0.5, 0, 0.2, 1)"
+    },
+    "--ease-out": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "cubic-bezier(0.2, 0.6, 0.2, 1)",
+      "dark": "cubic-bezier(0.2, 0.6, 0.2, 1)"
+    },
+    "--elevated": {
+      "group": "lavender tint — AI surface, selection",
+      "light": "#ffffff",
+      "dark": "#232328"
+    },
+    "--font-logo": {
+      "group": "type",
+      "light": "\"Cormorant Garamond\", Georgia, serif",
+      "dark": "\"Cormorant Garamond\", Georgia, serif"
+    },
+    "--font-sans": {
+      "group": "type",
+      "light": "\"IBM Plex Sans\", \"Helvetica Neue\", Arial, sans-serif",
+      "dark": "\"IBM Plex Sans\", \"Helvetica Neue\", Arial, sans-serif"
+    },
+    "--foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-fg)",
+      "dark": "var(--paged-fg)"
+    },
+    "--hover": {
+      "group": "lavender tint — AI surface, selection",
+      "light": "rgba(0, 0, 0, 0.06)",
+      "dark": "rgba(255, 255, 255, 0.06)"
+    },
+    "--input": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-input)",
+      "dark": "var(--paged-input)"
+    },
+    "--muted": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-muted)",
+      "dark": "var(--paged-muted)"
+    },
+    "--muted-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-muted-fg)",
+      "dark": "var(--paged-muted-fg)"
+    },
+    "--overlay-guide": {
+      "group": "canvas overlays",
+      "light": "#7c5cff",
+      "dark": "#7c5cff"
+    },
+    "--overlay-selection": {
+      "group": "canvas overlays",
+      "light": "#e0408f",
+      "dark": "#e0408f"
+    },
+    "--overlay-snap": {
+      "group": "canvas overlays",
+      "light": "#0f766e",
+      "dark": "#14b8a6"
+    },
+    "--overlay-target": {
+      "group": "canvas overlays",
+      "light": "#dc2626",
+      "dark": "#dc2626"
+    },
+    "--paged-accent": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 96%",
+      "dark": "240 5% 16%"
+    },
+    "--paged-accent-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 9%",
+      "dark": "0 0% 96%"
+    },
+    "--paged-bg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 100%",
+      "dark": "240 6% 10%"
+    },
+    "--paged-border": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 89%",
+      "dark": "240 5% 20%"
+    },
+    "--paged-card": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 100%",
+      "dark": "240 6% 10%"
+    },
+    "--paged-card-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 9%",
+      "dark": "0 0% 96%"
+    },
+    "--paged-destructive": {
+      "group": "Paged semantic channels",
+      "light": "0 84% 60%",
+      "dark": "0 72% 58%"
+    },
+    "--paged-destructive-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 98%",
+      "dark": "0 0% 98%"
+    },
+    "--paged-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 9%",
+      "dark": "0 0% 96%"
+    },
+    "--paged-input": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 89%",
+      "dark": "240 5% 22%"
+    },
+    "--paged-muted": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 96%",
+      "dark": "240 5% 16%"
+    },
+    "--paged-muted-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 45%",
+      "dark": "240 5% 64%"
+    },
+    "--paged-popover": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 100%",
+      "dark": "240 7% 15%"
+    },
+    "--paged-popover-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 9%",
+      "dark": "0 0% 96%"
+    },
+    "--paged-primary": {
+      "group": "Paged semantic channels",
+      "light": "263 73% 43%",
+      "dark": "263 90% 72%"
+    },
+    "--paged-primary-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 98%",
+      "dark": "263 40% 12%"
+    },
+    "--paged-radius": {
+      "group": "Paged semantic channels",
+      "light": "0.5rem",
+      "dark": "0.5rem"
+    },
+    "--paged-ring": {
+      "group": "Paged semantic channels",
+      "light": "263 73% 43%",
+      "dark": "263 90% 72%"
+    },
+    "--paged-secondary": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 96%",
+      "dark": "240 5% 18%"
+    },
+    "--paged-secondary-fg": {
+      "group": "Paged semantic channels",
+      "light": "0 0% 9%",
+      "dark": "0 0% 96%"
+    },
+    "--pg-bg": {
+      "group": "surfaces & interaction",
+      "light": "#ffffff",
+      "dark": "#18181b"
+    },
+    "--pg-border": {
+      "group": "surfaces & interaction",
+      "light": "#e3e3e3",
+      "dark": "#2c2c31"
+    },
+    "--pg-destructive": {
+      "group": "lavender tint — AI surface, selection",
+      "light": "#ef4444",
+      "dark": "#f0616d"
+    },
+    "--pg-fg": {
+      "group": "surfaces & interaction",
+      "light": "#171717",
+      "dark": "#ededf0"
+    },
+    "--pg-muted": {
+      "group": "surfaces & interaction",
+      "light": "#f5f5f5",
+      "dark": "#232327"
+    },
+    "--pg-muted-fg": {
+      "group": "surfaces & interaction",
+      "light": "#737373",
+      "dark": "#9b9ba4"
+    },
+    "--pg-primary": {
+      "group": "surfaces & interaction",
+      "light": "hsl(263 73% 43%)",
+      "dark": "hsl(263 90% 72%)"
+    },
+    "--pg-primary-fg": {
+      "group": "surfaces & interaction",
+      "light": "#fafafa",
+      "dark": "#1a1430"
+    },
+    "--pg-primary-hover": {
+      "group": "surfaces & interaction",
+      "light": "hsl(263 73% 38%)",
+      "dark": "hsl(263 90% 78%)"
+    },
+    "--pg-primary-soft": {
+      "group": "surfaces & interaction",
+      "light": null,
+      "dark": "hsl(263 45% 22%)"
+    },
+    "--pg-surface-2": {
+      "group": "status signals",
+      "light": "var(--pg-muted)",
+      "dark": "var(--pg-muted)"
+    },
+    "--popover": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-popover)",
+      "dark": "var(--paged-popover)"
+    },
+    "--popover-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-popover-fg)",
+      "dark": "var(--paged-popover-fg)"
+    },
+    "--primary": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-primary)",
+      "dark": "var(--paged-primary)"
+    },
+    "--primary-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-primary-fg)",
+      "dark": "var(--paged-primary-fg)"
+    },
+    "--radius": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-radius)",
+      "dark": "var(--paged-radius)"
+    },
+    "--radius-full": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "999px",
+      "dark": "999px"
+    },
+    "--radius-lg": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "8px",
+      "dark": "8px"
+    },
+    "--radius-md": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "6px",
+      "dark": "6px"
+    },
+    "--radius-sm": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "4px",
+      "dark": "4px"
+    },
+    "--radius-xs": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "2px",
+      "dark": "2px"
+    },
+    "--ring": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-ring)",
+      "dark": "var(--paged-ring)"
+    },
+    "--secondary": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-secondary)",
+      "dark": "var(--paged-secondary)"
+    },
+    "--secondary-foreground": {
+      "group": "shadcn variable bridge",
+      "light": "var(--paged-secondary-fg)",
+      "dark": "var(--paged-secondary-fg)"
+    },
+    "--selected-bg": {
+      "group": "lavender tint — AI surface, selection",
+      "light": "var(--pg-primary-soft)",
+      "dark": "var(--pg-primary-soft)"
+    },
+    "--shadow-1": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "0 1px 2px rgba(0, 0, 0, 0.05)",
+      "dark": "0 1px 2px rgba(0, 0, 0, 0.05)"
+    },
+    "--shadow-2": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "0 2px 6px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05)",
+      "dark": "0 2px 6px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05)"
+    },
+    "--shadow-pop": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "0 6px 20px rgba(0, 0, 0, 0.18)",
+      "dark": "0 6px 20px rgba(0, 0, 0, 0.5)"
+    },
+    "--space-1": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "4px",
+      "dark": "4px"
+    },
+    "--space-2": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "8px",
+      "dark": "8px"
+    },
+    "--space-3": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "12px",
+      "dark": "12px"
+    },
+    "--space-4": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "16px",
+      "dark": "16px"
+    },
+    "--space-5": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "24px",
+      "dark": "24px"
+    },
+    "--space-6": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "32px",
+      "dark": "32px"
+    },
+    "--space-7": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "48px",
+      "dark": "48px"
+    },
+    "--space-8": {
+      "group": "rhythm, radii, elevation, motion",
+      "light": "64px",
+      "dark": "64px"
+    },
+    "--status-approved": {
+      "group": "status signals",
+      "light": "#3c6e4e",
+      "dark": "#57b87a"
+    },
+    "--status-draft": {
+      "group": "status signals",
+      "light": "#a1a1aa",
+      "dark": "#6c6c76"
+    },
+    "--status-error": {
+      "group": "status signals",
+      "light": "#c1121f",
+      "dark": "#f0616d"
+    },
+    "--status-error-fg": {
+      "group": "status signals",
+      "light": "var(--status-error)",
+      "dark": "var(--status-error)"
+    },
+    "--status-info": {
+      "group": "status signals",
+      "light": "#2c507d",
+      "dark": "#5b8bd0"
+    },
+    "--status-ok": {
+      "group": "status signals",
+      "light": "var(--status-approved)",
+      "dark": "var(--status-approved)"
+    },
+    "--status-progress": {
+      "group": "status signals",
+      "light": "hsl(263 73% 43%)",
+      "dark": "hsl(263 90% 74%)"
+    },
+    "--status-review": {
+      "group": "status signals",
+      "light": "#9a6a1c",
+      "dark": "#d39a3e"
+    },
+    "--status-warn": {
+      "group": "status signals",
+      "light": "var(--status-review)",
+      "dark": "var(--status-review)"
+    },
+    "--status-warning": {
+      "group": "status signals",
+      "light": "var(--status-review)",
+      "dark": "var(--status-review)"
+    },
+    "--tracking-wide": {
+      "group": "type",
+      "light": "0.14em",
+      "dark": "0.14em"
+    },
+    "--wordmark-dot": {
+      "group": "type",
+      "light": "#8f1d1f",
+      "dark": "#8f1d1f"
+    }
+  }
+}

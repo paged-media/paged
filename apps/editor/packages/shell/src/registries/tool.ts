@@ -17,6 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import { t } from "@paged-media/strings";
+import { TOOL, TOOL_CLUSTER } from "./messages";
 import type * as Api from "@paged-media/plugin-api";
 
 import type { Disposable, Registrable } from "./types";
@@ -68,12 +70,43 @@ export const BUILT_IN_TOOL_CLUSTERS: ReadonlyArray<{
   id: ToolClusterId;
   label: string;
 }> = [
-  { id: "select", label: "Select" },
-  { id: "draw", label: "Draw & type" },
-  { id: "shapes", label: "Frames & shapes" },
-  { id: "transform", label: "Transform" },
-  { id: "colour", label: "Colour" },
-  { id: "view", label: "View" },
+  // Labels are read where they show, so they follow the editor's locale.
+  {
+    id: "select",
+    get label() {
+      return t(TOOL_CLUSTER.select);
+    },
+  },
+  {
+    id: "draw",
+    get label() {
+      return t(TOOL_CLUSTER.draw);
+    },
+  },
+  {
+    id: "shapes",
+    get label() {
+      return t(TOOL_CLUSTER.shapes);
+    },
+  },
+  {
+    id: "transform",
+    get label() {
+      return t(TOOL_CLUSTER.transform);
+    },
+  },
+  {
+    id: "colour",
+    get label() {
+      return t(TOOL_CLUSTER.colour);
+    },
+  },
+  {
+    id: "view",
+    get label() {
+      return t(TOOL_CLUSTER.view);
+    },
+  },
 ];
 
 /**
@@ -223,7 +256,9 @@ export function createToolRegistry(): ToolRegistry {
 export const DEFAULT_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.select",
-    title: "Selection",
+    get title() {
+      return t(TOOL.selection);
+    },
     icon: "tool-select",
     shortcut: "v",
     group: "select",
@@ -234,7 +269,9 @@ export const DEFAULT_TOOLS: ToolContribution[] = [
   },
   {
     id: "paged.tool.type",
-    title: "Type",
+    get title() {
+      return t(TOOL.type);
+    },
     icon: "tool-type",
     shortcut: "t",
     group: "type",

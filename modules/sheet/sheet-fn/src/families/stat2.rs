@@ -45,15 +45,17 @@
 
 use sheet_core::{CellError, CellValue};
 
+use super::linalg::invert;
 use super::stat::{finite, numbers_or_error, paired, scalar_number, sorted};
 use crate::arg::Arg;
 use crate::coerce;
 use crate::ctx::EvalCtx;
 use crate::result::FnResult;
+use crate::special::{erf_series, erfc};
 
 // ---- PERCENTILE.EXC / QUARTILE.EXC -----------------------------------------
 
-fn percentile_exc_of(s: &[f64], k: f64) -> Result<f64, CellError> {
+pub(super) fn percentile_exc_of(s: &[f64], k: f64) -> Result<f64, CellError> {
     let n = s.len();
     if n == 0 || k <= 0.0 || k >= 1.0 {
         return Err(CellError::Num);
@@ -183,6 +185,90 @@ fn strict_numbers(g: &[Vec<CellValue>]) -> Result<Vec<f64>, CellError> {
     Ok(out)
 }
 
+/// TREND over several regressors (W3): ordinary least squares on the normal
+/// equations (as LINEST), then each row (column, for a row of `known_ys`)
+/// of `new_xs` — default `known_xs` — predicted. A `new_xs` with the wrong
+/// number of regressors is `#REF!`.
+fn trend_multi(args: &[Arg], yg: &[Vec<CellValue>], ys: &[f64], xg: &[Vec<CellValue>]) -> FnResult {
+    let fail = |e: CellError| FnResult::Scalar(CellValue::Error(e));
+    let n = ys.len();
+    let y_is_col = yg.first().map_or(0, Vec::len) == 1;
+    // Observations as rows of regressors.
+    let obs = |g: &[Vec<CellValue>]| -> Result<Vec<Vec<f64>>, CellError> {
+        let mut out = Vec::new();
+        if y_is_col {
+            for row in g {
+                out.push(strict_numbers(std::slice::from_ref(row))?);
+            }
+        } else {
+            for c in 0..g.first().map_or(0, Vec::len) {
+                let col: Vec<CellValue> = g.iter().map(|row| row[c].clone()).collect();
+                out.push(strict_numbers(&[col])?);
+            }
+        }
+        Ok(out)
+    };
+    let x = match obs(xg) {
+        Ok(x) => x,
+        Err(e) => return fail(e),
+    };
+    if x.len() != n {
+        return fail(CellError::Ref);
+    }
+    let k = x.first().map_or(0, Vec::len);
+    let with_const = match bool_arg(args.get(3), true) {
+        Ok(b) => b,
+        Err(e) => return fail(e),
+    };
+    let p = k + usize::from(with_const);
+    let row = |r: &[f64]| -> Vec<f64> {
+        let mut v = r.to_vec();
+        if with_const {
+            v.push(1.0);
+        }
+        v
+    };
+    let mut xtx = vec![vec![0.0; p]; p];
+    let mut xty = vec![0.0; p];
+    for (i, y) in ys.iter().enumerate() {
+        let r = row(&x[i]);
+        for a in 0..p {
+            xty[a] += r[a] * y;
+            for b in 0..p {
+                xtx[a][b] += r[a] * r[b];
+            }
+        }
+    }
+    let Some(inv) = invert(xtx) else {
+        return fail(CellError::Num);
+    };
+    let beta: Vec<f64> = (0..p)
+        .map(|a| (0..p).map(|b| inv[a][b] * xty[b]).sum())
+        .collect();
+    let target = match args.get(2) {
+        None | Some(Arg::Scalar(CellValue::Empty)) => x,
+        Some(a) => match obs(&grid(a)) {
+            Ok(t) => t,
+            Err(e) => return fail(e),
+        },
+    };
+    if target.iter().any(|t| t.len() != k) {
+        return fail(CellError::Ref);
+    }
+    let preds: Vec<CellValue> = target
+        .iter()
+        .map(|t| {
+            let r = row(t);
+            finite(r.iter().zip(&beta).map(|(a, b)| a * b).sum())
+        })
+        .collect();
+    FnResult::Array(if y_is_col {
+        preds.into_iter().map(|v| vec![v]).collect()
+    } else {
+        vec![preds]
+    })
+}
+
 /// `TREND(known_ys, [known_xs], [new_xs], [const])` (registry
 /// `sheet.fn.stat.trend`). Single-regressor least squares; the result has the
 /// shape of `new_xs` (default `known_xs`, default `{1..n}` shaped like
@@ -200,8 +286,7 @@ pub fn trend(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
             let multi_col = g.first().map_or(0, |r| r.len()) > 1 && g.len() > 1;
             let multi_row = g.len() > 1 && g.first().map_or(0, |r| r.len()) > 1;
             if multi_col || multi_row {
-                // Multiple regression — recorded scope limit.
-                return fail(CellError::Value);
+                return trend_multi(args, &yg, &ys, &g);
             }
             match strict_numbers(&g) {
                 Ok(v) => (g, v),
@@ -301,66 +386,6 @@ pub fn frequency(args: &[Arg], _ctx: &EvalCtx) -> FnResult {
 // ---- the normal distribution -----------------------------------------------
 
 const SQRT_2: f64 = std::f64::consts::SQRT_2;
-const FRAC_2_SQRT_PI: f64 = std::f64::consts::FRAC_2_SQRT_PI;
-
-/// `erf(x)` for `|x| <= 3` by the all-positive series
-/// `2/√π · e^{−x²} · Σ 2ⁿ x^{2n+1} / (1·3·…·(2n+1))` (no cancellation).
-fn erf_series(x: f64) -> f64 {
-    let x2 = x * x;
-    let mut term = x;
-    let mut sum = x;
-    let mut k = 1.0;
-    for _ in 0..200 {
-        term *= 2.0 * x2 / (2.0 * k + 1.0);
-        sum += term;
-        if term.abs() <= sum.abs() * 1e-17 {
-            break;
-        }
-        k += 1.0;
-    }
-    FRAC_2_SQRT_PI * (-x2).exp() * sum
-}
-
-/// `erfc(x)` for `x > 0` by the continued fraction (modified Lentz).
-fn erfc_cf(x: f64) -> f64 {
-    // erfc(x) = e^{-x²}/√π · 1/(x + (1/2)/(x + 1/(x + (3/2)/(x + 2/(x + …)))))
-    let tiny = 1e-300;
-    let mut f = x;
-    if f == 0.0 {
-        f = tiny;
-    }
-    let mut c = f;
-    let mut d = 0.0;
-    for i in 1..500 {
-        let a = i as f64 / 2.0;
-        d = x + a * d;
-        if d == 0.0 {
-            d = tiny;
-        }
-        c = x + a / c;
-        if c == 0.0 {
-            c = tiny;
-        }
-        d = 1.0 / d;
-        let delta = c * d;
-        f *= delta;
-        if (delta - 1.0).abs() < 1e-16 {
-            break;
-        }
-    }
-    (-x * x).exp() / std::f64::consts::PI.sqrt() / f
-}
-
-/// `erfc(x)` for any real `x`.
-fn erfc(x: f64) -> f64 {
-    if x < 0.0 {
-        2.0 - erfc(-x)
-    } else if x <= 3.0 {
-        1.0 - erf_series(x)
-    } else {
-        erfc_cf(x)
-    }
-}
 
 /// The standard normal CDF `Φ(z)`.
 pub(crate) fn std_norm_cdf(z: f64) -> f64 {
@@ -584,40 +609,6 @@ pub fn percentrank_exc(args: &[Arg], _ctx: &EvalCtx) -> CellValue {
 }
 
 // ---- LINEST ----------------------------------------------------------------
-
-/// Solve the normal equations: the inverse of the symmetric `a` (Gauss-Jordan
-/// with partial pivoting); `None` when singular.
-fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
-    let k = a.len();
-    let mut inv: Vec<Vec<f64>> = (0..k)
-        .map(|i| (0..k).map(|j| if i == j { 1.0 } else { 0.0 }).collect())
-        .collect();
-    for col in 0..k {
-        let piv = (col..k).max_by(|&x, &y| a[x][col].abs().total_cmp(&a[y][col].abs()))?;
-        if a[piv][col].abs() < 1e-300 {
-            return None;
-        }
-        a.swap(col, piv);
-        inv.swap(col, piv);
-        let d = a[col][col];
-        for j in 0..k {
-            a[col][j] /= d;
-            inv[col][j] /= d;
-        }
-        for r in 0..k {
-            if r != col {
-                let f = a[r][col];
-                if f != 0.0 {
-                    for j in 0..k {
-                        a[r][j] -= f * a[col][j];
-                        inv[r][j] -= f * inv[col][j];
-                    }
-                }
-            }
-        }
-    }
-    Some(inv)
-}
 
 fn bool_arg(arg: Option<&Arg>, default: bool) -> Result<bool, CellError> {
     match arg {

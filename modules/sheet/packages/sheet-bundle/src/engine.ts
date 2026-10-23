@@ -67,6 +67,8 @@ export interface SheetInfo {
   name: string;
   rows: number;
   cols: number;
+  /** The tab's visibility as the workbook saved it (read-only). */
+  state?: "visible" | "hidden" | "veryHidden";
 }
 
 /** One changed cell after an edit — the engine returns the recomputed
@@ -401,6 +403,15 @@ export interface SheetEngine {
    *  counts, the numbers' sum/average/min/max, sum and average as text in
    *  the first number's format. Optional: an older wasm lacks it. */
   rangeStats?(sheet: number, range: string): RangeStats;
+  /** Where Ctrl+arrow lands from a cell, as Excel moves (optional: an
+   *  older wasm lacks it). */
+  dataEdge?(
+    sheet: number,
+    row: number,
+    col: number,
+    dRow: number,
+    dCol: number,
+  ): [number, number];
   /** Record the sheets-mode selection rectangle in the engine model so the
    *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
    *  state, the panel only requests it). `setGridSelection` forwards to
@@ -486,6 +497,20 @@ export interface SheetEngine {
     maxIter: number,
     maxChange: number,
   ): { changed: CellChange[] };
+  /** Set the calculation mode (written back to `<calcPr calcMode>`).
+   *  Leaving `manual` calculates what is pending. */
+  setCalcMode?(mode: CalcMode): { changed: CellChange[] };
+  /** Calculate Now (F9): every pending cell and the volatile ones. */
+  calculateNow?(): { changed: CellChange[] };
+  /** Calculate Sheet (Shift+F9): the pending cells of one sheet. */
+  calculateSheet?(sheet: number): { changed: CellChange[] };
+  /** Whether edits wait for a calculation (manual mode). */
+  isCalcPending?(): boolean;
+  /** Precision as displayed (`<calcPr fullPrecision>`): `false` stores an
+   *  entered number as its format shows it. */
+  setFullPrecision?(full: boolean): void;
+  /** Name the document for `CELL("filename")` (empty: an unsaved workbook). */
+  setDocumentName?(name: string): { changed: CellChange[] };
   /** Add a worksheet at the end (empty name = next free `SheetN`); its id. */
   addSheet?(name: string): number;
   /** Rename a worksheet (Excel's name rules; throws the reason). */
@@ -721,7 +746,18 @@ export interface CalcSettingsInfo {
   iterative: boolean;
   maxIter: number;
   maxChange: number;
+  /** `<calcPr calcMode>`. */
+  calcMode: CalcMode;
+  /** `<calcPr fullPrecision>` (`false` = precision as displayed). */
+  fullPrecision: boolean;
+  /** `<calcPr fullCalcOnLoad>`. */
+  fullCalcOnLoad: boolean;
+  /** Edits waiting for a calculation (manual mode). */
+  calcPending: boolean;
 }
+
+/** When formulas recalculate (`<calcPr calcMode>`). */
+export type CalcMode = "auto" | "autoNoTable" | "manual";
 
 /** The host clock the facade feeds `NOW`/`TODAY` from. Injected so tests
  *  can pin it; the default reads `Date`. */
@@ -799,6 +835,13 @@ export interface SheetWasmEngine {
   ): GridScene;
   get_frame_window(sheet: number, spec: FrameWindowSpec): FrameWindow;
   range_stats?(sheet: number, range: string): RangeStats;
+  data_edge?(
+    sheet: number,
+    row: number,
+    col: number,
+    d_row: number,
+    d_col: number,
+  ): Uint32Array | number[];
   set_grid_selection(
     sheet: number,
     anchor_row: number,
@@ -837,6 +880,12 @@ export interface SheetWasmEngine {
     max_iter: number,
     max_change: number,
   ): { changed: CellChange[] };
+  set_calc_mode?(mode: string): { changed: CellChange[] };
+  calculate_now?(): { changed: CellChange[] };
+  calculate_sheet?(sheet: number): { changed: CellChange[] };
+  is_calc_pending?(): boolean;
+  set_full_precision?(full: boolean): void;
+  set_document_name?(name: string): { changed: CellChange[] };
   add_sheet?(name: string): number;
   rename_sheet?(sheet: number, name: string): void;
   delete_sheet?(sheet: number): { changed: CellChange[] };
@@ -980,8 +1029,25 @@ export function wrapEngine(
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
       wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
     getFrameWindow: (sheet, spec) => wasm.get_frame_window(sheet, spec),
+    ...(wasm.data_edge
+      ? {
+          dataEdge: (
+            sheet: number,
+            row: number,
+            col: number,
+            dRow: number,
+            dCol: number,
+          ) => {
+            const r = wasm.data_edge!(sheet, row, col, dRow, dCol);
+            return [r[0]!, r[1]!] as [number, number];
+          },
+        }
+      : {}),
     ...(wasm.range_stats
-      ? { rangeStats: (sheet: number, range: string) => wasm.range_stats!(sheet, range) }
+      ? {
+          rangeStats: (sheet: number, range: string) =>
+            wasm.range_stats!(sheet, range),
+        }
       : {}),
     setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
       wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
@@ -1010,6 +1076,22 @@ export function wrapEngine(
       need("set_iterative")(on, maxIter, maxChange) as {
         changed: CellChange[];
       },
+    setCalcMode: (mode) =>
+      need("set_calc_mode")(mode) as { changed: CellChange[] },
+    calculateNow: () => {
+      tick();
+      return need("calculate_now")() as { changed: CellChange[] };
+    },
+    calculateSheet: (sheet) => {
+      tick();
+      return need("calculate_sheet")(sheet) as { changed: CellChange[] };
+    },
+    isCalcPending: () => need("is_calc_pending")() as boolean,
+    setFullPrecision: (full) => {
+      need("set_full_precision")(full);
+    },
+    setDocumentName: (name) =>
+      need("set_document_name")(name) as { changed: CellChange[] },
     addSheet: (name) => need("add_sheet")(name) as number,
     renameSheet: (sheet, name) => {
       need("rename_sheet")(sheet, name);

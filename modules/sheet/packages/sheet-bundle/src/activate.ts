@@ -42,8 +42,11 @@ import {
   contributeSchemaPanel,
 } from "@paged-media/plugin-sdk";
 import { parseBinding } from "../../sheet-host-model/src";
+import { t } from "@paged-media/strings";
 
 import manifest from "../manifest.json";
+
+import { COMMANDS, FILES, PANELS } from "./messages";
 
 import {
   DELIMITED_MIMES,
@@ -57,13 +60,15 @@ import { subscribeProviderInvalidation } from "./binding-provider/invalidation";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
 import { createWorkbookSession } from "./session";
 import { contributeObjectModel } from "./object-model";
+import { contributeLayoutCommands } from "./layout-commands";
+import { contributeSheetTemplateFields } from "./template-fields";
 import { makeWorkbookPanel } from "./panels/workbook-panel";
 import { makeGridPanel } from "./panels/grid-panel";
 import { makeSheetFrameSurface } from "./surface/sheet-frame-surface";
 import { makeDatasetsPanel } from "./panels/datasets-panel";
 import {
   PROPERTIES_PANEL_ID,
-  SHEET_PROPERTIES_PANEL,
+  sheetPropertiesPanel,
   publishPropertyBindings,
 } from "./panels/properties-panel";
 
@@ -143,6 +148,14 @@ export function activate(host: BundleHost): BundleHandle {
   // open and a document undo/redo all end in `reconcile`, which loads the
   // workbook version the document's label names.
   const objectModel = contributeObjectModel(host, session);
+  // Plan G3/G4: the template field kinds and the layout commands, through
+  // the object model's write door.
+  const templateFields = contributeSheetTemplateFields(
+    host,
+    session,
+    objectModel,
+  );
+  const layoutCommands = contributeLayoutCommands(host, session, objectModel);
   void session.restore().then(() => objectModel.reconcile());
   // The workbook belongs to the DOCUMENT, and activation runs at app boot —
   // before any document is open. Every later open (File ▸ Open, File ▸ New,
@@ -155,7 +168,7 @@ export function activate(host: BundleHost): BundleHandle {
 
   contributePanel(host, {
     id: PANEL_ID,
-    title: "Workbook",
+    title: t(PANELS.workbook),
     icon: "panel-canvas",
     component: makeWorkbookPanel(host, session),
     defaultDock: "right",
@@ -165,7 +178,7 @@ export function activate(host: BundleHost): BundleHandle {
   // surface, which is still SDK-blocked). It shares the in-memory session.
   contributePanel(host, {
     id: GRID_PANEL_ID,
-    title: "Grid",
+    title: t(PANELS.grid),
     icon: "panel-canvas",
     component: makeGridPanel(host, session),
     defaultDock: "right",
@@ -178,7 +191,7 @@ export function activate(host: BundleHost): BundleHandle {
   // degrades to an honest empty state when no registry is wired.
   contributePanel(host, {
     id: DATASETS_PANEL_ID,
-    title: "Datasets",
+    title: t(PANELS.datasets),
     icon: "panel-canvas",
     component: makeDatasetsPanel(host, session),
     defaultDock: "right",
@@ -186,20 +199,21 @@ export function activate(host: BundleHost): BundleHandle {
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a
   // schema panel of property rows over host.objects).
+  const propertiesPanel = sheetPropertiesPanel();
   const propertyBindings = host.supports("contribute.schemaPanel@1")
     ? (contributeSchemaPanel(host, {
         id: PROPERTIES_PANEL_ID,
-        title: SHEET_PROPERTIES_PANEL.title,
-        icon: SHEET_PROPERTIES_PANEL.icon,
+        title: propertiesPanel.title,
+        icon: propertiesPanel.icon,
         defaultDock: "right",
-        schema: SHEET_PROPERTIES_PANEL,
+        schema: propertiesPanel,
       }),
       publishPropertyBindings(host, session))
     : null;
 
   host.contribute.command({
     id: "media.paged.sheet.command.importXlsx",
-    title: "Import workbook (.xlsx)",
+    title: t(COMMANDS.importXlsx),
     category: "Sheet",
     // S-11: the command now opens the HOST file picker (and falls back to
     // the panel's own input when no picker is wired).
@@ -207,7 +221,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.lowerToFrame",
-    title: "Place selection on page",
+    title: t(COMMANDS.lowerToFrame),
     category: "Sheet",
     handler: () => session.lowerSelection(),
   });
@@ -217,7 +231,7 @@ export function activate(host: BundleHost): BundleHandle {
   // no-op the command logs.
   host.contribute.command({
     id: "media.paged.sheet.command.lowerChartToFrame",
-    title: "Place chart on page",
+    title: t(COMMANDS.lowerChartToFrame),
     category: "Sheet",
     handler: async () => {
       const charts = session.listCharts();
@@ -230,7 +244,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.openGrid",
-    title: "Open sheet grid",
+    title: t(COMMANDS.openGrid),
     category: "Sheet",
     handler: () => host.shell.openPanel(GRID_PANEL_ID),
   });
@@ -241,13 +255,13 @@ export function activate(host: BundleHost): BundleHandle {
   // (declared) + the host's scene channel; degrades with a logged warning.
   host.contribute.command({
     id: "media.paged.sheet.command.showGridInFrame",
-    title: "Show grid in frame",
+    title: t(COMMANDS.showGridInFrame),
     category: "Sheet",
     handler: () => void session.showGridInFrame(),
   });
   host.contribute.command({
     id: "media.paged.sheet.command.hideGridInFrame",
-    title: "Hide grid in frame",
+    title: t(COMMANDS.hideGridInFrame),
     category: "Sheet",
     handler: () => session.hideGridInFrame(),
   });
@@ -257,13 +271,13 @@ export function activate(host: BundleHost): BundleHandle {
   // the engine's (sheet.edit.*); the session routes + journals.
   host.contribute.command({
     id: "media.paged.sheet.command.sortRange",
-    title: "Sort range…",
+    title: t(COMMANDS.sortRange),
     category: "Sheet",
     handler: () => host.shell.openPanel(PANEL_ID),
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findReplace",
-    title: "Find & replace…",
+    title: t(COMMANDS.findReplace),
     category: "Sheet",
     handler: () => {
       host.shell.openPanel(GRID_PANEL_ID);
@@ -276,7 +290,7 @@ export function activate(host: BundleHost): BundleHandle {
   // menu/keyboard entry that surfaces the panel.
   host.contribute.command({
     id: "media.paged.sheet.command.sheetFromDataset",
-    title: "Sheet from dataset",
+    title: t(COMMANDS.sheetFromDataset),
     category: "Sheet",
     handler: () => host.shell.openPanel(DATASETS_PANEL_ID),
   });
@@ -286,7 +300,7 @@ export function activate(host: BundleHost): BundleHandle {
   // honestly when no range is selected / no clipboard backend is wired.
   host.contribute.command({
     id: "media.paged.sheet.command.copySelection",
-    title: "Copy sheet selection",
+    title: t(COMMANDS.copySelection),
     category: "Sheet",
     when: workbookIsOpen,
     handler: async () => {
@@ -307,7 +321,7 @@ export function activate(host: BundleHost): BundleHandle {
   // user does not even learn that it failed.
   host.contribute.command({
     id: "media.paged.sheet.command.pasteSelection",
-    title: "Paste into sheet",
+    title: t(COMMANDS.pasteSelection),
     category: "Sheet",
     when: workbookIsOpen,
     handler: async () => {
@@ -321,10 +335,12 @@ export function activate(host: BundleHost): BundleHandle {
   // panel keeps the named form.
   host.contribute.command({
     id: "media.paged.sheet.command.styleFromCell",
-    title: "New cell style from selection",
+    title: t(COMMANDS.styleFromCell),
     category: "Sheet",
     handler: async () => {
-      const r = await session.newCellStyleFromSelection("Cell style");
+      const r = await session.newCellStyleFromSelection(
+        t(COMMANDS.defaultStyleName),
+      );
       host.log.info(
         r.ok
           ? `styleFromCell: captured ${r.capturedCount} propert${
@@ -341,7 +357,7 @@ export function activate(host: BundleHost): BundleHandle {
   // reachable until now.
   host.contribute.command({
     id: "media.paged.sheet.command.paginateToChain",
-    title: "Paginate into threaded frames",
+    title: t(COMMANDS.paginateToChain),
     category: "Sheet",
     when: workbookIsOpen,
     handler: async () => {
@@ -352,7 +368,7 @@ export function activate(host: BundleHost): BundleHandle {
   // Wave 4 — a blank workbook to type into, without importing a file.
   host.contribute.command({
     id: "media.paged.sheet.command.newWorkbook",
-    title: "New blank workbook",
+    title: t(COMMANDS.newWorkbook),
     category: "Sheet",
     handler: async () => {
       await session.newWorkbook();
@@ -363,14 +379,14 @@ export function activate(host: BundleHost): BundleHandle {
   // engine rewrites every reference; it refuses, with the reason, when
   // preserved content would be left addressing the wrong cells).
   for (const [suffix, title, kind] of [
-    ["insertRows", "Insert rows", "insertRows"],
-    ["deleteRows", "Delete rows", "deleteRows"],
-    ["insertColumns", "Insert columns", "insertCols"],
-    ["deleteColumns", "Delete columns", "deleteCols"],
+    ["insertRows", COMMANDS.insertRows, "insertRows"],
+    ["deleteRows", COMMANDS.deleteRows, "deleteRows"],
+    ["insertColumns", COMMANDS.insertColumns, "insertCols"],
+    ["deleteColumns", COMMANDS.deleteColumns, "deleteCols"],
   ] as const) {
     host.contribute.command({
       id: `media.paged.sheet.command.${suffix}`,
-      title,
+      title: t(title),
       category: "Sheet",
       when: workbookIsOpen,
       handler: () => {
@@ -381,7 +397,7 @@ export function activate(host: BundleHost): BundleHandle {
   }
   host.contribute.command({
     id: "media.paged.sheet.command.addSheet",
-    title: "Add sheet",
+    title: t(COMMANDS.addSheet),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
@@ -395,7 +411,7 @@ export function activate(host: BundleHost): BundleHandle {
   const inGrid = () => session.isInFrameActive() && !editableFocus();
   host.contribute.command({
     id: "media.paged.sheet.command.fillDown",
-    title: "Fill down",
+    title: t(COMMANDS.fillDown),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
@@ -405,7 +421,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.fillRight",
-    title: "Fill right",
+    title: t(COMMANDS.fillRight),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
@@ -415,7 +431,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.clearCells",
-    title: "Clear cells",
+    title: t(COMMANDS.clearCells),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
@@ -425,7 +441,7 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findInSheet",
-    title: "Find in sheet…",
+    title: t(COMMANDS.findInSheet),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
@@ -435,12 +451,30 @@ export function activate(host: BundleHost): BundleHandle {
   });
   host.contribute.command({
     id: "media.paged.sheet.command.findNext",
-    title: "Find next in sheet",
+    title: t(COMMANDS.findNext),
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
       if (!session.findAgain())
         host.log.info("findNext: no match (or no search yet)");
+    },
+  });
+  // Sheet ADR 510 — Excel's cut: copy now, empty the source when the paste
+  // lands; and the Format Cells door (the Sheet properties panel).
+  host.contribute.command({
+    id: "media.paged.sheet.command.cutSelection",
+    title: t(COMMANDS.cutSelection),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => session.cutSelection(),
+  });
+  host.contribute.command({
+    id: "media.paged.sheet.command.formatCells",
+    title: t(COMMANDS.formatCells),
+    category: "Sheet",
+    when: workbookIsOpen,
+    handler: () => {
+      void host.shell?.openPanel?.(PROPERTIES_PANEL_ID);
     },
   });
   // Keys while a sheet frame is entered and focus is not in a text field.
@@ -573,8 +607,10 @@ export function activate(host: BundleHost): BundleHandle {
     // Sheet ADR 510 / extensions ADR 334 — while the frame is entered the
     // grid is a FRAME SURFACE: a main-thread surface over the frame with
     // headings, native pointer and key input, no render-worker round trip
-    // per keystroke. A host without frame surfaces keeps the scene layer.
-    if (host.supports("contribute.frameSurface@1")) {
+    // per keystroke. A host without frame surfaces keeps the scene layer:
+    // the probe is the DYNAMIC flag (a host that mounts them), not the
+    // static door every SDK has.
+    if (host.supports("editContext.frameSurface@1")) {
       host.contribute.frameSurface({
         contextType: "sheet",
         ...makeSheetFrameSurface(session),
@@ -641,7 +677,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.importer@1")) {
     host.contribute.importer({
       id: "media.paged.sheet.importer.xlsx",
-      title: "Spreadsheet",
+      title: t(FILES.spreadsheet),
       extensions: [".xlsx"],
       mimeTypes: [XLSX_MIME],
       import: async ({ name, bytes, newDocument }) => {
@@ -654,7 +690,7 @@ export function activate(host: BundleHost): BundleHandle {
     // one-sheet workbook (typed in Rust by the host language's locale).
     host.contribute.importer({
       id: "media.paged.sheet.importer.csv",
-      title: "Delimited text (CSV/TSV)",
+      title: t(FILES.delimited),
       extensions: [".csv", ".tsv"],
       mimeTypes: DELIMITED_MIMES,
       import: async ({ name, bytes, newDocument }) => {
@@ -670,7 +706,7 @@ export function activate(host: BundleHost): BundleHandle {
   if (host.supports("contribute.exporter@1")) {
     host.contribute.exporter({
       id: "media.paged.sheet.exporter.xlsx",
-      title: "Workbook (.xlsx)",
+      title: t(FILES.xlsx),
       extension: ".xlsx",
       mimeType: XLSX_MIME,
       export: () => session.saveWorkbook(),
@@ -694,6 +730,8 @@ export function activate(host: BundleHost): BundleHandle {
       textProviderHandle = null;
       documentOpenedSub.dispose();
       propertyBindings?.dispose();
+      templateFields.dispose();
+      layoutCommands.dispose();
       objectModel.dispose();
       session.dispose();
     },

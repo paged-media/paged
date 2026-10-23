@@ -55,7 +55,10 @@ import {
   type SessionPolicy,
   type TemplateFieldProblem,
   type TemplateFieldSummary,
+  TemplateFinding,
   type TemplateFieldValue,
+  type DeriveOptions,
+  type Derivation,
   type GradientDetail,
   type LayerSummary,
   type LineBounds,
@@ -649,6 +652,15 @@ export class CanvasClient {
   }
 
   /**
+   * v76 (editor plan F3) — the template's preflight: what is wrong with its
+   * policy before anyone fills it, errors first. The `templateFindings`
+   * collection.
+   */
+  async templateFindings(): Promise<readonly TemplateFinding[]> {
+    return this.collection<TemplateFinding>("templateFindings");
+  }
+
+  /**
    * v75 (engine ADR 1001) — fill template fields. The values are checked
    * against the fields' constraints and applied as one batch: one undo
    * step, checked against the session's policy. Resolves to the reply: a
@@ -666,6 +678,47 @@ export class CanvasClient {
     const reply = await this.send({
       kind: "setTemplateFields",
       payload: { values: [...values] },
+    });
+    if (reply.kind === "templateFieldsRefused")
+      return { ok: false, problems: reply.payload.problems };
+    if (reply.kind === "mutationApplied") return { ok: true, reply };
+    return { ok: false, reply };
+  }
+
+  /**
+   * v76 (engine ADR 1002) — the fields the document's XML tags describe
+   * (and, as `options` asks, its named items and plugin placeholders), with
+   * the tags that could not become fields and why. Reads only.
+   */
+  async derivedTemplateFields(
+    options: DeriveOptions = {},
+  ): Promise<Derivation> {
+    const reply = await this.send({
+      kind: "requestDerivedTemplateFields",
+      payload: { options },
+    });
+    if (reply.kind === "derivedTemplateFields") return reply.payload.derivation;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /**
+   * v76 (engine ADR 1002) — "Open as template": the derived fields (those
+   * named in `only`, when given) written as the template's policy, and each
+   * tagged range made a placeholder run, as one batch (one undo step).
+   * Writing the policy takes the author's role. Resolves like
+   * `setTemplateFields`.
+   */
+  async openAsTemplate(
+    options: DeriveOptions = {},
+    only?: readonly string[],
+  ): Promise<
+    | { ok: true; reply: WorkerToMain }
+    | { ok: false; problems: readonly TemplateFieldProblem[] }
+    | { ok: false; reply: WorkerToMain }
+  > {
+    const reply = await this.send({
+      kind: "openAsTemplate",
+      payload: { options, only: only ? [...only] : null },
     });
     if (reply.kind === "templateFieldsRefused")
       return { ok: false, problems: reply.payload.problems };

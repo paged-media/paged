@@ -88,6 +88,7 @@ fn field(name: &str, kind: TemplateFieldKind) -> FieldDef {
         group: None,
         required: false,
         constraints: Default::default(),
+        module: None,
     }
 }
 
@@ -184,6 +185,45 @@ fn a_filler_replaces_and_crops_a_field_and_nothing_else() {
             },
             &filler,
         ),
+        "image.replace",
+    );
+}
+
+/// Engine ADR 1003 — which page of a placed PDF a frame shows is the
+/// picture itself: `image.replace` on the item, which a picture field
+/// grants and scenery does not.
+#[test]
+fn a_placed_pdfs_page_is_image_replace_on_the_item() {
+    let page = |node: &NodeId| Operation::SetProperty {
+        node: node.clone(),
+        path: PropertyPath::FramePdfPage,
+        value: Value::Length(Some(2.0)),
+    };
+    let (mut doc, photo, logo) = template();
+    let required = paged_mutate::apply::permit::required(&page(&photo));
+    assert_eq!(
+        required,
+        vec![paged_mutate::apply::permit::Requirement::on_item(
+            Permission::ImageReplace,
+            "photo"
+        )]
+    );
+    let filler = session(Role::Filler);
+    for frame in [&photo, &logo] {
+        apply_checked(
+            &mut doc,
+            &Operation::PlaceImage {
+                frame: frame.clone(),
+                image_uri: Some("file:///art.pdf".into()),
+                fit: None,
+            },
+            &session(Role::Author),
+        )
+        .expect("the author places a PDF");
+    }
+    apply_checked(&mut doc, &page(&photo), &filler).expect("the field's page");
+    assert_refused(
+        apply_checked(&mut doc, &page(&logo), &filler),
         "image.replace",
     );
 }
@@ -312,4 +352,152 @@ fn parent_pages_are_page_setup() {
     });
     assert_eq!(required.len(), 1);
     assert_eq!(required[0].permission, Permission::DocumentPages);
+}
+
+/// A module field opens its own plugin's document-level label to a filler
+/// (a sheet's workbook version lives there), and no other plugin's.
+#[test]
+fn a_module_field_opens_its_own_plugins_document_label() {
+    let (mut doc, _photo, _logo) = template();
+    let sheet = add_rect(&mut doc, "sheet", 300.0);
+    let policy: ItemPolicy = serde_json::from_value(serde_json::json!({
+        "field": {
+            "name": "price",
+            "kind": "module",
+            "module": { "kind": "media.paged.sheet.cell", "grants": ["text.edit"], "def": { "ref": "B4" } }
+        }
+    }))
+    .unwrap();
+    apply(&mut doc, &label(&sheet, policy.to_label())).expect("sheet policy");
+    let filler = session(Role::Filler);
+    let doc_label = |key: &str| Operation::SetDocumentMetadata {
+        key: key.to_string(),
+        value: Some(r#"{"v":1,"data":{}}"#.to_string()),
+        caller: None,
+    };
+    apply_checked(&mut doc, &doc_label("x-paged:media.paged.sheet"), &filler)
+        .expect("the sheet's own state");
+    assert_refused(
+        apply_checked(&mut doc, &doc_label("x-paged:media.paged.web"), &filler),
+        "document.metadata",
+    );
+    assert_refused(
+        apply_checked(&mut doc, &doc_label(TEMPLATE_KEY), &filler),
+        "template.author",
+    );
+    // A session override still closes it.
+    let closed = SessionPolicy {
+        role: Role::Filler,
+        overrides: vec![(Permission::DocumentMetadata, Override::Deny)],
+    };
+    assert_refused(
+        apply_checked(&mut doc, &doc_label("x-paged:media.paged.sheet"), &closed),
+        "document.metadata",
+    );
+}
+
+fn first_page(doc: &Document) -> String {
+    doc.spreads[0].spread.pages[0]
+        .self_id
+        .clone()
+        .expect("page id")
+}
+
+fn page_ids(doc: &Document) -> Vec<String> {
+    doc.spreads
+        .iter()
+        .flat_map(|s| s.spread.pages.iter().filter_map(|p| p.self_id.clone()))
+        .collect()
+}
+
+/// Data ADR 560: a page's own policy may grant `document.pages`, so a filler
+/// may copy that page and remove its copies (a catalogue's product pages)
+/// while every other page stays closed, and adding a page anywhere still
+/// needs the document's grant.
+#[test]
+fn a_page_policy_opens_that_page_and_its_copies_and_no_other() {
+    let (mut doc, _photo, _logo) = template();
+    let filler = session(Role::Filler);
+    let source = first_page(&doc);
+    // A copy made before the page was opened is closed like any page.
+    apply_checked(
+        &mut doc,
+        &Operation::DuplicatePage {
+            page: source.clone(),
+            clone_spread_json: None,
+        },
+        &session(Role::Author),
+    )
+    .expect("the author copies the page");
+    let closed = page_ids(&doc)
+        .into_iter()
+        .find(|p| *p != source)
+        .expect("the copy");
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::DuplicatePage {
+                page: source.clone(),
+                clone_spread_json: None,
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
+    let open = ItemPolicy {
+        allow: vec![Permission::DocumentPages],
+        ..Default::default()
+    };
+    apply(
+        &mut doc,
+        &label(&NodeId::Page(source.clone()), open.to_label()),
+    )
+    .expect("page policy");
+
+    apply_checked(
+        &mut doc,
+        &Operation::DuplicatePage {
+            page: source.clone(),
+            clone_spread_json: None,
+        },
+        &filler,
+    )
+    .expect("a filler copies the open page");
+    let copy = page_ids(&doc)
+        .into_iter()
+        .find(|p| *p != source && *p != closed)
+        .expect("the filler's copy");
+    apply_checked(
+        &mut doc,
+        &Operation::RemovePage {
+            page_id: copy.clone(),
+        },
+        &filler,
+    )
+    .expect("the copy carries the page's policy, so a filler removes it");
+    assert!(!page_ids(&doc).contains(&copy));
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::RemovePage {
+                page_id: closed.clone(),
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
+    assert_refused(
+        apply_checked(
+            &mut doc,
+            &Operation::InsertPage {
+                after_page_id: Some(source.clone()),
+                master_id: None,
+                spread_self_id: None,
+                page_self_id: None,
+                restore_spread_json: None,
+            },
+            &filler,
+        ),
+        "document.pages",
+    );
 }

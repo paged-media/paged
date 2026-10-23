@@ -66,6 +66,8 @@ import {
   type RuleTarget,
 } from "../../data-host-model/src";
 import { objectsOf } from "./property-lane";
+import { t as tr } from "@paged-media/strings";
+import { STATUS } from "./messages";
 import { ownTextVariables, textVariablesOn } from "./text-variables";
 
 /** What one command's lowerings share: the active page, read once. */
@@ -1035,7 +1037,7 @@ export async function commitRule(
       );
       if (ops.length === 0) return 0;
       const out = await objectsOf(host)!.batch(ops, {
-        label: `Rule "${result.scope}"`,
+        label: tr(STATUS.ruleUndo, { scope: result.scope }),
       });
       if (!out.applied) {
         host.log.warn(

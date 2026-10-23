@@ -1,0 +1,22 @@
+# BITRSHIFT(number,shift_amount).
+# id	formula	setup	expected
+bitrshift-0	=BITRSHIFT(13,2)	-	3
+bitrshift-1	=BITRSHIFT(13,-2)	-	52
+bitrshift-2	=BITRSHIFT(1,-47)	-	140737488355328
+bitrshift-3	=BITRSHIFT(1,-48)	-	#NUM!
+bitrshift-4	=BITRSHIFT(281474976710655,47)	-	1
+bitrshift-5	=BITRSHIFT(1,54)	-	#NUM!
+bitrshift-6	=BITRSHIFT(1,-54)	-	#NUM!
+bitrshift-7	=BITRSHIFT(-1,1)	-	#NUM!
+bitrshift-8	=BITRSHIFT(1.5,1)	-	#NUM!
+bitrshift-9	=BITRSHIFT(16,1.9)	-	8
+bitrshift-10	=BITRSHIFT("a",1)	-	#VALUE!
+bitrshift-x0	=BITRSHIFT(A1,1)	A1=#N/A	#N/A
+bitrshift-x1	=SUM(BITRSHIFT({8,16},{1,2}))	-	8
+bitrshift-y0	=BITRSHIFT(0,60)	-	0
+bitrshift-y1	=BITRSHIFT(1,-53)	-	0
+bitrshift-y2	=BITRSHIFT(3,-52)	-	0
+bitrshift-y3	=BITRSHIFT(1,-49)	-	0
+bitrshift-y4	=BITRSHIFT(2^47,-6)	-	#NUM!
+bitrshift-y5	=BITRSHIFT(1,53)	-	0
+bitrshift-y6	=BITRSHIFT(2^47,48)	-	0

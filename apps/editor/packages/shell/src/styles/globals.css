@@ -41,11 +41,17 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Everything below is the editor's: scoped to its root element
+ * ([data-paged-editor], plan task E1), so a host page that mounts the
+ * editor keeps its own look. Tailwind's preflight is scoped the same way
+ * (tailwind.config.ts). `:where()` adds no specificity. */
 @layer base {
-  * {
+  :where([data-paged-editor]),
+  :where([data-paged-editor]) * {
     @apply border-border;
   }
-  body {
+  /* What the page's <body> used to carry: the editor's surface. */
+  [data-paged-editor] {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
@@ -55,20 +61,21 @@
    * state (a menu row's highlight, a field's inset ring) keeps it. A
    * pointer click does not match :focus-visible, so the ring appears only
    * for the keyboard. */
-  :where(
-    a[href],
-    button,
-    input,
-    select,
-    textarea,
-    summary,
-    [tabindex],
-    [contenteditable="true"],
-    [role="button"],
-    [role="menuitem"],
-    [role="tab"],
-    [role="option"]
-  ):focus-visible {
+  :where([data-paged-editor])
+    :where(
+      a[href],
+      button,
+      input,
+      select,
+      textarea,
+      summary,
+      [tabindex],
+      [contenteditable="true"],
+      [role="button"],
+      [role="menuitem"],
+      [role="tab"],
+      [role="option"]
+    ):focus-visible {
     outline: 2px solid hsl(var(--ring));
     outline-offset: 1px;
   }

@@ -49,10 +49,12 @@ pub mod defined_names;
 pub mod error;
 pub mod opc;
 pub mod parts;
+mod patch;
 pub mod preserve;
 pub mod rels;
 pub mod sheet_doc;
 pub mod sheet_view;
+mod shift;
 pub mod splice;
 pub mod structure;
 pub mod style_edit;
@@ -73,6 +75,7 @@ pub use parts::conditional_format::{
 pub use parts::data_validation::{DataValidation, DvKind, SheetDataValidations};
 pub use parts::external_link::{ExternalBook, ExternalLinks};
 pub use parts::freeze::FreezePanes;
+pub use parts::shared_strings::{RichRun, RichText};
 pub use parts::styles::{VisualStyle, VisualStyles};
 pub use style_edit::{EdgePatch, StylePatch};
 
@@ -174,6 +177,12 @@ pub struct XlsxDocument {
     /// comments part has no entry.
     pub comments: BTreeMap<SheetId, parts::comments::SheetComments>,
 
+    /// The shared strings as read (`t="s"` indexes): a saved cell whose text
+    /// is still its shared string keeps the index, and with it any rich-text
+    /// runs (patch.rs).
+    shared_strings: Vec<compact_str::CompactString>,
+    /// The sharedStrings part name, when the package has one.
+    shared_part: Option<String>,
     /// The OPC container (ordered parts + content types) for re-write.
     container: OpcContainer,
     /// Worksheet bindings: model sheet -> part name + captured subtrees.
@@ -390,6 +399,9 @@ impl XlsxDocument {
                 ws.col_widths = parsed_ws.col_widths;
                 ws.row_heights = parsed_ws.row_heights;
                 ws.hidden_rows = parsed_ws.hidden_rows;
+                ws.row_meta = parsed_ws.row_meta;
+                ws.col_meta = parsed_ws.col_meta;
+                ws.state = sref.state;
                 // The sheet-level `<autoFilter>` is a captured (verbatim)
                 // worksheet child; read its criteria into the model too.
                 ws.filters = parsed_ws
@@ -526,6 +538,7 @@ impl XlsxDocument {
 
             worksheet_parts.push(ws_part.clone());
             bindings.push(SheetBinding {
+                edits: Vec::new(),
                 sheet_id: sid,
                 part_name: ws_part,
                 captured: parsed_ws.captured,
@@ -646,6 +659,8 @@ impl XlsxDocument {
             freeze_panes,
             data_validations,
             comments,
+            shared_strings,
+            shared_part,
             container,
             bindings,
             workbook_part,
@@ -724,6 +739,7 @@ impl XlsxDocument {
                 cm: self.dynamic_cm,
                 anchors,
             },
+            &self.shared_strings,
         )
     }
 
@@ -842,6 +858,63 @@ impl XlsxDocument {
     /// identical); the grid shows an indicator + the panel lists the text.
     pub fn comments_of(&self, sheet: SheetId) -> Option<&parts::comments::SheetComments> {
         self.comments.get(&sheet)
+    }
+
+    /// Shared string `index` with its rich-text runs (W1.4), or `None`.
+    pub fn shared_rich_text(
+        &self,
+        index: usize,
+    ) -> Result<Option<parts::shared_strings::RichText>, XlsxError> {
+        match self.shared_part.as_deref().and_then(|p| self.part_bytes(p)) {
+            Some(xml) => parts::shared_strings::rich_text_at(&xml, index),
+            None => Ok(None),
+        }
+    }
+
+    /// Append a (rich) string to the shared-string table and return its
+    /// index: every existing index keeps its meaning (never renumbered). A
+    /// package without the part gets one, with its relationship and content
+    /// type. A cell written as `t="s"` with this index shows the runs.
+    pub fn append_shared_string(
+        &mut self,
+        text: &parts::shared_strings::RichText,
+    ) -> Result<u32, XlsxError> {
+        let part = match self.shared_part.clone() {
+            Some(p) => p,
+            None => {
+                let part = resolve_target(rels::part_dir(&self.workbook_part), "sharedStrings.xml");
+                self.add_workbook_rel(
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings",
+                    "sharedStrings.xml",
+                )?;
+                self.add_override(
+                    &part,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml",
+                )?;
+                self.container.parts.push(PartEntry::Opaque {
+                    name: part.clone(),
+                    bytes: br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"></sst>"#
+                        .to_vec(),
+                });
+                self.container.dirty = true;
+                self.shared_part = Some(part.clone());
+                part
+            }
+        };
+        let xml = self
+            .part_bytes(&part)
+            .ok_or_else(|| XlsxError::Structure(format!("missing {part}")))?;
+        let (out, index) = parts::shared_strings::append_si(&xml, text)?;
+        self.set_part_bytes(&part, out);
+        // Keep the positional table in step (padding if the part held more
+        // entries than were read).
+        while self.shared_strings.len() < index {
+            self.shared_strings
+                .push(compact_str::CompactString::default());
+        }
+        self.shared_strings.push(text.text().into());
+        Ok(index as u32)
     }
 
     /// The worksheet part name bound to a model sheet (test/consumer helper).

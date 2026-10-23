@@ -21,6 +21,47 @@ orientation only.
 - **§2 lists facts in the code that the concept did not account for.** The tasks are built
   around them. Read §2 before any task.
 
+## 0a. Progress (2026-10-23)
+
+| Task                                             | State                                                                                                                                   | Where                                                                               |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| A1–A6 profiles, regions, presets                 | Done                                                                                                                                    | ADR 274, `packages/shell/src/profile/`, `apps/canvas/src/profiles/`                 |
+| B1–B3 features                                   | Done                                                                                                                                    | ADR 275, `apps/canvas/feature-ids.json`                                             |
+| C1–C8, C11 engine policy                         | Done                                                                                                                                    | engine ADRs 1000, 1001 (protocol 75)                                                |
+| C9, C10 XML tags ↔ fields, F5 open as template   | Done (protocol 76): tagged ranges become placeholder runs; paged writes XML tags; File ▸ Open as template; `paged-node template ingest` | engine ADR 1002, `paged-template/src/derive.rs`, `idml-export/src/xml_structure.rs` |
+| D1–D5 filling in the editor                      | Done                                                                                                                                    | ADR 276, `panels/template/`                                                         |
+| E2, E3, E5 host actions, handle, host components | Done                                                                                                                                    | `apps/canvas/src/embed/create-editor.ts`                                            |
+| E4 theme and strings                             | Done                                                                                                                                    | `setTheme`, `docs/theme-tokens.json`, `platform/shared/strings`                     |
+| E6 iframe bridge                                 | Done; scripts run over it too (`runScript`), the old `paged:run` bridge stays for the docs playground                                   | `embed.html`, `src/embed/{bridge,connect}.ts`                                       |
+| E7 example host                                  | Done as the demo pages                                                                                                                  | `apps/canvas/demos/`                                                                |
+| E10 the whole editor in strings                  | Done: 5,036 messages, German shipped; extensions through `host.strings`                                                                 | extensions ADR 333, strings guard in CI                                             |
+| E1 instance safety                               | Done: two editors on a page, scoped styles, root-held keys and portals, a storage adapter                                               | ADR 277, `scripts/instance-guard.mjs`                                               |
+| E8 the npm package                               | Done; first publish needs the npm trusted publisher (a user action)                                                                     | `apps/editor/packages/editor`, PM-0013                                              |
+| E9 embedding docs                                | Done                                                                                                                                    | docs site PR                                                                        |
+| F1, F2 Template panel, preview as filler         | Done                                                                                                                                    | `panels/template/template-panel.tsx`                                                |
+| F6 the CLI                                       | Done: `paged-node template fields, kinds, fill, check, ingest` and `paged template fields, fill, check`                                 | `apps/cli/src/template.ts`, `paged-cli/src/template.rs`                             |
+| F7 server rendering                              | Done                                                                                                                                    | `engine-serve` `POST /run` `template`                                               |
+| F8 catalogues                                    | Done                                                                                                                                    | data ADR 560                                                                        |
+| F3 preflight, F4 author overlay                  | Done: the `templateFindings` collection, the Template panel's Problems, markers on the author's field outlines                          | `paged-template/src/preflight.rs`                                                   |
+| G1, G2 module field kinds, routing               | Done                                                                                                                                    | extensions ADR 335, engine ADR 1000 amendment                                       |
+| G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
+| G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
+| H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
+| I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
+
+Corrections to the plan found while building:
+
+- An iframe does not free the host page from cross-origin isolation: a frame is isolated only
+  when its top page is. The host page sends COOP `same-origin` and COEP `credentialless`, and the
+  frame is allowed `cross-origin-isolated` (E6).
+- The strings package lives in `platform/shared/strings`, not under `apps/editor/packages`, so
+  the built-in modules can use it (PM-0002); third-party extensions reach it through
+  `host.strings`.
+- Engine follow-ups found by the module work, and what became of them: a module's document-
+  and page-level label now opens to a filler when a field of that module is open, and a story
+  on a path is decided by the item that carries the path (engine ADR 1000, amendment of
+  2026-10-23); a placed PDF still always draws its first page.
+
 ## 1. Summary
 
 | Workstream             | Concept  | Where                                                                                   | Depends on       |
@@ -543,6 +584,13 @@ targets, value, validity }`.
 
 ### C9 — Fields from XML tags
 
+**Done (protocol 76, engine [ADR 1002](../../../engine/core/docs/adr/1002-xml-tags-carry-template-fields.md)).**
+`paged_template::derive_fields`; the importer records where each tagged range stands; a tag
+that cannot be a field (a parent page, nothing tagged, a line or group, a story whose ranges are
+the fields) is reported with its reason. Run fields live in `DocumentPolicy::runs`, keyed by the
+placeholder that holds them, and are read and set through it (`templateFields`,
+`setTemplateFields`). Fixture: `paged_gen::fixtures::tagged_template_idml`.
+
 - **Files.** `paged-template/src/derive.rs`. The model's `xml_root`, `xml_elements` and
   `xml_tags` are the sources.
 - **Steps.**
@@ -563,6 +611,15 @@ targets, value, validity }`.
   a tagged image frame, a tagged range and a parent-page tag.
 
 ### C10 — Writing XML tags (decided: in this project)
+
+**Done (protocol 76, engine ADR 1002).** The seven operations (undone through the inverse-only
+`RestoreXmlStructure`), the writer in `idml-export/src/xml_structure.rs` (story ranges placed by
+the story writer through private-use markers), the blank document's `Root` tag, and Make field
+in the Template panel tagging the item in the same batch. `TagItem` retags an item tagged
+already; `SetXmlAttribute` also takes the item a tag is on. Not done: moving ranges through
+every text-changing operation (the text kernels and the field operations do), renaming or
+removing a tag definition when a field is renamed (the old definition stays), the optional
+corpus lane.
 
 Goal: a field made in paged is also an XML-tagged element in the exported IDML, so InDesign
 and other tag-based tools see a paged-made template as tagged. Today tags survive only
@@ -1006,6 +1063,12 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
 
 ### F5 — Open as template
 
+**Done (engine half and the command).** `RequestDerivedTemplateFields` / `OpenAsTemplate`
+(one batch, author only); `paged.template.openAsTemplate` (File ▸ Open as template…) lists the
+derived fields and the skipped tags for confirmation; `paged-node template ingest <doc> -o
+<out>` runs the same messages. Not done: listing differences when re-deriving on a document
+that already has a policy (the new fields are merged into it).
+
 - **Steps.** A command `paged.template.openAsTemplate` (File menu) runs `derive_fields` (C9),
   shows the derived fields for confirmation, and writes the policy. On a document that already
   has a policy, it offers to re-derive from tags and lists the differences.
@@ -1053,6 +1116,12 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
   permission for "change the product list" is a session override (`document.pages` allowed for
   flow-generated pages only), decided in the data ADR.
 - **ADR.** `modules/data` **560**, "Template fields are binding targets".
+- **Done** (2026-10-23): [data ADR 560](../../../modules/data/docs/adr/560-template-fields-are-binding-targets.md).
+  The filler permission is a page policy rather than a session override: the engine asks
+  `document.pages` of the page removed or duplicated (engine ADR 1000's amendment of
+  2026-10-23), so a template that opens its catalogue page opens its copies and no other page.
+  Typed commands `media.paged.data.templateFieldTargets`, `bindTemplateField` and
+  `runCatalogue`.
 
 ---
 
@@ -1100,6 +1169,81 @@ write(item, def, value) → outcome }`. A field definition names the module kind
 Each module ships its kinds, a DOM test over the form, and a CLI fill test, and its docs say
 which of its parts can be fields. A module's own panels honour the session's role: a filler
 sees the module's editing UI only for the parts its fields open.
+
+### G3a — The field kinds in detail (from the module audits)
+
+| Kind                                 | Definition                                      | Read and write                                                                                                                                  |
+| ------------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.sheet.cell`             | `{ ref }` (a named range or `Sheet!A1`), a type | the cell's `value` through the object model's write door; a list validation makes it a choice                                                   |
+| `media.paged.sheet.range`            | `{ ref, columns?, rows: fixed or { max } }`     | `range.values`; a growable range inserts or deletes rows first                                                                                  |
+| `media.paged.sheet.chartSource`      | `{ chart, allowed }`                            | the chart's series through `updateChart`                                                                                                        |
+| `media.paged.doc.blockText`          | `{ frame, anchor }` (a bookmark or style + nth) | `block.text` planned like a merge field: the first run takes the text, the rest empty                                                           |
+| `media.paged.doc.mergeField`         | `{ name }`                                      | `mergeField.value` (already writable)                                                                                                           |
+| `media.paged.doc.listItems`          | `{ frame, anchor }`                             | needs list identity in the lowering and an insert that copies a paragraph's properties                                                          |
+| `media.paged.draw.paint`             | `{ target, channel: fill or stroke, allowed }`  | the frame's fill or stroke, or the front layer of its appearance stack                                                                          |
+| `media.paged.draw.graphicStyle`      | `{ targets, allowed }`                          | `appearance.graphicStyle`                                                                                                                       |
+| `media.paged.draw.textOnPath`        | `{ path }`                                      | the attached story's text                                                                                                                       |
+| `media.paged.draw.symbolChoice`      | `{ instance, allowed }`                         | re-place the instance with the chosen symbol in one batch                                                                                       |
+| `media.paged.image.picture`          | `{ frame, layer }` (by layer name)              | `replaceLayerPixels`; adjustment layers above stay; reports a pending composite                                                                 |
+| `media.paged.image.adjustmentPreset` | `{ frame, allowed: [{ name, rows }] }`          | creates or sets one named adjustment layer with the preset's rows                                                                               |
+| `media.paged.image.layerVisibility`  | `{ frame, layer }`                              | `layer.visible`                                                                                                                                 |
+| `media.paged.slide.placeholderText`  | `{ slide, placeholder: { type, idx } }`         | delegates to the engine's text lowering on the placeholder's story                                                                              |
+| `media.paged.slide.visibility`       | `{ slide }`                                     | the slide's `hidden` flag; PDF export must skip hidden slides                                                                                   |
+| `media.paged.web.value`              | `{ name }` (a `{{doc.key}}` value)              | `templateVar.value`: one field fills every web frame that uses it                                                                               |
+| `media.paged.web.source`             | `{ frame, lane: html or css }`                  | `webFrame.html` or `.css`, sanitised on write                                                                                                   |
+| `media.paged.web.cssVar`             | `{ frame, name, allowed }`                      | `cssVar.value`                                                                                                                                  |
+| `media.paged.data.record`            | `{ query or binding, label }`                   | previews the chosen record; the choice must be persisted (it is in memory today)                                                                |
+| `media.paged.data.bindingValue`      | `{ binding }`                                   | the control follows the binding kind; a write pins the value                                                                                    |
+| `media.paged.data.dataSet`           | `{ allowed? }`                                  | applies a captured data set in one batch                                                                                                        |
+| `media.paged.pdf.page`               | `{ frame?, allowed? }`                          | the frame's `framePdfPage`: a number from 1 to its `pdfPageCount`, or a choice of the `allowed` pages; grants `image.replace` (engine ADR 1003) |
+
+Every write maps onto a core permission (`text.edit`, `image.replace`, `style.edit`,
+visibility), so a module field is never a way around the policy. Template-level output
+settings (a locked PDF standard, profile, bleed and marks) live in the template's own label
+and are merged into `paged template fill` and the editor's export dialog for a filler.
+
+### G4 — Module coverage: CLI, SDK and scripts
+
+Audited per module: what the editor's UI can do that the Node CLI (`paged-node`), the Rust CLI,
+the SDK (`host.objects` and typed commands) and scripts (`paged.*`) cannot. The shared gaps
+first, since they unblock several modules at once:
+
+1. **Bytes across JSON surfaces.** A typed command argument of kind `bytes` cannot be passed
+   through `paged-node invoke` or a script. Accept `"@path"` (CLI) and `{ base64 }` (script
+   bridge) for a `bytes` field, and write a `bytes` result to `-o`. Unblocks `importXlsx`,
+   `placeDoc`, `importPptx`, `importPdf`, `importIdml`.
+2. **An import path.** `paged-node` opens only `.paged` and `.idml`. Open any extension a loaded
+   importer claims, and add `import <file>` for placing (SVG, raster, HTML, CSV).
+3. **Per-module CLI tests.** No CLI spec loads draw, image, sheet or web; add one each.
+4. **Headless rendering of module content.** Image composites with adjustments need a GPU and
+   web frames are not stored as rendered content, so a headless PDF shows stale pixels or a
+   fallback. Fail loudly (`pending` reported by `template check`), and bake web frames before
+   export.
+5. **The Rust CLI** has no plugin host; the module surface is `paged-node` only, and its docs say
+   so.
+
+Per module:
+
+- **draw:** done. The tool-only operations have typed twins (`knife`, `scissorsAt`,
+  `shapeBuild`); the width profile is a typed command (`widthProfile { targets, widths }`) and
+  a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
+  recipe an edited source feeds. A rebuild on every edit is left out: it would be a second
+  undo step after the edit's own (`modules/draw/docs/status.md`).
+- **image:** targeted crop, rotate, flip and canvas size; a typed `applyAdjustment`; filters with
+  a region; the session-only commands refuse headless with a code instead of doing nothing.
+- **sheet:** a placement kind (range, view, print, sizing) with `paginateToChain` and
+  `placeName`; merge, borders, column widths and row heights; `importCsv`; chart delete.
+- **data:** `apply` and `merge` rebased on typed commands (`importSource`); a batch verb per
+  record or group; read-only inspection commands (preview, expression check, refresh diff).
+- **doc:** done: the exporter works after reopening a saved document; `block.text` writable;
+  table-cell runs, paragraphs and merge fields writable, template fields anchored in a cell; a
+  heading anchor (`{ heading: n }`). Open: opening a `.docx` standalone headless (the SDK's
+  headless host has no native-open door, so `paged-node` places it in a frame).
+- **slide:** the typed `newSlide` places the layout's placeholders like the panel does; reorder
+  and duplicate; a typed `exportPptx`; menus and commands.
+- **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
+- **publish / pdf:** bookmarks and tagged PDF in the typed exporter; `template fill -o x.pdf` and
+  `merge` through the typed exporter; a `preflight` command and verb; `paged-node package`.
 
 ## 9b. Workstream H — Demos
 

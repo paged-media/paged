@@ -154,7 +154,7 @@ before. ADR 558 and 559 are proposed and not yet recorded in [`adr/`](adr/).
 - **"Export as InDesign Data Merge template"**: IDML + UTF-16 CSV; InDesign 2025 opened the
   recorded template with fields `sku, name` and merged its three records.
 - **paged.data's own objects** in `host.objects` (sources, queries, bindings, data sets,
-  variables) and ten typed commands, including "Bind to data…"
+  variables) and seventeen typed commands (seven of them the inspection commands below), including "Bind to data…"
   (`media.paged.data.bindProperty`, which the Bindings panel completes) and the Data Merge
   (`media.paged.data.merge`). A binding write (create, set, delete; the Bindings panel's
   "Bind" goes the same way) is one undo step: its element label and the document
@@ -193,6 +193,53 @@ Not done:
   counts as placed, so Lower does not insert it again.
 - Text-variable reads cost one query plus one `objects.get` per variable on every field
   read.
+
+- **Template fields** (editor plan G3; extensions ADR 335; `src/template-fields.ts`). Four
+  module field kinds open parts of the data to a template's filler, each written through the
+  lanes the panels use (so the engine checks every write against the session's role) and each
+  refusing a value with one sentence:
+  - `media.paged.data.record` `{ query, label? }`: which record of a query fills the
+    document, a choice (`"1"` is the first record; `label` names the column the options show).
+    The property and visibility bindings over the query move in one `host.objects` batch, one
+    undo step; the other per-record kinds follow through their preview lanes. The chosen record
+    is saved with the session (`preview` in the session part), so a reopened document reads it.
+  - `media.paged.data.bindingValue` `{ binding }`: a property or visibility binding's value,
+    set by hand and pinned so a refresh leaves it; the control follows the property's type.
+  - `media.paged.data.dataSet` `{ allowed? }`: which captured data set the document shows,
+    applied as one batch; the applied set is saved with the session (`dataSet`).
+  - `media.paged.data.variable` `{ name }`: a property or visibility variable by its name.
+
+  The field kinds grant `text.edit`, `image.replace` and `item.visibility`; a binding that
+  writes another property (a stroke weight) needs its permission in the field's grants, and a
+  write to an item the template does not open is refused. A text variable and a picture are
+  not module fields: they are text and image fields of their frames. `paged template check`
+  still reports the query's derived `recordCount` as a difference after a record field is
+  filled (it compares derived rows).
+
+- **Catalogues** ([ADR 560](adr/560-template-fields-are-binding-targets.md), plan F8;
+  `src/catalogue.ts`). A template's own text, picture and visibility fields are binding
+  targets: the Bindings panel's "Template fields" section, or the typed command
+  `bindTemplateField { field, query, expr, invert? }`, binds one to an expression over a
+  query (checked against the query; kept in the session part as `catalogue`).
+  `runCatalogue { query?, template?, mode?, by? }` (the panel's "Make catalogue") copies the
+  template page once per record (`perRecord`) or per group of `by` (`perGroup`) and fills
+  every copy's fields from its record: the engine decides each value (`plan_catalogue`,
+  typed by the field's kind, refused when the template's `required` or `maxLength` forbids
+  it, which refuses the whole run before anything is written), and the bundle writes them as
+  the template form does. A second run replaces the copies of the first; the template page
+  holds the first instance. Two undo steps when pages change (pages, then fields).
+  `templateFieldTargets` lists the fields with their bindings. A filler may run it where the
+  author's page policy opens the template page (`{ "allow": ["document.pages"] }`): the
+  engine asks `document.pages` of the page removed or duplicated, and the copies inherit
+  the grant; the first run is an author's (it marks the template page with this plugin's
+  page label). Not yet: a page whose stories hold a table, an anchored object or a footnote
+  cannot be copied; module fields are not catalogue targets; the editor's Template panel
+  has no control for the page grant.
+
+- **Inspection commands** (plan G4). Typed, read-only: `previewQuery { sql, limit }`,
+  `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the
+  variable set's `captureEveryRecord`, `exportVariableLibrary` and `importVariableLibrary`,
+  which change the session, never the document.
 
 ## Limits of what is shipped
 

@@ -26,91 +26,13 @@
 //! functions carry which prefix; [`crate::print_ooxml`] adds them and
 //! [`strip_storage_prefixes`] removes them on load.
 
-/// Registered functions Excel stores with `_xlfn.` (Excel 2010 and later).
-const XLFN: &[&str] = &[
-    "AGGREGATE",
-    "ANCHORARRAY",
-    "ARABIC",
-    "BASE",
-    "BYCOL",
-    "BYROW",
-    "CHOOSECOLS",
-    "CHOOSEROWS",
-    "CONCAT",
-    "DAYS",
-    "DECIMAL",
-    "DROP",
-    "FORECAST.LINEAR",
-    "FORMULATEXT",
-    "HSTACK",
-    "IFNA",
-    "IFS",
-    "ISFORMULA",
-    "ISOWEEKNUM",
-    "LAMBDA",
-    "LET",
-    "MAKEARRAY",
-    "MAP",
-    "MAXIFS",
-    "MINIFS",
-    "MODE.SNGL",
-    "NETWORKDAYS.INTL",
-    "NORM.DIST",
-    "NORM.INV",
-    "NORM.S.DIST",
-    "NORM.S.INV",
-    "NUMBERVALUE",
-    "PERCENTILE.EXC",
-    "PERCENTILE.INC",
-    "PERCENTRANK.EXC",
-    "PERCENTRANK.INC",
-    "QUARTILE.EXC",
-    "QUARTILE.INC",
-    "RANDARRAY",
-    "RANK.EQ",
-    "REDUCE",
-    "SCAN",
-    "SEQUENCE",
-    "SHEET",
-    "SHEETS",
-    "SINGLE",
-    "SORTBY",
-    "STDEV.P",
-    "STDEV.S",
-    "SWITCH",
-    "TAKE",
-    "TEXTAFTER",
-    "TEXTBEFORE",
-    "TEXTJOIN",
-    "TEXTSPLIT",
-    "TOCOL",
-    "TOROW",
-    "UNICHAR",
-    "UNICODE",
-    "UNIQUE",
-    "VAR.P",
-    "VAR.S",
-    "VSTACK",
-    "WORKDAY.INTL",
-    "XLOOKUP",
-    "XMATCH",
-    "XOR",
-];
-
-/// Registered functions Excel stores with `_xlfn._xlws.` (worksheet-only
-/// dynamic-array functions).
-const XLWS: &[&str] = &["FILTER", "SORT"];
-
 /// The storage prefix for a registered function name (upper-case), or `""`
-/// for a base-set function.
+/// for a base-set function. The registry row's `xlfn_prefix` is the one
+/// table (W1.0 amendment, sheet ADR 513; it replaced a hand list here).
 pub fn storage_prefix(name: &str) -> &'static str {
-    if XLWS.contains(&name) {
-        "_xlfn._xlws."
-    } else if XLFN.contains(&name) {
-        "_xlfn."
-    } else {
-        ""
-    }
+    sheet_core::funcs::lookup_func(name)
+        .map(|id| sheet_core::funcs::meta(id).xlfn_prefix)
+        .unwrap_or("")
 }
 
 /// Remove the OOXML storage prefixes (`_xlfn.`, `_xlws.`, `_xlpm.`, any
@@ -119,7 +41,8 @@ pub fn storage_prefix(name: &str) -> &'static str {
 /// result is the display dialect [`crate::parse`] reads. Text without
 /// prefixes is returned unchanged.
 pub fn strip_storage_prefixes(text: &str) -> String {
-    const PREFIXES: [&str; 3] = ["_xlfn.", "_xlws.", "_xlpm."];
+    const PREFIXES: [&str; 4] = ["_xlfn.", "_xlws.", "_xlpm.", "_xleta."];
+    const SINGLE: &str = "_xlfn.SINGLE(";
     let mut out = String::with_capacity(text.len());
     let mut in_string = false;
     let mut in_quote = false; // a 'quoted sheet' name
@@ -141,6 +64,14 @@ pub fn strip_storage_prefixes(text: &str) -> String {
         }
         if !in_string && !in_quote && c == b'_' {
             let rest = &text[i..];
+            // `_xlfn.SINGLE(` is the storage form of the `@` operator.
+            if rest.len() >= SINGLE.len()
+                && rest.as_bytes()[..SINGLE.len()].eq_ignore_ascii_case(SINGLE.as_bytes())
+            {
+                out.push_str("@(");
+                i += SINGLE.len();
+                continue;
+            }
             if let Some(p) = PREFIXES
                 .iter()
                 // Byte-wise: `rest[..6]` may split a multi-byte char
@@ -150,12 +81,16 @@ pub fn strip_storage_prefixes(text: &str) -> String {
                         && rest.as_bytes()[..p.len()].eq_ignore_ascii_case(p.as_bytes())
                 })
             {
-                // Only at an identifier start (not inside `A_xlfn.`).
+                // Only at an identifier start (not inside `A_xlfn.`), and a
+                // function prefix only before a function the registry knows:
+                // `_xlfn.REGEXTEST(` stays as written, the way an Excel that
+                // lacks the function shows it, so saving it again keeps the
+                // prefix and a newer Excel still reads it.
                 let prev_ident = out
                     .chars()
                     .last()
                     .is_some_and(|ch| ch.is_alphanumeric() || ch == '_' || ch == '.');
-                if !prev_ident {
+                if !prev_ident && (*p == "_xlpm." || prefixes_known_function(rest)) {
                     i += p.len();
                     continue;
                 }
@@ -166,6 +101,31 @@ pub fn strip_storage_prefixes(text: &str) -> String {
         i += ch.len_utf8();
     }
     rewrite_anchorarray(&out)
+}
+
+/// Whether the identifier after the run of `_xlfn.` / `_xlws.` prefixes at
+/// the start of `rest` is a registered function (or one of the two
+/// operator storage forms).
+fn prefixes_known_function(rest: &str) -> bool {
+    let mut r = rest;
+    loop {
+        let lower = r.get(..6).map(str::to_ascii_lowercase);
+        match lower.as_deref() {
+            Some("_xlfn.") | Some("_xlws.") => r = &r[6..],
+            _ if r
+                .get(..7)
+                .is_some_and(|p| p.eq_ignore_ascii_case("_xleta.")) =>
+            {
+                r = &r[7..]
+            }
+            _ => break,
+        }
+    }
+    let end = r
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))
+        .unwrap_or(r.len());
+    let name = &r[..end];
+    name.eq_ignore_ascii_case("ANCHORARRAY") || sheet_core::funcs::lookup_func(name).is_some()
 }
 
 /// `ANCHORARRAY(X)` → `(X)#` outside string literals (the spill operator's
@@ -267,10 +227,47 @@ mod tests {
     }
 
     #[test]
+    fn unknown_future_functions_keep_their_prefix() {
+        assert_eq!(
+            strip_storage_prefixes("_xlfn.FUTUREFN(A1,\"x\")+_xlfn.XLOOKUP(1,B1:B2,C1:C2)"),
+            "_xlfn.FUTUREFN(A1,\"x\")+XLOOKUP(1,B1:B2,C1:C2)"
+        );
+    }
+
+    #[test]
+    fn eta_lambda_prefix_is_stripped() {
+        // GROUPBY(r, v, SUM) is stored with an eta-reduced `_xleta.SUM` (W3).
+        assert_eq!(
+            strip_storage_prefixes("_xlfn.GROUPBY(A2:A7,C2:C7,_xleta.SUM)"),
+            "GROUPBY(A2:A7,C2:C7,SUM)"
+        );
+    }
+
+    #[test]
+    fn single_becomes_the_at_operator() {
+        assert_eq!(
+            strip_storage_prefixes("_xlfn.SINGLE(A1:A3)*2"),
+            "@(A1:A3)*2"
+        );
+        assert_eq!(
+            strip_storage_prefixes("\"_xlfn.SINGLE(\"&_xlfn.single(B1)"),
+            "\"_xlfn.SINGLE(\"&@(B1)"
+        );
+    }
+
+    #[test]
     fn prefix_table() {
         assert_eq!(storage_prefix("XLOOKUP"), "_xlfn.");
         assert_eq!(storage_prefix("FILTER"), "_xlfn._xlws.");
         assert_eq!(storage_prefix("SUM"), "");
         assert_eq!(storage_prefix("SUMIFS"), "");
+        assert_eq!(storage_prefix("sequence"), "_xlfn.");
+        assert_eq!(storage_prefix("NOT_A_FUNCTION"), "");
+        // Excel's own save (oracle/excel): the 2013 functions carry the
+        // prefix, ISO.CEILING and the Analysis ToolPak set do not.
+        assert_eq!(storage_prefix("BITAND"), "_xlfn.");
+        assert_eq!(storage_prefix("IMCOSH"), "_xlfn.");
+        assert_eq!(storage_prefix("ISO.CEILING"), "");
+        assert_eq!(storage_prefix("BESSELJ"), "");
     }
 }

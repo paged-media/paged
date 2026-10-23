@@ -25,6 +25,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { t } from "@paged-media/strings";
 import { covers } from "@paged-media/test-kit";
 
 import { NO_PICKER_REASON } from "../../src/panels/outline-panel";
@@ -70,7 +71,7 @@ describe.skipIf(!docxPresent)(
         "[data-doc-insert]",
       ) as HTMLButtonElement;
       expect(insert.disabled).toBe(true);
-      expect(insert.title).toBe(NO_PICKER_REASON);
+      expect(insert.title).toBe(t(NO_PICKER_REASON));
     });
 
     it("after File ▸ Open shows the document's name and counts, and Select frame selects its frame", async () => {

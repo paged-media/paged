@@ -26,7 +26,7 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
-import { cockpitActions } from "@paged-media/shell";
+import { cockpitActionsOf } from "@paged-media/shell";
 
 import { ColorPanel } from "../../src/panels/color-panel";
 import { ColorWheelPanel } from "../../src/panels/color-wheel-panel";
@@ -265,6 +265,6 @@ describe("Color panel: controls", () => {
       component: ColorWheelPanel,
     });
     await h.click(h.root.querySelector("[data-open-color-wheel]")!);
-    expect(cockpitActions.activeTab?.()).toBe("paged.color-wheel");
+    expect(cockpitActionsOf(h.scope).activeTab?.()).toBe("paged.color-wheel");
   });
 });

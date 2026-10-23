@@ -77,7 +77,28 @@ import { useState } from "react";
 import type { Value } from "@paged-media/client";
 
 import { usePagePosition } from "./page-position";
-import { addressOfElement } from "../object-model";
+import { useAddressOfElement } from "../object-model";
+import { defineMessages, useStrings } from "@paged-media/strings";
+
+const M = defineMessages("app.objectTransformPanel", {
+  referencePoint: "Reference point",
+  width: "width",
+  height: "height",
+  widthPrefix: "W",
+  heightPrefix: "H",
+  lockAspect: "Lock aspect — awaiting engine support",
+  opacity: "Opacity",
+  opacityLabel: "opacity",
+  rotateScale: "Rotate & scale",
+  rotation: "Rotation",
+  scaleX: "scale x",
+  scaleY: "scale y",
+  flipHorizontal: "Flip horizontal",
+  flipH: "Flip H",
+  flipVertical: "Flip vertical",
+  flipV: "Flip V",
+  groupTransform: "Group transform",
+});
 
 const BINDINGS = {
   bounds: { scope: "element" as const, path: "frameBounds" },
@@ -124,6 +145,7 @@ function anchorFractions(index: number): { fx: number; fy: number } {
 }
 
 export function ObjectTransformPanel() {
+  const strings = useStrings();
   const resolved = useObjectBindings(BINDINGS);
   const position = usePagePosition();
   const bounds = unwrapBounds(resolved.bounds.value);
@@ -204,7 +226,7 @@ export function ObjectTransformPanel() {
             className="text-[10.5px]"
             style={{ color: "var(--pg-muted-fg)" }}
           >
-            Reference point
+            {strings.t(M.referencePoint)}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-2" data-position-cells>
@@ -238,22 +260,22 @@ export function ObjectTransformPanel() {
         >
           <div className="grid min-w-0 flex-1 grid-cols-2 gap-2">
             <LengthInput
-              prefix="W"
+              prefix={strings.t(M.widthPrefix)}
               valuePt={w}
               min={0}
               disabled={!canWrite}
               onChangePt={() => {}}
               onCommitPt={(nw) => commitWidth(nw)}
-              aria-label="width"
+              aria-label={strings.t(M.width)}
             />
             <LengthInput
-              prefix="H"
+              prefix={strings.t(M.heightPrefix)}
               valuePt={h}
               min={0}
               disabled={!canWrite}
               onChangePt={() => {}}
               onCommitPt={(nh) => commitHeight(nh)}
-              aria-label="height"
+              aria-label={strings.t(M.height)}
             />
           </div>
           {/* Lock aspect — awaiting a constrain convention. */}
@@ -262,7 +284,7 @@ export function ObjectTransformPanel() {
             disabled
             data-seam
             data-lock-aspect
-            title="Lock aspect — awaiting engine support"
+            title={strings.t(M.lockAspect)}
             className="h-[28px] w-[28px] shrink-0 rounded-[6px] border border-input bg-background opacity-55"
           >
             <Icon
@@ -278,7 +300,7 @@ export function ObjectTransformPanel() {
           className="relative grid grid-cols-[84px_1fr] items-center gap-2"
         >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
-            Opacity
+            {strings.t(M.opacity)}
           </span>
           <NumberInput
             icon="ui-size"
@@ -295,7 +317,7 @@ export function ObjectTransformPanel() {
                 value: next,
               } as Value);
             }}
-            aria-label="opacity"
+            aria-label={strings.t(M.opacityLabel)}
           />
         </ObjectFieldFrame>
         {/* Rotate & scale — W2.3 transform-decompose. Read =
@@ -315,7 +337,7 @@ export function ObjectTransformPanel() {
               className="whitespace-nowrap text-[12.5px] font-semibold"
               style={{ color: "var(--pg-fg)" }}
             >
-              Rotate &amp; scale
+              {strings.t(M.rotateScale)}
             </span>
             <Icon
               name={rsOpen ? "ui-chevron-down" : "ui-chevron-right"}
@@ -327,7 +349,7 @@ export function ObjectTransformPanel() {
             <div className="flex flex-col gap-[9px] pb-3">
               <ObjectFieldFrame field={resolved.rotation}>
                 <SmartDialMicro
-                  label="Rotation"
+                  label={strings.t(M.rotation)}
                   value={rotation}
                   min={-180}
                   max={180}
@@ -361,7 +383,7 @@ export function ObjectTransformPanel() {
                         value: next / 100,
                       } as Value);
                     }}
-                    aria-label="scale x"
+                    aria-label={strings.t(M.scaleX)}
                   />
                 </ObjectFieldFrame>
                 <ObjectFieldFrame field={resolved.scaleY}>
@@ -379,7 +401,7 @@ export function ObjectTransformPanel() {
                         value: next / 100,
                       } as Value);
                     }}
-                    aria-label="scale y"
+                    aria-label={strings.t(M.scaleY)}
                   />
                 </ObjectFieldFrame>
               </div>
@@ -393,7 +415,7 @@ export function ObjectTransformPanel() {
                     disabled={!canFlipH}
                     data-flip-h
                     data-on={flipH === true ? "true" : "false"}
-                    title="Flip horizontal"
+                    title={strings.t(M.flipHorizontal)}
                     className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold"
                     style={{
                       background: flipH
@@ -409,7 +431,7 @@ export function ObjectTransformPanel() {
                       } as Value);
                     }}
                   >
-                    Flip H
+                    {strings.t(M.flipH)}
                   </button>
                 </ObjectFieldFrame>
                 <ObjectFieldFrame
@@ -421,7 +443,7 @@ export function ObjectTransformPanel() {
                     disabled={!canFlipV}
                     data-flip-v
                     data-on={flipV === true ? "true" : "false"}
-                    title="Flip vertical"
+                    title={strings.t(M.flipVertical)}
                     className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold"
                     style={{
                       background: flipV
@@ -437,7 +459,7 @@ export function ObjectTransformPanel() {
                       } as Value);
                     }}
                   >
-                    Flip V
+                    {strings.t(M.flipV)}
                   </button>
                 </ObjectFieldFrame>
               </div>
@@ -454,6 +476,8 @@ export function ObjectTransformPanel() {
  *  the matrix its children are drawn through) as a PropertyField on the
  *  selected groups — one batch = one undo step, "Bind to data…". */
 function GroupTransformField() {
+  const addressOfElement = useAddressOfElement();
+  const strings = useStrings();
   const { elementSelection } = useSelection();
   const groups = elementSelection.filter((id) => id.kind === "group");
   const key = groups.map((id) => JSON.stringify(id)).join("|");
@@ -469,7 +493,7 @@ function GroupTransformField() {
     >
       <PropertyField
         path="groupTransform"
-        label="Group transform"
+        label={strings.t(M.groupTransform)}
         targets={targets}
         schemaKind="group"
       />

@@ -12,7 +12,7 @@
     "rendering": ["hitTest"],
     "network": {
       "origins": "consent",
-      "purpose": "Fetch author-selected remote data sources (CSV/JSON/Parquet over HTTP(S)) at edit time, per-origin consented — never on document open."
+      "purpose": "Fetch author-selected remote data sources (CSV/JSON/Parquet over HTTP(S)) at edit time, per-origin consented \u2014 never on document open."
     },
     "documents": {
       "export": true,
@@ -355,7 +355,7 @@
       "commands": [
         {
           "id": "media.paged.data.bindProperty",
-          "title": "Bind to data…",
+          "title": "Bind to data\u2026",
           "args": {
             "kind": "struct",
             "fields": {
@@ -543,6 +543,176 @@
               }
             }
           }
+        },
+        {
+          "id": "media.paged.data.templateFieldTargets",
+          "title": "List the template fields data can fill",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.data.bindTemplateField",
+          "title": "Bind a template field to the data",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "field": {
+                "kind": "text"
+              },
+              "query": {
+                "kind": "text"
+              },
+              "expr": {
+                "kind": "text"
+              },
+              "invert": {
+                "kind": "bool",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.runCatalogue",
+          "title": "Make a catalogue from the template",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "query": {
+                "kind": "text",
+                "optional": true
+              },
+              "template": {
+                "kind": "text",
+                "optional": true
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["perRecord", "perGroup"],
+                "optional": true
+              },
+              "by": {
+                "kind": "list",
+                "of": {
+                  "kind": "text"
+                },
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.previewQuery",
+          "title": "Preview a query's rows",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "sql": {
+                "kind": "text"
+              },
+              "limit": {
+                "kind": "number",
+                "integer": true,
+                "default": 50
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.checkExpression",
+          "title": "Check a binding expression",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "expr": {
+                "kind": "text"
+              },
+              "query": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.refreshDiff",
+          "title": "What changed since the last refresh",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.data.previewRecordFlow",
+          "title": "Preview a record flow's blocks",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "binding": {
+                "kind": "text"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.captureEveryRecord",
+          "title": "Capture a data set per record",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "query": {
+                "kind": "text"
+              },
+              "prefix": {
+                "kind": "text",
+                "optional": true
+              },
+              "nameColumn": {
+                "kind": "text",
+                "optional": true
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.data.exportVariableLibrary",
+          "title": "Export the variable library (XML)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.data.importVariableLibrary",
+          "title": "Import a variable library (XML)",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "xml": {
+                "kind": "text"
+              }
+            }
+          }
+        }
+      ],
+      "templateFields": [
+        {
+          "kind": "media.paged.data.record",
+          "title": "Data record"
+        },
+        {
+          "kind": "media.paged.data.bindingValue",
+          "title": "Data binding value"
+        },
+        {
+          "kind": "media.paged.data.dataSet",
+          "title": "Data set"
+        },
+        {
+          "kind": "media.paged.data.variable",
+          "title": "Data variable"
         }
       ]
     }

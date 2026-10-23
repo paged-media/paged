@@ -88,6 +88,11 @@ export type {
   ObjectKindInfo,
   ObjectCommandInfo,
   ObjectsSurface,
+  TemplateFieldControl,
+  TemplateFieldRef,
+  TemplateFieldWrite,
+  TemplateFieldKindContribution,
+  TemplateFieldKindInfo,
   ListEdit,
   StructEdit,
   ValueEdit,
@@ -97,6 +102,8 @@ export type { BundleHandle, PagedBundle } from "./bundle.js";
 
 export type {
   BundleHost,
+  StringsSurface,
+  MessageParams,
   ContributionSurface,
   SceneLayerSurface,
   SceneLayerSubmitResult,

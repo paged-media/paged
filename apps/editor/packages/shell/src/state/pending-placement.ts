@@ -36,11 +36,15 @@
 // promise is the whole feature, and a second copy of the threading
 // machinery would be more code that can disagree with itself.
 //
-// THE CURSOR IS SET WITH `!important` ON THE ROOT for the reason
+// THE CURSOR IS SET WITH `!important` ON THE EDITOR'S ROOT for the reason
 // ThreadingController documents at its own call site: the canvas, the
 // panels and the menu bar each set their own cursor, so anything less
 // specific loses over most of the window and the copy cursor appears
 // only in the gaps.
+
+import { scoped, type EditorScope } from "./editor-scope";
+import { queryEditor } from "./editor-dom";
+import { editorRootOf } from "./editor-root";
 
 /** A client-space point the user clicked, or `null` when they cancelled. */
 export interface PlacementPoint {
@@ -66,15 +70,18 @@ export interface PlacementOptions {
 const DRAG_THRESHOLD_PX = 4;
 
 /** Marks the armed state for specs and for anything that wants to react
- *  to it. `documentElement` rather than a React node so it survives a
- *  dock re-layout mid-gesture. */
+ *  to it. On the editor's root element rather than a React node so it
+ *  survives a dock re-layout mid-gesture. */
 const ARMED_ATTR = "data-paged-placement";
 
-let armed = false;
+/** The armed placement's cancel, per editor (null: none armed). */
+const ARMED = scoped("pendingPlacement", () => ({
+  cancel: null as (() => void) | null,
+}));
 
-/** True while a placement is waiting for its click. */
-export function placementArmed(): boolean {
-  return armed;
+/** True while a placement is waiting for its click in `scope`'s editor. */
+export function placementArmed(scope: EditorScope): boolean {
+  return scope.get(ARMED).cancel !== null;
 }
 
 /**
@@ -90,10 +97,14 @@ export function placementArmed(): boolean {
  * user believes they cancelled.
  */
 export function awaitPlacementPoint(
+  scope: EditorScope,
   options: PlacementOptions = {},
 ): Promise<PlacementPoint | null> {
+  const armed = scope.get(ARMED);
   return new Promise<PlacementPoint | null>((resolve) => {
-    const root = document.documentElement;
+    // The editor's root element (the page's <html> for a shell without
+    // one): what the editor writes, it writes on itself (plan task E1).
+    const root = editorRootOf(scope) ?? document.documentElement;
     const previous = root.style.getPropertyValue("cursor");
     const previousPriority = root.style.getPropertyPriority("cursor");
 
@@ -105,7 +116,7 @@ export function awaitPlacementPoint(
     const finish = (value: PlacementPoint | null) => {
       if (settled) return;
       settled = true;
-      armed = false;
+      armed.cancel = null;
       root.removeAttribute(ARMED_ATTR);
       if (previous)
         root.style.setProperty("cursor", previous, previousPriority);
@@ -136,7 +147,10 @@ export function awaitPlacementPoint(
       // placement armed must open the File menu, not silently disarm
       // into nothing. So: no preventDefault, no stopPropagation, and the
       // placement quietly stands down.
-      const viewport = document.querySelector("[data-paged-viewport]");
+      const viewport = queryEditor(
+        editorRootOf(scope),
+        "[data-paged-viewport]",
+      );
       const target = e.target as Node | null;
       if (!viewport || !target || !viewport.contains(target)) {
         finish(null);
@@ -185,7 +199,7 @@ export function awaitPlacementPoint(
       finish(null);
     };
 
-    armed = true;
+    armed.cancel = () => finish(null);
     root.setAttribute(ARMED_ATTR, "armed");
     root.style.setProperty("cursor", "copy", "important");
     // Capture phase, so this wins the pointer before ViewportCanvas's
@@ -205,9 +219,8 @@ export function awaitPlacementPoint(
  *  Clicking those menu items already cancels — a click outside the
  *  canvas stands the placement down — but the KEYBOARD route reaches
  *  the command with the placement still armed. */
-export function cancelPendingPlacement(): void {
-  if (!armed) return;
-  // Escape is the same cancel this promise already understands, so the
-  // teardown lives in one place rather than two that can drift.
-  window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+export function cancelPendingPlacement(scope: EditorScope): void {
+  // The same `finish(null)` Escape runs, so the teardown lives in one
+  // place rather than two that can drift.
+  scope.get(ARMED).cancel?.();
 }

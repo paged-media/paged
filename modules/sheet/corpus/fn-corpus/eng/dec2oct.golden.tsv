@@ -1,0 +1,14 @@
+# DEC2OCT(number,[places]).
+# id	formula	setup	expected
+dec2oct-0	=DEC2OCT(58,3)	-	072
+dec2oct-1	=DEC2OCT(-100)	-	7777777634
+dec2oct-2	=DEC2OCT(536870911)	-	3777777777
+dec2oct-3	=DEC2OCT(-536870912)	-	4000000000
+dec2oct-4	=DEC2OCT(536870912)	-	#NUM!
+dec2oct-5	=DEC2OCT(-536870913)	-	#NUM!
+dec2oct-6	=DEC2OCT(8,1)	-	#NUM!
+dec2oct-7	=DEC2OCT(8,10)	-	0000000010
+dec2oct-8	=DEC2OCT(8,11)	-	#NUM!
+dec2oct-9	=DEC2OCT(0)	-	0
+dec2oct-x0	=DEC2OCT(A1)	A1=#N/A	#N/A
+dec2oct-x1	=CONCAT(DEC2OCT({7,8,9}))	-	71011

@@ -133,6 +133,16 @@ impl Dirty {
         self.set.clear();
     }
 
+    /// Take one cell out of the pending cut (it was just computed on its own).
+    pub fn unmark(&mut self, cell: CellRef) {
+        self.set.remove(&cell);
+    }
+
+    /// Whether no cell is pending recomputation.
+    pub fn is_empty(&self) -> bool {
+        self.set.is_empty()
+    }
+
     /// Whether a given cell is currently dirty.
     pub fn is_dirty(&self, cell: CellRef) -> bool {
         self.set.contains(&cell)

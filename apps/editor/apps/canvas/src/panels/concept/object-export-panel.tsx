@@ -25,19 +25,49 @@
 
 import { useState } from "react";
 
+import { defineMessages, useStrings } from "@paged-media/strings";
+
 import { ConceptShell, Row, SeamSelect, SeamSwitch } from "./concept-kit";
 
 type ExportTab = "Alt Text" | "Tagged PDF" | "EPUB & HTML";
 
 const TABS: ExportTab[] = ["Alt Text", "Tagged PDF", "EPUB & HTML"];
 
+const M = defineMessages("app.conceptObjectExportPanel", {
+  target:
+    "Per-object alt text (source: custom/XMP/structure), tagged-PDF role (Figure/Artifact), EPUB/HTML conversion + CSS class — feeds accessible PDF + EPUB output.",
+  altTextTab: "Alt Text",
+  taggedPdfTab: "Tagged PDF",
+  epubTab: "EPUB & HTML",
+  source: "Source",
+  custom: "Custom",
+  altTextHint: "Alt text (read by screen readers)",
+  applyTag: "Apply tag",
+  basedOnObject: "Based on object",
+  role: "Role",
+  actualText: "Actual text",
+  fromStructure: "From structure",
+  asArtifact: "Use as artifact",
+  layout: "Layout",
+  inlineReflow: "Inline / reflow",
+  convert: "Convert",
+  optimizedPng: "Optimized (PNG)",
+  resolution: "Resolution",
+  cssClass: "CSS class",
+  preserveLook: "Preserve look",
+});
+
+const TAB_LABEL: Record<ExportTab, string> = {
+  "Alt Text": M.altTextTab,
+  "Tagged PDF": M.taggedPdfTab,
+  "EPUB & HTML": M.epubTab,
+};
+
 export function ObjectExportPanel() {
+  const strings = useStrings();
   const [tab, setTab] = useState<ExportTab>("Alt Text");
   return (
-    <ConceptShell
-      testId="object-export-panel"
-      target="Per-object alt text (source: custom/XMP/structure), tagged-PDF role (Figure/Artifact), EPUB/HTML conversion + CSS class — feeds accessible PDF + EPUB output."
-    >
+    <ConceptShell testId="object-export-panel" target={strings.t(M.target)}>
       {/* Tab switcher is live local state; the fields are seams. */}
       <div
         className="flex border-b border-input"
@@ -60,17 +90,17 @@ export function ObjectExportPanel() {
                 tab === t ? "inset 0 -2px 0 var(--pg-primary)" : "none",
             }}
           >
-            {t}
+            {strings.t(TAB_LABEL[t])}
           </button>
         ))}
       </div>
       {tab === "Alt Text" && (
         <>
-          <Row label="Source">
-            <SeamSelect value="Custom" />
+          <Row label={strings.t(M.source)}>
+            <SeamSelect value={strings.t(M.custom)} />
           </Row>
           <div className="text-xs text-muted-foreground">
-            Alt text (read by screen readers)
+            {strings.t(M.altTextHint)}
           </div>
           <textarea
             disabled
@@ -82,35 +112,35 @@ export function ObjectExportPanel() {
       )}
       {tab === "Tagged PDF" && (
         <>
-          <Row label="Apply tag">
-            <SeamSelect value="Based on object" />
+          <Row label={strings.t(M.applyTag)}>
+            <SeamSelect value={strings.t(M.basedOnObject)} />
           </Row>
-          <Row label="Role">
+          <Row label={strings.t(M.role)}>
             <SeamSelect value="Figure" />
           </Row>
-          <Row label="Actual text">
-            <SeamSelect value="From structure" />
+          <Row label={strings.t(M.actualText)}>
+            <SeamSelect value={strings.t(M.fromStructure)} />
           </Row>
-          <Row label="Use as artifact">
+          <Row label={strings.t(M.asArtifact)}>
             <SeamSwitch />
           </Row>
         </>
       )}
       {tab === "EPUB & HTML" && (
         <>
-          <Row label="Layout">
-            <SeamSelect value="Inline / reflow" />
+          <Row label={strings.t(M.layout)}>
+            <SeamSelect value={strings.t(M.inlineReflow)} />
           </Row>
-          <Row label="Convert">
-            <SeamSelect value="Optimized (PNG)" />
+          <Row label={strings.t(M.convert)}>
+            <SeamSelect value={strings.t(M.optimizedPng)} />
           </Row>
-          <Row label="Resolution">
+          <Row label={strings.t(M.resolution)}>
             <SeamSelect value="150 PPI" />
           </Row>
-          <Row label="CSS class">
+          <Row label={strings.t(M.cssClass)}>
             <SeamSelect value=".figure" />
           </Row>
-          <Row label="Preserve look">
+          <Row label={strings.t(M.preserveLook)}>
             <SeamSwitch on />
           </Row>
         </>

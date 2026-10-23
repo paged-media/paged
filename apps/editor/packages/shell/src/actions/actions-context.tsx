@@ -37,6 +37,8 @@
 //     screen. See `UncapturedTally` in `model.ts` for why the direct-
 //     edit count is a floor rather than an exact ledger.
 
+import { t } from "@paged-media/strings";
+import { ACTIONS } from "./messages";
 import {
   createContext,
   useCallback,
@@ -65,6 +67,7 @@ import {
   type UncapturedTally,
 } from "./model";
 import { loadLibrary, parseImport, saveLibrary } from "./store";
+import { useEditorStorage } from "../state/storage";
 
 export interface RecordingState {
   startedAt: number;
@@ -143,7 +146,11 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   const client = useCanvasClient();
 
-  const [library, setLibrary] = useState<ActionLibrary>(() => loadLibrary());
+  // The editor's settings store (state/storage.ts).
+  const storage = useEditorStorage();
+  const [library, setLibrary] = useState<ActionLibrary>(() =>
+    loadLibrary(storage),
+  );
   const [recording, setRecording] = useState<RecordingState | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [lastReport, setLastReport] = useState<ReplayReport | null>(null);
@@ -159,10 +166,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const replayMutations = useRef(0);
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const commit = useCallback((next: ActionLibrary) => {
-    setLibrary(next);
-    setPersisted(saveLibrary(next));
-  }, []);
+  const commit = useCallback(
+    (next: ActionLibrary) => {
+      setLibrary(next);
+      setPersisted(saveLibrary(next, storage));
+    },
+    [storage],
+  );
 
   // Deliberately NOT a functional `setLibrary` updater: React runs
   // updaters during the render phase, so writing localStorage and
@@ -285,7 +295,9 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       if (!current || current.steps.length === 0) return null;
       const action: PagedAction = {
         id: newActionId(),
-        name: name.trim() || `Action ${library.actions.length + 1}`,
+        name:
+          name.trim() ||
+          t(ACTIONS.defaultName, { n: library.actions.length + 1 }),
         createdAt: Date.now(),
         steps: current.steps,
         uncaptured: current.uncaptured,
@@ -414,13 +426,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     const disposers = [
       registries.commands.register({
         id: "paged.actions.record",
-        title: "Actions: start recording",
+        title: t(ACTIONS.startRecording),
         category: "Actions",
         handler: () => apiRef.current?.startRecording(),
       }),
       registries.commands.register({
         id: "paged.actions.stop",
-        title: "Actions: stop recording",
+        title: t(ACTIONS.stopRecording),
         category: "Actions",
         handler: () => apiRef.current?.stopRecording(""),
       }),
@@ -433,7 +445,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
         // the palette entry actually usable and matches the "play what
         // I just recorded" reflex; the panel's Play button always
         // passes an explicit id.
-        title: "Actions: play most recent",
+        title: t(ACTIONS.playRecent),
         category: "Actions",
         handler: (_editor, payload) => {
           const current = apiRef.current;

@@ -61,8 +61,88 @@ import type {
   SwatchSummary,
 } from "@paged-media/client";
 
+import { defineMessages, useStrings, type Strings } from "@paged-media/strings";
+
 import { SchemaSections, type SectionSpec } from "./schema-sections";
+import { sectionsIn } from "./section-strings";
 import { CoreCommandButton, newMasterPrefill } from "../core-command-dialog";
+
+const M = defineMessages("app.objectOptionsPanels", {
+  swatch: "Swatch",
+  name: "Name",
+  type: "Type",
+  tint: "Tint",
+  alpha: "Alpha",
+  alternate: "Alternate",
+  space: "Space",
+  value: "Value",
+  ink: "Ink",
+  toProcess: "To process",
+  aliasTo: "Alias to",
+  definition: "Definition",
+  text: "Text",
+  textBefore: "Text before",
+  textAfter: "Text after",
+  dateFormat: "Date format",
+  gradient: "Gradient",
+  stops: "Stops",
+  colour: "Colour",
+  location: "Location",
+  midpoint: "Midpoint",
+  pageNumbering: "Page Numbering",
+  prefix: "Prefix",
+  style: "Style",
+  startAt: "Start at",
+  guide: "Guide",
+  position: "Position",
+  colorGroup: "Color group",
+  swatches: "Swatches",
+  numberingList: "Numbering list",
+  continueAcrossStories: "Continue across stories",
+  continueAcrossDocuments: "Continue across documents",
+  condition: "Condition",
+  visible: "Visible",
+  master: "Master",
+  field: "Field",
+  applyColour: "Apply colour",
+  swatchOptions: "Swatch Options",
+  noEditableSwatches: "This document has no editable swatches.",
+  textVariables: "Text Variables",
+  textVariable: "Text Variable",
+  pickColorGroup: "Color Group",
+  pickNumberingList: "Numbering List",
+  noTextVariables: "No text variables (or this engine does not list them yet).",
+  new: "New…",
+  delete: "Delete",
+  newVariable: "New variable",
+  gradientOptions: "Gradient Options",
+  noGradients: "This document has no gradients.",
+  newGradient: "New gradient",
+  sectionOptions: "Numbering & Section Options",
+  section: "Section",
+  deleteSection: "Delete section",
+  noSections: "This document has no numbering sections.",
+  verticalGuide: "Vertical guide at {at} pt, page {page}",
+  horizontalGuide: "Horizontal guide at {at} pt, page {page}",
+  guides: "Guides",
+  noGuides: "No ruler guides (or this engine does not list them yet).",
+  colorGroupOptions: "Color Group Options",
+  noColorGroups: "This document has no color groups.",
+  numberingListOptions: "Numbering List Options",
+  noNumberingLists: "This document has no numbering lists.",
+  conditionOptions: "Condition Options",
+  noConditions: "This document has no conditions.",
+  masterOptions: "Master Options",
+  noMasters: "This document has no master spreads.",
+  rename: "Rename…",
+  textFields: "Text Fields",
+  textField: "Text Field",
+  noTextFields: "No text fields (Insert ▸ Field adds a placeholder).",
+  insert: "Insert…",
+  setValue: "Set value…",
+});
+
+// Section titles and field labels below are message keys (`sectionsIn`).
 
 const SELECT =
   "h-[28px] w-full rounded-[6px] border border-input bg-background px-2 text-[12px]";
@@ -96,12 +176,6 @@ function useQuery(selector: string): string[] | null {
     };
   }, [model, selector, tick]);
   return list;
-}
-
-/** "Master Options" → "Master", "Condition Options" → "Condition". The
- *  row used to read "Master Option". */
-function pickerLabel(title: string): string {
-  return title.replace(/\s+Options?$/, "").replace(/s$/, "");
 }
 
 /** Each address's own `name`, when it has one: the picker listed raw ids
@@ -208,26 +282,26 @@ function Empty({ children }: { children: string }) {
 
 const SWATCH_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Swatch",
+    title: M.swatch,
     fields: [
-      { path: "name", label: "Name" },
-      { path: "model", label: "Type" },
-      { path: "tint", label: "Tint" },
-      { path: "alpha", label: "Alpha" },
+      { path: "name", label: M.name },
+      { path: "model", label: M.type },
+      { path: "tint", label: M.tint },
+      { path: "alpha", label: M.alpha },
     ],
   },
   {
-    title: "Alternate",
+    title: M.alternate,
     fields: [
-      { path: "alternateSpace", label: "Space" },
-      { path: "alternateValue", label: "Value" },
+      { path: "alternateSpace", label: M.space },
+      { path: "alternateValue", label: M.value },
     ],
   },
   {
-    title: "Ink",
+    title: M.ink,
     fields: [
-      { path: "convertToProcess", label: "To process" },
-      { path: "inkAliasTo", label: "Alias to", collection: "swatches" },
+      { path: "convertToProcess", label: M.toProcess },
+      { path: "inkAliasTo", label: M.aliasTo, collection: "swatches" },
     ],
   },
 ];
@@ -267,9 +341,10 @@ function SwatchColorEditor({ address }: { address: string }) {
     parts.length === COMPONENTS[space] &&
     parts.every((n) => Number.isFinite(n));
   const commit = field.commit;
+  const strings = useStrings();
   return (
     <ObjectFieldFrame field={field} className="relative flex flex-col gap-1.5">
-      <CockpitRow label="Space">
+      <CockpitRow label={strings.t(M.space)}>
         <FieldSelect
           data-swatch-color-space=""
           className={SELECT}
@@ -284,7 +359,7 @@ function SwatchColorEditor({ address }: { address: string }) {
           ))}
         </FieldSelect>
       </CockpitRow>
-      <CockpitRow label="Value">
+      <CockpitRow label={strings.t(M.value)}>
         <FieldInput
           data-swatch-color-value=""
           className={`${SELECT} font-mono`}
@@ -303,7 +378,7 @@ function SwatchColorEditor({ address }: { address: string }) {
             void commit?.({ ...(current ?? {}), space, value: parts })
           }
         >
-          Apply colour
+          {strings.t(M.applyColour)}
         </CockpitBtn>
       </div>
     </ObjectFieldFrame>
@@ -314,6 +389,7 @@ const swatchAddress = (selfId: string): string =>
   formatAddress({ kind: "swatch", name: selfId } as never);
 
 export function SwatchOptionsPanel() {
+  const strings = useStrings();
   const swatches = useCollection<SwatchSummary>("swatches");
   const [pick, setPick] = useState("");
   // [None], [Registration] and [Black] are reserved, as in the Swatches
@@ -336,9 +412,9 @@ export function SwatchOptionsPanel() {
       data-swatch-options-panel={swatches ? "ready" : "loading"}
       data-options-target={address ?? ""}
     >
-      <CockpitPanelHeader title="Swatch Options" />
+      <CockpitPanelHeader title={strings.t(M.swatchOptions)} />
       <div className="px-3.5 pb-2">
-        <CockpitRow label="Swatch">
+        <CockpitRow label={strings.t(M.swatch)}>
           <Picker
             testId="swatch"
             value={selfId}
@@ -358,12 +434,12 @@ export function SwatchOptionsPanel() {
           <SchemaSections
             key={address}
             targets={targets}
-            sections={SWATCH_SECTIONS}
+            sections={sectionsIn(strings, SWATCH_SECTIONS)}
             testId="swatch"
           />
         </>
       ) : (
-        <Empty>This document has no editable swatches.</Empty>
+        <Empty>{strings.t(M.noEditableSwatches)}</Empty>
       )}
     </div>
   );
@@ -373,14 +449,14 @@ export function SwatchOptionsPanel() {
 
 const TEXT_VARIABLE_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Definition",
+    title: M.definition,
     fields: [
-      { path: "textVariableName", label: "Name" },
-      { path: "textVariableType", label: "Type" },
-      { path: "textVariableContents", label: "Text" },
-      { path: "textVariableTextBefore", label: "Text before" },
-      { path: "textVariableTextAfter", label: "Text after" },
-      { path: "textVariableDateFormat", label: "Date format" },
+      { path: "textVariableName", label: M.name },
+      { path: "textVariableType", label: M.type },
+      { path: "textVariableContents", label: M.text },
+      { path: "textVariableTextBefore", label: M.textBefore },
+      { path: "textVariableTextAfter", label: M.textAfter },
+      { path: "textVariableDateFormat", label: M.dateFormat },
     ],
   },
 ];
@@ -390,6 +466,7 @@ const idOf = (address: string) => address.slice(address.indexOf(":") + 1);
 
 function AddressListPanel({
   title,
+  picker,
   testId,
   selector,
   sections,
@@ -398,7 +475,10 @@ function AddressListPanel({
   namePath = "name",
   labelOf,
 }: {
+  /** The panel's title, the picker's label and the empty state: message
+   *  keys, in the editor's locale when shown. */
   title: string;
+  picker: string;
   testId: string;
   selector: string;
   /** The path that holds the object's name, where it is not `name`
@@ -413,6 +493,7 @@ function AddressListPanel({
    *  address, or null when the list is empty). */
   actions?: (address: string | null) => ReactNode;
 }) {
+  const strings = useStrings();
   const list = useQuery(selector);
   const names = useObjectNames(list, namePath);
   const [pick, setPick] = useState("");
@@ -423,7 +504,7 @@ function AddressListPanel({
       data-object-options-panel={list ? testId : "loading"}
       data-options-target={address ?? ""}
     >
-      <CockpitPanelHeader title={title} />
+      <CockpitPanelHeader title={strings.t(title)} />
       {actions && (
         <div
           className="flex flex-wrap gap-[5px] px-3.5 pb-2"
@@ -435,7 +516,7 @@ function AddressListPanel({
       {address ? (
         <>
           <div className="px-3.5 pb-2">
-            <CockpitRow label={pickerLabel(title)}>
+            <CockpitRow label={strings.t(picker)}>
               <Picker
                 testId={testId}
                 value={address}
@@ -450,37 +531,39 @@ function AddressListPanel({
           <SchemaSections
             key={address}
             targets={targets}
-            sections={sections}
+            sections={sectionsIn(strings, sections)}
             testId={testId}
           />
         </>
       ) : (
-        <Empty>{empty}</Empty>
+        <Empty>{strings.t(empty)}</Empty>
       )}
     </div>
   );
 }
 
 export function TextVariablesPanel() {
+  const strings = useStrings();
   return (
     <AddressListPanel
-      title="Text Variables"
+      title={M.textVariables}
+      picker={M.textVariable}
       testId="textVariable"
       selector="textVariable"
       namePath="textVariableName"
       sections={TEXT_VARIABLE_SECTIONS}
-      empty="No text variables (or this engine does not list them yet)."
+      empty={M.noTextVariables}
       actions={(address) => (
         <>
           <CoreCommandButton
             op="createTextVariable"
-            label="New…"
+            label={strings.t(M.new)}
             testId="text-variable-new"
-            prefill={{ name: "New variable", contents: "" }}
+            prefill={{ name: strings.t(M.newVariable), contents: "" }}
           />
           <CoreCommandButton
             op="deleteTextVariable"
-            label="Delete"
+            label={strings.t(M.delete)}
             testId="text-variable-delete"
             disabled={!address}
             args={address ? { variableId: address } : undefined}
@@ -500,24 +583,24 @@ export function TextVariablesPanel() {
  *  undo step (§12.8). */
 const GRADIENT_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Gradient",
+    title: M.gradient,
     fields: [
-      { path: "name", label: "Name" },
-      { path: "kind", label: "Type" },
+      { path: "name", label: M.name },
+      { path: "kind", label: M.type },
       {
         path: "stops",
-        label: "Stops",
+        label: M.stops,
         items: {
           itemLabel: "stopColor",
           fields: [
             {
               field: "stopColor",
-              label: "Colour",
+              label: M.colour,
               style: "collection",
               props: { collectionName: "swatches" },
             },
-            { field: "locationPct", label: "Location" },
-            { field: "midpointPct", label: "Midpoint" },
+            { field: "locationPct", label: M.location },
+            { field: "midpointPct", label: M.midpoint },
           ],
           newItem: { stopColor: "Color/Black", locationPct: 100 },
         },
@@ -527,23 +610,25 @@ const GRADIENT_SECTIONS: readonly SectionSpec[] = [
 ];
 
 export function GradientOptionsPanel() {
+  const strings = useStrings();
   return (
     <AddressListPanel
-      title="Gradient Options"
+      title={M.gradientOptions}
+      picker={M.gradient}
       testId="gradient"
       selector="gradient"
       sections={GRADIENT_SECTIONS}
-      empty="This document has no gradients."
+      empty={M.noGradients}
       actions={(address) => (
         <>
           <CoreCommandButton
             op="createGradient"
-            label="New…"
+            label={strings.t(M.new)}
             testId="gradient-new"
             prefill={{
               spec: {
                 selfId: `Gradient/u${Date.now().toString(36)}`,
-                name: "New gradient",
+                name: strings.t(M.newGradient),
                 kind: "Linear",
                 stops: [
                   { stopColor: "Color/Paper", locationPct: 0 },
@@ -554,7 +639,7 @@ export function GradientOptionsPanel() {
           />
           <CoreCommandButton
             op="deleteGradient"
-            label="Delete"
+            label={strings.t(M.delete)}
             testId="gradient-delete"
             disabled={!address}
             args={address ? { gradientId: address } : undefined}
@@ -569,16 +654,17 @@ export function GradientOptionsPanel() {
 
 const SECTION_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Page Numbering",
+    title: M.pageNumbering,
     fields: [
-      { path: "prefix", label: "Prefix" },
-      { path: "numberingStyle", label: "Style" },
-      { path: "startAt", label: "Start at" },
+      { path: "prefix", label: M.prefix },
+      { path: "numberingStyle", label: M.style },
+      { path: "startAt", label: M.startAt },
     ],
   },
 ];
 
 export function SectionOptionsPanel() {
+  const strings = useStrings();
   const sections = useCollection<SectionSummary>("sections");
   const [pick, setPick] = useState("");
   const selfId =
@@ -594,11 +680,11 @@ export function SectionOptionsPanel() {
       data-section-options-panel={sections ? "ready" : "loading"}
       data-options-target={address ?? ""}
     >
-      <CockpitPanelHeader title="Numbering & Section Options" />
+      <CockpitPanelHeader title={strings.t(M.sectionOptions)} />
       {address ? (
         <>
           <div className="px-3.5 pb-2">
-            <CockpitRow label="Section">
+            <CockpitRow label={strings.t(M.section)}>
               <Picker
                 testId="section"
                 value={selfId}
@@ -613,20 +699,20 @@ export function SectionOptionsPanel() {
           <SchemaSections
             key={address}
             targets={targets}
-            sections={SECTION_SECTIONS}
+            sections={sectionsIn(strings, SECTION_SECTIONS)}
             testId="section"
           />
           <div className="px-3.5 pb-2">
             <CoreCommandButton
               op="deleteSection"
-              label="Delete section"
+              label={strings.t(M.deleteSection)}
               testId="section-delete"
               args={{ sectionId: address }}
             />
           </div>
         </>
       ) : (
-        <Empty>This document has no numbering sections.</Empty>
+        <Empty>{strings.t(M.noSections)}</Empty>
       )}
     </div>
   );
@@ -635,33 +721,38 @@ export function SectionOptionsPanel() {
 // --------------------------------------------------------------- guides
 
 const GUIDE_SECTIONS: readonly SectionSpec[] = [
-  { title: "Guide", fields: [{ path: "position", label: "Position" }] },
+  { title: M.guide, fields: [{ path: "position", label: M.position }] },
 ];
 
 /** A guide has no name; it is described as InDesign's Guides dialog
  *  would place it ("Vertical guide at 100 pt, page 1"). */
-function guideLabel(guide: GuideSummary): string {
+function guideLabel(strings: Strings, guide: GuideSummary): string {
   const at = Math.round(guide.position * 100) / 100;
-  const side = guide.orientation === "vertical" ? "Vertical" : "Horizontal";
-  return `${side} guide at ${at} pt, page ${guide.pageIndex + 1}`;
+  return strings.t(
+    guide.orientation === "vertical" ? M.verticalGuide : M.horizontalGuide,
+    { at, page: guide.pageIndex + 1 },
+  );
 }
 
 export function GuidesPanel() {
+  const strings = useStrings();
   const spreads = useCollection<SpreadSummary>("spreads");
   const labelOf = (address: string) => {
     const id = idOf(address);
     for (const s of spreads ?? [])
-      for (const g of s.guides ?? []) if (g.id === id) return guideLabel(g);
+      for (const g of s.guides ?? [])
+        if (g.id === id) return guideLabel(strings, g);
     return undefined;
   };
   return (
     <AddressListPanel
-      title="Guides"
+      title={M.guides}
+      picker={M.guide}
       testId="guide"
       selector="guide"
       labelOf={labelOf}
       sections={GUIDE_SECTIONS}
-      empty="No ruler guides (or this engine does not list them yet)."
+      empty={M.noGuides}
     />
   );
 }
@@ -677,12 +768,12 @@ export function GuidesPanel() {
 
 const COLOR_GROUP_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Color group",
+    title: M.colorGroup,
     fields: [
-      { path: "name", label: "Name" },
+      { path: "name", label: M.name },
       {
         path: "members",
-        label: "Swatches",
+        label: M.swatches,
         collection: "swatches",
         items: { newItem: "Color/Black" },
       },
@@ -693,22 +784,23 @@ const COLOR_GROUP_SECTIONS: readonly SectionSpec[] = [
 export function ColorGroupOptionsPanel() {
   return (
     <AddressListPanel
-      title="Color Group Options"
+      title={M.colorGroupOptions}
+      picker={M.pickColorGroup}
       testId="colorGroup"
       selector="colorGroup"
       sections={COLOR_GROUP_SECTIONS}
-      empty="This document has no color groups."
+      empty={M.noColorGroups}
     />
   );
 }
 
 const NUMBERING_LIST_SECTIONS: readonly SectionSpec[] = [
   {
-    title: "Numbering list",
+    title: M.numberingList,
     fields: [
-      { path: "name", label: "Name" },
-      { path: "continueAcrossStories", label: "Continue across stories" },
-      { path: "continueAcrossDocuments", label: "Continue across documents" },
+      { path: "name", label: M.name },
+      { path: "continueAcrossStories", label: M.continueAcrossStories },
+      { path: "continueAcrossDocuments", label: M.continueAcrossDocuments },
     ],
   },
 ];
@@ -716,17 +808,18 @@ const NUMBERING_LIST_SECTIONS: readonly SectionSpec[] = [
 export function NumberingListOptionsPanel() {
   return (
     <AddressListPanel
-      title="Numbering List Options"
+      title={M.numberingListOptions}
+      picker={M.pickNumberingList}
       testId="numberingList"
       selector="numberingList"
       sections={NUMBERING_LIST_SECTIONS}
-      empty="This document has no numbering lists."
+      empty={M.noNumberingLists}
     />
   );
 }
 
 const CONDITION_SECTIONS: readonly SectionSpec[] = [
-  { title: "Condition", fields: [{ path: "visible", label: "Visible" }] },
+  { title: M.condition, fields: [{ path: "visible", label: M.visible }] },
 ];
 
 export function ConditionOptionsPanel() {
@@ -736,47 +829,50 @@ export function ConditionOptionsPanel() {
     conditions?.find((c) => c.selfId === idOf(address))?.name || undefined;
   return (
     <AddressListPanel
-      title="Condition Options"
+      title={M.conditionOptions}
+      picker={M.condition}
       testId="condition"
       selector="condition"
       labelOf={labelOf}
       sections={CONDITION_SECTIONS}
-      empty="This document has no conditions."
+      empty={M.noConditions}
     />
   );
 }
 
 const MASTER_SECTIONS: readonly SectionSpec[] = [
-  { title: "Master", fields: [{ path: "name", label: "Name" }] },
+  { title: M.master, fields: [{ path: "name", label: M.name }] },
 ];
 
 export function MasterOptionsPanel() {
+  const strings = useStrings();
   const pageSize = useDocument().handle?.pageSizesPt[0] ?? null;
   return (
     <AddressListPanel
-      title="Master Options"
+      title={M.masterOptions}
+      picker={M.master}
       testId="master"
       selector="master"
       sections={MASTER_SECTIONS}
-      empty="This document has no master spreads."
+      empty={M.noMasters}
       actions={(address) => (
         <>
           <CoreCommandButton
             op="createMaster"
-            label="New…"
+            label={strings.t(M.new)}
             testId="master-new"
             prefill={newMasterPrefill(pageSize)}
           />
           <CoreCommandButton
             op="renameMaster"
-            label="Rename…"
+            label={strings.t(M.rename)}
             testId="master-rename"
             disabled={!address}
             prefill={address ? { master: address } : undefined}
           />
           <CoreCommandButton
             op="deleteMaster"
-            label="Delete"
+            label={strings.t(M.delete)}
             testId="master-delete"
             disabled={!address}
             args={address ? { master: address } : undefined}
@@ -788,17 +884,19 @@ export function MasterOptionsPanel() {
 }
 
 const FIELD_SECTIONS: readonly SectionSpec[] = [
-  { title: "Field", fields: [{ path: "value", label: "Value" }] },
+  { title: M.field, fields: [{ path: "value", label: M.value }] },
 ];
 
 export function FieldOptionsPanel() {
+  const strings = useStrings();
   return (
     <AddressListPanel
-      title="Text Fields"
+      title={M.textFields}
+      picker={M.textField}
       testId="field"
       selector="field"
       sections={FIELD_SECTIONS}
-      empty="No text fields (Insert ▸ Field adds a placeholder)."
+      empty={M.noTextFields}
       actions={(address) => {
         // `field:<story>@<offset>` — the command addresses the marker by
         // its story and offset.
@@ -807,7 +905,7 @@ export function FieldOptionsPanel() {
           <>
             <CoreCommandButton
               op="insertField"
-              label="Insert…"
+              label={strings.t(M.insert)}
               testId="field-insert"
               prefill={{
                 field: {
@@ -821,7 +919,7 @@ export function FieldOptionsPanel() {
             />
             <CoreCommandButton
               op="setFieldValue"
-              label="Set value…"
+              label={strings.t(M.setValue)}
               testId="field-set-value"
               disabled={!m}
               prefill={
