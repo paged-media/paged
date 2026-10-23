@@ -45,7 +45,7 @@ each published canary added is under [Releases](#releases).
   volatile cells recalculate with them; iterative calculation when the workbook's `calcPr`
   asks for it; `NOW` and `TODAY` follow the host clock. Number formats render in five display
   locales. Expected values are recorded from Excel and replayed in CI: 5,156 of 5,222 function
-  cases and 148 of 164 number-format cases agree, every disagreement a recorded ruling.
+  cases and 152 of 164 number-format cases agree, every disagreement a recorded ruling.
   Recalculating real workbooks reproduces Excel's saved value in 93.6% of comparable formula
   cells (56,533 of 60,419 over 201 workbooks): shared formulas, defined names of every kind,
   structured references (including `[#Headers],[#Data]` and `[#Data],[#Totals]`), whole-column
@@ -146,8 +146,22 @@ each published canary added is under [Releases](#releases).
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
   painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
-  like hidden rows. Still open: number-format colours; a merged area clipped by the page window does not carry its anchor's
+  like hidden rows. Still open: a merged area clipped by the page window does not carry its anchor's
   text onto the page.
+- **Number formats as a cell shows them** (W2.1). A section's colour (`[Red]`, the other seven
+  names and `[Color1]`–`[Color56]`, read through the workbook's own palette when it overrides
+  the default) colours the number on the page table and in the live grid alike; a conditional
+  format's font colour wins over it, and a text value keeps its font colour, as in Excel.
+  Conditional sections, fractions (the last continued-fraction convergent that fits, as Excel
+  picks it), elapsed time, `@` (a number under a text section shows as General) and the system
+  long date and time (`[$-F800]`, `[$-F400]`, `[$-x-sysdate]`, `[$-x-systime]`) render; a General
+  cell fits 11 characters as in Excel (`1.23457E+14`, `3.141592654`), while `&` and `CONCAT` keep
+  15 digits. A repeat fill (`*x`, the accounting formats' `* `) splits the cell: the grid
+  repeats the character across the free width, the page table puts a right tab stop at the
+  cell's inner width with the character as its leader. Recorded from Excel 16 (the display lane,
+  `recorded/display.tsv`: the text and the font colour of 190 cells) and replayed in CI: all 190
+  agree. Not modelled: General narrowing to a column narrower than 11 characters, `_x` as the
+  exact width of `x` (it is one space).
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and

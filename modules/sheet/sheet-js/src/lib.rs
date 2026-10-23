@@ -441,6 +441,29 @@ mod wasm {
             to_js(&window)
         }
 
+        /// Where Ctrl+arrow lands: `[row, col]`.
+        pub fn data_edge(
+            &self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            d_row: i32,
+            d_col: i32,
+        ) -> Result<Vec<u32>, JsValue> {
+            let (r, c) = self
+                .session
+                .data_edge(sheet, row, col, d_row, d_col)
+                .map_err(map_err)?;
+            Ok(vec![r, c])
+        }
+
+        /// Status-bar statistics of a range: `{count, numbers, sum, average,
+        /// min, max, sumDisplay, averageDisplay}` (sheet ADR 510).
+        pub fn range_stats(&self, sheet: u16, range: &str) -> Result<JsValue, JsValue> {
+            let stats = self.session.range_stats(sheet, range).map_err(map_err)?;
+            to_js(&stats)
+        }
+
         /// Record the sheets-mode selection rectangle (consumed by the next
         /// `get_grid_scene` for the same sheet).
         pub fn set_grid_selection(

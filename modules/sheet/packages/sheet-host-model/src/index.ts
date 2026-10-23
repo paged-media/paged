@@ -111,6 +111,7 @@ export {
   DEFAULT_GRID_SVG_OPTIONS,
   cellEditorRect,
   cellRect,
+  fillOnce,
   colAt,
   colBand,
   colPos,

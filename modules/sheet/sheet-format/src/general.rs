@@ -58,6 +58,77 @@ pub fn format_general(v: &CellValue) -> String {
     }
 }
 
+/// The width, in characters, General fits a number into in a CELL (Excel 16
+/// shows General numbers in at most 11 characters, sign, point and exponent
+/// included — recorded, display lane; ruling `sheet.format.general`).
+pub const GENERAL_CELL_CHARS: usize = 11;
+
+/// `General` as a cell shows it (and `TEXT(x, "General")`): the
+/// 15-significant-digit form when it fits [`GENERAL_CELL_CHARS`], else the
+/// decimals rounded to fit, else scientific with the mantissa rounded to fit
+/// (`123456789012345` → `1.23457E+14`, `3.14159265358979` → `3.141592654`,
+/// `0.000000015` stays decimal). Number→text coercion (`&`, CONCAT) keeps
+/// [`general_number`].
+pub fn general_cell_number(x: f64) -> String {
+    let full = general_number(x);
+    if !x.is_finite() || x == 0.0 {
+        return full;
+    }
+    let w = GENERAL_CELL_CHARS;
+    if !full.contains('E') && full.len() <= w {
+        return full;
+    }
+    let r = round_sig(x, 15);
+    let sign = usize::from(r < 0.0);
+    let mag = r.abs();
+    let int_digits = if mag < 1.0 {
+        1
+    } else {
+        mag.log10().floor() as usize + 1
+    };
+    if int_digits + sign <= w {
+        // Decimal notation, decimals rounded to fit.
+        let decimals = w.saturating_sub(sign + int_digits + 1);
+        let fixed = trim_fixed(&format!("{:.*}", decimals, r));
+        let exact = fixed.parse::<f64>().is_ok_and(|v| v == r);
+        let nonzero = fixed.trim_start_matches('-') != "0";
+        if nonzero && (exact || mag >= 1e-3) && fixed.len() <= w {
+            return fixed;
+        }
+    }
+    // Scientific: mantissa digits fitted beside the exponent.
+    let mut e = mag.log10().floor() as i32;
+    let exp_len = |e: i32| 2 + e.unsigned_abs().to_string().len().max(2);
+    for _ in 0..2 {
+        let room = w.saturating_sub(sign + exp_len(e));
+        let decimals = room.saturating_sub(2);
+        let m = mag / 10f64.powi(e);
+        let rounded = format!("{:.*}", decimals, m);
+        if rounded.starts_with("10") {
+            e += 1;
+            continue;
+        }
+        let mant = trim_fixed(&rounded);
+        return format!(
+            "{}{}E{}{:02}",
+            if sign == 1 { "-" } else { "" },
+            mant,
+            if e < 0 { '-' } else { '+' },
+            e.unsigned_abs()
+        );
+    }
+    full
+}
+
+/// `1.2300` → `1.23`, `5.000` → `5`.
+fn trim_fixed(s: &str) -> String {
+    if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s.to_string()
+    }
+}
+
 /// `General` rendering of a finite f64 per the module ruling. Used directly
 /// for number->text coercion (e.g. TEXT(x,"General"), `&` concatenation).
 pub fn general_number(x: f64) -> String {

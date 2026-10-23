@@ -606,6 +606,49 @@ fn sheet_js_set_now_updates_clock() {
     assert!(!a2.display.is_empty());
 }
 
+// ── sheet.js.data_edge ──────────────────────────────────────────────────────
+
+/// `data_edge` moves as Excel's Ctrl+arrow does: through a run of filled
+/// cells to its end, across a gap to the next filled cell, else to the edge.
+#[test]
+fn sheet_js_data_edge_moves_like_ctrl_arrow() {
+    let mut s = SheetSession::new();
+    for r in 0..3 {
+        s.set_cell(0, r, 0, "1").unwrap(); // A1:A3
+    }
+    s.set_cell(0, 9, 0, "1").unwrap(); // A10
+    s.set_cell(0, 0, 4, "x").unwrap(); // E1
+    assert_eq!(s.data_edge(0, 0, 0, 1, 0).unwrap(), (2, 0)); // run end
+    assert_eq!(s.data_edge(0, 2, 0, 1, 0).unwrap(), (9, 0)); // next filled
+    assert_eq!(s.data_edge(0, 9, 0, 1, 0).unwrap(), (1_048_575, 0)); // edge
+    assert_eq!(s.data_edge(0, 9, 0, -1, 0).unwrap(), (2, 0));
+    assert_eq!(s.data_edge(0, 0, 0, 0, 1).unwrap(), (0, 4));
+    assert_eq!(s.data_edge(0, 0, 4, 0, -1).unwrap(), (0, 0));
+    assert_eq!(s.data_edge(0, 0, 0, -1, 0).unwrap(), (0, 0)); // already at the top
+}
+
+// ── sheet.js.range_stats ────────────────────────────────────────────────────
+
+/// `range_stats` counts values and numbers and sums them for the status bar,
+/// formatting sum and average like the first numeric cell; text counts but
+/// does not sum; a whole column is fine.
+#[test]
+fn sheet_js_range_stats_counts_and_sums_the_selection() {
+    let mut s = SheetSession::new();
+    s.set_cell(0, 0, 0, "2").unwrap();
+    s.set_cell(0, 1, 0, "3.5").unwrap();
+    s.set_cell(0, 2, 0, "label").unwrap();
+    s.set_cell(0, 3, 0, "=A1+A2").unwrap();
+    let st = s.range_stats(0, "A1:A1048576").expect("stats");
+    assert_eq!((st.count, st.numbers), (4, 3));
+    assert_eq!(st.sum, 11.0);
+    assert_eq!(st.average, Some(11.0 / 3.0));
+    assert_eq!((st.min, st.max), (Some(2.0), Some(5.5)));
+    assert_eq!(st.sum_display, "11");
+    let empty = s.range_stats(0, "C1:D9").unwrap();
+    assert_eq!((empty.count, empty.numbers, empty.average), (0, 0, None));
+}
+
 // ── sheet.js.get_frame_window ───────────────────────────────────────────────
 
 /// `get_frame_window` answers the tracks a sheet frame shows (ADR 510) from
