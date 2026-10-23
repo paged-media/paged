@@ -1193,6 +1193,7 @@ export function activate(host: BundleHost): BundleHandle {
     untyped,
     undefined,
     () => session.state().source !== null,
+    (frameId) => session.liveSelection(frameId),
   );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).

@@ -1,0 +1,14 @@
+$ paged-node preflight <TMP>/fixture.paged --plugins=<REPO>/modules/publish/packages/publish-bundle/src/index.ts
+# exit 0
+# stdout
+{
+  "via": "media.paged.publish.preflight",
+  "options": {},
+  "ok": true,
+  "pageCount": 1,
+  "errors": 0,
+  "warnings": 0,
+  "findings": []
+}
+# stderr
+(empty)

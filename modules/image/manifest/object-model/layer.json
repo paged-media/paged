@@ -137,10 +137,38 @@
         "region": {
           "kind": "bounds",
           "optional": true
+        },
+        "mask": {
+          "kind": "struct",
+          "optional": true,
+          "fields": {
+            "polygons": {
+              "kind": "list",
+              "of": {
+                "kind": "list",
+                "of": {
+                  "kind": "point"
+                }
+              },
+              "optional": true
+            },
+            "alpha": {
+              "kind": "bytes",
+              "optional": true
+            },
+            "feather": {
+              "kind": "number",
+              "optional": true
+            }
+          }
+        },
+        "selection": {
+          "kind": "bool",
+          "optional": true
         }
       }
     },
-    "summary": "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths (blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] in image pixels; the whole canvas when absent). On the GPU where one exists, otherwise on the CPU twins of the same kernels (ADR 465). Reads nothing."
+    "summary": "An action: writing runs a filter on the layer's pixels — `params` are adjustment-layer paths (blur, sharpen, hue, invert, exposure, levels, …) — inside `region` ([top, left, bottom, right] in image pixels; the whole canvas when absent), narrowed by `mask` (a selection as data: `polygons` of [x, y] image pixels, unioned; `alpha`, one coverage byte per canvas pixel or an encoded image of the canvas size, its luminance times its alpha; `feather`, σ px) and, with `selection: true`, by the editor's live selection (refused headless). Partial coverage blends filtered and original pixels. On the GPU where one exists, otherwise on the CPU twins of the same kernels (ADR 465). Reads nothing."
   },
   {
     "path": "pixelSource",

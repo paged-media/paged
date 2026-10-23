@@ -122,6 +122,26 @@ describe("the session selection surface (real engine wasm)", () => {
     handle.dispose();
   });
 
+  it("liveSelection hands filterRegion the coverage of the open frame, or why there is none", async () => {
+    // @feat: image.editor.region-filter — `filterRegion { selection: true }`.
+    const { handle, session } = await ingest();
+    expect(session.liveSelection("u1")).toEqual({
+      refused: "nothing is selected in the editor",
+    });
+    expect(session.selectAll()).toBe(true);
+    const live = session.liveSelection("u1");
+    expect(live).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([255, 255]),
+    });
+    expect(session.liveSelection("u2")).toMatchObject({
+      refused: expect.stringMatching(/another image \(u1\), not u2/),
+    });
+    session.dispose();
+    handle.dispose();
+  });
+
   it("POLYGONAL lasso places, undoes and closes vertices — and refuses a degenerate shape", async () => {
     // The polygonal lasso is CLICK-driven where the freehand lasso is
     // drag-driven, so its whole state model is different: the gesture

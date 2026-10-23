@@ -203,3 +203,36 @@ three silent failures and one missing flag. Each is now a decision:
   sniffer makes holds `9.9` and a date (paged.data's oracle defect DM-8, closed for the
   merge in `modules/data`). A value is typed only where the query asks for one: a `CAST`,
   or a computation.
+
+## Amendment — 2026-10-23: data through typed commands, `generate`, `preflight`, `package`
+
+The editor's module-coverage audit (`apps/editor/docs/composable-editor-plan.md`, G4) found
+the data verbs reaching into paged.data's session object and the PDF of `merge` and
+`template fill` bypassing the typed exporter. Decided:
+
+- **Data through typed commands only.** `apply`, `merge` and the new `generate` call what a
+  script calls: `media.paged.data.importSource` (a file's bytes as a source), a `query`
+  object through `host.objects`, `previewQuery`, `defineBinding` (a session binding kind,
+  as the Bindings panel defines it), `apply`, `merge` (which now takes `imageBase` and
+  `imageFields`, and answers the undo steps it took) and `planBatch`. Nothing in
+  `apps/cli/src/data.ts` touches `sessionFor`.
+- **`generate <template>`**: a batch, one document per record (`--per record`) or per group
+  of records with the same `--by` values (`--per group`), planned by paged.data's
+  `planBatch`; each unit is a Data Merge of its records, written and undone.
+- **Every PDF through the typed exporter.** `session.exportBytes("pdf")` routes through
+  paged.publish's `exportPdf` (or another `*.exportPdf`) when one is installed, so
+  `template fill -o x.pdf`, `merge --format pdf`, `generate`, `package --pdf` and `-o x.pdf`
+  on a write make the PDF the editor's Export dialog makes. `export --core` keeps core's door.
+- **`preflight <doc>`** runs paged.publish's typed `preflight` with the PDF options given
+  (`--pdf-standard`, `--pages`, `--option key=value`) and exits 1 when a finding is an error.
+  Without paged.publish it is a usage error naming the bundle.
+- **`package <doc> -o <dir|x.zip>`** is InDesign's File ▸ Package, laid out as the Rust
+  `paged package`: `<name>.idml` with its links rebased into `Links/`, every linked file
+  (the engine's bytes, else the file the link names, relative to the document), the
+  document's fonts in `Document fonts/`, `Instructions.txt` and `<name> Report.txt`; `--pdf`
+  adds a PDF. A `.zip` unpacks into `<name>/` beside it, and its links point there. An IDML
+  carries no font binaries, so a face is collected only from the faces the engine holds for
+  the family and from the files `--fonts <dir|file>` names. A face whose OS/2 `fsType` says
+  Restricted Licence embedding is not copied, and the report says so; a family no face
+  answers for is reported missing. Whether a font's licence lets it be handed on otherwise
+  is the user's question: the report lists what was copied.
