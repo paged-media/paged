@@ -27,8 +27,9 @@
 //   range       `range/<sheet>!<A1:B2>`    values (2-D), inputs, formula fill,
 //                                          display, the same style rows
 //   namedRange  `namedRange/<name>` or `namedRange/<sheet>!<name>`
-//   table       `table/<name>`             read-only (the xlsx table part
-//                                          re-emits verbatim, spec §10.2)
+//   table       `table/<name>`             name, range (resize), totals row,
+//                                          style and its switches (ADR 517);
+//                                          created over a range
 //   chart       `chart/<index>`            kind, title, legend, series ranges,
 //                                          axis titles and bounds
 //
@@ -293,13 +294,20 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
     }),
   ],
   table: [
-    ro("name", text, { title: "Name" }),
+    rw("name", text, { title: "Name" }),
     ro("sheet", text, { title: "Sheet" }),
-    ro("range", text, { title: "Range" }),
+    rw("range", text, {
+      title: "Range",
+      summary: "Resizing keeps the header row where it is.",
+    }),
     ro("columns", { kind: "list", of: text }, { title: "Columns" }),
     ro("headerRow", bool, { title: "Header row" }),
-    ro("totalsRow", bool, { title: "Totals row" }),
-    ro("style", text, { title: "Table style", nullable: true }),
+    rw("totalsRow", bool, { title: "Totals row" }),
+    rw("style", text, { title: "Table style", nullable: true }),
+    rw("bandedRows", bool, { title: "Banded rows" }),
+    rw("bandedColumns", bool, { title: "Banded columns" }),
+    rw("firstColumn", bool, { title: "First column" }),
+    rw("lastColumn", bool, { title: "Last column" }),
     derived(
       "totals",
       { kind: "list", of: text },
@@ -739,6 +747,13 @@ export function contributeObjectModel(
               return value(t.totalsRow);
             case "style":
               return value(t.styleName ?? null);
+            case "bandedRows":
+            case "bandedColumns":
+            case "firstColumn":
+            case "lastColumn": {
+              const d = engine.tableDetail?.(t.name);
+              return value(d ? d[path] : false);
+            }
             case "totals":
             case "rowCount": {
               const r = engine.resolveRange!(t.sheet, t.range);
@@ -1062,10 +1077,60 @@ export function contributeObjectModel(
         }
         break;
       }
-      case "table":
-        throw new Refuse(
-          "tables are read-only: the xlsx table part re-emits verbatim (spec §10.2)",
+      case "table": {
+        const lower = id.toLowerCase();
+        const t = (engine.listTables?.() ?? []).find(
+          (x) => x.name.toLowerCase() === lower,
         );
+        if (!t) throw new Refuse(`no table "${id}"`);
+        const region = (e: SheetEngine, p: Pending) => {
+          const d = e.tableDetail?.(path === "name" ? String(v) : t.name);
+          if (d && e.resolveRange) {
+            p.regions.push(regionOf(e.resolveRange(d.sheet, d.range)));
+          }
+        };
+        const need = <K extends keyof SheetEngine>(e: SheetEngine, k: K) => {
+          const f = e[k];
+          if (typeof f !== "function")
+            throw new Refuse(`engine wasm predates ${String(k)}`);
+          return f as NonNullable<SheetEngine[K]>;
+        };
+        switch (path) {
+          case "name":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "renameTable")(t.name, String(v));
+              region(e, p);
+            };
+          case "range":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "resizeTable")(t.name, String(v));
+              region(e, p);
+            };
+          case "totalsRow":
+            return (e, p) => {
+              flushCells(e, p);
+              need(e, "setTableTotals")(t.name, Boolean(v));
+              region(e, p);
+            };
+          case "style":
+          case "bandedRows":
+          case "bandedColumns":
+          case "firstColumn":
+          case "lastColumn": {
+            const arg =
+              path === "style"
+                ? { style: v === null ? "" : String(v) }
+                : { [path]: Boolean(v) };
+            return (e, p) => {
+              need(e, "setTableStyle")(t.name, arg);
+              region(e, p);
+            };
+          }
+        }
+        throw new Refuse(`table has no writable path "${path}"`);
+      }
       case "chart": {
         const c = chartOf(engine, id);
         const patch: ChartPatch = {};
@@ -1156,6 +1221,23 @@ export function contributeObjectModel(
             e.updateChart(index, patch);
             chartOps.push({ op: "update", index, patch });
           }
+        };
+      }
+      case "table": {
+        const sheetName = String(props.sheet ?? "");
+        const range = String(props.range ?? "");
+        if (!range) throw new Refuse("a table needs a range");
+        const sheet = sheetName ? sheetIdByName(engine, sheetName) : 0;
+        const hasHeaders = props.headerRow !== false;
+        const style = props.style ? String(props.style) : undefined;
+        const name = props.name ? String(props.name) : undefined;
+        return (e, p) => {
+          if (!e.createTable)
+            throw new Refuse("engine wasm predates create_table");
+          flushCells(e, p);
+          const d = e.createTable(sheet, range, hasHeaders, style, name);
+          if (e.resolveRange)
+            p.regions.push(regionOf(e.resolveRange(d.sheet, d.range)));
         };
       }
     }

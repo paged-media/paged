@@ -71,6 +71,7 @@ mod stylemap;
 mod tables;
 mod w2_outline_protect;
 mod w2_sort_filter;
+mod w2_tables;
 mod w2_validation;
 mod w3_golden;
 mod whole_refs;

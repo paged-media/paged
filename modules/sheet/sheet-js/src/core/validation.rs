@@ -490,7 +490,12 @@ impl SheetSession {
                 });
             }
         }
-        let result = self.set_cell(sheet, row, col, input)?;
+        let mut result = self.set_cell(sheet, row, col, input)?;
+        // A typed entry grows a table it lands beside, and a formula in an
+        // empty table column becomes its calculated column (ADR 517).
+        if self.table_after_entry(sheet, row, col, input)? {
+            result.changed = self.rebuilt_changes();
+        }
         Ok(EnterResult {
             applied: true,
             alert: None,
