@@ -3807,7 +3807,8 @@ export function createWorkbookSession(
         });
         viewMoved.add(id);
       }
-      if (lastGridWindow) lastGridWindow = { ...lastGridWindow, firstRow: 0, firstCol: 0 };
+      if (lastGridWindow)
+        lastGridWindow = { ...lastGridWindow, firstRow: 0, firstCol: 0 };
       if (inFrameActive) void submitInFrameGrid();
       else if (id && viewMoved.has(id)) void refreshPlacements();
       return true;
