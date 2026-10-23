@@ -89,6 +89,7 @@ export type FrameSurfaceSession = Pick<
   | "pointerMoveInFrame"
   | "grabAt"
   | "selectionAreas"
+  | "pageWindowsOnLeave"
   | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
@@ -748,12 +749,24 @@ function SheetFrameSurfaceView({
       ctx.strokeStyle = "#2b6cb0";
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
-      ctx.strokeRect(
-        headW,
-        headH,
-        props.frameBoxPt.widthPt,
-        props.frameBoxPt.heightPt,
-      );
+      // Where the page window lands on leaving (one per chain frame); a
+      // frame that is no window keeps the frame-sized box at the origin.
+      const windows = session.pageWindowsOnLeave();
+      if (windows.length === 0) {
+        ctx.strokeRect(
+          headW,
+          headH,
+          props.frameBoxPt.widthPt,
+          props.frameBoxPt.heightPt,
+        );
+      } else {
+        ctx.translate(headW, headH);
+        for (const w of windows) {
+          const box = rangeRect(scene, w.top, w.left, w.bottom, w.right);
+          if (box)
+            ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+        }
+      }
       ctx.restore();
     }
     if (resizeGhost) {
