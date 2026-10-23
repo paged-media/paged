@@ -1,0 +1,192 @@
+# Excel-recorded cell display (oracle/excel/display.py — do not hand-edit)
+# id	format_code	value	shown	font_rgb	interior_rgb
+color-red-2dp	[Red]0.00	5	5.00	255,0,0	255,255,255
+color-blue-int	[Blue]0	3	3	0,0,255	255,255,255
+color-green-group	[Green]#,##0	1234	1,234	0,255,0	255,255,255
+color-black	[Black]0	7	7	0,0,0	255,255,255
+color-cyan	[Cyan]0.0	2.5	2.5	0,255,255	255,255,255
+color-magenta	[Magenta]0	9	9	255,0,255	255,255,255
+color-yellow	[Yellow]0	1	1	255,255,0	255,255,255
+color-white	[White]0	4	4	255,255,255	255,255,255
+color-neg-section	[Red]0.0;[Blue]0.0	-5	5.0	0,0,255	255,255,255
+color-pos-section	[Red]0.0;[Blue]0.0	5	5.0	255,0,0	255,255,255
+color-indexed-dropped	[Color12]0	8	8	128,128,0	255,255,255
+color-red-general	[Red]General	1.5	1.5	255,0,0	255,255,255
+cond-ge-match	[>=100]0"+";0	150	150+	0,0,0	255,255,255
+cond-ge-default	[>=100]0"+";0	50	50	0,0,0	255,255,255
+cond-lt-match	[<100]0;0	50	50	0,0,0	255,255,255
+cond-default-no-minus	[>=100]0;0	-5	-5	0,0,0	255,255,255
+cond-author-minus	[>=100]0;-0	-5	--5	0,0,0	255,255,255
+cond-two-conds-neg	[>100]0;[<0]0;0	-5	5	0,0,0	255,255,255
+cond-lt0-default	[<0]0;0	-5	5	0,0,0	255,255,255
+cond-text-neg	[>=0]"pos";"neg"	-5	neg	0,0,0	255,255,255
+cond-text-pos	[>=0]"pos";"neg"	5	pos	0,0,0	255,255,255
+cond-text-lo	[<=50]"lo";[>50]"hi"	30	lo	0,0,0	255,255,255
+cond-text-hi	[<=50]"lo";[>50]"hi"	80	hi	0,0,0	255,255,255
+cond-scale-k	[>=1000]0,"K";0	2500	3K	0,0,0	255,255,255
+cur-dollar-409	[$$-409]#,##0	1234	$1,234	0,0,0	255,255,255
+cur-euro-407	[$€-407]#,##0	1234	€1,234	0,0,0	255,255,255
+cur-pound-809	[$£-809]#,##0.00	12.5	£12.50	0,0,0	255,255,255
+cur-locale-only	[$-409]#,##0	1234	1,234	0,0,0	255,255,255
+cur-symbol-only	[$USD]0	5	USD5	0,0,0	255,255,255
+cur-dollar-decimals	[$$-409]#,##0.00	1234.5	$1,234.50	0,0,0	255,255,255
+cur-yen	[$¥-411]#,##0	5000	¥5,000	0,0,0	255,255,255
+cur-suffix	#,##0" "[$kr-414]	1234	1,234 kr	0,0,0	255,255,255
+cur-euro-suffix	#,##0.00" "[$€-407]	9.5	9.50 €	0,0,0	255,255,255
+cur-dollar-neg	[$$-409]#,##0	-1234	-$1,234	0,0,0	255,255,255
+cur-franc	[$CHF-807]#,##0	100	CHF100	0,0,0	255,255,255
+cur-zero	[$$-409]#,##0	0	$0	0,0,0	255,255,255
+dt-iso-epoch	yyyy-mm-dd	1	1900-01-01	0,0,0	255,255,255
+dt-iso	yyyy-mm-dd	44197	2021-01-01	0,0,0	255,255,255
+dt-longmonth	mmm d, yyyy	44197	Jan 1, 2021	0,0,0	255,255,255
+dt-fullmonth	mmmm	44228	February	0,0,0	255,255,255
+dt-weekday	dddd	44197	Friday	0,0,0	255,255,255
+dt-weekday-abbr	ddd	44197	Fri	0,0,0	255,255,255
+dt-time-full	hh:mm:ss	0.5	12:00:00	0,0,0	255,255,255
+dt-time-eve	hh:mm	0.75	18:00	0,0,0	255,255,255
+dt-ampm-noon	h:mm AM/PM	0.5	12:00 PM	0,0,0	255,255,255
+dt-ampm-midnight	h:mm AM/PM	0	12:00 AM	0,0,0	255,255,255
+dt-ampm-morning	h:mm AM/PM	0.25	6:00 AM	0,0,0	255,255,255
+dt-us	m/d/yyyy	44197	1/1/2021	0,0,0	255,255,255
+dt-yy	yy	44197	21	0,0,0	255,255,255
+dt-datetime	mm/dd/yyyy hh:mm	44197.5	01/01/2021 12:00	0,0,0	255,255,255
+elapsed-h-1.5day	[h]	1.5	36	0,0,0	255,255,255
+elapsed-h-halfday	[h]	0.5	12	0,0,0	255,255,255
+elapsed-h-2day	[h]	2	48	0,0,0	255,255,255
+elapsed-h-mm	[h]:mm	1.5	36:00	0,0,0	255,255,255
+elapsed-h-mm-partial	[h]:mm	0.5208333333	12:30	0,0,0	255,255,255
+elapsed-hh-mm-ss	[hh]:mm:ss	1.5	36:00:00	0,0,0	255,255,255
+elapsed-h-mm-ss	[h]:mm:ss	2.041666666	49:00:00	0,0,0	255,255,255
+elapsed-m-1day	[m]	1	1440	0,0,0	255,255,255
+elapsed-m-halfday	[m]	0.5	720	0,0,0	255,255,255
+elapsed-mm-pad	[mm]	0.0006944444	01	0,0,0	255,255,255
+elapsed-s-100	[s]	0.0011574074	100	0,0,0	255,255,255
+elapsed-ss-100	[ss]	0.0011574074	100	0,0,0	255,255,255
+frac-half	# ?/?	0.5	 1/2	0,0,0	255,255,255
+frac-mixed-quarter	# ?/?	2.25	2 1/4	0,0,0	255,255,255
+frac-16ths	# ??/??	0.3125	  5/16	0,0,0	255,255,255
+frac-twothirds-1	# ?/?	0.6666666667	 2/3	0,0,0	255,255,255
+frac-twothirds-2	# ??/??	0.6666666667	  2/3 	0,0,0	255,255,255
+frac-fixed16	# ?/16	0.5	 8/16	0,0,0	255,255,255
+frac-fixed8	# ?/8	0.5	 4/8	0,0,0	255,255,255
+frac-improper	?/?	0.5	1/2	0,0,0	255,255,255
+frac-carry	# ??/??	2.96	2 24/25	0,0,0	255,255,255
+frac-negative	# ?/?	-2.25	-2 1/4	0,0,0	255,255,255
+frac-seventh	# ??/??	0.142857142857	  1/7 	0,0,0	255,255,255
+frac-eighth-fit	# ?/?	0.875	 7/8	0,0,0	255,255,255
+gen-int	General	0	0	0,0,0	255,255,255
+gen-one	General	1	1	0,0,0	255,255,255
+gen-neg	General	-42	-42	0,0,0	255,255,255
+gen-thousand	General	1000	1000	0,0,0	255,255,255
+gen-half	General	1.5	1.5	0,0,0	255,255,255
+gen-tenth	General	0.1	0.1	0,0,0	255,255,255
+gen-neg-quarter	General	-0.25	-0.25	0,0,0	255,255,255
+gen-15sig	General	123456789012345	1.23457E+14	0,0,0	255,255,255
+gen-1e15	General	1000000000000000	1E+15	0,0,0	255,255,255
+gen-sci-big	General	1e21	1E+21	0,0,0	255,255,255
+gen-sci-small	General	0.000000015	0.000000015	0,0,0	255,255,255
+gen-e-minus7	General	0.0000001	0.0000001	0,0,0	255,255,255
+gen-neg-zero	General	-0	0	0,0,0	255,255,255
+gen-pi	General	3.14159265358979	3.141592654	0,0,0	255,255,255
+gen-bool-true	General	bool:true	bool:true	0,0,0	255,255,255
+gen-bool-false	General	bool:false	bool:false	0,0,0	255,255,255
+gen-text	General	text:hello	text:hello	0,0,0	255,255,255
+num-fixed2	0.00	1.5	1.50	0,0,0	255,255,255
+num-fixed2-int	0.00	1	1.00	0,0,0	255,255,255
+num-trunc	0	1.4	1	0,0,0	255,255,255
+num-round-half	0	1.5	2	0,0,0	255,255,255
+num-round-half2	0	2.5	3	0,0,0	255,255,255
+num-optional	#.##	1.5	1.5	0,0,0	255,255,255
+num-optional-int	#.##	1	1.	0,0,0	255,255,255
+num-leadzero-frac	0.##	0.5	0.5	0,0,0	255,255,255
+num-group	#,##0	1234	1,234	0,0,0	255,255,255
+num-group-millions	#,##0	1234567	1,234,567	0,0,0	255,255,255
+num-group-decimals	#,##0.00	1234.5	1,234.50	0,0,0	255,255,255
+num-scale-k	0,	12000	12	0,0,0	255,255,255
+num-scale-k-dec	0.0,	12500	12.5	0,0,0	255,255,255
+num-scale-m	0,,	12000000	12	0,0,0	255,255,255
+num-pad-zeros	000	7	007	0,0,0	255,255,255
+num-pad-zeros-dec	00.0	7.5	07.5	0,0,0	255,255,255
+num-neg	0.00	-1.5	-1.50	0,0,0	255,255,255
+num-zero-plain	0	0	0	0,0,0	255,255,255
+num-zero-fixed	0.00	0	0.00	0,0,0	255,255,255
+pad-fill-dash-before	*-0	5	----------------------------------------------------------------------------5	0,0,0	255,255,255
+pad-fill-dash-after	0"x"*-	5	5x--------------------------------------------------------------------------	0,0,0	255,255,255
+pad-fill-letter	0*x	5	5xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx	0,0,0	255,255,255
+pad-fill-dollar-space	$* #,##0	1234	$                                                                                                     1,234	0,0,0	255,255,255
+pad-fill-star	0*=	5	5=============================================	0,0,0	255,255,255
+pad-fill-dot	0*.5	5	5..........................................................................5	0,0,0	255,255,255
+pad-skip-space	_(0	5	 5	0,0,0	255,255,255
+pad-skip-and-fill	*-#,##0	1234	---------------------------------------------------------------------1,234	0,0,0	255,255,255
+pad-fill-paren	0*)	5	5))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))	0,0,0	255,255,255
+pad-fill-neg	*-0	-5	----------------------------------------------------------------------------5	0,0,0	255,255,255
+pad-fill-zero-pad	*-000	7	------------------------------------------------------------------------007	0,0,0	255,255,255
+pad-fill-decimals	0.0*-	2.5	2.5-------------------------------------------------------------------------	0,0,0	255,255,255
+pct-half	0%	0.5	50%	0,0,0	255,255,255
+pct-one	0%	1	100%	0,0,0	255,255,255
+pct-two-dec	0.00%	0.1234	12.34%	0,0,0	255,255,255
+pct-zero	0%	0	0%	0,0,0	255,255,255
+pct-neg	0%	-0.25	-25%	0,0,0	255,255,255
+pct-small	0.0%	0.005	0.5%	0,0,0	255,255,255
+pct-hash	#0%	0.5	50%	0,0,0	255,255,255
+pct-over-one	0%	1.5	150%	0,0,0	255,255,255
+pct-zero-dec	0.00%	0	0.00%	0,0,0	255,255,255
+pct-round-up	0%	0.999	100%	0,0,0	255,255,255
+pct-onedec	0.0%	0.12345	12.3%	0,0,0	255,255,255
+sci-big	0.00E+00	12345	1.23E+04	0,0,0	255,255,255
+sci-small	0.00E+00	0.0001234	1.23E-04	0,0,0	255,255,255
+sci-one-digit	0E+0	12345	1E+4	0,0,0	255,255,255
+sci-zero	0.00E+00	0	0.00E+00	0,0,0	255,255,255
+sci-neg	0.00E+00	-12345	-1.23E+04	0,0,0	255,255,255
+sci-one	0.0E+00	1	1.0E+00	0,0,0	255,255,255
+sci-billions	0.00E+00	9990000000	9.99E+09	0,0,0	255,255,255
+sci-avogadro	0.000E+00	602200000000000000000000	6.022E+23	0,0,0	255,255,255
+sci-hundred	0E+00	100	1E+02	0,0,0	255,255,255
+sci-half	0.00E+00	0.5	5.00E-01	0,0,0	255,255,255
+sec-neg-parens	0.00;(0.00)	-5	(5.00)	0,0,0	255,255,255
+sec-pos	0.00;(0.00)	5	5.00	0,0,0	255,255,255
+sec-zero-uses-pos	0.00;(0.00)	0	0.00	0,0,0	255,255,255
+sec-zero-literal	0;-0;"zero"	0	zero	0,0,0	255,255,255
+sec-three-pos	0;-0;"zero"	3	3	0,0,0	255,255,255
+sec-three-neg	0;-0;"zero"	-3	-3	0,0,0	255,255,255
+sec-red-neg	#,##0;[Red]-#,##0	-1234	-1,234	255,0,0	255,255,255
+sec-zero-dash	0.0;;"-"	0	-	0,0,0	255,255,255
+sec-plus-pos	+0;-0	5	+5	0,0,0	255,255,255
+sec-hide-all	;;;	5		0,0,0	255,255,255
+sec-paren-neg	0;(0)	-7	(7)	0,0,0	255,255,255
+txt-angle	0;0;0;"<"@">"	text:hi	<text:hi>	0,0,0	255,255,255
+txt-at-only	@	text:plain	text:plain	0,0,0	255,255,255
+txt-prefix	"Note: "@	text:alpha	Note: text:alpha	0,0,0	255,255,255
+txt-suffix	0;0;0;@" units"	text:5	text:5 units	0,0,0	255,255,255
+txt-general	General	text:passthrough	text:passthrough	0,0,0	255,255,255
+txt-number-code	0.00	text:note	text:note	0,0,0	255,255,255
+txt-hidden	;;;	text:hidden		0,0,0	255,255,255
+txt-double-at	@@	text:x	text:xtext:x	0,0,0	255,255,255
+txt-bracket	0;0;0;"["@"]"	text:tag	[text:tag]	0,0,0	255,255,255
+txt-arrows	0;0;0;">>"@	text:v	>>text:v	0,0,0	255,255,255
+color-index-3	[Color3]0	5	5	255,0,0	255,255,255
+color-index-10	[Color10]0.0	5	5.0	0,128,0	255,255,255
+color-index-12	[Color12]0	8	8	128,128,0	255,255,255
+color-index-45	[Color45]#,##0	1234	1,234	255,153,0	255,255,255
+color-neg-blue	0.00;[Blue]-0.00	-5	-5.00	0,0,255	255,255,255
+color-zero-section	0;0;[Magenta]0	0	0	255,0,255	255,255,255
+color-text-section	0;0;0;[Red]@	note	note	0,0,0	255,255,255
+color-cond-red	[Red][<0]0;[Green][>100]0;0	-3	3	255,0,0	255,255,255
+color-cond-green	[Red][<0]0;[Green][>100]0;0	300	300	0,255,0	255,255,255
+color-cond-default	[Red][<0]0;[Green][>100]0;0	50	50	0,0,0	255,255,255
+sys-long-date	[$-F800]dddd\,\ mmmm\ dd\,\ yyyy	44197	Friday, January 1, 2021	0,0,0	255,255,255
+sys-long-date-x	[$-x-sysdate]dddd, mmmm dd, yyyy	45000	Wednesday, March 15, 2023	0,0,0	255,255,255
+sys-long-time	[$-F400]h:mm:ss\ AM/PM	44197.75	6:00:00 PM	0,0,0	255,255,255
+sys-long-time-x	[$-x-systime]h:mm:ss AM/PM	0.5	12:00:00 PM	0,0,0	255,255,255
+fraction-2	# ??/??	3.14159	3  1/7 	0,0,0	255,255,255
+fraction-3	# ???/???	2.71828	2 334/465	0,0,0	255,255,255
+elapsed-h	[h]:mm:ss	1.5	36:00:00	0,0,0	255,255,255
+elapsed-h-neg	[h]:mm	2.25	54:00	0,0,0	255,255,255
+text-at	@	123	123	0,0,0	255,255,255
+text-quoted	"Item: "@	lamp	Item: lamp	0,0,0	255,255,255
+fill-acct	_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)	1234.5	 $                   1,234.50 	0,0,0	255,255,255
+fill-acct-neg	_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)	-12	 $                         (12.00)	0,0,0	255,255,255
+fill-acct-zero	_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)	0	 $                                     -   	0,0,0	255,255,255
+fill-dots-text	@*.	Total	Total......................	0,0,0	255,255,255
+fill-dash-num	*-0	42	--------------------------42	0,0,0	255,255,255
+fill-star-after	0*x	7	7xxxxxxxxxxxxxxxxx	0,0,0	255,255,255

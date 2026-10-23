@@ -29,7 +29,7 @@
 use crate::locale::locale_from_lcid;
 use crate::sections::{
     CompareOp, CompiledFormat, Condition, ElapsedUnit, FormatColor, FractionSpec, Section,
-    SectionKind, Token,
+    SectionKind, SystemFormat, Token,
 };
 use compact_str::CompactString;
 use sheet_core::Locale;
@@ -152,6 +152,8 @@ fn parse_section(raw: &str, force_text: bool) -> Result<(Section, Option<Locale>
     let mut condition: Option<Condition> = None;
     // The locale from the first `[$…-LCID]` token seen in this section.
     let mut locale: Option<Locale> = None;
+    // `[$-F800]` / `[$-F400]`: the whole section is a system format.
+    let mut system: Option<SystemFormat> = None;
 
     let mut tokens: Vec<Token> = Vec::new();
     let mut lit = String::new();
@@ -207,6 +209,16 @@ fn parse_section(raw: &str, force_text: bool) -> Result<(Section, Option<Locale>
                     }
                     Bracket::Color(c) => color = Some(c),
                     Bracket::Condition(cond) => condition = Some(cond),
+                    Bracket::Currency { symbol, lcid }
+                        if matches!(lcid, Some(0xF800) | Some(0xF400)) =>
+                    {
+                        let _ = symbol;
+                        system = Some(if lcid == Some(0xF800) {
+                            SystemFormat::LongDate
+                        } else {
+                            SystemFormat::LongTime
+                        });
+                    }
                     Bracket::Currency { symbol, lcid } => {
                         lit.push_str(&symbol);
                         // `[$…-LCID]` carries a per-code display locale; the
@@ -332,6 +344,22 @@ fn parse_section(raw: &str, force_text: bool) -> Result<(Section, Option<Locale>
     }
     flush_lit!();
 
+    // A system format replaces whatever tokens follow it (Excel writes the
+    // pattern it showed when the file was saved; the display locale's own
+    // pattern is what it shows).
+    if let Some(sys) = system {
+        return Ok((
+            Section {
+                tokens: vec![Token::System(sys)],
+                kind: SectionKind::DateTime,
+                general: false,
+                color,
+                condition,
+            },
+            locale,
+        ));
+    }
+
     // `General` (case-insensitive) as the sole content — possibly wrapped in a
     // color/condition bracket (e.g. `[Red]General`, `[>0]General`) — compiles
     // to a general-flagged section that still carries its color/condition.
@@ -393,7 +421,7 @@ enum Bracket {
     /// per-code display locale (ruling `sheet.format.locale.locale-from-workbook`).
     /// A pure `[$-407]` contributes an empty symbol but a non-`None` `lcid`.
     Currency { symbol: String, lcid: Option<u32> },
-    /// Anything unmodelled (an indexed `[Color12]`) — dropped.
+    /// Anything unmodelled (`[DBNum1]`, a `[Color57]` out of range) — dropped.
     Drop,
 }
 
@@ -478,6 +506,15 @@ fn parse_currency(body: &str) -> Option<(String, Option<u32>)> {
     let (symbol, lcid) = match rest.find('-') {
         Some(idx) => {
             let suffix = &rest[idx + 1..];
+            // `[$-x-sysdate]` / `[$-x-systime]`: the spellings newer Excel
+            // writes for the system long date / time (`F800` / `F400`).
+            let lower = suffix.to_ascii_lowercase();
+            if lower.starts_with("x-sysdate") {
+                return Some((rest[..idx].to_string(), Some(0xF800)));
+            }
+            if lower.starts_with("x-systime") {
+                return Some((rest[..idx].to_string(), Some(0xF400)));
+            }
             // The LCID may carry trailing modifiers in real files; parse the
             // leading hex run only (e.g. `407` from `407` or `0407`).
             let hex: String = suffix

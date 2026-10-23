@@ -26,8 +26,8 @@
 //!    body (the PRODUCTION implementation, spliced into the ABI
 //!    template by `abi::assemble`),
 //! 3. behind `feature = "reference"` (test-only, enabled solely by
-//!    image-conformance): the scalar Rust twin over
-//!    [`reference_prelude::Px`].
+//!    image-conformance) or `feature = "cpu"` (the shipped no-GPU path,
+//!    ADR 465): the scalar Rust twin over [`reference_prelude::Px`].
 //!
 //! The body is written in a restricted DSL whose every token is valid
 //! in BOTH languages: the idents `a`, `b` (vec4 samples), `p.<field>`
@@ -101,8 +101,9 @@ macro_rules! kernel_family {
             gpu_tolerance: $tol,
         };
 
-        /// Scalar reference twin (test-only golden source, spec §6.3).
-        #[cfg(feature = "reference")]
+        /// Scalar twin: the test-only golden source (spec §6.3), and
+        /// under `cpu` the shipped CPU path where no GPU exists (ADR 465).
+        #[cfg(any(feature = "reference", feature = "cpu"))]
         pub fn $refname(
             a: $crate::reference_prelude::Px,
             b: $crate::reference_prelude::Px,

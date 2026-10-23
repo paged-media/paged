@@ -130,7 +130,7 @@ fn gauss_axis(
 }
 
 /// Scalar reference for `conv.gaussian_h` — center at (ox+24, oy).
-fn gaussian_h_ref(
+pub(crate) fn gaussian_h_ref(
     win: &[Px],
     win_w: u32,
     _win_h: u32,
@@ -151,7 +151,7 @@ fn gaussian_h_ref(
 }
 
 /// Scalar reference for `conv.gaussian_v` — center at (ox, oy+24).
-fn gaussian_v_ref(
+pub(crate) fn gaussian_v_ref(
     win: &[Px],
     win_w: u32,
     _win_h: u32,
@@ -172,7 +172,7 @@ fn gaussian_v_ref(
 }
 
 /// A finite analytic test window (FINITE stimulus rule, harness docs).
-fn gauss_window(w: u32, h: u32) -> RefTile {
+pub(crate) fn gauss_window(w: u32, h: u32) -> RefTile {
     RefTile::from_fn(w, h, |x, y| {
         Px([
             (x as f32 * 0.011).fract(),
@@ -420,7 +420,7 @@ fn conv_gaussian_h_v_separable_chain() {
 // threshold 0.0. The reference mirrors the shader's `select` per
 // channel.
 
-fn unsharp_ref(a: Px, b: Px, p: &ConvUnsharpParams) -> Px {
+pub(crate) fn unsharp_ref(a: Px, b: Px, p: &ConvUnsharpParams) -> Px {
     let mut out = [0.0f32; 4];
     for (c, o) in out.iter_mut().enumerate() {
         let delta = a.0[c] - b.0[c];
@@ -433,7 +433,7 @@ fn unsharp_ref(a: Px, b: Px, p: &ConvUnsharpParams) -> Px {
     Px(out)
 }
 
-fn unsharp_inputs(w: u32, h: u32) -> (RefTile, RefTile) {
+pub(crate) fn unsharp_inputs(w: u32, h: u32) -> (RefTile, RefTile) {
     let orig = RefTile::from_fn(w, h, |x, y| {
         Px([
             (x as f32 * 0.017).fract(),

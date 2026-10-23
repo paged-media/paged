@@ -169,7 +169,10 @@ pub fn render_datetime(
                 };
                 let _ = write!(out, "{total:0pad$}");
             }
-            Token::Fill(c) => out.push(*c),
+            Token::Fill(c) => {
+                out.push(crate::sections::FILL_MARK);
+                out.push(*c);
+            }
             // Numeric/fraction tokens are not expected inside a date section; skip.
             _ => {}
         }

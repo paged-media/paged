@@ -93,8 +93,28 @@ fn seed() -> impl Strategy<Value = Seed> {
         })
 }
 
+/// Number formats behind the style ids: colour brackets (named, `[ColorN]`,
+/// per section) and repeat fills, so the format's colour and fill reach both
+/// surfaces the same way (W2.1).
+const FORMATS: [&str; 7] = [
+    "General",
+    "[Red]0;[Blue]-0",
+    "0.0",
+    "[Color12]#,##0",
+    "$* #,##0",
+    "@*.",
+    "[Green]General",
+];
+
 fn build(seed: &Seed) -> (SheetModel, SheetCondFmt) {
     let mut m = SheetModel::new();
+    for code in FORMATS.iter().skip(1) {
+        let num_fmt = m.styles.intern_num_fmt(code);
+        m.styles.push_style(sheet_core::CellStyle {
+            num_fmt,
+            ..Default::default()
+        });
+    }
     let s = m.add_sheet("S");
     let ws = m.sheet_mut(s).unwrap();
     for &(r, c, kind, style) in &seed.cells {
@@ -204,6 +224,7 @@ proptest! {
             let row = page.rows.iter().find(|r| r.index + r0 == cell.row).unwrap();
             let pc = row.cells.iter().find(|pc| pc.col == cell.col - c0).unwrap();
             prop_assert_eq!(&cell.text, &pc.text);
+            prop_assert_eq!(&cell.fill, &pc.fill);
             prop_assert_eq!(cell.align, pc.align);
             prop_assert_eq!(cell.style_key, pc.style_key);
         }

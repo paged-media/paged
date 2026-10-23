@@ -92,15 +92,21 @@ impl Section {
     }
 }
 
-/// A color named by a `[Color]` bracket (spec §9; ECMA-376 §18.8.31 color
-/// codes). The eight named colors Excel honours in a format code. Surfaced as
-/// a sidecar by [`crate::format_value_styled`] (ruling
-/// `sheet.format.color-brackets`); the frozen [`crate::format_value`] drops it.
+/// A colour named by a `[Color]` bracket (spec §9; ECMA-376 §18.8.31 colour
+/// codes): the eight named colours and `[ColorN]`, an index into the
+/// workbook's 56-colour palette (`[Color1]`..`[Color56]`, ruling
+/// `sheet.format.color-brackets`). Surfaced as a sidecar by
+/// [`crate::format_value_styled`] / [`crate::format_value_display`]; the
+/// frozen [`crate::format_value`] drops it.
 ///
-/// Excel ALSO accepts `[ColorN]` (a 1..56 palette index); T0 parses but does
-/// not model the indexed palette (it is dropped, like an unknown bracket), so
-/// only the eight named colors land here. Documented in the registry row.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+/// The named colours ARE palette entries — `[Black]` is `[Color1]`, `[White]`
+/// `[Color2]`, `[Red]` `[Color3]`, `[Green]` `[Color4]`, `[Blue]` `[Color5]`,
+/// `[Yellow]` `[Color6]`, `[Magenta]` `[Color7]`, `[Cyan]` `[Color8]` — so a
+/// workbook that overrides its palette (`<colors><indexedColors>`) recolours
+/// them too. [`FormatColor::palette_index`] gives the indexed-colour slot
+/// (`ColorN` is slot `N + 7`); [`FormatColor::default_rgb`] the colour of the
+/// default palette.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FormatColor {
     Black,
     Blue,
@@ -110,26 +116,147 @@ pub enum FormatColor {
     Red,
     White,
     Yellow,
+    /// `[ColorN]`, `N` in `1..=56`.
+    Indexed(u8),
 }
 
+/// The default 64-entry indexed palette (ECMA-376 §18.8.27): slots 0–7
+/// repeat 8–15; `[ColorN]` is slot `N + 7`. The xlsx layer keeps its own copy
+/// for `indexed=` cell colours; both are this table.
+pub const DEFAULT_PALETTE: [(u8, u8, u8); 64] = [
+    (0x00, 0x00, 0x00),
+    (0xFF, 0xFF, 0xFF),
+    (0xFF, 0x00, 0x00),
+    (0x00, 0xFF, 0x00),
+    (0x00, 0x00, 0xFF),
+    (0xFF, 0xFF, 0x00),
+    (0xFF, 0x00, 0xFF),
+    (0x00, 0xFF, 0xFF),
+    (0x00, 0x00, 0x00),
+    (0xFF, 0xFF, 0xFF),
+    (0xFF, 0x00, 0x00),
+    (0x00, 0xFF, 0x00),
+    (0x00, 0x00, 0xFF),
+    (0xFF, 0xFF, 0x00),
+    (0xFF, 0x00, 0xFF),
+    (0x00, 0xFF, 0xFF),
+    (0x80, 0x00, 0x00),
+    (0x00, 0x80, 0x00),
+    (0x00, 0x00, 0x80),
+    (0x80, 0x80, 0x00),
+    (0x80, 0x00, 0x80),
+    (0x00, 0x80, 0x80),
+    (0xC0, 0xC0, 0xC0),
+    (0x80, 0x80, 0x80),
+    (0x99, 0x99, 0xFF),
+    (0x99, 0x33, 0x66),
+    (0xFF, 0xFF, 0xCC),
+    (0xCC, 0xFF, 0xFF),
+    (0x66, 0x00, 0x66),
+    (0xFF, 0x80, 0x80),
+    (0x00, 0x66, 0xCC),
+    (0xCC, 0xCC, 0xFF),
+    (0x00, 0x00, 0x80),
+    (0xFF, 0x00, 0xFF),
+    (0xFF, 0xFF, 0x00),
+    (0x00, 0xFF, 0xFF),
+    (0x80, 0x00, 0x80),
+    (0x80, 0x00, 0x00),
+    (0x00, 0x80, 0x80),
+    (0x00, 0x00, 0xFF),
+    (0x00, 0xCC, 0xFF),
+    (0xCC, 0xFF, 0xFF),
+    (0xCC, 0xFF, 0xCC),
+    (0xFF, 0xFF, 0x99),
+    (0x99, 0xCC, 0xFF),
+    (0xFF, 0x99, 0xCC),
+    (0xCC, 0x99, 0xFF),
+    (0xFF, 0xCC, 0x99),
+    (0x33, 0x66, 0xFF),
+    (0x33, 0xCC, 0xCC),
+    (0x99, 0xCC, 0x00),
+    (0xFF, 0xCC, 0x00),
+    (0xFF, 0x99, 0x00),
+    (0xFF, 0x66, 0x00),
+    (0x66, 0x66, 0x99),
+    (0x96, 0x96, 0x96),
+    (0x00, 0x33, 0x66),
+    (0x33, 0x99, 0x66),
+    (0x00, 0x33, 0x00),
+    (0x33, 0x33, 0x00),
+    (0x99, 0x33, 0x00),
+    (0x99, 0x33, 0x66),
+    (0x33, 0x33, 0x99),
+    (0x33, 0x33, 0x33),
+];
+
 impl FormatColor {
-    /// Parse a color name (case-insensitive) from a `[...]` bracket body.
-    /// Returns `None` for anything that is not one of the eight named colors
-    /// (e.g. `[Color12]`, a condition, a currency token).
+    /// Parse a colour bracket body (case-insensitive): one of the eight names
+    /// or `ColorN` with `N` in `1..=56`. `None` for anything else (a
+    /// condition, a currency token, `[Color0]`, `[Color57]`).
     pub(crate) fn parse(name: &str) -> Option<FormatColor> {
-        match name.trim().to_ascii_lowercase().as_str() {
-            "black" => Some(FormatColor::Black),
-            "blue" => Some(FormatColor::Blue),
-            "cyan" => Some(FormatColor::Cyan),
-            "green" => Some(FormatColor::Green),
-            "magenta" => Some(FormatColor::Magenta),
-            "red" => Some(FormatColor::Red),
-            "white" => Some(FormatColor::White),
-            "yellow" => Some(FormatColor::Yellow),
-            _ => None,
+        let lower = name.trim().to_ascii_lowercase();
+        Some(match lower.as_str() {
+            "black" => FormatColor::Black,
+            "blue" => FormatColor::Blue,
+            "cyan" => FormatColor::Cyan,
+            "green" => FormatColor::Green,
+            "magenta" => FormatColor::Magenta,
+            "red" => FormatColor::Red,
+            "white" => FormatColor::White,
+            "yellow" => FormatColor::Yellow,
+            _ => {
+                let n: u8 = lower.strip_prefix("color")?.parse().ok()?;
+                if !(1..=56).contains(&n) {
+                    return None;
+                }
+                FormatColor::Indexed(n)
+            }
+        })
+    }
+
+    /// The `N` of the equivalent `[ColorN]` (`[Red]` is 3).
+    pub fn color_number(self) -> u8 {
+        match self {
+            FormatColor::Black => 1,
+            FormatColor::White => 2,
+            FormatColor::Red => 3,
+            FormatColor::Green => 4,
+            FormatColor::Blue => 5,
+            FormatColor::Yellow => 6,
+            FormatColor::Magenta => 7,
+            FormatColor::Cyan => 8,
+            FormatColor::Indexed(n) => n,
         }
     }
+
+    /// The indexed-colour slot this colour names (`[ColorN]` is `N + 7`), the
+    /// index a workbook's `<indexedColors>` override is read at.
+    pub fn palette_index(self) -> u32 {
+        self.color_number() as u32 + 7
+    }
+
+    /// The colour under the default palette.
+    pub fn default_rgb(self) -> (u8, u8, u8) {
+        DEFAULT_PALETTE[self.palette_index() as usize]
+    }
 }
+
+/// A system format named by `[$-F800]` (the system long date) or
+/// `[$-F400]` (the system long time): the section renders the display
+/// locale's own pattern, whatever tokens follow the bracket (ruling
+/// `sheet.format.system-formats`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SystemFormat {
+    LongDate,
+    LongTime,
+}
+
+/// The marker a renderer writes in front of a repeat-fill character (`*x`):
+/// [`crate::format_value_display`] turns it into [`crate::FillSpec`] and the
+/// public string APIs strip it. A private-use code point, never written by a
+/// format code.
+pub(crate) const FILL_MARK: char = '\u{E0F1}';
 
 /// A comparison operator inside a `[<100]`-style condition bracket.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -258,10 +385,14 @@ pub enum Token {
     /// (spec §9; ruling `sheet.format.fractions`). A fixed-denominator code
     /// (`# ?/16`) records the literal denominator in [`FractionSpec::fixed`].
     Fraction(FractionSpec),
-    /// A repeat-fill char `*x` (spec §9; ruling `sheet.format.padding`). T0
-    /// emits the fill char ONCE (column-width expansion is unknown in the
-    /// engine — see the ruling). The `char` is the fill character `x`.
+    /// A repeat-fill char `*x` (spec §9; ruling `sheet.format.padding`). The
+    /// string APIs emit the fill char ONCE; [`crate::format_value_display`]
+    /// reports where it stands so a surface that knows the cell width repeats
+    /// it there ([`crate::FillSpec`]). The `char` is the fill character `x`.
     Fill(char),
+    /// `[$-F800]` / `[$-F400]`: the section is the display locale's system
+    /// long date / long time pattern.
+    System(SystemFormat),
 }
 
 /// Which unit an [`Token::Elapsed`] accumulator totals.

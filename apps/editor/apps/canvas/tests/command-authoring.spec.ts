@@ -402,7 +402,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     // place landed centred, so four places built a pile of four.)
     const viewport = page.locator("[data-paged-viewport]");
     await expect(
-      page.locator("html[data-paged-placement='armed']"),
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
     ).toHaveCount(1, { timeout: 10_000 });
     const box = (await viewport.boundingBox())!;
     const clickX = box.x + box.width * 0.35;
@@ -471,7 +471,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
       buffer: tinyPng(40, 20),
     });
     await expect(
-      page.locator("html[data-paged-placement='armed']"),
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
     ).toHaveCount(1, { timeout: 10_000 });
     const box = (await page.locator("[data-paged-viewport]").boundingBox())!;
     // INTEGER click coordinates. The mouse lands on whole CSS pixels,
@@ -571,7 +571,7 @@ test.describe("U7 — paged.insert.* command authoring", () => {
       buffer: tinyPng(40, 20),
     });
     await expect(
-      page.locator("html[data-paged-placement='armed']"),
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
     ).toHaveCount(1, { timeout: 10_000 });
 
     await page.keyboard.press("Escape");
@@ -581,7 +581,9 @@ test.describe("U7 — paged.insert.* command authoring", () => {
     // The armed state is torn down AND nothing was minted. A place that
     // landed anyway after a cancel would be worse than the centred
     // behaviour this replaced, because the user believes they cancelled.
-    await expect(page.locator("html[data-paged-placement]")).toHaveCount(0);
+    await expect(
+      page.locator("[data-paged-editor][data-paged-placement]"),
+    ).toHaveCount(0);
     expect(await sceneNodeCount(page)).toBe(before);
   });
 

@@ -351,6 +351,7 @@ fn assemble_page_content(
                 text: String::new(),
                 align: sheet_core::Align::General,
                 style_key: 0,
+                fill: None,
             })
             .collect();
         rows.push(LoweredRow {

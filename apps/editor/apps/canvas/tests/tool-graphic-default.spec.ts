@@ -379,7 +379,7 @@ test.describe("ED-22 — a tool-drawn shape wears InDesign's graphic default", (
       buffer: PNG.sync.write(png),
     });
     await expect(
-      page.locator("html[data-paged-placement='armed']"),
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
     ).toHaveCount(1, {
       timeout: 10_000,
     });

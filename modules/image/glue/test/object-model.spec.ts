@@ -195,7 +195,7 @@ lane("the object model on the real plugin, headless", () => {
       (await h.objects.commands()).filter(
         (c) => c.owner === "media.paged.image",
       ),
-    ).toHaveLength(43); // 39 twins + replaceLayerPixels, cropImage, canvasSize, applyAdjustment
+    ).toHaveLength(44); // 39 twins + replaceLayerPixels, cropImage, canvasSize, applyAdjustment, filterRegion
   });
 
   it("an unedited frame reads as its one Background layer", async () => {
@@ -685,6 +685,8 @@ lane("count budgets", () => {
       decodes: 0,
       encodes: 0,
       plans: 1,
+      filters: 0,
+      gpuFilters: 0,
     });
     // Parts: the changed manifest + the record (unchanged pixels are
     // stored once, by content).
