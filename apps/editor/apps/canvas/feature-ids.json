@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 366,
+    "command": 368,
     "keybinding": 88,
-    "menu": 258,
+    "menu": 260,
     "panel": 122,
     "tool": 72
   },
@@ -731,12 +731,22 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.updateLinkedRecipes",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.updateObjectsOnPath",
       "kind": "command",
       "owner": "media.paged.draw"
     },
     {
       "id": "command:media.paged.draw.command.updateRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.widthProfile",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -2651,6 +2661,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Draw/Stroke/Width profile…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Draw/Symbol/Break link",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -2707,6 +2722,11 @@
     },
     {
       "id": "menu:Draw/Type/Create outlines",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Draw/Update linked recipes",
       "kind": "menu",
       "owner": "media.paged.draw"
     },

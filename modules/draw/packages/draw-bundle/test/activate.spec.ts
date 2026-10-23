@@ -204,6 +204,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.knife",
       "media.paged.draw.command.scissorsAt",
       "media.paged.draw.command.shapeBuild",
+      "media.paged.draw.command.widthProfile",
+      "media.paged.draw.command.updateLinkedRecipes",
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",

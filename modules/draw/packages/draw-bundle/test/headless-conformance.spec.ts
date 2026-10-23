@@ -212,7 +212,8 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // PATH OPTIONS — the ten "…" commands (Offset / Simplify /
         // Outline stroke / Stroke dashes / Reflect / Arc / Spiral / Rect
         // grid / Polar grid / Select same stroke weight within): each
-        // raises the panel at its section and mutates nothing.
+        // raises the panel at its section and mutates nothing. (The
+        // Width profile section is raised by its own command, run bare.)
         "command",
         "command",
         "command",
@@ -324,6 +325,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         // G4 — the Knife, Scissors and Shape Builder as commands.
         "command",
+        "command",
+        "command",
+        // G4 — the width profile and the linked-recipe update.
         "command",
         "command",
         // Phase 9 (Tier B) — Select-same (Fill / Stroke / Stroke weight).

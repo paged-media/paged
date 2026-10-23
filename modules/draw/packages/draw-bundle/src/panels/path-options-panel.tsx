@@ -99,6 +99,8 @@ const M = defineMessages("draw.pathOptionsPanel", {
     "Mirrors the selection across an axis at this angle through the centre of the selection's box: 90° flips left and right, 0° top and bottom. Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.",
   selectSameNote:
     "Matches every object whose stroke weight is within this many points of the first selected object's, the reference included; 0 is an exact match. Colours take no tolerance: an object's fill and stroke are read as swatch references, and this plugin cannot read a swatch's colour values to compare them yet.",
+  widthProfileNote:
+    "Replaces each selected open path with its outline, its width running from the start through the middle to the end. The outline is a filled shape and cannot be edited as a stroke again; closed and compound paths are left as they are.",
   reflectCopyUnavailable:
     "Copy needs a newer engine (version {version} or later).",
   hiddenPairs:
@@ -151,6 +153,9 @@ const M = defineMessages("draw.pathOptionsPanel", {
   reflectN: "{count, plural, one {Reflect # object} other {Reflect # objects}}",
   applyToN: "{count, plural, one {Apply to # path} other {Apply to # paths}}",
   insert: "Insert",
+  profileStart: "Width at the start (pt)",
+  profileMiddle: "Width in the middle (pt)",
+  profileEnd: "Width at the end (pt)",
   title: "Path options",
 });
 
@@ -188,6 +193,9 @@ export const REFLECT_COPY_UNAVAILABLE_NOTE = M.reflectCopyUnavailable;
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
 export const SELECT_SAME_TOLERANCE_NOTE = M.selectSameNote;
+
+/** What the Width profile section says, verbatim (pinned by a test). */
+export const WIDTH_PROFILE_SECTION_NOTE = M.widthProfileNote;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -722,6 +730,26 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
               <div style={mutedStyle} data-draw-pathopts-select-note>
                 {s.t(SELECT_SAME_TOLERANCE_NOTE)}
+              </div>
+            </>
+          );
+        case "widthProfile":
+          return (
+            <>
+              {numberRow("widthProfile", "start", s.t(M.profileStart), {
+                step: 0.5,
+                min: 0,
+              })}
+              {numberRow("widthProfile", "middle", s.t(M.profileMiddle), {
+                step: 0.5,
+                min: 0,
+              })}
+              {numberRow("widthProfile", "end", s.t(M.profileEnd), {
+                step: 0.5,
+                min: 0,
+              })}
+              <div style={mutedStyle} data-draw-pathopts-width-note>
+                {s.t(WIDTH_PROFILE_SECTION_NOTE)}
               </div>
             </>
           );
