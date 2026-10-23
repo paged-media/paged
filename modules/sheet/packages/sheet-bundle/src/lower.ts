@@ -98,12 +98,15 @@ import {
   type Placement,
   type TableFit,
   cellOfA1,
+  chartGeometryToMutations,
+  type ChartGeometry,
   HEADING_INDEX,
   rangeTopLeft,
   type BindingViewOptions,
   type FramePrint,
   type FrameSizing,
   type FrameView,
+  type ChainRecord,
 } from "../../sheet-host-model/src";
 
 import type { FrameBox, SheetEngine } from "./engine";
@@ -555,20 +558,67 @@ async function barOps(
   if (!at) return [];
   const bars =
     (content.databars ?? []).length > 0 || (content.icons ?? []).length > 0;
+  const sparks = content.sparklines ?? [];
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
-  if (!bars) return diagonals;
+  if (!bars && sparks.length === 0) return diagonals;
+  const known = await readKnownSwatchIds(host);
   return [
-    ...tableDataBarOps(
-      content,
-      at.widths,
-      at.pageId,
-      at.origin,
-      await readKnownSwatchIds(host),
-    ),
+    ...(bars
+      ? tableDataBarOps(content, at.widths, at.pageId, at.origin, known)
+      : []),
+    ...sparklineOps(content, at, known),
     ...diagonals,
   ];
+}
+
+/** W4 — the page art of `content`'s sparklines, each drawn in its table
+ *  cell (the chart translator at the cell's page box; no binding of its
+ *  own — the table's refresh redraws it like a data bar). */
+export function sparklineOps(
+  content: LoweredContent,
+  at: BarPlacement,
+  known: Awaited<ReturnType<typeof readKnownSwatchIds>>,
+): Mutation[] {
+  const sparks = content.sparklines ?? [];
+  if (sparks.length === 0) return [];
+  const colX = new Map<number, number>();
+  let x = 0;
+  content.cols.forEach((c, i) => {
+    colX.set(c.index, x);
+    x += at.widths[i] ?? c.widthPt;
+  });
+  const rowY = new Map<number, number>();
+  let y = 0;
+  for (const r of content.rows) {
+    rowY.set(r.index, y);
+    y += r.heightPt;
+  }
+  const [top, left] = at.origin;
+  const dummy = makeBinding("", "", 0);
+  const ops: Mutation[] = [];
+  for (const sp of sparks) {
+    const cx = colX.get(sp.col);
+    const cy = rowY.get(sp.row);
+    if (cx === undefined || cy === undefined) continue;
+    const t = top + cy;
+    const l = left + cx;
+    const r = chartGeometryToMutations(
+      {
+        widthPt: sp.wPt,
+        heightPt: sp.hPt,
+        prims: sp.prims as ChartGeometry["prims"],
+      },
+      { pageId: at.pageId, bounds: [t, l, t + sp.hPt, l + sp.wPt] },
+      dummy,
+      known ?? undefined,
+    );
+    const inner =
+      r.batch.op === "batch" ? (r.batch.args as { ops: Mutation[] }).ops : [];
+    for (const op of inner) if (op.op !== "setPluginMetadata") ops.push(op);
+  }
+  return ops;
 }
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
@@ -962,14 +1012,69 @@ export function rangeFramePage(
       { length: Math.abs(hi - lo) + 1 },
       (_, i) => Math.min(lo, hi) + i,
     );
-  return withoutGridlines(
-    engine.getTracksPage(sheet, {
-      rows: span(from.row, to.row),
-      cols: span(from.col, to.col),
-      ...(print?.headings ? { printHeadings: true } : {}),
-      ...(print?.gridlines ? { printGridlines: true } : {}),
-    }),
+  return withSparklines(
+    engine,
+    sheet,
+    withoutGridlines(
+      engine.getTracksPage(sheet, {
+        rows: span(from.row, to.row),
+        cols: span(from.col, to.col),
+        ...(print?.headings ? { printHeadings: true } : {}),
+        ...(print?.gridlines ? { printGridlines: true } : {}),
+      }),
+    ),
   );
+}
+
+/** Each engine's sparkline list per sheet (see `withSparklines`). */
+const sparklineLists = new WeakMap<
+  SheetEngine,
+  Map<number, ReturnType<NonNullable<SheetEngine["listSparklines"]>>>
+>();
+
+/** The sparklines of `sheet` that fall in `content`'s cells, each drawn in
+ *  its cell box (W4 `sparklineGeometry`), attached for the page
+ *  (`LoweredContent.sparklines`). Content without any is returned as is. */
+export function withSparklines(
+  engine: SheetEngine,
+  sheet: number,
+  content: LoweredContent,
+): LoweredContent {
+  if (!engine.listSparklines || !engine.sparklineGeometry) return content;
+  // A workbook's sparklines come with it (no door authors them), so each
+  // sheet's list is read once per engine: a refresh costs no extra call.
+  let perSheet = sparklineLists.get(engine);
+  if (!perSheet) {
+    perSheet = new Map();
+    sparklineLists.set(engine, perSheet);
+  }
+  let list = perSheet.get(sheet);
+  if (!list) {
+    try {
+      list = engine.listSparklines(sheet);
+    } catch {
+      return content;
+    }
+    perSheet.set(sheet, list);
+  }
+  if (list.length === 0) return content;
+  const rows = new Map(content.rows.map((r) => [r.index, r.heightPt]));
+  const cols = new Map(content.cols.map((c) => [c.index, c.widthPt]));
+  const out: NonNullable<LoweredContent["sparklines"]> = [];
+  for (const sp of list) {
+    const hPt = rows.get(sp.row);
+    const wPt = cols.get(sp.col);
+    if (hPt === undefined || wPt === undefined) continue;
+    let prims: unknown[] | null = null;
+    try {
+      prims = engine.sparklineGeometry(sheet, sp.row, sp.col, wPt, hPt);
+    } catch {
+      prims = null;
+    }
+    if (prims && prims.length > 0)
+      out.push({ row: sp.row, col: sp.col, wPt, hPt, prims });
+  }
+  return out.length > 0 ? { ...content, sparklines: out } : content;
 }
 
 /** A frame page lowered without gridlines says so to the table writer
@@ -1029,7 +1134,7 @@ export function placementWindow(
         printGridlines: info.print?.gridlines ?? false,
       });
       return {
-        content: withoutGridlines(content),
+        content: withSparklines(engine, info.sheet, withoutGridlines(content)),
         range: windowRange(content),
       };
     }
@@ -1092,7 +1197,7 @@ function chainWindow(
     printGridlines: print?.gridlines ?? false,
   });
   return {
-    content: withoutGridlines(content),
+    content: withSparklines(engine, sheet, withoutGridlines(content)),
     range: windowRange(content),
     chainStarts,
   };
@@ -1261,26 +1366,9 @@ export async function lowerSelectionToFrame(
   // size the frame's height to the table the engine will lay out: a frame
   // as tall as the workbook's rows cannot hold them (the engine starts the
   // table one line down, and grows a row to its tallest cell).
-  const { widths: columnWidths, fit } = await measureColumns(
-    host,
-    content,
-    opts?.sizing === "window",
-  );
-  if (opts?.fitHeight ?? !opts?.placement) {
-    placement = fittedPlacement(placement, content, fit);
-  }
-  // A window frame's column widened for its text (see `measureColumns`)
-  // widens the frame with it, so the table never overruns its frame.
-  if (opts?.sizing === "window") {
-    const [top, left, bottom, right] = placement.bounds;
-    const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
-    if (tableWidth > right - left) {
-      placement = {
-        ...placement,
-        bounds: [top, left, bottom, left + tableWidth],
-      };
-    }
-  }
+  const sized = await sizedPlacement(host, content, placement, opts);
+  placement = sized.placement;
+  const columnWidths = sized.columnWidths;
 
   const one = await placeInOneCall(
     host,
@@ -1423,6 +1511,37 @@ export async function lowerSelectionToFrame(
   return frameId;
 }
 
+/** A fresh placement's column widths, measured by font metrics (S-13),
+ *  and its frame sized to them: as tall as the table the engine lays out
+ *  when `fitHeight` asks, and a window frame as wide as a column widened
+ *  for its text makes the table, so the table never overruns its frame. */
+async function sizedPlacement(
+  host: BundleHost,
+  content: LoweredContent,
+  placement: Placement,
+  opts: LowerLaneOptions | undefined,
+): Promise<{ placement: Placement; columnWidths: number[] }> {
+  const { widths: columnWidths, fit } = await measureColumns(
+    host,
+    content,
+    opts?.sizing === "window",
+  );
+  if (opts?.fitHeight ?? !opts?.placement) {
+    placement = fittedPlacement(placement, content, fit);
+  }
+  if (opts?.sizing === "window") {
+    const [top, left, bottom, right] = placement.bounds;
+    const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+    if (tableWidth > right - left) {
+      placement = {
+        ...placement,
+        bounds: [top, left, bottom, left + tableWidth],
+      };
+    }
+  }
+  return { placement, columnWidths };
+}
+
 /** The within-batch handle the placement names its frame by. */
 const FRAME_HANDLE = "f";
 /** The within-batch handle the one-call placement names its table by. */
@@ -1462,46 +1581,20 @@ async function placeInOneCall(
     sheetName: string;
   },
 ): Promise<string | null | typeof REFUSED> {
-  const { sheet, range, contentVersion, sheetName } = opts;
-  const table = `$h:${TABLE_HANDLE}`;
-  const { ops, styleOps } = await tableContentOps(host, content, table, table);
-  const origin: [number, number] = [placement.bounds[0], placement.bounds[1]];
-  const drawn = await barOps(host, content, {
+  const { sheet, range, contentVersion } = opts;
+  const { ops, styleOps, drawn } = await oneCallOps(
+    host,
+    content,
     pageId,
-    origin,
-    widths: columnWidths,
-  });
-  const binding = makeBinding(
-    sheetName,
-    range,
-    contentVersion,
-    {
-      hash: contentHash(content),
-      widths: [...columnWidths],
-    },
-    placedViewOptions(range, opts),
+    placement,
+    columnWidths,
+    opts,
+    FRAME_HANDLE,
+    TABLE_HANDLE,
   );
   const r = await host.document.mutate({
     op: "batch",
-    args: {
-      ops: [
-        { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
-        { op: "bindCreated", args: { handle: FRAME_HANDLE } },
-        {
-          op: "setPluginMetadata",
-          args: {
-            elementId: { kind: "textFrame", id: `$h:${FRAME_HANDLE}` },
-            key: BINDING_KEY,
-            value: JSON.stringify(binding),
-          },
-        },
-        tableInsertOp(content, `$h:${FRAME_HANDLE}`, columnWidths),
-        { op: "bindCreated", args: { handle: TABLE_HANDLE } },
-        ...ops,
-        ...drawn,
-        ...styleOps,
-      ],
-    },
+    args: { ops: [...ops, ...styleOps] },
   });
   if (!r.applied) {
     host.log.debug(
@@ -1552,6 +1645,208 @@ async function placeInOneCall(
     await host.selection.set([{ kind: "textFrame", id: frameId }]);
   return frameId;
 }
+
+/** The ops that place one table in one call ({@link placeInOneCall}): the
+ *  frame (named `frameHandle`), its binding, the native table (named
+ *  `tableHandle`), its cell pour and decor, its data bars (`drawn`, also in
+ *  `ops`), and — apart, for the end of the batch — its cell text styles. */
+async function oneCallOps(
+  host: BundleHost,
+  content: LoweredContent,
+  pageId: PageId,
+  placement: Placement,
+  columnWidths: number[],
+  opts: LowerLaneOptions & {
+    range: string;
+    contentVersion: number;
+    sheetName: string;
+  },
+  frameHandle: string,
+  tableHandle: string,
+): Promise<{ ops: Mutation[]; styleOps: Mutation[]; drawn: Mutation[] }> {
+  const { range, contentVersion, sheetName } = opts;
+  const table = `$h:${tableHandle}`;
+  const { ops, styleOps } = await tableContentOps(host, content, table, table);
+  const origin: [number, number] = [placement.bounds[0], placement.bounds[1]];
+  const drawn = await barOps(host, content, {
+    pageId,
+    origin,
+    widths: columnWidths,
+  });
+  const binding = makeBinding(
+    sheetName,
+    range,
+    contentVersion,
+    {
+      hash: contentHash(content),
+      widths: [...columnWidths],
+    },
+    placedViewOptions(range, opts),
+  );
+  return {
+    ops: [
+      { op: "insertTextFrame", args: { pageId, bounds: placement.bounds } },
+      { op: "bindCreated", args: { handle: frameHandle } },
+      {
+        op: "setPluginMetadata",
+        args: {
+          elementId: { kind: "textFrame", id: `$h:${frameHandle}` },
+          key: BINDING_KEY,
+          value: JSON.stringify(binding),
+        },
+      },
+      tableInsertOp(content, `$h:${frameHandle}`, columnWidths),
+      { op: "bindCreated", args: { handle: tableHandle } },
+      ...ops,
+      ...drawn,
+    ],
+    styleOps,
+    drawn,
+  };
+}
+
+/** One area of a placement of several ({@link lowerAreasToFrames}): its
+ *  range and the options a single placement of it takes (its content, its
+ *  placement — where the first one goes and the size of each — and its
+ *  view). */
+export interface AreaPlacement {
+  range: string;
+  opts: LowerLaneOptions;
+}
+
+/**
+ * ADR 522 amendment — a print area of several ranges placed as ONE
+ * `mutate`, so the whole placement is one undo step: each area's frame,
+ * binding, native table, cell pour, data bars and text styles, the tables
+ * addressed by their in-batch handles (`f<i>`, `t<i>`), the first area at
+ * its placement and each next one `gapPt` under the one before (at that
+ * one's left edge, on its page). Every document resource two areas both
+ * mint (a swatch, a style) is minted once: core refuses a second mint of an
+ * id, and the refusal would fail the whole batch. Each area's table is
+ * reported through its own `onLowered`; the frames are selected. Returns
+ * the frame ids in area order, or {@link REFUSED_AREAS} when the host
+ * refused the batch (nothing landed: the caller places area by area).
+ */
+export async function lowerAreasToFrames(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  areas: readonly AreaPlacement[],
+  gapPt: number,
+): Promise<(string | null)[] | typeof REFUSED_AREAS> {
+  const sheetName =
+    engine.listSheets().find((s) => s.id === sheet)?.name ?? String(sheet);
+  const first = areas[0]?.opts.placement?.pageId ?? (await activePageId(host));
+  if (!first) {
+    host.log.warn("lower: no page to place the sheet frames into");
+    return [];
+  }
+  const ops: Mutation[] = [];
+  const styles: Mutation[] = [];
+  const built: {
+    area: AreaPlacement;
+    content: LoweredContent;
+    placement: Placement;
+    columnWidths: number[];
+    contentVersion: number;
+    bars: boolean;
+  }[] = [];
+  let prev: Placement | null = null;
+  for (const [i, area] of areas.entries()) {
+    const content = area.opts.content ?? pageContent(engine, sheet, area.range);
+    let placement: Placement =
+      area.opts.placement ?? defaultPlacement(first, content);
+    if (prev) {
+      // Under the area before, at its left edge, on its page.
+      const [t, l, b, r] = placement.bounds;
+      const top = prev.bounds[2] + gapPt;
+      placement = {
+        pageId: prev.pageId,
+        bounds: [top, prev.bounds[1], top + (b - t), prev.bounds[1] + (r - l)],
+      };
+    }
+    const sized = await sizedPlacement(host, content, placement, area.opts);
+    placement = sized.placement;
+    prev = placement;
+    const contentVersion = area.opts.contentVersion ?? 0;
+    const one = await oneCallOps(
+      host,
+      content,
+      placement.pageId,
+      placement,
+      sized.columnWidths,
+      { ...area.opts, range: area.range, contentVersion, sheetName },
+      `${FRAME_HANDLE}${i}`,
+      `${TABLE_HANDLE}${i}`,
+    );
+    ops.push(...one.ops);
+    styles.push(...one.styleOps);
+    built.push({
+      area,
+      content,
+      placement,
+      columnWidths: sized.columnWidths,
+      contentVersion,
+      bars: one.drawn.length > 0,
+    });
+  }
+  const r = await host.document.mutate({
+    op: "batch",
+    args: { ops: oneMintEach([...ops, ...styles]) },
+  });
+  if (!r.applied) {
+    host.log.debug("lower: one-call placement of the areas refused", r);
+    return REFUSED_AREAS;
+  }
+  // The minted list is in mint order: each area's frame, its table, then
+  // its bars — so a polygon belongs to the last frame minted before it.
+  const minted = r.minted ?? [];
+  const frames: (string | null)[] = built.map(() => null);
+  const tables: (ElementId | undefined)[] = built.map(() => undefined);
+  const bars: ElementId[][] = built.map(() => []);
+  let at = -1;
+  for (const m of minted) {
+    const f = /^f(\d+)$/.exec(m.handle ?? "");
+    const t = /^t(\d+)$/.exec(m.handle ?? "");
+    if (f) {
+      at = Number(f[1]);
+      frames[at] = frameIdOf(m.element);
+    } else if (t) tables[Number(t[1])] = m.element;
+    else if (at >= 0 && isPolygon(m.element) && built[at]?.bars)
+      bars[at]!.push(m.element);
+  }
+  for (const [i, b] of built.entries()) {
+    const frameId = frames[i];
+    const created = tables[i];
+    if (!frameId || created?.kind !== "table") {
+      host.log.warn(
+        "lower: the areas' placement applied without naming every frame and table",
+        r,
+      );
+      continue;
+    }
+    b.area.opts.onLowered?.({
+      frameId,
+      storyId: created.id.story_id,
+      tableId: created.id.table_id,
+      sheet,
+      range: b.area.range,
+      pageId: b.placement.pageId,
+      content: b.content,
+      columnWidths: b.columnWidths,
+      contentVersion: b.contentVersion,
+      barIds: bars[i]!,
+      ...placedView(b.area.range, b.area.opts, b.content),
+    });
+  }
+  const placed = frames.filter((f): f is string => !!f);
+  if (placed.length > 0)
+    await host.selection.set(placed.map((id) => ({ kind: "textFrame", id })));
+  return frames;
+}
+
+/** {@link lowerAreasToFrames}'s "the host refused the batch". */
+export const REFUSED_AREAS = Symbol("refused-areas");
 
 /** The story and table a placed frame shows, read off the PAGE: a hit test
  *  down the frame's first column until it lands in a table cell (the table
@@ -2080,7 +2375,11 @@ export async function refreshLoweredTable(
   );
   const oldBars = info.barIds ?? [];
   let drawn: Mutation[] = [];
-  if (oldBars.length > 0 || (next.databars ?? []).length > 0) {
+  if (
+    oldBars.length > 0 ||
+    (next.databars ?? []).length > 0 ||
+    (next.sparklines ?? []).length > 0
+  ) {
     const at = await frameOrigin(host, info.frameId);
     if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });
   }
@@ -2414,6 +2713,10 @@ export interface ChainTable {
   content: LoweredContent;
   widths: number[];
   blank: boolean;
+  /** A table a later session found whose recorded content is not what the
+   *  workbook paginates to now (ADR 522 amendment): the next pass deletes it
+   *  and paginates afresh, since what it shows is unknown. */
+  stale?: boolean;
 }
 
 /** The result of a chain pagination pass. */
@@ -2430,10 +2733,16 @@ export interface ChainLowerResult {
   /** Every table this placement owns, in story order (the baseline the
    *  next pass refreshes from — see `subscribeChainReflow`'s `from`). */
   tables: ChainTable[];
+  /** The chain record the page carries for this placement (its JSON, with
+   *  the frame it rides): a pass re-stamps it only when it changed. */
+  recordKey?: string;
 }
 
 /** Pagination options (forwarded to the engine). */
 export interface ChainOptions {
+  /** The bound sheet's name, for the chain's record (read from the engine
+   *  when absent). */
+  sheetName?: string;
   repeatedHeaderRows?: number;
   continuedMarker?: boolean;
   keepRowsTogether?: [number, number][];
@@ -2564,6 +2873,131 @@ async function paginateInOneCall(
  * longer needs are deleted (`deleteTable`), else emptied. All pages go into the
  * CHAIN'S story — threaded frames share one story.
  */
+/** The pages `range` paginates to in `boxes` (all threading math in Rust).
+ *  Plan G4 — several ranges (a print area of several areas) paginate in
+ *  sequence, each range's tables after the one before in the story. */
+function paginatePages(
+  engine: SheetEngine,
+  sheet: number,
+  range: string | readonly string[],
+  boxes: FrameBox[],
+  opts?: ChainOptions,
+): Page[] {
+  const paginateOpts = {
+    repeatedHeaderRows: opts?.repeatedHeaderRows,
+    continuedMarker: opts?.continuedMarker,
+    keepRowsTogether: opts?.keepRowsTogether,
+  };
+  if (typeof range === "string")
+    return engine.paginate(sheet, range, boxes, paginateOpts);
+  if (range.length === 1)
+    return engine.paginate(sheet, range[0]!, boxes, paginateOpts);
+  if (engine.paginateAreas)
+    return engine.paginateAreas(sheet, [...range], boxes, paginateOpts);
+  throw new Error("engine wasm predates paginate_areas");
+}
+
+/** A view of `host` whose `document.mutate` remembers the `appliedSeq` of
+ *  the last write it applied (the step a chain record amends). */
+function seqTracking(host: BundleHost): {
+  host: BundleHost;
+  last(): number | undefined;
+} {
+  let last: number | undefined;
+  const doc = host.document;
+  const document = new Proxy(doc, {
+    get(target, key) {
+      if (key === "mutate")
+        return async (...args: Parameters<typeof doc.mutate>) => {
+          const out = await target.mutate(...args);
+          if (out.applied && out.appliedSeq !== undefined)
+            last = out.appliedSeq;
+          return out;
+        };
+      const v = Reflect.get(target, key, target) as unknown;
+      return typeof v === "function" ? v.bind(target) : v;
+    },
+  });
+  const view = new Proxy(host, {
+    get(target, key) {
+      if (key === "document") return document;
+      const v = Reflect.get(target, key, target) as unknown;
+      return typeof v === "function" ? v.bind(target) : v;
+    },
+  });
+  return { host: view, last: () => last };
+}
+
+/** The feature a chain record's stamp needs: it joins the pass's last
+ *  write (engine ADR 1004), so it costs no undo step of its own. */
+const AMEND_FEATURE = "document.mutate.amend@1";
+
+/** The chain record a pass leaves (ADR 522 amendment): the key it is
+ *  compared by (with the frame it rides) and the write that stamps it on
+ *  the chain's first frame. Null when a table has no id. */
+function chainRecordStamp(
+  sheetName: () => string,
+  range: string | readonly string[],
+  chain: readonly ChainFrame[],
+  tables: readonly ChainTable[],
+  opts: ChainOptions | undefined,
+): { key: string; op: () => Mutation } | null {
+  const head = chain[0]?.frameId;
+  if (!head || tables.some((t) => t.tableId === "")) return null;
+  const areas = typeof range === "string" ? [range] : [...range];
+  const record: ChainRecord = {
+    ...(areas.length > 1 ? { areas } : {}),
+    repeatHeaderRows: opts?.repeatedHeaderRows ?? 0,
+    tables: tables.map((t) => ({
+      tableId: t.tableId,
+      hash: contentHash(t.content),
+      widths: [...t.widths],
+    })),
+  };
+  return {
+    key: `${head} ${JSON.stringify(record)}`,
+    op: () => ({
+      op: "setPluginMetadata",
+      args: {
+        elementId: { kind: "textFrame", id: head },
+        key: BINDING_KEY,
+        value: JSON.stringify(
+          makeBinding(sheetName(), areas[0] ?? "", 0, undefined, {
+            chain: record,
+          }),
+        ),
+      },
+    }),
+  };
+}
+
+/**
+ * ADR 522 amendment — record a paginated chain on its first frame: the
+ * source (sheet, range or areas), the repeated rows and the tables the pass
+ * left in story order (id, content hash, widths), so a reopened document
+ * finds the chain again and keeps it live. A pass that refreshes its tables
+ * in place carries the record in its last table's batch; any other pass
+ * writes it INTO its last undo step (`mutate(…, { amend })`). Only a record
+ * that changed is written; a host that cannot amend a step keeps no record
+ * of a pass that added or deleted tables (the chain then stays live for
+ * this session only). Returns the record now on the page.
+ */
+async function stampChainRecord(
+  host: BundleHost,
+  stamp: ReturnType<typeof chainRecordStamp>,
+  seq: number | undefined,
+  prevKey: string | undefined,
+): Promise<string | undefined> {
+  if (!stamp || stamp.key === prevKey) return prevKey;
+  if (seq === undefined || !host.supports(AMEND_FEATURE)) return prevKey;
+  const r = await host.document.mutate(stamp.op(), { amend: seq });
+  if (!r.applied) {
+    host.log.debug("chain-lower: the chain record was not stamped", r);
+    return prevKey;
+  }
+  return stamp.key;
+}
+
 async function paginatePass(
   host: BundleHost,
   engine: SheetEngine,
@@ -2573,23 +3007,65 @@ async function paginatePass(
   chain: ChainFrame[],
   owned: ChainTable[],
   opts?: ChainOptions,
+  prevKey?: string,
 ): Promise<ChainLowerResult> {
-  const paginateOpts = {
-    repeatedHeaderRows: opts?.repeatedHeaderRows,
-    continuedMarker: opts?.continuedMarker,
-    keepRowsTogether: opts?.keepRowsTogether,
-  };
+  let name: string | undefined = opts?.sheetName;
+  const sheetName = () =>
+    (name ??=
+      engine.listSheets().find((x) => x.id === sheet)?.name ?? String(sheet));
+  const tracked = seqTracking(host);
+  const result = await paginateWrites(
+    tracked.host,
+    engine,
+    sheet,
+    range,
+    storyId,
+    chain,
+    owned,
+    opts,
+    (tables) => {
+      const stamp = chainRecordStamp(sheetName, range, chain, tables, opts);
+      return stamp && stamp.key !== prevKey ? stamp : null;
+    },
+  );
+  const recordKey =
+    result.recordKey ??
+    (await stampChainRecord(
+      host,
+      chainRecordStamp(sheetName, range, result.chain, result.tables, opts),
+      tracked.last(),
+      prevKey,
+    ));
+  return recordKey ? { ...result, recordKey } : result;
+}
+
+/** One pass's writes ({@link paginatePass}). */
+async function paginateWrites(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string | readonly string[],
+  storyId: string,
+  chain: ChainFrame[],
+  owned: ChainTable[],
+  opts?: ChainOptions,
+  /** The record stamp of a pass that leaves `tables` (null: unchanged). */
+  recordOf?: (
+    tables: readonly ChainTable[],
+  ) => ReturnType<typeof chainRecordStamp>,
+): Promise<ChainLowerResult> {
   const boxes = chain.map((c) => c.box);
-  // Plan G4 — several ranges (a print area of several areas) paginate in
-  // sequence, each range's tables after the one before in the story.
-  let pages: Page[];
-  if (typeof range === "string")
-    pages = engine.paginate(sheet, range, boxes, paginateOpts);
-  else if (range.length === 1)
-    pages = engine.paginate(sheet, range[0]!, boxes, paginateOpts);
-  else if (engine.paginateAreas)
-    pages = engine.paginateAreas(sheet, [...range], boxes, paginateOpts);
-  else throw new Error("engine wasm predates paginate_areas");
+  const pages = paginatePages(engine, sheet, range, boxes, opts);
+  if (owned.some((t) => t.stale)) {
+    // What the tables a later session found show is unknown: they go, and
+    // the range paginates afresh (should the engine refuse the delete, the
+    // new tables still land; the old ones stay as they are).
+    if (!(await deleteTables(host, storyId, owned)))
+      host.log.warn(
+        "chain-lower: the chain's earlier tables could not be deleted",
+      );
+    owned = [];
+  }
   if (owned.length === 0 && pages.length > 0) {
     const one = await paginateInOneCall(host, storyId, pages);
     if (one)
@@ -2603,8 +3079,34 @@ async function paginatePass(
   }
   const tables: ChainTable[] = [];
   const tableIds: (string | null)[] = [];
+  const measured: number[][] = [];
+  for (const page of pages)
+    measured.push(await measureColumnWidths(host, page.content));
+  // Every page refreshes a table it already has (a reflow, an edit): the
+  // chain's record is known before anything is written, and rides the
+  // batch of the last table that changes — no write of its own.
+  let tail: { at: number; op: Mutation; key: string } | null = null;
+  if (recordOf && owned.length === pages.length && pages.length > 0) {
+    const same = (i: number) =>
+      JSON.stringify(owned[i]!.content) === JSON.stringify(pages[i]!.content) &&
+      JSON.stringify(owned[i]!.widths) === JSON.stringify(measured[i]);
+    let at = -1;
+    for (let i = 0; i < pages.length; i++) if (!same(i)) at = i;
+    const stamp =
+      at >= 0
+        ? recordOf(
+            pages.map((p, i) => ({
+              tableId: owned[i]!.tableId,
+              content: p.content,
+              widths: measured[i]!,
+              blank: false,
+            })),
+          )
+        : null;
+    if (stamp) tail = { at, op: stamp.op(), key: stamp.key };
+  }
   for (const [i, page] of pages.entries()) {
-    const widths = await measureColumnWidths(host, page.content);
+    const widths = measured[i]!;
     const prev = owned[i];
     if (prev) {
       await applyTableRefresh(
@@ -2615,6 +3117,7 @@ async function paginatePass(
         prev.widths,
         page.content,
         widths,
+        tail?.at === i ? [tail.op] : [],
       );
       tables.push({
         tableId: prev.tableId,
@@ -2666,7 +3169,14 @@ async function paginatePass(
     );
     tables.push({ ...t, content: blank, blank: true });
   }
-  return { storyId, chain, pages, tableIds, tables };
+  return {
+    storyId,
+    chain,
+    pages,
+    tableIds,
+    tables,
+    ...(tail ? { recordKey: tail.key } : {}),
+  };
 }
 
 /**
@@ -2707,6 +3217,67 @@ export async function lowerPaginatedToChain(
   );
 }
 
+/**
+ * ADR 522 amendment — a chain an earlier session paginated, found again by
+ * the record on its first frame: the chain's frames now, and the tables the
+ * record names as the baseline the next pass refreshes from. When every
+ * recorded table's hash is what the workbook paginates to now, each one's
+ * content is that page; otherwise the tables are marked stale and the next
+ * pass replaces them. Null when the story threads no frames. Reads only.
+ */
+export async function adoptChain(
+  host: BundleHost,
+  engine: SheetEngine,
+  sheet: number,
+  range: string | readonly string[],
+  storyId: string,
+  record: ChainRecord,
+): Promise<ChainLowerResult | null> {
+  const chain = await resolveChain(host, storyId);
+  if (chain.length === 0) return null;
+  let pages: Page[] = [];
+  try {
+    pages = paginatePages(
+      engine,
+      sheet,
+      range,
+      chain.map((c) => c.box),
+      { repeatedHeaderRows: record.repeatHeaderRows },
+    );
+  } catch (err) {
+    host.log.debug("chain rediscovery: pagination failed", err);
+  }
+  const current =
+    record.tables.length === pages.length &&
+    record.tables.every((t, i) => t.hash === contentHash(pages[i]!.content));
+  const empty: LoweredContent = {
+    cols: [],
+    rows: [],
+    rules: { h: [], v: [] },
+    merges: [],
+  };
+  const tables: ChainTable[] = record.tables.map((t, i) => ({
+    tableId: t.tableId,
+    content: current ? pages[i]!.content : empty,
+    widths: [...t.widths],
+    blank: false,
+    ...(current ? {} : { stale: true }),
+  }));
+  const areas = typeof range === "string" ? [range] : [...range];
+  return {
+    storyId,
+    chain,
+    pages,
+    tableIds: tables.map((t) => t.tableId),
+    tables,
+    recordKey: `${chain[0]!.frameId} ${JSON.stringify({
+      ...(areas.length > 1 ? { areas } : {}),
+      repeatHeaderRows: record.repeatHeaderRows,
+      tables: record.tables,
+    })}`,
+  };
+}
+
 /** How long a burst of reflow events settles before ONE re-pagination. */
 export const CHAIN_REFLOW_DEBOUNCE_MS = 150;
 
@@ -2745,6 +3316,14 @@ export function subscribeChainReflow(
   opts?: ChainOptions & { from?: ChainLowerResult | null; debounceMs?: number },
 ): ChainSubscription {
   let last: ChainLowerResult | null = opts?.from ?? null;
+  // The chain's record names the sheet: read once, not on every pass.
+  let sheetName = opts?.sheetName;
+  try {
+    sheetName ??= engine.listSheets().find((x) => x.id === sheet)?.name;
+  } catch {
+    // Read again by the pass that needs it.
+  }
+  const passOpts = sheetName ? { ...opts, sheetName } : opts;
   let chainFrameIds = new Set<string>(last?.chain.map((c) => c.frameId) ?? []);
   if (chainFrameIds.size === 0) {
     void resolveChain(host, chainStoryId).then((chain) => {
@@ -2769,7 +3348,8 @@ export function subscribeChainReflow(
         chainStoryId,
         chain,
         last?.tables ?? [],
-        opts,
+        passOpts,
+        last?.recordKey,
       );
       chainFrameIds = new Set(last.chain.map((c) => c.frameId));
       return last;

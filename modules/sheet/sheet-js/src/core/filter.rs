@@ -933,6 +933,22 @@ impl SheetSession {
                 r.end.col - r.start.col + 1
             )));
         }
+        if let Some(def) = self.table_covering(sheet, &r) {
+            // A table's own AutoFilter (its part), columns counted from the
+            // table's first column.
+            let mut view = self.table_view(sheet, &def)?;
+            let tcol = r.start.col + col - view.range.normalized().start.col;
+            view.columns.retain(|c| c.col != tcol);
+            if let Some(a) = criterion {
+                let criterion = self.criterion_from_arg(&a)?;
+                view.columns.push(ColumnFilter {
+                    col: tcol,
+                    criterion,
+                });
+            }
+            self.with_bounds(sheet, &mut view);
+            return self.apply_table_filter(sheet, def, view);
+        }
         let mut view = match self.sheet_autofilter(sheet) {
             Some(v) if v.range.normalized() == r => v,
             _ => FilterView {
@@ -1013,6 +1029,26 @@ impl SheetSession {
         let v = self
             .sheet_autofilter(sheet)
             .ok_or_else(|| SessionError("the sheet has no AutoFilter".into()))?;
+        self.column_values_of(sheet, &v, col)
+    }
+
+    /// The filter dropdown of column `col` of table `name`'s AutoFilter.
+    pub fn table_filter_column_values(
+        &self,
+        name: &str,
+        col: u32,
+    ) -> Result<FilterColumnValues, SessionError> {
+        let (sheet, def) = self.table_def_pub(name)?;
+        let v = self.table_view(sheet, &def)?;
+        self.column_values_of(sheet, &v, col)
+    }
+
+    fn column_values_of(
+        &self,
+        sheet: u16,
+        v: &FilterView,
+        col: u32,
+    ) -> Result<FilterColumnValues, SessionError> {
         let n = v.range.normalized();
         if col > n.end.col - n.start.col {
             return Err(SessionError(format!("filter column {col} out of range")));
@@ -1141,6 +1177,141 @@ impl SheetSession {
             font_colors: font.into_iter().collect(),
             criterion: current.and_then(|c| self.criterion_to_arg(&c.criterion)),
         })
+    }
+
+    // ── tables' own AutoFilters ─────────────────────────────────────────
+
+    fn table_def_pub(
+        &self,
+        name: &str,
+    ) -> Result<(u16, sheet_xlsx::table_doc::TableDef), SessionError> {
+        let n = self.engine().model().sheets.len() as u16;
+        for s in 0..n {
+            for t in self.doc.table_defs(s) {
+                if t.name().eq_ignore_ascii_case(name) {
+                    return Ok((s, t));
+                }
+            }
+        }
+        Err(SessionError(format!("no table named {name:?}")))
+    }
+
+    /// The table whose header-and-data rows hold `r`.
+    fn table_covering(&self, sheet: u16, r: &RangeRef) -> Option<sheet_xlsx::table_doc::TableDef> {
+        let n = r.normalized();
+        self.doc.table_defs(sheet).into_iter().find(|t| {
+            t.header_rows() > 0
+                && t.range().is_some_and(|(r0, c0, r1, c1)| {
+                    let d1 = r1 - t.totals_rows();
+                    r0 <= n.start.row && n.end.row <= d1 && c0 <= n.start.col && n.end.col <= c1
+                })
+        })
+    }
+
+    /// A table's AutoFilter as a view over its header and data rows.
+    fn table_view(
+        &self,
+        sheet: u16,
+        def: &sheet_xlsx::table_doc::TableDef,
+    ) -> Result<FilterView, SessionError> {
+        let (r0, c0, r1, c1) = def
+            .range()
+            .ok_or_else(|| SessionError("table without a range".into()))?;
+        let d1 = r1 - def.totals_rows();
+        let mk = |row, col| CellRef {
+            sheet,
+            row,
+            col,
+            row_abs: false,
+            col_abs: false,
+        };
+        let range = RangeRef {
+            start: mk(r0, c0),
+            end: mk(d1, c1),
+        };
+        let columns = sheet_xlsx::parts::autofilter::parse(&def.to_bytes(), sheet)
+            .map(|v| v.columns)
+            .unwrap_or_default();
+        Ok(FilterView {
+            range,
+            columns,
+            from_file: true,
+        })
+    }
+
+    /// Apply `view` as table `def`'s AutoFilter: the rows its old criteria
+    /// hid show, the new ones hide, the part is written.
+    fn apply_table_filter(
+        &mut self,
+        sheet: u16,
+        mut def: sheet_xlsx::table_doc::TableDef,
+        view: FilterView,
+    ) -> Result<FilterResult, SessionError> {
+        let old = self.table_view(sheet, &def)?;
+        let filtered = self
+            .engine()
+            .model()
+            .sheet(sheet)
+            .expect("validated")
+            .filtered_rows
+            .clone();
+        let old_hidden: BTreeSet<u32> = self
+            .rows_hidden_by(sheet, &old)
+            .into_iter()
+            .filter(|r| filtered.contains(r))
+            .collect();
+        let new_hidden = self.rows_hidden_by(sheet, &view);
+        let base = def.node.child("autoFilter").cloned();
+        let p = def.node.prefix().to_string();
+        let af = sheet_xlsx::parts::autofilter::autofilter_node(&view, base.as_ref(), &p);
+        match def
+            .node
+            .children
+            .iter()
+            .position(|c| c.local() == "autoFilter")
+        {
+            Some(i) => def.node.children[i] = af,
+            None => def.node.children.insert(0, af),
+        }
+        self.doc.store_table(&def);
+        let mut filters = self
+            .engine()
+            .model()
+            .sheet(sheet)
+            .expect("validated")
+            .filters
+            .clone();
+        filters.retain(|f| f.range.normalized() != old.range.normalized());
+        filters.push(view);
+        let mut now_filtered = filtered;
+        for r in &old_hidden {
+            now_filtered.remove(r);
+        }
+        now_filtered.extend(new_hidden.iter().copied());
+        {
+            let vm = self.engine_mut().sheet_view_mut(sheet).expect("validated");
+            for r in &old_hidden {
+                vm.hidden_rows.remove(r);
+            }
+            vm.hidden_rows.extend(new_hidden.iter().copied());
+        }
+        self.engine_mut()
+            .set_filter_view(sheet, filters, now_filtered);
+        self.extra_dirty.insert(sheet);
+        let res = self.engine_mut().recalc_visibility();
+        Ok(FilterResult {
+            hidden_rows: new_hidden.into_iter().collect(),
+            changed: self.changes_of(&res).changed,
+        })
+    }
+
+    /// Clear every criterion of table `name`'s AutoFilter.
+    pub fn clear_table_filter(&mut self, name: &str) -> Result<FilterResult, SessionError> {
+        let (sheet, def) = self.table_def_pub(name)?;
+        self.guard_allow(sheet, super::protect::Allow::AutoFilter)?;
+        let mut v = self.table_view(sheet, &def)?;
+        v.columns.clear();
+        self.apply_table_filter(sheet, def, v)
     }
 
     // ── named filter views ──────────────────────────────────────────────

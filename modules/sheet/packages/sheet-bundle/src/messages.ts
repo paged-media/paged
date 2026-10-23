@@ -291,7 +291,7 @@ export const WORKBOOK = defineMessages("sheet.workbook", {
   frozen:
     "{sheet}: frozen {rows, plural, one {# row} other {# rows}}, {cols, plural, one {# column} other {# columns}}",
   validations:
-    "{sheet}: {count, plural, one {# data validation} other {# data validations}} ({kinds}; kept but not enforced)",
+    "{sheet}: {count, plural, one {# data validation} other {# data validations}} ({kinds}; checked on entry)",
   comments:
     "{count, plural, one {# comment} other {# comments}} (read-only): {list}",
   commentAt: "{author} at {cell}",
@@ -527,6 +527,28 @@ export const TOKENS = defineMessages("sheet.token", {
   math: "Math and trigonometry",
   stat: "Statistical",
   text: "Text",
+});
+
+/** Sheet ADR 524 — the Document styles section of the workbook panel. */
+export const DOC_STYLES = defineMessages("sheet.docStyles", {
+  section: "Document styles",
+  switchLabel: "Use document styles",
+  note: "Excel cell styles take the layout document's paragraph, character and cell styles; the workbook keeps its own values for Excel.",
+  offer:
+    "This workbook uses its own Excel look. Use the document's styles instead?",
+  excelStyle: "Excel style",
+  paragraphStyle: "Paragraph style",
+  characterStyle: "Character style",
+  cellStyle: "Cell style",
+  cells: "Cells",
+  none: "(none)",
+  create: "Create document styles from workbook",
+  created: "{count} document styles created and mapped.",
+  missing: "{count} references missing",
+  remap: "Remap",
+  remapTo: "Replace {id} with",
+  unread: "The document's styles could not be read.",
+  noWorkbook: "Open or create a workbook first.",
 });
 
 defineTranslations("de", de);

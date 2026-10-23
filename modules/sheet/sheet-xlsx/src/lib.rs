@@ -47,6 +47,7 @@
 
 pub mod chart_write;
 pub mod defined_names;
+pub mod doc_style_map;
 pub mod error;
 pub mod kind;
 #[cfg(feature = "ods")]
