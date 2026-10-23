@@ -124,6 +124,7 @@ export type {
   SecretsSurface,
   SecretMaterial,
   DocumentSurface,
+  SwatchDisplay,
   MutateWithBytesOptions,
   SelectionSurface,
   ViewportSurface,
