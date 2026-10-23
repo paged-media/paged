@@ -2277,6 +2277,53 @@ pub enum Mutation {
     DeleteTextVariable {
         variable_id: String,
     },
+    /// v76 (engine ADR 1002) — define the XML tag `name` (`color`: its tag
+    /// colour, an enumeration such as `Red`). Routes to
+    /// `Operation::CreateXmlTag`.
+    CreateXmlTag {
+        name: String,
+        #[serde(default)]
+        color: Option<String>,
+    },
+    /// v76 — remove the XML tag `name`; refused while an element uses it.
+    DeleteXmlTag {
+        name: String,
+    },
+    /// v76 — tag a page item or a story (a text frame's element tags its
+    /// story) with `tag`, defined when missing; a tagged item is retagged.
+    /// `selfId` names a new element; the engine mints one when absent.
+    TagItem {
+        item: String,
+        tag: String,
+        #[serde(default)]
+        self_id: Option<String>,
+    },
+    /// v76 — remove the element tagging a page item or a story.
+    UntagItem {
+        item: String,
+    },
+    /// v76 — tag the story characters `[start, end)` (the `StoryRange`
+    /// count) with `tag`. `selfId` as for `TagItem`.
+    TagRange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        tag: String,
+        #[serde(default)]
+        self_id: Option<String>,
+    },
+    /// v76 — remove the element `element` tagging a text range.
+    UntagRange {
+        element: String,
+    },
+    /// v76 — set (`value` absent: remove) an XML element's attribute;
+    /// `element` is its id, or the page item or story it tags.
+    SetXmlAttribute {
+        element: String,
+        name: String,
+        #[serde(default)]
+        value: Option<String>,
+    },
     /// W0.5 — "show only this set": activate one `<ConditionSet>`.
     ActivateConditionSet {
         set: String,
@@ -2587,6 +2634,13 @@ mutation_vocabulary! {
     SetDocumentMetadata,
     CreateTextVariable,
     DeleteTextVariable,
+    CreateXmlTag,
+    DeleteXmlTag,
+    TagItem,
+    UntagItem,
+    TagRange,
+    UntagRange,
+    SetXmlAttribute,
     PathPointCurveType,
     PathPointSet,
     Batch,

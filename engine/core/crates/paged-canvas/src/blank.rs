@@ -79,10 +79,25 @@ fn styles() -> String {
     ))
 }
 
+/// InDesign's default structure (engine ADR 1002): the `Root` tag, and the
+/// back story's root element, so a new document is tag-ready the way one
+/// made in InDesign is.
+fn tags() -> String {
+    xml(&format!(
+        "<idPkg:Tags xmlns:idPkg=\"{NS}\" DOMVersion=\"20.0\">\
+<XMLTag Self=\"XMLTag/Root\" Name=\"Root\"><Properties>\
+<TagColor type=\"enumeration\">LightBlue</TagColor></Properties></XMLTag></idPkg:Tags>"
+    ))
+}
+
 fn backing() -> String {
     xml(&format!(
         "<idPkg:BackingStory xmlns:idPkg=\"{NS}\" DOMVersion=\"20.0\">\
-<XmlStory Self=\"backing\"/></idPkg:BackingStory>"
+<XmlStory Self=\"backing\" UserText=\"true\">\
+<ParagraphStyleRange AppliedParagraphStyle=\"ParagraphStyle/$ID/[No paragraph style]\">\
+<CharacterStyleRange AppliedCharacterStyle=\"CharacterStyle/$ID/[No character style]\">\
+<XMLElement Self=\"di2\" MarkupTag=\"XMLTag/Root\"/><Content>&#xFEFF;</Content>\
+</CharacterStyleRange></ParagraphStyleRange></XmlStory></idPkg:BackingStory>"
     ))
 }
 
@@ -94,6 +109,7 @@ fn designmap(name: &str) -> String {
 <idPkg:Fonts src=\"Resources/Fonts.xml\"/>\n\
 <idPkg:Styles src=\"Resources/Styles.xml\"/>\n\
 <idPkg:Preferences src=\"Resources/Preferences.xml\"/>\n\
+<idPkg:Tags src=\"XML/Tags.xml\"/>\n\
 <idPkg:MasterSpread src=\"MasterSpreads/MasterSpread_um.xml\"/>\n\
 <idPkg:Spread src=\"Spreads/Spread_us.xml\"/>\n\
 <idPkg:BackingStory src=\"XML/BackingStory.xml\"/>\n\
@@ -177,6 +193,7 @@ PageBinding=\"LeftToRight\" ColumnDirection=\"Horizontal\" Intent=\"PrintIntent\
     );
     put("MasterSpreads/MasterSpread_um.xml", &master, false);
     put("Spreads/Spread_us.xml", &spread, false);
+    put("XML/Tags.xml", &tags(), false);
     put("XML/BackingStory.xml", &backing(), false);
 
     zip.finish().expect("zip finish").into_inner()
@@ -196,6 +213,20 @@ mod tests {
         assert_eq!(doc.spreads.len(), 1);
         assert_eq!(doc.spreads[0].spread.pages.len(), 1);
         assert!(doc.stories.is_empty());
+    }
+
+    /// Engine ADR 1002 — InDesign's default structure: the `Root` tag and
+    /// the root element.
+    #[test]
+    fn blank_idml_is_tag_ready() {
+        let doc = idml_import::import_idml(&blank_idml(612.0, 792.0))
+            .unwrap()
+            .0;
+        assert_eq!(doc.designmap.xml_tags.len(), 1);
+        assert_eq!(doc.designmap.xml_tags[0].name, "Root");
+        let root = doc.designmap.xml_root.as_ref().unwrap();
+        assert_eq!(root.tag, "XMLTag/Root");
+        assert!(root.children.is_empty());
     }
 
     /// A-33 — the document's setup is the page's: InDesign reads the

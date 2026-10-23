@@ -801,7 +801,7 @@ fn frame_mutation_error(e: paged_mutate::OperationError) -> crate::channel::Work
 pub(crate) enum Selectability {
     All,
     None,
-    ByItem(paged_template::PolicyIndex, paged_template::SessionPolicy),
+    ByItem(Box<paged_template::PolicyIndex>, paged_template::SessionPolicy),
 }
 
 impl Selectability {
@@ -3634,7 +3634,14 @@ impl CanvasModel {
                     // Reverse what landed, newest first, then report
                     // WHICH child failed — a bare "batch failed" is what
                     // made the original rejection so hard to diagnose.
-                    return Err(self.roll_back_batch(log_base, i, child, format!("{err:?}")));
+                    let rolled_back = self.roll_back_batch(log_base, i, child, format!("{err:?}"));
+                    // A typed refusal stays typed (engine ADR 1001): the
+                    // batch is rolled back all the same.
+                    return Err(match err {
+                        crate::channel::WorkerError::NotPermitted { .. }
+                        | crate::channel::WorkerError::Locked { .. } => err,
+                        _ => rolled_back,
+                    });
                 }
             }
         }
@@ -4397,6 +4404,46 @@ impl CanvasModel {
             }),
             Mutation::DeleteTextVariable { variable_id } => Some(Operation::DeleteTextVariable {
                 variable_id: variable_id.clone(),
+            }),
+            Mutation::CreateXmlTag { name, color } => Some(Operation::CreateXmlTag {
+                name: name.clone(),
+                color: color.clone(),
+            }),
+            Mutation::DeleteXmlTag { name } => Some(Operation::DeleteXmlTag { name: name.clone() }),
+            Mutation::TagItem { item, tag, self_id } => Some(Operation::TagItem {
+                item: item.clone(),
+                tag: tag.clone(),
+                self_id: self_id
+                    .clone()
+                    .unwrap_or_else(|| self.mint_xml_element_id(mint_offset)),
+            }),
+            Mutation::UntagItem { item } => Some(Operation::UntagItem { item: item.clone() }),
+            Mutation::TagRange {
+                story_id,
+                start,
+                end,
+                tag,
+                self_id,
+            } => Some(Operation::TagRange {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                tag: tag.clone(),
+                self_id: self_id
+                    .clone()
+                    .unwrap_or_else(|| self.mint_xml_element_id(mint_offset)),
+            }),
+            Mutation::UntagRange { element } => Some(Operation::UntagRange {
+                element: element.clone(),
+            }),
+            Mutation::SetXmlAttribute {
+                element,
+                name,
+                value,
+            } => Some(Operation::SetXmlAttribute {
+                element: element.clone(),
+                name: name.clone(),
+                value: value.clone(),
             }),
             Mutation::PathPointCurveType {
                 element_id,
@@ -5532,6 +5579,32 @@ impl CanvasModel {
     /// the next: a real document came back with `Hyperlink/ueef094`
     /// twice and a table `ueef094` beside them, three successors of
     /// the same unchanged page-item max.
+    /// Engine ADR 1002 — a fresh XML element `Self`: `di` and an id off the
+    /// shared line, skipping any element already named so.
+    pub(crate) fn mint_xml_element_id(&self, offset: &mut u64) -> String {
+        let taken: std::collections::HashSet<&str> = self
+            .scene
+            .designmap
+            .xml_root
+            .iter()
+            .flat_map(|r| r.walk())
+            .chain(
+                self.scene
+                    .stories
+                    .iter()
+                    .flat_map(|s| s.story.xml_elements.iter())
+                    .flat_map(|e| e.walk()),
+            )
+            .map(|e| e.self_id.as_str())
+            .collect();
+        loop {
+            let id = format!("di{}", self.mint_page_item_id_with_offset(offset));
+            if !taken.contains(id.as_str()) {
+                return id;
+            }
+        }
+    }
+
     pub(crate) fn mint_page_item_id_with_offset(&self, offset: &mut u64) -> String {
         let max = paged_mutate::ids::highest_u_hex_id(&self.scene).max(self.source_id_floor);
         let id = format!("u{:x}", max + 1 + *offset);
@@ -10001,6 +10074,7 @@ impl CanvasModel {
                 content: el.content.clone(),
                 story_id: story_id.map(str::to_string),
                 attributes: el.attributes.clone(),
+                range: el.range.map(|r| [r.start, r.end]),
             });
             for child in &el.children {
                 walk(child, depth + 1, story_id, scene, out);
@@ -13229,7 +13303,7 @@ impl CanvasModel {
             Some(set) if set.has(Permission::Select) => Selectability::All,
             Some(_) => Selectability::None,
             None => Selectability::ByItem(
-                paged_template::PolicyIndex::build(&self.scene).0,
+                Box::new(paged_template::PolicyIndex::build(&self.scene).0),
                 self.session_policy.clone(),
             ),
         }
