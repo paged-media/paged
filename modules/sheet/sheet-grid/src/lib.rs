@@ -100,32 +100,48 @@ pub struct GridScene {
     /// The merged areas intersecting the window, one rect per pane they
     /// show in (a merge crossing the frozen split yields one per side).
     pub merges: Vec<GridMerge>,
+    /// Conditional-format icons of the visible cells (W2.4), as the page
+    /// lowering places them (viewport-local pt). Omitted when empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub icons: Vec<sheet_lower::IconRect>,
+    /// The sparklines of the VISIBLE cells (`x14:sparklineGroups`, sheet
+    /// ADR 519): each cell's viewport-local box and the sparkline's
+    /// primitives in that box's own pt space. Empty unless the caller
+    /// supplies them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sparklines: Vec<GridSparkline>,
 }
 
-/// One conditional-formatting DATA BAR drawn in a grid viewport (spec §8.2 — the
-/// vector page-draw lane, mirrored on the grid surface). Its absolute
-/// `(row, col)` plus the viewport-local rect (`x`, `y`, `w`, `h`, pt): the bar
-/// fills `fill_fraction ∈ [0, 1]` of the cell width, inset from the cell edges by
-/// [`sheet_lower::DATABAR_INSET_PT`] (the same inset the page lowering uses), so
-/// the bar reads inside the cell without touching the gridlines. `fill` is the
-/// bar colour as `#RRGGBB`. The renderer draws a filled rect; a data bar is
-/// GEOMETRY, never a cell style fill, so a cell can show both its style and a bar.
+/// One sparkline drawn in a grid viewport: its cell, the cell's box in
+/// viewport-local pt, and the chart primitives (sheet-chart's IR) placed in
+/// the box (origin its top-left).
 #[derive(serde::Serialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GridDataBar {
+pub struct GridSparkline {
     pub row: u32,
     pub col: u32,
-    /// The rect's viewport-local top-left + size (pt).
     pub x: f64,
     pub y: f64,
     pub w: f64,
     pub h: f64,
-    /// The bar's value share of the cell width, `[0, 1]` (`w` already encodes it;
-    /// carried so a renderer can label/animate the bar).
-    pub fill_fraction: f64,
-    /// The bar fill colour, `#RRGGBB`.
-    pub fill: String,
+    pub prims: Vec<sheet_chart::Primitive>,
 }
+
+impl GridViewport {
+    /// The viewport-local box `(x, y, w, h)` of a displayed cell.
+    pub fn cell_box(&self, row: u32, col: u32) -> Option<(f64, f64, f64, f64)> {
+        let ri = self.row_indices.iter().position(|r| *r == row)?;
+        let ci = self.col_indices.iter().position(|c| *c == col)?;
+        let (x0, x1) = (*self.x_offsets.get(ci)?, *self.x_offsets.get(ci + 1)?);
+        let (y0, y1) = (*self.y_offsets.get(ri)?, *self.y_offsets.get(ri + 1)?);
+        Some((x0, y0, x1 - x0, y1 - y0))
+    }
+}
+
+/// One conditional-formatting DATA BAR drawn in a grid viewport: the page
+/// lowering's own [`sheet_lower::DataBarRect`] (built by the same
+/// `bar_rect`), with the absolute `(row, col)` and a viewport-local rect.
+pub type GridDataBar = sheet_lower::DataBarRect;
 
 /// One cell-comment indicator on a grid cell (preserve-first display). Its
 /// absolute `(row, col)` plus the viewport-local content-space top-right corner
@@ -613,6 +629,30 @@ pub fn grid_scene_styled(
     cf: &SheetCondFmt,
     visual: &impl VisualStyleSource,
 ) -> GridScene {
+    grid_scene_cf(
+        model,
+        sheet,
+        spec,
+        include_gridlines,
+        comment_cells,
+        cf,
+        visual,
+        None,
+    )
+}
+
+/// [`grid_scene_styled`] with conditional formatting evaluated through `src` (W2.4,
+/// the session's `sheet_calc::cf` evaluator) instead of the static rules.
+pub fn grid_scene_cf(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    include_gridlines: bool,
+    comment_cells: &[(u32, u32)],
+    cf: &SheetCondFmt,
+    visual: &impl VisualStyleSource,
+    src: Option<&dyn sheet_lower::cfdraw::CellCfSource>,
+) -> GridScene {
     let ws = model.sheet(sheet);
     let win = frame_window(model, sheet, spec);
     let n_rows = win.rows.len();
@@ -693,43 +733,96 @@ pub fn grid_scene_styled(
     // ---- Materialize ONLY visible populated cells (virtualization). ----
     let ctx = FormatCtx::new(model.calc.date_system, model.calc.locale);
     let mut cache = FormatCache::default();
-    let mut styler = CellStyler::new(visual, cf, ws);
+    let mut styler = CellStyler::new(visual, cf, ws).with_cf_source(src);
     let mut cells: Vec<GridCell> = Vec::new();
     // Per emitted cell: (display row, display col, holds a text value).
     let mut meta: Vec<(usize, usize, bool)> = Vec::new();
     let mut databars: Vec<GridDataBar> = Vec::new();
+    let mut icons: Vec<sheet_lower::IconRect> = Vec::new();
     // merge index -> (text, align, style key) of its anchor, once seen.
     #[allow(clippy::type_complexity)]
     let mut anchors: std::collections::HashMap<usize, (String, Align, u32, Option<String>)> =
         std::collections::HashMap::new();
+    let empties = styler.styles_empty_cells();
     if let Some(ws) = ws {
         for (dr, &r) in win.rows.iter().enumerate() {
             for &(a, b) in &col_panes {
                 let (lo, hi) = (win.cols[a], win.cols[b - 1]);
-                for (&(_, c), cell) in ws.cells.range((r, lo)..=(r, hi)) {
-                    let Some(dc) = col_pos(c) else {
-                        continue; // a hidden column inside the pane's span
-                    };
-                    let d = sheet_lower::lower_cell_display(model, cell, &mut cache, &ctx);
-                    let key = styler.key_for_display(r, c, cell, d.color);
-                    if let Some((frac, rgb)) = styler.databar(r, c, cell) {
-                        let cell_x = x_offsets[dc];
-                        let cell_w = x_offsets[dc + 1] - cell_x;
-                        let cell_y = y_offsets[dr];
-                        let cell_h = y_offsets[dr + 1] - cell_y;
-                        // The SAME inset rule as the page lowering's `databar_rect`.
-                        let inset = DATABAR_INSET_PT.min(cell_w / 4.0).min(cell_h / 4.0);
-                        let avail_w = (cell_w - 2.0 * inset).max(0.0);
-                        databars.push(GridDataBar {
+                // The cells to visit in display order: every shown column when
+                // empty cells can be styled (a table, a conditional format —
+                // walked inline so style keys come in the page's order), else
+                // only the populated ones.
+                let items: Vec<(usize, u32, Option<&sheet_core::Cell>)> = if empties {
+                    (a..b)
+                        .map(|dc| (dc, win.cols[dc], ws.cell(r, win.cols[dc])))
+                        .collect()
+                } else {
+                    ws.cells
+                        .range((r, lo)..=(r, hi))
+                        .filter_map(|(&(_, c), cell)| col_pos(c).map(|dc| (dc, c, Some(cell))))
+                        .collect()
+                };
+                for (dc, c, cell) in items {
+                    let Some(cell) = cell else {
+                        if frags_by_row[dr]
+                            .iter()
+                            .any(|&fi| dc >= frags[fi].dc0 && dc < frags[fi].dc1)
+                        {
+                            continue;
+                        }
+                        let key = styler.key_for_empty(r, c);
+                        if key == 0 {
+                            continue;
+                        }
+                        meta.push((dr, dc, false));
+                        cells.push(GridCell {
                             row: r,
                             col: c,
-                            x: cell_x + inset,
-                            y: cell_y + inset,
-                            w: avail_w * frac.clamp(0.0, 1.0),
-                            h: (cell_h - 2.0 * inset).max(0.0),
-                            fill_fraction: frac,
-                            fill: format!("#{:02X}{:02X}{:02X}", rgb.0, rgb.1, rgb.2),
+                            text: String::new(),
+                            align: Align::General,
+                            style_key: key,
+                            wrap: false,
+                            v_align: None,
+                            overflow_to: None,
+                            fill: None,
+                            runs: None,
                         });
+                        continue;
+                    };
+                    let d = sheet_lower::lower_cell_cf(
+                        &mut styler,
+                        model,
+                        r,
+                        c,
+                        cell,
+                        &mut cache,
+                        &ctx,
+                    );
+                    let key = styler.key_for_display(r, c, cell, d.color);
+                    let cell_x = x_offsets[dc];
+                    let cell_w = x_offsets[dc + 1] - cell_x;
+                    let cell_y = y_offsets[dr];
+                    let cell_h = y_offsets[dr + 1] - cell_y;
+                    // The SAME geometry as the page lowering (`bar_rect`,
+                    // `place_icon`).
+                    if let Some(bar) = styler.databar(r, c, cell) {
+                        databars.push(sheet_lower::bar_rect(
+                            r,
+                            c,
+                            (cell_x, cell_y, cell_w, cell_h),
+                            &bar,
+                        ));
+                    }
+                    if let Some(icon) = styler.icon(r, c, cell) {
+                        icons.push(sheet_lower::place_icon(
+                            r,
+                            c,
+                            &icon,
+                            cell_x,
+                            cell_y,
+                            cell_h,
+                            DATABAR_INSET_PT,
+                        ));
                     }
                     let (text, align, fill) = (d.text, d.align, d.fill.map(String::from));
                     let covering = frags_by_row[dr]
@@ -763,39 +856,6 @@ pub fn grid_scene_styled(
                         overflow_to: None,
                         fill,
                         runs,
-                    });
-                }
-            }
-        }
-        // Empty cells inside a table carry its style (Excel bands them).
-        for band in &cf.tables {
-            for (dr, &r) in win.rows.iter().enumerate() {
-                for (dc, &c) in win.cols.iter().enumerate() {
-                    if !band.covers(r, c) || ws.cell(r, c).is_some() {
-                        continue;
-                    }
-                    if frags_by_row[dr]
-                        .iter()
-                        .any(|&fi| dc >= frags[fi].dc0 && dc < frags[fi].dc1)
-                    {
-                        continue;
-                    }
-                    let key = styler.key_for_empty(r, c);
-                    if key == 0 {
-                        continue;
-                    }
-                    meta.push((dr, dc, false));
-                    cells.push(GridCell {
-                        row: r,
-                        col: c,
-                        text: String::new(),
-                        align: Align::General,
-                        style_key: key,
-                        wrap: false,
-                        v_align: None,
-                        overflow_to: None,
-                        fill: None,
-                        runs: None,
                     });
                 }
             }
@@ -990,6 +1050,8 @@ pub fn grid_scene_styled(
         freeze,
         comments,
         databars,
+        sparklines: Vec::new(),
+        icons,
         merges,
     }
 }
@@ -1061,6 +1123,20 @@ pub fn frame_page(
     cf: &SheetCondFmt,
     visual: &impl VisualStyleSource,
 ) -> sheet_lower::LoweredContent {
+    frame_page_cf(model, sheet, spec, print, cf, visual, None)
+}
+
+/// [`frame_page`] with conditional formatting evaluated through `src` (W2.4,
+/// the session's `sheet_calc::cf` evaluator) instead of the static rules.
+pub fn frame_page_cf(
+    model: &SheetModel,
+    sheet: SheetId,
+    spec: &FrameWindowSpec,
+    print: PagePrint,
+    cf: &SheetCondFmt,
+    visual: &impl VisualStyleSource,
+    src: Option<&dyn sheet_lower::cfdraw::CellCfSource>,
+) -> sheet_lower::LoweredContent {
     let win = frame_page_window(model, sheet, spec, print.headings);
     let opts = sheet_lower::TrackOptions {
         print_headings: print.headings,
@@ -1068,7 +1144,7 @@ pub fn frame_page(
         header_rows: win.frozen_rows,
         frozen_cols: win.frozen_cols,
     };
-    sheet_lower::lower_tracks_styled(model, sheet, &win.rows, &win.cols, &opts, visual, cf)
+    sheet_lower::lower_tracks_cf(model, sheet, &win.rows, &win.cols, &opts, visual, cf, src)
 }
 
 /// The window a frame's page table shows: `spec`'s box, less the printed

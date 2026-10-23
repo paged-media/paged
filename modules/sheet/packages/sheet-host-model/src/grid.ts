@@ -49,7 +49,16 @@ import type {
   ScenePathSeg,
 } from "@paged-media/plugin-api";
 
-import type { Align, LoweredRun, LoweredStyle, Rule, Rules } from "./lowered";
+import type { ChartPrimitive } from "./chart";
+import type {
+  Align,
+  DataBarRect,
+  IconRect,
+  LoweredRun,
+  LoweredStyle,
+  Rule,
+  Rules,
+} from "./lowered";
 
 /** The viewport window (mirror of Rust `sheet_grid::GridViewport`): the
  *  displayed tracks and the cumulative viewport-local pt boundaries along
@@ -174,15 +183,18 @@ export interface GridCommentMarker {
  *  computed — the panel just draws a filled rect (the SAME bar the page lowering
  *  emits, so it reads identically on both surfaces). Mirror of the Rust
  *  `sheet_grid::GridDataBar`. */
-export interface GridDataBar {
+export type GridDataBar = DataBarRect;
+
+/** One sparkline in a grid viewport: its cell, the cell's viewport-local
+ *  box and the primitives (sheet-chart's IR) placed in it. */
+export interface GridSparkline {
   row: number;
   col: number;
   x: number;
   y: number;
   w: number;
   h: number;
-  fillFraction: number;
-  fill: string;
+  prims: ChartPrimitive[];
 }
 
 /** The complete grid scene for one viewport (spec §8.1): the windowed
@@ -207,8 +219,13 @@ export interface GridScene {
    *  `dataBar` rule covers (spec §8.2/§10.4 — drawn geometry, not a fill).
    *  Absent/empty when none. */
   databars?: GridDataBar[];
+  /** W2.4 — conditional-format icons of the visible cells. */
+  icons?: IconRect[];
   /** Merged areas intersecting the window (one rect per pane). */
   merges?: GridMerge[];
+  /** Sparklines in the visible cells (sheet ADR 519): each cell's box and
+   *  the chart primitives drawn in it (origin the box's top-left). */
+  sparklines?: GridSparkline[];
   /** Wave 5 — the target of a fill-handle drag in progress (drawn as an
    *  outline). Absent/null when no drag. Session-side, never from Rust. */
   fillPreview?: GridSelection | null;
@@ -982,6 +999,37 @@ export function gridSceneToSceneLayer(
       path: rectPath(b.x, b.y, b.x + b.w, b.y + b.h),
       paint: { ...paint, a: paint.a * o.dataBarOpacity },
     });
+  }
+
+  // 2.6 — sparklines (sheet ADR 519): the engine drew them in each cell's
+  //       box; placed at the box.
+  for (const sp of scene.sparklines ?? []) {
+    if (!cellRect(vp, sp.row, sp.col)) continue;
+    for (const p of sp.prims) {
+      if (p.kind === "rect" && p.fill) {
+        items.push({
+          kind: "fillPath",
+          path: rectPath(
+            sp.x + p.x,
+            sp.y + p.y,
+            sp.x + p.x + p.w,
+            sp.y + p.y + p.h,
+          ),
+          paint: cssColorToScenePaint(p.fill),
+        });
+      } else if (p.kind === "line" && p.pts.length >= 2) {
+        items.push({
+          kind: "strokePath",
+          path: p.pts.map(([x, y], i) => ({
+            op: i === 0 ? ("moveTo" as const) : ("lineTo" as const),
+            x: sp.x + x,
+            y: sp.y + y,
+          })),
+          paint: cssColorToScenePaint(p.stroke),
+          width: p.strokeW,
+        });
+      }
+    }
   }
 
   // 3 — cell text (v1: leading-edge / left).

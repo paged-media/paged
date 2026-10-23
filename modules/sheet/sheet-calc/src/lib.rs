@@ -77,6 +77,7 @@ macro_rules! perf_count {
 mod accel;
 pub mod adhoc;
 pub mod argview;
+pub mod cf;
 pub mod dirty;
 pub mod eval;
 pub mod external;
@@ -315,6 +316,11 @@ impl Engine {
     /// Only use this when you are DONE with the engine (e.g. to serialize).
     pub fn into_model(self) -> SheetModel {
         self.model
+    }
+
+    /// The serial date-time the volatile functions read as "now".
+    pub fn now_serial(&self) -> f64 {
+        self.config.now_serial
     }
 
     /// Update the `NOW`/`TODAY` serial. Marks volatile cells for recompute on

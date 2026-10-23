@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 sheet-core = { path = "../sheet-core" }
 sheet-format = { path = "../sheet-format" }
+# The sparkline primitives the scene carries are sheet-chart's geometry IR
+# (one generator for the page, the chart frames and the grid).
+sheet-chart = { path = "../sheet-chart" }
 # DOCUMENTED DEVIATION from the spec §4 dependency table (which lists only
 # sheet-core/sheet-format for the grid). sheet-grid reuses sheet-lower's
 # frozen LoweredStyle + RuleSet IR types so the grid scene and the page
