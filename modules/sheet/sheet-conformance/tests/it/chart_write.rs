@@ -284,3 +284,139 @@ fn excel_written_chart_ex_reads_back__feat__sheet_chart_chartex() {
         "box & whisker keeps its series"
     );
 }
+
+/// A workbook whose first sheet carries a sparkline group over A2:E2 drawn
+/// in F2 (an x14 `<extLst>`, as Excel writes one).
+fn sparkline_workbook() -> Vec<u8> {
+    let sheet = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetData><row r="2"><c r="A2"><v>1</v></c><c r="B2"><v>4</v></c><c r="C2"><v>-2</v></c><c r="D2"><v>5</v></c><c r="E2"><v>3</v></c></row></sheetData><extLst><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:sparklineGroups xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"><x14:sparklineGroup type="column" negative="1"><x14:colorSeries rgb="FF376092"/><x14:colorNegative rgb="FFD00000"/><x14:sparklines><x14:sparkline><xm:f>Sheet1!A2:E2</xm:f><xm:sqref>F2</xm:sqref></x14:sparkline></x14:sparklines></x14:sparklineGroup></x14:sparklineGroups></ext></extLst></worksheet>"#;
+    let base = corpus("01-minimal.xlsx");
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(&base)).unwrap();
+    let mut parts = Vec::new();
+    for i in 0..z.len() {
+        let mut f = z.by_index(i).unwrap();
+        let name = f.name().unwrap().to_string();
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+        if name == "xl/worksheets/sheet1.xml" {
+            data = sheet.as_bytes().to_vec();
+        }
+        parts.push((name, data));
+    }
+    sheet_xlsx::write::write_package(parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())))
+}
+
+#[test]
+fn sparklines_draw_in_the_grid_scene__feat__sheet_chart_sparklines() {
+    let bytes = sparkline_workbook();
+    let s = SheetSession::load_xlsx(&bytes).unwrap();
+    let list = s.list_sparklines(0);
+    assert_eq!(list.len(), 1);
+    assert_eq!((list[0].row, list[0].col, list[0].kind), (1, 5, "column"));
+    let scene = s
+        .get_grid_scene(0, 0, 0, 600.0, 200.0, Default::default())
+        .unwrap();
+    assert_eq!(scene.sparklines.len(), 1);
+    let sp = &scene.sparklines[0];
+    assert_eq!((sp.row, sp.col), (1, 5));
+    assert_eq!(sp.prims.len(), 5, "one column per value");
+    // The negative value in the negative colour.
+    let red = sp
+        .prims
+        .iter()
+        .filter(
+            |p| matches!(p, sheet_chart::Primitive::Rect { fill: Some(f), .. } if f == "#D00000"),
+        )
+        .count();
+    assert_eq!(red, 1);
+    // Scrolled past the cell: none.
+    let away = s
+        .get_grid_scene(0, 10, 0, 600.0, 200.0, Default::default())
+        .unwrap();
+    assert!(away.sparklines.is_empty());
+    // The bytes round-trip with the group (the extLst is a captured child).
+    let mut s = s;
+    s.set_cell(0, 1, 0, "2").unwrap();
+    let out = s.save_xlsx().unwrap();
+    assert_eq!(
+        SheetSession::load_xlsx(&out)
+            .unwrap()
+            .list_sparklines(0)
+            .len(),
+        1
+    );
+}
+
+/// 09-chart.xlsx with its chart moved onto a chartsheet tab ("Chart1").
+fn chartsheet_workbook() -> Vec<u8> {
+    let base = corpus("09-chart.xlsx");
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(&base)).unwrap();
+    let mut parts: Vec<(String, Vec<u8>)> = Vec::new();
+    for i in 0..z.len() {
+        let mut f = z.by_index(i).unwrap();
+        let name = f.name().unwrap().to_string();
+        let mut data = Vec::new();
+        f.read_to_end(&mut data).unwrap();
+        let text = String::from_utf8_lossy(&data).into_owned();
+        let data = match name.as_str() {
+            "xl/workbook.xml" => text
+                .replace(r#"r:id="rId1"/></sheets>"#, r#"r:id="rId1"/><sheet name="Chart1" sheetId="2" r:id="rId9"/></sheets>"#)
+                .into_bytes(),
+            "xl/_rels/workbook.xml.rels" => text
+                .replace("</Relationships>", r#"<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet" Target="chartsheets/sheet1.xml"/></Relationships>"#)
+                .into_bytes(),
+            "xl/worksheets/sheet1.xml" => text.replace(r#"<drawing r:id="rId1"/>"#, "").into_bytes(),
+            "xl/worksheets/_rels/sheet1.xml.rels" => continue,
+            "[Content_Types].xml" => text
+                .replace("</Types>", r#"<Override PartName="/xl/chartsheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml"/></Types>"#)
+                .into_bytes(),
+            _ => data,
+        };
+        parts.push((name, data));
+    }
+    parts.push((
+        "xl/chartsheets/sheet1.xml".into(),
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<chartsheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"/></sheetViews><drawing r:id="rId1"/></chartsheet>"#
+            .to_vec(),
+    ));
+    parts.push((
+        "xl/chartsheets/_rels/sheet1.xml.rels".into(),
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>"#
+            .to_vec(),
+    ));
+    sheet_xlsx::write::write_package(parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())))
+}
+
+#[test]
+fn a_chartsheet_is_a_tab_kind__feat__sheet_chart_chartsheets() {
+    let mut s = SheetSession::load_xlsx(&chartsheet_workbook()).unwrap();
+    let sheets = s.list_sheets();
+    assert_eq!(sheets.len(), 2);
+    assert_eq!((sheets[0].kind, sheets[0].chart), ("worksheet", None));
+    assert_eq!((sheets[1].kind, sheets[1].chart), ("chartsheet", Some(0)));
+    let tabs = s.list_chartsheets();
+    assert_eq!(
+        (tabs[0].sheet, tabs[0].name.as_str(), tabs[0].chart),
+        (1, "Chart1", Some(0))
+    );
+    let c = &s.list_charts()[0];
+    assert!(c.chartsheet);
+    assert_eq!(c.kind, "column");
+    // Its series still read Sheet1's cells; the tab's chart is edited and
+    // written back in place, and stays when deleted (the tab is the chart).
+    assert!(s.chart_specs()[0].series[0].values.starts_with("Sheet1!"));
+    s.update_chart(
+        0,
+        ChartPatch {
+            title: Some(Some("On its tab".into())),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let out = s.save_xlsx().unwrap();
+    let r = SheetSession::load_xlsx(&out).unwrap();
+    assert_eq!(r.list_charts()[0].title.as_deref(), Some("On its tab"));
+    assert_eq!(r.list_sheets()[1].kind, "chartsheet");
+}
