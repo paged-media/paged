@@ -70,6 +70,7 @@ function fakeSession() {
   };
   let lock = false;
   let pasteCard = false;
+  let activeSheet = 0;
   const session: FrameSurfaceSession = {
     pasteSpecialOpen: () => pasteCard,
     closePasteSpecial: () => {
@@ -145,8 +146,18 @@ function fakeSession() {
     functionList: () => [
       { name: "SUM", family: "math", minArgs: 1, maxArgs: null },
     ],
-    sheets: () => [{ id: 0, name: "Sheet1", rows: 3, cols: 3 }],
-    state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
+    sheets: () => [
+      { id: 0, name: "Sheet1", rows: 3, cols: 3 },
+      { id: 1, name: "Prices", rows: 3, cols: 3 },
+    ],
+    state: () =>
+      ({ activeSheet: activeSheet, gridSelection: scene.selection }) as never,
+    setFrameSheet: (id) => {
+      calls.push(["sheet", id]);
+      activeSheet = id;
+      changed();
+      return true;
+    },
   };
   const openPaste = () => {
     pasteCard = true;
@@ -310,6 +321,20 @@ describe("sheet frame surface", () => {
     ]);
     // The paste closes the card.
     expect(card.isConnected).toBe(false);
+  });
+
+  it("the bar's sheet menu switches the frame to another sheet", () => {
+    const { session, calls } = fakeSession();
+    const r = render(
+      createElement(makeSheetFrameSurface(session).bar, props()),
+    );
+    const select = r.getByTestId("sheet-bar-sheet") as HTMLSelectElement;
+    expect(select.value).toBe("0");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(calls).toContainEqual(["sheet", 1]);
+    expect((r.getByTestId("sheet-bar-sheet") as HTMLSelectElement).value).toBe(
+      "1",
+    );
   });
 
   it("detaches on unmount", () => {

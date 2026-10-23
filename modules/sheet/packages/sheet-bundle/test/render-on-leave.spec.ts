@@ -195,6 +195,27 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     expect((await bindingOf(frame))?.view.topLeft).toBe("A4");
   });
 
+  it("switching the frame's sheet puts that sheet on the page", async () => {
+    const { s, frame } = await placed();
+    expect(s.addSheet("Prices").ok).toBe(true);
+    const id = s.sheets().find((x) => x.name === "Prices")?.id;
+    expect(id).toBeDefined();
+    s.editCell(id!, 0, 0, "price");
+    await s.refreshPlacements();
+    await settle();
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    expect(s.setFrameSheet(id!)).toBe(true);
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    const b = await bindingOf(frame);
+    expect(b?.sheet).toBe("Prices");
+    expect(b?.view.topLeft).toBe("A1");
+    const tables = await exportedTableCells(h);
+    expect(tables).toHaveLength(1);
+    expect(tables[0].get("0:0")).toBe("price");
+  });
+
   it("a locked view snaps back on leaving", async () => {
     const { s, frame } = await placed();
     expect(await s.showGridInFrame(frame)).toBe(true);
