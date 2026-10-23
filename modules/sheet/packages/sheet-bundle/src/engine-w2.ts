@@ -73,6 +73,167 @@ export interface CellProtection {
   sheetProtected: boolean;
 }
 
+/** One data-validation rule (ADR 517). Formulas carry `=`. */
+export interface ValidationRuleInfo {
+  index: number;
+  sqref: string;
+  type:
+    | "none"
+    | "whole"
+    | "decimal"
+    | "list"
+    | "date"
+    | "time"
+    | "textLength"
+    | "custom";
+  operator: string;
+  formula1?: string | null;
+  formula2?: string | null;
+  allowBlank: boolean;
+  inCellDropdown: boolean;
+  showInput: boolean;
+  promptTitle?: string | null;
+  prompt?: string | null;
+  showError: boolean;
+  errorStyle: "stop" | "warning" | "information";
+  errorTitle?: string | null;
+  error?: string | null;
+}
+
+/** A rule to author (absent fields: Excel's defaults, or kept on update). */
+export interface ValidationRuleArg {
+  type?: ValidationRuleInfo["type"] | "any";
+  operator?: string;
+  formula1?: string;
+  formula2?: string;
+  listItems?: string[];
+  allowBlank?: boolean;
+  inCellDropdown?: boolean;
+  showInput?: boolean;
+  promptTitle?: string;
+  prompt?: string;
+  showError?: boolean;
+  errorStyle?: "stop" | "warning" | "information";
+  errorTitle?: string;
+  error?: string;
+}
+
+/** Excel's validation alert. */
+export interface ValidationAlert {
+  style: "stop" | "warning" | "information";
+  title: string;
+  message: string;
+}
+
+export interface EntryCheck {
+  valid: boolean;
+  alert?: ValidationAlert | null;
+}
+
+/** A validated entry: applied, or the alert to show (a warning or
+ *  information alert applies when re-entered with `confirmed`). */
+export interface EnterResult {
+  applied: boolean;
+  alert?: ValidationAlert | null;
+  result?: ChangedCells | null;
+}
+
+export interface CellValidation {
+  rule: ValidationRuleInfo;
+  listItems?: string[] | null;
+}
+
+export interface InvalidCell {
+  row: number;
+  col: number;
+  rule: number;
+}
+
+/** One sort level (Excel's Sort dialog). */
+export interface SortKey {
+  index: number;
+  descending?: boolean;
+  sortBy?: "value" | "cellColor" | "fontColor";
+  color?: string;
+  customList?: string[];
+}
+
+export interface SortSpec {
+  keys: SortKey[];
+  hasHeader?: boolean;
+  leftToRight?: boolean;
+  caseSensitive?: boolean;
+}
+
+/** A sort's result (the undo journal's inputs and style swap). */
+export interface SortOutcome extends ChangedCells {
+  edits: {
+    sheet: number;
+    row: number;
+    col: number;
+    prevInput: string;
+    nextInput: string;
+  }[];
+  styles?: { range: string; before: number[]; after: number[] };
+}
+
+export interface DateGroup {
+  year: number;
+  month?: number;
+  day?: number;
+  hour?: number;
+  minute?: number;
+  second?: number;
+}
+
+/** One AutoFilter column criterion. */
+export type FilterCriterion =
+  | { kind: "values"; values?: string[]; blanks?: boolean; dates?: DateGroup[] }
+  | {
+      kind: "custom";
+      and?: boolean;
+      conditions: { op: string; val: string }[];
+    }
+  | { kind: "contains"; text: string }
+  | { kind: "top"; n: number; percent?: boolean; top?: boolean }
+  | { kind: "dynamic"; type: string }
+  | { kind: "color"; color: string; cellColor?: boolean }
+  | { kind: "icon"; set: string; id?: number };
+
+export interface FilterOutcome {
+  hiddenRows: number[];
+  changed?: CellChange[];
+}
+
+export interface FilterState {
+  range: string;
+  columns: {
+    col: number;
+    criterion?: FilterCriterion | null;
+    applied: boolean;
+  }[];
+  hiddenRows: number[];
+}
+
+/** What a column's filter dropdown shows. */
+export interface FilterColumnValues {
+  kind: "text" | "number" | "date";
+  items: { text: string; count: number; selected: boolean }[];
+  dates: { year: number; month: number; day: number; count: number }[];
+  blanks: number;
+  blanksSelected: boolean;
+  fillColors: string[];
+  fontColors: string[];
+  criterion?: FilterCriterion | null;
+}
+
+export interface FilterViewInfo {
+  sheet: number;
+  name: string;
+  range: string;
+  columns: { col: number; criterion: FilterCriterion }[];
+}
+
 /** The camelCase W2 facade (spread into `SheetEngine`). */
 export interface SheetEngineW2 {
   outline?(sheet: number): OutlineInfo;
@@ -112,6 +273,55 @@ export interface SheetEngineW2 {
   ): void;
   unprotectWorkbook?(password: string): void;
   cellProtection?(sheet: number, row: number, col: number): CellProtection;
+  listValidationRules?(sheet: number): ValidationRuleInfo[];
+  validationAt?(
+    sheet: number,
+    row: number,
+    col: number,
+  ): CellValidation | undefined;
+  checkEntry?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): EntryCheck;
+  enterCell?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed?: boolean,
+  ): EnterResult;
+  invalidCells?(sheet: number): InvalidCell[];
+  setValidation?(
+    sheet: number,
+    range: string,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  updateValidation?(
+    sheet: number,
+    index: number,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  clearValidation?(sheet: number, range: string): ValidationRuleInfo[];
+  sortRangeBy?(sheet: number, range: string, spec: SortSpec): SortOutcome;
+  setAutofilter?(sheet: number, range: string): FilterOutcome;
+  removeAutofilter?(sheet: number): FilterOutcome;
+  setFilterColumn?(
+    sheet: number,
+    range: string,
+    col: number,
+    criterion?: FilterCriterion | null,
+  ): FilterOutcome;
+  clearFilterCriteria?(sheet: number): FilterOutcome;
+  reapplyFilter?(sheet: number): FilterOutcome;
+  filterState?(sheet: number): FilterState | undefined;
+  filterColumnValues?(sheet: number, col: number): FilterColumnValues;
+  saveFilterView?(sheet: number, name: string): void;
+  applyFilterView?(sheet: number, name: string): FilterOutcome;
+  deleteFilterView?(sheet: number, name: string): void;
+  listFilterViews?(): FilterViewInfo[];
+  setFilterViews?(views: FilterViewInfo[]): void;
 }
 
 /** The snake_case wasm methods behind it. */
@@ -155,6 +365,55 @@ export interface SheetWasmEngineW2 {
   ): void;
   unprotect_workbook?(password: string): void;
   cell_protection?(sheet: number, row: number, col: number): CellProtection;
+  list_validation_rules?(sheet: number): ValidationRuleInfo[];
+  validation_at?(
+    sheet: number,
+    row: number,
+    col: number,
+  ): CellValidation | undefined;
+  check_entry?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+  ): EntryCheck;
+  enter_cell?(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed: boolean,
+  ): EnterResult;
+  invalid_cells?(sheet: number): InvalidCell[];
+  set_validation?(
+    sheet: number,
+    range: string,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  update_validation?(
+    sheet: number,
+    index: number,
+    rule: ValidationRuleArg,
+  ): ValidationRuleInfo[];
+  clear_validation?(sheet: number, range: string): ValidationRuleInfo[];
+  sort_range_by?(sheet: number, range: string, spec: SortSpec): SortOutcome;
+  set_autofilter?(sheet: number, range: string): FilterOutcome;
+  remove_autofilter?(sheet: number): FilterOutcome;
+  set_filter_column?(
+    sheet: number,
+    range: string,
+    col: number,
+    criterion?: FilterCriterion,
+  ): FilterOutcome;
+  clear_filter_criteria?(sheet: number): FilterOutcome;
+  reapply_filter?(sheet: number): FilterOutcome;
+  filter_state?(sheet: number): FilterState | undefined;
+  filter_column_values?(sheet: number, col: number): FilterColumnValues;
+  save_filter_view?(sheet: number, name: string): void;
+  apply_filter_view?(sheet: number, name: string): FilterOutcome;
+  delete_filter_view?(sheet: number, name: string): void;
+  list_filter_views?(): FilterViewInfo[];
+  set_filter_views?(views: FilterViewInfo[]): void;
 }
 
 type Need = <K extends keyof SheetWasmEngineW2>(
@@ -191,5 +450,43 @@ export function wrapW2(need: Need, tick: () => void): Required<SheetEngineW2> {
     protectWorkbook: read<void>("protect_workbook"),
     unprotectWorkbook: read<void>("unprotect_workbook"),
     cellProtection: read<CellProtection>("cell_protection"),
+    listValidationRules: read<ValidationRuleInfo[]>("list_validation_rules"),
+    validationAt: read<CellValidation | undefined>("validation_at"),
+    checkEntry: read<EntryCheck>("check_entry"),
+    enterCell: (sheet, row, col, input, confirmed) => {
+      tick();
+      return need("enter_cell")(
+        sheet,
+        row,
+        col,
+        input,
+        confirmed ?? false,
+      ) as EnterResult;
+    },
+    invalidCells: read<InvalidCell[]>("invalid_cells"),
+    setValidation: read<ValidationRuleInfo[]>("set_validation"),
+    updateValidation: read<ValidationRuleInfo[]>("update_validation"),
+    clearValidation: read<ValidationRuleInfo[]>("clear_validation"),
+    sortRangeBy: write<SortOutcome>("sort_range_by"),
+    setAutofilter: write<FilterOutcome>("set_autofilter"),
+    removeAutofilter: write<FilterOutcome>("remove_autofilter"),
+    setFilterColumn: (sheet, range, col, criterion) => {
+      tick();
+      return need("set_filter_column")(
+        sheet,
+        range,
+        col,
+        criterion ?? undefined,
+      ) as FilterOutcome;
+    },
+    clearFilterCriteria: write<FilterOutcome>("clear_filter_criteria"),
+    reapplyFilter: write<FilterOutcome>("reapply_filter"),
+    filterState: read<FilterState | undefined>("filter_state"),
+    filterColumnValues: read<FilterColumnValues>("filter_column_values"),
+    saveFilterView: read<void>("save_filter_view"),
+    applyFilterView: write<FilterOutcome>("apply_filter_view"),
+    deleteFilterView: read<void>("delete_filter_view"),
+    listFilterViews: read<FilterViewInfo[]>("list_filter_views"),
+    setFilterViews: read<void>("set_filter_views"),
   };
 }

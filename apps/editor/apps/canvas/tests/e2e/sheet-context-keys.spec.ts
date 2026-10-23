@@ -391,6 +391,111 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       void at;
     });
 
+    test("AC-SURFACE-2 — Excel in the frame: typing edits in place, a click inserts a reference, the bar shows the formula, a heading selects its column @feat:sheet.grid.inframe @feat:sheet.grid.keyboard @level:gesture", async ({
+      page,
+    }) => {
+      // A taller frame: with the headings inside, a three-row frame shows
+      // about two rows and an arrow key scrolls the window.
+      const frame = await importAndLower(page, "A1:B9");
+      await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="sheet-frame-surface"]');
+      await expect(surface).toBeVisible({ timeout: 10_000 });
+      // Where a cell is on screen: the surface box over the content box,
+      // past the heading strips (row headings 26 pt, column headings 16 pt;
+      // default columns 44.2575 pt, rows 15 pt).
+      const widthPt = await page.evaluate(async (id) => {
+        const c = (globalThis as unknown as CanvasHandle).__canvas;
+        const g = (await c.client.elementGeometry([id]))[0]!;
+        return g.bounds[3] - g.bounds[1];
+      }, frame);
+      const cellAt = async (row: number, col: number) => {
+        const box = (await surface.boundingBox())!;
+        const k = box.width / widthPt;
+        return {
+          x: box.x + (26 + col * 44.2575 + 20) * k,
+          y: box.y + (16 + row * 15 + 7) * k,
+        };
+      };
+      const bar = page.locator('[data-testid="sheet-bar"]');
+      await expect(bar).toBeVisible();
+      // The lowered frame is about two columns wide, and the row headings
+      // take part of it: stay in column A. A2, then type "=" and click A1:
+      // point mode puts A1 in the formula.
+      // A1 by a click in the first row (row heights vary by workbook),
+      // then A2 by keyboard.
+      const first = await cellAt(0, 0);
+      await page.mouse.click(first.x, first.y);
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText(
+        "A1",
+      );
+      await page.keyboard.press("ArrowDown");
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText(
+        "A2",
+      );
+      await page.keyboard.type("=");
+      const editor = page.locator('[data-testid="sheet-cell-editor"]');
+      await expect(editor).toHaveValue("=");
+      const a1 = await cellAt(0, 0);
+      await page.mouse.click(a1.x, a1.y);
+      await expect(editor).toHaveValue("=A1");
+      await page.keyboard.type("*3");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowUp");
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText(
+        "A2",
+      );
+      await expect(
+        page.locator('[data-testid="sheet-bar-formula"]'),
+      ).toHaveValue("=A1*3");
+      // A column heading selects the whole column.
+      const box = (await surface.boundingBox())!;
+      const k = box.width / widthPt;
+      await page.mouse.click(box.x + (26 + 10) * k, box.y + 8 * k);
+      await expect(page.locator('[data-testid="sheet-bar-name"]')).toHaveText(
+        "A1:A1048576",
+      );
+      // A right-click in the grid shows the sheet's rows, not the page
+      // item's (extensions ADR 334, Context/ rows).
+      const a1b = await cellAt(0, 0);
+      await page.mouse.click(a1b.x, a1b.y, { button: "right" });
+      const menu = page.getByRole("menu");
+      await expect(
+        menu.getByRole("menuitem", { name: "Insert rows" }),
+      ).toBeVisible();
+      await expect(
+        menu.getByRole("menuitem", { name: /Bring to Front/i }),
+      ).toHaveCount(0);
+      await page.keyboard.press("Escape");
+    });
+
+    test("AC-FULLSCREEN-1 — the sheet frame goes full screen from its bar and comes back with Esc @feat:sheet.grid.inframe @level:gesture", async ({
+      page,
+    }) => {
+      const frame = await importAndLower(page, "A1:B9");
+      await enterSheet(page, frame);
+      const surface = page.locator('[data-testid="frame-surface"]');
+      await expect(surface).toHaveAttribute("data-presentation", "frame");
+      const small = (await surface.boundingBox())!;
+      await page.getByRole("button", { name: "Full screen" }).click();
+      await expect(surface).toHaveAttribute("data-presentation", "fullscreen");
+      const big = (await surface.boundingBox())!;
+      expect(big.width).toBeGreaterThan(small.width * 2);
+      // Typing still edits the grid in full screen.
+      await page.keyboard.type("77");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("ArrowUp");
+      await expect(
+        page.locator('[data-testid="sheet-bar-formula"]'),
+      ).toHaveValue("77");
+      // Esc: back to the frame; Esc again: out of the sheet.
+      await page.keyboard.press("Escape");
+      await expect(surface).toHaveAttribute("data-presentation", "frame");
+      await page.keyboard.press("Escape");
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(
+        0,
+      );
+    });
+
     test("AC-WHEEL-1 — a wheel over the active frame goes to onContentWheel; the canvas pans only when it declines @feat:plugin-platform.modal-edit-session @feat:sheet.grid.inframe @level:gesture", async ({
       page,
     }) => {

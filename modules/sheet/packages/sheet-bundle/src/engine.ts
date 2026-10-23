@@ -44,14 +44,28 @@ import {
 
 import type {
   ChartGeometry,
+  FramePageSpec,
   FrameWindow,
   FrameWindowSpec,
+  TracksSpec,
   GridScene,
   LoweredContent,
   Page,
 } from "../../sheet-host-model/src";
 
 // ------------------------------------------------------------ facade
+
+/** Status-bar statistics of a range (`SheetEngine.rangeStats`). */
+export interface RangeStats {
+  count: number;
+  numbers: number;
+  sum: number;
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  sumDisplay: string;
+  averageDisplay: string;
+}
 
 /** One worksheet's identity + dimensions. `rows`/`cols` are the used
  *  extent (the engine computes it) so the panel can default the range
@@ -99,12 +113,10 @@ export interface FreezeInfo {
   cols: number;
 }
 
-/** One worksheet's DATA-VALIDATION inventory (spec §1.1/§11/T∞ — PRESERVE-
- *  ONLY). Data validation round-trips preserved but is NEVER enforced,
- *  evaluated, or rendered as a runtime dropdown; this inventory exists ONLY so
- *  the panel can SHOW that the workbook carries validations Paged preserves but
- *  does not enforce. `count` is the headline number; `kinds` the distinct
- *  validation types present (display only). */
+/** One worksheet's DATA-VALIDATION inventory: `count` is the headline
+ *  number; `kinds` the distinct validation types present. The rules
+ *  themselves, their enforcement on entry (`enterCell`), list items and
+ *  authoring are the ADR 517 doors in `engine-w2.ts`. */
 export interface DataValidationInfo {
   sheet: number;
   count: number;
@@ -393,6 +405,19 @@ export interface SheetEngine extends SheetEngineW2 {
    *  order with their pt sizes, decided in Rust for the live grid and the
    *  page lowering alike. */
   getFrameWindow(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  /** Status-bar statistics of a range (sheet ADR 510): value and number
+   *  counts, the numbers' sum/average/min/max, sum and average as text in
+   *  the first number's format. Optional: an older wasm lacks it. */
+  rangeStats?(sheet: number, range: string): RangeStats;
+  /** Where Ctrl+arrow lands from a cell, as Excel moves (optional: an
+   *  older wasm lacks it). */
+  dataEdge?(
+    sheet: number,
+    row: number,
+    col: number,
+    dRow: number,
+    dCol: number,
+  ): [number, number];
   /** Record the sheets-mode selection rectangle in the engine model so the
    *  next [`getGridScene`] carries it (spec §8.1 — selection is engine
    *  state, the panel only requests it). `setGridSelection` forwards to
@@ -467,6 +492,16 @@ export interface SheetEngine extends SheetEngineW2 {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  /** The PAGE table of a sheet frame (ADR 510, render on leave): the frame
+   *  window for `spec` lowered over its tracks with the workbook's styles
+   *  and conditional formats. Without `printHeadings` it is exactly the
+   *  window the live grid shows for the same spec (same tracks, pt sizes,
+   *  styles); rows/cols carry SHEET indices, the frozen rows become
+   *  `headerRows`. */
+  getFramePage?(sheet: number, spec: FramePageSpec): LoweredContent;
+  /** Lower EXPLICIT tracks for the page (sheet indices, display order) —
+   *  `getFramePage` without the window step. */
+  getTracksPage?(sheet: number, spec: TracksSpec): LoweredContent;
   /** Re-evaluate volatile cells (NOW/TODAY/RAND) against the host clock
    *  (the facade reads the clock itself). */
   recalcVolatile?(): { changed: CellChange[] };
@@ -603,6 +638,9 @@ export interface SheetEngine extends SheetEngineW2 {
   chartSpecs?(): ChartSpec[];
   /** ADR 323 — patch one chart (validated whole; page-side only). */
   updateChart?(index: number, patch: ChartPatch): void;
+  /** Plan G4 — delete one chart (its slot stays: the other charts keep
+   *  their indices; page-side only, like `addChart`). */
+  deleteChart?(index: number): void;
 }
 
 /** One computed cell value (no number format applied). */
@@ -922,6 +960,14 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
     opts?: GridSceneOptions,
   ): GridScene;
   get_frame_window(sheet: number, spec: FrameWindowSpec): FrameWindow;
+  range_stats?(sheet: number, range: string): RangeStats;
+  data_edge?(
+    sheet: number,
+    row: number,
+    col: number,
+    d_row: number,
+    d_col: number,
+  ): Uint32Array | number[];
   set_grid_selection(
     sheet: number,
     anchor_row: number,
@@ -952,6 +998,8 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
     range: string,
     opts?: LowerOptions,
   ): LoweredContent;
+  get_frame_page?(sheet: number, spec: FramePageSpec): LoweredContent;
+  get_tracks_page?(sheet: number, spec: TracksSpec): LoweredContent;
   set_clock?(unix_ms: number, tz_offset_min: number): number;
   recalc_volatile?(): { changed: CellChange[] };
   calc_settings?(): CalcSettingsInfo;
@@ -1034,6 +1082,7 @@ export interface SheetWasmEngine extends SheetWasmEngineW2 {
   list_tables?(): TableInfo[];
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
+  delete_chart?(index: number): void;
 }
 
 /** The module shape the wasm-bindgen `--target web` glue exports. */
@@ -1111,6 +1160,26 @@ export function wrapEngine(
     getGridScene: (sheet, firstRow, firstCol, wPt, hPt, opts) =>
       wasm.get_grid_scene(sheet, firstRow, firstCol, wPt, hPt, opts),
     getFrameWindow: (sheet, spec) => wasm.get_frame_window(sheet, spec),
+    ...(wasm.data_edge
+      ? {
+          dataEdge: (
+            sheet: number,
+            row: number,
+            col: number,
+            dRow: number,
+            dCol: number,
+          ) => {
+            const r = wasm.data_edge!(sheet, row, col, dRow, dCol);
+            return [r[0]!, r[1]!] as [number, number];
+          },
+        }
+      : {}),
+    ...(wasm.range_stats
+      ? {
+          rangeStats: (sheet: number, range: string) =>
+            wasm.range_stats!(sheet, range),
+        }
+      : {}),
     setGridSelection: (sheet, anchorRow, anchorCol, rows, cols) =>
       wasm.set_grid_selection(sheet, anchorRow, anchorCol, rows, cols),
     listSheets: () => wasm.list_sheets(),
@@ -1129,6 +1198,10 @@ export function wrapEngine(
     dispose: () => wasm.free(),
     getRangePage: (sheet, range, opts) =>
       need("get_range_page")(sheet, range, opts) as LoweredContent,
+    getFramePage: (sheet, spec) =>
+      need("get_frame_page")(sheet, spec) as LoweredContent,
+    getTracksPage: (sheet, spec) =>
+      need("get_tracks_page")(sheet, spec) as LoweredContent,
     recalcVolatile: () => {
       tick();
       return need("recalc_volatile")() as { changed: CellChange[] };
@@ -1230,6 +1303,9 @@ export function wrapEngine(
     chartSpecs: () => need("chart_specs")() as ChartSpec[],
     updateChart: (index, patch) => {
       need("update_chart")(index, patch);
+    },
+    deleteChart: (index) => {
+      need("delete_chart")(index);
     },
     // Sheet ADR 517 — outline, protection, tables, sort/filter, validation,
     // what-if (src/engine-w2.ts).

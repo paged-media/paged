@@ -34,5 +34,6 @@ pub mod style_model;
 pub mod styles;
 pub mod tables;
 pub mod theme;
+pub mod validation;
 pub mod workbook;
 pub mod worksheet;

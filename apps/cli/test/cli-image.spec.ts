@@ -20,7 +20,10 @@
 // an image, run by the typed `filterRegion` with the image bundle loaded
 // from the workspace. Node has no GPU, so the engine runs the CPU twins
 // of the kernels (image ADR 465); the document is written back with the
-// filtered image in its frame.
+// filtered image in its frame. A mask given as data narrows the region:
+// polygons in the JSON argument, an alpha coverage read from a file with
+// the `bytes` argument form "@path"; `selection: true` is refused, as
+// there is no editor session to hold one.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -144,6 +147,106 @@ describe("paged-node invoke — paged.image", () => {
           want,
         );
       }
+  });
+
+  it("filterRegion within a polygon mask changes only the polygon's pixels", async () => {
+    const out = join(tmp.dir, "polygon.paged");
+    const r = await cli([
+      "invoke",
+      docPath,
+      FILTER,
+      JSON.stringify({
+        layer: LAYER,
+        params: { "invert.enabled": true },
+        // A rectangle as a polygon: columns 0–3, rows 0–2.
+        mask: {
+          polygons: [
+            [
+              [0, 0],
+              [4, 0],
+              [4, 3],
+              [0, 3],
+            ],
+          ],
+        },
+      }),
+      "-o",
+      out,
+      IMAGE,
+    ]);
+    expect(r.code, JSON.stringify(r.json) + r.err).toBe(0);
+    const before = stripes();
+    const after = await placedPixels(out);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++) {
+        const o = (y * W + x) * 4;
+        const inside = x < 4 && y < 3;
+        const want = inside
+          ? [255 - before[o]!, 255 - before[o + 1]!, 255 - before[o + 2]!, 255]
+          : Array.from(before.subarray(o, o + 4));
+        expect(Array.from(after.subarray(o, o + 4)), `(${x}, ${y})`).toEqual(
+          want,
+        );
+      }
+  });
+
+  it("filterRegion within an alpha mask read from a file (@path): 0 untouched, 255 inverted, 128 half way", async () => {
+    // One coverage byte per pixel: row 0 full, row 1 half, the rest none.
+    const alpha = new Uint8Array(W * H);
+    alpha.fill(255, 0, W);
+    alpha.fill(128, W, 2 * W);
+    const maskPath = join(tmp.dir, "mask.bin");
+    writeFileSync(maskPath, alpha);
+    const out = join(tmp.dir, "alpha.paged");
+    const r = await cli([
+      "invoke",
+      docPath,
+      FILTER,
+      JSON.stringify({
+        layer: LAYER,
+        params: { "invert.enabled": true },
+        mask: { alpha: `@${maskPath}` },
+      }),
+      "-o",
+      out,
+      IMAGE,
+    ]);
+    expect(r.code, JSON.stringify(r.json) + r.err).toBe(0);
+    const before = stripes();
+    const after = await placedPixels(out);
+    for (let x = 0; x < W; x++) {
+      const o = x * 4;
+      expect(Array.from(after.subarray(o, o + 3))).toEqual([
+        255 - before[o]!,
+        255 - before[o + 1]!,
+        255 - before[o + 2]!,
+      ]);
+      const h = (W + x) * 4;
+      for (let c = 0; c < 3; c++)
+        expect(Math.abs(after[h + c]! - 127.5)).toBeLessThanOrEqual(1.5);
+    }
+    expect(Array.from(after.subarray(2 * W * 4))).toEqual(
+      Array.from(before.subarray(2 * W * 4)),
+    );
+  });
+
+  it("filterRegion with selection: true is refused headless, with the reason", async () => {
+    const r = await cli([
+      "invoke",
+      docPath,
+      FILTER,
+      JSON.stringify({
+        layer: LAYER,
+        params: { "invert.enabled": true },
+        selection: true,
+      }),
+      "--no-save",
+      IMAGE,
+    ]);
+    expect(r.code).toBe(1);
+    expect(JSON.stringify(r.json) + r.err).toMatch(
+      /no image is open in the editor/,
+    );
   });
 
   it("filterRegion outside the canvas fails with the reason, and writes nothing", async () => {

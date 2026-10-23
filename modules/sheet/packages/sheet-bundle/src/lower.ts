@@ -94,6 +94,13 @@ import {
   type Page,
   type Placement,
   type TableFit,
+  cellOfA1,
+  HEADING_INDEX,
+  rangeTopLeft,
+  type BindingViewOptions,
+  type FramePrint,
+  type FrameSizing,
+  type FrameView,
 } from "../../sheet-host-model/src";
 
 import type { FrameBox, SheetEngine } from "./engine";
@@ -169,6 +176,10 @@ export interface MeasuredColumns {
 export async function measureColumns(
   host: BundleHost,
   content: LoweredContent,
+  /** Sheet ADR 510 — a window-sized frame keeps the sheet's own column
+   *  widths (what the live grid shows), widened only where its text would
+   *  otherwise wrap. */
+  useSheetWidths = false,
 ): Promise<MeasuredColumns> {
   const styleOf = (key: number | undefined) =>
     key == null
@@ -202,6 +213,10 @@ export async function measureColumns(
         ascenders.set(faceKey(face), metrics.ascender);
       }
       const measured = metrics.advance + CELL_INSET_PT;
+      // A table cell wraps where Excel's text spills into the next cell:
+      // a column too narrow for its text grows to it, so the table stays
+      // as tall as its rows.
+      if (useSheetWidths) return Math.max(col.widthPt, measured);
       return measured > 0 ? measured : col.widthPt;
     }),
   );
@@ -239,8 +254,9 @@ export async function measureColumns(
 async function measureColumnWidths(
   host: BundleHost,
   content: LoweredContent,
+  useSheetWidths = false,
 ): Promise<number[]> {
-  return (await measureColumns(host, content)).widths;
+  return (await measureColumns(host, content, useSheetWidths)).widths;
 }
 
 /** `placement` with its height replaced by the height of the native table
@@ -614,6 +630,9 @@ export function tableBindingStamp(
   tableId: string,
   content: LoweredContent,
   widths: readonly number[],
+  /** The frame's view, print options and sizing (binding v2, ADR 510);
+   *  absent fields take the binding's defaults. */
+  viewOptions: BindingViewOptions = {},
 ): Mutation {
   return {
     op: "setPluginMetadata",
@@ -621,12 +640,18 @@ export function tableBindingStamp(
       elementId: { kind: "textFrame", id: frameId },
       key: BINDING_KEY,
       value: JSON.stringify(
-        makeBinding(sheetName, range, contentVersion, {
-          storyId,
-          tableId,
-          hash: contentHash(content),
-          widths: [...widths],
-        }),
+        makeBinding(
+          sheetName,
+          range,
+          contentVersion,
+          {
+            storyId,
+            tableId,
+            hash: contentHash(content),
+            widths: [...widths],
+          },
+          viewOptions,
+        ),
       ),
     },
   };
@@ -699,6 +724,48 @@ export interface LoweredTableInfo {
    *  band is kept. Absent: none (the engine reports bands since core
    *  v0.71.13; on an older one a banded table is replaced). */
   headerRows?: number;
+  /** Sheet ADR 510 — the frame's window (binding v2): where it starts and
+   *  whether scrolling may move it, what the page prints besides the
+   *  cells, how its columns are sized, and its content box (pt) the
+   *  window fills. */
+  view?: FrameView;
+  print?: FramePrint;
+  sizing?: FrameSizing;
+  boxPt?: { widthPt: number; heightPt: number };
+}
+
+/** Re-stamp a placed table's binding alone — its view changed but the
+ *  cells it shows did not (a lock, a scroll back to where it was). One
+ *  mutate, one undo step; returns whether it applied. */
+export async function stampPlacedView(
+  host: BundleHost,
+  info: LoweredTableInfo,
+  sheetName: string,
+): Promise<boolean> {
+  if (!info.content) return false;
+  const r = await host.document.mutate(
+    tableBindingStamp(
+      info.frameId,
+      sheetName,
+      info.range,
+      info.contentVersion ?? 0,
+      info.storyId,
+      info.tableId,
+      info.content,
+      info.columnWidths ?? [],
+      viewOptionsOf(info),
+    ),
+  );
+  return r.applied;
+}
+
+/** The binding options of a placed table's view, for its stamp. */
+export function viewOptionsOf(info: LoweredTableInfo): BindingViewOptions {
+  return {
+    ...(info.view ? { view: info.view } : {}),
+    ...(info.print ? { print: info.print } : {}),
+    ...(info.sizing ? { sizing: info.sizing } : {}),
+  };
 }
 
 /** Lane options for [`lowerSelectionToFrame`]. */
@@ -730,6 +797,36 @@ export interface LowerLaneOptions {
   /** Select the placed frame (default true; a background re-placement
    *  leaves the user's selection alone). */
   select?: boolean;
+  /** Sheet ADR 510 — `"window"` places a frame that is a window onto the
+   *  sheet: the sheet's own column widths, a view starting at the range's
+   *  top-left, re-windowed to its box on every refresh. Default `"fit"`
+   *  (a fixed range with text-measured widths). */
+  sizing?: FrameSizing;
+}
+
+/** Slack (pt) added to a window measured from its own tracks, so float
+ *  sums never drop the last whole row or column. */
+export const WINDOW_SLACK_PT = 0.5;
+
+/** The view fields a fresh placement records (ADR 510). */
+function placedView(
+  range: string,
+  sizing: FrameSizing | undefined,
+  content: LoweredContent,
+): Pick<LoweredTableInfo, "view" | "sizing" | "boxPt"> {
+  if (sizing !== "window") return {};
+  // The window is the range's own size in sheet tracks (the frame itself is
+  // fitted a little taller to the table the engine lays out), so a refresh
+  // shows the same cells until the user scrolls.
+  const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+  return {
+    view: { topLeft: rangeTopLeft(range), lock: false },
+    sizing: "window",
+    boxPt: {
+      widthPt: sum(content.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
+      heightPt: sum(content.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
+    },
+  };
 }
 
 /** The PAGE lowering of a range: real styles + conditional formatting
@@ -743,6 +840,147 @@ export function pageContent(
   return engine.getRangePage
     ? engine.getRangePage(sheet, range, { includeGridRules: true })
     : engine.getRangeLowered(sheet, range, { includeGridRules: true });
+}
+
+/** What a placed table should show now (sheet ADR 510): a window-sized
+ *  frame lowers the window of the sheet that fits its box from its view's
+ *  top-left (the same tracks the live grid shows, `frame_window`), with its
+ *  print options; any other frame — or a window frame whose box is not
+ *  known yet, or an engine without the door — lowers its fixed range. */
+export function placementContent(
+  engine: SheetEngine,
+  info: Pick<
+    LoweredTableInfo,
+    "sheet" | "range" | "view" | "print" | "sizing" | "boxPt"
+  >,
+): LoweredContent {
+  return (
+    placementWindow(engine, info)?.content ??
+    pageContent(engine, info.sheet, info.range)
+  );
+}
+
+/** A range lowered the way a window frame lowers it (sheet ADR 510): its
+ *  rows and columns as explicit tracks of a frame page (`getTracksPage`,
+ *  sheet indices, the workbook's frozen rows as header rows), so the first
+ *  refresh of the placed window diffs against the same shape. Falls back to
+ *  the range lowering on an engine without the door or a range it cannot
+ *  read as two corners. */
+export function rangeFramePage(
+  engine: SheetEngine,
+  sheet: number,
+  range: string,
+): LoweredContent {
+  const bang = range.lastIndexOf("!");
+  const [a, b] = (bang >= 0 ? range.slice(bang + 1) : range).split(":");
+  const from = a ? cellOfA1(a.replaceAll("$", "")) : null;
+  const to = b ? cellOfA1(b.replaceAll("$", "")) : from;
+  if (!engine.getTracksPage || !from || !to)
+    return pageContent(engine, sheet, range);
+  const span = (lo: number, hi: number) =>
+    Array.from(
+      { length: Math.abs(hi - lo) + 1 },
+      (_, i) => Math.min(lo, hi) + i,
+    );
+  return withoutGridlines(
+    engine.getTracksPage(sheet, {
+      rows: span(from.row, to.row),
+      cols: span(from.col, to.col),
+    }),
+  );
+}
+
+/** A frame page lowered without gridlines says so to the table writer
+ *  (`LoweredContent.noGridlines`). */
+function withoutGridlines(content: LoweredContent): LoweredContent {
+  return content.rules.h.length === 0 && content.rules.v.length === 0
+    ? { ...content, noGridlines: true }
+    : content;
+}
+
+/** A window frame's page lowering and the A1 range it covers, or null when
+ *  the frame lowers its fixed range ({@link placementContent}). */
+export function placementWindow(
+  engine: SheetEngine,
+  info: Pick<
+    LoweredTableInfo,
+    "sheet" | "range" | "view" | "print" | "sizing" | "boxPt"
+  >,
+): { content: LoweredContent; range: string | null } | null {
+  if (
+    info.sizing === "window" &&
+    info.view &&
+    info.boxPt &&
+    engine.getFramePage
+  ) {
+    const tl = cellOfA1(info.view.topLeft);
+    if (tl && info.boxPt.widthPt > 0 && info.boxPt.heightPt > 0) {
+      const content = engine.getFramePage(info.sheet, {
+        topRow: tl.row,
+        leftCol: tl.col,
+        widthPt: info.boxPt.widthPt,
+        heightPt: info.boxPt.heightPt,
+        printHeadings: info.print?.headings ?? false,
+        printGridlines: info.print?.gridlines ?? false,
+      });
+      return {
+        content: withoutGridlines(content),
+        range: windowRange(content),
+      };
+    }
+  }
+  return null;
+}
+
+/** Column letters of a 0-based column index (`0` -> `A`, `27` -> `AB`). */
+function colName(col: number): string {
+  let n = col + 1;
+  let out = "";
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    out = String.fromCharCode(65 + r) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
+}
+
+/** The A1 address of a 0-based cell. */
+export function a1OfCell(row: number, col: number): string {
+  return `${colName(col)}${row + 1}`;
+}
+
+/** The A1 range a frame page covers (its sheet-indexed tracks, the printed
+ *  heading track left out), or null when it shows no sheet cell. */
+export function windowRange(content: LoweredContent): string | null {
+  const rows = content.rows
+    .map((r) => r.index)
+    .filter((i) => i !== HEADING_INDEX);
+  const cols = content.cols
+    .map((c) => c.index)
+    .filter((i) => i !== HEADING_INDEX);
+  if (rows.length === 0 || cols.length === 0) return null;
+  const r0 = Math.min(...rows);
+  const r1 = Math.max(...rows);
+  const c0 = Math.min(...cols);
+  const c1 = Math.max(...cols);
+  return `${a1OfCell(r0, c0)}:${a1OfCell(r1, c1)}`;
+}
+
+/** True when a scroll-driven refresh re-pours most of the table, so a new
+ *  table is cheaper than rewriting the old one (`TableRefreshOps.replace`). */
+export function refreshWantsReplace(
+  info: LoweredTableInfo,
+  next: LoweredContent,
+): boolean {
+  if (!info.content) return false;
+  return tableRefreshOps(
+    info.content,
+    next,
+    info.storyId,
+    info.tableId,
+    info.columnWidths ?? [],
+    next.cols.map((c) => c.widthPt),
+  ).replace;
 }
 
 /**
@@ -797,7 +1035,17 @@ export async function lowerSelectionToFrame(
   let placement = opts?.placement ?? defaultPlacement(pageId, content);
   // The session's workbook revision (Wave 4) — a refresh rewrites it.
   const contentVersion = opts?.contentVersion ?? 0;
-  const binding = makeBinding(sheetName, range, contentVersion);
+  const viewOpts: BindingViewOptions =
+    opts?.sizing === "window"
+      ? { view: { topLeft: rangeTopLeft(range) }, sizing: "window" }
+      : {};
+  const binding = makeBinding(
+    sheetName,
+    range,
+    contentVersion,
+    undefined,
+    viewOpts,
+  );
 
   if (opts?.lane === "tab-text") {
     return lowerTabTextToFrame(host, content, placement, binding);
@@ -808,9 +1056,25 @@ export async function lowerSelectionToFrame(
   // size the frame's height to the table the engine will lay out: a frame
   // as tall as the workbook's rows cannot hold them (the engine starts the
   // table one line down, and grows a row to its tallest cell).
-  const { widths: columnWidths, fit } = await measureColumns(host, content);
+  const { widths: columnWidths, fit } = await measureColumns(
+    host,
+    content,
+    opts?.sizing === "window",
+  );
   if (opts?.fitHeight ?? !opts?.placement) {
     placement = fittedPlacement(placement, content, fit);
+  }
+  // A window frame's column widened for its text (see `measureColumns`)
+  // widens the frame with it, so the table never overruns its frame.
+  if (opts?.sizing === "window") {
+    const [top, left, bottom, right] = placement.bounds;
+    const tableWidth = columnWidths.reduce((a, b) => a + b, 0);
+    if (tableWidth > right - left) {
+      placement = {
+        ...placement,
+        bounds: [top, left, bottom, left + tableWidth],
+      };
+    }
   }
 
   const one = await placeInOneCall(
@@ -920,6 +1184,7 @@ export async function lowerSelectionToFrame(
             tableId,
             content,
             columnWidths,
+            viewOpts,
           ),
         ]
       : [],
@@ -946,6 +1211,7 @@ export async function lowerSelectionToFrame(
     columnWidths,
     contentVersion,
     barIds,
+    ...placedView(range, opts?.sizing, content),
   });
   if (opts?.select !== false)
     await host.selection.set([{ kind: "textFrame", id: frameId }]);
@@ -1000,10 +1266,18 @@ async function placeInOneCall(
     origin,
     widths: columnWidths,
   });
-  const binding = makeBinding(sheetName, range, contentVersion, {
-    hash: contentHash(content),
-    widths: [...columnWidths],
-  });
+  const binding = makeBinding(
+    sheetName,
+    range,
+    contentVersion,
+    {
+      hash: contentHash(content),
+      widths: [...columnWidths],
+    },
+    opts.sizing === "window"
+      ? { view: { topLeft: rangeTopLeft(range) }, sizing: "window" }
+      : {},
+  );
   const r = await host.document.mutate({
     op: "batch",
     args: {
@@ -1069,6 +1343,7 @@ async function placeInOneCall(
     columnWidths,
     contentVersion,
     barIds,
+    ...placedView(range, opts.sizing, content),
   });
   if (opts.select !== false)
     await host.selection.set([{ kind: "textFrame", id: frameId }]);
@@ -1576,7 +1851,11 @@ export async function refreshLoweredTable(
 ): Promise<LoweredTableInfo> {
   const prev = info.content;
   const prevWidths = info.columnWidths ?? [];
-  const nextWidths = await measureColumnWidths(host, next);
+  const nextWidths = await measureColumnWidths(
+    host,
+    next,
+    info.sizing === "window",
+  );
   // The binding re-stamp rides the refresh batch: one undo step.
   const stamp = tableBindingStamp(
     info.frameId,
@@ -1587,6 +1866,7 @@ export async function refreshLoweredTable(
     info.tableId,
     next,
     nextWidths,
+    viewOptionsOf(info),
   );
   const oldBars = info.barIds ?? [];
   let drawn: Mutation[] = [];
@@ -1802,7 +2082,11 @@ export async function replaceLoweredTable(
   contentVersion: number,
   sheetName: string,
 ): Promise<LoweredTableInfo | null> {
-  const widths = await measureColumnWidths(host, next);
+  const widths = await measureColumnWidths(
+    host,
+    next,
+    info.sizing === "window",
+  );
   const oldBars = (info.barIds ?? []).map((id) => ({
     op: "deleteFrame" as const,
     args: { frameId: id.id as string },
@@ -1839,6 +2123,7 @@ export async function replaceLoweredTable(
             tableId,
             next,
             widths,
+            viewOptionsOf(info),
           ),
         ],
         at ? { ...at, widths } : undefined,
@@ -1896,7 +2181,15 @@ export async function replaceLoweredTable(
     },
     select: false,
     onLowered: (p) => {
-      placed = p;
+      // The re-placed frame keeps the window it showed; its next refresh
+      // stamps the view back into the binding.
+      placed = {
+        ...p,
+        ...(info.view ? { view: info.view } : {}),
+        ...(info.print ? { print: info.print } : {}),
+        ...(info.sizing ? { sizing: info.sizing } : {}),
+        ...(info.boxPt ? { boxPt: info.boxPt } : {}),
+      };
     },
   });
   return placed;
@@ -1969,6 +2262,89 @@ async function deleteTables(
   return false;
 }
 
+/** The within-batch handle prefix of a chain's tables (`c0`, `c1`, …). */
+const CHAIN_TABLE_HANDLE = "c";
+
+/** A batch's ops with every repeated document-resource mint (a swatch or
+ *  style that two of its tables both ask for, at the same content-addressed
+ *  id) and its repeated property sets kept once: core refuses a second
+ *  mint of an id, and the refusal would fail the whole batch. */
+function oneMintEach(ops: readonly Mutation[]): Mutation[] {
+  const seen = new Set<string>();
+  return ops.filter((op) => {
+    if (!op.op.startsWith("create") && op.op !== "setStyleProperty")
+      return true;
+    const key = JSON.stringify(op);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * A chain's first pagination as ONE `mutate` (protocol 66, plan G4): every
+ * page's table appended to the chain's story, its cells poured and styled
+ * through the table's in-batch handle. One undo step for the placement. Null
+ * when the host refused the batch (nothing landed; the caller places table
+ * by table) or the reply does not name every table.
+ */
+async function paginateInOneCall(
+  host: BundleHost,
+  storyId: string,
+  pages: readonly Page[],
+): Promise<ChainTable[] | null> {
+  const ops: Mutation[] = [];
+  const styles: Mutation[] = [];
+  const widths: number[][] = [];
+  for (const [i, page] of pages.entries()) {
+    const w = await measureColumnWidths(host, page.content);
+    widths.push(w);
+    const handle = `${CHAIN_TABLE_HANDLE}${i}`;
+    const content = await tableContentOps(
+      host,
+      page.content,
+      storyId,
+      `$h:${handle}`,
+    );
+    ops.push(
+      pageTableMutations(page, storyId, w).insert,
+      { op: "bindCreated", args: { handle } },
+      ...content.ops,
+    );
+    styles.push(...content.styleOps);
+  }
+  const r = await host.document.mutate({
+    op: "batch",
+    args: { ops: oneMintEach([...ops, ...styles]) },
+  });
+  if (!r.applied) {
+    host.log.debug("chain-lower: one-call pagination refused", r);
+    return null;
+  }
+  const minted = r.minted ?? [];
+  const byHandle = pages.map(
+    (_, i) =>
+      minted.find((m) => m.handle === `${CHAIN_TABLE_HANDLE}${i}`)?.element ??
+      minted.filter((m) => m.element.kind === "table")[i]?.element,
+  );
+  if (byHandle.some((e) => e?.kind !== "table")) {
+    // Applied — the tables stand — but the reply does not name them all.
+    host.log.warn(
+      "chain-lower: one-call pagination applied without naming its tables",
+      r,
+    );
+  }
+  return pages.map((page, i) => {
+    const e = byHandle[i];
+    return {
+      tableId: e?.kind === "table" ? e.id.table_id : "",
+      content: page.content,
+      widths: widths[i]!,
+      blank: false,
+    };
+  });
+}
+
 /**
  * One pagination pass over a chain (Wave 2D / S-05; Wave 4 replace). Asks
  * the engine to paginate the range into the chain's content boxes (all
@@ -1998,6 +2374,17 @@ async function paginatePass(
       keepRowsTogether: opts?.keepRowsTogether,
     },
   );
+  if (owned.length === 0 && pages.length > 0) {
+    const one = await paginateInOneCall(host, storyId, pages);
+    if (one)
+      return {
+        storyId,
+        chain,
+        pages,
+        tableIds: one.map((t) => t.tableId),
+        tables: one,
+      };
+  }
   const tables: ChainTable[] = [];
   const tableIds: (string | null)[] = [];
   for (const [i, page] of pages.entries()) {

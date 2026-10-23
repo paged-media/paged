@@ -23,6 +23,7 @@ import type {
 import { bootEngine } from "../engine";
 import {
   createImageObjects,
+  FILTER_FIELDS,
   KIND_CONTENT,
   KIND_PREFIX,
   KIND_ROWS,
@@ -33,6 +34,7 @@ import {
   type ImageCodec,
   type ImageKind,
   type ImageObjects,
+  type SelectionSource,
 } from "./image-objects";
 import { ANCHORS, QUARTER_OPS } from "./canvas-ops";
 import { IMAGE_TEMPLATE_FIELDS, imageTemplateFields } from "./template-fields";
@@ -128,11 +130,7 @@ export const TYPED_ARGS: Record<string, { args: ValueType; title?: string }> = {
     title: "Filter a region",
     args: {
       kind: "struct",
-      fields: {
-        layer: LAYER_REF,
-        params: { kind: "struct", fields: {}, open: true },
-        region: { kind: "bounds", optional: true },
-      },
+      fields: { layer: LAYER_REF, ...FILTER_FIELDS },
     },
   },
   "media.paged.image.command.replaceLayerPixels": {
@@ -165,10 +163,10 @@ export function engineCodec(): () => Promise<ImageCodec> {
         e.encode(rgba, width, height, "png"),
       // The GPU when this realm's engine has a device (the editor's
       // session requested one); the CPU twins otherwise (ADR 465).
-      async filterRegion(rgba, width, height, wire, rect) {
+      async filterRegion(rgba, width, height, wire, rect, mask) {
         const gpu = e.gpuReady();
         return {
-          rgba: await e.filterRegion(rgba, width, height, wire, rect),
+          rgba: await e.filterRegion(rgba, width, height, wire, rect, mask),
           gpu,
         };
       },
@@ -293,18 +291,12 @@ function nativeHandlers(
       return fail(await objects.batch(ops));
     },
     "media.paged.image.command.filterRegion": async ({ objects }, args) => {
-      const { layer, params, region } = args as {
+      const { layer, ...filter } = args as {
         layer: string;
         params: Record<string, unknown>;
-        region?: number[];
       };
       frameOf(layer);
-      return fail(
-        await objects.set(layer, "filter", {
-          params,
-          ...(region ? { region } : {}),
-        }),
-      );
+      return fail(await objects.set(layer, "filter", filter));
     },
     "media.paged.image.command.replaceLayerPixels": async (
       { objects },
@@ -394,15 +386,18 @@ export { KIND_CONTENT };
 /**
  * Register the object model. Null when the host has no object registry
  * (`contribute.objectModel@1` false) — the bundle then works as before.
+ * `selection` reads the editor session's live selection for
+ * `filterRegion`'s `selection: true` (absent headless, where it refuses).
  */
 export function contributeImageObjectModel(
   host: BundleHost,
   untyped: readonly UntypedCommand[],
   codec: () => Promise<ImageCodec> = engineCodec(),
   live?: () => boolean,
+  selection?: SelectionSource,
 ): { handle: ObjectModelHandle; objects: ImageObjects } | null {
   if (!host.supports("contribute.objectModel@1")) return null;
-  const objects = createImageObjects(host, codec);
+  const objects = createImageObjects(host, codec, selection);
   const handle = host.contribute.objectModel({
     kinds: objects.kinds,
     batch: objects.batch,

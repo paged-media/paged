@@ -93,8 +93,9 @@ export function tableCellPositionOf(
 /** Phase-2 op: create the table in an already-resolved story. `rows`/`cols`
  *  are the lowered grid extent; `columnWidths` (pt) are caller-measured
  *  (font metrics, S-13), falling back to the IR's char-based widths;
- *  `rowHeights` (pt) come straight from the IR. Header/footer rows are 0 in
- *  T0 (repeated-header view options are a later wire-through). The host
+ *  `rowHeights` (pt) come straight from the IR. Header rows are the IR's
+ *  `headerRows` (a frame page's frozen rows + printed heading row; 0 for a
+ *  range lowering), footer rows 0. The host
  *  returns `createdId = tableId`. */
 export function tableInsertOp(
   content: LoweredContent,
@@ -107,7 +108,7 @@ export function tableInsertOp(
       storyId,
       rows: content.rows.length,
       cols: content.cols.length,
-      headerRows: 0,
+      headerRows: Math.min(content.headerRows ?? 0, content.rows.length),
       footerRows: 0,
       columnWidths,
       rowHeights: content.rows.map((r) => r.heightPt),
@@ -392,6 +393,25 @@ export function tableDecorOps(
       k === 0 ? "cellLeftEdgeStrokeWeight" : "cellRightEdgeStrokeWeight";
     for (const row of coveredPositions(yBounds, rule.from, rule.to)) {
       putEdge(row, col, path);
+    }
+  }
+
+  // A frame page printed without gridlines (ADR 510): every edge is
+  // written as no line. Left to the engine, a cell edge takes the document
+  // default stroke — a visible border that also makes each row taller than
+  // the frame was fitted to. Style borders still win below.
+  if (content.noGridlines) {
+    const rowsN = content.rows.length;
+    const colsN = content.cols.length;
+    for (let r = 0; r < rowsN; r++) {
+      for (let c = 0; c < colsN; c++) {
+        // The same edges the grid rules address: the first row's top and
+        // the first column's left, every cell's bottom and right.
+        if (r === 0) putEdge(r, c, "cellTopEdgeStrokeWeight", 0);
+        if (c === 0) putEdge(r, c, "cellLeftEdgeStrokeWeight", 0);
+        putEdge(r, c, "cellBottomEdgeStrokeWeight", 0);
+        putEdge(r, c, "cellRightEdgeStrokeWeight", 0);
+      }
     }
   }
 

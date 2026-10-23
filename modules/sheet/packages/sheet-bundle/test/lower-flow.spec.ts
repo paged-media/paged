@@ -34,6 +34,7 @@ import type {
   ElementGeometryItem,
   ElementId,
   FrameChainLink,
+  MintedElement,
   Mutation,
   MutationOutcome,
 } from "@paged-media/plugin-api";
@@ -919,7 +920,7 @@ function fakeChainEngine() {
  *  onDidChange channel the test fires reflow / non-reflow events on. */
 function fakeChainHost(
   links: FrameChainLink[],
-  opts: { deleteTable?: boolean } = {},
+  opts: { deleteTable?: boolean; inBatchHandles?: boolean } = {},
 ) {
   const mutations: Mutation[] = [];
   const listeners: Array<(e: DocumentChangeEvent) => void> = [];
@@ -972,10 +973,42 @@ function fakeChainHost(
           : null;
       },
       async mutate(m: Mutation): Promise<MutationOutcome> {
-        mutations.push(m);
         // A pre-66 wire refuses the `deleteTable` variant outright (the
         // real 0.64 engine's reply, verbatim in shape).
         const kids = m.op === "batch" ? m.args.ops : [m];
+        // In-batch handles (66): a batch of tables, each named by the
+        // `bindCreated` after it; without them such a batch is refused (the
+        // caller places table by table) and changes nothing, so it is not
+        // recorded.
+        if (kids.some((k) => k.op === "bindCreated")) {
+          if (!opts.inBatchHandles)
+            return { applied: false, error: "unknown op bindCreated" };
+          mutations.push(m);
+          const minted: MintedElement[] = [];
+          for (const k of kids) {
+            if (k.op === "insertTable") {
+              tableSeq += 1;
+              minted.push({
+                handle: null,
+                element: {
+                  kind: "table",
+                  id: { story_id: "Story/f0", table_id: `tbl${tableSeq}` },
+                } as ElementId,
+              } as MintedElement);
+            } else if (k.op === "bindCreated") {
+              const latest = minted.at(-1);
+              if (latest)
+                (latest as { handle: string | null }).handle = k.args.handle;
+            }
+          }
+          return {
+            applied: true,
+            createdId: minted.at(-1)?.element ?? null,
+            pageIds: ["Page/u1"],
+            minted,
+          };
+        }
+        mutations.push(m);
         if (
           !opts.deleteTable &&
           kids.some((k) => (k.op as string) === "deleteTable")
@@ -1097,6 +1130,39 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
       "tbl2",
     );
 
+    expect(result!.tableIds).toEqual(["tbl1", "tbl2"]);
+  });
+
+  it("a host with in-batch handles places every page's table in ONE mutate (one undo step) [sheet.lower.paginate]", async () => {
+    const { host, mutations } = fakeChainHost(CHAIN, { inBatchHandles: true });
+    const { engine } = fakeChainEngine();
+    const result = await lowerPaginatedToChain(
+      host,
+      engine,
+      0,
+      "A1:A6",
+      "Story/f0",
+    );
+    expect(mutations).toHaveLength(1);
+    const ops = (mutations[0] as { args: { ops: Mutation[] } }).args.ops;
+    const inserts = ops.filter((o) => o.op === "insertTable") as Array<{
+      args: { storyId: string };
+    }>;
+    expect(inserts.map((o) => o.args.storyId)).toEqual([
+      "Story/f0",
+      "Story/f0",
+    ]);
+    // Each page's pour addresses its own table by handle.
+    const pours = ops.filter((o) => o.op === "insertText") as Array<{
+      args: { text?: string; cell?: { tableId?: string } };
+    }>;
+    expect(pours.find((o) => o.args.text === "r0")?.args.cell?.tableId).toBe(
+      "$h:c0",
+    );
+    expect(pours.find((o) => o.args.text === "r1")?.args.cell?.tableId).toBe(
+      "$h:c1",
+    );
+    // The handles resolve to the minted tables, the next pass's baseline.
     expect(result!.tableIds).toEqual(["tbl1", "tbl2"]);
   });
 

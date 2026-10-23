@@ -84,6 +84,37 @@ each published canary added is under [Releases](#releases).
   `recorded/opencheck.tsv`: 16 cases; a broken control file is caught; the generated fixtures 05,
   11 and 13 are refused by Excel as generated, so the cases made from them are not gated). A reference to a table
   the edit deletes reads `#REF!`, as Excel rewrites it.
+- **Sort and AutoFilter** (ADR 517). `sortRangeBy` is Excel's Sort dialog: up to 64 levels, each
+  by value (ascending, descending, a custom list), cell colour or font colour (on top or on
+  bottom), case-sensitive or not, top to bottom or left to right; stable, blanks last, formats move
+  with their rows, formulas are re-addressed; the sort is written as `<sortState>` (inside the
+  `<autoFilter>` when the range lies in it) so Excel's dialog reopens with the same levels. The
+  AutoFilter engine evaluates every criterion Excel writes — value lists with date groups and
+  blanks, one or two custom conditions with wildcards, top/bottom n or n%, dynamic filters
+  (above/below average, today … year to date, `Q1`–`Q4`, `M1`–`M12`, against the host clock), cell
+  and font colour as shown (conditional formatting included) — and writes it as `<filterColumn>`;
+  the rows it hides are saved hidden, as Excel saves them, and clearing it shows exactly those.
+  `filterColumnValues` is the dropdown's data (distinct shown values with counts and ticks over
+  the rows the other columns keep, the date tree, blanks, the colours present, the current
+  criterion); `filterState`, `reapplyFilter`, `clearFilterCriteria`, `removeAutofilter`. Named
+  filter views are saved and applied by name and kept beside the workbook in the `.paged` part
+  (`filter-views.json`, `writeFilterViewsPart`); the active one is the `<autoFilter>`. No UI calls
+  these doors yet; the bundle does not yet persist the named views on its own.
+- **Data validation, interpreted** (ADR 517). `enterCell` checks a typed entry against its
+  cell's rule: whole and decimal numbers, dates, times and text length against the operator and
+  operands (formulas, relative to the rule's first cell), lists (case-insensitive text, numbers by
+  value) from an inline list or a range, a name or a dynamic `OFFSET`/`INDIRECT` source, and
+  custom formulas evaluated with the entry in place; a blank passes where the rule allows it. A
+  `stop` alert refuses; a `warning` or `information` alert is returned unapplied until the
+  caller confirms; a rule with its error alert off never refuses. Only an entry is checked, as in
+  Excel (paste, fill, sort and undo are not). `validationAt` gives a cell's rule with its input
+  message and a list rule's dropdown items; `invalidCells` is Circle Invalid Data. Rules are
+  authored and edited (`setValidation`, `updateValidation`, `clearValidation`; the cells leave
+  older rules, Excel's length limits on messages apply) and written back into
+  `<dataValidations>`, keeping what each untouched rule held. A protected sheet refuses rule
+  edits. The editor's cell editor does not call `enterCell` yet, and the Workbook panel still
+  reports the rules as not enforced. The Excel 2010 `x14:dataValidation` copies in `extLst`
+  (cross-sheet lists written by Excel 2010) are kept but not read.
 - **Outline, hidden rows, columns and sheets, protection** (ADR 517). Rows and columns group
   and ungroup (up to seven levels), groups collapse and expand (a nested collapsed group stays
   collapsed when its parent expands), Excel's outline-level buttons, hide and unhide rows, columns
@@ -131,8 +162,23 @@ each published canary added is under [Releases](#releases).
   come as rects with the anchor's text and style, split at the frozen band, with the gridlines
   inside them left out; text cells name the empty neighbours they may overflow into. The
   painter (`paintGridScene`) and the SVG/scene-layer views draw all of it. Hidden columns are skipped
-  like hidden rows. Still open: a merged area clipped by the page window does not carry its anchor's
-  text onto the page.
+  like hidden rows.
+- **The page side of the window (ADR 510 amendment).** `get_frame_page` (TS `getFramePage`)
+  lowers the window a frame shows into the page table: `frame_window` for the frame's spec, then
+  `lower_tracks` over its rows and columns (`get_tracks_page` / `getTracksPage` takes explicit
+  tracks). Widths and heights are the sheet's own pt sizes, not measured; rows and columns keep
+  their sheet index; the frozen rows become the table's header rows (`headerRows`, so they repeat
+  on continuation frames). Printed headings add a heading row (A, B, C…) and column (1, 2, 3…),
+  boxed, taken off the box first; printed gridlines are an option. A merge clipped by the window
+  carries its anchor's text and style on its shown corner (on the page and in the grid). A
+  property test holds the page (without headings) to the grid scene of the same window, track by
+  track: indices, sizes, styles table, cells, merges, gridlines and data bars. The in-place
+  refresh (`tableRefreshOps`) aligns columns by their index as rows are aligned, so a scroll by k
+  columns is k column deletes and k inserts and only the new cells are re-poured (perf budget:
+  6 column ops for a 3-column scroll); header-band changes use `insertHeaderRow` /
+  `removeHeaderRow`; `replace` asks for a fresh table when more than 60 % of the cells would be
+  re-poured. The session does not call the page door on leave yet (the exit flow is the next
+  step).
 - **Number formats as a cell shows them** (W2.1). A section's colour (`[Red]`, the other seven
   names and `[Color1]`–`[Color56]`, read through the workbook's own palette when it overrides
   the default) colours the number on the page table and in the live grid alike; a conditional
@@ -269,8 +315,25 @@ each published canary added is under [Releases](#releases).
 - **Layout commands** (plan G4; `src/layout-commands.ts`). Typed `importCsv { text, name }`,
   `mergeCells`, `unmergeCells`, `setBorders { range, edges: all | outline | top | right |
 bottom | left, style, color? }`, `setColumnWidth` and `setRowHeight { sheet, first, last?,
-size? }` (no size clears it), each one workbook version and one undo step. Deleting a chart
-  is not a command: the engine has no door that removes one.
+size? }` (no size clears it), each one workbook version and one undo step.
+- **Placement and chart delete** (plan G4). Typed `place { source: range | name | printArea,
+ref, chain?, repeatHeaderRows }` puts an A1 range, a defined name or table (the placement
+  keeps the name, as the panel's Place does) or a sheet's print area (`_xlnm.Print_Area`,
+  resolved by the engine; `ref` is the sheet) on the page as one table in a new frame, or,
+  with `chain` (a frame of a threaded chain), paginated across the chain with the leading rows
+  repeated, live as the palette's Paginate is. Each placement is one document write and one
+  undo step: the first pagination of a chain is one batch on a host with in-batch handles
+  (core protocol 66), every page's table addressed by its handle and each swatch or style
+  minted once; an older host places table by table. Typed `deleteChart { chart }` removes the
+  chart from the workbook (`delete_chart`: the slot stays, so every other chart keeps its
+  index; the chart journal replays the delete) and every placed copy of it (found on the scene
+  tree by its binding, so a chart placed in an earlier session goes too), one workbook version
+  and one undo step; a `host.objects` delete of `chart/<n>` does the same in its batch.
+  `apps/cli/test/cli-sheet.spec.ts` runs both through `paged-node invoke`. Not a placement
+  kind yet: a frame's view and sizing (`sizing: "window"`, print headings and gridlines, ADR
+  510), whose page side is not wired to placement; a print area of several ranges; a chart read
+  from the workbook stays in the saved xlsx (the writer never re-derives chart parts) and is
+  deleted again from the journal when the version is loaded.
 - **Datasets, both ways.** A dataset-sourced sheet re-pulls on every provider revision by default
   (`live: false` keeps the old mark-stale behaviour), and a sheet range can be published as a
   `dataset` provider whose revision moves with every edit.
@@ -306,8 +369,9 @@ size? }` (no size clears it), each one workbook version and one undo step. Delet
   theme part and the workbook palette; conditional-format colour-scale stops still use the
   default Office theme.
 - **One workbook** is stored at a time; importing another replaces it.
-- **Filter views** hide rows from the page lowering; they are not written into the xlsx and no
-  panel calls them yet.
+- **Icon criteria.** Sorting by a conditional-format icon is refused and an icon filter keeps
+  every row (`filterState` reports it as not applied): the styler does not compute icon sets yet.
+  Tables' own AutoFilters are read and kept; the filter doors work on the sheet's AutoFilter.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
@@ -332,8 +396,8 @@ size? }` (no size clears it), each one workbook version and one undo step. Delet
   the bundle never sets.
 - **Exact decimal arithmetic:** a Cargo feature `sheet-js` does not enable
   ([ADR 501](adr/501-f64-numbers.md)).
-- **Interpreting pivot tables, data validation, external links or macros**
-  ([ADR 504](adr/504-publishing-first-scope.md)). External links are never followed; a formula
+- **Interpreting pivot tables, slicers or macros**
+  ([ADR 504](adr/504-publishing-first-scope.md), amended by [ADR 517](adr/517-interactive-workbook-features.md)). External links are never followed; a formula
   over another workbook (`[1]Sheet1!A1`) evaluates from the values cached in the file.
 - **Other file formats.** `.xlsx`, CSV and TSV are read; `.xlsx` is written; a legacy `.xls` is
   refused.

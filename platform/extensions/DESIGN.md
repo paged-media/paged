@@ -2709,8 +2709,11 @@ over the frame's content box while the context is active on it (editor ADR 281).
 
 - **Shape.** `contribute.frameSurface({ contextType, render })`; the component gets
   `FrameSurfaceProps`: `elementId`, `widthPt` / `heightPt` (its own CSS size), `pxPerPt`,
-  `presentation` (`"frame"` | `"fullscreen"`), `toContentPt(clientX, clientY)`,
+  `presentation` (`"frame"` | `"fullscreen"`), `frameBoxPt` (the frame's content box in either
+  presentation), `toContentPt(clientX, clientY)`,
   `requestPresentation(p)` and `exit({ commit })`.
+- **Bar.** An optional `bar` component the host shows as a floating, upright, unscaled card
+  attached above the frame (below when there is no room), with the same props.
 - **Coordinates.** One CSS pixel inside the surface is one point of frame content; the host's
   transform carries camera, page origin, ItemTransform and the content-box origin.
 - **Gate.** `contextType` must be declared in `contributes.editContexts[]` and registered by the
@@ -2725,3 +2728,7 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `shell.exitEditContext@1`.
 - **Isolate.** React in the host realm, like panels (§6). The isolate form is a transferred
   `OffscreenCanvas`, a plain-data input stream and the host's input-method proxy.
+- **Document styles (ADR 336).** A surface draws with the document's styles through
+  `host.document.styleProperties(collection, styleId)` (resolved through `BasedOn`) and
+  `host.document.swatchDisplay(ids)` (display colours after colour management, CMYK, gamut);
+  probes `document.styleProperties@1`, `document.swatchDisplay@1`.

@@ -723,6 +723,17 @@ export interface ImageSession {
   /** Re-read the engine's selection stats into `state().selection` and
    *  notify (the machines call this after every committed change). */
   refreshSelection(): void;
+  /** The live selection over `frameId`'s image as coverage bytes (one per
+   *  image pixel, row-major) — what `filterRegion { selection: true }`
+   *  filters within — or why there is none to use: no image open, another
+   *  frame open, nothing selected (the editor's "no selection" means
+   *  everything to an adjustment; a script asking for THE selection is
+   *  told there is none instead). */
+  liveSelection(
+    frameId: string,
+  ):
+    | { width: number; height: number; coverage: Uint8Array }
+    | { refused: string };
   /** Select the whole image (an explicit full-extent selection). */
   selectAll(): boolean;
   /** Deselect (back to "no selection" — adjust applies everywhere). */
@@ -3463,6 +3474,25 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!engine || !state.source) return;
       state.selection = engine.selectionStats();
       emit();
+    },
+
+    liveSelection(frameId) {
+      const src = state.source;
+      if (!engine || !src)
+        return {
+          refused: "no image is open in the editor, so there is no selection",
+        };
+      if (src.elementId !== frameId)
+        return {
+          refused: `the editor's selection is on another image (${src.elementId ?? "an import"}), not ${frameId}`,
+        };
+      if (!engine.selectionStats())
+        return { refused: "nothing is selected in the editor" };
+      return {
+        width: src.width,
+        height: src.height,
+        coverage: engine.selectionCoverageBytes().slice(),
+      };
     },
 
     selectAll() {

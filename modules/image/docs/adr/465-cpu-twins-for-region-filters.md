@@ -1,6 +1,7 @@
 # ADR 465 — Where no GPU exists, a region filter runs on shipped CPU twins
 
 - **Status:** Accepted, 2026-10-23. An exception to [ADR 450](450-gpu-only-kernels.md), which it amends.
+  Amended 2026-10-23: a mask given as data (below).
 - **Scope:** `image-kernels` (feature `cpu`, `src/cpu.rs`), `image-js/src/region_filter.rs` and the
   chain it shares with the GPU (`ingest.rs`, `adjust_stages`), the wasm export
   `filter_region_rgba8`, the object model's layer `filter` row and the typed command
@@ -98,8 +99,41 @@ to change its twin too, or the GPU lanes fail.
 The CPU path is slower than the GPU path, roughly linearly in the region's area and, for blur,
 in its radius. It runs on the region only, grown by the widest window.
 
-The selection is a session concept; headless there is none, so a headless region is a rectangle.
-Filtering within a selection stays the editor's Apply.
+The selection is a session concept; headless there is none, so a headless region was a rectangle
+and filtering within a selection stayed the editor's Apply. The amendment below lifts that.
+
+## Amendment, 2026-10-23 — a mask given as data
+
+`filterRegion` takes a selection as data, so a script and the CLI can filter within one, and the
+editor's live selection:
+
+- **`mask { polygons?, alpha?, feather? }`.** `polygons` are closed polygons of `[x, y]` image
+  pixels, each filled even–odd and anti-aliased by the selection rasteriser
+  (`SelectionCoverage::rasterize_polygon`), unioned; `alpha` is an 8-bit coverage, one byte per
+  canvas pixel (or an encoded image of the canvas size, its luminance times its alpha),
+  intersected; `feather` is a Gaussian on the mask (σ ≤ 250 px). The result is clipped hard to
+  `region`. Rasterising is mask preparation, the CPU work ADR 450 allows; it happens once, in
+  Rust (`region_filter::mask_coverage`), and both paths consume the same coverage.
+- **`selection: true`** reads the editor session's selection of that frame as coverage bytes
+  (`ImageSession.liveSelection`) and intersects it with any `mask`. Without one (headless,
+  another image open, nothing selected) it is refused with the reason; "no selection" does not
+  silently mean everything here.
+- **One mask on both paths.** The GPU path gives the coverage to the pipeline as its selection;
+  the CPU path applies it per stage as the ABI does, `mix(a, result, m)` with `m` the coverage
+  byte lowered to f16 as `mask_window_f16` lowers it, the Gaussian passes and the unsharp
+  included, and the curves table blends by the same coverage. Partial coverage blends filtered
+  and original pixels. Neither path writes a pixel whose coverage is 0. The paths agree within
+  one 8-bit level under a mask too.
+- **Refusals.** A polygon of fewer than three points, an alpha of the wrong size, a feather out
+  of range and a mask that covers no pixel are refused with the reason.
+
+Evidence: `image-js/src/region_filter.rs` (`RegionMask`, `mask_coverage`, `filter_masked_cpu`,
+`filter_masked_gpu`), `image-js/src/lib.rs` (`filter_region_rgba8`'s mask arguments),
+`glue/src/object-model/image-objects.ts` (`FILTER_FIELDS`, the mask and selection checks),
+`glue/src/session.ts` (`liveSelection`); tests in `image-conformance/tests/it/cpu_twins.rs` (the
+rasteriser, the CPU path under a mask, the two paths under a mask), `glue/test/region-filter.spec.ts`
+(a polygon and an alpha mask headless, the selection source), `glue/test/selection.spec.ts` and
+`apps/cli/test/cli-image.spec.ts` (a polygon, an alpha mask from `@path`, `selection: true` refused).
 
 ## Related
 
