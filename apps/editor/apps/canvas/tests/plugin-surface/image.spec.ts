@@ -569,7 +569,7 @@ test.describe("plugin surface · paged.image", () => {
     // forever — which is exactly how this spec first reported the
     // change, as a 5-minute timeout.
     await expect(
-      page.locator("html[data-paged-placement='armed']"),
+      page.locator("[data-paged-editor][data-paged-placement='armed']"),
     ).toHaveCount(1, { timeout: 15_000 });
     const vp = (await page.locator("[data-paged-viewport]").boundingBox())!;
     await page.mouse.click(
