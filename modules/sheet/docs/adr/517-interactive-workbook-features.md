@@ -81,6 +81,19 @@ captured XML. The engine gains a mutable view door (`Engine::sheet_view_mut`) ne
   dynamic lists, custom rules with the entry in place, Circle Invalid Data, authoring that moves
   cells between rules, the round trip, the corpus workbook's own rules enforced and its zero-edit
   save unchanged).
+- Sort and filter: `sheet-js/src/core/sort.rs`, `sheet-js/src/core/filter.rs`,
+  `sheet-xlsx/src/parts/autofilter.rs` (every criterion read and written, a byte-identical round
+  trip of Excel's forms), `sheet-xlsx/src/style_edit.rs` (`color_dxf`: the differential format a
+  colour sort or filter names), `sheet-conformance/tests/it/w2_sort_filter.rs` (two-level, custom
+  list, case-sensitive, left-to-right and colour sorts with their `sortState`; every criterion,
+  the clock-driven dynamic dates, the dropdown data, named views; property tests: a two-key sort
+  is stable against brute force, the custom-condition engine equals a brute-force reading).
+
+**Frozen type amendment (filter criteria).** `sheet_core::FilterCriterion` gains `DateGroups`,
+`Custom`, `Dynamic`, `Color` and `Icon` (with `FilterOp`, `CustomCondition`, `DateGroup`);
+`Unsupported` remains for criteria in extensions Paged does not read. The existing variants keep
+their meaning. A sheet's filter is now its `<autoFilter>`: what was a Paged-only view written
+nowhere is written as Excel writes it, and the rows it hides are saved hidden.
 
 ## Consequences
 
