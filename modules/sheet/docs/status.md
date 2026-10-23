@@ -498,7 +498,8 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
 - **One workbook** is stored at a time; importing another replaces it.
 - **Icon criteria.** Sorting by a conditional-format icon is refused and an icon filter keeps
   every row (`filterState` reports it as not applied): the styler does not compute icon sets yet.
-  Tables' own AutoFilters are read and kept; the filter doors work on the sheet's AutoFilter.
+  A filter over a range inside a table goes into the table's own AutoFilter (its part);
+  `tableFilterColumnValues` and `clearTableFilter` are its dropdown and clear.
 - **Formulas** are the Excel en-US dialect only. On load, a formula the parser does not read
   keeps its cached value (an external defined name or DDE item, `[1]!Name`), and so does one
   calling a function the engine does not know or never runs (WEBSERVICE, CUBEVALUE).
