@@ -33,7 +33,7 @@ const MANIFEST: PluginManifest = {
   name: "test",
   version: "1.0.0",
   apiVersion: "^0.2",
-  capabilities: { document: { read: true } },
+  capabilities: { document: { read: "broad" } },
 } as PluginManifest;
 
 describe("document style reads (extensions ADR 336)", () => {
