@@ -528,4 +528,18 @@ impl SheetEngine {
     pub fn list_data_tables(&self) -> Result<JsValue, JsValue> {
         to_js(&self.session.list_data_tables())
     }
+
+    /// The filter dropdown of a table's column (its own AutoFilter).
+    pub fn table_filter_column_values(&self, name: &str, col: u32) -> Result<JsValue, JsValue> {
+        to_js(
+            &self
+                .session
+                .table_filter_column_values(name, col)
+                .map_err(map_err)?,
+        )
+    }
+
+    pub fn clear_table_filter(&mut self, name: &str) -> Result<JsValue, JsValue> {
+        to_js(&self.session.clear_table_filter(name).map_err(map_err)?)
+    }
 }
