@@ -84,4 +84,14 @@ button.addEventListener("click", async () => {
   note(r.ok ? "name set" : `refused: ${JSON.stringify(r)}`);
 });
 form.append(button);
+const script = document.createElement("button");
+script.textContent = "Run a script: count the pages";
+script.setAttribute("data-demo-run-script", "");
+script.addEventListener("click", async () => {
+  const r = await editor.runScript(
+    'const p = paged.pages(); console.log("pages: " + (typeof p === "string" ? JSON.parse(p) : p).length);',
+  );
+  note(r.error ? `script error: ${r.error}` : r.output.join(" "));
+});
+form.append(script);
 page.status("ready");

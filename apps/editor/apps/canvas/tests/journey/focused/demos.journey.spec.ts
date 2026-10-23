@@ -130,6 +130,9 @@ test.describe("journey · embedding demos", () => {
     await frame.locator('[data-region-command="paged.host.submit"]').click();
     await expect(page.getByRole("status")).toHaveText("submitted");
     await expect(messages).toContainText('"Mary Example"');
+    // Scripts reach the frame too (dev and demo builds).
+    await page.locator("[data-demo-run-script]").click();
+    await expect(messages).toContainText("pages: 1");
   });
 
   test("two editors on one page: each fills, submits and answers its own keys @feat:editor-shell.solo-mode @level:happy", async ({
