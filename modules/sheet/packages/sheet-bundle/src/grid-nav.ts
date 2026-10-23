@@ -241,6 +241,8 @@ export type GridKeyAction =
   | { kind: "pasteSpecial" }
   /** F9: recalculate (manual calculation mode). */
   | { kind: "calculate" }
+  /** Ctrl+Shift+L: AutoFilter on or off (sheet ADR 517). */
+  | { kind: "toggleFilter" }
   /** Alt+Down: the active cell's dropdown (a validation list, a filter
    *  menu). */
   | { kind: "dropdown" }
@@ -299,6 +301,8 @@ export function gridKeyAction(
           : { kind: "toggleStyle", style: "underline" };
       case "1":
         return editing ? { kind: "none" } : { kind: "formatCells" };
+      case "l":
+        return editing || !shift ? { kind: "none" } : { kind: "toggleFilter" };
       case "z":
         return shift ? { kind: "redo" } : { kind: "undo" };
       case "y":
