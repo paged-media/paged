@@ -109,3 +109,265 @@ impl SheetSession {
         })
     }
 }
+
+// ── Authoring (W2.5) ─────────────────────────────────────────────────────
+
+use sheet_core::condfmt::{CfBlock, CfKind, CfRule};
+use sheet_core::visual::DifferentialFormat;
+
+use super::SessionError;
+
+/// One rule as the authoring API lists it: its position in priority order
+/// (the handle the other calls take until the next change), its ranges in
+/// A1 and the rule itself (kind, priority, stop-if-true, differential
+/// format, in the model's JSON shape).
+#[derive(serde::Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CfRuleInfo {
+    pub index: u32,
+    pub ranges: Vec<String>,
+    pub rule: CfRule,
+}
+
+/// A rule to add or replace: its ranges (A1, several allowed), what it
+/// tests and paints, whether it stops lower rules, its differential format.
+#[derive(serde::Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CfRuleSpec {
+    pub ranges: Vec<String>,
+    pub kind: CfKind,
+    #[serde(default)]
+    pub stop_if_true: bool,
+    #[serde(default)]
+    pub dxf: Option<DifferentialFormat>,
+}
+
+impl SheetSession {
+    /// The sheet's rules, by position in priority order: `(block, rule)`.
+    fn cf_order(cf: &SheetCf) -> Vec<(usize, usize)> {
+        let mut v: Vec<(i64, usize, usize)> = cf
+            .blocks
+            .iter()
+            .enumerate()
+            .flat_map(|(b, block)| {
+                block
+                    .rules
+                    .iter()
+                    .enumerate()
+                    .map(move |(r, rule)| (rule.priority, b, r))
+            })
+            .collect();
+        v.sort();
+        v.into_iter().map(|(_, b, r)| (b, r)).collect()
+    }
+
+    /// The conditional-format rules of `sheet`, highest priority first.
+    pub fn cf_rules(&self, sheet: u16) -> Result<Vec<CfRuleInfo>, SessionError> {
+        self.validate_sheet(sheet)?;
+        let Some(cf) = self.doc.cf_models.get(&sheet) else {
+            return Ok(Vec::new());
+        };
+        Ok(Self::cf_order(cf)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (b, r))| CfRuleInfo {
+                index: i as u32,
+                ranges: cf.blocks[b]
+                    .ranges
+                    .iter()
+                    .map(sheet_xlsx::cf_edit::range_a1)
+                    .collect(),
+                rule: cf.blocks[b].rules[r].clone(),
+            })
+            .collect())
+    }
+
+    fn cf_ranges(
+        &self,
+        ranges: &[String],
+    ) -> Result<Vec<sheet_core::condfmt::CfRange>, SessionError> {
+        if ranges.is_empty() {
+            return Err(SessionError("a conditional format needs a range".into()));
+        }
+        ranges
+            .iter()
+            .map(|t| {
+                let r = super::parse_range(t.trim())?;
+                Ok((
+                    r.r0.min(r.r1),
+                    r.c0.min(r.c1),
+                    r.r0.max(r.r1),
+                    r.c0.max(r.c1),
+                ))
+            })
+            .collect()
+    }
+
+    /// Apply `edit` to the sheet's rules (in priority order), renumber the
+    /// priorities 1..n in that order and write the result.
+    fn cf_apply(
+        &mut self,
+        sheet: u16,
+        edit: impl FnOnce(&mut SheetCf, &mut Vec<(usize, usize)>) -> Result<(), SessionError>,
+    ) -> Result<(), SessionError> {
+        self.validate_sheet(sheet)?;
+        let mut cf = self.doc.cf_models.get(&sheet).cloned().unwrap_or_default();
+        let mut order = Self::cf_order(&cf);
+        edit(&mut cf, &mut order)?;
+        for (i, &(b, r)) in order.iter().enumerate() {
+            if let Some(rule) = cf.blocks.get_mut(b).and_then(|bl| bl.rules.get_mut(r)) {
+                rule.priority = i as i64 + 1;
+            }
+        }
+        cf.blocks.retain(|b| !b.rules.is_empty());
+        self.doc
+            .write_conditional_formats(sheet, &cf)
+            .map_err(|e| SessionError(e.to_string()))?;
+        self.extra_dirty.insert(sheet);
+        self.cf_caches.clear();
+        Ok(())
+    }
+
+    /// Add a rule at the top of the priority order (as Excel's New Rule
+    /// does). Returns its index (0).
+    pub fn add_cf_rule(&mut self, sheet: u16, spec: CfRuleSpec) -> Result<u32, SessionError> {
+        let ranges = self.cf_ranges(&spec.ranges)?;
+        self.cf_apply(sheet, move |cf, order| {
+            let rule = CfRule {
+                stop_if_true: spec.stop_if_true,
+                dxf: spec.dxf,
+                ..CfRule::new(spec.kind, 0)
+            };
+            cf.blocks.push(CfBlock {
+                ranges,
+                rules: vec![rule],
+                x14_only: false,
+            });
+            order.insert(0, (cf.blocks.len() - 1, 0));
+            Ok(())
+        })?;
+        Ok(0)
+    }
+
+    /// Replace rule `index` (its ranges, test, format and stop flag); its
+    /// priority stays.
+    pub fn update_cf_rule(
+        &mut self,
+        sheet: u16,
+        index: u32,
+        spec: CfRuleSpec,
+    ) -> Result<(), SessionError> {
+        let ranges = self.cf_ranges(&spec.ranges)?;
+        self.cf_apply(sheet, move |cf, order| {
+            let &(b, r) = order
+                .get(index as usize)
+                .ok_or_else(|| SessionError(format!("no conditional format {index}")))?;
+            let old = cf.blocks[b].rules[r].clone();
+            let rule = CfRule {
+                kind: spec.kind,
+                stop_if_true: spec.stop_if_true,
+                dxf: spec.dxf,
+                dxf_id: None,
+                ext_id: old.ext_id,
+                priority: old.priority,
+            };
+            if cf.blocks[b].ranges == ranges {
+                cf.blocks[b].rules[r] = rule;
+            } else if cf.blocks[b].rules.len() == 1 {
+                cf.blocks[b].ranges = ranges;
+                cf.blocks[b].rules[r] = rule;
+            } else {
+                // The rule moves to its own block; the others keep theirs.
+                cf.blocks[b].rules.remove(r);
+                for o in order.iter_mut() {
+                    if o.0 == b && o.1 > r {
+                        o.1 -= 1;
+                    }
+                }
+                cf.blocks.push(CfBlock {
+                    ranges,
+                    rules: vec![rule],
+                    x14_only: false,
+                });
+                order[index as usize] = (cf.blocks.len() - 1, 0);
+            }
+            Ok(())
+        })
+    }
+
+    /// Delete rule `index`.
+    pub fn delete_cf_rule(&mut self, sheet: u16, index: u32) -> Result<(), SessionError> {
+        self.cf_apply(sheet, move |cf, order| {
+            if index as usize >= order.len() {
+                return Err(SessionError(format!("no conditional format {index}")));
+            }
+            let (b, r) = order.remove(index as usize);
+            cf.blocks[b].rules.remove(r);
+            for o in order.iter_mut() {
+                if o.0 == b && o.1 > r {
+                    o.1 -= 1;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Put the rules in a new priority order: `order` lists the current
+    /// indices, highest priority first (every index once).
+    pub fn reorder_cf_rules(
+        &mut self,
+        sheet: u16,
+        new_order: Vec<u32>,
+    ) -> Result<(), SessionError> {
+        self.cf_apply(sheet, move |_, order| {
+            let mut seen = vec![false; order.len()];
+            if new_order.len() != order.len()
+                || new_order.iter().any(|&i| {
+                    (i as usize) >= seen.len() || std::mem::replace(&mut seen[i as usize], true)
+                })
+            {
+                return Err(SessionError(
+                    "the new order must list every rule once".into(),
+                ));
+            }
+            *order = new_order.iter().map(|&i| order[i as usize]).collect();
+            Ok(())
+        })
+    }
+
+    /// Set rule `index`'s stop-if-true.
+    pub fn set_cf_stop_if_true(
+        &mut self,
+        sheet: u16,
+        index: u32,
+        stop: bool,
+    ) -> Result<(), SessionError> {
+        self.cf_apply(sheet, move |cf, order| {
+            let &(b, r) = order
+                .get(index as usize)
+                .ok_or_else(|| SessionError(format!("no conditional format {index}")))?;
+            cf.blocks[b].rules[r].stop_if_true = stop;
+            Ok(())
+        })
+    }
+}
+
+impl SheetSession {
+    /// The sheet's whole conditional-format model (the undo snapshot).
+    pub fn cf_snapshot(&self, sheet: u16) -> Result<SheetCf, SessionError> {
+        self.validate_sheet(sheet)?;
+        Ok(self.doc.cf_models.get(&sheet).cloned().unwrap_or_default())
+    }
+
+    /// Restore a [`cf_snapshot`](Self::cf_snapshot) (the undo of an
+    /// authoring step).
+    pub fn cf_restore(&mut self, sheet: u16, cf: SheetCf) -> Result<(), SessionError> {
+        self.validate_sheet(sheet)?;
+        self.doc
+            .write_conditional_formats(sheet, &cf)
+            .map_err(|e| SessionError(e.to_string()))?;
+        self.extra_dirty.insert(sheet);
+        self.cf_caches.clear();
+        Ok(())
+    }
+}

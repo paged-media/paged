@@ -802,6 +802,70 @@ mod wasm {
             to_js(&r)
         }
 
+        // ── W2.5: conditional-format authoring (sheet ADR 523) ──────────
+
+        /// The sheet's conditional-format rules, highest priority first:
+        /// `[{index, ranges, rule}]` (the rule in the model's JSON shape).
+        pub fn cf_rules(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            to_js(&self.session.cf_rules(sheet).map_err(map_err)?)
+        }
+
+        /// Add a rule at the top: `spec` is `{ranges, kind, stopIfTrue?,
+        /// dxf?}`. Returns its index (0).
+        pub fn add_cf_rule(&mut self, sheet: u16, spec: JsValue) -> Result<u32, JsValue> {
+            let spec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session.add_cf_rule(sheet, spec).map_err(map_err)
+        }
+
+        /// Replace rule `index` (`spec` as for `add_cf_rule`).
+        pub fn update_cf_rule(
+            &mut self,
+            sheet: u16,
+            index: u32,
+            spec: JsValue,
+        ) -> Result<(), JsValue> {
+            let spec = serde_wasm_bindgen::from_value(spec)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session
+                .update_cf_rule(sheet, index, spec)
+                .map_err(map_err)
+        }
+
+        /// Delete rule `index`.
+        pub fn delete_cf_rule(&mut self, sheet: u16, index: u32) -> Result<(), JsValue> {
+            self.session.delete_cf_rule(sheet, index).map_err(map_err)
+        }
+
+        /// New priority order: the current indices, highest first.
+        pub fn reorder_cf_rules(&mut self, sheet: u16, order: Vec<u32>) -> Result<(), JsValue> {
+            self.session.reorder_cf_rules(sheet, order).map_err(map_err)
+        }
+
+        /// Set rule `index`'s stop-if-true.
+        pub fn set_cf_stop_if_true(
+            &mut self,
+            sheet: u16,
+            index: u32,
+            stop: bool,
+        ) -> Result<(), JsValue> {
+            self.session
+                .set_cf_stop_if_true(sheet, index, stop)
+                .map_err(map_err)
+        }
+
+        /// The whole model (an undo snapshot).
+        pub fn cf_snapshot(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            to_js(&self.session.cf_snapshot(sheet).map_err(map_err)?)
+        }
+
+        /// Restore a `cf_snapshot`.
+        pub fn cf_restore(&mut self, sheet: u16, snapshot: JsValue) -> Result<(), JsValue> {
+            let cf = serde_wasm_bindgen::from_value(snapshot)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session.cf_restore(sheet, cf).map_err(map_err)
+        }
+
         /// The cell visual model of one cell (W2.2): every colour a
         /// `ColorRef` (`concrete` + optional document swatch).
         pub fn get_cell_visual(&self, sheet: u16, row: u32, col: u32) -> Result<JsValue, JsValue> {

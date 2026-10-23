@@ -35,7 +35,7 @@
 //! the concrete value is unchanged).
 
 /// The colour a workbook stores (ECMA-376 §18.8.3 `CT_Color`).
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum ConcreteColor {
     /// `rgb="AARRGGBB"` (alpha dropped).
@@ -51,7 +51,7 @@ pub enum ConcreteColor {
 }
 
 /// How a document swatch is defined.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DocColorModel {
     Rgb,
@@ -86,7 +86,7 @@ impl DocColorModel {
 /// A reference to a document swatch: its id in the layout document, its
 /// colour model and the sRGB a reader without the document shows (what an
 /// xlsx save writes as the concrete colour).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocSwatchRef {
     pub id: String,
@@ -95,7 +95,7 @@ pub struct DocSwatchRef {
 }
 
 /// A colour: the concrete workbook colour plus an optional document swatch.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ColorRef {
     pub concrete: ConcreteColor,
@@ -161,7 +161,9 @@ impl ColorRef {
 }
 
 /// `<u val>` (ECMA-376 §18.18.82).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum UnderlineKind {
     #[default]
@@ -197,7 +199,9 @@ impl UnderlineKind {
 }
 
 /// `<vertAlign val>`: superscript / subscript.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum VertAlign {
     #[default]
@@ -226,7 +230,8 @@ impl VertAlign {
 
 /// A concrete font (`<font>`, ECMA-376 §18.8.22). `None` / default fields
 /// carry no explicit attribute.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct FontSpec {
     pub name: Option<String>,
@@ -242,7 +247,8 @@ pub struct FontSpec {
 }
 
 /// A font plus optional document character / paragraph styles.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct TextStyleRef {
     pub font: FontSpec,
@@ -254,7 +260,9 @@ pub struct TextStyleRef {
 
 /// The pattern of a `<patternFill>` (ECMA-376 §18.18.55, the 18 patterns
 /// plus `none`).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum PatternKind {
     #[default]
@@ -343,7 +351,7 @@ impl PatternKind {
 }
 
 /// One stop of a gradient fill.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GradientStop {
     /// 0..1 along the gradient.
@@ -352,7 +360,7 @@ pub struct GradientStop {
 }
 
 /// A `<gradientFill>`'s geometry.
-#[derive(Clone, Debug, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum GradientKind {
     /// `type="linear" degree`.
@@ -367,7 +375,7 @@ pub enum GradientKind {
 }
 
 /// A cell's fill (`<fill>`, ECMA-376 §18.8.20).
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum CellFill {
     #[default]
@@ -384,7 +392,9 @@ pub enum CellFill {
 }
 
 /// A border line style (ST_BorderStyle, the 13 line styles plus none).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum BorderStyle {
     #[default]
@@ -437,7 +447,8 @@ impl BorderStyle {
 }
 
 /// One border edge: its line style and colour.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct BorderEdge {
     pub style: BorderStyle,
@@ -452,7 +463,8 @@ impl BorderEdge {
 
 /// A cell's border (`<border>`, ECMA-376 §18.8.4): four edges and the
 /// diagonal, drawn up (bottom-left → top-right) and/or down.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct CellBorder {
     pub left: BorderEdge,
@@ -465,7 +477,9 @@ pub struct CellBorder {
 }
 
 /// `<alignment horizontal>` (the full ST_HorizontalAlignment).
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum HAlign {
     #[default]
@@ -508,7 +522,9 @@ impl HAlign {
 }
 
 /// `<alignment vertical>`.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(
+    Copy, Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
 pub enum VAlign {
     Top,
@@ -545,7 +561,8 @@ impl VAlign {
 pub const ROTATION_STACKED: u32 = 255;
 
 /// `<alignment>` (ECMA-376 §18.8.1).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct CellAlignment {
     pub horizontal: HAlign,
@@ -561,7 +578,8 @@ pub struct CellAlignment {
 
 /// What a cell style looks like (one `cellXfs` record resolved through its
 /// sub-tables, the `apply*` flags honoured).
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct CellVisual {
     pub font: TextStyleRef,
@@ -579,7 +597,8 @@ pub struct CellVisual {
 
 /// A font change a differential format (`<dxf>`) applies: only the `Some`
 /// facets change.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct FontDelta {
     pub name: Option<String>,
@@ -594,7 +613,8 @@ pub struct FontDelta {
 
 /// A differential format (`<dxf>`, ECMA-376 §18.8.14): what a conditional
 /// format (or a table style element) changes.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct DifferentialFormat {
     pub font: Option<FontDelta>,
@@ -605,7 +625,8 @@ pub struct DifferentialFormat {
 }
 
 /// One Excel named cell style (`cellStyles` + its `cellStyleXfs` record).
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct NamedCellStyle {
     pub name: String,
@@ -623,7 +644,8 @@ pub struct NamedCellStyle {
 
 /// One run of a rich-text cell: its text and the font it overrides (`None`
 /// = the cell's font).
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct RichRunVisual {
     pub text: String,

@@ -49,7 +49,7 @@ use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, Vi
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
 use sheet_xlsx::XlsxDocument;
 
-mod cf;
+pub mod cf;
 mod charts;
 pub mod csv;
 pub mod files;

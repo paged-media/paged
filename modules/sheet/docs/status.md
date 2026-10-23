@@ -274,6 +274,14 @@ each published canary added is under [Releases](#releases).
   agree, two colour-scale cells differ by one level (a recorded divergence). A 1,000,000-cell
   sheet with 20 rules: 0.7 ms per grid viewport, 46 ms for the first frame after an edit. Not on
   the page: gradient data bars (solid), bars and icons on a paginated chain.
+  **Authoring** (W2.5): `cf_rules`, `add_cf_rule` (on top, as Excel's New Rule), `update_cf_rule`,
+  `delete_cf_rule`, `reorder_cf_rules`, `set_cf_stop_if_true` (engine facade and session, each
+  session call one undo step; the dialog is still to come). A write splices only the changed
+  `<conditionalFormatting>` blocks (an unchanged one keeps its bytes, its priorities spliced in
+  place), rewrites the worksheet's x14 extension only when it changes (every data bar, the icon
+  sets 2006 lacks, custom icons) and appends a `<dxf>` the style sheet does not have. Excel 16
+  opens what Paged writes after authoring styles and conditional formats of every kind without
+  a repair and keeps every rule (the open-check lane: `w2-styles`, `w2-cf`).
 - **Grid panel and in-frame grid.** Range selection by click, drag and shift; arrows, Tab, F2,
   Delete and scrolling in the frame; a cell editor with function completion; copy and paste of
   ranges with relative references re-addressed; the fill handle with number, date, weekday and
