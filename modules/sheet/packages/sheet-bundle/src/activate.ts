@@ -631,7 +631,12 @@ export function activate(host: BundleHost): BundleHandle {
     host.contribute.objectType({
       type: "sheetFrame",
       bakedFallback: "rectangle",
-      matches: (c) => parseBinding(c.metadata) !== null,
+      // The first frame of a paginated chain carries a binding too (its
+      // chain record, ADR 522 amendment): it stays a text frame.
+      matches: (c) => {
+        const b = parseBinding(c.metadata);
+        return b !== null && !b.data.chain;
+      },
       editContextType: "sheet",
     });
   }

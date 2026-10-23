@@ -438,7 +438,15 @@ describe("sheet_chart_lower_paged_draw: binding + determinism", () => {
     // A vector-first chart binds on the minted polygon (insertPath node).
     expect(meta.args.elementId).toEqual({ kind: "polygon", id: "$created" });
     expect(meta.args.key).toBe("x-paged:media.paged.sheet");
-    expect(JSON.parse(meta.args.value)).toEqual(binding);
+    // ADR 522 amendment — with the bound element's page outline as the
+    // chart's art (the 5×5 rect at the origin (10, 20)).
+    expect(JSON.parse(meta.args.value)).toEqual({
+      ...binding,
+      data: { ...binding.data, art: [10, 20, 15, 25] },
+    });
+    expect(chartGeometryToMutations(geom, placement, binding).art).toEqual([
+      10, 20, 15, 25,
+    ]);
   });
 
   it("a text-only chart binds on a textFrame; an empty chart emits no ops", () => {
