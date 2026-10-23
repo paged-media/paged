@@ -88,6 +88,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [276](276-filling-a-template.md) | Filling a template | Accepted 2026-10-22 |
 | [277](277-the-editor-mounts-as-an-instance.md) | The editor mounts as an instance | Accepted 2026-10-23 |
 | [281](281-the-canvas-mounts-frame-surfaces.md) | The canvas mounts a bundle's frame surface over the active frame | Accepted 2026-10-22 |
+| [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and
