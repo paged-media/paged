@@ -94,6 +94,8 @@ import {
   type LoweredTableInfo,
 } from "./lower";
 import { NOTICES } from "./messages";
+import { createDataTools, type DataToolsApi } from "./data-tools";
+import type { EnterResult } from "./engine-w2";
 import {
   chartPlacement,
   chartSizeOf,
@@ -339,7 +341,7 @@ export interface SessionState {
   findRequest: number;
 }
 
-export interface WorkbookSession {
+export interface WorkbookSession extends DataToolsApi {
   /** Read the current state snapshot. */
   state(): SessionState;
   /** Subscribe to state changes (the panel's render trigger). The
@@ -1246,6 +1248,59 @@ export function createWorkbookSession(
     return true;
   }
 
+  /** A typed entry through the engine's validation (`enterCell`, sheet ADR
+   *  517) and journaled like `journaledSetCell`: the prior input is read
+   *  first, the format the text implied rides the same step. An engine
+   *  without the door takes `journaledSetCell`. Null when the write failed
+   *  (logged; nothing journaled). */
+  function journaledEnterCell(
+    sheet: number,
+    row: number,
+    col: number,
+    input: string,
+    confirmed: boolean,
+  ): EnterResult | null {
+    const engine = state.engine;
+    if (!engine) return null;
+    if (!engine.enterCell)
+      return journaledSetCell(sheet, row, col, input)
+        ? { applied: true }
+        : null;
+    let prev: string;
+    let res: EnterResult;
+    try {
+      // Free when the formula bar just showed the cell (a memoised read).
+      prev =
+        cachedRead(`input:${sheet}:${row}:${col}`, () =>
+          engine.getCellInput(sheet, row, col),
+        ) ?? "";
+      res = engine.enterCell(sheet, row, col, input, confirmed);
+    } catch (err) {
+      host.log.warn("enterCell refused", err);
+      return null;
+    }
+    if (!res.applied) return res;
+    const restyled = (res.result as { restyled?: readonly Restyle[] } | null)
+      ?.restyled;
+    editJournal.length = journalCursor; // drop any redo tail
+    const batch = nextJournalBatch++;
+    if (restyled && restyled.length > 0)
+      editJournal.push({
+        sheet,
+        row,
+        col,
+        prev: "",
+        next: "",
+        batch,
+        fmt: restyleStep(restyled),
+      });
+    editJournal.push({ sheet, row, col, prev, next: input, batch });
+    journalCursor = editJournal.length;
+    markEdited();
+    stampRev();
+    return res;
+  }
+
   /** Write one cell and return its PRIOR input (the journal's inverse).
    *  The batch door is preferred: its slim `{changedCount, circular,
    *  prevInputs}` reply carries the prior input, so the write costs one
@@ -1551,7 +1606,7 @@ export function createWorkbookSession(
     if (ch.length !== 1) return false;
     if (!cellEdit) {
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text: ch };
       cellEditMode = "enter";
     } else {
@@ -1587,6 +1642,7 @@ export function createWorkbookSession(
     if (cellEdit) return true;
     const at = activeOf();
     if (!at || !state.engine || state.activeSheet === null) return false;
+    if (!data.mayEdit(at.row, at.col)) return false;
     let text = "";
     try {
       text = state.engine.getCellInput(state.activeSheet, at.row, at.col) ?? "";
@@ -1608,7 +1664,13 @@ export function createWorkbookSession(
     cellEdit = null;
     const sheet = state.activeSheet;
     if (state.engine && sheet !== null) {
-      journaledSetCell(sheet, row, col, text);
+      // Sheet ADR 517 — protection and validation decide; a held-back
+      // entry waits on its alert (Retry / Yes / OK reopen or apply it).
+      if (!data.enterTyped(sheet, row, col, text)) {
+        emitter.emit({ kind: "edit" });
+        void submitInFrameGrid();
+        return false;
+      }
       emitter.emit({
         kind: "cells",
         regions: regionsOf([{ sheet, row, col }]),
@@ -2010,12 +2072,18 @@ export function createWorkbookSession(
         return backspaceEdit();
       case "commit":
         commitEdit();
-        if (m && a.then) applyModel(advance(m, a.then));
+        // A held-back entry stays where it is until its alert is answered.
+        if (m && a.then && !data.api.entryAlert())
+          applyModel(advance(m, a.then));
         return true;
       case "commitMove":
         commitEdit();
-        if (m) applyModel(moveBy(m, a.dRow, a.dCol, false));
+        if (m && !data.api.entryAlert())
+          applyModel(moveBy(m, a.dRow, a.dCol, false));
         return true;
+      case "dropdown":
+        return data.api.openCellDropdown();
+
       case "cancel":
         cancelEdit();
         return true;
@@ -3491,7 +3559,48 @@ export function createWorkbookSession(
     },
   };
 
+  // Sheet ADR 517 — validation, filter, sort, outline, protection and Goal
+  // Seek in the grid (src/data-tools.ts).
+  const data = createDataTools({
+    host,
+    engine: () => state.engine,
+    sheet: () => state.activeSheet,
+    selection: () => {
+      if (state.gridSelection) return state.gridSelection;
+      const at = activeOf();
+      return at
+        ? { anchorRow: at.row, anchorCol: at.col, rows: 1, cols: 1 }
+        : null;
+    },
+    active: () => activeOf(),
+    revision: () => revision,
+    extent: () => {
+      const info = api.sheets().find((x) => x.id === state.activeSheet);
+      return info ? { rows: info.rows, cols: info.cols } : null;
+    },
+    enter: journaledEnterCell,
+    reopenEdit: (row, col, text) => {
+      applyModel(collapsed({ row, col }));
+      cellEdit = { row, col, text };
+      cellEditMode = "edit";
+      emitter.emit({ kind: "edit" });
+      void submitInFrameGrid();
+    },
+    journal: (edits, step) => journalBatch(edits, step),
+    edited: () => {
+      markEdited();
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    repaint: () => {
+      emitter.emit();
+      void submitInFrameGrid();
+    },
+    changedUi: () => emitter.emit(),
+  });
+
   const api: WorkbookSession = {
+    ...data.api,
     objectBridge: () => bridge,
     state: () => state,
     onDidChange: (l) => emitter.on(l),
@@ -3732,7 +3841,7 @@ export function createWorkbookSession(
         return ok;
       }
       const at = activeOf();
-      if (!at) return false;
+      if (!at || !data.mayEdit(at.row, at.col)) return false;
       cellEdit = { row: at.row, col: at.col, text };
       cellEditMode = mode;
       emitter.emit({ kind: "edit" });
@@ -3771,6 +3880,7 @@ export function createWorkbookSession(
 
     hideGridInFrame() {
       cellEdit = null;
+      data.reset();
       drag = null;
       fillPreview = null;
       inFrameActive = false;

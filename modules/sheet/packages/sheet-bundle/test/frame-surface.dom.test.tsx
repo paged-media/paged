@@ -39,6 +39,7 @@ import {
   type FrameSurfaceSession,
   withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
+import { dataToolsStub } from "./data-tools-stub";
 
 afterEach(cleanup);
 
@@ -73,6 +74,8 @@ function fakeSession(shown: GridScene = scene) {
   let pasteCard = false;
   let activeSheet = 0;
   const session: FrameSurfaceSession = {
+    ...dataToolsStub(),
+    undoCellEdit: () => false,
     pasteSpecialOpen: () => pasteCard,
     closePasteSpecial: () => {
       pasteCard = false;

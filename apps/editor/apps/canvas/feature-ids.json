@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 384,
+    "command": 386,
     "keybinding": 88,
-    "menu": 278,
+    "menu": 280,
     "panel": 122,
     "tool": 72
   },
@@ -1021,6 +1021,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.circleInvalid",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.clearCells",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1032,6 +1037,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.cutSelection",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.dataValidation",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2391,6 +2401,11 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Context/Circle invalid data",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Context/Clear contents",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -2402,6 +2417,11 @@
     },
     {
       "id": "menu:Context/Cut",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Context/Data validation…",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
