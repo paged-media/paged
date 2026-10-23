@@ -111,6 +111,7 @@ import {
   type BlobStore,
   type ClipboardBackend,
   type DocumentsBackend,
+  type NativeDocumentBackend,
   type SecretStoreBackend,
   type CreateBundleHostOptions,
   type ToolSettingsBackend,
@@ -212,6 +213,14 @@ export interface HarnessOptions
    *  `defaultFont`. Absent: the document's declared profile, else naive
    *  CMYK, as before. */
   cmykProfile?: Uint8Array;
+  /** The native-document door (`host.nativeDocument`): by default the
+   *  harness backs it with the engine, as the editor does: the reads answer
+   *  the core-owned `paged/core/` parts and `open` loads a native or
+   *  importable package as the active document (fanned out like `load`),
+   *  so `supports("document.readNative@1")` / `("document.openNative@1")`
+   *  are true and an importer opens its file standalone. A backend given
+   *  here replaces it; `false` wires none, the host without the door. */
+  nativeDocument?: NativeDocumentBackend | false;
 }
 
 /** A headless will-save registry: listeners register per plugin and
@@ -971,6 +980,52 @@ export async function createHeadlessHost(
     },
   };
 
+  // The headless native-document backend, the editor's
+  // (`plugin-native-document.ts`) over the engine: the reads go through the
+  // core part wire ops at the well-known `paged/core/` paths, `open` is a
+  // direct load whose `documentLoaded` reply is fanned out, as `load` does.
+  // No replace question: the importer that opens is the caller's own act.
+  const CORE_PARTS_PREFIX = "paged/core/";
+  const readCorePart = async (path: string): Promise<Uint8Array | null> => {
+    try {
+      const reply = (await editor.client.send({
+        kind: "readPagedPart",
+        payload: { path },
+      } as MainToWorkerKind)) as WorkerToMain;
+      if (reply.kind !== "pagedPartRead" || !reply.payload.found) return null;
+      return Uint8Array.from(reply.payload.bytes);
+    } catch {
+      return null;
+    }
+  };
+  const nativeDocumentBackend: NativeDocumentBackend | undefined =
+    options.nativeDocument === false
+      ? undefined
+      : (options.nativeDocument ?? {
+          readModel: () =>
+            readCorePart(`${CORE_PARTS_PREFIX}model/document.pgm`),
+          readComposition: () =>
+            readCorePart(`${CORE_PARTS_PREFIX}composition/document.pgd`),
+          async listParts(prefix) {
+            const rel = (prefix ?? "").replace(/^\/+/, "");
+            try {
+              const reply = (await editor.client.send({
+                kind: "listPagedParts",
+                payload: { prefix: CORE_PARTS_PREFIX + rel },
+              } as MainToWorkerKind)) as WorkerToMain;
+              return reply.kind === "pagedPartList" ? reply.payload.paths : [];
+            } catch {
+              return [];
+            }
+          },
+          async open(bytes) {
+            const reply = loadDirect(bytes);
+            if (reply.kind !== "documentLoaded") throw loadFailure(reply);
+            objects.core?.invalidate();
+            fanOut(reply);
+          },
+        });
+
   // A placeholder manifest until a bundle is loaded; `loadBundle`
   // rebuilds the host bound to the bundle's own manifest so the
   // namespace rule + metadata key derive correctly.
@@ -1053,6 +1108,7 @@ export async function createHeadlessHost(
       // way the editor shell does, so the harness vouches for it.
       editContextEnterPoint: true,
       documents: documentsBackend,
+      nativeDocument: nativeDocumentBackend,
       // v70 — page navigation, when the test supplies a backend (absent:
       // `supports("viewport.pages@1")` is false, as before).
       pages: options.pages,
