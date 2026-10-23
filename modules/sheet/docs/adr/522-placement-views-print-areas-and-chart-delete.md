@@ -78,4 +78,42 @@ brought back — like every chart placed in an earlier session — was not refre
   changes for it. An older version opening bytes this one saved after a delete sees the later
   charts one index lower (it does not read the slots).
 - A chart moved on the page is redrawn at its recorded box (as charts placed in the same session
-  always were).
+  always were). Amendment 1 lifts this, and the single-step and chain limits above.
+
+## Amendment 1 (2026-10-23): charts follow their art, one step per print area, chains are rediscovered
+
+1. **A chart follows its art.** The binding of a placed chart also records `art`: the page-space
+   outline of the element that carries it (its first element), as the batch draws it. A refresh
+   reads where that element stands now (`elementGeometry`, through its composed transform, so a
+   moved or scaled group is seen) and carries the box along: moved by the art's offset and, on an
+   axis where the art has an extent, scaled by its change of size (a label frame, which sizes
+   itself to its text, is followed by its top-left only). The chart is redrawn where it stands,
+   and its new binding records the box and art it was drawn at. A later session does the same
+   from the recorded box and art, so a chart moved before the document was saved is redrawn where
+   it was moved to.
+2. **A chart placed before its box was recorded gets one on discovery**: the outline of its
+   elements, with its first element's outline as its art, so it follows moves and redraws like a
+   new one; its next redraw writes both into its binding. Discovery itself writes nothing: on
+   open it would be an undo step of its own, and after an undo it would clear the redo stack.
+3. **A print area placed without a chain is one undo step.** Every area's frame, binding, native
+   table, cell pour, data bars and text styles go in ONE batch (`lowerAreasToFrames`), each frame
+   and table named by its in-batch handle (`f<i>`, `t<i>`) and placed under the one before, and
+   every document resource two areas both mint is minted once (the mint-dedupe rule: a second
+   mint of an id fails the whole batch). A host without in-batch handles refuses the batch and
+   the areas are placed one by one, as before.
+4. **A paginated chain records itself.** The chain's first frame carries a binding with `chain:
+   { areas?, repeatHeaderRows, tables: [{ tableId, hash, widths }] }` — the source (its sheet and
+   range, or the areas paginated in sequence), the repeated rows and the tables the last pass
+   left in story order. The table ids exist only after the write, so the record joins the
+   pagination's undo step through `mutate(…, { amend })` (engine ADR 1004); a pass that refreshes
+   its tables in place (a reflow, an edit) carries it in its last changed table's batch instead,
+   and a pass that changes nothing writes nothing. On open the session subscribes every recorded
+   chain as `paginateSelection` does: a resize reflows it and an edit refreshes its tables in
+   place, from the recorded tables when their hashes are what the workbook paginates to now; a
+   chain whose tables no longer match is replaced on the next refresh (its tables deleted, the
+   range paginated afresh). A chain's first frame is not a sheet frame (the `sheetFrame` object
+   type skips a chain binding), so it is still edited as text.
+
+Consequences: a host that cannot amend an undo step keeps no record of a first pagination (the
+chain stays live for that session only); a chart placed by the version just before this one has
+a box but no art, and a move made to it before reopening is not followed.
