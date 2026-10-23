@@ -49,6 +49,7 @@ use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, Vi
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
 use sheet_xlsx::XlsxDocument;
 
+mod cf;
 mod charts;
 pub mod csv;
 mod fill;
@@ -451,6 +452,9 @@ pub struct SheetSession {
     removed_charts: BTreeSet<u32>,
     /// Named filter views (criteria saved beside the workbook, ADR 517).
     filter_views: Vec<filter::FilterViewInfo>,
+    /// Conditional-format evaluation caches per sheet (W2.4), dropped on
+    /// every engine write.
+    cf_caches: cf::CfCaches,
 }
 
 /// The T0 cap on cells materialized by a single [`SheetSession::get_range_lowered`]
@@ -687,6 +691,8 @@ impl SheetSession {
 
     /// Mutable twin of [`SheetSession::engine`].
     fn engine_mut(&mut self) -> &mut Engine {
+        // Any write may change what a conditional format sees.
+        self.cf_caches.clear();
         self.engine
             .as_mut()
             .expect("engine present outside save_xlsx")
@@ -718,6 +724,7 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            cf_caches: cf::CfCaches::default(),
         }
     }
 
@@ -847,6 +854,7 @@ impl SheetSession {
             salt_counter: 0,
             removed_charts: BTreeSet::new(),
             filter_views: Vec::new(),
+            cf_caches: cf::CfCaches::default(),
         };
         // Which saved-hidden rows the file's AutoFilters hid (ADR 517).
         session.init_file_filters();
@@ -1922,13 +1930,15 @@ impl SheetSession {
         // the repeated header band keeps its formatting on every frame.
         let model = self.engine().model();
         let cf = self.doc.lowered_conditional_formats(sheet);
-        let full = sheet_lower::lower_range_condfmt(
+        let eval = self.eval_cf(sheet);
+        let full = sheet_lower::lower_range_cf(
             model,
             sheet,
             cell_range,
             &ViewOptions::default(),
             &self.doc.visual_styles,
             &cf,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         );
         Ok(sheet_lower::paginate_lowered(full, &boxes, &paginate_opts))
     }
@@ -1990,7 +2000,8 @@ impl SheetSession {
         let cf = self.doc.lowered_conditional_formats(sheet);
 
         let model = self.engine().model();
-        let mut scene = sheet_grid::grid_scene_styled(
+        let eval = self.eval_cf(sheet);
+        let mut scene = sheet_grid::grid_scene_cf(
             model,
             sheet,
             &spec,
@@ -1998,6 +2009,7 @@ impl SheetSession {
             &comment_cells,
             &cf,
             &self.doc.visual_styles,
+            eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         );
 
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —

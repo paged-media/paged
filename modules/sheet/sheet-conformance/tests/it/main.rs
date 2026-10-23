@@ -19,6 +19,7 @@ mod defects;
 mod edit_fill;
 mod edit_ops;
 mod entry_oracle;
+mod excel_cf_display;
 mod excel_display;
 mod excel_opencheck;
 mod excel_oracle;
