@@ -462,7 +462,9 @@ export function makeWorkbookPanel(
             >
               {sheets.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.rows} × {s.cols})
+                  {s.kind === "chartsheet"
+                    ? t(M.chartSheetOption, { name: s.name })
+                    : `${s.name} (${s.rows} × ${s.cols})`}
                 </option>
               ))}
             </select>
