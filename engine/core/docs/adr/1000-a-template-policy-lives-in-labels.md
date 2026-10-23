@@ -92,3 +92,13 @@ this way. The engine lists a module field in `templateFields` without a value an
 `setTemplateFields` ("a module field is set through its module"): the module reads and writes
 it through `host.objects` (extensions [ADR 335](../../../../platform/extensions/docs/adr/335-modules-contribute-template-field-kinds.md)),
 and the engine checks the module's writes against the session's role like any other.
+
+A module keeps state at the document's or a page's level too (a sheet's workbook version, a
+slide's hidden flag). A write of the label `x-paged:<plugin>` there is decided for that plugin
+alone: a filler may make it when a field of the plugin is open (its `module.kind` is
+`<plugin>.<name>`), or when the document's defaults grant `document.metadata`; a session
+override that denies `document.metadata` still closes it. No other plugin's label opens, and
+the template's own label stays the author's.
+
+A story on a path has no text frame. Its permissions are decided by the page item whose
+`<TextPath>` carries it, so a field on that item reaches the story's text.

@@ -57,10 +57,10 @@ Corrections to the plan found while building:
 - The strings package lives in `platform/shared/strings`, not under `apps/editor/packages`, so
   the built-in modules can use it (PM-0002); third-party extensions reach it through
   `host.strings`.
-- Engine follow-ups found by the module work: a module field cannot grant a document-level
-  label write scoped to its own module (sheet, web document values and slide visibility need
-  `document.metadata` from the document's defaults today); a story on a path has no frame, so
-  its text-edit grant does not reach it; a placed PDF always draws its first page.
+- Engine follow-ups found by the module work, and what became of them: a module's document-
+  and page-level label now opens to a filler when a field of that module is open, and a story
+  on a path is decided by the item that carries the path (engine ADR 1000, amendment of
+  2026-10-23); a placed PDF still always draws its first page.
 
 ## 1. Summary
 

@@ -322,30 +322,28 @@ describe.skipIf(!ENGINE_BUILT)(
 
     it("refuses a write the template does not allow, and the workbook stays as the document names it", async () => {
       const f = await template();
-      // No document policy: the workbook's version label is the document's,
-      // which a filler may not write.
+      // No document policy: the workbook's version label is the sheet's own
+      // state, which a template with a sheet field opens to a filler
+      // (engine ADR 1000, module fields).
       await role(env, "filler");
-      const refused = await env.objects.writeTemplateField(f.qty, 8);
-      expect(refused.ok).toBe(false);
-      expect((refused as { problem: string }).problem).toContain(
-        "document.metadata",
-      );
-      expect(await cellValue(env, "B3")).toBe("3");
+      expect(await env.objects.writeTemplateField(f.qty, 8)).toEqual({
+        ok: true,
+      });
+      expect(await cellValue(env, "B3")).toBe("8");
 
       // A second table shows B3 and is no field: the page could not follow.
       await role(env, "author");
-      await documentPolicy(env, ["document.metadata"]);
       const other = (await env.objects.invoke(`${C}.lowerToFrame` as never, {
         range: "book!A3:B4",
       })) as { frame: string };
       await env.settle();
       await role(env, "filler");
-      const shown = await env.objects.writeTemplateField(f.qty, 8);
+      const shown = await env.objects.writeTemplateField(f.qty, 9);
       expect(shown).toEqual({
         ok: false,
         problem: `book!B3 is also shown in a table this template does not open (${other.frame} needs text.edit); make that frame a sheet field too.`,
       });
-      expect(await cellValue(env, "B3")).toBe("3");
+      expect(await cellValue(env, "B3")).toBe("8");
       // A cell only the field's own table shows is still open.
       expect(await env.objects.writeTemplateField(f.fruit, "Quince")).toEqual({
         ok: true,

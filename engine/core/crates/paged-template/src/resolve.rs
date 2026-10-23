@@ -134,6 +134,34 @@ impl PolicyIndex {
         session.apply_overrides(set)
     }
 
+    /// Whether a field of the plugin `plugin` (`media.paged.sheet`) opens
+    /// part of its content: its kind is `<plugin>.<name>`.
+    pub fn module_has_field(&self, plugin: &str) -> bool {
+        self.fields().any(|(_, f)| {
+            f.module.as_ref().is_some_and(|m| {
+                m.kind
+                    .strip_prefix(plugin)
+                    .is_some_and(|r| r.starts_with('.'))
+            })
+        })
+    }
+
+    /// What `session` may do to the document- or page-level label the
+    /// plugin `plugin` keeps (`x-paged:<plugin>`): the document's grants,
+    /// and `document.metadata` when a field of that plugin is open, since
+    /// filling it writes the plugin's own state there (a sheet's workbook
+    /// version, a slide's hidden flag).
+    pub fn effective_for_module_label(&self, session: &SessionPolicy, plugin: &str) -> PermSet {
+        if let Some(set) = session.unbound() {
+            return set;
+        }
+        let mut set = session.role.defaults().union(self.document_defaults());
+        if self.module_has_field(plugin) {
+            set = set.with(crate::permission::Permission::DocumentMetadata);
+        }
+        session.apply_overrides(set)
+    }
+
     /// What `session` may do to the text variable `variable_id`.
     pub fn effective_for_variable(&self, session: &SessionPolicy, variable_id: &str) -> PermSet {
         if let Some(set) = session.unbound() {

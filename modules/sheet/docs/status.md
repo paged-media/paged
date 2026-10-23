@@ -221,8 +221,8 @@ each published canary added is under [Releases](#releases).
     the author's series lists a chart draws.
 
   A cell holding a formula, and a value starting with `=`, are refused. The workbook's version
-  label is the document's, so a filler writes a sheet field only where the template's document
-  policy grants `document.metadata`. Every placed table that shows a written cell is re-poured
+  label is the sheet's own document-level state, which a template with a sheet field opens to
+  a filler (engine ADR 1000, amendment of 2026-10-23). Every placed table that shows a written cell is re-poured
   after the write: each must be a sheet field itself (its grants say it may be re-poured), or
   the write is refused before anything changes. A placed chart is redrawn by replacing its art,
   so a chart's source is writable only where the template lets a filler add and delete items.
