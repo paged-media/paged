@@ -73,6 +73,7 @@ export type FrameSurfaceSession = Pick<
   | "closePasteSpecial"
   | "pasteAtSelection"
   | "frameView"
+  | "setFrameSheet"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
@@ -928,6 +929,8 @@ function SheetBarView({
           ? a1Of(active.row, active.col)
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
+      sheetId: st.activeSheet,
+      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
@@ -1047,12 +1050,22 @@ function SheetBarView({
             Count {view.stats.count}
           </span>
         ) : null}
-        <span
+        <select
           data-testid="sheet-bar-sheet"
+          aria-label="Sheet"
+          value={view.sheetId ?? ""}
           style={{ ...box, whiteSpace: "nowrap" }}
+          onChange={(e) => {
+            session.setFrameSheet(Number(e.currentTarget.value));
+            requestAnimationFrame(focusGrid);
+          }}
         >
-          {view.sheet}
-        </span>
+          {view.sheetList.map((sh) => (
+            <option key={sh.id} value={sh.id}>
+              {sh.name}
+            </option>
+          ))}
+        </select>
         {view.lock !== null ? (
           <button
             type="button"

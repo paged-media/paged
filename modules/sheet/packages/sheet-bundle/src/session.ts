@@ -432,6 +432,10 @@ export interface WorkbookSession {
    *  binding records it with the next page write. False when no window
    *  frame is known. */
   setFrameViewLock(lock: boolean, frameId?: string): boolean;
+  /** Show sheet `sheetId` in the entered frame (RagTime: the frame is a
+   *  window onto a component): the grid moves to its A1, and a window
+   *  frame's page shows that sheet when the frame is left. */
+  setFrameSheet(sheetId: number): boolean;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -3783,6 +3787,30 @@ export function createWorkbookSession(
       void flushPersist().catch((err) =>
         host.log.warn("workbook persist on exit failed", err),
       );
+    },
+
+    setFrameSheet(sheetId) {
+      const engine = state.engine;
+      if (!engine || !engine.listSheets().some((x) => x.id === sheetId))
+        return false;
+      if (state.activeSheet === sheetId) return true;
+      api.setActiveSheet(sheetId);
+      const id = lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (id && info?.sizing === "window" && info.view) {
+        loweredTables.set(id, {
+          ...info,
+          sheet: sheetId,
+          view: { ...info.view, topLeft: "A1" },
+          // A sheet switch rewrites every cell: no in-place diff.
+          content: undefined,
+        });
+        viewMoved.add(id);
+      }
+      if (lastGridWindow) lastGridWindow = { ...lastGridWindow, firstRow: 0, firstCol: 0 };
+      if (inFrameActive) void submitInFrameGrid();
+      else if (id && viewMoved.has(id)) void refreshPlacements();
+      return true;
     },
 
     frameView(frameId) {
