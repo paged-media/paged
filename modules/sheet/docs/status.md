@@ -346,6 +346,19 @@ each published canary added is under [Releases](#releases).
   else above, else to its right or left), never on top of it, and in the margin box's top-left
   corner with nothing selected. It is shrunk proportionally only when the margin box cannot
   hold 360 × 240 pt.
+- **Document chart styles** (ADR 525). A chart's chart area, plot area, axis lines and
+  gridlines take document swatches, and its chart text, title, axis titles, axis labels, legend
+  and data labels take document paragraph and character styles and a swatch, each with the
+  swatch's real colour model (RGB, CMYK, spot, Lab). The series can take a document colour group
+  in order (a pie per point). A workbook default chart style applies to every role a chart does
+  not override; it is stored in `workbook.xml` (a paged extension) and survives a save. The
+  Workbook panel's Chart style section edits the default or one chart (swatch pickers with the
+  display colour, paragraph and character style menus, the colour group), with "Use as default
+  for this workbook" and "Reset to default"; each change is one undo step through the object
+  model (`chart.roles`, `chart.seriesColorGroup`, `workbook.chartStyle`). Editing a swatch in the
+  document recolours every placed chart that names it. Open: the in-frame grid does not draw
+  charts (a change previews on the placed chart), and a chart's own overrides reach the xlsx
+  once the chart writer splices edited charts.
 - **Host panels in the sheet context.** The host's Swatches panel shows and edits the workbook
   chart colours; the Character and Paragraph panels show the selected cells' type, read-only.
 - **Datasets.** A panel lists the datasets the host offers, by a display name derived from the
