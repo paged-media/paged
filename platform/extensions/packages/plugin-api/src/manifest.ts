@@ -140,6 +140,20 @@ export interface PluginCapabilities {
    */
   dataProviders?: DataProvidersCapability;
   /**
+   * The DATA door's roles (`host.data`, `data@1`, extensions ADR 343,
+   * PM-0015). `serve` = the bundle serves the document's data (paged.data
+   * in the editor); `read` = it reads tables and records; `write` = it
+   * writes rows into a table; `bind` = it binds object properties to data.
+   * A use without its role is refused by the host gate.
+   */
+  data?: DataCapability;
+  /**
+   * The ACTIONS door's roles (`host.actions`, `actions@1`, extensions ADR
+   * 344). `register` = the bundle registers actions others can run; `run` =
+   * it runs registered actions.
+   */
+  actions?: ActionsCapability;
+  /**
    * The clipboard door's grant (K-6 / S-14). Gates `host.clipboard`:
    * `"full"` grants BOTH the text and the rich `tabular` (cell-grid)
    * payload — the sheets range copy/paste interchange; `"vector"` grants
@@ -303,6 +317,20 @@ export interface DataProvidersCapability {
   publish?: string[];
   /** Categories this bundle MAY discover + read (the consume role). */
   consume?: string[];
+}
+
+/** The data door's roles (`capabilities.data`, extensions ADR 343). */
+export interface DataCapability {
+  serve?: boolean;
+  read?: boolean;
+  write?: boolean;
+  bind?: boolean;
+}
+
+/** The actions door's roles (`capabilities.actions`, extensions ADR 344). */
+export interface ActionsCapability {
+  register?: boolean;
+  run?: boolean;
 }
 
 /** Purposes a bundle may declare for a shipped wasm module. A closed

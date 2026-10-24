@@ -257,9 +257,11 @@ describe.skipIf(!RUN_BUDGETS)(
     // first READY session, so activation pays nothing else for them.
     // Panel UX pass: −2 — the Data ▸ Sources… and Dataset catalog… menu rows
     // are gone (the host's Data menu raises those panels by name).
+    // The data door (extensions ADR 343): +2 — supports("data@1") and
+    // data.serve; the service answers only when another bundle asks.
     const W7: Measured = onLabelled(
       {
-        hostCalls: 39,
+        hostCalls: 41,
         hostReads: 2,
         mutates: 0,
         mutationOps: 0,
@@ -273,7 +275,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 40, hostReads: 4 },
+      { hostCalls: 42, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();

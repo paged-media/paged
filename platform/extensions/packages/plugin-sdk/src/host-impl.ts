@@ -138,6 +138,12 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables.js";
+import {
+  createActionsSurface,
+  createDataSurface,
+  type ActionBackend,
+  type DataBackend,
+} from "./doors-data-actions.js";
 import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
@@ -1221,6 +1227,15 @@ export interface CreateBundleHostOptions {
    *  through it. When absent, `host.dataProviders` discover() is empty +
    *  register() is a no-op and `supports("dataProviders@1")` is false. */
   dataProviders?: DataProviderBackend;
+  /** The shared DATA backend (`data@1`, extensions ADR 343): the editor
+   *  builds ONE (`createDataRegistry`) and injects it into every host, so
+   *  the serving bundle and its consumers meet. Absent: every `host.data`
+   *  call rejects and `supports("data@1")` is false. */
+  data?: DataBackend;
+  /** The shared ACTION registry (`actions@1`, ADR 344), one per editor
+   *  (`createActionRegistry`). Absent: `register` throws, `list` is empty
+   *  and `supports("actions@1")` is false. */
+  actions?: ActionBackend;
   /** Host-provided SHARED BINDING-PROVIDER registry (ADR-023 phase A): the
    *  editor creates ONE (`createBindingProviderRegistry`) and injects the SAME
    *  instance into every plugin host, so its own panels can ask "who resolves
@@ -3410,6 +3425,21 @@ export function createBundleHost(
     (category === undefined || dpCap.consume.includes(category));
   const consumeDeclared =
     Array.isArray(dpCap?.consume) && dpCap.consume.length > 0;
+  // ----------------------------------------- data and actions (ADRs 343, 344)
+  const data = createDataSurface(
+    manifest.id,
+    options?.data,
+    manifest.capabilities?.data,
+    requireDeclared,
+    (d) => store.add(d),
+  );
+  const actions = createActionsSurface(
+    manifest.id,
+    options?.actions,
+    manifest.capabilities?.actions,
+    requireDeclared,
+    (d) => store.add(d),
+  );
   const dataProviders: DataProvidersSurface = {
     register(registration) {
       requireDeclared(
@@ -4757,6 +4787,15 @@ export function createBundleHost(
     // rendezvous (D-09).
     featureSet.add("dataProviders@1");
   }
+  if (options?.data) {
+    // The door always exists (calls reject without a backend); this flag
+    // means a shared data backend is wired (extensions ADR 343).
+    featureSet.add("data@1");
+  }
+  if (options?.actions) {
+    // The shared action registry is wired (extensions ADR 344).
+    featureSet.add("actions@1");
+  }
   if (options?.bindingProviders) {
     // ADR-023 — the door always exists (see the static flag above); this
     // one means a real SHARED registry is wired, so a registered
@@ -4920,6 +4959,8 @@ export function createBundleHost(
     documents,
     network,
     dataProviders,
+    data,
+    actions,
     diagnostics,
     journal,
     bindings,

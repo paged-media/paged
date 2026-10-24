@@ -56,6 +56,25 @@ pub struct ImportReport {
     pub as_written: bool,
 }
 
+/// One edit of a source table's rows (`data@1`'s `write`, extensions ADR
+/// 343). `row` is the 0-based row in the table's order (its import order),
+/// as [`Store::records`] numbers it.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum RowEdit {
+    Set {
+        row: usize,
+        field: String,
+        value: serde_json::Value,
+    },
+    Insert {
+        values: serde_json::Map<String, serde_json::Value>,
+    },
+    Delete {
+        row: usize,
+    },
+}
+
 /// A result column: its name and its type as the query builders read it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ColumnInfo {
@@ -478,5 +497,159 @@ fn display(v: &Value, scale: Option<u8>) -> Option<String> {
         (Value::Bool(b), _) => b.to_string(),
         (Value::DateTime(ms), _) => read::iso_of_ms(*ms),
         (v, _) => v.as_display(),
+    })
+}
+
+impl Store {
+    /// A window of a source table's rows, in the table's order.
+    pub fn records(&self, table: &str, offset: usize, limit: Option<usize>) -> Result<RecordSet> {
+        if !self.tables()?.iter().any(|t| t == table) {
+            return Err(StoreError::Read(format!("no source table \"{table}\"")));
+        }
+        let limit = limit.map_or(-1, |l| l as i64);
+        self.query(&format!(
+            "SELECT * FROM {} ORDER BY rowid LIMIT {limit} OFFSET {offset}",
+            ident(table)
+        ))
+    }
+
+    /// Apply `edits` to the source table `table`, in order, in one
+    /// transaction (all or none), and to its as-written twin when it has
+    /// one, so Data Merge reads what was written. Returns the row count.
+    pub fn edit(&self, table: &str, edits: &[RowEdit]) -> Result<usize> {
+        if !self.tables()?.iter().any(|t| t == table) {
+            return Err(StoreError::Read(format!("no source table \"{table}\" (a query is not written)")));
+        }
+        let columns = self.describe(&format!("SELECT * FROM {}", ident(table)))?;
+        let twin = format!("{AS_WRITTEN_PREFIX}{table}");
+        let has_twin = self.all_tables()?.contains(&twin);
+        self.exec("BEGIN")?;
+        let done = (|| -> Result<()> {
+            for e in edits {
+                self.apply_edit(table, &columns, e, false)?;
+                if has_twin {
+                    self.apply_edit(&twin, &columns, e, true)?;
+                }
+            }
+            Ok(())
+        })();
+        match done {
+            Ok(()) => self.exec("COMMIT")?,
+            Err(e) => {
+                let _ = self.exec("ROLLBACK");
+                return Err(e);
+            }
+        }
+        self.count(table)
+    }
+
+    fn count(&self, table: &str) -> Result<usize> {
+        let sql = format!("SELECT count(*) FROM {}", ident(table));
+        let mut stmt = self.writer.prepare(&sql).map_err(sql_err(&sql))?;
+        let mut n = 0;
+        self.drive(&mut stmt, &sql, |r| {
+            if let turso_core::Value::Numeric(Numeric::Integer(c)) = r.get_value(0) {
+                n = *c as usize;
+            }
+            false
+        })?;
+        Ok(n)
+    }
+
+    fn rowid(&self, table: &str, row: usize) -> Result<i64> {
+        let sql = format!("SELECT rowid FROM {} ORDER BY rowid LIMIT 1 OFFSET {row}", ident(table));
+        let mut stmt = self.writer.prepare(&sql).map_err(sql_err(&sql))?;
+        let mut id = None;
+        self.drive(&mut stmt, &sql, |r| {
+            if let turso_core::Value::Numeric(Numeric::Integer(v)) = r.get_value(0) {
+                id = Some(*v);
+            }
+            false
+        })?;
+        id.ok_or_else(|| StoreError::Read(format!("\"{table}\" has no row {row}")))
+    }
+
+    fn apply_edit(&self, table: &str, columns: &[ColumnInfo], edit: &RowEdit, as_text: bool) -> Result<()> {
+        let t = ident(table);
+        let column = |name: &str| {
+            columns
+                .iter()
+                .find(|c| c.name == name)
+                .ok_or_else(|| StoreError::Read(format!("\"{table}\" has no field \"{name}\"")))
+        };
+        let run = |sql: &str, values: Vec<turso_core::Value>| -> Result<()> {
+            let mut stmt = self.writer.prepare(sql).map_err(sql_err(sql))?;
+            for (i, v) in values.into_iter().enumerate() {
+                stmt.bind_at(NonZero::new(i + 1).expect("1-based"), v).map_err(sql_err(sql))?;
+            }
+            self.drive(&mut stmt, sql, |_| true)
+        };
+        match edit {
+            RowEdit::Set { row, field, value } => {
+                let c = column(field)?;
+                let id = self.rowid(table, *row)?;
+                run(
+                    &format!("UPDATE {t} SET {} = ? WHERE rowid = {id}", ident(field)),
+                    vec![cell_of(value, &c.ty, as_text)?],
+                )
+            }
+            RowEdit::Insert { values } => {
+                for k in values.keys() {
+                    column(k)?;
+                }
+                let names: Vec<String> = columns.iter().map(|c| ident(&c.name)).collect();
+                let marks = vec!["?"; columns.len()].join(", ");
+                let cells = columns
+                    .iter()
+                    .map(|c| cell_of(values.get(&c.name).unwrap_or(&serde_json::Value::Null), &c.ty, as_text))
+                    .collect::<Result<Vec<_>>>()?;
+                run(&format!("INSERT INTO {t} ({}) VALUES ({marks})", names.join(", ")), cells)
+            }
+            RowEdit::Delete { row } => {
+                let id = self.rowid(table, *row)?;
+                run(&format!("DELETE FROM {t} WHERE rowid = {id}"), Vec::new())
+            }
+        }
+    }
+}
+
+/// A written value as the column stores it: `ty` is the column's type as
+/// [`Store::describe`] names it (`INTEGER`, `REAL`, `DECIMAL(18,2)`,
+/// `BOOLEAN`, `DATE`, `TIMESTAMP`, `TEXT`). A date or timestamp is stored as
+/// ISO text, as an import stores it; a twin (`as_text`) stores text.
+fn cell_of(value: &serde_json::Value, ty: &str, as_text: bool) -> Result<turso_core::Value> {
+    use serde_json::Value as J;
+    let bad = || StoreError::Read(format!("{value} is not a {ty} value"));
+    let text = |s: String| turso_core::Value::build_text(s);
+    let raw = match value {
+        J::Null => return Ok(turso_core::Value::Null),
+        J::String(s) => s.trim().to_string(),
+        J::Bool(_) | J::Number(_) => value.to_string(),
+        J::Array(_) | J::Object(_) => return Err(bad()),
+    };
+    if as_text {
+        return Ok(text(match value {
+            J::String(s) => s.clone(),
+            _ => raw,
+        }));
+    }
+    Ok(match ty {
+        "INTEGER" => turso_core::Value::from_i64(raw.parse().map_err(|_| bad())?),
+        "REAL" => turso_core::Value::from_f64(raw.parse().map_err(|_| bad())?),
+        t if t.starts_with("DECIMAL") => turso_core::Value::from_f64(raw.parse().map_err(|_| bad())?),
+        "BOOLEAN" => turso_core::Value::from_i64(match raw.as_str() {
+            "true" | "1" => 1,
+            "false" | "0" => 0,
+            _ => return Err(bad()),
+        }),
+        "DATE" => {
+            let (y, m, d) = data_core::temporal::civil_from_days(iso_date(&raw).ok_or_else(bad)?);
+            text(format!("{y:04}-{m:02}-{d:02}"))
+        }
+        "TIMESTAMP" => text(read::iso_of_ms(timestamp_ms(&raw).ok_or_else(bad)?)),
+        _ => text(match value {
+            J::String(s) => s.clone(),
+            _ => raw,
+        }),
     })
 }

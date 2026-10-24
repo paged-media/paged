@@ -50,7 +50,11 @@ import type {
   WillSaveBackend,
   WorkerBackend,
 } from "@paged-media/plugin-sdk";
-import { createDataProviderRegistry } from "@paged-media/plugin-sdk";
+import {
+  createActionRegistry,
+  createDataProviderRegistry,
+  createDataRegistry,
+} from "@paged-media/plugin-sdk";
 import type { CanvasClient } from "@paged-media/client";
 import {
   activeStrings,
@@ -229,6 +233,11 @@ export function createEditorHostOptions(
   // consumer plugin (paged.sheet sourcing a sheet from it) rendezvous
   // through it — never by direct contact.
   const dataProviders = createDataProviderRegistry();
+  // Extensions ADRs 343, 344 (PM-0015): the document's data door, served by
+  // one bundle (paged.data) and read, written and bound by any, and the ONE
+  // action registry every bundle registers into and runs from.
+  const data = createDataRegistry();
+  const actions = createActionRegistry();
 
   const shared: Omit<CreateBundleHostOptions, "console"> = {
     shell,
@@ -247,6 +256,9 @@ export function createEditorHostOptions(
     // ADR 223 — the module door.
     modules,
     dataProviders,
+    // Flip supports("data@1") and supports("actions@1").
+    data,
+    actions,
     // ADR 023 phase A/C — the app's ONE binding-provider registry (host
     // panels read the same instance).
     bindingProviders: deps.bindingProviders,
