@@ -6,7 +6,7 @@
     "command": 458,
     "keybinding": 88,
     "menu": 336,
-    "panel": 127,
+    "panel": 129,
     "tool": 81
   },
   "features": [
@@ -4456,12 +4456,22 @@
       "owner": "media.paged.data"
     },
     {
+      "id": "panel:media.paged.data.panel.pagination",
+      "kind": "panel",
+      "owner": "media.paged.data"
+    },
+    {
       "id": "panel:media.paged.data.panel.query",
       "kind": "panel",
       "owner": "media.paged.data"
     },
     {
       "id": "panel:media.paged.data.panel.sources",
+      "kind": "panel",
+      "owner": "media.paged.data"
+    },
+    {
+      "id": "panel:media.paged.data.panel.templates",
       "kind": "panel",
       "owner": "media.paged.data"
     },
