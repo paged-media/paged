@@ -469,8 +469,10 @@ describe("the panel's Layers section", () => {
     expect(LAYERS_SCOPE_NOTE).toContain("removing");
     expect(LAYERS_SCOPE_NOTE).toContain("bounded");
     // The consequences people would otherwise discover by losing work.
-    expect(LAYERS_SCOPE_NOTE).toContain("flattens the stack");
-    expect(LAYERS_SCOPE_NOTE).toContain("undo history goes with it");
+    expect(LAYERS_SCOPE_NOTE).toContain(
+      "A crop, resize or straighten keeps every layer and mask",
+    );
+    expect(LAYERS_SCOPE_NOTE).not.toContain("flattens the stack");
     expect(LAYERS_SCOPE_NOTE).toContain(
       "Export and save-back write the flattened composite, not the layers",
     );

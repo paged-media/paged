@@ -67,7 +67,6 @@ import type {
 } from "../engine";
 import {
   DEFAULT_BW_WEIGHTS,
-  WARP_KINDS,
   displayTreatmentLabel,
   isCmykConversion,
   GRADIENT_KINDS,
@@ -75,12 +74,7 @@ import {
   isIdentity,
 } from "../engine";
 import type { AspectPreset } from "../crop-machine";
-import {
-  COLOR_NAMES,
-  gradientKindLabel,
-  toneRangeLabel,
-  warpKindLabel,
-} from "../words";
+import { COLOR_NAMES, gradientKindLabel, toneRangeLabel } from "../words";
 
 import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
@@ -91,6 +85,11 @@ import { SelectModifySection } from "./sections/select-modify-section";
 import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
 import { SmartObjectSection } from "./sections/smart-object-section";
+import {
+  DISTORT_DEFAULTS,
+  DistortSection,
+  type DistortParams,
+} from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
 import {
   actionBar,
@@ -502,10 +501,11 @@ const SCOPE = defineMessages("image.scope", {
     "beneath it) or a smart object (rescaling re-renders from the original); " +
     "layers can be grouped, clipped and masked. Undo is one list for paint, " +
     "fills and bakes and every change to the stack — adding, removing, " +
-    "reordering, opacity, blend, masks, groups, rotate, flip and canvas size; " +
-    "it is bounded, and the panel says when old steps fall off. A crop, " +
-    "resize or straighten flattens the stack, and the undo history goes with " +
-    "it. Export and save-back write the flattened composite, not the layers. " +
+    "reordering, opacity, blend, masks, groups, rotate, flip, canvas size, " +
+    "crop, straighten and image size; it is bounded, and the panel says when " +
+    "old steps fall off. A crop, resize or straighten keeps every layer and " +
+    "mask and is one undo step; it drops the selection. Export and " +
+    "save-back write the flattened composite, not the layers. " +
     "A PSD opens as its own layers only when this model reproduces it " +
     "exactly — 8- or 16-bit RGB, with no groups and no layer masks; anything " +
     "else keeps Photoshop's merged composite as a single layer and says why.",
@@ -1976,7 +1976,6 @@ const P = defineMessages("image.panel", {
   gradientMapTitle:
     "Map luminance through a two-stop colour ramp (shadows to highlights)",
   gradientMap: "Gradient map",
-  warpTitle: "Apply the {kind} distortion (amount 0 is the identity)",
   gradientMapNote:
     "A gradient map replaces colour with a ramp read from luminance; the " +
     "distortions resample through one backward map, so they share a " +
@@ -2104,9 +2103,6 @@ const GALLERY = defineMessages("image.gallery", {
   stainedGlassTitle:
     "Cellular tiling with a border term. The border weight alone separates " +
     "Crystallize from Stained Glass.",
-  glass: "Glass",
-  glassTitle:
-    "Refraction-style displacement through a procedural normal field.",
   texturizer: "Texturizer",
   texturizerTitle:
     "Procedural surface texture modulating shading; kind picks Canvas / " +
@@ -2177,6 +2173,7 @@ export function makeImagePanel(session: ImageSession) {
       anchorY: 1,
     });
     const [modifyRadius, setModifyRadius] = useState(4);
+    const [distort, setDistort] = useState<DistortParams>(DISTORT_DEFAULTS);
     const [lookupName, setLookupName] = useState<string | null>(null);
     const [hueSatRange, setHueSatRange] = useState(-1);
     // Generate-section local state (the request shape, not engine state).
@@ -3173,20 +3170,14 @@ export function makeImagePanel(session: ImageSession) {
           >
             {t(P.gradientMap)}
           </button>
-          {WARP_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              data-image-warp={kind}
-              disabled={s.busy || !s.gpu || !s.source}
-              title={t(P.warpTitle, { kind: warpKindLabel(kind) })}
-              onClick={() => void session.applyWarp(kind, 0.4)}
-            >
-              {warpKindLabel(kind)}
-            </button>
-          ))}
         </div>
         <div style={note}>{t(P.gradientMapNote)}</div>
+        <DistortSection
+          session={session}
+          params={distort}
+          onParams={setDistort}
+          disabled={s.busy || !s.gpu || !s.source}
+        />
 
         <div style={sectionTitle}>{t(P.stylize)}</div>
         <div style={row}>
@@ -3333,15 +3324,6 @@ export function makeImagePanel(session: ImageSession) {
             onClick={() => void session.galleryStainedGlass(1, 24, 0.5, 1)}
           >
             {t(GALLERY.stainedGlass)}
-          </button>
-          <button
-            type="button"
-            data-image-glass
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.glassTitle)}
-            onClick={() => void session.galleryGlass(1, 24, 0.4, 1)}
-          >
-            {t(GALLERY.glass)}
           </button>
           <button
             type="button"

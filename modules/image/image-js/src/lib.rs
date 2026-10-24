@@ -3009,8 +3009,9 @@ mod wasm {
     /// OPEN a layer stack over an engine-held image: one full-canvas
     /// "Background" layer sharing that image's pixels. Re-opening on the
     /// SAME handle is a no-op (the stack survives); opening on a
-    /// different handle replaces it, which is what a crop / resize /
-    /// straighten commit does (it flattens).
+    /// different handle replaces it with a fresh one-layer stack. (Crop,
+    /// resize and straighten no longer swap handles: they run through
+    /// `layers_canvas_op` and keep the stack.)
     #[wasm_bindgen]
     pub fn layers_open(handle: u32) -> Result<(), JsValue> {
         if LAYERS.with(|l| l.borrow().as_ref().map(|d| d.handle)) == Some(handle) {
@@ -3465,25 +3466,36 @@ mod wasm {
         .await
     }
 
-    /// IMAGE ▸ Rotate / Flip / Canvas Size, over the WHOLE stack (every
-    /// layer, mask and smart source moves together; see
-    /// `LayerStack::transform_canvas`). `op` is "rotate-cw", "rotate-ccw",
-    /// "rotate-180", "flip-h", "flip-v" or "canvas" (then `width`,
-    /// `height` and the anchors apply; they are ignored otherwise).
+    /// IMAGE ▸ Rotate / Flip / Canvas Size / Image Size and the crop
+    /// tool's commit, over the WHOLE stack (every layer, mask and smart
+    /// source moves together; see `LayerStack::transform_canvas` and
+    /// `transform_canvas_gpu`). `op` is "rotate-cw", "rotate-ccw",
+    /// "rotate-180", "flip-h", "flip-v", "canvas" (`width`, `height` and
+    /// the anchors), "crop" (`x`, `y`, `width`, `height`; `degrees` ≠ 0
+    /// straightens first) or "resample" (`width`, `height`, `filter` ∈
+    /// nearest | mitchell | lanczos3). Unused arguments are ignored.
     ///
-    /// The bound image takes the new extent and the composite; its mip
-    /// pyramid goes, and the selection is re-bound (dropped), because
-    /// both address the old extent. The undo history is cleared.
+    /// The bound image takes the new extent and the composite IN PLACE —
+    /// the handle stays. Its mip pyramid goes; the selection is dropped
+    /// whenever the extent changes, and always by a crop or resample (a
+    /// selection does not survive a crop, as in Photoshop). It is ONE
+    /// undo step and the history before it stays: undoing it restores
+    /// the extent the older steps were recorded against.
     /// Returns `[width, height]`.
     #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
     pub async fn layers_canvas_op(
         op: &str,
         width: u32,
         height: u32,
         anchor_x: u8,
         anchor_y: u8,
+        x: u32,
+        y: u32,
+        degrees: f32,
+        filter: &str,
     ) -> Result<Vec<u32>, JsValue> {
-        use crate::layers::CanvasOp;
+        use crate::layers::{CanvasOp, ResampleFilter};
         let op = match op {
             "rotate-cw" => CanvasOp::RotateCw,
             "rotate-ccw" => CanvasOp::RotateCcw,
@@ -3496,13 +3508,39 @@ mod wasm {
                 anchor_x,
                 anchor_y,
             },
+            "crop" if degrees == 0.0 => CanvasOp::Crop {
+                x,
+                y,
+                width,
+                height,
+            },
+            "crop" => CanvasOp::Straighten {
+                x,
+                y,
+                width,
+                height,
+                degrees,
+            },
+            "resample" => CanvasOp::Resample {
+                width,
+                height,
+                filter: ResampleFilter::from_wire(filter).ok_or_else(|| {
+                    JsValue::from_str(&format!(
+                        "unknown resample filter \"{filter}\" (nearest | mitchell | lanczos3)"
+                    ))
+                })?,
+            },
             other => {
                 return Err(JsValue::from_str(&format!(
-                    "unknown canvas operation \"{other}\" \
-                     (rotate-cw | rotate-ccw | rotate-180 | flip-h | flip-v | canvas)"
+                    "unknown canvas operation \"{other}\" (rotate-cw | rotate-ccw | \
+                     rotate-180 | flip-h | flip-v | canvas | crop | resample)"
                 )))
             }
         };
+        let deselect = matches!(
+            op,
+            CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } | CanvasOp::Resample { .. }
+        );
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
             let result = async {
@@ -3511,11 +3549,14 @@ mod wasm {
                 // untransformed image is the state this must never leave.
                 if ctx.is_none() && !doc.stack.composite_is_trivial() {
                     return Err(JsValue::from_str(
-                        "rotating or resizing a layered image is GPU-only \
+                        "a canvas operation on a layered image is GPU-only \
                          (the composite is a kernel dispatch) — call init_gpu first",
                     ));
                 }
-                doc.stack.transform_canvas(op).map_err(ingest_err)?;
+                doc.stack
+                    .transform_canvas_gpu(ctx.as_deref(), op)
+                    .await
+                    .map_err(ingest_err)?;
                 let rgba = doc
                     .stack
                     .composite(ctx.as_deref(), None)
@@ -3533,7 +3574,13 @@ mod wasm {
                     Ok::<(), JsValue>(())
                 })?;
                 PYRAMIDS.with(|p| p.borrow_mut().remove(&doc.handle));
-                SELECTION.with(|s| s.borrow_mut().bind(doc.handle, w, h));
+                SELECTION.with(|s| {
+                    let mut sel = s.borrow_mut();
+                    if deselect {
+                        sel.clear();
+                    }
+                    sel.bind(doc.handle, w, h);
+                });
                 Ok(vec![w, h])
             }
             .await;
@@ -3618,9 +3665,6 @@ mod wasm {
     /// place in a stack whose layers are all canvas-sized.
     #[wasm_bindgen]
     pub async fn layers_render_smart(index: usize, scale: f32) -> Result<(), JsValue> {
-        use half::f16;
-        use image_kernels::families::resample::{ResampleParams, RESAMPLE_MITCHELL};
-
         // `is_finite` first, so NaN is refused by NAME rather than by the
         // side effect of failing `> 0.0`. Same verdict, but a reader no
         // longer has to reconstruct why the comparison was negated.
@@ -3644,42 +3688,16 @@ mod wasm {
             })
             .ok_or_else(|| JsValue::from_str(&format!("layer {index} is not a smart object")))?;
 
-        let out_w = ((src.width as f32) * scale).round().max(1.0) as u32;
-        let out_h = ((src.height as f32) * scale).round().max(1.0) as u32;
-
-        let mut win = Vec::with_capacity(src.rgba.len() * 2);
-        for &b in src.rgba.iter() {
-            win.extend_from_slice(&f16::from_f32(b as f32 / 255.0).to_le_bytes());
-        }
-        let params = ResampleParams::new(
-            src.width as f32 / out_w as f32,
-            src.height as f32 / out_h as f32,
-            0.0,
-            0.0,
-        );
-        let rendered = image_gpu::execute_windowed_once_async(
+        let canvas = crate::layers::render_smart(
             &ctx,
-            &RESAMPLE_MITCHELL,
-            &win,
-            src.width,
-            src.height,
-            params.as_bytes(),
-            None,
-            out_w,
-            out_h,
+            &src,
+            scale,
+            crate::layers::ResampleFilter::Mitchell,
+            cw,
+            ch,
         )
         .await
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        // f16 window -> straight RGBA8, then letterbox into the canvas.
-        let small = crate::fill::f16_to_rgba8(&rendered);
-        let mut canvas = vec![0u8; (cw as usize) * (ch as usize) * 4];
-        for y in 0..out_h.min(ch) {
-            let srow = (y as usize) * (out_w as usize) * 4;
-            let drow = (y as usize) * (cw as usize) * 4;
-            let n = (out_w.min(cw) as usize) * 4;
-            canvas[drow..drow + n].copy_from_slice(&small[srow..srow + n]);
-        }
+        .map_err(ingest_err)?;
 
         recorded_edit("Scale smart object", None, |st| {
             st.set_smart_render(index, Arc::from(canvas.into_boxed_slice()), scale)

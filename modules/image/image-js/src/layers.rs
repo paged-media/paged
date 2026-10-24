@@ -130,7 +130,6 @@ use image_kernels::families::compose::ComposeParams;
 use image_kernels::families::compose::COMPOSE_NORMAL;
 use image_kernels::KernelDef;
 
-#[cfg(any(test, feature = "reference-fold"))]
 use crate::fill::{f16_to_rgba8, rgba8_to_f16};
 use crate::ingest::{AdjustParams, IngestError};
 use crate::stroke::blend_kernel;
@@ -195,13 +194,16 @@ pub struct SmartSource {
     pub scale: f32,
 }
 
-/// One pixel layer: canvas-extent straight RGBA8 plus the four
-/// properties the composite reads and the one (`locked`) it refuses on.
-/// A whole-canvas geometric change: every layer, every mask and every
-/// smart object's source moves together, so the stack keeps its layers.
-/// All of these are exact pixel moves (no resampling), the same class of
-/// CPU windowing as a crop.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A whole-canvas geometric change: every layer, every mask (layer and
+/// group) and every smart object's source moves together, so the stack
+/// keeps its layers.
+///
+/// Two classes. The EXACT ops (rotate, flip, Canvas Size, Crop) are pure
+/// pixel moves, the same class of CPU windowing as a crop, and run in
+/// [`LayerStack::transform_canvas`]. The RESAMPLING ops (Resample,
+/// Straighten) interpolate, so they are kernel dispatches and run in
+/// [`LayerStack::transform_canvas_gpu`] (GPU-only, spec §6).
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CanvasOp {
     RotateCw,
     RotateCcw,
@@ -217,6 +219,62 @@ pub enum CanvasOp {
         anchor_x: u8,
         anchor_y: u8,
     },
+    /// The crop tool's axis-aligned commit: keep the rectangle, drop the
+    /// rest. Exact windowing; the rectangle is clipped to the canvas.
+    Crop {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
+    /// Image ▸ Image Size: every layer and mask resampled to the new
+    /// extent with `filter` (the T1 `resample.*` kernels).
+    Resample {
+        width: u32,
+        height: u32,
+        filter: ResampleFilter,
+    },
+    /// The crop tool's straightened commit: every buffer rotated by
+    /// `−degrees` about the rectangle's centre (`geom.rotate_bilinear`),
+    /// then the now-upright rectangle cut out.
+    Straighten {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        degrees: f32,
+    },
+}
+
+/// The reconstruction filter of [`CanvasOp::Resample`] — the three T1
+/// resample kernels, by their wire names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResampleFilter {
+    Nearest,
+    Mitchell,
+    Lanczos3,
+}
+
+impl ResampleFilter {
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "nearest" => Some(Self::Nearest),
+            "mitchell" => Some(Self::Mitchell),
+            "lanczos3" => Some(Self::Lanczos3),
+            _ => None,
+        }
+    }
+
+    fn kernel(self) -> &'static KernelDef {
+        use image_kernels::families::resample::{
+            RESAMPLE_LANCZOS3, RESAMPLE_MITCHELL, RESAMPLE_NEAREST,
+        };
+        match self {
+            Self::Nearest => &RESAMPLE_NEAREST,
+            Self::Mitchell => &RESAMPLE_MITCHELL,
+            Self::Lanczos3 => &RESAMPLE_LANCZOS3,
+        }
+    }
 }
 
 impl CanvasOp {
@@ -225,12 +283,86 @@ impl CanvasOp {
         match *self {
             CanvasOp::RotateCw | CanvasOp::RotateCcw => (h, w),
             CanvasOp::Rotate180 | CanvasOp::FlipHorizontal | CanvasOp::FlipVertical => (w, h),
-            CanvasOp::Resize { width, height, .. } => (width, height),
+            CanvasOp::Resize { width, height, .. }
+            | CanvasOp::Crop { width, height, .. }
+            | CanvasOp::Resample { width, height, .. }
+            | CanvasOp::Straighten { width, height, .. } => (width, height),
+        }
+    }
+
+    /// A pure pixel move (no interpolation): everything but Resample and
+    /// Straighten. Only these have a CPU remap.
+    pub fn is_exact(&self) -> bool {
+        !matches!(
+            self,
+            CanvasOp::Resample { .. } | CanvasOp::Straighten { .. }
+        )
+    }
+
+    /// The undo step's label.
+    pub fn label(&self) -> &'static str {
+        match self {
+            CanvasOp::RotateCw => "Rotate 90° clockwise",
+            CanvasOp::RotateCcw => "Rotate 90° counter-clockwise",
+            CanvasOp::Rotate180 => "Rotate 180°",
+            CanvasOp::FlipHorizontal => "Flip horizontal",
+            CanvasOp::FlipVertical => "Flip vertical",
+            CanvasOp::Resize { .. } => "Canvas size",
+            CanvasOp::Crop { .. } => "Crop",
+            CanvasOp::Resample { .. } => "Image size",
+            CanvasOp::Straighten { .. } => "Straighten and crop",
+        }
+    }
+
+    /// Clip a crop / straighten rectangle to a `(w, h)` canvas (the other
+    /// ops pass through). An empty intersection becomes a 0-sized
+    /// rectangle, which [`LayerStack::transform_canvas`] refuses.
+    fn clipped(self, w: u32, h: u32) -> Self {
+        let clip = |x: u32, y: u32, cw: u32, ch: u32| {
+            let (x0, y0) = (x.min(w), y.min(h));
+            let x1 = x.saturating_add(cw).min(w);
+            let y1 = y.saturating_add(ch).min(h);
+            (x0, y0, x1 - x0, y1 - y0)
+        };
+        match self {
+            CanvasOp::Crop {
+                x,
+                y,
+                width,
+                height,
+            } => {
+                let (x, y, width, height) = clip(x, y, width, height);
+                CanvasOp::Crop {
+                    x,
+                    y,
+                    width,
+                    height,
+                }
+            }
+            CanvasOp::Straighten {
+                x,
+                y,
+                width,
+                height,
+                degrees,
+            } => {
+                let (x, y, width, height) = clip(x, y, width, height);
+                CanvasOp::Straighten {
+                    x,
+                    y,
+                    width,
+                    height,
+                    degrees,
+                }
+            }
+            other => other,
         }
     }
 
     /// For an output pixel, the input pixel it comes from (None = added
-    /// area). `(w, h)` is the INPUT extent.
+    /// area). `(w, h)` is the INPUT extent. Exact ops only; the
+    /// resampling ops have no single source pixel and answer `None`
+    /// (they never reach the CPU remap).
     fn source(&self, x: u32, y: u32, w: u32, h: u32) -> Option<(u32, u32)> {
         match *self {
             CanvasOp::RotateCw => Some((y, h - 1 - x)),
@@ -252,12 +384,18 @@ impl CanvasOp {
                 (sx >= 0 && sy >= 0 && sx < i64::from(w) && sy < i64::from(h))
                     .then_some((sx as u32, sy as u32))
             }
+            CanvasOp::Crop { x: ox, y: oy, .. } => {
+                let (sx, sy) = (x + ox, y + oy);
+                (sx < w && sy < h).then_some((sx, sy))
+            }
+            CanvasOp::Resample { .. } | CanvasOp::Straighten { .. } => None,
         }
     }
 
     /// Remap a `bpp`-bytes-per-pixel buffer of extent `(w, h)`; added
-    /// area takes `fill`.
+    /// area takes `fill`. Exact ops only.
     fn remap(&self, src: &[u8], w: u32, h: u32, bpp: usize, fill: u8) -> Vec<u8> {
+        debug_assert!(self.is_exact(), "a resampling op has no CPU remap");
         let (ow, oh) = self.output_size(w, h);
         let mut out = vec![fill; ow as usize * oh as usize * bpp];
         for y in 0..oh {
@@ -273,6 +411,8 @@ impl CanvasOp {
     }
 }
 
+/// One pixel layer: canvas-extent straight RGBA8 plus the four
+/// properties the composite reads and the one (`locked`) it refuses on.
 #[derive(Debug, Clone)]
 pub struct Layer {
     /// Pixels of its own, or an adjustment over what is below.
@@ -1058,49 +1198,212 @@ impl LayerStack {
     /// the source, and a "convert to pixels" that silently threw away
     /// the original is exactly the destructive move this rung exists to
     /// prevent — rasterize by baking into a NEW pixel layer instead.
-    /// Rotate, flip or re-size the whole canvas: every layer's pixels,
-    /// every mask and every smart object's source move together, so the
-    /// stack keeps its layers (a crop, by contrast, flattens).
+    /// Rotate, flip, re-size or crop the whole canvas — the EXACT
+    /// [`CanvasOp`]s: every layer's pixels, every layer and group mask and
+    /// every smart object's source move together, so the stack keeps its
+    /// layers.
     ///
     /// One undo step; the history before it stays (undoing the op first
     /// restores the extent older pixel steps were recorded against).
-    /// Canvas Size is refused while a smart object is in the stack (its
-    /// render would no longer line up with its source).
+    /// Canvas Size is refused while a smart object is in the stack, and a
+    /// crop while a smart object's render is not its source at 1:1 (in
+    /// both cases its render would no longer line up with its source).
+    /// The resampling ops are kernel dispatches and are refused here —
+    /// they go through [`Self::transform_canvas_gpu`].
     pub fn transform_canvas(&mut self, op: CanvasOp) -> Result<(), IngestError> {
-        let label = match op {
-            CanvasOp::RotateCw => "Rotate 90° clockwise",
-            CanvasOp::RotateCcw => "Rotate 90° counter-clockwise",
-            CanvasOp::Rotate180 => "Rotate 180°",
-            CanvasOp::FlipHorizontal => "Flip horizontal",
-            CanvasOp::FlipVertical => "Flip vertical",
-            CanvasOp::Resize { .. } => "Canvas size",
-        };
+        if !op.is_exact() {
+            return Err(IngestError::Unsupported(format!(
+                "{} resamples every layer and is GPU-only (transform_canvas_gpu)",
+                op.label()
+            )));
+        }
+        let op = op.clipped(self.width, self.height);
+        self.check_canvas_op(op)?;
         // Always recorded, for the reason `remove` is: older pixel steps
         // address the old extent and must not be reachable across it.
-        self.recorded(label, None, |s| s.transform_canvas_unrecorded(op))
+        self.recorded(op.label(), None, |s| {
+            s.transform_canvas_unrecorded(op);
+            Ok(())
+        })
     }
 
-    fn transform_canvas_unrecorded(&mut self, op: CanvasOp) -> Result<(), IngestError> {
+    /// Every [`CanvasOp`], the resampling ones included: Image Size
+    /// (`Resample`) runs the T1 resample kernel over every layer and mask;
+    /// `Straighten` rotates each through `geom.rotate_bilinear` about the
+    /// rectangle's centre and then cuts the rectangle. An exact op takes
+    /// the CPU path of [`Self::transform_canvas`] and needs no device; a
+    /// resampling one is GPU-only and refuses without `ctx`.
+    ///
+    /// Every dispatch runs BEFORE the stack changes, so a failure leaves
+    /// the stack and its history as they were. Then it is one undo step,
+    /// and the history before it stays.
+    ///
+    /// A smart object is RE-RENDERED from its source by a uniform
+    /// resample (its scale follows the canvas, so nothing is lost). A
+    /// non-uniform one cannot be held by the one-scale model, so the
+    /// source is resampled by the same factors — lossy, and said here.
+    /// A 16-bit layer stays 16-bit; the working window is rgba16float.
+    pub async fn transform_canvas_gpu(
+        &mut self,
+        ctx: Option<&GpuContext>,
+        op: CanvasOp,
+    ) -> Result<(), IngestError> {
+        if let CanvasOp::Straighten {
+            x,
+            y,
+            width,
+            height,
+            degrees,
+        } = op
+        {
+            // No angle is the pure cut: no dispatch, no interpolation blur.
+            if degrees == 0.0 {
+                return self.transform_canvas(CanvasOp::Crop {
+                    x,
+                    y,
+                    width,
+                    height,
+                });
+            }
+        }
+        if op.is_exact() {
+            return self.transform_canvas(op);
+        }
+        let op = op.clipped(self.width, self.height);
+        self.check_canvas_op(op)?;
+        let ctx = ctx.ok_or_else(|| {
+            IngestError::Unsupported(format!(
+                "{} is a resample and GPU-only — call init_gpu first",
+                op.label()
+            ))
+        })?;
+        let (w, h) = (self.width, self.height);
+        let (ow, oh) = op.output_size(w, h);
+        let mut layers = self.layers.clone();
+        for layer in &mut layers {
+            let mut rerendered = false;
+            if let (LayerKind::Smart(src), CanvasOp::Resample { filter, .. }) =
+                (&mut layer.kind, op)
+            {
+                let f = ow as f32 / w as f32;
+                if (h as f32 * f).round() as u32 == oh {
+                    let scale = src.scale * f;
+                    let render = render_smart(ctx, src, scale, filter, ow, oh).await?;
+                    src.scale = scale;
+                    layer.rgba =
+                        crate::pixels::Pixels::from_rgba8(Arc::from(render.into_boxed_slice()))
+                            .into();
+                    rerendered = true;
+                } else {
+                    let (sw, sh) = (
+                        ((src.width as f32) * ow as f32 / w as f32).round().max(1.0) as u32,
+                        ((src.height as f32) * oh as f32 / h as f32)
+                            .round()
+                            .max(1.0) as u32,
+                    );
+                    let resample = CanvasOp::Resample {
+                        width: sw,
+                        height: sh,
+                        filter,
+                    };
+                    let out = gpu_canvas_op(
+                        ctx,
+                        resample,
+                        &rgba8_to_f16(&src.rgba),
+                        src.width,
+                        src.height,
+                    )
+                    .await?;
+                    src.rgba = Arc::from(f16_to_rgba8(&out).into_boxed_slice());
+                    src.width = sw;
+                    src.height = sh;
+                }
+            }
+            if !rerendered {
+                let canvas = layer.rgba.canvas();
+                let depth = canvas.depth();
+                let out = gpu_canvas_op(ctx, op, &pixels_to_f16(canvas), w, h).await?;
+                layer.rgba = f16_to_pixels(&out, depth).into();
+            }
+            if let (LayerKind::Smart(src), CanvasOp::Straighten { .. }) = (&mut layer.kind, op) {
+                // `check_canvas_op` admitted it only at 1:1 over the
+                // canvas, where the source IS the render: it turns with it.
+                src.rgba = layer.rgba.canvas().to_rgba8().into_owned().into();
+                src.width = ow;
+                src.height = oh;
+            }
+            if let Some(mask) = &layer.mask {
+                let out =
+                    gpu_canvas_op(ctx, op, &coverage_to_f16(mask.canvas().data()), w, h).await?;
+                layer.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
+                    .map(|c| Arc::new(c).into());
+            }
+        }
+        let mut groups = self.groups.clone();
+        for g in &mut groups {
+            if let Some(mask) = &g.mask {
+                let out = gpu_canvas_op(ctx, op, &coverage_to_f16(mask.data()), w, h).await?;
+                g.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)).map(Arc::new);
+            }
+        }
+        self.recorded(op.label(), None, move |s| {
+            s.layers = layers;
+            s.groups = groups;
+            s.width = ow;
+            s.height = oh;
+            Ok(())
+        })
+    }
+
+    /// The refusals every canvas op shares, checked before anything is
+    /// computed or recorded. `op` is already clipped.
+    fn check_canvas_op(&self, op: CanvasOp) -> Result<(), IngestError> {
         let (w, h) = (self.width, self.height);
         let (ow, oh) = op.output_size(w, h);
         if ow == 0 || oh == 0 {
-            return Err(IngestError::Unsupported(
-                "canvas size must be at least 1×1".into(),
-            ));
+            return Err(IngestError::Unsupported(match op {
+                CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } => {
+                    format!("the crop rectangle is empty against {w}×{h}")
+                }
+                _ => "canvas size must be at least 1×1".into(),
+            }));
         }
-        let resize = matches!(op, CanvasOp::Resize { .. });
-        if resize
-            && self
-                .layers
+        if let CanvasOp::Straighten { degrees, .. } = op {
+            if !degrees.is_finite() {
+                return Err(IngestError::Unsupported(
+                    "the straighten angle must be finite".into(),
+                ));
+            }
+        }
+        let smart = |pred: &dyn Fn(&SmartSource) -> bool| {
+            self.layers
                 .iter()
-                .any(|l| matches!(l.kind, LayerKind::Smart(_)))
-        {
-            return Err(IngestError::Unsupported(
+                .filter_map(|l| l.smart_source())
+                .any(pred)
+        };
+        match op {
+            CanvasOp::Resize { .. } if smart(&|_| true) => Err(IngestError::Unsupported(
                 "Canvas Size with a smart object in the stack is not supported \
                  (its render would no longer line up with its source)"
                     .into(),
-            ));
+            )),
+            CanvasOp::Crop { .. } | CanvasOp::Straighten { .. }
+                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
+            {
+                Err(IngestError::Unsupported(
+                    "cropping a smart object that is rendered at another scale is not \
+                     supported (its render would no longer line up with its source)"
+                        .into(),
+                ))
+            }
+            _ => Ok(()),
         }
+    }
+
+    /// The exact ops' CPU remap of every buffer. `op` is checked.
+    fn transform_canvas_unrecorded(&mut self, op: CanvasOp) {
+        let (w, h) = (self.width, self.height);
+        let (ow, oh) = op.output_size(w, h);
         for layer in &mut self.layers {
             let canvas = layer.rgba.canvas();
             let (bpp, depth) = (canvas.bytes_per_pixel(), canvas.depth());
@@ -1113,6 +1416,8 @@ impl LayerStack {
                 layer.mask = SelectionCoverage::from_data(ow, oh, m).map(|c| Arc::new(c).into());
             }
             if let LayerKind::Smart(src) = &mut layer.kind {
+                // Rotations and flips move the source in its own extent; a
+                // crop reaches here only at 1:1, where the extents agree.
                 let s = op.remap(&src.rgba, src.width, src.height, 4, 0);
                 let (sw, sh) = op.output_size(src.width, src.height);
                 src.rgba = Arc::from(s.into_boxed_slice());
@@ -1120,9 +1425,14 @@ impl LayerStack {
                 src.height = sh;
             }
         }
+        for g in &mut self.groups {
+            if let Some(mask) = &g.mask {
+                let m = op.remap(mask.data(), w, h, 1, 255);
+                g.mask = SelectionCoverage::from_data(ow, oh, m).map(Arc::new);
+            }
+        }
         self.width = ow;
         self.height = oh;
-        Ok(())
     }
 
     pub fn make_smart(&mut self, index: usize) -> Result<(), IngestError> {
@@ -3280,6 +3590,167 @@ pub fn cmyk_flatten_agrees(
     Ok(a)
 }
 
+// ── resampling canvas ops: the GPU dispatch and its window bridges ──
+
+/// One resampling [`CanvasOp`] over one rgba16float window of extent
+/// `(w, h)`; returns the window at the op's output extent. `Resample` is
+/// one `resample.*` dispatch; `Straighten` is one `geom.rotate_bilinear`
+/// dispatch (backward-mapped, clamp-to-edge, about the rectangle's
+/// centre) and then the exact cut of the rectangle.
+async fn gpu_canvas_op(
+    ctx: &GpuContext,
+    op: CanvasOp,
+    win: &[u8],
+    w: u32,
+    h: u32,
+) -> Result<Vec<u8>, IngestError> {
+    use image_kernels::families::geom::{RotateBilinearParams, GEOM_ROTATE_BILINEAR};
+    use image_kernels::families::resample::ResampleParams;
+    match op {
+        CanvasOp::Resample {
+            width,
+            height,
+            filter,
+        } => {
+            let params =
+                ResampleParams::new(w as f32 / width as f32, h as f32 / height as f32, 0.0, 0.0);
+            image_gpu::execute_windowed_once_async(
+                ctx,
+                filter.kernel(),
+                win,
+                w,
+                h,
+                params.as_bytes(),
+                None,
+                width,
+                height,
+            )
+            .await
+            .map_err(|e| IngestError::Pipeline(e.to_string()))
+        }
+        CanvasOp::Straighten {
+            x,
+            y,
+            width,
+            height,
+            degrees,
+        } => {
+            let c = (
+                x as f32 + width as f32 / 2.0,
+                y as f32 + height as f32 / 2.0,
+            );
+            // The FRAME turned by +degrees, so the content turns back.
+            let params = RotateBilinearParams::new(-degrees, c, c);
+            let rotated = image_gpu::execute_windowed_once_async(
+                ctx,
+                &GEOM_ROTATE_BILINEAR,
+                win,
+                w,
+                h,
+                params.as_bytes(),
+                None,
+                w,
+                h,
+            )
+            .await
+            .map_err(|e| IngestError::Pipeline(e.to_string()))?;
+            Ok(cut_window(&rotated, w, 8, (x, y, width, height)))
+        }
+        _ => Err(IngestError::Unsupported(format!(
+            "{} is an exact op with no dispatch",
+            op.label()
+        ))),
+    }
+}
+
+/// The rectangle `(x, y, cw, ch)` (inside the `w`-wide buffer) of a
+/// `bpp`-bytes-per-pixel buffer.
+fn cut_window(src: &[u8], w: u32, bpp: usize, (x, y, cw, ch): (u32, u32, u32, u32)) -> Vec<u8> {
+    let mut out = Vec::with_capacity(cw as usize * ch as usize * bpp);
+    for row in y..y + ch {
+        let s = (row as usize * w as usize + x as usize) * bpp;
+        out.extend_from_slice(&src[s..s + cw as usize * bpp]);
+    }
+    out
+}
+
+/// A layer's pixels as the rgba16float working window, at their own
+/// depth (a 16-bit sample is not narrowed to a byte on the way in).
+fn pixels_to_f16(px: &crate::pixels::Pixels) -> Vec<u8> {
+    use half::f16;
+    if !px.is_16bit() {
+        return rgba8_to_f16(px.raw());
+    }
+    let mut out = Vec::with_capacity(px.raw().len());
+    for pair in px.raw().as_chunks::<2>().0 {
+        let v = f32::from(u16::from_ne_bytes(*pair)) / 65535.0;
+        out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
+    }
+    out
+}
+
+/// The window back to pixels at `depth`.
+fn f16_to_pixels(win: &[u8], depth: image_core::SampleDepth) -> crate::pixels::Pixels {
+    use half::f16;
+    if depth != image_core::SampleDepth::U16 {
+        return crate::pixels::Pixels::from_rgba8(Arc::from(f16_to_rgba8(win).into_boxed_slice()));
+    }
+    let samples: Vec<u16> = win
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|p| (f16::from_le_bytes(*p).to_f32().clamp(0.0, 1.0) * 65535.0).round() as u16)
+        .collect();
+    crate::pixels::Pixels::from_rgba16(&samples)
+}
+
+/// A one-byte coverage field as a window (the value in every channel).
+fn coverage_to_f16(cov: &[u8]) -> Vec<u8> {
+    let rgba: Vec<u8> = cov.iter().flat_map(|&v| [v, v, v, v]).collect();
+    rgba8_to_f16(&rgba)
+}
+
+/// The window back to coverage (its red channel).
+fn f16_to_coverage(win: &[u8]) -> Vec<u8> {
+    f16_to_rgba8(win)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|p| p[0])
+        .collect()
+}
+
+/// RENDER a smart object's SOURCE at `scale` with `filter`, letterboxed
+/// (top-left) into a `cw × ch` canvas as straight RGBA8 — the one
+/// re-render both the smart-scale door and Image Size use. GPU-only.
+pub async fn render_smart(
+    ctx: &GpuContext,
+    src: &SmartSource,
+    scale: f32,
+    filter: ResampleFilter,
+    cw: u32,
+    ch: u32,
+) -> Result<Vec<u8>, IngestError> {
+    let out_w = ((src.width as f32) * scale).round().max(1.0) as u32;
+    let out_h = ((src.height as f32) * scale).round().max(1.0) as u32;
+    let op = CanvasOp::Resample {
+        width: out_w,
+        height: out_h,
+        filter,
+    };
+    let small = f16_to_rgba8(
+        &gpu_canvas_op(ctx, op, &rgba8_to_f16(&src.rgba), src.width, src.height).await?,
+    );
+    let mut canvas = vec![0u8; (cw as usize) * (ch as usize) * 4];
+    for y in 0..out_h.min(ch) {
+        let srow = (y as usize) * (out_w as usize) * 4;
+        let drow = (y as usize) * (cw as usize) * 4;
+        let n = (out_w.min(cw) as usize) * 4;
+        canvas[drow..drow + n].copy_from_slice(&small[srow..srow + n]);
+    }
+    Ok(canvas)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3496,6 +3967,299 @@ mod tests {
         // Rotation is fine: the source rotates with the render.
         s.transform_canvas(CanvasOp::Rotate180)
             .expect("rotate smart");
+    }
+
+    /// `numbered()` plus an empty top layer with a mask, both in a group
+    /// with a mask of its own: what a canvas op must keep.
+    fn layered() -> LayerStack {
+        let mut s = numbered();
+        s.add("top");
+        let cov = SelectionCoverage::from_data(3, 2, vec![255, 0, 0, 0, 0, 7]).expect("cov");
+        s.layers[1].mask = Some(Arc::new(cov).into());
+        let g = s.group_range(0, 1, "group").expect("group");
+        let gm = SelectionCoverage::from_data(3, 2, vec![1, 2, 3, 4, 5, 6]).expect("gm");
+        s.set_group_mask(g, Some(Arc::new(gm)), true)
+            .expect("group mask");
+        s
+    }
+
+    fn reds_of(s: &LayerStack, i: usize) -> Vec<u8> {
+        s.layers[i]
+            .rgba
+            .to_rgba8()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| p[0])
+            .collect()
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn crop_keeps_every_layer_mask_and_group_in_one_undo_step__feat__image_editor_canvas_ops() {
+        let mut s = layered();
+        s.set_active(0).expect("active");
+        let mut painted = s.layers[0].rgba.to_rgba8().into_owned();
+        painted[0] = 99;
+        s.edit_active(
+            "paint",
+            Region::new(0, 0, 1, 1),
+            Arc::<[u8]>::from(painted.into_boxed_slice()).into(),
+        )
+        .expect("paint");
+        let labels_before: Vec<String> = s.undo_labels().iter().map(|l| l.to_string()).collect();
+        s.transform_canvas(CanvasOp::Crop {
+            x: 1,
+            y: 0,
+            width: 2,
+            height: 2,
+        })
+        .expect("crop");
+        assert_eq!((s.width, s.height), (2, 2));
+        assert_eq!(s.layers.len(), 2, "the layers survive the crop");
+        assert_eq!(s.groups.len(), 1, "and so does the group");
+        assert_eq!(reds_of(&s, 0), vec![1, 2, 11, 12]);
+        assert_eq!(
+            s.layers[1].mask.as_ref().expect("mask").canvas().data(),
+            &[0, 0, 0, 7]
+        );
+        assert_eq!(
+            s.groups[0].mask.as_ref().expect("group mask").data(),
+            &[2, 3, 5, 6]
+        );
+        // ONE step on top of the history that was there.
+        let mut want = labels_before.clone();
+        want.push("Crop".into());
+        assert_eq!(s.undo_labels(), want);
+        assert_eq!(s.undo().as_deref(), Some("Crop"));
+        assert_eq!((s.width, s.height), (3, 2));
+        assert_eq!(reds_of(&s, 0), vec![99, 1, 2, 10, 11, 12]);
+        assert_eq!(
+            s.undo().as_deref(),
+            Some("paint"),
+            "the history before stays"
+        );
+        assert_eq!(reds_of(&s, 0), reds(&numbered()));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn crop_clips_to_the_canvas_and_refuses_an_empty_rect__feat__image_editor_canvas_ops() {
+        let mut s = numbered();
+        s.transform_canvas(CanvasOp::Crop {
+            x: 2,
+            y: 1,
+            width: 10,
+            height: 10,
+        })
+        .expect("clipped");
+        assert_eq!((s.width, s.height), (1, 1));
+        assert_eq!(reds(&s), vec![12]);
+        let before: Vec<String> = s.undo_labels().iter().map(|l| l.to_string()).collect();
+        let err = s
+            .transform_canvas(CanvasOp::Crop {
+                x: 5,
+                y: 0,
+                width: 1,
+                height: 1,
+            })
+            .expect_err("empty");
+        assert!(err.to_string().contains("empty"), "{err}");
+        assert_eq!(s.undo_labels(), before, "a refused crop records nothing");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn crop_moves_a_smart_source_at_1_to_1_and_refuses_a_scaled_one__feat__image_editor_canvas_ops()
+    {
+        let mut s = numbered();
+        s.make_smart(0).expect("smart");
+        let crop = CanvasOp::Crop {
+            x: 0,
+            y: 1,
+            width: 3,
+            height: 1,
+        };
+        s.transform_canvas(crop).expect("crop smart");
+        let src = s.layers[0].smart_source().expect("source");
+        assert_eq!((src.width, src.height), (3, 1));
+        assert_eq!(
+            src.rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| p[0])
+                .collect::<Vec<_>>(),
+            vec![10, 11, 12]
+        );
+        let mut s = numbered();
+        s.make_smart(0).expect("smart");
+        s.set_smart_render(0, px(3, 2, 5), 0.5).expect("render");
+        let err = s.transform_canvas(crop).expect_err("scaled");
+        assert!(err.to_string().contains("smart object"), "{err}");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn resampling_ops_are_gpu_only_and_a_level_straighten_is_the_crop__feat__image_editor_canvas_ops(
+    ) {
+        let mut s = numbered();
+        let resample = CanvasOp::Resample {
+            width: 6,
+            height: 4,
+            filter: ResampleFilter::Nearest,
+        };
+        assert!(s.transform_canvas(resample).is_err(), "no CPU resample");
+        let err = pollster::block_on(s.transform_canvas_gpu(None, resample)).expect_err("no gpu");
+        assert!(err.to_string().contains("GPU-only"), "{err}");
+        assert!(s.undo_labels().is_empty(), "a refusal records nothing");
+        // 0° is the exact cut: no device needed, labelled as a crop.
+        pollster::block_on(s.transform_canvas_gpu(
+            None,
+            CanvasOp::Straighten {
+                x: 1,
+                y: 0,
+                width: 2,
+                height: 1,
+                degrees: 0.0,
+            },
+        ))
+        .expect("level straighten");
+        assert_eq!(reds(&s), vec![1, 2]);
+        assert_eq!(s.undo_labels(), vec!["Crop"]);
+        assert_eq!(
+            ResampleFilter::from_wire("lanczos3"),
+            Some(ResampleFilter::Lanczos3)
+        );
+        assert_eq!(ResampleFilter::from_wire("bicubic"), None);
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn image_size_resamples_every_layer_and_mask_in_one_undo_step__feat__image_editor_canvas_ops() {
+        let Some(ctx) = device() else { return };
+        let mut s = layered();
+        s.add("deep");
+        // A 16-bit layer stays 16-bit through the resample.
+        s.layers[2].rgba = crate::pixels::Pixels::from_rgba16(&[0x1234u16; 3 * 2 * 4]).into();
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Resample {
+                width: 6,
+                height: 4,
+                filter: ResampleFilter::Nearest,
+            },
+        ))
+        .expect("resample");
+        assert_eq!((s.width, s.height), (6, 4));
+        assert_eq!(s.layers.len(), 3);
+        // Nearest at 2× doubles every pixel.
+        assert_eq!(
+            reds_of(&s, 0),
+            vec![
+                0, 0, 1, 1, 2, 2, 0, 0, 1, 1, 2, 2, 10, 10, 11, 11, 12, 12, 10, 10, 11, 11, 12, 12
+            ]
+        );
+        let m = s.layers[1].mask.as_ref().expect("mask").canvas();
+        assert_eq!((m.width(), m.height()), (6, 4));
+        assert_eq!(&m.data()[..6], &[255, 255, 0, 0, 0, 0]);
+        assert_eq!(m.data()[23], 7);
+        let gm = s.groups[0].mask.as_ref().expect("group mask");
+        assert_eq!((gm.width(), gm.height()), (6, 4));
+        assert!(s.layers[2].rgba.is_16bit(), "depth kept");
+        let deep = s.layers[2].rgba.canvas().sample16(23, 0);
+        assert!(deep.abs_diff(0x1234) <= 8, "16-bit sample {deep:#x}");
+        assert_eq!(s.undo_labels().last().copied(), Some("Image size"));
+        assert_eq!(s.undo().as_deref(), Some("Image size"));
+        assert_eq!((s.width, s.height), (3, 2));
+        assert_eq!(reds_of(&s, 0), reds(&numbered()));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn image_size_re_renders_a_smart_object_from_its_source__feat__image_editor_canvas_ops() {
+        let Some(ctx) = device() else { return };
+        let mut s = numbered();
+        s.make_smart(0).expect("smart");
+        let source = s.layers[0].smart_source().expect("src").rgba.to_vec();
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Resample {
+                width: 6,
+                height: 4,
+                filter: ResampleFilter::Nearest,
+            },
+        ))
+        .expect("resample");
+        let src = s.layers[0].smart_source().expect("src");
+        assert_eq!(src.scale, 2.0, "the scale follows the canvas");
+        assert_eq!(src.rgba.to_vec(), source, "the source itself is untouched");
+        assert_eq!(&reds_of(&s, 0)[..6], &[0, 0, 1, 1, 2, 2]);
+        // A stretch cannot be one scale: the source is resampled with it.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Resample {
+                width: 6,
+                height: 2,
+                filter: ResampleFilter::Nearest,
+            },
+        ))
+        .expect("stretch");
+        let src = s.layers[0].smart_source().expect("src");
+        assert_eq!((src.width, src.height), (3, 1));
+        assert_eq!((s.width, s.height), (6, 2));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn straighten_rotates_every_layer_and_mask_then_crops__feat__image_editor_canvas_ops() {
+        let Some(ctx) = device() else { return };
+        let mut s = layered();
+        // 180° about the full canvas's centre maps pixel centres onto
+        // pixel centres, so the bilinear rotation is exactly Rotate 180°.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Straighten {
+                x: 0,
+                y: 0,
+                width: 3,
+                height: 2,
+                degrees: 180.0,
+            },
+        ))
+        .expect("straighten");
+        let mut want = layered();
+        want.transform_canvas(CanvasOp::Rotate180).expect("180");
+        assert_eq!(s.layers.len(), 2);
+        assert_eq!(reds_of(&s, 0), reds_of(&want, 0));
+        assert_eq!(
+            s.layers[1].mask.as_ref().expect("mask").canvas().data(),
+            want.layers[1].mask.as_ref().expect("mask").canvas().data()
+        );
+        assert_eq!(
+            s.groups[0].mask.as_ref().expect("gm").data(),
+            want.groups[0].mask.as_ref().expect("gm").data()
+        );
+        // Then a cut: the straightened rect is the new canvas.
+        pollster::block_on(s.transform_canvas_gpu(
+            Some(ctx),
+            CanvasOp::Straighten {
+                x: 1,
+                y: 0,
+                width: 1,
+                height: 2,
+                degrees: 180.0,
+            },
+        ))
+        .expect("cut");
+        assert_eq!((s.width, s.height), (1, 2));
+        assert_eq!(reds_of(&s, 0), vec![1, 11], "180° twice, middle column");
+        assert_eq!(
+            s.undo_labels(),
+            vec!["Straighten and crop", "Straighten and crop"]
+        );
+        assert_eq!(s.undo().as_deref(), Some("Straighten and crop"));
+        assert_eq!((s.width, s.height), (3, 2));
     }
 
     // ── smart objects ────────────────────────────────────────────────
