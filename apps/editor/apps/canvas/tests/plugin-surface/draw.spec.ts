@@ -264,6 +264,8 @@ const COMMANDS = [
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
   "media.paged.draw.command.applyGuideColor",
+  "media.paged.draw.command.rasterizeOptions",
+  "media.paged.draw.command.rasterize",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
@@ -342,9 +344,7 @@ const PANEL_MARKER: Record<string, string> = {
 // ── helpers ─────────────────────────────────────────────────────────
 
 interface RegistrySnapshot {
-  tools: string[  "media.paged.draw.command.rasterizeOptions",
-  "media.paged.draw.command.rasterize",
-];
+  tools: string[];
   panels: string[];
   commands: string[];
   importers: string[];
