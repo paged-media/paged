@@ -344,6 +344,17 @@ export const HOST_FEATURES: readonly string[] = [
   // that would otherwise say even-odd with winding (paged.draw's SVG
   // importer) asks this flag first.
   "document.fillRule@1",
+  // Engine ADR 1010 — clip groups and groups pasted into a frame. The
+  // vendored wire carries `createGroup { memberIds, clip: true }` (the
+  // top-most member clips the rest and paints nothing), the `groupClip`
+  // path, and `pasteInto` / `releaseFrom` taking a group (a grouped item
+  // stands for its outermost group); `tree()` lists a frame's pasted-in
+  // children under it and marks a clip group's row `clip: true`. STATIC,
+  // like `document.fillRule@1`: every change is additive at protocol 76,
+  // so the handshake does not prove the engine has it — an older engine
+  // ignores `clip` (a plain group) and refuses a group child. paged.draw's
+  // clipped repeat asks it before choosing a clip group over paste-into.
+  "document.clipGroups@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

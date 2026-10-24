@@ -1357,11 +1357,21 @@ export interface DocumentSurface {
     filter?: HitFilter,
   ): Promise<HitResult | null>;
   elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
+  /**
+   * The scene outline: spread → page → page items, a group's members as
+   * its `children`. Engine ADR 1010 (`supports("document.clipGroups@1")`):
+   * a frame's pasted-in (paste-into) content is listed as ITS `children`
+   * too, so every page item of the document is reachable here — a bundle
+   * no longer keeps its own index of what it pasted in — and a clip
+   * group's row carries `clip: true` (its last child is the clipping
+   * path). An older engine lists no pasted-in content.
+   */
   tree(): Promise<SceneTreeNode[]>;
   /**
    * C-16 — the per-element PARENTAGE read: the nearest ANCESTOR that is
-   * itself an addressable element (a group today — the only element kind
-   * that nests page items), or `null` when there is none.
+   * itself an addressable element (a group, or since engine ADR 1010 the
+   * frame a page item is pasted into — the two element kinds that nest
+   * page items), or `null` when there is none.
    *
    * Consumer: paged.draw's `selectParentGroup` command
    * (`draw-bundle/src/commands/select-parent-group.ts`), which climbs to
