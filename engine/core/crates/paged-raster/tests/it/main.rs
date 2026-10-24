@@ -31,5 +31,6 @@ mod formats;
 mod layouts;
 mod matrix;
 mod metadata;
+mod psd;
 mod raw_tiff;
 mod support;

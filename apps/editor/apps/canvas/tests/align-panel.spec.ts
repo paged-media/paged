@@ -39,15 +39,15 @@ test.describe("Phase 5 — Align panel", () => {
     await openPanel(page, "paged.align");
   });
 
-  test("AC-ALIGN-1 — panel mounts; 6 align + 2 distribute buttons; hints when no selection @feat:editor-shell.panels.align @level:smoke", async ({
+  test("AC-ALIGN-1 — panel mounts; 6 align + 6 distribute + 2 spacing buttons; hints when no selection @feat:editor-shell.panels.align @level:smoke", async ({
     page,
   }) => {
     await expect(page.locator('[data-align-panel="ready"]')).toBeVisible();
     const buttons = page.locator(
       '[data-align-panel="ready"] button[data-align-kind]',
     );
-    // 6 align + 2 distribute = 8.
-    await expect(buttons).toHaveCount(8);
+    // 6 align + 6 distribute objects + 2 distribute spacing = 14.
+    await expect(buttons).toHaveCount(14);
     // Hint visible with empty selection.
     await expect(
       page.locator('[data-align-panel="ready"] [data-align-hint]'),
@@ -124,9 +124,39 @@ test.describe("Phase 5 — Align panel", () => {
       const pair = JSON.parse(pairJson) as Array<{ kind: string; id: string }>;
       const lefts: number[] = [];
       for (const id of pair) {
-        const props = await dbg.client.elementProperties(id);
-        const entry = props?.entries.find((e) => e.path === "frameBounds");
-        if (entry?.value?.value) lefts.push(entry.value.value[1]);
+        const [g] =
+          (await (
+            dbg.client as unknown as {
+              elementGeometry(
+                ids: unknown[],
+              ): Promise<
+                Array<{ bounds: number[]; itemTransform?: number[] | null }>
+              >;
+            }
+          ).elementGeometry([id])) ?? [];
+        // The box the object shows (align moves through frameTransform).
+        const m = g?.itemTransform ?? [1, 0, 0, 1, 0, 0];
+        const v = g
+          ? [
+              Math.min(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.min(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+              Math.max(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.max(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+            ]
+          : null;
+        if (v) lefts.push(v[1]);
       }
       return lefts;
     }, minLeft);
@@ -250,9 +280,38 @@ test.describe("Phase 5 — Align panel", () => {
       const trio = JSON.parse(trioJson) as Array<{ kind: string; id: string }>;
       const centers: number[] = [];
       for (const id of trio) {
-        const props = await dbg.client.elementProperties(id);
-        const v = props?.entries.find((e) => e.path === "frameBounds")?.value
-          ?.value;
+        const [g] =
+          (await (
+            dbg.client as unknown as {
+              elementGeometry(
+                ids: unknown[],
+              ): Promise<
+                Array<{ bounds: number[]; itemTransform?: number[] | null }>
+              >;
+            }
+          ).elementGeometry([id])) ?? [];
+        // The box the object shows (align moves through frameTransform).
+        const m = g?.itemTransform ?? [1, 0, 0, 1, 0, 0];
+        const v = g
+          ? [
+              Math.min(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.min(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+              Math.max(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.max(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+            ]
+          : null;
         if (v) centers.push((v[1] + v[3]) / 2);
       }
       return centers;
@@ -310,9 +369,38 @@ test.describe("Phase 5 — Align panel", () => {
       // Snapshot the originals.
       const beforeLefts: number[] = [];
       for (const id of pair) {
-        const props = await dbg.client.elementProperties(id);
-        const v = props?.entries.find((e) => e.path === "frameBounds")?.value
-          ?.value;
+        const [g] =
+          (await (
+            dbg.client as unknown as {
+              elementGeometry(
+                ids: unknown[],
+              ): Promise<
+                Array<{ bounds: number[]; itemTransform?: number[] | null }>
+              >;
+            }
+          ).elementGeometry([id])) ?? [];
+        // The box the object shows (align moves through frameTransform).
+        const m = g?.itemTransform ?? [1, 0, 0, 1, 0, 0];
+        const v = g
+          ? [
+              Math.min(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.min(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+              Math.max(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.max(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+            ]
+          : null;
         if (v) beforeLefts.push(v[1]);
       }
       dbg.setElementSelection?.(pair, "replace");
@@ -357,9 +445,38 @@ test.describe("Phase 5 — Align panel", () => {
       const pair = JSON.parse(pairJson) as Array<{ kind: string; id: string }>;
       const lefts: number[] = [];
       for (const id of pair) {
-        const props = await dbg.client.elementProperties(id);
-        const v = props?.entries.find((e) => e.path === "frameBounds")?.value
-          ?.value;
+        const [g] =
+          (await (
+            dbg.client as unknown as {
+              elementGeometry(
+                ids: unknown[],
+              ): Promise<
+                Array<{ bounds: number[]; itemTransform?: number[] | null }>
+              >;
+            }
+          ).elementGeometry([id])) ?? [];
+        // The box the object shows (align moves through frameTransform).
+        const m = g?.itemTransform ?? [1, 0, 0, 1, 0, 0];
+        const v = g
+          ? [
+              Math.min(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.min(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+              Math.max(
+                m[1] * g.bounds[1] + m[3] * g.bounds[0],
+                m[1] * g.bounds[3] + m[3] * g.bounds[2],
+              ) + m[5],
+              Math.max(
+                m[0] * g.bounds[1] + m[2] * g.bounds[0],
+                m[0] * g.bounds[3] + m[2] * g.bounds[2],
+              ) + m[4],
+            ]
+          : null;
         if (v) lefts.push(v[1]);
       }
       return lefts;

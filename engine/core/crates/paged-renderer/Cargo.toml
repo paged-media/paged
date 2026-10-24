@@ -117,6 +117,8 @@ hayro-interpret = { version = "0.8", default-features = false, features = ["embe
 
 [dev-dependencies]
 paged-test-resources.workspace = true
+# The placed-PSD tests write their documents with paged-psd.
+paged-psd = { path = "../paged-psd" }
 paged-fidelity = { path = "../paged-fidelity" }
 paged-flow = { path = "../paged-flow" }
 # C1-in-code test (tests/it/c1_no_idml.rs) drives the neutral render pipeline

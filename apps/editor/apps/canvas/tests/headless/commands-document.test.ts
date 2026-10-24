@@ -511,6 +511,84 @@ describe("Align (paged.align.objects)", () => {
   });
 });
 
+describe("Align to the page and Transform Each (WP4.4)", () => {
+  /** An object's transformed box, page space. */
+  const shown = async (e: HeadlessEditor, id: unknown) => {
+    const [g] = await e.editor.client.elementGeometry([id as never]);
+    const [t, l, b, r] = g!.bounds;
+    const m = g!.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    const xs = [l, r].flatMap((x) =>
+      [t, b].map((y) => m[0] * x + m[2] * y + m[4]),
+    );
+    const ys = [l, r].flatMap((x) =>
+      [t, b].map((y) => m[1] * x + m[3] * y + m[5]),
+    );
+    return [
+      Math.min(...ys),
+      Math.min(...xs),
+      Math.max(...ys),
+      Math.max(...xs),
+    ].map((v) => Math.round(v * 100) / 100);
+  };
+
+  test("align one object to its page's right edge, one undo step", async () => {
+    covers("command:paged.align.objects");
+    const e = await targets();
+    const before = await e.dump();
+    const { addressOfElement } = editorObjectsOf(e.editor.scope);
+    const frame = addressOfElement(T.frame.id as never);
+    const pages = (await e.editor.client.collection("pages")) as Array<{
+      sizePt: [number, number];
+    }>;
+    const result = await e.invoke("paged.align.objects", {
+      kind: "right",
+      targets: [frame],
+      to: "page",
+    });
+    await e.idle();
+    expect(result).toMatchObject({ applied: true, undoSteps: 1 });
+    expect((await shown(e, T.frame.id))[3]).toBeCloseTo(pages[0]!.sizePt[0], 2);
+    await e.invoke("paged.editor.undo");
+    await e.idle();
+    expect(dumpDiff(before, await e.dump())).toEqual([]);
+  });
+
+  test("transform each scales every object about its own centre, one undo step", async () => {
+    covers("command:paged.object.transformEach");
+    const e = await targets();
+    const before = await e.dump();
+    const { addressOfElement } = editorObjectsOf(e.editor.scope);
+    const ids = [T.frame.id, T.path.id];
+    const boxes = await Promise.all(ids.map((id) => shown(e, id)));
+    const result = await e.invoke("paged.object.transformEach", {
+      targets: ids.map((id) => addressOfElement(id as never)),
+      scaleH: 50,
+      scaleV: 50,
+    });
+    await e.idle();
+    expect(result).toMatchObject({ applied: true, undoSteps: 1 });
+    for (const [i, id] of ids.entries()) {
+      const [t, l, b, r] = boxes[i]!;
+      const after = await shown(e, id);
+      // Half the size, the same centre.
+      expect(after[2]! - after[0]!).toBeCloseTo((b - t) / 2, 1);
+      expect((after[1]! + after[3]!) / 2).toBeCloseTo((l + r) / 2, 1);
+    }
+    await e.invoke("paged.editor.undo");
+    await e.idle();
+    expect(dumpDiff(before, await e.dump())).toEqual([]);
+  });
+
+  test("the dialog command opens over the selection and changes nothing", async () => {
+    covers("command:paged.object.transformEachDialog");
+    const e = await targets();
+    const before = await e.dump();
+    await e.select([T.frame.id]);
+    await e.invoke("paged.object.transformEachDialog");
+    expect(dumpDiff(before, await e.dump())).toEqual([]);
+  });
+});
+
 describe("New from a brief (paged.file.newFromBrief)", () => {
   test("opens the assistant; the document is untouched", async () => {
     covers("command:paged.file.newFromBrief");
