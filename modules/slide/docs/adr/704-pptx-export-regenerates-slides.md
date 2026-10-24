@@ -26,3 +26,10 @@ of an exporter anyway.
 
 - Any native edit can be exported; fidelity depends on the read model, not on a patch mapping.
 - Byte-level identity holds only for unedited decks.
+
+## Amendment (2026-10-24): identity per slide
+
+[ADR 711](711-powerpoint-parity-program.md): byte identity holds per slide. A slide the
+document did not change keeps its part, its relationships and its notes byte for byte, even when
+other slides were edited. Within an edited slide, an unchanged shape keeps its original XML.
+Export reads the document through `host.documents.exportPaged`.
