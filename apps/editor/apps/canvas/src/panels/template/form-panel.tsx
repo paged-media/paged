@@ -84,7 +84,7 @@ function sameElement(a: unknown, b: unknown): boolean {
   return x.kind === y.kind && JSON.stringify(x.id) === JSON.stringify(y.id);
 }
 
-/** A picture input as a button (editor ADR 293): `capture` makes a phone
+/** A picture input as a button (editor ADR 294): `capture` makes a phone
  *  offer its camera; without it, the phone's library and files. */
 function PictureInput({
   field,
@@ -143,7 +143,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   const client = useCanvasClient();
   const strings = useStrings();
   // A fill shape on a phone or tablet: touch-sized controls, and a
-  // picture comes from the camera or the library (editor ADR 293).
+  // picture comes from the camera or the library (editor ADR 294).
   const touch = useTouchSized();
   const touchStyle = touchTargetStyle(touch);
   const { field } = row;
@@ -400,7 +400,7 @@ const sheetButton = {
 
 /**
  * The form as a sheet under the canvas (the `template-fill` preset on a
- * phone, editor ADR 293): the field tapped on the page, with Done to put
+ * phone, editor ADR 294): the field tapped on the page, with Done to put
  * it away, or every field when asked for.
  */
 function FieldSheet({

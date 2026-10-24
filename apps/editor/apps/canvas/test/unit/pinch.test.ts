@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Two fingers zoom and move the canvas together (editor ADR 293).
+// Two fingers zoom and move the canvas together (editor ADR 294).
 
 import { describe, expect, test } from "bun:test";
 

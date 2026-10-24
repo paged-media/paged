@@ -2196,6 +2196,7 @@ fn apply_run_property_choice(
         C::Underline(u) => props.underline = Some(underline_on(u)),
         C::VerticalTextAlignment(v) => props.vert_align = Some(vert_align(&v.val)),
         C::Position(p) => props.baseline_half_pts = signed_hps(&p.val),
+        C::Spacing(sp) => props.spacing_twips = Some(sp.val),
         _ => {}
     }
 }
@@ -2345,6 +2346,9 @@ fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
     }
     if let Some(p) = &rpr.position {
         props.baseline_half_pts = signed_hps(&p.val);
+    }
+    if let Some(sp) = &rpr.spacing {
+        props.spacing_twips = Some(sp.val);
     }
     props
 }

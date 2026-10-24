@@ -127,7 +127,7 @@ export function CockpitLayout({
   // Editor ADR 291: a Data panel field dropped on the document is placed.
   const fieldDrop = useDataFieldDrop();
 
-  // The fill shapes (editor ADR 293). The form region is a column beside
+  // The fill shapes (editor ADR 294). The form region is a column beside
   // the canvas; below the breakpoint `form-first` puts the form first and
   // folds the preview away, and `field-sheet` keeps the canvas and shows
   // the form as a sheet under it (the form panel then shows the active

@@ -1,4 +1,4 @@
-# ADR 293 — The fill presets on phones and tablets
+# ADR 294 — The fill presets on phones and tablets
 
 - **Status:** Accepted 2026-10-24.
 - **Scope:** the profile's `compact` and `canvas.preview` (`packages/shell/src/profile/`),

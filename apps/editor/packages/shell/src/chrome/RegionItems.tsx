@@ -47,7 +47,7 @@ export function RegionItems({
   const commands = useRegistryView(useRegistries().commands);
   const paged = useOptionalPaged();
   // A fill shape on a phone or tablet: every button is a touch target
-  // (editor ADR 293).
+  // (editor ADR 294).
   const touch = touchTargetStyle(useTouchSized());
 
   const render = (item: RegionItem, key: string) => {

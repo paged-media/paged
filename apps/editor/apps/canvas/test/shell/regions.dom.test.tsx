@@ -260,7 +260,7 @@ describe("region contents (A3)", () => {
   });
 });
 
-describe("a fill shape on a phone (editor ADR 293)", () => {
+describe("a fill shape on a phone (editor ADR 294)", () => {
   const FILL: EditorProfile = {
     regions: {
       header: { items: ["paged.editor.undo", "paged.editor.redo"] },

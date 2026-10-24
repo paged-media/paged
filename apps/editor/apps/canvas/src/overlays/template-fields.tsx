@@ -74,7 +74,7 @@ function TemplateFieldsRender(props: OverlayProps): ReactElement | null {
   const [geometry, setGeometry] = useState<readonly ElementGeometryItem[]>([]);
   const shown = role === "author" || role === "filler";
   // A fill shape on a touch screen: the Replace button is a 44 px target
-  // (editor ADR 293).
+  // (editor ADR 294).
   const touch = useTouchSized();
   const buttonW = touch ? 96 : 64;
   const buttonH = touch ? TOUCH_TARGET_PX : 20;

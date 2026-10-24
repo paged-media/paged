@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The fill shapes on phones and tablets (editor ADR 293): below the
+// The fill shapes on phones and tablets (editor ADR 294): below the
 // compact breakpoint `form-first` puts the form first with the preview
 // folded away, and `field-sheet` shows the canvas with the tapped field in
 // a sheet under it; their controls are touch targets of at least 44 px. A

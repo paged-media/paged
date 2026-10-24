@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Phones and tablets (editor ADR 293). The fill shapes (`template-fill`,
+// Phones and tablets (editor ADR 294). The fill shapes (`template-fill`,
 // `form`) change layout below a breakpoint measured on the EDITOR's root,
 // not the window: an editor embedded in a narrow column of a wide page is
 // narrow. Their controls are touch-sized below the breakpoint and wherever

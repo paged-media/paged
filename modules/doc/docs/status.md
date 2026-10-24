@@ -133,18 +133,38 @@ of 2026-10-24):
   run is merged the same way rather than replacing the run's `<w:rPr>`. Runs the engine joined
   map back onto their Word runs; nothing is merged. Cells are read with the engine's cell
   `paragraphs` (the story read's shape, as JSON text; engine `virtual_set.rs`) next to their
-  `text`. Limits: `tracking` has no Word property here, a colour the canvas made that is not a
-  swatch of the import is not written, a run holding more than text (a drawing, a field
-  character, a note reference) is not split and the split is reported, and a paragraph added
-  in a cell takes its neighbour's look.
+  `text`. Tracking is written as Word's character spacing at the run's size (`w:spacing`,
+  twentieths of a point; the import reads it back as the same tracking, so a document's own
+  spacing now shows on the canvas). A colour the canvas made, which is not a swatch of the
+  import, is written from the colour the host displays for it (`swatchDisplay`, sent with the
+  read-back as `colors`). A run holding more than text keeps what it holds once: a drawing, a
+  field character or a note reference before the run's text goes with the first piece of a
+  split, one after it with the last; one between two texts of the same run (Word writes such
+  children in runs of their own, so only another producer's file has it) cannot be placed in
+  an edited text, and that split is reported. A paragraph added in a cell takes the runs read
+  back: its words' own looks, merged into the copied run's `<w:rPr>`. A run all of whose text
+  was removed is removed, in body paragraphs and cells alike, unless it holds more than text
+  (a drawing, a field character, a note reference): then it is emptied and keeps that, so a
+  note's reference survives its number's deletion (a run in a body hyperlink was left unchanged
+  before). A cell emptied on the canvas whose styled read holds no paragraph follows its text
+  read (it was left as it was).
 - Native tables are found again by signature, not by their ordinal in the story
   (`matchTables` in doc-host-model, `src/tables.ts`): the live tables of the document's
   stories are read (`tableRowCount`, `tableColumnCount`, each cell's `text`) and paired with
   the poured ones of the same shape, most unchanged non-empty cells first, then the same story
   and the nearest ordinal; a table every cell of which was edited pairs by its place between
   its matched neighbours. A placed document whose story gained, lost or reordered tables still
-  saves and writes its cells; only a table that cannot be found (deleted, or reshaped with
-  every cell edited) is reported. The object model's cell writes locate tables the same way.
+  saves and writes its cells. Rows added or removed on the canvas are saved too: the save-back
+  pairs a table of the same columns and another row count by the poured texts it still holds
+  anywhere (rows shift), else by its place, reads it whole, aligns its rows with Word's by
+  text (`overlay_tables`, the differ's own alignment), and writes `InsertRow` (before the first
+  kept row too) and `DeleteRow`, the kept rows' cells as cell edits. What stays reported: a
+  table deleted on the canvas; a table whose columns were added or removed (a row of texts
+  does not say which column is new; the column ops need a uniform grid and the column's
+  identity, which only a canvas column read would give); and rows added or removed in a table
+  with merged cells, since a span crosses the rows the alignment moves. The object model's
+  cell writes locate tables by their poured shape, since they address a cell by its poured
+  row and column.
 - A `.docx` opens standalone headless: the SDK's headless host has the native-open door, so
   `paged-node` opens it as its own document as the editor does, and saves or exports it as
   `.docx` through the exporter.

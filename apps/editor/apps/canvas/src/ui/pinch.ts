@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Two fingers on the canvas zoom and move it together (editor ADR 293):
+// Two fingers on the canvas zoom and move it together (editor ADR 294):
 // the document point under the fingers' midpoint at the start stays under
 // their midpoint, and the scale follows the distance between them. Pure,
 // so the arithmetic is tested without a pointer.

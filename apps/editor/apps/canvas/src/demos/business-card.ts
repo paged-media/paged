@@ -20,7 +20,7 @@
 // Demo: design placeholders. A locked business card whose name, title,
 // e-mail and portrait are the only open parts (profile `template-fill`,
 // role filler). Submit hands the values to the host. It works on a phone
-// (editor ADR 293): the card fills the screen, a tapped field opens in a
+// (editor ADR 294): the card fills the screen, a tapped field opens in a
 // sheet below it, and the portrait can come from the camera. With
 // `?layout=form` it is the `form` preset instead: the form first, the
 // card as a preview.

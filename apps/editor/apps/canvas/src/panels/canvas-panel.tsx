@@ -100,12 +100,12 @@ export function CanvasPanel(_props: PanelProps) {
   // gesture branch commits and returns before the click branch ever runs.
   const tools = useRegistryView(useRegistries().tools);
   const legacyKeyForTool = tools.get(effectiveTool)?.legacyKey ?? null;
-  // A preview canvas (the `form` preset, editor ADR 293) only pans and
+  // A preview canvas (the `form` preset, editor ADR 294) only pans and
   // zooms: every drag pans and a click selects nothing, as with the Hand.
   const preview = useChromeRegions().canvas.preview;
   const forcePan = effectiveTool === "paged.tool.hand" || preview;
   // A filler or a viewer moves nothing by dragging, so one finger pans the
-  // page and a tap selects (editor ADR 293); a pen or a mouse is unchanged.
+  // page and a tap selects (editor ADR 294); a pen or a mouse is unchanged.
   const role = useSessionRole();
   const touchPans = role === "filler" || role === "viewer";
   // Direct Selection reaches the leaf: a click on a grouped item selects

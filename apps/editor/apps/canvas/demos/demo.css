@@ -146,7 +146,7 @@ body {
 
 /* On a phone (below the editor's compact breakpoint, 720 px) the host's
    page stacks: the editor first, the host's aside under it, and every
-   control of the host a 44 px touch target (editor ADR 293). */
+   control of the host a 44 px touch target (editor ADR 294). */
 @media (max-width: 719px) {
   html,
   body {

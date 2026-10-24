@@ -89,7 +89,7 @@ export function soloPresetId(soloName: string): string {
  *  template form, a short tool rail, and Undo, Redo and Save; the session
  *  is a filler, so the engine lets it change only what the template
  *  permits. On a phone the canvas fills the screen and the field tapped
- *  on it opens in a sheet below (editor ADR 293). */
+ *  on it opens in a sheet below (editor ADR 294). */
 const TEMPLATE_FILL: EditorProfile = {
   extends: "full",
   get title() {

@@ -121,7 +121,7 @@ export interface CanvasFurniture {
 
 /**
  * What a fill shape shows below the compact breakpoint
- * (`COMPACT_MAX_WIDTH_PX`, editor ADR 293): `form-first`, the form at full
+ * (`COMPACT_MAX_WIDTH_PX`, editor ADR 294): `form-first`, the form at full
  * width with the preview collapsed above it; `field-sheet`, the canvas at
  * full width with the active field in a sheet at the bottom. `null`: the
  * same layout at every width, as a desktop editor.
@@ -159,7 +159,7 @@ export interface EditorProfile {
   /** The session's role (docs/composable-editor.md §7.6): what the engine
    *  lets this editor do to a template. Not stored in the document. */
   readonly role?: Role;
-  /** The layout below the compact breakpoint (editor ADR 293). Absent
+  /** The layout below the compact breakpoint (editor ADR 294). Absent
    *  inherits the preset's; `null` keeps the desktop layout. */
   readonly compact?: CompactLayout | null;
 }

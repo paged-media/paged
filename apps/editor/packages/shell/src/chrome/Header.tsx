@@ -58,7 +58,7 @@ export interface HeaderProps {
 export function Header({ onFile, headerExtras, status }: HeaderProps) {
   const chrome = useChromeRegions();
   const headerRegion = chrome.region("header");
-  // A fill shape on a phone (editor ADR 293): the header grows to hold
+  // A fill shape on a phone (editor ADR 294): the header grows to hold
   // touch-sized buttons and keeps its sides close.
   const compact = useCompactLayout() !== null;
   return (

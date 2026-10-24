@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The fill presets on a phone (editor ADR 293), on emulated devices with
+// The fill presets on a phone (editor ADR 294), on emulated devices with
 // touch: the business card demo in `template-fill` (the card fills the
 // screen; a tapped field opens in a sheet; the portrait comes from the
 // camera input) and in `form` (the form first, the preview folded away).

@@ -18,7 +18,7 @@
  */
 
 // Zoom buttons over the canvas of a fill shape on a touch screen (editor
-// ADR 293): zoom out, fit the page, zoom in, each a 44 px target. They run
+// ADR 294): zoom out, fit the page, zoom in, each a 44 px target. They run
 // the View menu's own commands, so they zoom as the keys do; a pinch zooms
 // the same camera. A desktop editor never renders them.
 

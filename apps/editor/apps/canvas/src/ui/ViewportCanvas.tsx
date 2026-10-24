@@ -190,7 +190,7 @@ export interface ViewportCanvasProps {
   /** Concept 1 — the Hand tool (incl. the Space spring-load): every
    * primary-button drag pans, reusing the proven pan machinery. */
   forcePan?: boolean;
-  /** A filler or a viewer (editor ADR 293): a one-finger touch drag pans
+  /** A filler or a viewer (editor ADR 294): a one-finger touch drag pans
    *  the page instead of moving or marqueeing, and a tap still selects. */
   touchPans?: boolean;
   /** Concept 1 — the Zoom tool (incl. Cmd+Space): a click zooms in
@@ -260,7 +260,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     maxDelta: number;
   } | null>(null);
 
-  // Editor ADR 293 — the touch points on the canvas, by pointer id, in
+  // Editor ADR 294 — the touch points on the canvas, by pointer id, in
   // viewport px. Two of them are a pinch: it takes over from whatever the
   // first finger began (rolled back, never committed), and the touch
   // stays the pinch's until every finger has lifted.
@@ -633,7 +633,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return [e.clientX - rect.left, e.clientY - rect.top];
   };
 
-  /** Editor ADR 293 — a touch pointer's part in a pinch. True when the
+  /** Editor ADR 294 — a touch pointer's part in a pinch. True when the
    *  pinch took the event. */
   const pinchDown = (e: React.PointerEvent<HTMLDivElement>): boolean => {
     if (e.pointerType !== "touch") return false;

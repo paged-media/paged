@@ -131,4 +131,39 @@ describe("matchTables @feat:plugin-doc.object-model", () => {
     const m = matchTables(ir, [live("a", 0, "Item", "Price", "Extra")]);
     expect(m.size).toBe(0);
   });
+
+  /** A live table of several rows of two cells. */
+  const grid = (id: string, ordinal: number, ...rows: string[][]) => ({
+    id,
+    story: 0,
+    ordinal,
+    rows: rows.length,
+    cols: 2,
+    cells: Object.fromEntries(
+      rows.flatMap((r, i) => r.map((t, c) => [`${i},${c}`, t])),
+    ),
+  });
+
+  it("with rowsMayChange, pairs a table whose rows were added or removed", () => {
+    const tables = [
+      // A row added above "Item | Price": its texts moved down a row.
+      grid("a", 0, ["New", "Row"], ["Item", "Price"]),
+      grid("b", 1, ["Name", "City"]),
+      // Every cell edited and a row added: paired by its place.
+      grid("c", 2, ["Nom", "Code"], ["x", "y"]),
+    ];
+    // The object model (rows and columns as poured) does not.
+    expect(matchTables(ir, tables).get(1)).toBeUndefined();
+    const m = matchTables(ir, tables, { rowsMayChange: true });
+    expect([...m]).toEqual([
+      [1, "a"],
+      [3, "b"],
+      [5, "c"],
+    ]);
+    // Columns still have to agree.
+    const cols = matchTables(ir, [live("a", 0, "Item", "Price", "Extra")], {
+      rowsMayChange: true,
+    });
+    expect(cols.size).toBe(0);
+  });
 });

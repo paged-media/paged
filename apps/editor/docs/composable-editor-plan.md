@@ -48,7 +48,10 @@ orientation only.
 | G4 coverage gaps                                 | Done: CLI imports and bytes, typed commands per module, headless module content; what stays by design is listed in G4                   |                                                                                     |
 | H demos                                          | Done: a gallery of thirteen pages (module fields and PDF/X-4 included), journeys                                                        | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
-| Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                | ADR 293, `packages/shell/src/state/compact.ts`                                      |
+| Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                     | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
+| Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                      | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
+| Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                            | ADR 293, `panels/template/template-notice.tsx`                                      |
+| Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                | ADR 294, `packages/shell/src/state/compact.ts`                                      |
 
 Corrections to the plan found while building:
 
@@ -1307,7 +1310,14 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   A changed run list is saved back too, in body paragraphs and cells: formatting given to part
   of a run splits that `w:r` (the parts keep its `w:rPr`, the changed one gets only what
   changed), direct formatting the engine can express is written, untouched runs stay byte for
-  byte (the engine reads a cell's styled `paragraphs`).
+  byte (the engine reads a cell's styled `paragraphs`). Since the leftovers round: tracking as
+  `w:spacing` (imported back as tracking), a canvas colour from the host's swatch display, a
+  run holding a drawing, field character or note reference split around it, a paragraph added
+  in a cell with its words' looks, a run whose text is gone removed (emptied where it holds
+  more than text) in body and cells alike, and rows added or removed on the canvas saved as
+  `w:tr` inserts and deletes. Reported, with the reason: columns added or removed on the
+  canvas, rows changed in a table with merged cells, and a non-text child between two texts of
+  one run (`modules/doc/docs/status.md`).
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
@@ -1401,7 +1411,7 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 | The editor profile is runtime data (amends 213)                          | editor       | 274     | A4         |
 | Features gate what is offered                                            | editor       | 275     | B2         |
 | Filling a template                                                       | editor       | 276     | D5         |
-| The fill presets on phones and tablets                                   | editor       | 293     | §14        |
+| The fill presets on phones and tablets                                   | editor       | 294     | §14        |
 | The editor mounts as an instance                                         | editor       | 277     | E1         |
 | Host actions are commands                                                | editor       | 278     | E2         |
 | The embedding API and the iframe bridge                                  | editor       | 279     | E6         |

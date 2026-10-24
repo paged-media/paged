@@ -39,7 +39,7 @@ import {
 } from "./panels/outline-panel.js";
 import { placeEmbedded } from "./place.js";
 import { openStandalone } from "./open.js";
-import { readTableCells } from "./save-cells.js";
+import { canvasColors, readTableCells } from "./save-cells.js";
 import {
   discoverDocs,
   readDocBytes,
@@ -187,12 +187,18 @@ export function activate(host: BundleHost): BundleHandle {
       contents,
       sectionBlocks(ir).map(pouredParagraphCount),
     );
-    const { cells, skips } = await readTableCells(host, ir, sections);
+    const { cells, tables, skips } = await readTableCells(host, ir, sections);
     const engine = await DocEngine.boot();
     try {
       engine.loadDocx(source);
       engine.setMidPageColumns(state.data.midPageColumns ?? true);
-      const bytes = engine.saveEditedFromContent({ ...content, cells });
+      const colors = await canvasColors(host, content.paragraphs, cells);
+      const bytes = engine.saveEditedFromContent({
+        ...content,
+        cells,
+        tables,
+        colors,
+      });
       host.diagnostics.set(
         "media.paged.doc/save-back",
         [...skips, ...engine.lastSaveSkips()].map((message) => ({
@@ -273,9 +279,12 @@ export function activate(host: BundleHost): BundleHandle {
           engine.lowered(),
           last.storyIds,
         );
+        const colors = await canvasColors(host, content.paragraphs, read.cells);
         const bytes = engine.saveEditedFromContent({
           ...content,
           cells: read.cells,
+          tables: read.tables,
+          colors,
         });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan

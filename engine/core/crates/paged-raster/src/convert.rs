@@ -169,9 +169,17 @@ pub fn to_rgba8(img: &RasterImage, conv: &dyn ColourConvert) -> Result<Rgba8> {
 
     match img.model {
         ColorModel::Gray | ColorModel::Rgb => {
+            // Scene-linear floats (Radiance, OpenEXR) are clipped at 1 and
+            // sRGB-encoded: a display-referred default without tone mapping.
+            let linear = img.info.format.is_scene_linear() && matches!(img.data, Samples::F32(_));
             let mut v = [0.0f32; 5];
             for (p, dst) in out.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let a = pixel(p, &mut v);
+                if linear {
+                    v.iter_mut()
+                        .take(colour)
+                        .for_each(|s| *s = crate::dng::srgb_encode(s.clamp(0.0, 1.0)));
+                }
                 *dst = if colour == 1 {
                     let g = q(v[0]);
                     [g, g, g, q(a)]

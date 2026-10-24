@@ -48,7 +48,7 @@ export interface ChromeRegions {
   region(id: RegionId): ResolvedRegion | null;
   readonly canvas: Required<CanvasFurniture>;
   /** The layout below the compact breakpoint; null for a desktop editor
-   *  (editor ADR 293). `useCompactLayout` says whether it applies now. */
+   *  (editor ADR 294). `useCompactLayout` says whether it applies now. */
   readonly compact: CompactLayout | null;
 }
 
