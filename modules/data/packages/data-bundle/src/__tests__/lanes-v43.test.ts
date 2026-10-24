@@ -27,6 +27,7 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
+import { storeDouble } from "./store-double";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
@@ -37,7 +38,7 @@ import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../engine"));
-const actualDuckdb = await importActual(() => import("../query/duckdb"));
+const actualStore = await importActual(() => import("../query/store"));
 
 /** A capturing fake host: records every mutation, serves placeholders/frameChain/
  *  geometry from in-memory fixtures, and a `supports` allow-list. */
@@ -197,13 +198,9 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike) {
     ...actualEngine,
     bootEngine: async () => engine,
   }));
-  mock.module("../query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => ({
-      registerCsv: async () => {},
-      query: async () => ({}),
-      close: async () => {},
-    }),
+  mock.module("../query/store", () => ({
+    ...actualStore,
+    storeHandle: (e: DataEngineLike) => storeDouble(e),
   }));
   const { createSession: make } = await import("../session");
   return make(host, 20613);

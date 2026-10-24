@@ -81,6 +81,7 @@ function imageHarness(
       void calls.push(`sampleColor(${at},${size})`),
     applyRedEye: async (box: { x: number; y: number; w: number; h: number }) =>
       void calls.push(`applyRedEye(${box.x},${box.y},${box.w},${box.h})`),
+    takeCurvesPick: () => false,
   } as unknown as ImageSession;
   return { fake, g: gestures(fake), host, session, calls };
 }
@@ -181,6 +182,7 @@ describe("paged.image tools through the gesture DSL", () => {
       state: () => ({ source: null, selection: null }),
       bucketFill: async () => void calls.push("bucketFill"),
       offsetLayer: async () => void calls.push("offsetLayer"),
+      takeCurvesPick: () => false,
     } as unknown as ImageSession;
     const g = gestures(fake);
     await g

@@ -31,13 +31,14 @@ use hayro_interpret::hayro_syntax::object::Rect as PdfRect;
 use hayro_interpret::hayro_syntax::page::Page;
 use hayro_interpret::hayro_syntax::Pdf;
 use hayro_interpret::{
-    interpret_page, BlendMode as PdfBlend, ClipPath, Context, Device, DrawMode, DrawProps, Image,
-    ImageDrawProps, InterpreterCache, InterpreterSettings, Paint as PdfPaint, SoftMask,
+    interpret_page, BlendMode as PdfBlend, ClipPath, Context, Device, DrawMode, DrawProps,
+    FillRule as PdfFillRule, Image, ImageDrawProps, InterpreterCache, InterpreterSettings,
+    Paint as PdfPaint, SoftMask,
 };
 use kurbo13::{Affine, BezPath, PathEl};
 use paged_compose::{
-    BlendMode, Color, DisplayCommand, DisplayList, LineCap, LineJoin, Paint, PathData, PathSegment,
-    Rect as ListRect, Stroke, Transform,
+    BlendMode, Color, DisplayCommand, DisplayList, FillRule, LineCap, LineJoin, Paint, PathData,
+    PathSegment, Rect as ListRect, Stroke, Transform,
 };
 use paged_model::PdfCropBox;
 
@@ -213,15 +214,13 @@ fn draw(bytes: &[u8], view: PdfView, transform: Transform, list: &mut DisplayLis
 const UNIT_RECT_KEY: u64 = 0x1d_4c_69_70_5f_72_65_63;
 
 fn unit_rect() -> PathData {
-    PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: 0.0, y: 0.0 },
-            PathSegment::LineTo { x: 1.0, y: 0.0 },
-            PathSegment::LineTo { x: 1.0, y: 1.0 },
-            PathSegment::LineTo { x: 0.0, y: 1.0 },
-            PathSegment::Close,
-        ],
-    }
+    PathData::new(vec![
+        PathSegment::MoveTo { x: 0.0, y: 0.0 },
+        PathSegment::LineTo { x: 1.0, y: 0.0 },
+        PathSegment::LineTo { x: 1.0, y: 1.0 },
+        PathSegment::LineTo { x: 0.0, y: 1.0 },
+        PathSegment::Close,
+    ])
 }
 
 struct ListDevice<'l> {
@@ -275,7 +274,14 @@ fn path_data(p: &BezPath) -> PathData {
             PathEl::ClosePath => PathSegment::Close,
         });
     }
-    PathData { segments }
+    PathData::new(segments)
+}
+
+fn fill_rule(r: &PdfFillRule) -> FillRule {
+    match r {
+        PdfFillRule::NonZero => FillRule::NonZero,
+        PdfFillRule::EvenOdd => FillRule::EvenOdd,
+    }
 }
 
 fn paint(p: &PdfPaint<'_>) -> Paint {
@@ -324,7 +330,16 @@ fn blend(b: PdfBlend) -> BlendMode {
 
 impl ListDevice<'_> {
     fn emit(&mut self, path: &BezPath, props: &DrawProps<'_>, mode: &DrawMode) {
-        let id = self.list.paths.push_anon(path_data(path));
+        // `f*` and `B*` fill by the even-odd rule (engine ADR 1006); a
+        // stroke ignores the rule, so the shared path can carry it.
+        let rule = match mode {
+            DrawMode::Fill(r) | DrawMode::FillAndStroke(r, _) => fill_rule(r),
+            _ => FillRule::NonZero,
+        };
+        let id = self
+            .list
+            .paths
+            .push_anon(path_data(path).with_fill_rule(rule));
         let transform = self.outer.compose(&affine(props.transform));
         let p = paint(&props.paint);
         let fill = |list: &mut DisplayList| {
@@ -382,9 +397,11 @@ impl<'a> Device<'a> for ListDevice<'_> {
     }
 
     fn push_clip_path(&mut self, clip: &ClipPath) {
-        // The list has one fill rule: an even-odd clip (`W*`) clips
-        // non-zero (ADR 154).
-        let id = self.list.paths.push_anon(path_data(&clip.path));
+        // `W*` clips even-odd (engine ADR 1006).
+        let id = self
+            .list
+            .paths
+            .push_anon(path_data(&clip.path).with_fill_rule(fill_rule(&clip.fill)));
         self.list.push(DisplayCommand::PushClip {
             path_id: id,
             transform: self.outer,

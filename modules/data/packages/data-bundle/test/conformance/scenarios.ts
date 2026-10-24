@@ -19,7 +19,7 @@
 // One behaviour scenario per paged.data command id, run by the unit file
 // (`test/commands.spec.ts`, the recording fake editor) and the headless file
 // (`test/headless/commands.headless.test.ts`, the real canvas engine), both
-// over the real data-js engine and a real DuckDB (./env.ts).
+// over the real data-js engine with its query store (./env.ts).
 //
 // paged.data's palette commands carry no `when` gate: what decides whether
 // one can act is the data it needs, so a scenario first runs it with nothing

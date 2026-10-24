@@ -109,6 +109,26 @@
             "consume": { "type": "array", "items": { "type": "string" } }
           }
         },
+        "data": {
+          "type": "object",
+          "description": "The data door (host.data, data@1, extensions ADR 343). 'serve' = the bundle serves the document's data (one service at a time); 'read' = read tables and records; 'write' = write rows into a table; 'bind' = bind object properties to data.",
+          "additionalProperties": false,
+          "properties": {
+            "serve": { "type": "boolean" },
+            "read": { "type": "boolean" },
+            "write": { "type": "boolean" },
+            "bind": { "type": "boolean" }
+          }
+        },
+        "actions": {
+          "type": "object",
+          "description": "The actions door (host.actions, actions@1, extensions ADR 344). 'register' = register named, pure actions other bundles can run; 'run' = run registered actions and chains of them.",
+          "additionalProperties": false,
+          "properties": {
+            "register": { "type": "boolean" },
+            "run": { "type": "boolean" }
+          }
+        },
         "storage": {
           "type": "object",
           "description": "Persistent binary storage (K-4 / S-08). 'blob' gates the OPFS-backed host.blob byte store; 'quotaBytes' requests a ceiling (host enforces the stricter of it and its hard per-plugin cap).",

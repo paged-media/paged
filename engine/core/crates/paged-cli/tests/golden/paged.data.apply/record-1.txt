@@ -1,0 +1,7 @@
+$ paged data apply bound.paged --source products=products.csv --record 1 -o grace.paged
+--- exit: 0
+--- stdout
+op	written	rectangle:u1	75.0
+v_name	written	textVariable:dTextVariablenpaged:v_name	"Grace"
+--- stderr
+query leak: not run: the table function read_csv() reads files or URLs — import the data as a source and query its table

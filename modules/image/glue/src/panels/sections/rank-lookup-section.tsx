@@ -1,4 +1,5 @@
-// FILTERS — Median, Maximum, Minimum (3×3) and Color Lookup (.cube).
+// FILTERS — Median, Maximum, Minimum (each opens its dialog: a radius and
+// the neighbourhood's shape) and Color Lookup (.cube).
 
 import type { ImageSession } from "../../session";
 import { defineMessages, t } from "@paged-media/strings";
@@ -12,7 +13,8 @@ const M = defineMessages("image.rankLookup", {
   minimum: "Minimum",
   lookup: "Color Lookup (.cube)",
   note:
-    "Median, Maximum and Minimum work on a 3×3 neighbourhood. A lookup table " +
+    "Median (radius up to 10 px), Maximum and Minimum (up to 32 px) work on a " +
+    "square or round neighbourhood. A lookup table " +
     "is applied at 9×9×9 lattice points (larger tables are resampled to " +
     "that).",
 });
@@ -40,25 +42,25 @@ export function RankLookupSection({
           type="button"
           data-image-median
           disabled={off}
-          onClick={() => void session.applyMedian()}
+          onClick={() => void session.openFilterDialog("median")}
         >
-          {t(M.median)}
+          {t(M.median)}…
         </button>
         <button
           type="button"
           data-image-maximum
           disabled={off}
-          onClick={() => void session.applyMorph("max")}
+          onClick={() => void session.openFilterDialog("maximum")}
         >
-          {t(M.maximum)}
+          {t(M.maximum)}…
         </button>
         <button
           type="button"
           data-image-minimum
           disabled={off}
-          onClick={() => void session.applyMorph("min")}
+          onClick={() => void session.openFilterDialog("minimum")}
         >
-          {t(M.minimum)}
+          {t(M.minimum)}…
         </button>
       </div>
       <div style={row}>

@@ -858,6 +858,9 @@ export async function commitLoweredImage(
   image: LoweredImage,
   elementId: string,
   fitOverride?: IdmlFit,
+  /** Data ADR 563: an asset column's pipeline (fetch, keep, act) maps the
+   *  reference to what is placed, or says why there is nothing to place. */
+  resolveUri?: (uri: string) => Promise<{ uri: string } | { reason: string }>,
 ): Promise<boolean> {
   if (image.status !== "present") {
     host.log.info(
@@ -874,9 +877,18 @@ export async function commitLoweredImage(
     );
     return false;
   }
+  let placed = uri;
+  if (resolveUri) {
+    const r = await resolveUri(uri);
+    if ("reason" in r) {
+      host.log.warn(`image "${image.target}": ${r.reason} — nothing placed`);
+      return false;
+    }
+    placed = r.uri;
+  }
   const fit = fitOverride ?? idmlFit(image.fit);
   const outcome = await host.document.mutate(
-    placeImageMutation(elementId, uri, fit),
+    placeImageMutation(elementId, placed, fit),
   );
   if (!outcome.applied) {
     host.log.warn(
@@ -885,7 +897,7 @@ export async function commitLoweredImage(
     return false;
   }
   host.log.info(
-    `image "${image.target}" placed on ${elementId} (uri ${uri}, fit ${fit})`,
+    `image "${image.target}" placed on ${elementId} (uri ${placed === uri ? uri : `${uri} → asset`}, fit ${fit})`,
   );
   return true;
 }

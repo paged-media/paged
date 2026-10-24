@@ -398,6 +398,22 @@ pub(super) fn find_stroke_alignment_mut<'a>(
     }
 }
 
+/// Engine ADR 1006 — locate the `fill_rule` field on any page-item kind
+/// with an outline.
+pub(super) fn find_fill_rule_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut paged_model::FillRule> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.fill_rule),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.fill_rule),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.fill_rule),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.fill_rule),
+        NodeId::GraphicLine(id) => find_graphic_line_mut(doc, id).map(|l| &mut l.fill_rule),
+        _ => None,
+    }
+}
+
 /// W1.1 — locate the `stroke_dash: Vec<f32>` field (per-frame
 /// `StrokeDashAndGap` override) on any stroked page-item kind.
 pub(super) fn find_stroke_dash_mut<'a>(

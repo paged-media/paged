@@ -39,6 +39,13 @@ import { defineMessages, t } from "@paged-media/strings";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
+import {
+  filterDef,
+  filterDefaults,
+  scaledForProxy,
+  type FilterId,
+  type FilterValue,
+} from "./filters";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
@@ -47,11 +54,19 @@ import {
 } from "./session-store";
 import {
   averageRgba8,
+  DEFAULT_EYEDROPPER,
   freshColors,
+  isSampleSize,
+  MAX_SAMPLERS,
+  nextSamplerId,
+  sampleWindow,
   swapped,
   toHex,
   type ColorPair,
+  type ColorSamplerInfo,
+  type EyedropperOptions,
   type SampleSize,
+  type SampleSource,
 } from "./color-state";
 import {
   bootEngine,
@@ -78,6 +93,7 @@ import {
   type RasterFormat,
   type ResampleFilter,
   type CanvasOpKind,
+  type TrimBy,
   type SelectionModifyOp,
   type Rgba01,
   SAMPLING_TOOLS,
@@ -198,6 +214,34 @@ export interface SourceImage {
 
 export type EngineStatus = "idle" | "booting" | "ready" | "unavailable";
 
+/** The open FILTER dialog (`openFilterDialog`): which filter, its
+ *  values, and what the canvas shows. While `applied`, the filter at
+ *  `appliedValues` is in the active layer as the newest undo step — the
+ *  preview at full resolution; OK keeps that step, Cancel undoes it. */
+export interface FilterDialogState {
+  id: FilterId;
+  values: Record<string, FilterValue>;
+  /** Preview on the canvas (Photoshop's Preview checkbox). */
+  preview: boolean;
+  /** The before/after toggle: the canvas shows the image without the
+   *  filter while the dialog stays open. */
+  before: boolean;
+  applied: boolean;
+}
+
+/** Which dialog the panel shows on top (one at a time, as a modal). */
+export type ImageDialog =
+  | { kind: "filter"; filter: FilterDialogState }
+  | { kind: "imageSize" }
+  | { kind: "trim" }
+  | { kind: "rotate" };
+
+/** The Curves eyedroppers. */
+export type CurvesPick = "black" | "grey" | "white";
+
+/** Per-channel curve points the Curves tools set (Auto, the pickers). */
+export type ChannelCurves = Record<"r" | "g" | "b", Array<[number, number]>>;
+
 export interface ImageSessionState {
   engine: EngineStatus;
   /** The honest boot/GPU detail when something is off. */
@@ -232,6 +276,11 @@ export interface ImageSessionState {
   /** Foreground / background colour (`color-state.ts`). The brush paints
    *  the foreground; gradients run foreground → background. */
   colors: ColorPair;
+  /** WP4.10 — the Eyedropper's sample size and what it reads. */
+  eyedropper: EyedropperOptions;
+  /** WP4.10 — the fixed colour samplers (up to four), each with what it
+   *  reads now; re-read whenever the session reports a change. */
+  samplers: ColorSamplerInfo[];
   /** Adjustment sliders update the frame as they move (on by default). */
   livePreview: boolean;
   /** Magic wand + paint bucket tolerance / contiguity. */
@@ -360,6 +409,19 @@ export interface ImageSessionState {
    *  preset once it is edited, and pretending otherwise would mislabel
    *  a stroke's provenance. */
   brushPreset: number | null;
+  /** The dialog on top of the panel, or null. */
+  dialog: ImageDialog | null;
+  /** The resolution the image declares, in pixels per inch (read from a
+   *  PNG's pHYs or a JPEG's JFIF density on open, set by Image Size);
+   *  null when it declares none (Image Size then shows 72). The PNG and
+   *  JPEG exporters write it. */
+  ppi: number | null;
+  /** The Curves eyedropper waiting for a click on the image, or null. */
+  curvesPicker: CurvesPick | null;
+  /** The per-channel curves the Curves tools (Auto, the eyedroppers)
+   *  last set — a new object each time, so the panel's curve editor can
+   *  follow it. Null until they are used on this image. */
+  channelCurves: ChannelCurves | null;
 }
 
 export interface ImageSession {
@@ -379,7 +441,12 @@ export interface ImageSession {
    *  to a new pixel size (GPU-only — rejects honestly without a device),
    *  in place, as one undo step. Document unchanged until Apply
    *  re-composites. */
-  resizeTo(w: number, h: number, filter: ResampleFilter): Promise<boolean>;
+  resizeTo(
+    w: number,
+    h: number,
+    filter: ResampleFilter,
+    ppi?: number | null,
+  ): Promise<boolean>;
   /** PSD layer-record edits (only when `state().psd` is set). Each
    *  applies to the retained parse and refreshes the layer list. */
   psdSetLayerOpacity(index: number, opacity: number): boolean;
@@ -526,6 +593,62 @@ export interface ImageSession {
   applyMedian(): Promise<boolean>;
   /** OTHER ▸ Maximum ("max") / Minimum ("min"), 3×3. */
   applyMorph(kind: "max" | "min"): Promise<boolean>;
+  /** FILTER DIALOG — open `id`'s dialog with its last values (its
+   *  defaults the first time) and, with preview on, show the result on
+   *  the canvas. Refuses without an image. Replaces an open dialog
+   *  (cancelling an open filter first). */
+  openFilterDialog(id: FilterId): Promise<boolean>;
+  /** Change the open filter dialog's values; the preview follows (on a
+   *  resampled proxy at once where it can, at full resolution when the
+   *  values rest). */
+  setFilterValues(patch: Record<string, FilterValue>): void;
+  /** Preview on / off. Off takes the filter back off the canvas. */
+  setFilterPreview(on: boolean): Promise<void>;
+  /** The before/after toggle. */
+  setFilterBefore(before: boolean): Promise<void>;
+  /** OK: the filter at the dialog's values, kept as ONE undo step. */
+  commitFilterDialog(): Promise<boolean>;
+  /** Cancel: the image as it was before the dialog opened. */
+  cancelFilterDialog(): Promise<boolean>;
+  /** Run a catalogue filter at `values` (its defaults where missing)
+   *  without a dialog — the scripting and palette reach. */
+  applyFilter(
+    id: FilterId,
+    values?: Record<string, FilterValue>,
+  ): Promise<boolean>;
+  /** BLUR ▸ Average: the selection filled with its average colour. */
+  applyAverage(): Promise<boolean>;
+  /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
+   *  rotation) on top of the panel. */
+  openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  /** Close the Image dialog (a filter dialog is cancelled). */
+  closeDialog(): Promise<void>;
+  /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
+   *  bottom-right pixel's colour) from every side, over every layer: an
+   *  exact crop, one undo step. */
+  trim(by: TrimBy): Promise<boolean>;
+  /** IMAGE ▸ Image Rotation ▸ Arbitrary: turn the canvas and every layer
+   *  by `degrees` (positive = clockwise); the canvas grows to hold it.
+   *  One undo step; GPU-only except for quarter turns. */
+  rotateCanvas(degrees: number): Promise<boolean>;
+  /** Image Size's resolution (ppi; null = undeclared). Metadata: no
+   *  pixel changes. */
+  setResolution(ppi: number | null): void;
+  /** CURVES ▸ Auto — per-channel contrast (Photoshop's "Enhance Per
+   *  Channel Contrast", 0.1 % clipped at each end) as per-channel curves.
+   *  Returns the points set, for the panel's curve editor. */
+  autoCurves(): ChannelCurves | null;
+  /** Arm a Curves eyedropper: the next click on the image with an image
+   *  tool samples there instead of acting (null disarms). */
+  armCurvesPicker(kind: CurvesPick | null): void;
+  /** Set a Curves eyedropper's point from the composite at image px `at`
+   *  (a 3×3 average): black and white move the channel curves' ends,
+   *  grey balances the three channels at that tone. Returns the
+   *  per-channel points, or null. */
+  curvesPick(kind: CurvesPick, at: [number, number]): ChannelCurves | null;
+  /** Called by the image tools on pointer-down: when a Curves eyedropper
+   *  is armed, it takes the click (and is disarmed). */
+  takeCurvesPick(at: [number, number]): boolean;
   /** ADJUST ▸ Color Lookup from a .cube file's text. */
   applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
   /** The GRADIENT TOOL: foreground → background along the dragged line
@@ -568,7 +691,25 @@ export interface ImageSession {
     at: [number, number],
     size?: SampleSize,
     target?: "fg" | "bg",
+    source?: SampleSource,
   ): Rgba01 | null;
+  /** What `sampleColor` would read at `at`, without setting a colour
+   *  (the samplers' read). `source` "layer" reads the active layer's own
+   *  pixels; null for an adjustment layer, off-image, or nothing open. */
+  readColor(
+    at: [number, number],
+    size?: SampleSize,
+    source?: SampleSource,
+  ): Rgba01 | null;
+  /** The Eyedropper tool's options. Unknown sizes are ignored. */
+  setEyedropperOptions(o: Partial<EyedropperOptions>): void;
+  /** Place a colour sampler at image px `at`; its number, or null when
+   *  four are placed already (or `at` is off the image). */
+  addColorSampler(at: [number, number]): number | null;
+  /** Move sampler `id` to `at`. */
+  moveColorSampler(id: number, at: [number, number]): boolean;
+  removeColorSampler(id: number): boolean;
+  clearColorSamplers(): void;
   /** Fill the selection with the defined pattern (Edit ▸ Fill ▸ Pattern). */
   fillWithPattern(scale?: number, opacity?: number): Promise<boolean>;
   /** Shape blur with the defined pattern as the blur's shape. */
@@ -1141,6 +1282,10 @@ const S = defineMessages("image.status", {
   applied: "{label} applied.",
   sampledAverage: "Sampled {colour} at {x}, {y} ({size}×{size} average).",
   sampled: "Sampled {colour} at {x}, {y}.",
+  sampledNothing:
+    "The current layer has no pixels there (an adjustment layer, or transparent) — nothing sampled.",
+  samplersFull:
+    "{max} colour samplers are placed already — Alt-click one to remove it.",
   bakedTooLarge:
     "The baked image is {size} MB; the host takes at most 8 MB per image until it accepts binary transfers. Nothing was committed.",
   committed:
@@ -1235,6 +1380,25 @@ const S = defineMessages("image.status", {
   selectionContracted: "Selection contracted by {radius} px.",
   selectionBordered: "Selection bordered by {radius} px.",
   selectionSmoothed: "Selection smoothed by {radius} px.",
+  filterNeedsAnImage: "Open an image to use {label}.",
+  filterCancelled: "{label} cancelled — the image is as it was.",
+  trimmed: "Trimmed to {width}×{height}.",
+  trimNothing: "Trim would leave nothing — nothing was trimmed.",
+  trimNoop: "Nothing to trim on any side.",
+  rotatedCanvas: "Rotated the canvas {degrees}° — now {width}×{height}.",
+  rotateNoop: "A whole turn leaves the canvas as it is.",
+  resolutionSet: "Resolution set to {ppi} ppi.",
+  autoCurves: "Curves set to each channel's own contrast (0.1 % clipped).",
+  autoCurvesFlat: "Auto found no contrast to stretch.",
+  curvesPickArmed: "Click the image to set the {kind} point.",
+  curvesPicked: "Curves {kind} point set from {colour} at {x}, {y}.",
+});
+
+/** The Curves eyedroppers' names, as the status line says them. */
+const PICK = defineMessages("image.curvesPick", {
+  black: "black",
+  grey: "grey",
+  white: "white",
 });
 
 /** The names of the whole-image effects and layer operations, as the
@@ -1288,6 +1452,7 @@ const E = defineMessages("image.effect", {
   zoomBlur: "Zoom blur",
   distort: "Distort ({kind}" + ")",
   colorLookup: "Color lookup",
+  average: "Average",
 });
 
 /** Each selection modification's outcome. */
@@ -1326,6 +1491,10 @@ function cubicAt(
 export function createImageSession(host: BundleHost): ImageSession {
   const listeners = new Set<() => void>();
   let engine: ImageEngine | null = null;
+  /** The Curves eyedroppers' sampled colours (straight RGB), per image. */
+  let curvePicks: Partial<Record<CurvesPick, [number, number, number]>> = {};
+  /** The ends Curves ▸ Auto found, per channel (a pick takes over). */
+  let curveAuto: Array<[number, number]> | null = null;
   let bootPromise: Promise<ImageEngine | null> | null = null;
   let sceneSurface: ReturnType<typeof host.contribute.sceneLayer> | null = null;
   // C-6 — the active tile-resource claim (null when nothing is claimed).
@@ -1364,6 +1533,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     selection: null,
     pattern: null,
     colors: freshColors(),
+    eyedropper: { ...DEFAULT_EYEDROPPER },
+    samplers: [],
     livePreview: true,
     wand: {
       tolerance: WAND_TOLERANCE_DEFAULT,
@@ -1405,6 +1576,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushLibrary: null,
     brushLibraryName: null,
     brushPreset: null,
+    dialog: null,
+    ppi: null,
+    curvesPicker: null,
+    channelCurves: null,
   };
   /** The retained PSD parse handle (wasm-side), when state.psd is set. */
   let psdHandle: number | null = null;
@@ -1563,7 +1738,18 @@ export function createImageSession(host: BundleHost): ImageSession {
   /** The engine handle of the defined pattern (`definePattern`). */
   let patternHandle: number | null = null;
 
+  /** Re-read every colour sampler (cheap: at most four small windows). */
+  const refreshSamplers = () => {
+    if (state.samplers.length === 0) return;
+    state.samplers = state.samplers.map((s) => ({
+      ...s,
+      colour: api.readColor(s.at, state.eyedropper.size, "all"),
+    }));
+  };
   const emit = () => {
+    // A sampler shows what the image holds NOW: every change the session
+    // reports may have moved pixels under it.
+    refreshSamplers();
     for (const l of [...listeners]) l();
   };
   const setStatus = (s: string) => {
@@ -1958,6 +2144,14 @@ export function createImageSession(host: BundleHost): ImageSession {
     state.cloneSource = null;
     state.ptPerPx = null;
     freeProxy();
+    // A dialog belongs to the image it was opened on.
+    dropFilterDialog();
+    state.dialog = null;
+    state.ppi = null;
+    state.curvesPicker = null;
+    state.channelCurves = null;
+    curvePicks = {};
+    curveAuto = null;
   };
 
   /** "8BPS" — the PSD/PSB magic. */
@@ -2388,6 +2582,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
       state.saveBack = null;
+      // Metadata only: Image Size shows it and the exporters write it.
+      try {
+        state.ppi = engine.readPpi(bytes);
+      } catch (err) {
+        host.log.debug("resolution read failed", err);
+        state.ppi = null;
+      }
       // The PSD structural session rides EVERY PSD ingest (the K-2
       // import AND the C-5 selection lane) — it is what the PSD
       // save-back writes into.
@@ -2438,6 +2639,232 @@ export function createImageSession(host: BundleHost): ImageSession {
       setStatus(t(S.frameDeselectedInFramePreviewCleared));
     }
   });
+
+  /** Encoded PNG / JPEG bytes carrying the image's resolution. */
+  const withPpi = (bytes: Uint8Array): Uint8Array =>
+    engine && state.ppi !== null ? engine.stampPpi(bytes, state.ppi) : bytes;
+
+  // ── FILTER DIALOG (WP5.2) ───────────────────────────────────────────
+  //
+  // The dialog previews by APPLYING: the filter lands in the active layer
+  // through `applyEffect` — the selection mask, the active layer and the
+  // journal exactly as a direct apply — as the newest undo step, and a
+  // change of values undoes that step and applies again. OK keeps the
+  // step (one undo step, whatever was previewed); Cancel undoes it; the
+  // before/after toggle undoes it and re-applies. While a slider moves,
+  // the frame shows the filter on a RESAMPLED PROXY of the image (the
+  // adjustment sliders' path: about what the frame shows, px lengths
+  // scaled with it), and the full-resolution pass follows when the
+  // values rest. The proxy needs the composite to BE the active layer
+  // and no selection (a selection is bound at source resolution), so it
+  // runs on a one-layer image without a selection; otherwise every
+  // change previews at full resolution, latest-wins.
+
+  /** The last values each filter's dialog was closed with. */
+  const lastFilterValues = new Map<FilterId, Record<string, FilterValue>>();
+  /** The image the dialog's proxy preview runs on (taken at open). */
+  let filterProxy: {
+    handle: number;
+    width: number;
+    height: number;
+    factor: number;
+  } | null = null;
+  /** The values the applied preview step was run with. */
+  let appliedKey: string | null = null;
+  let filterSettle: ReturnType<typeof setTimeout> | null = null;
+  let lastFilterPass: Promise<boolean> = Promise.resolve(true);
+
+  const openFilter = (): FilterDialogState | null =>
+    state.dialog?.kind === "filter" ? state.dialog.filter : null;
+
+  const freeFilterProxy = () => {
+    if (filterProxy && engine) engine.freeImage(filterProxy.handle);
+    filterProxy = null;
+  };
+
+  /** Forget the dialog without touching the image (the image itself is
+   *  going away, or the caller already restored it). */
+  const dropFilterDialog = () => {
+    if (filterSettle) clearTimeout(filterSettle);
+    filterSettle = null;
+    freeFilterProxy();
+    appliedKey = null;
+  };
+
+  /** Take the preview step back off the image (it is the newest step:
+   *  the dialog is modal over the image's edits). */
+  const unapplyFilter = async (d: FilterDialogState): Promise<void> => {
+    if (!d.applied) return;
+    d.applied = false;
+    appliedKey = null;
+    await historyStep(true);
+  };
+
+  /** The FULL-RESOLUTION preview: the filter at the dialog's values in
+   *  the image, or off it when preview is off or "before" is showing. */
+  const filterPassNow = async (): Promise<boolean> => {
+    const d = openFilter();
+    if (!d || !engine || !state.source) return false;
+    const key = JSON.stringify(d.values);
+    const wanted = d.preview && !d.before;
+    if (d.applied && (!wanted || appliedKey !== key)) await unapplyFilter(d);
+    if (!wanted || d.applied) return true;
+    const def = filterDef(d.id);
+    const values = { ...d.values };
+    const eng = engine;
+    const ok = await api.applyEffect(def.label, (h) => def.run(eng, h, values));
+    // The dialog may have closed (or moved on) while the pass ran.
+    if (openFilter() !== d) {
+      if (ok) await historyStep(true);
+      return false;
+    }
+    d.applied = ok;
+    appliedKey = ok ? key : null;
+    emit();
+    return ok;
+  };
+  const filterPassLatest = latestWins(filterPassNow);
+
+  /** The PROXY preview: the filter on the dialog's resampled copy, put in
+   *  the frame; the image itself is not touched. False when this image
+   *  cannot be previewed that way (the full pass is then the preview). */
+  const filterProxyNow = async (): Promise<boolean> => {
+    const d = openFilter();
+    const src = state.source;
+    const target = src?.elementId;
+    if (!d || !src || !engine || !target || !state.gpu || !scene())
+      return false;
+    if (!filterProxy) return false;
+    const def = filterDef(d.id);
+    const values = scaledForProxy(def, d.values, filterProxy.factor);
+    try {
+      const out = await def.run(engine, filterProxy.handle, values);
+      let rgba: Uint8Array;
+      try {
+        rgba = await engine.adjust(out.handle, state.params);
+      } finally {
+        if (out.handle !== filterProxy?.handle) engine.freeImage(out.handle);
+      }
+      if (openFilter() !== d || !filterProxy) return false;
+      const box = await frameBox(target);
+      await submitLayer(
+        target,
+        rgba,
+        filterProxy.width,
+        filterProxy.height,
+        box,
+        src.width,
+        src.height,
+      );
+      return true;
+    } catch (err) {
+      host.log.debug("filter proxy preview failed", err);
+      return false;
+    }
+  };
+  const filterProxyLatest = latestWins(filterProxyNow);
+
+  /** After a value change: the proxy at once (where it can), the full
+   *  pass when the values have rested. */
+  const scheduleFilterPreview = () => {
+    const d = openFilter();
+    if (!d) return;
+    if (filterSettle) clearTimeout(filterSettle);
+    filterSettle = null;
+    if (!d.preview || d.before) {
+      lastFilterPass = filterPassLatest();
+      return;
+    }
+    if (!filterProxy) {
+      lastFilterPass = filterPassLatest();
+      return;
+    }
+    void filterProxyLatest();
+    filterSettle = setTimeout(() => {
+      filterSettle = null;
+      lastFilterPass = filterPassLatest();
+    }, PREVIEW_SETTLE_MS);
+  };
+
+  /** The proxy the dialog previews on, when this image allows one. */
+  const takeFilterProxy = async (): Promise<void> => {
+    freeFilterProxy();
+    const src = state.source;
+    const target = src?.elementId;
+    if (!src || !engine || !target || !state.gpu || !scene()) return;
+    if (state.selection || state.layers.layers.length !== 1) return;
+    try {
+      const box = await frameBox(target);
+      const { w, h } = proxySize(box, src);
+      if (w >= src.width && h >= src.height) return;
+      const r = await engine.resize(src.handle, w, h, "lanczos3");
+      filterProxy = {
+        handle: r.handle,
+        width: r.width,
+        height: r.height,
+        factor: r.width / src.width,
+      };
+    } catch (err) {
+      host.log.debug("filter proxy failed", err);
+      filterProxy = null;
+    }
+  };
+
+  /** Close the filter dialog, putting the image back as it was. */
+  const cancelFilter = async (): Promise<boolean> => {
+    const d = openFilter();
+    if (!d) return false;
+    if (filterSettle) clearTimeout(filterSettle);
+    filterSettle = null;
+    await lastFilterPass.catch(() => false);
+    lastFilterValues.set(d.id, { ...d.values });
+    // Closed first, so a pass still in flight sees it gone (unless
+    // another dialog has already taken its place).
+    if (openFilter() === d) state.dialog = null;
+    await unapplyFilter(d);
+    dropFilterDialog();
+    // The frame may still show the proxy: put the image back in it.
+    if (state.source?.elementId) await api.apply();
+    setStatus(t(S.filterCancelled, { label: t(filterDef(d.id).label) }));
+    return true;
+  };
+
+  // ── CURVES TOOLS (I-55) ─────────────────────────────────────────────
+
+  /** Build the per-channel curves from the picks (and Auto's ends):
+   *  black → 0, grey → its own luminance (so the three channels meet
+   *  there: neutral), white → 1. */
+  const channelCurvesFromPicks = (): ChannelCurves => {
+    const out = {} as ChannelCurves;
+    (["r", "g", "b"] as const).forEach((ch, i) => {
+      const b = curvePicks.black?.[i] ?? curveAuto?.[i]?.[0] ?? 0;
+      const w = curvePicks.white?.[i] ?? curveAuto?.[i]?.[1] ?? 1;
+      const pts: Array<[number, number]> = [
+        [b, 0],
+        [w, 1],
+      ];
+      const grey = curvePicks.grey;
+      if (grey) {
+        const target = (grey[0] + grey[1] + grey[2]) / 3;
+        // Only where it keeps the curve increasing.
+        if (grey[i]! > b && grey[i]! < w) pts.splice(1, 0, [grey[i]!, target]);
+      }
+      out[ch] =
+        w > b
+          ? pts
+          : [
+              [0, 0],
+              [1, 1],
+            ];
+    });
+    return out;
+  };
+
+  const applyChannelCurves = (curves: ChannelCurves) => {
+    for (const ch of ["r", "g", "b"] as const)
+      api.setCurvePoints(curves[ch], ch);
+    state.channelCurves = curves;
+  };
 
   const api: ImageSession = {
     state: () => state,
@@ -2650,6 +3077,266 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
 
+    async openFilterDialog(id) {
+      const def = filterDef(id);
+      if (openFilter()) await cancelFilter();
+      if (!state.source || !engine) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
+        return false;
+      }
+      discardStroke();
+      const filter: FilterDialogState = {
+        id,
+        values: { ...filterDefaults(def), ...lastFilterValues.get(id) },
+        preview: true,
+        before: false,
+        applied: false,
+      };
+      state.dialog = { kind: "filter", filter };
+      emit();
+      await takeFilterProxy();
+      if (openFilter() !== filter) {
+        freeFilterProxy();
+        return false;
+      }
+      lastFilterPass = filterPassLatest();
+      await lastFilterPass;
+      return true;
+    },
+
+    setFilterValues(patch) {
+      const d = openFilter();
+      if (!d) return;
+      d.values = { ...d.values, ...patch };
+      // A new dialog record, so a render memoised on it sees the change.
+      state.dialog = { kind: "filter", filter: d };
+      emit();
+      scheduleFilterPreview();
+    },
+
+    async setFilterPreview(on) {
+      const d = openFilter();
+      if (!d) return;
+      d.preview = on;
+      state.dialog = { kind: "filter", filter: d };
+      emit();
+      scheduleFilterPreview();
+      await lastFilterPass;
+    },
+
+    async setFilterBefore(before) {
+      const d = openFilter();
+      if (!d) return;
+      d.before = before;
+      state.dialog = { kind: "filter", filter: d };
+      emit();
+      scheduleFilterPreview();
+      await lastFilterPass;
+    },
+
+    async commitFilterDialog() {
+      const d = openFilter();
+      if (!d) return false;
+      if (filterSettle) clearTimeout(filterSettle);
+      filterSettle = null;
+      await lastFilterPass.catch(() => false);
+      // OK applies what the dialog SAYS, preview or not.
+      d.preview = true;
+      d.before = false;
+      lastFilterPass = filterPassLatest();
+      const ok = await lastFilterPass;
+      if (!ok || !d.applied) return false;
+      lastFilterValues.set(d.id, { ...d.values });
+      // The step stays: it IS the filter, one undo step.
+      d.applied = false;
+      state.dialog = null;
+      dropFilterDialog();
+      setStatus(t(S.applied, { label: t(filterDef(d.id).label) }));
+      return true;
+    },
+
+    cancelFilterDialog() {
+      return cancelFilter();
+    },
+
+    async applyFilter(id, values) {
+      const def = filterDef(id);
+      const v = { ...filterDefaults(def), ...values };
+      const eng = engine;
+      if (!eng) {
+        setStatus(t(S.filterNeedsAnImage, { label: t(def.label) }));
+        return false;
+      }
+      return api.applyEffect(def.label, (h) => def.run(eng, h, v));
+    },
+
+    async applyAverage() {
+      return api.applyEffect(E.average, (h) => engine!.applyAverage(h));
+    },
+
+    openDialog(kind) {
+      if (!state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog = { kind };
+      emit();
+      return true;
+    },
+
+    async closeDialog() {
+      if (openFilter()) {
+        await cancelFilter();
+        return;
+      }
+      state.dialog = null;
+      emit();
+    },
+
+    async trim(by) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      let rect: { x: number; y: number; w: number; h: number } | null;
+      try {
+        rect = engine.trimRect(src.handle, by);
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: "trim", error: errText(err) }));
+        return false;
+      }
+      if (!rect) {
+        setStatus(t(S.trimNothing));
+        return false;
+      }
+      if (rect.w === src.width && rect.h === src.height) {
+        setStatus(t(S.trimNoop));
+        return false;
+      }
+      discardStroke();
+      let wh: { width: number; height: number };
+      try {
+        engine.layersOpen(src.handle);
+        wh = await engine.layersCrop(rect, 0);
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: "trim", error: errText(err) }));
+        emit();
+        return false;
+      }
+      adoptCanvasExtent(src, wh);
+      if (src.elementId) await api.apply();
+      if (state.dialog?.kind === "trim") state.dialog = null;
+      setStatus(t(S.trimmed, { width: wh.width, height: wh.height }));
+      return true;
+    },
+
+    async rotateCanvas(degrees) {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (!Number.isFinite(degrees) || ((degrees % 360) + 360) % 360 === 0) {
+        setStatus(t(S.rotateNoop));
+        return false;
+      }
+      discardStroke();
+      let wh: { width: number; height: number };
+      try {
+        engine.layersOpen(src.handle);
+        wh = await engine.layersRotate(degrees);
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: "rotate", error: errText(err) }));
+        emit();
+        return false;
+      }
+      adoptCanvasExtent(src, wh);
+      if (src.elementId) await api.apply();
+      if (state.dialog?.kind === "rotate") state.dialog = null;
+      setStatus(
+        t(S.rotatedCanvas, { degrees, width: wh.width, height: wh.height }),
+      );
+      return true;
+    },
+
+    setResolution(ppi) {
+      state.ppi = ppi !== null && Number.isFinite(ppi) && ppi > 0 ? ppi : null;
+      setStatus(t(S.resolutionSet, { ppi: state.ppi ?? 72 }));
+    },
+
+    autoCurves() {
+      const src = state.source;
+      if (!src || !engine) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return null;
+      }
+      let lv: Array<[number, number]>;
+      try {
+        lv = engine.autoContrastLevels(src.handle, 0.001);
+      } catch (err) {
+        setStatus(t(S.whatFailed, { what: "auto", error: errText(err) }));
+        return null;
+      }
+      curveAuto = lv;
+      // Auto restarts the ends; a grey pick stays.
+      delete curvePicks.black;
+      delete curvePicks.white;
+      const curves = channelCurvesFromPicks();
+      applyChannelCurves(curves);
+      const flat = lv.every(([b, w]) => b === 0 && w === 1);
+      setStatus(t(flat ? S.autoCurvesFlat : S.autoCurves));
+      return curves;
+    },
+
+    armCurvesPicker(kind) {
+      state.curvesPicker = kind;
+      if (kind) setStatus(t(S.curvesPickArmed, { kind: t(PICK[kind]) }));
+      else emit();
+    },
+
+    curvesPick(kind, at) {
+      const src = state.source;
+      if (!src || !engine) return null;
+      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
+      if (px < 0 || py < 0 || px >= src.width || py >= src.height) return null;
+      const x0 = Math.max(0, px - 1);
+      const y0 = Math.max(0, py - 1);
+      const x1 = Math.min(src.width, px + 2);
+      const y1 = Math.min(src.height, py + 2);
+      let c: Rgba01 | null;
+      try {
+        c = averageRgba8(engine.tile(src.handle, x0, y0, x1 - x0, y1 - y0));
+      } catch (err) {
+        host.log.debug("curves sample failed", err);
+        return null;
+      }
+      if (!c) return null;
+      curvePicks[kind] = [c[0], c[1], c[2]];
+      const curves = channelCurvesFromPicks();
+      applyChannelCurves(curves);
+      state.curvesPicker = null;
+      setStatus(
+        t(S.curvesPicked, {
+          kind: t(PICK[kind]),
+          colour: toHex(c),
+          x: px,
+          y: py,
+        }),
+      );
+      return curves;
+    },
+
+    takeCurvesPick(at) {
+      const kind = state.curvesPicker;
+      if (!kind) return false;
+      api.curvesPick(kind, at);
+      state.curvesPicker = null;
+      emit();
+      return true;
+    },
+
     async applyColorLookup(cubeText, name = t(E.colorLookup)) {
       let cube: Float32Array;
       try {
@@ -2845,7 +3532,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         } else {
           const fmt: RasterFormat = sourceFormat === "jpeg" ? "jpeg" : "png";
           result = {
-            bytes: engine.encode(rgba, src.width, src.height, fmt),
+            bytes: withPpi(engine.encode(rgba, src.width, src.height, fmt)),
             fileName: `${stem}${fmt === "jpeg" ? ".jpg" : ".png"}`,
             mimeType: fmt === "jpeg" ? "image/jpeg" : "image/png",
             note: fmt === "jpeg" ? t(S.jpegSaveBack) : t(S.pngSaveBack),
@@ -2944,7 +3631,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       }
       try {
         const rgba = await engine.adjust(src.handle, state.params);
-        const bytes = engine.encode(rgba, src.width, src.height, format);
+        const bytes = withPpi(
+          engine.encode(rgba, src.width, src.height, format),
+        );
         return {
           bytes,
           fileName: `${baseName(src.name)}${format === "jpeg" ? ".jpg" : ".png"}`,
@@ -3087,24 +3776,93 @@ export function createImageSession(host: BundleHost): ImageSession {
       api.setBackground(c.bg);
     },
 
-    sampleColor(at, size = 1, target = "fg") {
+    readColor(at, size = 1, source = "all") {
       const src = state.source;
       if (!src || !engine) return null;
-      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
-      if (px < 0 || py < 0 || px >= src.width || py >= src.height) return null;
-      const r = (size - 1) / 2;
-      const x0 = Math.max(0, px - r);
-      const y0 = Math.max(0, py - r);
-      const x1 = Math.min(src.width, px + r + 1);
-      const y1 = Math.min(src.height, py + r + 1);
-      let c: Rgba01 | null;
+      const win = sampleWindow(at, size, src.width, src.height);
+      if (!win) return null;
+      const active = state.layers.active;
       try {
-        c = averageRgba8(engine.tile(src.handle, x0, y0, x1 - x0, y1 - y0));
+        // "Current layer" with a stack open reads the active layer's own
+        // pixels; without a stack the image IS its one layer.
+        const px =
+          source === "layer" && active >= 0
+            ? engine.layersWindow(active, win.x, win.y, win.w, win.h)
+            : engine.tile(src.handle, win.x, win.y, win.w, win.h);
+        return averageRgba8(px);
       } catch (err) {
         host.log.debug("colour sample failed", err);
         return null;
       }
-      if (!c) return null;
+    },
+
+    setEyedropperOptions(o) {
+      const next = { ...state.eyedropper };
+      if (isSampleSize(o.size)) next.size = o.size;
+      if (o.source === "layer" || o.source === "all") next.source = o.source;
+      state.eyedropper = next;
+      emit();
+    },
+
+    addColorSampler(at) {
+      const src = state.source;
+      if (!src) return null;
+      if (state.samplers.length >= MAX_SAMPLERS) {
+        setStatus(t(S.samplersFull, { max: MAX_SAMPLERS }));
+        return null;
+      }
+      if (!sampleWindow(at, 1, src.width, src.height)) return null;
+      const id = nextSamplerId(state.samplers);
+      if (id === null) return null;
+      const point: [number, number] = [Math.floor(at[0]), Math.floor(at[1])];
+      state.samplers = [
+        ...state.samplers,
+        { id, at: point, colour: null },
+      ].sort((a, b) => a.id - b.id);
+      emit();
+      return id;
+    },
+
+    moveColorSampler(id, at) {
+      const src = state.source;
+      if (!src || !sampleWindow(at, 1, src.width, src.height)) return false;
+      if (!state.samplers.some((s) => s.id === id)) return false;
+      const point: [number, number] = [Math.floor(at[0]), Math.floor(at[1])];
+      state.samplers = state.samplers.map((s) =>
+        s.id === id ? { ...s, at: point } : s,
+      );
+      emit();
+      return true;
+    },
+
+    removeColorSampler(id) {
+      if (!state.samplers.some((s) => s.id === id)) return false;
+      state.samplers = state.samplers.filter((s) => s.id !== id);
+      emit();
+      return true;
+    },
+
+    clearColorSamplers() {
+      if (state.samplers.length === 0) return;
+      state.samplers = [];
+      emit();
+    },
+
+    sampleColor(at, size = 1, target = "fg", source = "all") {
+      const src = state.source;
+      if (!src || !engine) return null;
+      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
+      const read = api.readColor(at, size, source);
+      // A transparent read of the current layer is "nothing there", not
+      // a colour (the composite's transparency is still a colour: what
+      // the frame shows through it is the document, not the image).
+      const c = read && source === "layer" && read[3] === 0 ? null : read;
+      if (!c) {
+        if (source === "layer" && state.layers.active >= 0) {
+          setStatus(t(S.sampledNothing));
+        }
+        return null;
+      }
       if (target === "fg") api.setForeground(c);
       else api.setBackground(c);
       setStatus(
@@ -3631,7 +4389,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       return true;
     },
 
-    async resizeTo(w, h, filter) {
+    async resizeTo(w, h, filter, ppi) {
       const src = state.source;
       if (!src || !engine) {
         setStatus(t(S.nothingToResizeIngestAnImage));
@@ -3651,6 +4409,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         return false;
       }
       adoptCanvasExtent(src, wh);
+      if (ppi !== undefined) state.ppi = ppi;
+      if (state.dialog?.kind === "imageSize") state.dialog = null;
       setStatus(
         t(S.resampled, {
           width: wh.width,
@@ -4720,6 +5480,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     dispose() {
       disposed = true;
       if (settleTimer) clearTimeout(settleTimer);
+      dropFilterDialog();
       selectionSub.dispose();
       openSub?.dispose();
       discardStroke();

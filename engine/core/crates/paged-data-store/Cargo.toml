@@ -1,0 +1,40 @@
+[package]
+name = "paged-data-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data's store (PM-0015, ADR 561): an in-memory Turso database the imported sources live in, and the queries over them, read straight into data-core RecordSets. File readers for CSV/TSV, JSON, Parquet and XLSX live here, so the same engine answers in the editor, the CLI and the server."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_store is a later mechanical pass).
+name = "data_store"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+paged-data-xlsx = { path = "../paged-data-xlsx" }
+# MIT. Default features off (no encryption, SIMD, autovacuum or full-text
+# search); 0.8.3 builds only with `fs` (core paths call `Database::open_file`)
+# and `uuid` (incremental/dbsp.rs), so both stay on although the store is
+# in-memory (docs/design/turso-spike-2026-10.md).
+turso_core = { version = "=0.8.3", default-features = false, features = ["fs", "uuid", "time", "json", "series"] }
+# MIT, the parser half of turso_core: its lexer errors carry the offset.
+turso_parser = "=0.8.3"
+# MIT OR Unlicense.
+csv = "1"
+# Apache-2.0. The row reader only: no Arrow layer. Codecs in pure Rust
+# (snappy, gzip, brotli, lz4); zstd binds C and does not build for
+# wasm32-unknown-unknown, so a zstd-compressed file is refused with a reason.
+parquet = { version = "60", default-features = false, features = ["snap", "brotli", "flate2-zlib-rs", "lz4"] }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# std::time panics on wasm32-unknown-unknown: the store's clock reads JS.
+js-sys = "0.3"

@@ -54,6 +54,7 @@ import type {
 } from "../../data-host-model/src";
 import type { CatalogueDef, TemplateFieldBinding } from "./catalogue";
 import type { ImportFormat } from "./query/import";
+import type { AssetColumnDef } from "./assets";
 import type { RefreshPolicy } from "./refresh";
 import type { RemoteFormat } from "./remote";
 
@@ -137,6 +138,9 @@ export interface PersistedSession {
   preview?: Record<string, number>;
   /** The data set last applied to the document, if any. */
   dataSet?: string;
+  /** Data ADR 563: the asset columns, by `<query>.<field>`. Absent when
+   *  there are none. */
+  assets?: Record<string, AssetColumnDef>;
   /** ADR 560: the template fields bound to the data, and the catalogues
    *  made (by template page). Absent when there are none. */
   catalogue?: {
@@ -289,6 +293,9 @@ export function decodeSession(
         }
       : {}),
     ...(typeof p.dataSet === "string" ? { dataSet: p.dataSet } : {}),
+    ...(p.assets && typeof p.assets === "object"
+      ? { assets: p.assets as Record<string, AssetColumnDef> }
+      : {}),
     ...(p.catalogue && typeof p.catalogue === "object"
       ? {
           catalogue: {

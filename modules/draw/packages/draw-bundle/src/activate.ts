@@ -71,6 +71,18 @@ import de from "../locales/de.json" with { type: "json" };
 
 import { drawTools } from "./tools";
 import {
+  contributePathToolCommands,
+  PATH_TOOL_COMMAND_IDS,
+} from "./commands/path-tools";
+import {
+  contributeStarFlareCommands,
+  STAR_FLARE_COMMAND_IDS,
+} from "./commands/star-flare";
+import {
+  contributeShaperCommand,
+  SHAPER_STROKE_COMMAND_ID,
+} from "./commands/shaper";
+import {
   contributeAppearanceCommands,
   APPEARANCE_COMMAND_IDS,
 } from "./commands/appearance";
@@ -148,7 +160,15 @@ import {
 import {
   contributeImageTraceCommand,
   IMAGE_TRACE_COMMAND_IDS,
+  IMAGE_TRACE_PANEL_ID,
 } from "./commands/image-trace";
+import { contributeLiveRetrace } from "./commands/image-trace-live";
+import {
+  contributeRecolorCommands,
+  COLOR_GUIDE_PANEL_ID,
+  RECOLOR_COMMAND_IDS,
+  RECOLOR_PANEL_ID,
+} from "./commands/recolor";
 import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
@@ -164,6 +184,7 @@ import {
 import {
   contributePathOptionsCommands,
   openPathOptions,
+  lastUsedPathOptions,
   lastUsedPayload,
   PATH_OPTIONS_COMMAND_IDS,
   PATH_OPTIONS_PANEL_ID,
@@ -173,6 +194,7 @@ import {
   REVERSE_PATH_COMMAND_IDS,
 } from "./commands/reverse-path";
 import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
+import { contributeRasterizeCommand } from "./commands/rasterize";
 import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
@@ -208,6 +230,9 @@ import {
   OBJECTS_ON_PATH_PANEL_ID,
 } from "./panels/objects-on-path-panel";
 import { makePathOptionsPanel } from "./panels/path-options-panel";
+import { makeImageTracePanel } from "./panels/image-trace-panel";
+import { makeRecolorPanel } from "./panels/recolor-panel";
+import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
 import {
@@ -370,6 +395,25 @@ export function activate(host: BundleHost): BundleHandle {
     icon: "tool-smooth",
     ...makePathOptionsPanel(host),
   });
+  // WP6.6 — IMAGE TRACE options: the presets, the options they set, Live,
+  // Trace and Re-trace (the Draw ▸ Image trace… row raises it).
+  host.contribute.panel({
+    id: IMAGE_TRACE_PANEL_ID,
+    icon: "ui-filter",
+    ...makeImageTracePanel(host),
+  });
+  // WP6.5 — RECOLOR ARTWORK (harmony on a wheel, reduce, library) and the
+  // COLOR GUIDE (the fill's harmony and its variations).
+  host.contribute.panel({
+    id: RECOLOR_PANEL_ID,
+    icon: "ui-swatch-fill",
+    ...makeRecolorPanel(host),
+  });
+  host.contribute.panel({
+    id: COLOR_GUIDE_PANEL_ID,
+    icon: "ui-sun",
+    ...makeColorGuidePanel(host),
+  });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
   // commits `setElementProperty{ frameStrokeDashArray, lengths }` to
@@ -408,6 +452,13 @@ export function activate(host: BundleHost): BundleHandle {
   // Type ▸ Create outlines — a text frame's glyphs as compound paths, one
   // per colour, in one batch (commands/create-outlines.ts; protocol 66).
   const createOutlinesCommandsSub = contributeCreateOutlinesCommands(host);
+  // Object ▸ Rasterize — the selection as one image frame of its pixels
+  // (plugin-sdk `rasterizeElements`, `render.snapshot@2`). Run bare, it
+  // repeats the values last applied from the Path Options panel.
+  const rasterizeCommandSub = contributeRasterizeCommand(
+    host,
+    () => lastUsedPathOptions(host).rasterize,
+  );
   // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
   // about the selection's centre, composed onto each object's own
   // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
@@ -517,6 +568,15 @@ export function activate(host: BundleHost): BundleHandle {
   const textOnPathCommandsSub = contributeTextOnPathCommands(host);
   // The Knife, Scissors and Shape Builder as commands (their gesture as data).
   const cutCommandsSub = contributeCutCommands(host);
+  // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
+  // data, and the Star / Flare inserts (a payload-free run repeats the
+  // Path Options panel's last-used values).
+  const pathToolCommandsSub = contributePathToolCommands(host);
+  const shaperCommandSub = contributeShaperCommand(host);
+  const starFlareCommandsSub = contributeStarFlareCommands(host, {
+    star: () => lastUsedPayload(host, "star"),
+    flare: () => lastUsedPayload(host, "flare"),
+  });
   // The width profile as data, and the rebuild of the recipes a changed
   // source feeds (G4).
   const widthProfileCommandsSub = contributeWidthProfileCommands(host, () =>
@@ -573,6 +633,10 @@ export function activate(host: BundleHost): BundleHandle {
   // non-zero. One-shot, fills only, main-thread — commands/image-trace.ts
   // states the whole honest scope, and the command TITLE carries it.
   const imageTraceCommandSub = contributeImageTraceCommand(host);
+  // …a LIVE trace re-traced inside the edit that changes its image's link.
+  const liveRetraceSub = contributeLiveRetrace(host);
+  // WP6.5 — Recolor Artwork and the Color Guide's apply.
+  const recolorCommandsSub = contributeRecolorCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -635,7 +699,7 @@ export function activate(host: BundleHost): BundleHandle {
       publishDrawPropertyLists(host))
     : null;
   host.log.info(
-    `activated — ${tools.length} tools + 3 schema panels + 9 React panels + ` +
+    `activated — ${tools.length} tools + 3 schema panels + 12 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -661,9 +725,13 @@ export function activate(host: BundleHost): BundleHandle {
         GLOBAL_EDIT_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
+        RECOLOR_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
         CUT_COMMAND_IDS.length +
+        PATH_TOOL_COMMAND_IDS.length +
+        STAR_FLARE_COMMAND_IDS.length +
+        [SHAPER_STROKE_COMMAND_ID].length +
         WIDTH_PROFILE_COMMAND_IDS.length +
         RECIPE_UPDATE_COMMAND_IDS.length
       } commands + 1 edit context + ` +
@@ -685,6 +753,8 @@ export function activate(host: BundleHost): BundleHandle {
       svgIoSub.dispose();
       menuSub.dispose();
       imageTraceCommandSub.dispose();
+      liveRetraceSub.dispose();
+      recolorCommandsSub.dispose();
       objectsOnPathCommandsSub.dispose();
       blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();
@@ -692,6 +762,9 @@ export function activate(host: BundleHost): BundleHandle {
       globalEditCommandSub.dispose();
       textOnPathCommandsSub.dispose();
       cutCommandsSub.dispose();
+      pathToolCommandsSub.dispose();
+      shaperCommandSub.dispose();
+      starFlareCommandsSub.dispose();
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
       recipeAutoUpdateSub.dispose();
@@ -710,6 +783,7 @@ export function activate(host: BundleHost): BundleHandle {
       transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
       createOutlinesCommandsSub.dispose();
+      rasterizeCommandSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

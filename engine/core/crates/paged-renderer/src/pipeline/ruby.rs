@@ -723,9 +723,7 @@ impl Kenten {
     /// an em): circles 700 wide, the small ones 440 and 490, rings 50 to
     /// 64 thick, triangles 770 wide, the sesame dot about 660 × 675.
     fn path(self) -> PathData {
-        let mut p = PathData {
-            segments: Vec::new(),
-        };
+        let mut p = PathData::new(Vec::new());
         let ring = |p: &mut PathData, outer: f32, inner: f32| {
             circle(p, outer, false);
             circle(p, inner, true);

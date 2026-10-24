@@ -657,10 +657,319 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 }
 ";
 
+// ─────────────────── runtime-radius max / min / median ───────────────────
+//
+// Filter ▸ Other ▸ Maximum / Minimum and Filter ▸ Noise ▸ Median with a
+// RADIUS, as Photoshop has them (the 3×3 kernels above are their r = 1
+// case and stay, because a fixed comparator network is the cheapest
+// exact 3×3 median). One params block for the three: the radius (the
+// shader clamps it to the class bound, so an over-large request
+// degrades to the bound rather than reading outside the window) and the
+// neighbourhood SHAPE — 0 square (Photoshop's "Squareness"), 1 round
+// (a disc: taps with dx² + dy² ≤ r², Photoshop's "Roundness").
+//
+// The halo is DERIVED from the bound textures (`(in0 − out) / 2`), as
+// `conv.bilateral` does, so each kernel is right under the windowed
+// dispatcher (halo = class radius) and the one-shot one (halo 0, taps
+// clamped to the edge) alike. Taps are clamped into the window: the
+// edge pixel repeats, which is the convolution edge rule everywhere in
+// this family.
+//
+// Radius 0 is the identity for all three (a one-tap neighbourhood).
+
+/// Compile-time MAX radius of `morph.dilate_r` / `morph.erode_r` — the
+/// windowed ROI bound (§8.3). The cost is (2r + 1)² loads per texel,
+/// 4 225 at the bound: a max/min is one compare per tap, so that stays
+/// interactive on a GPU where a sorting method would not.
+pub const MORPH_MAX_RADIUS: u16 = 32;
+
+/// Compile-time MAX radius of `rank.median_r`. The median costs one
+/// pass per bisection step over the (2r + 1)² taps (see
+/// [`RANK_MEDIAN_R`]); 33 passes over 441 taps at the bound.
+pub const MEDIAN_MAX_RADIUS: u16 = 10;
+
+/// Bisection steps of `rank.median_r` — enough that the bracket is
+/// narrower than the f16 spacing anywhere in a ±256 range, which is
+/// what makes the final selection exact (see [`RANK_MEDIAN_R`]).
+pub const MEDIAN_BISECTION_STEPS: u32 = 32;
+
+/// `morph.dilate_r` / `morph.erode_r` / `rank.median_r` params.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct MorphRadiusParams {
+    /// Neighbourhood radius in px (clamped to the kernel's bound).
+    pub radius: u32,
+    /// 0 = square neighbourhood, 1 = round (a disc).
+    pub round: u32,
+    pub _pad0: u32,
+    pub _abi_pad: u32,
+}
+
+impl MorphRadiusParams {
+    pub fn new(radius: u32, round: bool) -> Self {
+        Self {
+            radius,
+            round: u32::from(round),
+            _pad0: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+const MORPH_RADIUS_FIELDS: &[ParamField] = &[
+    ParamField {
+        name: "radius",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "round",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "_pad0",
+        wgsl_ty: "u32",
+    },
+    ParamField {
+        name: "_abi_pad",
+        wgsl_ty: "u32",
+    },
+];
+
+/// Filter ▸ Other ▸ MAXIMUM at a radius: per-channel max over the
+/// square (or round) neighbourhood. Exact — `max` selects an existing
+/// f16 sample.
+pub static MORPH_DILATE_R: KernelDef = KernelDef {
+    id: "morph.dilate_r",
+    class: KernelClass::Windowed {
+        radius: (MORPH_MAX_RADIUS, MORPH_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<MorphRadiusParams>(),
+        fields: MORPH_RADIUS_FIELDS,
+    },
+    wgsl: MORPH_DILATE_R_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+/// Filter ▸ Other ▸ MINIMUM at a radius: per-channel min, as
+/// [`MORPH_DILATE_R`]. Exact.
+pub static MORPH_ERODE_R: KernelDef = KernelDef {
+    id: "morph.erode_r",
+    class: KernelClass::Windowed {
+        radius: (MORPH_MAX_RADIUS, MORPH_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<MorphRadiusParams>(),
+        fields: MORPH_RADIUS_FIELDS,
+    },
+    wgsl: MORPH_ERODE_R_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+/// The shared body of the two runtime-radius morphology modules; `OP`
+/// is replaced by `max` or `min`. Reduction order: dy outer ascending,
+/// dx inner ascending, seeded with the centre (max/min are order-free
+/// over reals, but the order is fixed so the twin mirrors it).
+macro_rules! morph_r_wgsl {
+    ($id:literal, $op:literal) => {
+        concat!(
+            "// paged.image kernel `",
+            $id,
+            "` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius: u32,
+    round: u32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+const R_MAX : u32 = 32u;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wd = textureDimensions(in0);
+    let win = vec2<i32>(i32(wd.x), i32(wd.y));
+    let halo = (win - vec2<i32>(i32(d.x), i32(d.y))) / 2;
+    let base = xy + halo;
+    let center = textureLoad(in0, base, 0);
+    let r = i32(min(params.radius, R_MAX));
+    var acc = center;
+    for (var dy = -r; dy <= r; dy = dy + 1) {
+        for (var dx = -r; dx <= r; dx = dx + 1) {
+            if (params.round != 0u && dx * dx + dy * dy > r * r) { continue; }
+            let c = clamp(base + vec2<i32>(dx, dy), vec2<i32>(0, 0), win - vec2<i32>(1, 1));
+            acc = ",
+            $op,
+            "(acc, textureLoad(in0, c, 0));
+        }
+    }
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(center, acc, vec4<f32>(m)));
+}
+"
+        )
+    };
+}
+
+const MORPH_DILATE_R_WGSL: &str = morph_r_wgsl!("morph.dilate_r", "max");
+const MORPH_ERODE_R_WGSL: &str = morph_r_wgsl!("morph.erode_r", "min");
+
+/// Filter ▸ Noise ▸ MEDIAN at a radius: the per-channel median of the
+/// square (or round) neighbourhood.
+///
+/// THE METHOD. A comparator network cannot take a runtime radius and
+/// count-below selection (`rank.dust_scratches`) is O(n²) in taps, so
+/// this BISECTS ON THE VALUE instead. With `k = ⌊n/2⌋` (0-indexed) the
+/// median is the smallest sample `m` with `#(s ≤ m) > k`. Start from
+/// `lo = min`, `hi = max` (if `#(s ≤ lo) > k` the median IS the
+/// minimum); keep `#(s ≤ lo) ≤ k < #(s ≤ hi)` while halving the bracket
+/// for [`MEDIAN_BISECTION_STEPS`] steps, one counting pass each. Then
+/// the median is the smallest sample above `lo`: after 32 halvings the
+/// bracket is narrower than the spacing of f16 values anywhere in a
+/// ±256 range, so no sample other than the median fits between `lo` and
+/// it. The result is therefore an EXISTING sample — the tolerance is
+/// `Exact` — at a cost of 33 passes over the taps (14 553 loads per
+/// texel at r = 10) instead of (2r + 1)⁴.
+///
+/// All four channels bisect at once (vec4 brackets, componentwise
+/// selects), so the loads are shared.
+pub static RANK_MEDIAN_R: KernelDef = KernelDef {
+    id: "rank.median_r",
+    class: KernelClass::Windowed {
+        radius: (MEDIAN_MAX_RADIUS, MEDIAN_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<MorphRadiusParams>(),
+        fields: MORPH_RADIUS_FIELDS,
+    },
+    wgsl: RANK_MEDIAN_R_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::Exact,
+};
+
+const RANK_MEDIAN_R_WGSL: &str = "\
+// paged.image kernel `rank.median_r` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius: u32,
+    round: u32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+const R_MAX : u32 = 10u;
+const STEPS : i32 = 32;
+
+var<private> g_base : vec2<i32>;
+var<private> g_win : vec2<i32>;
+var<private> g_r : i32;
+
+fn inside(dx: i32, dy: i32) -> bool {
+    return params.round == 0u || dx * dx + dy * dy <= g_r * g_r;
+}
+
+fn tap(dx: i32, dy: i32) -> vec4<f32> {
+    let c = clamp(g_base + vec2<i32>(dx, dy), vec2<i32>(0, 0), g_win - vec2<i32>(1, 1));
+    return textureLoad(in0, c, 0);
+}
+
+/// #(s <= t) per channel over the neighbourhood.
+fn count_le(t: vec4<f32>) -> vec4<f32> {
+    var n = vec4<f32>(0.0);
+    for (var dy = -g_r; dy <= g_r; dy = dy + 1) {
+        for (var dx = -g_r; dx <= g_r; dx = dx + 1) {
+            if (!inside(dx, dy)) { continue; }
+            n = n + select(vec4<f32>(0.0), vec4<f32>(1.0), tap(dx, dy) <= t);
+        }
+    }
+    return n;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wd = textureDimensions(in0);
+    g_win = vec2<i32>(i32(wd.x), i32(wd.y));
+    g_base = xy + (g_win - vec2<i32>(i32(d.x), i32(d.y))) / 2;
+    g_r = i32(min(params.radius, R_MAX));
+    let center = textureLoad(in0, g_base, 0);
+
+    // Pass 0: the bracket and the tap count.
+    var lo = center;
+    var hi = center;
+    var n = 0.0;
+    for (var dy = -g_r; dy <= g_r; dy = dy + 1) {
+        for (var dx = -g_r; dx <= g_r; dx = dx + 1) {
+            if (!inside(dx, dy)) { continue; }
+            let s = tap(dx, dy);
+            lo = min(lo, s);
+            hi = max(hi, s);
+            n = n + 1.0;
+        }
+    }
+    let k = vec4<f32>(floor(n * 0.5));
+    let lo0 = lo;
+    let at_min = count_le(lo) > k;
+
+    for (var i = 0; i < STEPS; i = i + 1) {
+        let mid = (lo + hi) * 0.5;
+        let up = count_le(mid) > k;
+        hi = select(hi, mid, up);
+        lo = select(mid, lo, up);
+    }
+
+    // The smallest sample above `lo` is the median.
+    var med = hi;
+    for (var dy = -g_r; dy <= g_r; dy = dy + 1) {
+        for (var dx = -g_r; dx <= g_r; dx = dx + 1) {
+            if (!inside(dx, dy)) { continue; }
+            let s = tap(dx, dy);
+            med = select(med, min(med, s), s > lo);
+        }
+    }
+    let result = select(med, lo0, at_min);
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(center, result, vec4<f32>(m)));
+}
+";
+
 pub static FAMILY: &[&KernelDef] = &[
     &MORPH_DILATE,
     &MORPH_ERODE,
     &RANK_MEDIAN3,
     &RANK_DESPECKLE,
     &RANK_DUST_SCRATCHES,
+    &MORPH_DILATE_R,
+    &MORPH_ERODE_R,
+    &RANK_MEDIAN_R,
 ];

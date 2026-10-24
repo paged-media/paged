@@ -414,6 +414,20 @@ const TABLE: &[Row] = &[
               ("radius_px", V::F(4.0)), ("sigma_range", V::F(0.1)), ("amount", V::F(1.0))]),
           note: "amount 0 ⇒ mix(a, filtered, 0); also proves `filtered` is \
                  finite, since a NaN would survive the zero factor" },
+    Row { id: "conv.box_r",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
+          stress: P::Fields(&[("radius", V::U(4))]),
+          note: "radius 0 ⇒ one tap divided by one" },
+    Row { id: "conv.surface",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(4)), ("threshold", V::F(0.0))])),
+          stress: P::Fields(&[("radius", V::U(4)), ("threshold", V::F(0.2))]),
+          note: "threshold 0 ⇒ only the centre counts (the shader returns it)" },
+    Row { id: "conv.high_pass",
+          identity: Identity::NotDefined,
+          stress: P::Fields(&[("radius_px", V::F(2.0))]),
+          note: "EXCLUDED from identity: a high pass of any radius maps a flat \
+                 area to 50 % grey, so no parameter returns the input (as in \
+                 Photoshop)" },
     Row { id: "conv.smart_sharpen",
           identity: Identity::Params(P::Fields(&[
               ("radius_px", V::F(1.0)), ("amount", V::F(0.0)),
@@ -558,6 +572,11 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("seed", V::U(7)), ("amount", V::F(0.5))]),
           note: "EXCLUDED from identity: Generator. Its hash is coordinate+seed, \
                  which is exactly what the determinism property exists to pin" },
+    Row { id: "gen.add_noise",
+          identity: Identity::Params(P::Fields(&[("seed", V::U(7)), ("amount", V::F(0.0))])),
+          stress: P::Fields(&[("seed", V::U(7)), ("amount", V::F(0.5)), ("gaussian", V::U(1))]),
+          note: "amount 0 ⇒ rgb + n·0, clamped to [0, α] — a no-op on valid \
+                 premultiplied input" },
     Row { id: "gen.pattern",
           identity: Identity::Params(P::Fields(&[("scale", V::F(1.0)), ("opacity", V::F(0.0))])),
           stress: P::Fields(&[
@@ -651,6 +670,19 @@ const TABLE: &[Row] = &[
           stress: P::Fields(&[("radius", V::U(2)), ("threshold", V::F(0.1))]),
           note: "channels live in [0,1] and the substitution test is a STRICT \
                  `>`, so threshold 1 never fires" },
+
+    Row { id: "morph.dilate_r",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
+          stress: P::Fields(&[("radius", V::U(3)), ("round", V::U(1))]),
+          note: "radius 0 ⇒ the one-tap neighbourhood is the centre" },
+    Row { id: "morph.erode_r",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
+          stress: P::Fields(&[("radius", V::U(3))]),
+          note: "radius 0 ⇒ the one-tap neighbourhood is the centre" },
+    Row { id: "rank.median_r",
+          identity: Identity::Params(P::Fields(&[("radius", V::U(0))])),
+          stress: P::Fields(&[("radius", V::U(2))]),
+          note: "radius 0 ⇒ the median of one sample is the sample" },
 
     // ── resample (separable rational scale) ─────────────────────────────
     Row { id: "resample.nearest",

@@ -1,17 +1,17 @@
-// The browser lane's page entry: the bundle's REAL DuckDB boot (bootDuckDB,
-// which spawns the shipped eh worker from bin/ and instantiates the shipped
-// engine) plus the query guard and importer, exposed on `window.lane` for
-// test/duckdb-browser.spec.ts to drive through Playwright. Bundled by
+// The browser lane's page entry: the bundle's REAL engine boot (bootEngine,
+// the shipped data-js wasm from bin/ or the module host) with its query
+// store, the query guard and the importer, exposed on `window.lane` for
+// test/store-browser.spec.ts to drive through Playwright. Bundled by
 // test/browser-lane.ts with esbuild and served at /lane/entry.js, so
 // `binUrl()` (../bin/) resolves to the served bin/.
 import { bootEngine } from "../../src/engine";
-import { bootDuckDB, type DuckDBHandle } from "../../src/query/duckdb";
-import { loadIntoDuckDB } from "../../src/query/import";
+import { loadIntoStore } from "../../src/query/import";
 import { guardQuery } from "../../src/query/sql";
+import { storeHandle } from "../../src/query/store";
 
 (window as unknown as { lane: unknown }).lane = {
-  bootDuckDB,
   bootEngine,
-  guard: (_d: DuckDBHandle, sql: string) => guardQuery(sql),
-  loadIntoDuckDB,
+  guard: (sql: string) => guardQuery(sql),
+  loadIntoStore,
+  storeHandle,
 };

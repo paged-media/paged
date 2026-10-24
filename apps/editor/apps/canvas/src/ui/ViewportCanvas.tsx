@@ -37,6 +37,7 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 import {
+  CANVAS_POINTER,
   OverlayHost,
   pageToContentPoint,
   TEXT_TOOL_ID,
@@ -202,6 +203,7 @@ const WHEEL_LINE_PX = 16;
 export function ViewportCanvas(props: ViewportCanvasProps) {
   const keys = useEditorKeys();
   const scope = useEditorScope();
+  const pointerStore = scope.get(CANVAS_POINTER);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Set once we've transferred to the worker — guards against re-transfer (illegal). */
@@ -999,7 +1001,28 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     );
   };
 
+  // WP4.5 — publish where the pointer is (the Info panel's cursor X/Y and
+  // colour sample). Every move, whatever owns the drag.
+  const publishPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const [docX, docY] = viewportToDoc(
+      props.camera,
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+    );
+    const containing = findContainingPage(rects, props.pageIds, docX, docY);
+    pointerStore.set({
+      pageId: containing ? containing[0] : null,
+      pagePoint: containing
+        ? [docX - containing[1].x, docY - containing[1].y]
+        : null,
+      docPoint: [docX, docY],
+    });
+  };
+  const onPointerLeave = () => pointerStore.set(null);
+
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    publishPointer(e);
     // K-1 — while a content gesture owns the pointer, route moves to the
     // active context (content coords) and skip tool/hover logic.
     if (contentGestureRef.current) {
@@ -1608,6 +1631,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       }
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
+      onPointerLeave={onPointerLeave}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
       onWheel={onWheel}

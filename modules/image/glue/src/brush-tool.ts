@@ -167,6 +167,8 @@ export function makeBrushGesture(
       const machine = session.brushMachine();
       if (!machine || !e.pagePoint || !fit) return;
       const point = pageToImage(fit, e.pagePoint);
+      // An armed Curves eyedropper takes the click.
+      if (session.takeCurvesPick(point)) return;
 
       // ALT-CLICK SETS THE CLONE SOURCE — Photoshop's convention, and
       // the only interaction the sampling tools add. It is a SEPARATE

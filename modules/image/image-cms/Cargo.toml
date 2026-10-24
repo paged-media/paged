@@ -11,7 +11,7 @@ description = "paged.image color management (spec §10.1): the swappable CmsEngi
 workspace = true
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 thiserror = { workspace = true }
 # The engine's one CMS (ADR 466, PM-0014): both backends are adapters over
 # `paged_color::cms` — qcms 0.3 (cmyk + iccv4-enabled, the engine's exact

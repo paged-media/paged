@@ -1,6 +1,6 @@
 # ADR 1005 — A raster is read by `paged-raster`, and a TIFF through `tiff`
 
-- **Status:** Accepted 2026-10-24.
+- **Status:** Accepted 2026-10-24; amended 2026-10-24 (PSD/PSB through `paged-psd`).
 - **Scope:** no wire change (protocol unchanged). New crate `paged-raster`; `paged-renderer`
   (`pipeline/image_decode.rs`), `paged-gpu` (`vcpu.rs`, `vello_rs.rs`: the wasm32 raster-time
   decode), `paged-cli` (`place.rs`). The first part of the raster plan's codec matrix; the
@@ -54,6 +54,45 @@ the shrunk size. A Lab TIFF's profile is not carried on (its pixels arrive as sR
 - Orientation is reported, not applied (the renderer never applied it), and a CMYK TIFF without
   a profile does not yet use the document's CMYK working space.
 - The PDF export still embeds a TIFF as RGB pixels (its lazy path still uses `image`).
+
+## Amendment — 2026-10-24: a PSD or PSB is read through `paged-psd`
+
+The PSD reader of the raster plan moved into the engine (PM-0014, image ADR 466):
+`crates/paged-psd` and its pixel types `crates/paged-pixel`, by `git mv` from paged.image's
+`image-psd` and `image-core`, with their tests. `paged-raster` depends on it.
+
+**Decision.** `probe` of a PSD or PSB reads `paged_psd::summary`: the header, the image
+resources (ICC 1039, XMP 1060, IPTC 1028, resolution 1005, the whole resource section as the
+Photoshop resources) and the layer records, without copying a channel. `decode` returns the
+merged composite, the image Photoshop stores beside the layers, through the composite decode
+paged.image opens a flat PSD with: RGB and Grayscale (`composite_rgba8`) and CMYK
+(`composite_cmyk8`, straight ink), 8 and 16 bits (16 reduced to the high byte), RAW and RLE,
+straight alpha when the layer count's sign says the composite has transparency (the white
+matte undone). CMYK converts in `to_rgba8` with the file's embedded profile through the
+`ColourConvert`, the conversion a CMYK TIFF takes; without a profile, the naive formula. A
+Lab, indexed, bitmap, duotone, 32-bit or ZIP composite is refused by name
+(`Error::Unsupported`). The renderer decodes a PSD as it decodes a TIFF (`decode_raster`,
+shrunk to its 4096 px cap, the embedded profile carried on), so a placed PSD or PSB draws its
+composite instead of the frame fill and the `ImageDecodeFailed` diagnostic; a composite it
+cannot read keeps that outcome. paged-gpu's wasm32 raster-time decode and `paged-cli`'s
+`place` probe needed no change.
+
+**Layers.** `RasterInfo` gains `layer_count`: the layer records a PSD stores (in its layer
+info, or in the `Lr16` / `Lr32` block of a 16- or 32-bit document) and those of a layered
+TIFF's ImageSourceData (tag 37724; `paged_psd::image_source_data_records`). `None` marks a
+TIFF whose layer data is there but not readable: Photoshop writes it little-endian in a
+little-endian TIFF, which `paged-psd` does not read. The layers' pixels stay the image
+module's; the engine draws the composite (a TIFF's own image, a PSD's merged composite).
+
+**Consequences.**
+- The device fallback for a profile-less CMYK PSD truncates as the TIFF one does; paged.image's
+  ingest rounds, so the two differ by at most one level until the colour unification (WP1.3)
+  gives both one conversion. With a profile both use the embedded profile, through different
+  CMS backends (paged-color here, `image-cms` in the module).
+- `idml-export`'s image sizing keeps its own two-field PSD header read; switching it to the
+  probe would add `paged-raster`'s tree to a crate that has none of it.
+- `paged-psd` and `paged-pixel` stay leaf crates, checked by a `cargo tree` guard in
+  `core-ci.yml`.
 
 ## Note — 2026-10-24: the frame's intent ([ADR 1016](1016-one-cms-with-intents-and-bpc.md))
 

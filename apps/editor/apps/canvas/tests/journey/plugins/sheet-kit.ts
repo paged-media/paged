@@ -120,6 +120,47 @@ export async function elementScreenCenter(
   return at!;
 }
 
+/** An unrotated element's page bounds on screen, CSS px: its top-left
+ *  corner and how many CSS px one point is at the current zoom. */
+export async function elementScreenBox(
+  page: Page,
+  ref: ElementRef,
+): Promise<{
+  x: number;
+  y: number;
+  widthPt: number;
+  heightPt: number;
+  pxPerPt: number;
+}> {
+  const box = await page.evaluate(async (id) => {
+    let best: HTMLCanvasElement | null = null;
+    let bestArea = 0;
+    for (const cv of Array.from(document.querySelectorAll("canvas"))) {
+      const r = cv.getBoundingClientRect();
+      if (r.width * r.height > bestArea) {
+        bestArea = r.width * r.height;
+        best = cv;
+      }
+    }
+    const wrap = (best?.parentElement ?? best)!.getBoundingClientRect();
+    const c = (globalThis as unknown as CanvasHandle).__canvas;
+    const item = (await c.client.elementGeometry([id]))[0];
+    if (!item) return null;
+    const [top, left, bottom, right] = item.bounds;
+    const [a, b, cc, d, tx, ty] = item.itemTransform ?? [1, 0, 0, 1, 0, 0];
+    const cam = c.client.camera.read();
+    return {
+      x: wrap.left + (a * left + cc * top + tx) * cam.scale + cam.tx,
+      y: wrap.top + (b * left + d * top + ty) * cam.scale + cam.ty,
+      widthPt: right - left,
+      heightPt: bottom - top,
+      pxPerPt: cam.scale * Math.hypot(a, b),
+    };
+  }, ref);
+  expect(box, "the frame has on-screen geometry").not.toBeNull();
+  return box!;
+}
+
 /** Load a workbook through the workbook panel's picker (the K-5 door). */
 export async function importWorkbook(
   page: Page,

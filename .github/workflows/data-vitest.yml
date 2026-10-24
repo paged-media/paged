@@ -16,6 +16,9 @@ on:
     branches: [main]
     paths:
       - "modules/data/**"
+      # The engine crates the wasm is built from (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
+      - "engine/core/crates/paged-action/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -52,6 +55,9 @@ on:
   pull_request:
     paths:
       - "modules/data/**"
+      # The engine crates the wasm is built from (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
+      - "engine/core/crates/paged-action/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -136,10 +142,8 @@ jobs:
       # the job HERE, before any spec can skip.
       - name: real-engine artifact guard (fail, never skip)
         run: test -f packages/data-bundle/bin/data_js_bg.wasm
-      # The real query engine. DuckDB-WASM is vendored by this script (MIT,
-      # prebuilt, never compiled in-tree), which also stages the eh variant
-      # as the governed bin/duckdb-engine.wasm. REQUIRE_REAL_DUCKDB=1 below
-      # turns every "DuckDB not vendored" skip into a failure.
+      # The query store is inside that wasm (data-store, ADR 561): there is
+      # no second engine to fetch or stage.
       # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
       # which the real-engine specs boot.
       - name: engine wasm packages
@@ -148,12 +152,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      # after install: vendor-duckdb.sh bundles the DuckDB JS API with the
-      # installed apache-arrow (scripts/bundle-duckdb-api.mjs)
-      - name: vendor DuckDB-WASM (MIT prebuilt)
-        run: bash scripts/vendor-duckdb.sh
-      - name: real-DuckDB artifact guard (fail, never skip)
-        run: test -f packages/data-bundle/bin/duckdb-engine.wasm
       # ------------------------------------------------------------------
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
@@ -161,13 +159,13 @@ jobs:
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence
       # still ships: the JUnit steps below run under `!cancelled()`.
-      # The real-BROWSER DuckDB lane (test/duckdb-browser.spec.ts): the
-      # shipped eh worker + engine in headless Chrome under the editor's
-      # headers. The Node lane cannot see what only the browser worker does
-      # (the json_serialize_sql guard passed every Node spec and trapped on
-      # every refresh in the editor). The runner's preinstalled Chrome —
-      # no browser download, no apt.
-      - name: browser for the DuckDB browser lane (fail, never skip)
+      # The real-BROWSER lane (test/store-browser.spec.ts): the shipped
+      # engine wasm and its query store in headless Chrome under the editor's
+      # headers. The Node lane cannot see what only the browser does (the
+      # first query guard passed every Node spec and trapped on every refresh
+      # in the editor). The runner's preinstalled Chrome — no browser
+      # download, no apt.
+      - name: browser for the browser lane (fail, never skip)
         run: |
           CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)
           test -n "$CHROME"
@@ -177,9 +175,8 @@ jobs:
           # The spec-level half of the dual gate (engine-real.spec.ts,
           # wasm-fresh.spec.ts): under this env a missing artifact FAILS the
           # suite instead of letting the skipIf gate silently pass a vacuous
-          # run. REQUIRE_REAL_DUCKDB does the same for the DuckDB specs.
+          # run.
           REQUIRE_REAL_ENGINE: "1"
-          REQUIRE_REAL_DUCKDB: "1"
           REQUIRE_REAL_CORE: "1"
           REQUIRE_REAL_BROWSER: "1"
         run: |
@@ -190,7 +187,6 @@ jobs:
       - name: bun test:dom (panel components)
         env:
           REQUIRE_REAL_ENGINE: "1"
-          REQUIRE_REAL_DUCKDB: "1"
         run: bun run --filter './packages/data-bundle' test:dom
       # bun's reports, rewritten into the vitest shape the evidence has always
       # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.

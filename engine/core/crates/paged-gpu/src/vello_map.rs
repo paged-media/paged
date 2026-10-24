@@ -28,8 +28,8 @@
 //! are the types each renderer takes.
 
 use paged_compose::{
-    BlendMode as ComposeBlendMode, Color as ComposeColor, DisplayList, LineCap, LineJoin, Paint,
-    PathData, PathId, PathSegment, Transform,
+    BlendMode as ComposeBlendMode, Color as ComposeColor, DisplayList, FillRule, LineCap, LineJoin,
+    Paint, PathData, PathId, PathSegment, Transform,
 };
 
 #[cfg(feature = "vello-backend")]
@@ -73,6 +73,23 @@ pub(crate) fn path_to_bez(data: &PathData, transform: &Transform) -> kurbo::BezP
         }
     }
     p
+}
+
+/// The rule a fill or clip of `path_id` draws by (engine ADR 1006): the
+/// path's own, `NonZero` for a missing path. A stroke outline is filled
+/// `NonZero` whatever its source path says.
+pub(crate) fn path_fill(list: &DisplayList, path_id: PathId) -> peniko::Fill {
+    list.paths
+        .get(path_id)
+        .map_or(peniko::Fill::NonZero, |p| fill_of(p.fill_rule))
+}
+
+/// A display-list fill rule as both renderers take it.
+pub(crate) fn fill_of(rule: FillRule) -> peniko::Fill {
+    match rule {
+        FillRule::NonZero => peniko::Fill::NonZero,
+        FillRule::EvenOdd => peniko::Fill::EvenOdd,
+    }
 }
 
 /// A resolved paint: a solid colour or a gradient, in page space.
@@ -911,7 +928,7 @@ mod tests {
 
     fn list_with(segments: Vec<PathSegment>) -> (DisplayList, PathId) {
         let mut list = DisplayList::new();
-        let id = list.paths.push_anon(PathData { segments });
+        let id = list.paths.push_anon(PathData::new(segments));
         (list, id)
     }
 

@@ -94,21 +94,10 @@ function realCorpusRoot(): string[] {
 const CORPUS_FONTS = resolveCorpusSubdir("fonts");
 const CORPUS_ENVATO = resolveCorpusSubdir("idml");
 
-// paged.data's DuckDB-WASM query engine. The package ships it in its own
-// `bin/` (duckdb-engine.wasm, duckdb-browser-eh.worker.js, duckdb-browser.mjs —
-// staged by plugin-data's scripts/vendor-duckdb.sh), next to the data-js engine,
-// and the bundle loads every file relative to its own module (`../bin/<file>`).
-//
-//   DATA_BIN     the installed package's bin/ — the source of truth, served by
-//                `duckdbDistRoute` in dev and copied into `dist/bin/` by
-//                `dataBundleBin` in a build.
-//   DUCKDB_DIST  the in-repo paged.data module's vendor/duckdb-wasm/dist
-//                (`<repo root>/modules/data`) — dev-only FALLBACK for a package
-//                that predates the shipped engine (@paged-media/data <=
-//                0.1.0-canary.9 imported the dist from vendor/ and shipped no
-//                DuckDB). vendor/ is staged locally by the module's
-//                scripts/vendor-duckdb.sh; where it is absent the package is
-//                the only source.
+// paged.data's engine (data_js.js + data_js_bg.wasm, the query store inside
+// it) ships in the package's own `bin/`, and the bundle loads it relative to
+// its own module (`../bin/<file>`). DATA_BIN is that installed `bin/`, copied
+// into `dist/bin/` by `dataBundleBin` in a build.
 const DATA_BIN = resolve(
   __dirname,
   "node_modules",
@@ -116,19 +105,6 @@ const DATA_BIN = resolve(
   "data",
   "bin",
 );
-const DUCKDB_DIST = (() => {
-  const candidates = [resolve(MONOREPO_ROOT, "modules", "data")];
-  for (const dir of candidates) {
-    try {
-      if (statSync(dir).isDirectory())
-        return resolve(dir, "vendor", "duckdb-wasm", "dist");
-    } catch {
-      // try next candidate
-    }
-  }
-  return resolve(candidates[0], "vendor", "duckdb-wasm", "dist");
-})();
-
 // SharedArrayBuffer requires cross-origin isolation. Set the two
 // COOP / COEP headers Vite's dev server needs so the worker can
 // allocate a SAB for the camera transform. Production hosts must
@@ -578,146 +554,26 @@ function corpusIdmlRoute(): import("vite").Plugin {
 }
 
 /**
- * Serve paged.data's DuckDB-WASM files as RAW assets with the correct MIME
- * type, from the installed package's `bin/` first and the sibling vendor dist
- * second (see DATA_BIN / DUCKDB_DIST). paged.data boots its query engine by
- * spawning a Worker from `duckdb-browser-*.worker.js`, which then
- * nested-fetches the `duckdb-*.wasm` module (and, for the old vendor coi
- * variant, a `*.pthread.worker.js`). Vite's dev server
- * resolves the worker's top-level URL through its module graph, but the
- * worker's OWN nested `fetch`/`importScripts` for the pthread script + the
- * wasm fall through to the SPA fallback → it hands back `index.html`, and the
- * worker chokes on "Unexpected token '<'" (it expected JS/wasm). This
- * middleware intercepts any request whose path ends in one of the vendored
- * DuckDB filenames and streams the raw bytes with the right Content-Type,
- * BEFORE the SPA fallback runs. It stays graceful when neither directory has
- * the file (the file isn't there → `next()`, the bundle reports
- * `duckdb-missing` honestly). Flat-name guard mirrors `fontsRoute`.
- *
- * The worker is served same-origin, so it inherits the COOP/COEP cross-origin
- * isolation the `crossOriginIsolation` plugin sets — the SharedArrayBuffer
- * the DuckDB pthread runtime needs is available.
- */
-// The VENDOR dist's browser API entry (`duckdb-browser.mjs`, the module an old
-// bundle dynamically imports via `@vite-ignore`) carries ONE bare specifier:
-// `import { … } from "apache-arrow"`. Served raw (the `@vite-ignore` dist is
-// outside Vite's module graph), the browser can't resolve a bare specifier →
-// it fetches `/apache-arrow`, hits the SPA fallback, gets `index.html`, and
-// the module load fails. We rewrite that one specifier to a virtual ESM module
-// id (below) that Vite DOES transform — `export * from "apache-arrow"` resolved
-// through the editor's `apache-arrow` alias + dep-optimizer. Same-origin, no
-// CDN, no bare specifier left for the browser. The package's own
-// `bin/duckdb-browser.mjs` has apache-arrow inlined and is served untouched.
-const DUCKDB_ARROW_VIRTUAL = "/@id/__x00__virtual:duckdb-apache-arrow";
-
-function duckdbDistRoute(): import("vite").Plugin {
-  // Match the vendored DuckDB dist artifacts the worker boot needs: the
-  // browser worker bootstraps, the pthread worker, and the wasm modules.
-  // `.map` sourcemaps are matched too so the worker's lazy sourcemap fetch
-  // doesn't trip the SPA fallback either.
-  const isDuckDbAsset = (name: string): boolean =>
-    /^duckdb-(browser|coi|eh|mvp|engine)[\w.-]*\.(js|cjs|mjs|wasm)(\.map)?$/.test(
-      name,
-    );
-  // The API-entry modules that carry the bare `apache-arrow` import (NOT the
-  // worker IIFEs, which are self-contained). These get a body rewrite.
-  const needsArrowRewrite = (name: string): boolean =>
-    /^duckdb-browser\.(c?js|mjs)$/.test(name);
-  const mimeFor = (name: string): string => {
-    if (name.endsWith(".wasm")) return "application/wasm";
-    if (name.endsWith(".map") || name.endsWith(".json"))
-      return "application/json";
-    // .js / .cjs / .mjs — a worker script must be served as JS (a `<`-leading
-    // HTML body is the exact failure this route fixes).
-    return "text/javascript";
-  };
-  const VIRTUAL_ID = "virtual:duckdb-apache-arrow";
-  const RESOLVED_VIRTUAL_ID = "\0" + VIRTUAL_ID;
-  return {
-    name: "static-suffix:duckdb-wasm-dist",
-    // Virtual ESM the rewritten dist imports instead of the bare specifier —
-    // Vite transforms its graph (apache-arrow via the editor alias).
-    resolveId(id) {
-      if (id === VIRTUAL_ID) return RESOLVED_VIRTUAL_ID;
-      return null;
-    },
-    load(id) {
-      if (id === RESOLVED_VIRTUAL_ID) return `export * from "apache-arrow";`;
-      return null;
-    },
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url) return next();
-        const pathOnly = decodeURIComponent(req.url.split("?")[0]);
-        const base = pathOnly.split("/").pop() ?? "";
-        if (!isDuckDbAsset(base)) return next();
-        // Package bin/ first, the vendor dist second. The basename is a
-        // flat, regex-checked name, so neither lookup can escape its dir.
-        let abs: string | null = null;
-        let fromVendor = false;
-        for (const dir of [DATA_BIN, DUCKDB_DIST]) {
-          const candidate = resolve(dir, base);
-          if (!candidate.startsWith(dir)) continue;
-          try {
-            if (statSync(candidate).isFile()) {
-              abs = candidate;
-              fromVendor = dir === DUCKDB_DIST;
-              break;
-            }
-          } catch {
-            // not in this dir
-          }
-        }
-        if (!abs) return next();
-        res.setHeader("Content-Type", mimeFor(base));
-        res.setHeader("Cache-Control", "no-cache");
-        // Same-origin worker scripts must be embeddable under COEP.
-        res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-        if (fromVendor && needsArrowRewrite(base)) {
-          // Read + rewrite the single bare `apache-arrow` specifier to the
-          // virtual module URL. Small files (~30 KiB); read fully, not streamed.
-          const src = readFileSync(abs, "utf8");
-          const rewritten = src.replace(
-            /(["'])apache-arrow\1/g,
-            `"${DUCKDB_ARROW_VIRTUAL}"`,
-          );
-          return res.end(rewritten);
-        }
-        createReadStream(abs).pipe(res);
-      });
-    },
-  };
-}
-
-/**
  * BUILD output: copy the installed @paged-media/data package's `bin/` into
- * `dist/bin/`. The bundle loads its engines with runtime-relative URLs
- * (`new URL("../bin/<file>", import.meta.url)` — data_js.js + data_js_bg.wasm,
- * and DuckDB's duckdb-browser.mjs, duckdb-browser-eh.worker.js,
- * duckdb-engine.wasm, and the json/parquet extensions in duckdb-ext/<engine>/
- * <platform>/). Vite cannot see those (they are computed, not literal), so it
- * bundles the code into `dist/assets/*.js` and leaves the files behind;
- * from `assets/`, `../bin/` is `dist/bin/`. Without this a built editor has no
- * data engine and no DuckDB at all — the dev route above only covers `vite dev`.
+ * `dist/bin/`. The bundle loads its engine with runtime-relative URLs
+ * (`new URL("../bin/<file>", import.meta.url)` — data_js.js +
+ * data_js_bg.wasm). Vite cannot see those (they are computed, not literal),
+ * so it bundles the code into `dist/assets/*.js` and leaves the files behind;
+ * from `assets/`, `../bin/` is `dist/bin/`. Without this a built editor has
+ * no data engine at all.
  *
- * Only the package's own files are copied (no vendor/ fallback in a build), so
- * a build is exactly as complete as the published package. Missing DuckDB
- * files are a warning, not an error: the plugin degrades to "duckdb-missing",
- * and REQUIRE_REAL_DUCKDB=1 journeys turn that into a failure.
+ * Only the package's own files are copied, so a build is exactly as complete
+ * as the published package. A missing engine is a warning, not an error: the
+ * plugin degrades to "engine-missing", and REQUIRE_REAL_ENGINE=1 journeys
+ * turn that into a failure.
  */
 function dataBundleBin(): import("vite").Plugin {
-  const DUCKDB_FILES = [
-    "duckdb-engine.wasm",
-    "duckdb-browser-eh.worker.js",
-    "duckdb-browser.mjs",
-  ];
   return {
     name: "paged-data-bundle-bin",
     apply: "build",
     generateBundle() {
       let names: string[] = [];
       try {
-        // Recursive: DuckDB's extensions live in bin/duckdb-ext/<engine>/<platform>/.
         names = (readdirSync(DATA_BIN, { recursive: true }) as string[])
           .map((n) => n.split(sep).join("/"))
           .filter((n) => !n.endsWith(".d.ts"));
@@ -736,20 +592,10 @@ function dataBundleBin(): import("vite").Plugin {
           source: readFileSync(abs),
         });
       }
-      const missing = DUCKDB_FILES.filter((f) => !names.includes(f));
-      for (const ext of ["json", "parquet"])
-        if (
-          !names.some(
-            (n) =>
-              n.startsWith("duckdb-ext/") &&
-              n.endsWith(`/${ext}.duckdb_extension.wasm`),
-          )
-        )
-          missing.push(`duckdb-ext/…/${ext}.duckdb_extension.wasm`);
-      if (missing.length)
+      if (!names.includes("data_js_bg.wasm"))
         this.warn(
-          `@paged-media/data ships no ${missing.join(", ")} — DuckDB will report duckdb-missing in this build ` +
-            "(build it: modules/data/scripts/build-wasm.sh, then scripts/vendor-duckdb.sh)",
+          "@paged-media/data ships no data_js_bg.wasm — paged.data will report engine-missing in this build " +
+            "(build it: modules/data/scripts/build-wasm.sh)",
         );
     },
   };
@@ -809,7 +655,6 @@ export default defineConfig({
     aiProxyDev(),
     fontsRoute(),
     corpusIdmlRoute(),
-    duckdbDistRoute(),
     dataBundleBin(),
     pagedModules(),
   ],
@@ -834,7 +679,7 @@ export default defineConfig({
         ...realCorpusRoot(),
         // The workspace packages outside apps/editor (`<repo root>/modules`,
         // `platform/extensions`, `engine/core/packages`): their wasm
-        // artifacts (canvas-wasm, sheet-js, image-js, DuckDB) are served via
+        // artifacts (canvas-wasm, sheet-js, image-js, data-js) are served via
         // /@fs/ — without this the engine boot 403s (the K-1
         // live-validation e2e surfaced it).
         MONOREPO_ROOT,
@@ -847,15 +692,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      // The vendored DuckDB-WASM dist (paged.data's query engine, loaded
-      // from plugin-data/vendor via a @vite-ignore dynamic import) imports
-      // "apache-arrow" as a bare specifier. Vite resolves that relative to
-      // the dist's own location (plugin-data/vendor), where it isn't
-      // installed — so pin it to the editor's copy. Without this the bundle
-      // reports duckdb-missing and data binding can't drive.
-      "apache-arrow": resolve(__dirname, "node_modules/apache-arrow"),
-    },
     // One React only: a plugin bundle is a workspace package, linked to
     // its source directory, so its imports resolve from ITS realpath (its
     // own node_modules). Should that ever resolve another React than the
@@ -872,14 +708,6 @@ export default defineConfig({
     // cannot read; plugin-sdk: a top-level await below the optimizer's
     // target; data: a runtime-relative `../bin/` import that 404s from
     // .vite/deps). The linked packages have none of those problems.
-    // Pre-bundle apache-arrow at server startup. The DuckDB-WASM API entry's
-    // bare `apache-arrow` import is rewritten to a virtual module (see
-    // duckdbDistRoute) that pulls in apache-arrow; if Vite first discovers it
-    // mid-test (when the data panel boots DuckDB), the dep-optimizer kicks off
-    // a server-wide reload that races the in-flight worker boot and the source
-    // never reaches "ready" on a COLD first run. Optimizing it up front removes
-    // that reload — the boot is then deterministic on both lanes.
-    include: ["apache-arrow"],
   },
   worker: {
     format: "es",

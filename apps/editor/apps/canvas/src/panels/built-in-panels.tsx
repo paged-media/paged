@@ -58,6 +58,7 @@ import { CrossReferencesPanel } from "./cross-references-panel";
 import { HyperlinksPanel } from "./hyperlinks-panel";
 import { IndexPanel } from "./index-panel";
 import { InfoPanel } from "./info-panel";
+import { ZoomNavigatorPanel } from "./zoom-navigator-panel";
 import { LinksPanel } from "./links-panel";
 import { EffectsPanel } from "./effects-panel";
 import { FrameFittingPanel } from "./frame-fitting-panel";
@@ -102,6 +103,7 @@ import { ScriptEditorPanel } from "./script-editor";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
+import { DataPanel } from "./data-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -195,6 +197,7 @@ const M = defineMessages("app.builtInPanels", {
   effects: "Effects",
   layers: "Layers",
   info: "Info",
+  navigator: "Navigator",
   attributes: "Attributes",
   properties: "Properties",
   aiAssistant: "AI Assistant",
@@ -205,6 +208,7 @@ const M = defineMessages("app.builtInPanels", {
   keyboardShortcuts: "Keyboard shortcuts",
   problems: "Problems",
   journal: "Journal",
+  data: "Data",
   library: "Library",
   table: "Table",
   tabs: "Tabs",
@@ -1020,6 +1024,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
     defaultGroup: "inspector",
   },
   {
+    // WP4.5 — the zoom proxy (a view of the page with the view rectangle;
+    // drag to pan, zoom slider / field / buttons). `paged.pages` is the
+    // page list, which this repository called "navigator" before.
+    id: "paged.navigator",
+    get title() {
+      return t(M.navigator);
+    },
+    component: ZoomNavigatorPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
     // SDK Phase 5 (v1 sweep) — Attributes editor. v1 surface
     // is the Nonprinting toggle. Per `panel-catalog-and-sdk-
     // extension.md` §6 Tier 5.
@@ -1135,6 +1151,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.journal);
     },
     component: JournalPanel,
+    defaultDock: "bottom",
+    defaultGroup: "console",
+  },
+  {
+    // Editor ADR 291 — the document's data as a grid (data@1): tabs per
+    // table, sort, filter, group, the fields bindings read; a first-run
+    // guide while there is none.
+    id: "paged.data",
+    get title() {
+      return t(M.data);
+    },
+    component: DataPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
   },

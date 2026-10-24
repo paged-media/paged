@@ -66,15 +66,16 @@ export const DATA_CMD = "media.paged.data.command";
  *  README grant row). */
 export const CSV_FIXTURE = pathResolve(HERE, "../../assets/annual-orders.csv");
 
-/** The paged.data DSL's own per-function registry (the in-repo module at
- *  `<repo root>/modules/data`) — read at build time by the
- *  expression-language page. */
+/** The paged.data DSL's own per-function registry (in the engine crate
+ *  `<repo root>/engine/core/crates/paged-data-core`, PM-0015) — read at
+ *  build time by the expression-language page. */
 export const FUNCTIONS_REGISTRY = pathResolve(
   HERE,
   "../../../../../../../..",
-  "modules",
-  "data",
-  "registry",
+  "engine",
+  "core",
+  "crates",
+  "paged-data-core",
   "functions",
 );
 
@@ -86,7 +87,7 @@ export const units = (k: number): number => 37 * k - 12;
  *  — ids never cross the CHAPTER boundary (hard rule 1); within one
  *  chapter run they are the same live document. */
 export const chapterData: {
-  /** DuckDB reached "ready" and the CSV registered. */
+  /** The store reached "ready" and the CSV registered. */
   ready: boolean;
   /** The PAGE that reached ready. This module lives in the test worker,
    *  which Playwright reuses across tests: the catalog is split into two
@@ -127,7 +128,7 @@ let derivedCsv: string | null = null;
  * The order book with `order_date` WITHHELD — a run-time derivation of
  * the granted asset, never a second asset.
  *
- * WHY (a product finding this chapter surfaced, 2026-08-27): DuckDB's
+ * WHY (a product finding this chapter surfaced, 2026-08-27): the store's
  * CSV sniffer types the ISO order_date column as DATE, its Arrow
  * column materialises as epoch-MILLISECONDS, and the bundle's
  * Arrow→RecordSet seam passes that number straight through as
@@ -163,7 +164,7 @@ export function csvWithoutDates(): string {
     return cells.join(",");
   });
   const dir = mkdtempSync(join(tmpdir(), "annual-orders-"));
-  // SAME basename on purpose: the sources panel derives the DuckDB
+  // SAME basename on purpose: the sources panel derives the the store
   // table name from the file name, and the chapter's reads look for
   // `annual_orders`.
   derivedCsv = join(dir, "annual-orders.csv");
@@ -357,7 +358,7 @@ export async function invokeFor<T>(
 /**
  * Register the order book: the importData command (which opens the
  * sources panel), the panel's host file-picker door, and the honest
- * wait for the vendored DuckDB-WASM engine to reach "ready". Returns
+ * wait for the data engine to reach "ready". Returns
  * the final engine status; only "ready" means a query can run.
  */
 export async function importOrders(
@@ -406,7 +407,7 @@ export async function importOrders(
   } else {
     notes.push(
       `the CSV source never reached "ready" (engine status "${got}") — the ` +
-        "vendored DuckDB-WASM dist is absent or this context is not " +
+        "data engine wasm is absent or this context is not " +
         "cross-origin isolated. No query ran and this chapter's data pages " +
         "claim no data rows.",
     );
@@ -592,7 +593,7 @@ export interface DslFamily {
 
 /**
  * The 42-function roster, read from the plugin's own per-function
- * registry (`registry/functions/*.yaml` — the same files data-core's
+ * registry (`paged-data-core/functions/*.yaml` — the same files data-core's
  * build.rs consumes: no row → no dispatch → uncallable). A narrow
  * line reader, not a YAML parser: rows are `- id:` blocks and each
  * carries one `name:` line. Null when the registry is absent.

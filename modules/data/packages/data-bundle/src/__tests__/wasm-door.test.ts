@@ -1,13 +1,12 @@
 // The module door (plugin-sdk ADR 326) and bootEngine's use of it: a host
 // without a module backend answers null (load bin/), as does a refusing door
 // (the boot catches it); a host's copy that fails to load falls back to the
-// glue's own; DuckDB's pre-fetch names why a host copy is unusable.
-import { afterEach, describe, expect, it, vi } from "bun:test";
+// glue's own.
+import { describe, expect, it, vi } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import { hostWasm } from "../bin-url";
 import { initEngineGlue } from "../engine";
-import { preflightHostedWasm } from "../query/duckdb";
 
 const SRI = "sha384-" + "A".repeat(64);
 
@@ -24,18 +23,16 @@ describe("hostWasm", () => {
       url: `https://modules.example/${name}.wasm`,
       integrity: SRI,
     }));
-    expect(await hostWasm(host(true, { resolve }))("duckdb-engine")).toEqual({
-      url: "https://modules.example/duckdb-engine.wasm",
+    expect(await hostWasm(host(true, { resolve }))("data-engine")).toEqual({
+      url: "https://modules.example/data-engine.wasm",
       integrity: SRI,
     });
-    expect(resolve).toHaveBeenCalledWith("duckdb-engine");
+    expect(resolve).toHaveBeenCalledWith("data-engine");
   });
 
   it("is null on a host without a module backend, and the door is not called", async () => {
     const resolve = vi.fn();
-    expect(
-      await hostWasm(host(false, { resolve }))("duckdb-engine"),
-    ).toBeNull();
+    expect(await hostWasm(host(false, { resolve }))("data-engine")).toBeNull();
     expect(resolve).not.toHaveBeenCalled();
   });
 });
@@ -106,41 +103,5 @@ describe("initEngineGlue (bootEngine through the door)", () => {
     await run(init, async () => null);
     await run(init, async () => Promise.reject(new Error("undeclared")));
     expect(init.mock.calls).toEqual([[], [], []]);
-  });
-});
-
-describe("preflightHostedWasm (DuckDB's pre-fetch)", () => {
-  afterEach(() => unstubAllGlobals());
-
-  it("passes a module that is there, fetched with its integrity", async () => {
-    const fetchMock = vi.fn(async () => new Response("wasm"));
-    stubGlobal("fetch", fetchMock);
-    expect(
-      await preflightHostedWasm("https://m.example/d.wasm", SRI),
-    ).toBeNull();
-    expect(fetchMock).toHaveBeenCalledWith("https://m.example/d.wasm", {
-      integrity: SRI,
-    });
-    expect(
-      await preflightHostedWasm("https://m.example/d.wasm", null),
-    ).toBeNull();
-    expect(fetchMock).toHaveBeenLastCalledWith("https://m.example/d.wasm");
-  });
-
-  it("names why a module is not usable: a status, or a refused fetch", async () => {
-    stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("", { status: 404 })),
-    );
-    expect(await preflightHostedWasm("https://m.example/d.wasm", null)).toBe(
-      "answered HTTP 404",
-    );
-    stubGlobal(
-      "fetch",
-      vi.fn(async () => Promise.reject(new TypeError("integrity mismatch"))),
-    );
-    expect(await preflightHostedWasm("https://m.example/d.wasm", SRI)).toMatch(
-      /with its integrity \(integrity mismatch\)/,
-    );
   });
 });

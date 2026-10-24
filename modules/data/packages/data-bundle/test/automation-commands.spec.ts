@@ -21,7 +21,7 @@
 // binding kind, as the Bindings panel defines it) and planBatch (the units
 // of a per-record or per-group batch). The UNIT layer: the real bundle on
 // the SDK's in-process host over the recording fake editor, with the real
-// data-js engine and a real DuckDB.
+// data-js engine with its query store.
 
 import {
   afterEach,

@@ -48,7 +48,9 @@ pub use resource_provider::{
 };
 
 #[cfg(feature = "cpu")]
-pub use pipeline::{render, render_built_page, render_document, separate_built_page};
+pub use pipeline::{
+    render, render_built_page, render_built_page_region, render_document, separate_built_page,
+};
 
 // Prepress: the CPU rasterizer's ink separation. Re-exported so the
 // canvas layer reads coverage without depending on `paged-gpu`

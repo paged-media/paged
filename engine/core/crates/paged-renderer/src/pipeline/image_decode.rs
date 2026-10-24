@@ -19,9 +19,10 @@
 //! Raster / vector image decoding: format sniffing (JPEG, SVG, EPS),
 //! DCT-scaled JPEG decode for oversized rasters, SVG rasterisation,
 //! and lazy dimension peeking. RGBA conversion lives in
-//! [`super::image_convert`]. A TIFF decodes through `paged-raster`, the
-//! same call paged-gpu makes at raster time on wasm32, so a CMYK or Lab
-//! TIFF converts through paged-color with its embedded profile.
+//! [`super::image_convert`]. A TIFF and a PSD/PSB decode through
+//! `paged-raster`, the same call paged-gpu makes at raster time on wasm32,
+//! so a CMYK or Lab TIFF and a CMYK PSD convert through paged-color with
+//! their embedded profile. A PSD/PSB draws its merged composite.
 
 use super::*;
 
@@ -188,8 +189,8 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
         let h = (src_h * k / 8).max(1);
         return Some((w, h));
     }
-    // A TIFF reports the size its capped decode will have.
-    if paged_raster::is_tiff(bytes) {
+    // A TIFF or PSD reports the size its capped decode will have.
+    if reads_through_raster(bytes) {
         if let Ok(info) = paged_raster::probe(bytes) {
             return Some(paged_raster::shrunk_dimensions(
                 info.width,
@@ -252,8 +253,8 @@ pub(super) fn decode_image_bytes_with(
             }
         }
     }
-    if paged_raster::is_tiff(bytes) {
-        if let Some(d) = decode_tiff(bytes, max_px, rendering) {
+    if reads_through_raster(bytes) {
+        if let Some(d) = decode_raster(bytes, max_px, rendering) {
             return Some(d);
         }
     }
@@ -270,11 +271,22 @@ pub(super) fn decode_image_bytes_with(
     })
 }
 
-/// A TIFF through `paged-raster`, shrunk to `max_px` and converted with
-/// paged-color with `rendering`. `None` lets the caller try the `image`
-/// crate, the decoder TIFFs used before.
+/// The formats `paged-raster` reads itself rather than through `image`:
+/// TIFF, and PSD/PSB (whose merged composite it decodes through
+/// paged-psd; `image` reads no PSD).
+fn reads_through_raster(bytes: &[u8]) -> bool {
+    matches!(
+        paged_raster::sniff(bytes),
+        Some(paged_raster::Format::Tiff | paged_raster::Format::Psd)
+    )
+}
+
+/// A TIFF or PSD/PSB through `paged-raster`, shrunk to `max_px` and
+/// converted with paged-color with `rendering`. `None` lets the caller try the `image`
+/// crate, the decoder TIFFs used before (it reads no PSD, so a PSD it
+/// cannot decode stays undecoded: a Lab, indexed or ZIP composite).
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn decode_tiff(
+fn decode_raster(
     bytes: &[u8],
     max_px: u32,
     rendering: paged_color::cms::Rendering,
@@ -288,7 +300,7 @@ fn decode_tiff(
     ) {
         Ok(img) => img,
         Err(err) => {
-            tracing::warn!(error = %err, "TIFF decode failed; trying the image crate");
+            tracing::warn!(error = %err, "raster decode failed; trying the image crate");
             return None;
         }
     };
@@ -298,16 +310,16 @@ fn decode_tiff(
         height: rgba.height,
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba.data),
-        icc: tiff_icc(&img.info),
+        icc: raster_icc(&img.info),
         rendering: None,
     })
 }
 
-/// The profile a decoded TIFF carries on: the embedded one, except a Lab
-/// image's, whose pixels arrive as sRGB (the PDF export tags an RGB
+/// The profile a decoded TIFF or PSD carries on: the embedded one, except
+/// a Lab image's, whose pixels arrive as sRGB (the PDF export tags an RGB
 /// raster with any three-channel profile it is given; a CMYK profile it
 /// leaves off the converted pixels, as it does a CMYK JPEG's).
-fn tiff_icc(info: &paged_raster::RasterInfo) -> Option<bytes::Bytes> {
+fn raster_icc(info: &paged_raster::RasterInfo) -> Option<bytes::Bytes> {
     if info.color_model == paged_raster::ColorModel::Lab {
         return None;
     }
@@ -316,13 +328,13 @@ fn tiff_icc(info: &paged_raster::RasterInfo) -> Option<bytes::Bytes> {
 
 /// Extract an embedded ICC profile from JPEG (APP2 `ICC_PROFILE`
 /// segments, reassembled in chunk order), PNG (`iCCP` chunk,
-/// zlib-inflated) or TIFF (tag 34675; not for a Lab TIFF, see
-/// [`tiff_icc`]). Header-only scans — no pixel decode. The PDF
+/// zlib-inflated), TIFF (tag 34675) or PSD (resource 1039); not for a Lab
+/// image, see [`raster_icc`]. Header-only scans — no pixel decode. The PDF
 /// exporter tags the image's /ColorSpace with this; the rasterizer
 /// keeps using its own decode-time conversion.
 pub(super) fn extract_icc(bytes: &[u8]) -> Option<bytes::Bytes> {
-    if paged_raster::is_tiff(bytes) {
-        return tiff_icc(&paged_raster::probe(bytes).ok()?);
+    if reads_through_raster(bytes) {
+        return raster_icc(&paged_raster::probe(bytes).ok()?);
     }
     paged_raster::extract_icc(bytes).map(bytes::Bytes::from)
 }

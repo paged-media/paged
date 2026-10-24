@@ -4,14 +4,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "image-core",
     "image-kernels",
     "image-gpu",
     "image-pipeline",
     "image-graph",
     "image-cms",
     "image-codecs",
-    "image-psd",
     "image-js",
     "image-conformance",
 ]
@@ -31,6 +29,12 @@ needless_pass_by_value = "allow"
 too_many_arguments = "allow"
 
 [workspace.dependencies]
+# The pixel types and the PSD reader live in the engine (ADR 466, PM-0014;
+# moved in WP1.2 with their history). The module keeps their old names
+# through `package` aliases, so `use image_core::…` / `use image_psd::…`
+# compile unchanged until a mechanical rename.
+image-core = { path = "../../engine/core/crates/paged-pixel", package = "paged-pixel" }
+image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"

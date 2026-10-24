@@ -111,6 +111,56 @@ export {
 export { peakedWidthProfile } from "./width";
 // Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
 export { interpolateAnchors, mixRgb } from "./blend";
+// WP6.6 — blend STRUCTURE matching: keys with different anchor or contour
+// counts are brought to one structure without changing either shape, and
+// gradient ramps are resampled to shared stop locations.
+export {
+  subdivideRun,
+  reverseRun,
+  alignClosedRun,
+  collapsedRun,
+  matchContourSets,
+  rampColorAt,
+  solidRamp,
+  matchRamps,
+  interpolateRamps,
+  type ContourSet,
+  type MatchResult,
+  type RampStop,
+} from "./blend-match";
+// WP6.5 — colour harmony: HSB wheel, Lab distance, the harmony rules, the
+// Color Guide variations, deterministic Lab k-means, reduce / map /
+// recolour (Recolor Artwork's pure half).
+export {
+  wrapHue,
+  hueDelta,
+  rgbToHsb,
+  hsbToRgb,
+  rgbToLab,
+  labToRgb,
+  deltaE,
+  sameRgb,
+  HARMONY_RULES,
+  harmonyOf,
+  rotateHues,
+  wheelPoint,
+  wheelColor,
+  wheelDragDelta,
+  VARIATION_KINDS,
+  variationsOf,
+  kMeansLab,
+  reduceColors,
+  nearestColorIndex,
+  NEUTRAL_SATURATION,
+  isNeutral,
+  recolorToHarmony,
+  type Hsb,
+  type Lab,
+  type HarmonyRule,
+  type VariationKind,
+  type WeightedColor,
+  type LabClusters,
+} from "./color-harmony";
 // Wave 2 — the lasso-select region test.
 export {
   pointInPolygon,
@@ -214,3 +264,60 @@ export {
   SAME_SHAPE_SHIFT_LIMIT,
   type SameShapeOptions,
 } from "./shape-match";
+// WP6.1 part 2 — locations on a contour (the Path Eraser, the Join tool
+// and the Shaper share them), the corner-aware Simplify fit behind the
+// live preview, the Reshape falloff, Star / Flare geometry and the
+// Shaper's recogniser.
+export {
+  locatedSamples,
+  locationScalar,
+  locationAlongSamples,
+  pointAtLocation,
+  segmentCubic,
+  segmentCount,
+  subCubic,
+  subRun,
+  polylineDistance,
+  polylineIntersections,
+  polylineLength,
+  type PathLocation,
+  type LocatedSample,
+  type PolylineCrossing,
+} from "./path-locate";
+export {
+  simplifyAnchorTable,
+  simplifyContour,
+  interiorAngleAt,
+  fitCubics,
+  type SimplifyFitOptions,
+} from "./simplify-fit";
+export {
+  planPathErase,
+  planJoinScrub,
+  ERASE_MIN_PIECE_PT,
+  type ErasePlan,
+  type JoinCandidate,
+  type JoinPlan,
+} from "./path-erase";
+export { reshapeTable, reshapeWeight, pathDistancesFrom } from "./reshape";
+export {
+  starPath,
+  regularPolygonPath,
+  flareParts,
+  STAR_MIN_POINTS,
+  STAR_MAX_POINTS,
+  FLARE_MAX_RAYS,
+  FLARE_MAX_RINGS,
+  type StarSpec,
+  type FlareSpec,
+  type FlareParts,
+} from "./star";
+export {
+  recogniseShape,
+  SCRIBBLE_TURN_DEG,
+  SCRIBBLE_MIN_REVERSALS,
+  LINE_SNAP_DEG,
+  type ShaperKind,
+  type ShaperRecognition,
+  type ShaperOptions,
+} from "./shaper";

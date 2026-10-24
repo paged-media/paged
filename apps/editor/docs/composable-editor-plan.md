@@ -991,7 +991,7 @@ id, method, args }`, answered by `paged:reply`; plus `paged:event`. `ArrayBuffer
      editor's worker resolves the wasm from that package (as `apps/cli` already does through
      `resolveCanvasWasm`), with the `assetBase` override for hosts that move files.
   2. Wasm and workers ship as files in `dist/assets/`, resolved via `assetBase` (E1 step 7).
-     Module wasm stays hosted where ADR 220 says. The `paged.data` bundle (DuckDB) is
+     Module wasm stays hosted where ADR 220 says. The `paged.data` bundle is
      optional: excluded unless the profile names it, and fetched from the module host.
   3. Exports: `.` (`createEditor`, types), `./iframe` (`connectEditor`), `./presets` (preset
      data for host-side tooling), `./feature-ids.json`, `./style.css` only if E1 cannot scope
@@ -1396,7 +1396,7 @@ that those records keep their numbers, cited with their component ("core ADR 205
 | A permission gap: a write path that bypasses all three doors          | a filler can change what the template forbids  | exhaustive classifier; a test per wire `Mutation` kind in a filler session; server-side `template check` as the backstop     |
 | Text-path enforcement needs story→frame resolution on every keystroke | typing latency                                 | cache the story→field map in `PolicyIndex`; measure with the existing perf lane before and after                             |
 | Constraint checks that need layout (overset, shrink)                  | slow sets, layout re-entrancy                  | run after apply inside the batch; `shrink` bounded in steps; benchmark on long stories                                       |
-| Package size: bundling every module                                   | slow first load for embedders                  | profile-driven bundle loading (ADR 222), DuckDB excluded by default, a size budget in the release checks                     |
+| Package size: bundling every module                                   | slow first load for embedders                  | profile-driven bundle loading (ADR 222), paged.data excluded by default, a size budget in the release checks                 |
 | Surface ids become a public contract                                  | renames break hosts                            | the feature-id inventory (B3) with deprecation aliases; a check that a removed id is listed as deprecated for one release    |
 | Cross-origin isolation for npm hosts                                  | partners cannot set COOP/COEP                  | the iframe path; document `credentialless` COEP; open question in the concept                                                |
 | The XML writer (C10) changes exported packages                        | InDesign rejects or alters a written structure | unchanged imports keep the byte-identical copy path; the corpus round-trip lane; the writer follows InDesign 20's own output |

@@ -64,7 +64,7 @@ pub fn parse_value_json(text: &str) -> serde_json::Value {
     serde_json::from_str(text).unwrap_or_else(|_| serde_json::Value::String(text.to_string()))
 }
 
-fn schema_of(
+pub(crate) fn schema_of(
     target: &VirtualTarget,
     path: &str,
 ) -> Result<paged_introspect::schema::PropertySchema> {

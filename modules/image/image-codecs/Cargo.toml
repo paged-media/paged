@@ -11,7 +11,7 @@ description = "paged.image codec adapter contract (ImageSource/ImageTarget over 
 workspace = true
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 thiserror = { workspace = true }
 # D-4 winner (zune-png vs image-rs/png; bench in image-conformance):
 # zune-png. Pure-Rust decode+encode, no_std-capable, fastest decode and

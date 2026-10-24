@@ -57,7 +57,6 @@ import {
   EMPTY_TALLY,
   isRecordable,
   newActionId,
-  planReplay,
   stepFromInvocation,
   ACTIONS_SCHEMA_VERSION,
   type ActionLibrary,
@@ -65,8 +64,19 @@ import {
   type PagedAction,
   type SkipReason,
   type UncapturedTally,
+  type ImportRule,
+  importRuleMatches,
+  stopStep,
 } from "./model";
 import { loadLibrary, parseImport, saveLibrary } from "./store";
+import {
+  ActionPlayer,
+  type PlayerDeps,
+  type PlayerState,
+  type PlayerStatus,
+} from "./player";
+import { onImported } from "../state/import-hooks";
+import { useEditorScope } from "../state/editor-scope";
 import { useEditorStorage } from "../state/storage";
 
 export interface RecordingState {
@@ -87,10 +97,32 @@ export interface ReplayReport {
   actionName: string;
   ran: ReplayStepResult[];
   skipped: Array<{ index: number; title: string; reason: SkipReason }>;
-  /** `mutationApplied` count observed while the replay was in flight.
-   *  Reported, never acted on — see `undoNote` in the panel. */
+  /** `mutationApplied` count observed while the replay was in flight. */
   mutations: number;
+  /** WP4.11 — the document undo steps the replay ended in (the player
+   *  groups it, see `player.ts`): 1 for an uninterrupted replay that
+   *  wrote the document; -1 when the client offers no undo group. */
+  undoSteps: number;
+  /** Ended by Cancel rather than by running out of steps. */
+  cancelled: boolean;
   finishedAt: number;
+}
+
+/** WP4.11 — a replay that is waiting (paused, stopped) or running. */
+export interface PlaybackState {
+  actionId: string;
+  status: PlayerStatus;
+  /** The step it waits before, or null. */
+  pausedAt: number | null;
+  /** An inserted stop's message while stopped. */
+  message: string | null;
+  /** Steps run so far. */
+  ran: number;
+}
+
+export interface PlayOptions {
+  /** Pause after every step. */
+  stepByStep?: boolean;
 }
 
 export interface ActionsApi {
@@ -108,7 +140,26 @@ export interface ActionsApi {
    *  action, or null when nothing was captured. */
   stopRecording(name: string): PagedAction | null;
 
-  play(actionId: string): Promise<ReplayReport | null>;
+  /** Play an action. Resolves with the report once it FINISHES, or with
+   *  null while it waits at a breakpoint or a stop (Continue / Step /
+   *  Cancel drive it from there, and the report arrives then). */
+  play(actionId: string, options?: PlayOptions): Promise<ReplayReport | null>;
+  /** The replay in flight or waiting, or null. */
+  playback: PlaybackState | null;
+  /** Continue a waiting replay to its next breakpoint, stop or the end. */
+  resume(): Promise<ReplayReport | null>;
+  /** Run the next step of a waiting replay, then wait again. */
+  stepOnce(): Promise<ReplayReport | null>;
+  /** End a waiting replay where it stands. */
+  cancelPlayback(): void;
+  /** Toggle the breakpoint before step `index`. */
+  togglePause(actionId: string, index: number): void;
+  /** Insert a stop showing `message` before step `index` (`steps.length`
+   *  appends it). */
+  insertStop(actionId: string, index: number, message: string): void;
+  /** The run-on-import rules. */
+  importRules: readonly ImportRule[];
+  setImportRules(rules: readonly ImportRule[]): void;
 
   rename(actionId: string, name: string): void;
   remove(actionId: string): void;
@@ -122,26 +173,68 @@ export interface ActionsApi {
 
 const Context = createContext<ActionsApi | null>(null);
 
-/** Run a replay's steps in order through the command registry; a step
- *  that throws is recorded with its message and the replay goes on.
- *  Outside the provider: the React Compiler does not compile a component
- *  with a `try` it cannot lower (ADR 229). */
-async function replaySteps(
+/** The player's door to the editor: the registry runs the steps, and the
+ *  client — when it is the real `CanvasClient` — groups their writes into
+ *  one undo step. A client without the group (a test stub) leaves every
+ *  write its own step, and the report says the count is unknown. */
+export function playerDeps(
   commands: { invoke(id: string, payload?: unknown): Promise<unknown> },
-  steps: ReturnType<typeof planReplay>["run"],
-): Promise<ReplayStepResult[]> {
-  const ran: ReplayStepResult[] = [];
-  for (const { index, step } of steps) {
-    let error: string | null = null;
-    try {
-      await commands.invoke(step.command, step.payload);
-    } catch (err) {
-      error = err instanceof Error ? err.message : String(err);
-    }
-    ran.push({ index, command: step.command, title: step.title, error });
-  }
-  return ran;
+  client: unknown,
+): PlayerDeps {
+  const c = client as Partial<{
+    beginUndoGroup(o: { continueSeq?: number | null }): void;
+    endUndoGroup(): Promise<{
+      steps: number;
+      writes: number;
+      lastSeq: number | null;
+    } | null>;
+  }>;
+  const grouped =
+    typeof c?.beginUndoGroup === "function" &&
+    typeof c?.endUndoGroup === "function";
+  return {
+    invoke: (id, payload) => commands.invoke(id, payload),
+    ...(grouped
+      ? {
+          beginUndoGroup: (o) => c.beginUndoGroup!(o),
+          endUndoGroup: () => c.endUndoGroup!(),
+        }
+      : {}),
+  };
 }
+
+function reportOf(
+  action: PagedAction,
+  state: PlayerState,
+  mutations: number,
+): ReplayReport {
+  return {
+    actionId: action.id,
+    actionName: action.name,
+    ran: state.ran.map((r) => ({
+      index: r.index,
+      command: r.command,
+      title: r.title,
+      error: r.error,
+    })),
+    skipped: state.skipped,
+    mutations,
+    undoSteps: state.undoSteps,
+    cancelled: state.status === "cancelled",
+    finishedAt: Date.now(),
+  };
+}
+
+function playbackOf(action: PagedAction, state: PlayerState): PlaybackState {
+  return {
+    actionId: action.id,
+    status: state.status,
+    pausedAt: state.pausedAt,
+    message: state.message,
+    ran: state.ran.length,
+  };
+}
+
 export function ActionsProvider({ children }: PropsWithChildren) {
   const registries = useRegistries();
   const client = useCanvasClient();
@@ -153,6 +246,9 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   );
   const [recording, setRecording] = useState<RecordingState | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [playback, setPlayback] = useState<PlaybackState | null>(null);
+  const playerRef = useRef<ActionPlayer | null>(null);
+  const scope = useEditorScope();
   const [lastReport, setLastReport] = useState<ReplayReport | null>(null);
   const [persisted, setPersisted] = useState(true);
 
@@ -182,6 +278,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const patch = useCallback(
     (actionId: string, fn: (action: PagedAction) => PagedAction) => {
       commit({
+        ...library,
         schema: ACTIONS_SCHEMA_VERSION,
         actions: library.actions.map((a) => (a.id === actionId ? fn(a) : a)),
       });
@@ -304,6 +401,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
         includeDocumentBound: false,
       };
       commit({
+        ...library,
         schema: ACTIONS_SCHEMA_VERSION,
         actions: [...library.actions, action],
       });
@@ -312,39 +410,112 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [recording, library, commit],
   );
 
+  /** Drive the player one leg (start, Continue, Step) and settle the
+   *  panel's state from where it ended: still waiting, or finished with
+   *  a report. */
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const play = useCallback(
-    async (actionId: string): Promise<ReplayReport | null> => {
-      const action = library.actions.find((a) => a.id === actionId);
-      if (!action || playingId) return null;
-      const plan = planReplay(action);
-      setPlayingId(actionId);
-      setLastReport(null);
+  const drive = useCallback(
+    async (
+      player: ActionPlayer,
+      leg: (p: ActionPlayer) => Promise<PlayerState>,
+    ): Promise<ReplayReport | null> => {
       replayingRef.current = true;
-      replayMutations.current = 0;
-      const ran = await replaySteps(registries.commands, plan.run).finally(
-        () => {
-          replayingRef.current = false;
-          setPlayingId(null);
-        },
+      setPlayback(
+        playbackOf(player.action, { ...player.state, status: "running" }),
       );
-      const report: ReplayReport = {
-        actionId,
-        actionName: action.name,
-        ran,
-        skipped: plan.skip.map((s) => ({
-          index: s.index,
-          title: s.step.title,
-          reason: s.reason,
-        })),
-        mutations: replayMutations.current,
-        finishedAt: Date.now(),
-      };
+      const state = await leg(player).finally(() => {
+        replayingRef.current = false;
+      });
+      if (!player.finished) {
+        setPlayback(playbackOf(player.action, state));
+        return null;
+      }
+      playerRef.current = null;
+      setPlayingId(null);
+      setPlayback(null);
+      const report = reportOf(player.action, state, replayMutations.current);
       setLastReport(report);
       return report;
     },
-    [library, playingId, registries],
+    [],
   );
+
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const play = useCallback(
+    async (
+      actionId: string,
+      options: PlayOptions = {},
+    ): Promise<ReplayReport | null> => {
+      const action = library.actions.find((a) => a.id === actionId);
+      if (!action || playingId || playerRef.current) return null;
+      const player = new ActionPlayer(
+        action,
+        playerDeps(registries.commands, client),
+        { stepByStep: options.stepByStep === true },
+      );
+      playerRef.current = player;
+      setPlayingId(actionId);
+      setLastReport(null);
+      replayMutations.current = 0;
+      return drive(player, (p) => p.start());
+    },
+    [library, playingId, registries, client, drive],
+  );
+
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const resume = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player || !player.waiting) return null;
+    return drive(player, (p) => p.resume());
+  }, [drive]);
+
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const stepOnce = useCallback(async () => {
+    const player = playerRef.current;
+    if (!player || !player.waiting) return null;
+    return drive(player, (p) => p.step());
+  }, [drive]);
+
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
+  const cancelPlayback = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const state = player.cancel();
+    if (player.waiting || !replayingRef.current) {
+      playerRef.current = null;
+      setPlayingId(null);
+      setPlayback(null);
+      setLastReport(reportOf(player.action, state, replayMutations.current));
+    }
+  }, []);
+
+  // ── run on import ──────────────────────────────────────────────
+  // A rule's action plays once the import finished; one import at a time
+  // (an action that itself opens a file does not set the rules off again).
+  const rulesRef = useRef<{
+    library: ActionLibrary;
+    play: (id: string) => Promise<ReplayReport | null>;
+  } | null>(null);
+  useLayoutEffect(() => {
+    rulesRef.current = { library, play };
+  });
+  useEffect(() => {
+    let running = false;
+    return onImported(scope, async (file) => {
+      const current = rulesRef.current;
+      if (!current || running) return;
+      const rule = (current.library.importRules ?? []).find(
+        (r) =>
+          importRuleMatches(r, file.name) &&
+          current.library.actions.some((a) => a.id === r.actionId),
+      );
+      if (!rule) return;
+      running = true;
+      await current.play(rule.actionId).finally(() => {
+        running = false;
+      });
+    });
+  }, [scope]);
 
   // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const api = useMemo<ActionsApi>(
@@ -358,11 +529,40 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       cancelRecording,
       stopRecording,
       play,
+      playback,
+      resume,
+      stepOnce,
+      cancelPlayback,
+      togglePause: (id, index) =>
+        patch(id, (a) => ({
+          ...a,
+          steps: a.steps.map((s, i) =>
+            i === index ? { ...s, pause: !s.pause } : s,
+          ),
+        })),
+      insertStop: (id, index, message) =>
+        patch(id, (a) => {
+          const steps = [...a.steps];
+          steps.splice(
+            Math.max(0, Math.min(index, steps.length)),
+            0,
+            stopStep(message),
+          );
+          return { ...a, steps };
+        }),
+      importRules: library.importRules ?? [],
+      setImportRules: (rules) =>
+        commit({ ...library, importRules: [...rules] }),
       rename: (id, name) => patch(id, (a) => ({ ...a, name })),
       remove: (id) =>
         commit({
+          ...library,
           schema: ACTIONS_SCHEMA_VERSION,
           actions: library.actions.filter((a) => a.id !== id),
+          // A rule naming a deleted action names nothing.
+          importRules: (library.importRules ?? []).filter(
+            (r) => r.actionId !== id,
+          ),
         }),
       setIncludeDocumentBound: (id, include) =>
         patch(id, (a) => ({ ...a, includeDocumentBound: include })),
@@ -385,6 +585,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
         // rather than silently overwriting the user's edits.
         const fresh = incoming.map((a) => ({ ...a, id: newActionId() }));
         commit({
+          ...library,
           schema: ACTIONS_SCHEMA_VERSION,
           actions: [...library.actions, ...fresh],
         });
@@ -402,6 +603,10 @@ export function ActionsProvider({ children }: PropsWithChildren) {
       cancelRecording,
       stopRecording,
       play,
+      playback,
+      resume,
+      stepOnce,
+      cancelPlayback,
       patch,
       commit,
     ],

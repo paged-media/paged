@@ -6651,6 +6651,7 @@ impl CanvasModel {
     /// drop is loud rather than silent.
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7269,6 +7270,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(f.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(f.fill_rule.as_str().into())),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -7623,6 +7629,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(f.stroke_weight)),
+                            },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(f.fill_rule.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8064,6 +8075,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(p.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(p.fill_rule.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -8245,6 +8261,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(l.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(l.fill_rule.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -8413,6 +8434,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(o.stroke_weight)),
+                            },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(o.fill_rule.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
@@ -9631,12 +9657,89 @@ impl CanvasModel {
                     [only] => (*only).clone(),
                     [first, .., last] => format!("{first}–{last}"),
                 };
+                let page_ids = parsed
+                    .spread
+                    .pages
+                    .iter()
+                    .filter_map(|p| p.self_id.clone())
+                    .collect();
+                let members = self.spread_members(&parsed.spread);
                 SpreadSummary {
                     label,
                     self_id,
                     page_count,
                     guides,
+                    page_ids,
+                    members,
                 }
+            })
+            .collect()
+    }
+
+    /// WP2.7 — a spread's top-level page items (`frames_in_order`: a
+    /// group stands for its members) with the page each sits on, by the
+    /// rule [`Self::element_geometry`] applies ([`Self::host_page`]: the
+    /// page holding the centre of the item's transformed box).
+    fn spread_members(
+        &self,
+        spread: &paged_model::Spread,
+    ) -> Vec<crate::channel::SpreadMemberSummary> {
+        use crate::element_selection::ElementId;
+        use paged_model::FrameRef;
+        let id = |s: &Option<String>| s.clone();
+        spread
+            .frames_in_order
+            .iter()
+            .filter_map(|r| {
+                let (element, bounds, transform) = match *r {
+                    FrameRef::TextFrame(i) => {
+                        let f = spread.text_frames.get(i)?;
+                        (
+                            ElementId::TextFrame(id(&f.self_id)?),
+                            f.bounds,
+                            f.item_transform,
+                        )
+                    }
+                    FrameRef::Rectangle(i) => {
+                        let f = spread.rectangles.get(i)?;
+                        (
+                            ElementId::Rectangle(id(&f.self_id)?),
+                            f.bounds,
+                            f.item_transform,
+                        )
+                    }
+                    FrameRef::Oval(i) => {
+                        let f = spread.ovals.get(i)?;
+                        (ElementId::Oval(id(&f.self_id)?), f.bounds, f.item_transform)
+                    }
+                    FrameRef::GraphicLine(i) => {
+                        let f = spread.graphic_lines.get(i)?;
+                        (
+                            ElementId::GraphicLine(id(&f.self_id)?),
+                            f.bounds,
+                            f.item_transform,
+                        )
+                    }
+                    FrameRef::Polygon(i) => {
+                        let f = spread.polygons.get(i)?;
+                        (
+                            ElementId::Polygon(id(&f.self_id)?),
+                            f.bounds,
+                            f.item_transform,
+                        )
+                    }
+                    FrameRef::Group(i) => {
+                        let g = spread.groups.get(i)?;
+                        let (bounds, transform) = crate::group_box::group_box(spread, i)?;
+                        (ElementId::Group(id(&g.self_id)?), bounds, transform)
+                    }
+                };
+                Some(crate::channel::SpreadMemberSummary {
+                    id: element,
+                    page_id: self
+                        .host_page(spread, bounds, transform)
+                        .map(|bp| bp.id.as_str().to_string()),
+                })
             })
             .collect()
     }
@@ -9690,6 +9793,9 @@ impl CanvasModel {
         // spells it (the `Self` id, the file name when there is none).
         let mut spread_id_of: std::collections::HashMap<&str, String> =
             std::collections::HashMap::new();
+        // WP2.7 — page self id → (its index in the spread, is it a verso).
+        let mut placement_of: std::collections::HashMap<&str, (u32, bool)> =
+            std::collections::HashMap::new();
         for parsed in &scene.spreads {
             for (pid, m) in &parsed.spread.page_margins {
                 margins.insert(pid.as_str(), m);
@@ -9699,10 +9805,17 @@ impl CanvasModel {
                 .self_id
                 .clone()
                 .unwrap_or_else(|| parsed.src.clone());
-            for pg in &parsed.spread.pages {
+            for (pi, pg) in parsed.spread.pages.iter().enumerate() {
                 if let Some(id) = pg.self_id.as_deref() {
                     spread_of.insert(id, &parsed.spread);
                     spread_id_of.insert(id, spread_id.clone());
+                    // WP2.7 — the renderer's binding rule
+                    // (`BindingEdge::of_page`): IDML puts the spine at
+                    // spread x = 0, and a page whose centre lies left of
+                    // it is a verso, bound on its right.
+                    let b = crate::hit::transform_bbox(pg.bounds, pg.item_transform);
+                    let verso = (b.left + b.right) * 0.5 < -0.5;
+                    placement_of.insert(id, (pi as u32, verso));
                 }
             }
         }
@@ -9712,6 +9825,11 @@ impl CanvasModel {
             .enumerate()
             .map(|(i, p)| {
                 let m = margins.get(p.id.as_str()).copied();
+                let placement = placement_of.get(p.id.as_str()).copied();
+                let verso = placement.is_some_and(|(_, v)| v);
+                let left = m.map(|m| m.left).unwrap_or(0.0);
+                let right = m.map(|m| m.right).unwrap_or(0.0);
+                let (inside, outside) = if verso { (right, left) } else { (left, right) };
                 PageSummary {
                     self_id: p.id.as_str().to_string(),
                     index: (i + 1) as u32,
@@ -9734,6 +9852,16 @@ impl CanvasModel {
                     // The build's origin, as item geometry reports it.
                     page_origin: Some([p.spread_origin.0, p.spread_origin.1]),
                     spread_id: spread_id_of.get(p.id.as_str()).cloned(),
+                    index_in_spread: placement.map(|(i, _)| i),
+                    binding_edge: placement.map(|_| {
+                        if verso {
+                            crate::channel::BindingEdgeWire::Right
+                        } else {
+                            crate::channel::BindingEdgeWire::Left
+                        }
+                    }),
+                    margin_inside_pt: inside,
+                    margin_outside_pt: outside,
                 }
             })
             .collect()
@@ -12261,33 +12389,106 @@ impl CanvasModel {
         page_id: &PageId,
         hide: &[crate::element_selection::ElementId],
     ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        self.build_page_filtered(page_id, hide, &[])
+    }
+
+    /// Extensions ADR 338 (`render.snapshot@2`) — the page drawn with `hide`
+    /// left out and, when `only` is not empty, with nothing but `only`
+    /// in it: every other item (master items included) is set invisible
+    /// in a copy of the scene. An `only` id expands the way a selection
+    /// does: a group to its members, a container to what is pasted into
+    /// it, a masked item to its mask artwork, and a story (a
+    /// `storyRange` address) to every frame of its thread. Visibility is
+    /// not a layout input (text wrap is collected from hidden items
+    /// too), so the kept items draw exactly where the page draws them.
+    pub fn build_page_filtered(
+        &self,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+        only: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        use crate::element_selection::ElementId;
         use std::collections::HashSet;
         let mut scene = self.scene.clone();
-        let mut ids: HashSet<String> = hide.iter().map(|e| e.raw_id().to_string()).collect();
-        // A hidden group hides its members (nested groups too).
-        let spreads = scene
-            .spreads
-            .iter()
-            .map(|p| &p.spread)
-            .chain(scene.master_spreads.values().map(|m| &m.spread));
-        for sp in spreads {
-            let mut changed = true;
-            while changed {
-                changed = false;
-                for g in &sp.groups {
-                    if g.self_id.as_deref().is_some_and(|id| ids.contains(id)) {
-                        for m in &g.members {
-                            let id = frame_self_id(sp, *m);
-                            if let Some(id) = id {
-                                changed |= ids.insert(id);
+        let spreads = || {
+            scene
+                .spreads
+                .iter()
+                .map(|p| &p.spread)
+                .chain(scene.master_spreads.values().map(|m| &m.spread))
+        };
+        // Close `ids` under the containment relations: a group's members
+        // (nested groups too), a container's pasted-in children and, for
+        // `only`, a masked item's mask artwork.
+        let close = |ids: &mut HashSet<String>, masks: bool| {
+            for sp in spreads() {
+                let mut changed = true;
+                while changed {
+                    changed = false;
+                    for g in &sp.groups {
+                        if g.self_id.as_deref().is_some_and(|id| ids.contains(id)) {
+                            for m in &g.members {
+                                if let Some(id) = frame_self_id(sp, *m) {
+                                    changed |= ids.insert(id);
+                                }
+                            }
+                        }
+                    }
+                    for (host, children) in &sp.nested_children {
+                        if ids.contains(host) {
+                            for c in children {
+                                if let Some(id) = frame_self_id(sp, *c) {
+                                    changed |= ids.insert(id);
+                                }
+                            }
+                        }
+                    }
+                    if masks {
+                        for (target, mask) in &sp.opacity_masks {
+                            if ids.contains(target) {
+                                changed |= ids.insert(mask.mask_item.clone());
                             }
                         }
                     }
                 }
             }
-        }
+        };
+        let mut hidden: HashSet<String> = hide.iter().map(|e| e.raw_id().to_string()).collect();
+        close(&mut hidden, false);
+        let kept: Option<HashSet<String>> = (!only.is_empty()).then(|| {
+            let stories: HashSet<&str> = only
+                .iter()
+                .filter_map(|e| match e {
+                    ElementId::StoryRange { story_id, .. } => Some(story_id.as_str()),
+                    _ => None,
+                })
+                .collect();
+            let mut ids: HashSet<String> = only
+                .iter()
+                .filter(|e| !matches!(e, ElementId::StoryRange { .. }))
+                .map(|e| e.raw_id().to_string())
+                .collect();
+            for sp in spreads() {
+                for f in &sp.text_frames {
+                    if f.parent_story
+                        .as_deref()
+                        .is_some_and(|s| stories.contains(s))
+                    {
+                        if let Some(id) = &f.self_id {
+                            ids.insert(id.clone());
+                        }
+                    }
+                }
+            }
+            close(&mut ids, true);
+            ids
+        });
+        let off = |id: &Option<String>| match id.as_deref() {
+            Some(i) if hidden.contains(i) => true,
+            Some(i) => kept.as_ref().is_some_and(|k| !k.contains(i)),
+            None => kept.is_some(),
+        };
         let hide_in = |sp: &mut paged_model::Spread| {
-            let off = |id: &Option<String>| id.as_deref().is_some_and(|i| ids.contains(i));
             sp.text_frames
                 .iter_mut()
                 .filter(|f| off(&f.self_id))

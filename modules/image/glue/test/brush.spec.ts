@@ -386,6 +386,7 @@ function stubSession(begin: () => Promise<boolean> = async () => true) {
       return true;
     },
     brushCancel: () => calls.push("cancel"),
+    takeCurvesPick: () => false,
   } as unknown as ImageSession;
   return { session, calls, machine };
 }

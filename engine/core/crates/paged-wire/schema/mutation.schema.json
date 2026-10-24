@@ -7393,6 +7393,11 @@
           "description": "The page of a placed PDF the frame shows: `<PDF><PDFAttribute\nPageNumber>`, 1-based. `Value::Length` carrying a whole number of\nat least 1; `None` clears it (page 1). On a Rectangle, Oval or\nPolygon that places a picture; a frame whose bytes are not a PDF\nrefuses it. The renderer shows page 1 for a page the PDF lacks.\nPaint-only (`frame_style`): the frame's fit re-resolves against\nthe page's size on the next build.",
           "type": "string",
           "const": "framePdfPage"
+        },
+        {
+          "description": "The rule the frame's outline fills and clips by: `Value::Text`\n`\"NonZero\"` (IDML's rule, the default) or `\"EvenOdd\"`; `\"\"` clears\nto `\"NonZero\"`. On a TextFrame, Rectangle, Oval, Polygon or\nGraphicLine. No IDML attribute carries it: the IDML export re-winds\nan even-odd outline whose contours do not cross and reports the\nrest as lost. Paint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameFillRule"
         }
       ]
     },

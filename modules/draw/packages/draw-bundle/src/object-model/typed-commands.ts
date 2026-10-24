@@ -64,11 +64,15 @@ import type {
   SpiralParams,
 } from "../commands/insert-shapes";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
+import type { FlareParams, StarParams } from "../commands/star-flare";
 import {
   FLIP_PATH_EFFECTS,
   PATH_TYPE_ALIGNMENTS,
 } from "../commands/text-on-path";
 import type { TraceOptions } from "../trace-engine";
+import { TRACE_PRESET_IDS } from "../commands/trace-presets";
+import { RECOLOR_MODES } from "../commands/recolor";
+import { HARMONY_RULES } from "@paged-media/draw-geometry";
 import {
   BOOL,
   COLOR,
@@ -117,6 +121,26 @@ const titleOf = (id: string): string => {
 };
 
 /** Every field of a params interface, typed (exhaustive by construction). */
+const STAR: Record<keyof StarParams, ValueType> = {
+  cx: LEN,
+  cy: LEN,
+  radius1: LEN,
+  radius2: LEN,
+  points: INT,
+  rotationDeg: DEG,
+};
+const FLARE: Record<keyof FlareParams, ValueType> = {
+  cx: LEN,
+  cy: LEN,
+  centreRadius: LEN,
+  haloScale: NUM,
+  rays: INT,
+  rayLength: LEN,
+  rings: INT,
+  endX: LEN,
+  endY: LEN,
+  ringRadius: LEN,
+};
 const ARC: Record<keyof ArcParams, ValueType> = {
   cx: LEN,
   cy: LEN,
@@ -150,7 +174,7 @@ const POLAR_GRID: Record<keyof PolarGridParams, ValueType> = {
   radials: INT,
 };
 const TRACE: Record<keyof TraceOptions, ValueType> = {
-  mode: enumOf(["color", "bw"]),
+  mode: enumOf(["color", "bw", "centerline"]),
   pathMode: enumOf(["spline", "polygon"]),
   colorPrecision: INT,
   filterSpeckle: INT,
@@ -164,6 +188,13 @@ const TRACE: Record<keyof TraceOptions, ValueType> = {
   maxRegions: INT,
   maxTracePixels: INT,
   stacked: BOOL,
+  maxColors: INT,
+  grayscale: BOOL,
+};
+/** The trace's preset and live flag (WP6.6) beside its options. */
+const TRACE_EXTRA: Fields = {
+  preset: enumOf(TRACE_PRESET_IDS),
+  live: BOOL,
 };
 const CAP = enumOf(["butt", "round", "square"]);
 const JOIN = enumOf(["miter", "round", "bevel"]);
@@ -225,7 +256,7 @@ export const TWINS: readonly TwinSpec[] = [
     miterLimit: NUM,
   }),
   twin("offsetPath", { ...T, delta: LEN, join: JOIN, miterLimit: NUM }),
-  twin("simplifyPath", { ...T, tolerance: LEN }),
+  twin("simplifyPath", { ...T, tolerance: LEN, cornerAngle: DEG }),
   // Endpoints / direction / outlines / transform.
   ...[
     "joinEndpoints",
@@ -235,8 +266,8 @@ export const TWINS: readonly TwinSpec[] = [
     "createOutlines",
     "transformAgain",
   ].map(sel),
-  twin("reflectHorizontal", { ...T, copy: BOOL }),
-  twin("reflectVertical", { ...T, copy: BOOL }),
+  twin("reflectHorizontal", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
+  twin("reflectVertical", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
   // Pathfinder (boolean + region) and compound paths.
   ...[
     "pathfinderUnite",
@@ -468,6 +499,43 @@ export const TWINS: readonly TwinSpec[] = [
     path: { kind: "list", of: POINT },
     mode: enumOf(["keep", "remove"]),
   }),
+  // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
+  // data (page pt), and the Star / Flare inserts with every parameter.
+  twin("joinScrub", {
+    ...T,
+    page: TEXT,
+    path: { kind: "list", of: POINT },
+    tolerance: LEN,
+  }),
+  twin("pathErase", {
+    ...T,
+    page: TEXT,
+    path: { kind: "list", of: POINT },
+    width: LEN,
+  }),
+  twin("reshapeAt", {
+    ...T,
+    point: POINT,
+    to: POINT,
+    radius: LEN,
+    tolerance: LEN,
+  }),
+  twin("shaperStroke", { ...T, page: TEXT, path: { kind: "list", of: POINT } }),
+  twin("insertStar", { ...STAR, page: TEXT }),
+  twin("insertFlare", { ...FLARE, page: TEXT }),
+  // Their "…" raisers are typed too (no arguments: they raise the Path
+  // Options section, or insert the last-used one where no panel can be
+  // raised) — the untyped baseline is a ratchet that does not grow.
+  twin("insertStarOptions", {}),
+  twin("insertFlareOptions", {}),
+  // Object ▸ Rasterize (extensions ADR 338): the selection as one image
+  // frame at `ppi`, and its "…" raiser.
+  twin("rasterize", {
+    ...T,
+    ppi: NUM,
+    background: enumOf(["transparent", "paper"]),
+  }),
+  twin("rasterizeOptions", {}),
   // The width profile (the Width tool's bake, its profile as data) and the
   // rebuild of the recipes a changed source feeds.
   twin("widthProfile", { ...T, widths: { kind: "list", of: LEN } }),
@@ -476,8 +544,30 @@ export const TWINS: readonly TwinSpec[] = [
     { ...T, all: BOOL },
     { result: { kind: "list", of: TEXT } },
   ),
-  // Image trace — the full option set.
-  twin("imageTrace", { ...T, ...TRACE }),
+  // Image trace — the full option set, a preset and the live flag; the
+  // re-trace takes the same (options it does not name keep the record's),
+  // and the "…" raiser none.
+  twin("imageTrace", { ...T, ...TRACE, ...TRACE_EXTRA }),
+  twin("retraceImage", { ...T, ...TRACE, ...TRACE_EXTRA }),
+  twin("imageTraceOptions", {}),
+  // Recolor Artwork (WP6.5) — the request as data; the colour map as a
+  // list of { from: swatch id, to: hex or swatch id }.
+  twin("recolorArtwork", {
+    ...T,
+    mode: enumOf(RECOLOR_MODES),
+    rule: enumOf(HARMONY_RULES),
+    base: TEXT,
+    rotate: DEG,
+    recolorNeutrals: BOOL,
+    count: INT,
+    colorGroup: TEXT,
+    map: {
+      kind: "list",
+      of: { kind: "struct", fields: { from: TEXT, to: TEXT } },
+    },
+  }),
+  twin("recolorArtworkOptions", {}),
+  twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
 ];
 
 /** The args schema of a twin. */

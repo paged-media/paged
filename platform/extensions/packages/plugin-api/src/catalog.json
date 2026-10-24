@@ -1546,6 +1546,7 @@
     "frameFittingReferencePoint",
     "frameAutoFit",
     "framePdfPage",
+    "frameFillRule",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -3853,6 +3854,22 @@
           "kind": "attr"
         }
       ]
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameFillRule",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "NonZero",
+          "EvenOdd"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "NonZero",
+      "access": "readWrite",
+      "bindable": true
     },
     {
       "addressKind": "frame",
@@ -16638,6 +16655,22 @@
             "kind": "attr"
           }
         ]
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameFillRule",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "NonZero",
+            "EvenOdd"
+          ]
+        },
+        "nullable": true,
+        "default": "NonZero",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
       },
       {
         "addressKind": "frame",

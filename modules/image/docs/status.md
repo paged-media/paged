@@ -16,6 +16,8 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   only previews the file.
   Each image starts with the panel at identity; values set on one image do not carry over
   to the next.
+  The PSD reader is the engine's `paged-psd` (WP1.2), so the canvas draws a placed PSD or
+  PSB's merged composite before this module opens it, decoded the same way.
 - **Adjustments.** The "Image" panel has a histogram and a re-runnable chain: exposure,
   brightness, contrast, saturation, temperature and tint, levels (composite and per
   channel), tone curves (composite and per channel), Hue/Saturation (master, six colour
@@ -23,10 +25,20 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   photo filter, channel mixer, blur, sharpen, hue rotate, invert, and "Auto-enhance". Apply
   runs it on the GPU, within the selection if there is one, and shows it inside the frame.
   Sliders preview live on a resampled proxy; full resolution follows when they rest.
-- **Filters and fills.** One-shot kernels from the panel: gradient map, warp, emboss, find
-  edges, motion and radial blur, mosaic, twelve gallery effects, despeckle, dust and
-  scratches, offset, lens blur, reduce noise, smart sharpen, selective colour, median,
-  maximum and minimum (3×3), colour lookup from a `.cube` file, shape blur; gradient (foreground
+- **Filters and fills.** Each one-shot filter opens one generic Filter dialog
+  (`glue/src/filters.ts`, `panels/sections/filter-dialog.tsx`; Image ▸ Filter ▸ … and the
+  panel's buttons): every parameter of its kernel as a slider, an angle dial, a choice, a
+  switch or a colour, previewed on the canvas — on a resampled proxy while a value moves
+  (one-layer image, no selection; px lengths scaled with it), at full resolution when it
+  rests — with Preview and a before/after toggle; OK keeps the filter as one undo step in
+  the active layer and inside the selection, Cancel leaves the image as it was. The filters:
+  box blur, surface blur, motion and radial blur, lens blur, add noise (uniform or
+  gaussian, monochromatic), despeckle, dust and scratches, median (radius ≤ 10), reduce
+  noise, high pass, maximum and minimum (radius ≤ 32, square or round), offset, smart
+  sharpen, emboss, find edges, glowing edges, mosaic, colour halftone, ten more gallery
+  effects, gradient map and selective colour; average (no dialog) fills the selection with
+  its average colour. Warp and glass have their own Distort section; colour lookup from a
+  `.cube` file, shape blur; gradient (foreground
   to background), noise, solid, pattern and content-aware fills; Define pattern; the paint
   bucket; a gradient tool (drag the line) in five geometries, linear, radial, angular,
   reflected and diamond (a tool option and the colour section's choice); red-eye removal.
@@ -62,12 +74,21 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
 - **Commit and reopen.** "Commit image edits to the document" stores the layers in the
   document's parts and puts their composite in the frame, as one document undo step;
   reopening the frame restores the layers ([ADR 462](adr/462-sessions-persist-in-parts.md)).
-- **Canvas.** A crop tool with aspect presets and a straighten angle; resize with a
-  nearest, Mitchell or Lanczos 3 filter; rotate 90°/180°, flip, and Canvas Size with an
-  anchor over all layers; a Move tool and nudges for the selected pixels or the layer.
+- **Canvas.** A crop tool with aspect presets and a straighten angle; an Image Size dialog
+  (pixel and printed size, resolution in ppi, constrain proportions, resample with a
+  nearest, Mitchell or Lanczos 3 filter, or change only the resolution); Trim by
+  transparent pixels or the top-left or bottom-right colour; rotate 90°/180°, any angle
+  (Image Rotation ▸ Arbitrary: the canvas grows, the corners are transparent; quarter turns
+  are exact), flip, and Canvas Size with an anchor — all over every layer and mask, each one
+  undo step; a Move tool and nudges for the selected pixels or the layer. The resolution
+  is read from a PNG's `pHYs` or a JPEG's JFIF density on open and written into PNG and
+  JPEG exports; a PSD keeps its own resolution resource.
+- **Curves tools.** Auto (each channel's own contrast, 0.1 % clipped at each end) and black,
+  grey and white point eyedroppers: an armed eyedropper takes the next click on the image
+  with an image tool and sets the channel curves from the sampled colour.
 - **PSD.** A PSD whose layers the model reproduces opens as layers. Layers of the retained
   file can be renamed, removed and given another opacity before export. With no edit the
-  writer reproduces the input bytes (`image-psd/tests/it/roundtrip.rs`). A session with more
+  writer reproduces the input bytes (`engine/core/crates/paged-psd/tests/it/roundtrip.rs`). A session with more
   than one layer exports as a layered PSD (pixel layers, masks, groups, opacity, blend,
   visibility, clipping); with adjustment layers it is flattened, and says so.
 - **Panels, menu, shortcuts, language.** Beside the "Image" panel, an "Image properties"
@@ -161,9 +182,15 @@ the baked image), beside the module's own label on the frame.
 ## Limits of what is shipped
 
 - **A GPU is required.** Only the region filter has a CPU path (ADR 465). Without WebGPU,
-  the adjustment preview and Apply, the gallery and generator filters, painting, resize and
-  the composite of more than one layer return an error; decode, the identity composite,
-  selection, histograms and `filterRegion` still work.
+  the adjustment preview and Apply, the filter dialogs' preview and OK, the generator
+  filters, painting, resize, arbitrary rotation and the composite of more than one layer
+  return an error; decode, the identity composite, selection, histograms, Trim, quarter
+  turns, the Curves tools and `filterRegion` still work.
+- **Filter dialog limits.** Cancel leaves the filter as a redo step. The radius bounds are
+  the kernels' windows (median 10 px, maximum/minimum and box blur 32 px, surface blur
+  16 px, high pass σ 10 px); Photoshop's go further. There is no Reveal All: layers are
+  stored within the canvas (ADR 464 clips their bounds to it), so nothing lies beyond it to
+  reveal. Trim trims all four sides (no per-side choice).
 - **The preview on the page** is one scene-layer image, cleared when the frame leaves the
   selection and on Reset. It goes through the scene layer's image doors (`submitImage`,
   `submitImageTiles`), so a brush sample sends only the rectangle it changed. Edits reach
@@ -199,7 +226,7 @@ the baked image), beside the module's own label on the frame.
   clipping, user masks, vector masks (drawn from their paths the way Photoshop draws them — a
   17×15 sample grid per pixel, per-component combine / subtract / intersect / exclude, even-odd
   or non-zero, invert — and multiplied with the user mask; on a fill/shape layer the stored
-  pixels already are the shape; `image-psd/src/vector_mask.rs`), mask density and feather (a
+  pixels already are the shape; `engine/core/crates/paged-psd/src/vector_mask.rs`), mask density and feather (a
   Gaussian of that sigma), fill opacity; smart objects as their stored render, accepted only
   where the file's merged composite agrees inside each one's footprint (a stale render, as on a
   corpus mock-up, opens flattened); text layers blended in a gamma space as Photoshop's are
@@ -211,14 +238,15 @@ the baked image), beside the module's own label on the frame.
   adjustment layers (Photo Filter and Brightness/Contrast differ from Photoshop's), a group vector
   mask or a feathered shape mask opens flattened; artboards import (members cut to the
   artboard, its background beneath them), and says which (`PsdFile::layer_import_blockers` lists
-  every reason; `image-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
+  every reason; `engine/core/crates/paged-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
   one by one and blended in RGB, which Photoshop does not do (it blends the inks), so a CMYK
   file opens flattened when a layer, group or overlay uses a mode other than Normal or Multiply
   (measured 9.9–50 ΔE00 p95 off on synthetic tiles), when it has no real merged data, or when
   its RGB flatten is more than 8 levels off the converted composite on over 1 % of the pixels or
   more than 2 levels off on over 5 % (a tint: Multiply over pale stock).
-  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not read, so such a file
-  opens flattened. Across the 157-file private corpus, 76 files open as layers and are measured
+  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not imported, so such a
+  file opens flattened (paged-psd reads their records, `PsdFile::layer_list`, which the import
+  does not use yet). Across the 157-file private corpus, 76 files open as layers and are measured
   against Photoshop's composite (3 did on 2026-10-04), all but one within 1.5 % of pixels more
   than 2 levels off; the rest open flattened, the commonest reasons being smart objects the
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which

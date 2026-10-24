@@ -60,11 +60,21 @@ import { createScissorsHandler } from "./handlers/scissors";
 import { createShapeBuilderHandler } from "./handlers/shape-builder";
 import { createTypeOnPathHandler } from "./handlers/text-on-path";
 import { createWidthHandler } from "./handlers/width";
+import { createReflectHandler } from "./handlers/reflect";
+import { createReshapeHandler } from "./handlers/reshape";
+import {
+  createJoinHandler,
+  createPathEraserHandler,
+  createShaperHandler,
+} from "./handlers/scrub-tools";
+import { createFlareHandler, createStarHandler } from "./handlers/star-flare";
 import {
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
   LASSO_OPTIONS,
   PAINTBRUSH_OPTIONS,
+  RESHAPE_OPTIONS,
+  STAR_OPTIONS,
   WIDTH_OPTIONS,
   toolOptionsSpecOf,
 } from "./tool-options";
@@ -91,6 +101,13 @@ const M = defineMessages("draw.tools", {
   repeat: "Repeat (steer the selected repeat)",
   knife: "Knife",
   scissorsAnyPoint: "Scissors (any point)",
+  reflect: "Reflect",
+  reshape: "Reshape",
+  join: "Join",
+  pathEraser: "Path Eraser",
+  star: "Star",
+  flare: "Flare",
+  shaper: "Shaper",
 });
 
 const CROSS: CursorSpec = { kind: "css", token: "crosshair" };
@@ -153,6 +170,21 @@ export const REPEAT_TOOL_IDS = ["media.paged.draw.tool.repeat"] as const;
 export const CUT_TOOL_IDS = [
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
+] as const;
+
+/** WP6.1 part 2 — Illustrator's remaining quick-win tools (host-free,
+ *  the PRO_TOOL_IDS pattern). EVERY ONE IS KEYLESS: the shortcut
+ *  registers are full (the note above: `shift+o` is the only free shift
+ *  key and it is reserved for the host's Artboard tool), so each joins
+ *  the host flyout Illustrator keeps it in, without a key. */
+export const WAVE3_TOOL_IDS = [
+  "media.paged.draw.tool.reflect",
+  "media.paged.draw.tool.reshape",
+  "media.paged.draw.tool.join",
+  "media.paged.draw.tool.pathEraser",
+  "media.paged.draw.tool.star",
+  "media.paged.draw.tool.flare",
+  "media.paged.draw.tool.shaper",
 ] as const;
 
 /** Build the three anchor-editing tools bound to `host` — each
@@ -550,6 +582,91 @@ export function drawTools(host: BundleHost): ToolContribution[] {
       order: 2,
       cursor: CROSS,
       gesture: () => createScissorsHandler(host),
+    },
+    // WP6.1 part 2 — keyless, each in the host flyout Illustrator keeps it
+    // in (WAVE3_TOOL_IDS says why there are no keys). Glyphs: REAL tokens
+    // of the host's map whose metaphor holds (an invented token renders
+    // the rail button glyphless).
+    //
+    // REFLECT and RESHAPE join the host's TRANSFORM flyout (Rotate, Scale,
+    // Shear); Illustrator nests Reflect under Rotate and Reshape under
+    // Scale — one flyout here.
+    {
+      id: "media.paged.draw.tool.reflect",
+      title: t(M.reflect),
+      icon: "tool-rotate",
+      group: "transform",
+      section: "transform",
+      order: 10,
+      cursor: CROSS,
+      gesture: () => createReflectHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.reshape",
+      title: t(M.reshape),
+      icon: "tool-directSelect",
+      group: "transform",
+      section: "transform",
+      order: 11,
+      cursor: CROSS,
+      gesture: () => createReshapeHandler(host),
+      options: toolOptionsSpecOf(RESHAPE_OPTIONS),
+    },
+    // JOIN, PATH ERASER and SHAPER join the host's PENCIL flyout (with
+    // Smooth) — Illustrator's Shaper / Pencil / Smooth / Path Eraser / Join
+    // group.
+    {
+      id: "media.paged.draw.tool.shaper",
+      title: t(M.shaper),
+      icon: "tool-pencil",
+      group: "pencil",
+      section: "drawType",
+      order: 10,
+      cursor: CROSS,
+      gesture: () => createShaperHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.pathEraser",
+      title: t(M.pathEraser),
+      icon: "tool-erase",
+      group: "pencil",
+      section: "drawType",
+      order: 11,
+      cursor: CROSS,
+      gesture: () => createPathEraserHandler(host),
+    },
+    {
+      id: "media.paged.draw.tool.join",
+      title: t(M.join),
+      icon: "tool-smooth",
+      group: "pencil",
+      section: "drawType",
+      order: 12,
+      cursor: CROSS,
+      gesture: () => createJoinHandler(host),
+    },
+    // STAR and FLARE join the host's SHAPE flyout (Rectangle, Ellipse,
+    // Polygon).
+    {
+      id: "media.paged.draw.tool.star",
+      title: t(M.star),
+      icon: "tool-polygon",
+      group: "shape",
+      section: "drawType",
+      order: 10,
+      cursor: CROSS,
+      gesture: () => createStarHandler(host),
+      options: toolOptionsSpecOf(STAR_OPTIONS),
+    },
+    {
+      id: "media.paged.draw.tool.flare",
+      title: t(M.flare),
+      icon: "tool-ellipse",
+      group: "shape",
+      section: "drawType",
+      order: 11,
+      cursor: CROSS,
+      gesture: () => createFlareHandler(host),
     },
   ];
 }

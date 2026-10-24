@@ -30,6 +30,7 @@ import type {
   ElementId,
   PageId,
   ProviderRecordSet,
+  DataTableInfo,
   SceneLayerSurface,
   TabularClipboard,
 } from "@paged-media/plugin-api";
@@ -438,6 +439,11 @@ export interface SessionState {
      *  object-model wave); false = the snapshot is kept and only marked
      *  stale. */
     live?: boolean;
+    /** `"table"`: a table of the document's data (`data@1`, extensions ADR
+     *  343), edited in place — a committed body cell is written back to the
+     *  table (`providerId` is the table's name). Absent: a published
+     *  dataset (`dataProviders@1`), read only. */
+    kind?: "table";
   } | null;
   /** Wave 5 — bumps on every Cmd+F / "Find in sheet": the grid panel
    *  focuses its find field when it changes. */
@@ -884,6 +890,15 @@ export interface WorkbookSession extends DataToolsApi {
     providerId: string,
     opts?: { live?: boolean },
   ): Promise<void>;
+  /** PM-0015 step 7 — the tables of the document's data (`host.data`,
+   *  `data@1`): empty when no bundle serves them. Never throws. */
+  dataTables(): Promise<readonly DataTableInfo[]>;
+  /** Open a table of the document's data as the workbook (sheet 0: row 0
+   *  the field names, rows 1.. the records) and edit it in place: a
+   *  committed body cell of a writable table is written back
+   *  (`host.data.write`), and a change made elsewhere re-pulls it. False
+   *  (logged) when there is no data service or the table is gone. */
+  sourceFromDataTable(table: string): Promise<boolean>;
   /** ADR 323 — the object model's door into the session
    *  (`src/object-model.ts`). Not a panel API. */
   objectBridge(): ObjectBridge;
@@ -1323,6 +1338,15 @@ export function createWorkbookSession(
   // dataset (disposed + replaced on each `sourceFromDataset`, and on
   // `dispose`). Null when the workbook is not dataset-sourced.
   let dataSourceSub: { dispose(): void } | null = null;
+  /** The linked data table's field names, in column order (sheet 0's row 0),
+   *  whether it takes writes, and the revisions this session wrote (their
+   *  change events are its own echo, not a reason to re-pull). */
+  let linkedTable: {
+    table: string;
+    fields: string[];
+    writable: boolean;
+    written: Set<string>;
+  } | null = null;
 
   // C-1 / S-02 — the last frame this session lowered into (the target for
   // the in-frame grid) + the lazily-obtained scene-layer surface.
@@ -3088,6 +3112,65 @@ export function createWorkbookSession(
     } catch (err) {
       host.log.warn(`sourceFromDataset: setCell(0,${row},${col}) failed`, err);
     }
+  }
+
+  /** A committed cell of a linked data table, written back (`data@1`). Only
+   *  sheet 0's body inside the seeded fields is the table; a formula stays
+   *  the sheet's (the table keeps values), and the header is the schema. */
+  function writeBack(sheet: number, row: number, col: number, input: string) {
+    const link = linkedTable;
+    if (!link || state.dataSource?.kind !== "table" || sheet !== 0) return;
+    if (col >= link.fields.length) return;
+    if (row === 0) {
+      host.log.info(
+        `table "${link.table}": a field is renamed in its source, not in the sheet`,
+      );
+      return;
+    }
+    if (!link.writable) {
+      host.log.info(`table "${link.table}" is derived: edit its source table`);
+      return;
+    }
+    if (input.trimStart().startsWith("=")) {
+      host.log.info(
+        `table "${link.table}": a formula stays in the sheet; the table keeps values`,
+      );
+      return;
+    }
+    const field = link.fields[col]!;
+    void host.data
+      .write(link.table, [
+        { op: "set", row: row - 1, field, value: input === "" ? null : input },
+      ])
+      .then((r) => {
+        link.written.add(r.revision);
+        if (state.dataSource?.providerId === link.table)
+          state.dataSource = { ...state.dataSource, revision: r.revision };
+      })
+      .catch((err: unknown) => {
+        host.log.warn(
+          `table "${link.table}": the edit of ${field} (row ${row}) was not written — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  }
+
+  /** Seed (or re-seed) sheet 0 from a data table. */
+  async function pullTable(
+    table: string,
+    engine: SheetEngine,
+  ): Promise<boolean> {
+    let records: ProviderRecordSet;
+    try {
+      records = await host.data.records(table);
+    } catch (err) {
+      host.log.warn(`table "${table}": records failed`, err);
+      return false;
+    }
+    const prev = seededExtent;
+    seededExtent = seedSheetFromRecords(engine, records, prev ?? undefined);
+    if (linkedTable?.table === table)
+      linkedTable.fields = records.schema.fields.map((f) => f.name);
+    return true;
   }
 
   /** Window the active sheet into a GridScene + overlay the session
@@ -5610,6 +5693,7 @@ export function createWorkbookSession(
       }
       if (!journaledSetCell(sheet, row, col, fromDisplay(row, col, input)))
         return false;
+      writeBack(sheet, row, col, input);
       // The dirty cut recomputed in Rust; refresh the panel (it re-requests
       // the windowed scene on the next render).
       emitter.emit({
@@ -6259,6 +6343,7 @@ export function createWorkbookSession(
         host.log.warn("sourceFromDataset: prior engine dispose failed", err);
       }
 
+      linkedTable = null; // a published dataset is read only
       seededExtent = seedSheetFromRecords(engine, snapshot.records);
 
       cancelPendingPersist(); // the prior workbook is replaced
@@ -6303,6 +6388,104 @@ export function createWorkbookSession(
       // The seeded workbook is document content: persist it like an edit.
       markEdited();
       emitter.emit();
+    },
+
+    async dataTables() {
+      if (!host.supports("data@1") || !host.data.available()) return [];
+      try {
+        return await host.data.tables();
+      } catch (err) {
+        host.log.warn("dataTables: tables failed", err);
+        return [];
+      }
+    },
+
+    async sourceFromDataTable(table: string) {
+      if (!host.supports("data@1") || !host.data.available()) {
+        host.log.warn(
+          `sourceFromDataTable("${table}"): no bundle serves the document's data (supports('data@1') is false, or paged.data is not loaded)`,
+        );
+        return false;
+      }
+      let info: DataTableInfo | undefined;
+      try {
+        info = (await host.data.tables()).find((t) => t.name === table);
+      } catch (err) {
+        host.log.warn(`sourceFromDataTable("${table}"): tables failed`, err);
+      }
+      if (!info) {
+        host.log.warn(`sourceFromDataTable("${table}"): no such table`);
+        return false;
+      }
+      let engine: SheetEngine;
+      try {
+        engine = await bootEmptyEngine();
+        state.bootError = null;
+      } catch (err) {
+        state.bootError = err instanceof Error ? err.message : ENGINE_NOT_BUILT;
+        host.log.warn("sourceFromDataTable: engine boot failed", err);
+        emitter.emit();
+        return false;
+      }
+      try {
+        state.engine?.dispose();
+      } catch (err) {
+        host.log.warn("sourceFromDataTable: prior engine dispose failed", err);
+      }
+      seededExtent = null;
+      linkedTable = {
+        table,
+        fields: info.schema.fields.map((f) => f.name),
+        writable: info.writable,
+        written: new Set(),
+      };
+      if (!(await pullTable(table, engine))) {
+        linkedTable = null;
+        return false;
+      }
+      cancelPendingPersist();
+      loadEpoch += 1;
+      forgetPlacements();
+      state.engine = engine;
+      dialectEngine();
+      state.activeSheet = 0;
+      state.fileName = table;
+      state.gridSelection = null;
+      defaultRangeForActive();
+      state.dataSource = {
+        providerId: table,
+        revision: info.revision,
+        stale: false,
+        live: true,
+        kind: "table",
+      };
+      dataSourceSub?.dispose();
+      dataSourceSub = host.data.onDidChange((change) => {
+        const link = linkedTable;
+        if (!link || change.table !== link.table) return;
+        if (link.written.delete(change.revision)) return; // our own write
+        if (state.engine !== engine) return;
+        void pullTable(link.table, engine).then((ok) => {
+          if (!ok || state.dataSource?.providerId !== link.table) return;
+          state.dataSource = { ...state.dataSource, revision: change.revision };
+          markEdited();
+          emitter.emit({
+            kind: "cells",
+            regions: [
+              {
+                sheet: 0,
+                firstRow: 0,
+                firstCol: 0,
+                lastRow: Math.max((seededExtent?.rows ?? 1) - 1, 0),
+                lastCol: Math.max((seededExtent?.cols ?? 1) - 1, 0),
+              },
+            ],
+          });
+        });
+      });
+      markEdited();
+      emitter.emit();
+      return true;
     },
 
     textSelectionRange() {

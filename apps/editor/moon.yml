@@ -183,7 +183,6 @@ tasks:
         "slide:wasm",
         "sheet:wasm",
         "data:wasm",
-        "data:duckdb",
         "web:wasm",
         "draw:wasm",
         "image:wasm",

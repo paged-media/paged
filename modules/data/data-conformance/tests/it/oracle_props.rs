@@ -646,7 +646,7 @@ fn data_bind_diff_removed_names_old_rows__feat__data_bind_engine() {
 }
 
 /// A variable binding reads record 0 of the STABILIZED order, so the same rows
-/// delivered in another order (as DuckDB may, without ORDER BY) are no change
+/// delivered in another order (as a query may, without ORDER BY) are no change
 /// (was defect DP-4: it read record 0 of the delivery order).
 #[test]
 fn data_bind_variable_ignores_delivery_order__feat__data_bind_change_report() {

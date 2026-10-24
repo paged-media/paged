@@ -223,12 +223,10 @@ pub fn emit_line(
 ) {
     // Lines aren't naturally interned (their geometry depends on the
     // endpoints), so push an anonymous path each time.
-    let path = PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: x1, y: y1 },
-            PathSegment::LineTo { x: x2, y: y2 },
-        ],
-    };
+    let path = PathData::new(vec![
+        PathSegment::MoveTo { x: x1, y: y1 },
+        PathSegment::LineTo { x: x2, y: y2 },
+    ]);
     let path_id = list.paths.push_anon(path);
     list.push(DisplayCommand::StrokePath {
         path_id,
@@ -250,44 +248,42 @@ pub fn unit_ellipse() -> PathData {
     let k = r * ELLIPSE_KAPPA;
     let cx = 0.5_f32;
     let cy = 0.5_f32;
-    PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: cx + r, y: cy },
-            PathSegment::CubicTo {
-                cx1: cx + r,
-                cy1: cy + k,
-                cx2: cx + k,
-                cy2: cy + r,
-                x: cx,
-                y: cy + r,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - k,
-                cy1: cy + r,
-                cx2: cx - r,
-                cy2: cy + k,
-                x: cx - r,
-                y: cy,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - r,
-                cy1: cy - k,
-                cx2: cx - k,
-                cy2: cy - r,
-                x: cx,
-                y: cy - r,
-            },
-            PathSegment::CubicTo {
-                cx1: cx + k,
-                cy1: cy - r,
-                cx2: cx + r,
-                cy2: cy - k,
-                x: cx + r,
-                y: cy,
-            },
-            PathSegment::Close,
-        ],
-    }
+    PathData::new(vec![
+        PathSegment::MoveTo { x: cx + r, y: cy },
+        PathSegment::CubicTo {
+            cx1: cx + r,
+            cy1: cy + k,
+            cx2: cx + k,
+            cy2: cy + r,
+            x: cx,
+            y: cy + r,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - k,
+            cy1: cy + r,
+            cx2: cx - r,
+            cy2: cy + k,
+            x: cx - r,
+            y: cy,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - r,
+            cy1: cy - k,
+            cx2: cx - k,
+            cy2: cy - r,
+            x: cx,
+            y: cy - r,
+        },
+        PathSegment::CubicTo {
+            cx1: cx + k,
+            cy1: cy - r,
+            cx2: cx + r,
+            cy2: cy - k,
+            x: cx + r,
+            y: cy,
+        },
+        PathSegment::Close,
+    ])
 }
 
 /// The unit square traced the way InDesign writes a rectangle: down the
@@ -295,15 +291,13 @@ pub fn unit_ellipse() -> PathData {
 /// path does, since its marks start at the first anchor and take their
 /// side from the direction (`stroke_marks`, ADR 150).
 fn unit_rect() -> PathData {
-    PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: 0.0, y: 0.0 },
-            PathSegment::LineTo { x: 0.0, y: 1.0 },
-            PathSegment::LineTo { x: 1.0, y: 1.0 },
-            PathSegment::LineTo { x: 1.0, y: 0.0 },
-            PathSegment::Close,
-        ],
-    }
+    PathData::new(vec![
+        PathSegment::MoveTo { x: 0.0, y: 0.0 },
+        PathSegment::LineTo { x: 0.0, y: 1.0 },
+        PathSegment::LineTo { x: 1.0, y: 1.0 },
+        PathSegment::LineTo { x: 1.0, y: 0.0 },
+        PathSegment::Close,
+    ])
 }
 
 #[cfg(test)]

@@ -14,8 +14,8 @@ workspace = true
 # boa 0.22 turned `temporal` on by default; the sandbox keeps the feature
 # set 0.21's defaults gave it.
 boa_engine = { version = "0.22", default-features = false, features = ["float16", "xsum"] }
-data-core = { path = "../data-core" }
-data-automation = { path = "../data-automation" }
+paged-data-core = { path = "../../../engine/core/crates/paged-data-core" }
+paged-data-automation = { path = "../../../engine/core/crates/paged-data-automation" }
 data-js = { path = "../data-js" }
 serde.workspace = true
 serde_json.workspace = true

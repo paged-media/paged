@@ -14,7 +14,7 @@
   title: File source (CSV/TSV/JSON/Parquet/Excel) — file-import capability
   spec: plugin-data data-sources/src/lib.rs (base-idea §6.2)
   status: implemented
-  provenance: ["DuckDB readers over OPFS-imported bytes; capability-gated"]
+  provenance: ["the store's readers (data-store) over imported bytes; capability-gated"]
   tests:
     rust: ["data-conformance/tests/it/sources.rs::data_source_file"]
 
@@ -34,7 +34,7 @@
   tests:
     rust:
       - "data-conformance/tests/it/sources.rs::data_source_remote"
-      - "data-sources/src/remote.rs::data_source_remote_validate"
+      - "engine:paged-data-sources/src/remote.rs::data_source_remote_validate"
     vitest: ["packages/data-bundle/src/__tests__/remote.test.ts"]
 
 - id: data.source.db-attach
@@ -46,18 +46,35 @@
     - "honest transport scoping: SQLite attach (file/OPFS) is pure-web-reachable; Postgres/MySQL over raw TCP is the headless/napi + proxy lane (a named deferral) — attach_plan().in_browser reports it; descriptor + ref indirection + host seam exist for all three"
   tests:
     rust:
-      - "data-sources/src/lib.rs::data_source_db_attach_credential_ref_only"
-      - "data-sources/src/lib.rs::data_source_db_attach_sqlite_is_file_tier"
-      - "data-sources/src/lib.rs::data_source_db_attach_plan_scopes_network_engines"
+      - "engine:paged-data-sources/src/lib.rs::data_source_db_attach_credential_ref_only"
+      - "engine:paged-data-sources/src/lib.rs::data_source_db_attach_sqlite_is_file_tier"
+      - "engine:paged-data-sources/src/lib.rs::data_source_db_attach_plan_scopes_network_engines"
 
 - id: data.source.duckdb-engine
   title: DuckDB-WASM loads first-class via the `engine` wasm purpose (64 MiB ceiling, D-07b)
-  spec: plugin-data packages/data-bundle/manifest.json + scripts/vendor-duckdb.sh (D-07b, D-11)
+  spec: plugin-data packages/data-bundle/manifest.json (D-07b, D-11)
+  status: superseded
+  superseded_by: data.store.turso
+  provenance:
+    - "DuckDB-WASM was the query engine until ADR 561 (PM-0015); the store is Turso inside the data engine, one wasm artifact"
+
+- id: data.store.turso
+  title: The query store — Turso compiled into the data engine, files read in Rust, queries into RecordSets (ADR 561)
+  spec: plugin-data data-store/src (PM-0015, ADR 561)
   status: implemented
   provenance:
-    - "the vendored MIT DuckDB-WASM (~36 MiB) is declared purpose:engine — it earns the governed 64 MiB per-artifact ceiling, NOT the 8 MiB compute/codec cap; the plugin-cli size-gate verifies it passes as engine and would REJECT it as compute"
+    - "turso_core 0.8.3 (MIT) behind data_core::RecordSet; CSV/TSV/JSON/Parquet/XLSX readers in Rust; the SQLite oracle replayed (24 of 25 agree, one pinned gap)"
   tests:
-    rust: ["data-conformance/tests/it/sources.rs::data_source_duckdb_engine_purpose"]
+    rust:
+      - "engine:paged-data-store/tests/it.rs::csv_columns_are_typed_from_their_fields__feat__data_store_turso"
+      - "engine:paged-data-store/tests/it.rs::a_query_reads_declared_types_back__feat__data_store_turso"
+      - "engine:paged-data-store/tests/it.rs::the_query_connection_refuses_writes__feat__data_store_turso"
+      - "engine:paged-data-store/tests/it.rs::indesign_merge_csvs_read_as_written__feat__data_store_turso"
+      - "engine:paged-data-store/tests/it.rs::the_parquet_fixture_imports__feat__data_store_turso"
+      - "engine:paged-data-store/tests/it.rs::the_xlsx_fixture_imports_with_its_worksheet_types__feat__data_store_turso"
+      - "engine:paged-data-store/tests/sqlite_oracle.rs::the_store_answers_as_sqlite_does__feat__data_store_turso"
+      - "data-conformance/tests/it/roundtrip.rs::data_plugin_load_payload_keeps_the_store__feat__data_store_turso"
+      - "data-conformance/tests/it/sources.rs::data_source_one_engine_artifact__feat__data_store_turso"
 
 - id: data.source.refresh-policy
   title: Source refresh-policy shape — Manual | OnOpen | Interval | Never (round-trips; honest interactive-vs-automation split, §5.1/§11)

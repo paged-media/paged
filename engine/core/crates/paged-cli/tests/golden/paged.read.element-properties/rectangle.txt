@@ -18,6 +18,13 @@ rows with a value: [
     }
   },
   {
+    "path": "frameFillRule",
+    "value": {
+      "type": "text",
+      "value": "NonZero"
+    }
+  },
+  {
     "path": "frameTextWrapOffsets",
     "value": {
       "type": "bounds",

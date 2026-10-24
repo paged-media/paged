@@ -9,11 +9,14 @@ tags: ["rust", "node", "module", "wasm"]
 
 project:
   title: "modules/data"
-  description: "Database publishing module: DSL, bindings, DuckDB-WASM query engine."
+  description: "Database publishing module: DSL, bindings, the Turso query store."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
-# data-core and data-expr take platform/shared/fmt by path.
+# The engine crates (engine/core/crates/paged-data-*, PM-0015) and
+# platform/shared/fmt are path dependencies.
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
@@ -30,23 +33,17 @@ fileGroups:
     - "/.cargo/*.toml"
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"
+    - "/engine/core/crates/paged-data-*/**/*.rs"
+    - "/engine/core/crates/paged-data-*/Cargo.toml"
+    - "/engine/core/crates/paged-data-core/functions/*.yaml"
+    - "/engine/core/crates/paged-action/**/*.rs"
+    - "/engine/core/crates/paged-action/Cargo.toml"
 
 tasks:
   js-test:
-    # data-vitest.yml builds the engine wasm and vendors DuckDB before bun test.
-    deps: ["~:wasm", "~:duckdb"]
-
-  duckdb:
-    description: "Vendor the pinned DuckDB-WASM build and stage it into packages/data-bundle/bin/ (scripts/vendor-duckdb.sh)."
-    command: "bash scripts/vendor-duckdb.sh"
-    inputs:
-      - "scripts/vendor-duckdb.sh"
-      - "scripts/bundle-duckdb-api.mjs"
-      - "packages/data-bundle/manifest.json"
-      - "/bun.lock"
-    options:
-      # Downloads from npm; data-vitest runs it in CI.
-      runInCI: "skip"
+    # data-vitest.yml builds the engine wasm (the query store is inside it)
+    # before bun test.
+    deps: ["~:wasm"]
 
   wasm:
     description: "data-js wasm into packages/data-bundle/bin/ (scripts/build-wasm.sh)."

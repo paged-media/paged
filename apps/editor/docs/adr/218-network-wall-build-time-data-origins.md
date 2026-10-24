@@ -72,3 +72,9 @@ at build time.
   between the committed floor and the module.
 - `tests/e2e/network-consent.spec.ts` AC-NET-1: an external fetch trips `connect-src` on the
   default build.
+
+## Amendment (2026-10-24): no DuckDB
+
+paged.data no longer runs DuckDB-WASM ([PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md),
+data record 561): its query store is Turso, compiled into its own engine wasm. What this record
+says about DuckDB describes the editor before that change.

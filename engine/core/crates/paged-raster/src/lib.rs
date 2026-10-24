@@ -54,9 +54,17 @@
 //!
 //! PNG, JPEG, WebP, GIF and BMP decode through `image`, exactly as the
 //! renderer did before this crate existed: [`decode_rgba8`] on one of them
-//! is `image::load_from_memory(..).to_rgba8()`, byte for byte. PSD (`8BPS`)
-//! is recognised and refused ([`Error::Unsupported`]) until the PSD reader
-//! moves into the engine.
+//! is `image::load_from_memory(..).to_rgba8()`, byte for byte.
+//!
+//! PSD and PSB (`8BPS`) read through `paged-psd`: [`probe`] from its
+//! summary (header, resources, layer records; no pixel copied), [`decode`]
+//! from the merged composite, the image Photoshop stores beside the
+//! layers ("maximize compatibility"). RGB, Grayscale and CMYK at 8 and 16
+//! bits (16 reduced to 8, the composite decoder's rule), RAW and RLE, with
+//! the composite's transparency when the document has it. CMYK converts
+//! like a CMYK TIFF, through the file's own profile (resource 1039). The
+//! layers themselves are the image module's; [`RasterInfo::layer_count`]
+//! says how many there are.
 //!
 //! ## Colour
 //!
@@ -77,14 +85,16 @@
 //!
 //! Orientation is reported, not applied (the renderer never applied it).
 //! Region decode, the remaining codecs and encoders of the raster plan,
-//! layered TIFF (tag 37724 is detected and exposed as `has_layers` only)
-//! and gray or RGB ICC conversion follow in later work.
+//! and gray or RGB ICC conversion follow in later work. A layered TIFF
+//! (tag 37724) decodes its flattened image; its layer records are read
+//! through `paged-psd` for [`RasterInfo::layer_count`] only.
 
 #![forbid(unsafe_code)]
 
 mod convert;
 mod icc;
 mod other;
+mod psd;
 mod shrink;
 mod sniff;
 mod tif;
@@ -124,8 +134,15 @@ pub struct RasterInfo {
     pub iptc: Option<Vec<u8>>,
     /// The embedded Photoshop image resource blocks (TIFF tag 34377).
     pub photoshop_irb: Option<Vec<u8>>,
-    /// Photoshop's layer data is present (TIFF tag 37724, ImageSourceData).
+    /// Photoshop's layer data is present: a PSD/PSB with layer records, or
+    /// a TIFF with tag 37724 (ImageSourceData).
     pub has_layers: bool,
+    /// The layer records Photoshop stores (group open and close markers
+    /// included), read through `paged-psd`: `Some(0)` for a file without
+    /// layers, `None` when a TIFF's layer data is present but not readable
+    /// (a little-endian payload, or a damaged one). Always `Some(0)` for
+    /// the formats that have no layers.
+    pub layer_count: Option<usize>,
     /// Pixels per inch, horizontal and vertical, when the file states a
     /// resolution in inches or centimetres.
     pub resolution: Option<(f64, f64)>,
@@ -257,8 +274,8 @@ pub struct DecodeOptions {
     pub page: usize,
     /// When set, an image whose longer edge exceeds it is box-shrunk by
     /// the smallest whole factor that brings it within (see
-    /// [`shrunk_dimensions`]). Honoured by the TIFF decoder; the formats
-    /// read through `image` decode at full size.
+    /// [`shrunk_dimensions`]). Honoured by the TIFF and PSD decoders; the
+    /// formats read through `image` decode at full size.
     pub max_dim: Option<u32>,
 }
 
@@ -295,7 +312,7 @@ pub fn probe(bytes: &[u8]) -> Result<RasterInfo> {
 pub fn probe_page(bytes: &[u8], page: usize) -> Result<RasterInfo> {
     match sniff(bytes) {
         Some(Format::Tiff) => tif::probe(bytes, page),
-        Some(Format::Psd) => Err(psd_unsupported()),
+        Some(Format::Psd) => psd::probe(bytes, page),
         Some(format) => other::probe(bytes, format, page),
         None => Err(Error::UnknownFormat),
     }
@@ -305,7 +322,7 @@ pub fn probe_page(bytes: &[u8], page: usize) -> Result<RasterInfo> {
 pub fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
     match sniff(bytes) {
         Some(Format::Tiff) => tif::decode(bytes, opts),
-        Some(Format::Psd) => Err(psd_unsupported()),
+        Some(Format::Psd) => psd::decode(bytes, opts),
         Some(format) => other::decode(bytes, format, opts),
         None => Err(Error::UnknownFormat),
     }
@@ -324,6 +341,7 @@ pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
 ///
 /// A TIFF decodes through this crate (shrunk to `max_dim` when given);
 /// one it cannot read is handed to `image`, the decoder TIFFs used before.
+/// A PSD/PSB decodes its merged composite (shrunk to `max_dim`).
 /// Every other format is `image::load_from_memory(bytes)?.to_rgba8()`,
 /// unchanged, at full size.
 pub fn decode_rgba8_with(
@@ -338,7 +356,8 @@ pub fn decode_rgba8_with(
                 tracing::warn!(error = %err, "TIFF decode failed; trying the image crate");
                 other::decode_rgba8(bytes).map_err(|_| err)
             }),
-        Some(Format::Psd) => Err(psd_unsupported()),
+        Some(Format::Psd) => psd::decode(bytes, DecodeOptions { page: 0, max_dim })
+            .and_then(|img| to_rgba8(&img, conv)),
         _ => other::decode_rgba8(bytes),
     }
 }
@@ -346,11 +365,4 @@ pub fn decode_rgba8_with(
 /// The bytes are a TIFF (classic or BigTIFF, either byte order).
 pub fn is_tiff(bytes: &[u8]) -> bool {
     sniff(bytes) == Some(Format::Tiff)
-}
-
-fn psd_unsupported() -> Error {
-    Error::Unsupported {
-        format: Format::Psd,
-        what: "the Photoshop document format".into(),
-    }
 }

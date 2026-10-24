@@ -38,8 +38,9 @@
 //!   5. Counter-rotation — outer Group rotates, inner child rotates
 //!      back; the rendered rect should net to upright.
 //!   6. Compound path (`Polygon` with two sub-paths in one
-//!      `PathGeometry`) — even-odd fill cuts a square hole out of
-//!      a square.
+//!      `PathGeometry`) — the inner sub-path, wound against the outer
+//!      one, cuts a square hole out of a square under IDML's non-zero
+//!      fill.
 //!
 //! Note: this sample only exercises *structural* group emission and
 //! transform composition; richer group semantics (group-level
@@ -383,9 +384,9 @@ fn build_variant(seq: u32, idx: usize) -> Vec<PageItem> {
         }
         // 6. Compound path — single Polygon, one PathGeometry, two
         //    sub-paths (outer 200×200 square, inner 80×80 square).
-        //    Even-odd fill rule punches the inner square out as a
-        //    hole. The PolygonItemTransform places the assembly
-        //    near the page centre.
+        //    The inner square, wound against the outer, is a hole
+        //    under IDML's non-zero fill. The PolygonItemTransform
+        //    places the assembly near the page centre.
         5 => {
             let outer = 200.0_f32;
             let inner_inset = (outer - 80.0) * 0.5;
@@ -395,7 +396,7 @@ fn build_variant(seq: u32, idx: usize) -> Vec<PageItem> {
                 true,
             );
             // Inner sub-path walked in opposite winding so the
-            // even-odd rule treats it as a hole rather than an
+            // non-zero rule treats it as a hole rather than an
             // extra fill.
             let inner_path = PolygonSubPath::corners(
                 [

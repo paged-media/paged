@@ -8,49 +8,64 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
 
 ## Layout
 
-- A Cargo workspace of 13 crates. They sit at the repo root, not under `crates/`. The
-  toolchain is pinned to Rust 1.99.1 (`rust-toolchain.toml`); no crate is published.
-- A pnpm workspace with two TypeScript packages under `packages/`.
-- `registry/`: YAML. The 42 rows in `functions/`, one per expression function, are read by
-  the two `build.rs` scripts. The 73 rows in `features/` are read by the `coverage-gate`
+- Sixteen crates in two Cargo workspaces (PM-0015). The engine-level twelve — the types,
+  the binding language, query shaping, sync, lowering, barcodes, data sets, sources, the
+  store and the XLSX reader, batch planning, and the session that joins them — are
+  `engine/core/crates/paged-data-*`, in the engine's workspace; each keeps its library name
+  (`data_core`, `data_store`, `data_session`, …). The module's workspace holds the other
+  four at its root: `data-js` (the wasm shim), `data-script`, `data-cli` and
+  `data-conformance`, which reach the engine crates by path. The toolchain
+  is pinned to Rust 1.99.1 in both; no crate is published.
+- Two TypeScript packages under `packages/`, in the root Bun workspace.
+- The function rows are `engine/core/crates/paged-data-core/functions/*.yaml`: 42 rows,
+  one per expression function, read by the two `build.rs` scripts.
+- `registry/`: YAML. The 73 rows in `features/` are read by the `coverage-gate`
   binary, which also reads the function rows; the 68 feature rows marked `implemented` name
   tests.
-- `scripts/`: the wasm build, the DuckDB download and the import lint.
-- `vendor/duckdb-wasm/`: git holds only `SOURCE.md` and a `.gitkeep`. The DuckDB-WASM 1.29.0
-  files are fetched by `scripts/vendor-duckdb.sh` into its `dist/` folder, which is ignored.
+- `scripts/`: the wasm build and the import lint.
+- `spikes/turso/`: the measured Turso spike behind ADR 561 (its own Cargo workspace, not
+  built by the module; [`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md)).
 
 ## Rust crates
 
-| Crate              | What it owns                                                                                                                                                                                                                 | Workspace crates it depends on                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `data-core`        | The shared types: `Value`, `DataSource`, `Query`, `RecordSet`, the seven `Binding` kinds, the sync types, the `Expr` syntax tree. Its `build.rs` generates the function table from the registry.                             | none                                                                                                                    |
-| `data-expr`        | The binding language: lexer, Pratt parser, evaluator, and the function kernels in five families (format, logic, math, temporal, text). Its `build.rs` generates the dispatch.                                                | `data-core`                                                                                                             |
-| `data-query`       | Reshaping a result by its declared shape, a deterministic row order (`stabilize`), FNV-1a content hashes and the resolve stamp.                                                                                              | `data-core`                                                                                                             |
-| `data-sources`     | One adapter per source kind, the capability check `authorize`, the source manifest, credential redaction, validation of a remote descriptor and its invalidation key, column metadata for governed data sets, `attach_plan`. | `data-core`                                                                                                             |
-| `data-barcode`     | Encoders for EAN-13, UPC-A, Code-128 and QR. Output is a list of rectangles in a unit box.                                                                                                                                   | `data-core`                                                                                                             |
-| `data-dataset`     | Variables, data sets and the variable-library XML codec (uses `quick-xml`).                                                                                                                                                  | `data-core`                                                                                                             |
-| `data-lower`       | Resolved content to the lowered form: variable, table, image, barcode, visibility; and `paginate_flow` for record flow.                                                                                                      | `data-core`, `data-barcode`                                                                                             |
-| `data-bind`        | `ResolutionEngine`: resolves a binding against a delivered result, keeps a sync state per binding, evaluates rules, and holds the keyed row diff, the change report and the column-mapping suggestions.                      | `data-core`, `data-expr`, `data-query`                                                                                  |
-| `data-automation`  | `plan_batch`: splits a result into generation units (per record, per group, one catalog).                                                                                                                                    | `data-core`, `data-query`                                                                                               |
-| `data-js`          | `DataSession`, which joins the crates above, and the wasm class `DataEngine`.                                                                                                                                                | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation` |
-| `data-script`      | A Boa (`boa_engine` 0.21.1) context that evaluates a script to a `{ locale?, params?, build? }` value.                                                                                                                       | `data-core`, `data-automation`, `data-js`                                                                               |
-| `data-cli`         | The library function `run_job` and the binary `paged-data-batch`.                                                                                                                                                            | `data-core`, `data-lower`, `data-automation`, `data-js`, `data-script`                                                  |
-| `data-conformance` | 27 integration test files and the `coverage-gate` binary. Test only.                                                                                                                                                         | every crate except `data-cli` and `data-script`                                                                         |
+The table names each crate by its directory; all but `data-js`, `data-script`, `data-cli`
+and `data-conformance` are `paged-data-<x>` packages in `engine/core/crates`.
+
+| Crate              | What it owns                                                                                                                                                                                                                        | Workspace crates it depends on                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-core`        | The shared types: `Value`, `DataSource`, `Query`, `RecordSet`, the seven `Binding` kinds, the sync types, the `Expr` syntax tree. Its `build.rs` generates the function table from the registry.                                    | none                                                                                                                                  |
+| `data-expr`        | The binding language: lexer, Pratt parser, evaluator, and the function kernels in five families (format, logic, math, temporal, text). Its `build.rs` generates the dispatch.                                                       | `data-core`                                                                                                                           |
+| `data-query`       | Reshaping a result by its declared shape, a deterministic row order (`stabilize`), FNV-1a content hashes and the resolve stamp.                                                                                                     | `data-core`                                                                                                                           |
+| `data-xlsx`        | One worksheet of an `.xlsx` as typed rows (calamine).                                                                                                                                                                               | none                                                                                                                                  |
+| `data-store`       | The query store (ADR 561): an in-memory Turso database the sources live in, the readers for CSV/TSV (delimiter sniffed, types inferred, kept as written too), JSON, Parquet and XLSX, and queries read straight into a `RecordSet`. | `data-core`, `data-xlsx`                                                                                                              |
+| `data-sources`     | One adapter per source kind, the capability check `authorize`, the source manifest, credential redaction, validation of a remote descriptor and its invalidation key, column metadata for governed data sets, `attach_plan`.        | `data-core`                                                                                                                           |
+| `data-barcode`     | Encoders for EAN-13, UPC-A, Code-128 and QR. Output is a list of rectangles in a unit box.                                                                                                                                          | `data-core`                                                                                                                           |
+| `data-dataset`     | Variables, data sets and the variable-library XML codec (uses `quick-xml`).                                                                                                                                                         | `data-core`                                                                                                                           |
+| `data-lower`       | Resolved content to the lowered form: variable, table, image, barcode, visibility; and `paginate_flow` for record flow.                                                                                                             | `data-core`, `data-barcode`                                                                                                           |
+| `data-bind`        | `ResolutionEngine`: resolves a binding against a delivered result, keeps a sync state per binding, evaluates rules, and holds the keyed row diff, the change report and the column-mapping suggestions.                             | `data-core`, `data-expr`, `data-query`                                                                                                |
+| `data-automation`  | `plan_batch`: splits a result into generation units (per record, per group, one catalog).                                                                                                                                           | `data-core`, `data-query`                                                                                                             |
+| `data-session`     | `DataSession`, which joins the crates above, and `labels`: the recipe a document's labels carry (core ADR 1014).                                                                                                                    | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation`, `data-store` |
+| `data-js`          | The wasm class `DataEngine`, a forwarding shim over `DataSession`; it re-exports the session's modules.                                                                                                                             | `data-session` (and `data-core`, `data-bind`, `data-lower`, `data-store` for its signatures)                                          |
+| `data-script`      | A Boa (`boa_engine` 0.21.1) context that evaluates a script to a `{ locale?, params?, build? }` value.                                                                                                                              | `data-core`, `data-automation`, `data-js`                                                                                             |
+| `data-cli`         | The library function `run_job` and the binary `paged-data-batch`.                                                                                                                                                                   | `data-core`, `data-lower`, `data-automation`, `data-js`, `data-script`                                                                |
+| `data-conformance` | 27 integration test files and the `coverage-gate` binary. Test only.                                                                                                                                                                | every crate except `data-cli` and `data-script`                                                                                       |
 
 - **One wasm module, two layers.** `data-js` builds as `cdylib` and `rlib`. `DataSession`
   (`data-js/src/core.rs`) is plain Rust. `DataEngine` (`data-js/src/lib.rs`) is compiled only
   for `wasm32`; its methods forward to the session and convert structured values with
   `serde-wasm-bindgen`. `data-cli`, `data-script` and `data-conformance` use the session
   natively.
-- **No I/O.** At run time no crate in the wasm tree reads a file, a clock or the network.
-  The day number for `TODAY()` and the query results are handed in.
+- **No I/O.** At run time no crate in the wasm tree reads a file or the network. The day
+  number for `TODAY()` and the bytes of every source are handed in. The store keeps its
+  database in memory; Turso reads a clock for its own bookkeeping, which on wasm comes from
+  JavaScript (`data-store/src/clock.rs`; `std::time` has no clock on `wasm32-unknown-unknown`).
 - **Native-only code stays out of the wasm.** `data-script` and `data-cli` depend on
-  `data-js`, not the reverse. CI checks two edges with `cargo tree`: `data-expr` must not
-  reach `data-sources`, `data-query`, `data-bind`, `data-lower` or `data-js`, and the wasm
-  tree of `data-js` must not contain `data-conformance` or `proptest`.
+  `data-js`, not the reverse. CI checks two edges with `cargo tree`: `paged-data-expr` must
+  not reach the sources, query, bind, lower or store crates (core / ci), and the wasm tree of
+  `data-js` must not contain `data-conformance` or `proptest` (data / rust).
 
 **The function table.** `data-core/build.rs` and `data-expr/build.rs` both read
-`registry/functions/*.yaml` and sort the rows by id, so the index one assigns is the index
+`paged-data-core/functions/*.yaml` and sort the rows by id, so the index one assigns is the index
 the other dispatches on. The parser looks a function name up in the generated table; a name
 with no row is a parse error, which evaluation turns into the value `#NAME`. The
 `coverage-gate` binary fails when a registry row with `status: implemented` names no test
@@ -65,9 +80,9 @@ TypeScript copy of the lowered types (`lowered.ts`), and the metadata envelope
 
 **`packages/data-bundle`** is published to npm as `@paged-media/data` (`dist`, `bin` and
 `manifest.json`). It holds `activate(host)`, three React panels (`src/panels/`), the session
-(`src/session.ts`), the engine loader (`src/engine.ts`), the DuckDB loader
-(`src/query/duckdb.ts`), the Arrow converter (`src/query/recordset.ts`) and the functions
-that write to the document (`src/lower.ts`).
+(`src/session.ts`), the engine loader (`src/engine.ts`), the handle on the engine's query
+store (`src/query/store.ts`), the query guard (`src/query/sql.ts`) and the functions that write
+to the document (`src/lower.ts`).
 
 - The bundle imports the host model by relative path (`../../data-host-model/src`). Both
   are private workspace packages (PM-0008); the editor builds them from source.
@@ -75,7 +90,7 @@ that write to the document (`src/lower.ts`).
   The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import outside its
   allow-list:
   those three, the internal shared packages (`platform/shared/*`), this repo's own
-  `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and `apache-arrow`.
+  `@paged-media/data-` packages.
 - The TypeScript interface `DataEngineLike` (`src/engine.ts`) repeats the methods of the
   Rust class by hand, except `define_template` and `lower_barcode_at`. Nothing generates it.
 
@@ -85,13 +100,13 @@ that write to the document (`src/lower.ts`).
 file picked in the panel            remote URL, after consent: fetch()
         \                               /
          v                             v
-   DuckDB-WASM, in a worker the bundle starts          src/query/duckdb.ts
-         |  conn.query(sql)  ->  Arrow table
+   bytes  ->  DataEngine.store_import(name, format, bytes)   src/query/store.ts
+         |  read in Rust, a table in the store           data-store (Turso)
          v
-   arrowToRecordSet  ->  { schema, columns, row_count }  src/query/recordset.ts
-         |  engine.ingest_result(queryId, records)       JSON-shaped values
+   DataEngine.store_ingest(queryId, sql)                 the query guard first (sql.ts)
+         |  rows straight into a RecordSet, inside the wasm
          v
-   DataEngine (wasm)  ->  DataSession  ->  ResolutionEngine
+   DataSession  ->  ResolutionEngine
          |  resolve: evaluate the binding's expressions   data-bind, data-expr
          |  lower:  content-space geometry, in points     data-lower, data-barcode
          v
@@ -101,17 +116,17 @@ file picked in the panel            remote URL, after consent: fetch()
    host.document.mutate(...)                             src/lower.ts, src/session.ts
 ```
 
-1. **Sources.** The Data sources panel reads a `.csv` or `.tsv` file, through
-   `host.shell.pickFile` where the host has it, and hands the text to DuckDB, which creates
-   a table named after the file. A remote source is first only a descriptor.
+1. **Sources.** The Data sources panel reads a file, through `host.shell.pickFile` where the
+   host has it, and hands the bytes to the engine's store, which reads them in Rust and
+   creates a table named after the file. A remote source is first only a descriptor.
    `loadRemoteSource` checks `host.network.consentedOrigins()` and, if the origin is granted,
-   makes the only `fetch` call in the bundle's source and registers the bytes with DuckDB.
+   makes the only `fetch` call in the bundle's source and hands the bytes to the store.
    See [ADR 556](adr/556-secrets-never-enter-the-plugin.md).
-2. **Query.** `refreshData` runs every defined query in DuckDB. `arrowToRecordSet` maps
-   each Arrow column to one of six field types by the type's name and wraps each cell as a
-   tagged value `{ t, v }`. That object crosses into the wasm as a `RecordSet`; no Arrow
-   bytes cross. See [ADR 014](adr/014-data-provider-arrow-seam.md) and
-   [ADR 015](adr/015-duckdb-wasm-vendored.md).
+2. **Query.** `refreshData` runs every defined query in the store, after the guard. A
+   query's rows become a `RecordSet` inside the wasm: a column that reads a table column
+   has its declared type (a DATE, a DECIMAL with its scale, a BOOLEAN), a computed one the
+   type of its values. No row crosses into TypeScript. See
+   [ADR 014](adr/014-data-provider-arrow-seam.md) and PM-0015 (record 561).
 3. **Resolve.** `ResolutionEngine::set_result` hashes the result and, when the hash changed,
    marks dependent bindings stale, except pinned and overridden ones. `resolve_at` evaluates
    a binding's expression source text against one row (variable, image, barcode, visibility)
@@ -159,7 +174,7 @@ binding of the current session, and writes `setFieldValue` only where the value 
 
 | Data                                                                           | Where it lives                                                                                                                                                                                                                                              |
 | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Imported and fetched rows                                                      | DuckDB's memory, in the worker. Gone on reload.                                                                                                                                                                                                             |
+| Imported and fetched rows                                                      | The store, in the engine's memory; kept when an undo reloads a session version, gone on reload (the `session` part holds the imported bytes, loaded again on first use).                                                                                    |
 | Sources, queries, binding definitions, sync states, data sets                  | The wasm session and maps in `src/session.ts`. Gone on reload.                                                                                                                                                                                              |
 | Resolved values                                                                | The document, as ordinary content: fields, tables, images, paths, element visibility, applied styles.                                                                                                                                                       |
 | The link from a text field to its binding                                      | The field's own tag `{ plugin: "media.paged.data", key: <binding id> }`. From engine protocol 71: the custom text variable named `paged:<binding id>` (ADR 559), whose contents is the value; found by name, because an InDesign save re-spells its `Self`. |
@@ -184,7 +199,7 @@ On branch `om/universal-binding` (2026-10-06), against plugin-api/plugin-sdk
   enum (members), text (maxLength), ref, asset, bounds/point/transform. `coerce: strict`
   fails a mismatch (sync state `Error`); `lenient` runs `missing` (`keepLast` writes nothing,
   `clear`, `default`, `error`). The expression language gained `MM CM IN PT PX AS` and
-  `RGB CMYK HEX SWATCH ENUM` (`registry/functions/{units,color}.yaml`); a length is a number
+  `RGB CMYK HEX SWATCH ENUM` (`paged-data-core/functions/{units,color}.yaml`); a length is a number
   in points and a colour is a canonical text literal, so no `Value` variant was added.
 - **One apply = one `host.objects.batch`** (`src/property-lane.ts`): `resolve_properties_at`
   decides every value (pinned and overridden bindings answer `keep`), `data-host-model`
@@ -227,9 +242,8 @@ On branch `om/universal-binding` (2026-10-06), against plugin-api/plugin-sdk
 
 The manifest (`packages/data-bundle/manifest.json`) declares: `document` read `broad` and
 write `scoped`; `rendering: ["hitTest"]`; `network: { origins: "consent" }`; `clipboard:
-"none"`; `dataProviders.publish: ["dataset"]`; and four wasm files, `bin/data_js_bg.wasm`
-(purpose `compute`), `bin/duckdb-engine.wasm` and DuckDB's json and parquet extensions in
-`bin/duckdb-ext/v1.1.1/wasm_eh/` (purpose `engine`). It contributes three
+"none"`; `dataProviders.publish: ["dataset"]`; and one wasm file, `bin/data_js_bg.wasm`
+(purpose `compute`, at most 16 MiB), the query store inside it. It contributes three
 panels, seven commands and one edit context, `dataBinding`.
 
 | Door                                                                              | What the plugin uses it for                                                                         |
@@ -246,28 +260,22 @@ panels, seven commands and one edit context, `dataBinding`.
 | `host.shell.pickFile`, `saveFile`, `openPanel`                                    | import CSV and XML, export XML, open a panel                                                        |
 | `host.supports`, `host.log`                                                       | probe optional doors; logging                                                                       |
 
-Neither wasm file goes through a host loader, but both are first asked of the host's module
+The wasm file does not go through a host loader, but it is first asked of the host's module
 door (plugin-sdk ADR 326; `hostWasm` in `packages/data-bundle/src/bin-url.ts`, which asks
 `host.modules` where the host wires a module backend, `modules@1`). The engine is imported from
 `../bin/data_js.js`, the `wasm-bindgen --target web` glue; its `.wasm` is the host's copy,
 fetched with its Subresource Integrity, when the host serves one, else the file next to the
-glue. DuckDB is loaded from the package's own `bin/` (`packages/data-bundle/src/bin-url.ts`):
-`duckdb-browser.mjs` (the DuckDB JS API with apache-arrow bundled in) and the eh worker
-always; `duckdb-engine.wasm` from the host when it serves it — pre-fetched once with its
-integrity (a 404 or a mismatch falls back to `bin/`), then handed to the worker as a URL — else
-from `bin/`. The bundle starts DuckDB's worker itself, same-origin. The publish workflow stamps
-each artifact's sha384 into the published manifest and uploads the wasm to the module host
+glue. The publish workflow stamps the artifact's sha384 into the published manifest and uploads the wasm to the module host
 (`paged-plugin integrity` / `modules-upload`, plugin-cli 0.1.6). All of them are in the files
 the npm package lists, so an application serves the installed package's `bin/`; the editor
 copies it into its build output.
 
 The plugin offers two things to others: the published data set described above, and the
-exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bootDuckDB`.
+exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `storeHandle`.
 
 ## Build and test
 
-- `bash scripts/vendor-duckdb.sh` downloads DuckDB-WASM and copies its `duckdb-eh.wasm` to
-  `packages/data-bundle/bin/duckdb-engine.wasm`. `bash scripts/build-wasm.sh` builds
+- `bash scripts/build-wasm.sh` builds
   `data-js` for `wasm32-unknown-unknown`, runs `wasm-bindgen --target web` into
   `packages/data-bundle/bin/` (ignored by git) and `wasm-opt -Oz` when installed. It fails
   above 100 MB, and when the installed `wasm-bindgen` differs from the one in `Cargo.lock`.
@@ -276,9 +284,10 @@ exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bo
 - TypeScript: `pnpm test` runs the import lint, then `bun test` in both packages. The bundle's
   unit tests use hand-written fake hosts and fake engines. `test/engine-real.spec.ts` loads
   the built wasm; when the file is absent it is skipped, or fails if `REQUIRE_REAL_ENGINE=1`.
-  `test/pipeline-real.spec.ts` and `test/duckdb-real.spec.ts` (`pnpm --filter @paged-media/data
-test:e2e`) drive the real wasm and the real DuckDB (Node build over the shipped engine); they
-  fail instead of skipping under `REQUIRE_REAL_DUCKDB=1`.
+  `test/pipeline-real.spec.ts` and `test/store-real.spec.ts` (`bun run test:e2e`) drive the
+  real wasm and its store; `test/store-browser.spec.ts` the same in headless Chromium under
+  the editor's headers. They fail instead of skipping under `REQUIRE_REAL_ENGINE=1`
+  (`REQUIRE_REAL_BROWSER=1` for the browser lane).
 - CI (`.github/workflows/`), on pushes to `main`: `rust.yml` runs format, clippy with
   warnings as errors, the two `cargo tree` checks, `cargo-deny`, the tests, the coverage gate
   and the wasm build; `vitest.yml` builds the wasm, runs the import lint and vitest;

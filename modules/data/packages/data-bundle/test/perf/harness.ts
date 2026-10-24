@@ -27,15 +27,13 @@
 //           bytes that cross INTO it (ingest_result), the JSON bytes that come
 //           back OUT of a resolve/lower, and the engine's own perfCounters()
 //           (resolves, stabilize sorts, sort-key allocations, fingerprints).
-//   duck    real DuckDB-WASM over the shipped bin/duckdb-engine.wasm, driven
-//           through the bundle's own duckdbHandle (Node blocking build — the
-//           browser worker cannot run here; same as test/duckdb-real.spec.ts)
-//           behind a counter of registrations, queries and rows returned.
+//   store   the query store inside that engine (ADR 561), through the
+//           bundle's own handle (src/query/store.ts) behind a counter of
+//           imports, statements and rows handed on.
 //
 // The session under test is the bundle's own createSession, with bootEngine /
-// bootDuckDB pointed at the counted real instances — nothing in src/ changes.
+// storeHandle pointed at the counted real instances — nothing in src/ changes.
 
-import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,7 +44,7 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import { HOST_FEATURES, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import type { DataEngineLike } from "../../src/engine";
-import type { DuckDBHandle } from "../../src/query/duckdb";
+import type { QueryHandle } from "../../src/query/store";
 import type { DataSourceSession } from "../../src/session";
 import manifest from "../../manifest.json";
 import {
@@ -61,37 +59,24 @@ import { type WorkLog } from "./counting-host";
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../../src/engine"));
-const actualDuckdb = await importActual(() => import("../../src/query/duckdb"));
+const actualStore = await importActual(() => import("../../src/query/store"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..", "..");
 const BIN = join(PKG, "bin");
 export const DATA_JS_WASM = join(BIN, "data_js_bg.wasm");
-const DUCK_WASM = join(BIN, "duckdb-engine.wasm");
-const DUCK_NODE_API = join(
-  PKG,
-  "..",
-  "..",
-  "vendor",
-  "duckdb-wasm",
-  "dist",
-  "duckdb-node-blocking.cjs",
-);
 
 export const TODAY = 20613;
 
 /** Every piece the budgets need is here (or a REQUIRE_* flag turns its
  *  absence into a failure instead of a skip). */
 export const HAVE_ENGINE = existsSync(DATA_JS_WASM);
-export const HAVE_DUCK = existsSync(DUCK_WASM) && existsSync(DUCK_NODE_API);
 export const HAVE_CORE = ENGINE_ANCHOR !== null;
 export const REQUIRED =
-  REQUIRE_REAL_CORE ||
-  process.env.REQUIRE_REAL_ENGINE === "1" ||
-  process.env.REQUIRE_REAL_DUCKDB === "1";
+  REQUIRE_REAL_CORE || process.env.REQUIRE_REAL_ENGINE === "1";
 /** Run the budgets when every piece is present, or when a lane requires them
  *  (then a missing piece fails loudly inside the boot). */
-export const RUN_BUDGETS = (HAVE_ENGINE && HAVE_DUCK && HAVE_CORE) || REQUIRED;
+export const RUN_BUDGETS = (HAVE_ENGINE && HAVE_CORE) || REQUIRED;
 
 /** The per-test timeout the budget specs set. A count does not get slower on a
  *  loaded CI runner; the wall clock around it does. No budget is a duration. */
@@ -127,6 +112,8 @@ export interface EngineLog {
 
 export interface CountedEngine {
   engine: DataEngineLike;
+  /** The engine itself, uncounted (the store reads it). */
+  raw: DataEngineLike;
   log: EngineLog;
   /** All wasm calls. */
   total(): number;
@@ -187,6 +174,7 @@ export async function bootCountedEngine(): Promise<CountedEngine> {
   glue.resetPerfCounters();
   return {
     engine,
+    raw,
     log: new Proxy({} as EngineLog, { get: (_, k) => (log as never)[k] }),
     total: () => Object.values(log.calls).reduce((n, v) => n + v, 0),
     counters: () => glue.perfCounters() as EngineCounters,
@@ -198,103 +186,71 @@ export async function bootCountedEngine(): Promise<CountedEngine> {
 }
 let bootSeq = 0;
 
-// ── the counted DuckDB ──────────────────────────────────────────────────────
+// ── the counted query store ────────────────────────────────────────────────
 
-export interface DuckLog {
-  registerCsv: number;
-  registerFileBuffer: number;
+export interface StoreLog {
+  /** Sources loaded (a CSV, an imported file). */
+  imports: number;
+  /** Statements run: ingests, as-written reads, describes, previews. */
   queries: number;
-  /** Rows DuckDB handed back across every query. */
+  /** Rows the store handed on across every query. */
   rowsOut: number;
 }
 
-export interface CountedDuck {
-  handle: DuckDBHandle;
-  log: DuckLog;
+export interface CountedStore {
+  handle: QueryHandle;
+  log: StoreLog;
   reset(): void;
 }
 
-/** Load DuckDB's Node build. The vendored CJS requires apache-arrow, which
- *  resolves from modules/data's own node_modules (a devDependency there for
- *  this). It used to come from this package's node_modules through a
- *  NODE_PATH rewrite, which only Node honours. */
-function requireNodeDuckDB(): any {
-  return createRequire(import.meta.url)(DUCK_NODE_API);
-}
-
-/** Boot real DuckDB over the shipped EH engine through the bundle's own
- *  handle code, counted. */
-export async function bootCountedDuck(): Promise<CountedDuck> {
-  if (!HAVE_DUCK) {
-    throw new Error(
-      `${DUCK_WASM} or the Node API is missing — run \`bash scripts/vendor-duckdb.sh\``,
-    );
-  }
-  const { duckdbHandle } = await import("../../src/query/duckdb");
-  const { nodeBootSql } = await import("../duckdb-node-ext");
-  const duckdb = requireNodeDuckDB();
-  const db = await duckdb.createDuckDB(
-    {
-      mvp: {
-        mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"),
-        mainWorker: "",
-      },
-      eh: { mainModule: DUCK_WASM, mainWorker: "" },
+/** The query store of a counted engine, through the bundle's own handle
+ *  code (src/query/store.ts), counted. It reads the RAW engine, so its calls
+ *  are store work and not the engine's `wasmCalls` (as DuckDB's were). */
+export function bootCountedStore(engine: CountedEngine): CountedStore {
+  // The real handle, taken before `sessionOver` mocks the module: the mock
+  // hands out counted stores, and a counted store must wrap the real one.
+  const inner = actualStore.storeHandle(engine.raw);
+  if (!inner) throw new Error("the data-js wasm has no query store");
+  let log: StoreLog = { imports: 0, queries: 0, rowsOut: 0 };
+  const handle: QueryHandle = {
+    async importFile(name, format, bytes, sheet) {
+      log.imports += 1;
+      return inner.importFile(name, format, bytes, sheet);
     },
-    new duckdb.VoidLogger(),
-    duckdb.NODE_RUNTIME,
-  );
-  await db.instantiate();
-  const conn = db.connect();
-  for (const s of nodeBootSql()) conn.query(s); // as bootDuckDB does
-  const inner = duckdbHandle(db, conn, () => db.reset?.());
-  let log: DuckLog = {
-    registerCsv: 0,
-    registerFileBuffer: 0,
-    queries: 0,
-    rowsOut: 0,
-  };
-  const handle: DuckDBHandle = {
-    async registerCsv(name, text) {
-      log.registerCsv += 1;
-      return inner.registerCsv(name, text);
+    async importCsv(name, text) {
+      log.imports += 1;
+      return inner.importCsv(name, text);
     },
-    async registerFileBuffer(name, bytes) {
-      log.registerFileBuffer += 1;
-      return inner.registerFileBuffer(name, bytes);
-    },
-    async query(sql) {
+    dropSource: (name) => inner.dropSource(name),
+    tables: () => inner.tables(),
+    async ingest(q, sql) {
       log.queries += 1;
-      const rs = await inner.query(sql);
-      log.rowsOut += rs.row_count;
-      return rs;
+      const n = await inner.ingest(q, sql);
+      log.rowsOut += n;
+      return n;
     },
-    // Wave 6: every statement counts as a query — the guard's parse
-    // (`rows`), import DDL (`exec`) and previews.
-    async rows(sql) {
+    async ingestAsWritten(q, sql, sources) {
       log.queries += 1;
-      const out = await inner.rows(sql);
-      log.rowsOut += out.rows.length;
-      return out;
+      const n = await inner.ingestAsWritten(q, sql, sources);
+      log.rowsOut += n ?? 0;
+      return n;
     },
-    async exec(sql) {
+    async describe(sql) {
       log.queries += 1;
-      return inner.exec(sql);
+      return inner.describe(sql);
     },
-    dropFile: (name) => inner.dropFile(name),
-    async queryColumns(sql) {
+    async preview(sql, limit) {
       log.queries += 1;
-      const batch = await inner.queryColumns(sql);
-      log.rowsOut += batch.row_count;
-      return batch;
+      const p = await inner.preview(sql, limit);
+      log.rowsOut += p.rows.length;
+      return p;
     },
-    close: () => inner.close(),
   };
   return {
     handle,
-    log: new Proxy({} as DuckLog, { get: (_, k) => (log as never)[k] }),
+    log: new Proxy({} as StoreLog, { get: (_, k) => (log as never)[k] }),
     reset: () => {
-      log = { registerCsv: 0, registerFileBuffer: 0, queries: 0, rowsOut: 0 };
+      log = { imports: 0, queries: 0, rowsOut: 0 };
     },
   };
 }
@@ -317,24 +273,33 @@ export async function openDataHost(): Promise<HeadlessHost> {
 
 // ── the session under test ──────────────────────────────────────────────────
 
-/** The bundle's own session over `host`, with its engine and DuckDB boots
+let current: { engine: CountedEngine | null; store: CountedStore | null } = {
+  engine: null,
+  store: null,
+};
+let mocked = false;
+
+/** The bundle's own session over `host`, with its engine boot and its store
  *  pointed at the given counted instances. */
 export async function sessionOver(
   host: BundleHost,
   engine: CountedEngine,
-  duck: CountedDuck | null,
+  store: CountedStore | null,
 ): Promise<DataSourceSession> {
-  mock.module("../../src/engine", () => ({
-    ...actualEngine,
-    bootEngine: async () => engine.engine,
-  }));
-  mock.module("../../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      if (!duck) throw new Error("this scenario boots no DuckDB");
-      return duck.handle;
-    },
-  }));
+  // The mocks are installed once and read these: a module that imported the
+  // first mock keeps it, so a second `mock.module` would not reach it.
+  current = { engine, store };
+  if (!mocked) {
+    mocked = true;
+    mock.module("../../src/engine", () => ({
+      ...actualEngine,
+      bootEngine: async () => current.engine!.engine,
+    }));
+    mock.module("../../src/query/store", () => ({
+      ...actualStore,
+      storeHandle: () => current.store?.handle ?? null,
+    }));
+  }
   const { createSession } = await import("../../src/session");
   return createSession(host, TODAY);
 }
@@ -422,7 +387,7 @@ export interface Measured {
   stabilizeCalls: number;
   keyAllocs: number;
   fingerprints: number;
-  duckQueries: number;
+  storeQueries: number;
 }
 
 /** What a scenario measured beside the budget numbers (trended, not gated). */
@@ -436,7 +401,7 @@ export interface Trended {
 export function measure(
   work: WorkLog,
   engine: CountedEngine | null,
-  duck: CountedDuck | null,
+  store: CountedStore | null,
   undoSteps: number | null,
 ): Measured {
   const c = engine?.counters();
@@ -453,7 +418,7 @@ export function measure(
     stabilizeCalls: c?.stabilize_calls ?? 0,
     keyAllocs: c?.key_allocs ?? 0,
     fingerprints: c?.fingerprints ?? 0,
-    duckQueries: duck?.log.queries ?? 0,
+    storeQueries: store?.log.queries ?? 0,
   };
 }
 

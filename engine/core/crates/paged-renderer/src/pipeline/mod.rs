@@ -2003,6 +2003,31 @@ pub fn render_built_page(page: &BuiltPage, dpi: f32, background: Color) -> image
     paged_gpu::rasterize(&page.list, &raster_opts)
 }
 
+/// Rasterise a region of an already-built page: the `width_px` ×
+/// `height_px` pixels whose top-left corner is page pt `origin_pt` at
+/// `dpi` (extensions ADR 338, `requestSnapshot.clip`). The list is moved
+/// so the corner lands on the origin and drawn as a region-sized page, so
+/// the cost follows the region, not the page. `background` as for
+/// [`render_built_page`]; a transparent one leaves the pixels
+/// premultiplied.
+#[cfg(feature = "cpu")]
+pub fn render_built_page_region(
+    page: &BuiltPage,
+    origin_pt: (f32, f32),
+    (width_px, height_px): (u32, u32),
+    dpi: f32,
+    background: Color,
+) -> image::RgbaImage {
+    let scale = dpi / 72.0;
+    let list = page.list.translated_for_raster(-origin_pt.0, -origin_pt.1);
+    // A hair under the pixel count, so `pixel_size`'s ceil lands on it.
+    let side = |px: u32| (px.max(1) as f32 - 0.01) / scale;
+    let mut raster_opts = paged_gpu::RasterOptions::new(side(width_px), side(height_px));
+    raster_opts.dpi = dpi;
+    raster_opts.background = background;
+    paged_gpu::rasterize(&list, &raster_opts)
+}
+
 /// Separate an already-built page into its ink plates at `dpi`.
 ///
 /// The raster is thrown away — only the plate state is wanted. Cost is

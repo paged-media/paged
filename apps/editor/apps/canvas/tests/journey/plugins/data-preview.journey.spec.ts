@@ -37,7 +37,7 @@
 // stepper walks), step the
 // preview across records and assert the "N / M" position advances, then run the
 // change report and assert it surfaces (the first diff reports the bindings as
-// the baseline). DuckDB-WASM boot is the unblocked gateway; this SKIPS with the
+// the baseline). the data engine boot is the unblocked gateway; this SKIPS with the
 // engine status only if it does not boot.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -47,7 +47,7 @@ import { Designer } from "../driver/designer";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { addBindingThroughPanel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -110,7 +110,7 @@ test.describe("journey · paged.data preview stepper + change report", () => {
     await designer.open();
     await designer.newDocument();
 
-    // ── 1. IMPORT — registers the source through DuckDB. ──
+    // ── 1. IMPORT — registers the source through the store. ──
     const ready = await importCsv(page);
     if (!ready) {
       const got =
@@ -119,11 +119,11 @@ test.describe("journey · paged.data preview stepper + change report", () => {
           .last()
           .getAttribute("data-status")
           .catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
-        `preview stepper needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
-          "standard editor dev server (Vite duckdbDistRoute + COOP/COEP isolation); this skip only " +
-          "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
+        `preview stepper needs the data engine to boot (engine status "${got}"). It boots on the ` +
+          "standard editor dev server; this skip only " +
+          "fires if the package shipped no bin/data_js_bg.wasm.",
       );
     }
     await expect(page.getByText(/data_people/).first()).toBeVisible({

@@ -1,11 +1,12 @@
-// The Data query panel (wave 6) — a SQL field with DuckDB's diagnostics, the
+// The Data query panel (wave 6) — a SQL field with the store's diagnostics, the
 // filter / sort / group builders that write SQL into it, and a preview grid of
 // the first rows. A query is saved under an id (an engine query, saved with
 // the document like every definition); bindings read it by that id.
 //
 // Every query the panel runs or saves passes the session's guard first (one
 // SELECT over imported source tables — query/sql.ts). The preview shows the
-// values as DuckDB prints them; it ingests nothing and changes no binding.
+// values as a bound field displays them; it ingests nothing and changes no
+// binding.
 //
 // Built from host surfaces + React only; token-layer styling.
 

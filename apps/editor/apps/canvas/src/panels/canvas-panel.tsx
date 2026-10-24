@@ -37,6 +37,9 @@ import {
   useInstrumentation,
   useOverlaySignals,
   useSelection,
+  useScoped,
+  ALIGN_SCOPE,
+  clickKeyObject,
   useOptionalEditContextStack,
   useOptionalTableSelection,
   useRegistries,
@@ -118,6 +121,8 @@ export function CanvasPanel(_props: PanelProps) {
   const tableSelection = useOptionalTableSelection();
   const { fps, gpuActive, layoutCacheStats } = useInstrumentation();
   const { hitSelection, setHitSelection } = useOverlaySignals();
+  // WP4.4 — the Align panel's scope and key object (a click sets the key).
+  const alignScope = useScoped(ALIGN_SCOPE);
 
   // W3.A2 — resolve a table cell selection from a hit's tableContext.
   // The hit carries `{tableId,row,col}` + the owning `storyId` + the
@@ -337,6 +342,15 @@ export function CanvasPanel(_props: PanelProps) {
               target = { kind: "group" as const, id: chain[0] };
             }
           }
+          // WP4.4 — Align to key object: a plain click on one of the
+          // selected objects makes it the key and keeps the selection.
+          if (
+            mode === "replace" &&
+            nextActive === activeGroup &&
+            clickKeyObject(alignScope, elementSelection, target)
+          ) {
+            return Promise.resolve(elementSelection);
+          }
           if (nextActive !== activeGroup) setActiveGroup(nextActive);
           groupChainRef.current = chain;
           setContentSelection(null);
@@ -402,7 +416,9 @@ export function CanvasPanel(_props: PanelProps) {
     [
       activeTool,
       activeGroup,
+      alignScope,
       client,
+      elementSelection,
       resolveTableCell,
       setActiveGroup,
       directSelect,

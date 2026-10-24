@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Raster images: probe, decode and encode (TIFF through `tiff`, the web formats through `image`), with colour conversion through paged-color."
+description = "Raster images: probe, decode and encode (TIFF through `tiff`, PSD/PSB composites through paged-psd, the web formats through `image`), with colour conversion through paged-color."
 
 [lints]
 workspace = true
@@ -21,6 +21,8 @@ flate2 = { workspace = true }
 # moxcms on wasm32 (the `moxcms` feature), both with the frame's intent and
 # black-point compensation. Both halves are wasm-safe, see the crate docs.
 paged-color = { path = "../paged-color", features = ["moxcms"] }
+# PSD/PSB composites and the layer records of PSDs and layered TIFFs.
+paged-psd = { path = "../paged-psd" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

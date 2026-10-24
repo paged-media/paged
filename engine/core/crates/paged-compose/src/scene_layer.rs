@@ -573,7 +573,7 @@ fn build_path(segs: &[ScenePathSeg]) -> PathData {
             ScenePathSeg::Close => PathSegment::Close,
         });
     }
-    PathData { segments: out }
+    PathData::new(out)
 }
 
 /// Lower a [`SceneLayer`] into `list`, clipped to the frame's content box
@@ -615,15 +615,13 @@ pub fn emit_scene_layer<T>(
     if clipped {
         // Clip path = the content box [0,0,cw,ch] in content coords,
         // carried into page space by `content_outer`.
-        let clip = list.paths.push_anon(PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: cw, y: 0.0 },
-                PathSegment::LineTo { x: cw, y: ch },
-                PathSegment::LineTo { x: 0.0, y: ch },
-                PathSegment::Close,
-            ],
-        });
+        let clip = list.paths.push_anon(PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: cw, y: 0.0 },
+            PathSegment::LineTo { x: cw, y: ch },
+            PathSegment::LineTo { x: 0.0, y: ch },
+            PathSegment::Close,
+        ]));
         list.push(DisplayCommand::PushClip {
             path_id: clip,
             transform: content_outer,

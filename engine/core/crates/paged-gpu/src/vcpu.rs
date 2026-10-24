@@ -161,8 +161,24 @@ fn premul_rgba8(c: ComposeColor) -> [u8; 4] {
 /// A clip on a surface: a page-space path, or a coverage mask (a soft
 /// mask) in the surface's own pixels.
 enum Clip {
-    Path(BezPath),
+    /// The path and the rule it clips by (engine ADR 1006).
+    Path(BezPath, Fill),
     Mask,
+}
+
+/// Push `path` as a clip filled by `rule`, leaving the context's rule at
+/// `NonZero` (what every other draw expects).
+fn push_clip_with(ctx: &mut RenderContext, path: &BezPath, rule: Fill) {
+    ctx.set_fill_rule(rule);
+    ctx.push_clip_path(path);
+    ctx.set_fill_rule(Fill::NonZero);
+}
+
+/// Fill `path` by `rule`, leaving the context's rule at `NonZero`.
+fn fill_with(ctx: &mut RenderContext, path: &BezPath, rule: Fill) {
+    ctx.set_fill_rule(rule);
+    ctx.fill_path(path);
+    ctx.set_fill_rule(Fill::NonZero);
 }
 
 /// One render target: a premultiplied RGBA8 buffer plus the draws not
@@ -223,8 +239,8 @@ impl Surface {
         self.ctx.set_transform(self.xform);
         self.ctx.set_fill_rule(Fill::NonZero);
         for clip in &self.clips {
-            if let Clip::Path(p) = clip {
-                self.ctx.push_clip_path(p);
+            if let Clip::Path(p, rule) = clip {
+                push_clip_with(&mut self.ctx, p, *rule);
             }
         }
         if let Some(m) = self.masks.last() {
@@ -302,6 +318,7 @@ impl Surface {
         &mut self,
         res: &mut Resources,
         path: &BezPath,
+        rule: Fill,
         brush: PaintBrush,
         blend: PenikoBlendMode,
     ) {
@@ -314,7 +331,7 @@ impl Surface {
         if blends {
             ctx.set_blend_mode(blend);
         }
-        ctx.fill_path(path);
+        fill_with(ctx, path, rule);
         if blends {
             ctx.set_blend_mode(PenikoBlendMode::default());
         }
@@ -359,9 +376,9 @@ impl Surface {
         ctx.set_transform(xform);
     }
 
-    fn push_clip(&mut self, path: BezPath) {
-        self.ctx.push_clip_path(&path);
-        self.clips.push(Clip::Path(path));
+    fn push_clip(&mut self, path: BezPath, rule: Fill) {
+        push_clip_with(&mut self.ctx, &path, rule);
+        self.clips.push(Clip::Path(path, rule));
     }
 
     /// Push a soft mask (`w × h` coverage in this surface's pixels).
@@ -379,7 +396,7 @@ impl Surface {
 
     fn pop_clip(&mut self) {
         match self.clips.pop() {
-            Some(Clip::Path(_)) => self.ctx.pop_clip(),
+            Some(Clip::Path(..)) => self.ctx.pop_clip(),
             Some(Clip::Mask) => {
                 self.masks.pop();
                 match self.masks.last() {
@@ -414,11 +431,11 @@ impl Surface {
         if !self.has_clip() {
             return None;
         }
-        let paths: Vec<&BezPath> = self
+        let paths: Vec<(&BezPath, Fill)> = self
             .clips
             .iter()
             .filter_map(|c| match c {
-                Clip::Path(p) => Some(p),
+                Clip::Path(p, rule) => Some((p, *rule)),
                 Clip::Mask => None,
             })
             .collect();
@@ -428,8 +445,8 @@ impl Surface {
         } else {
             let pix = scratch.render(res, w, h, |ctx| {
                 ctx.set_transform(region);
-                for p in &paths {
-                    ctx.push_clip_path(p);
+                for (p, rule) in &paths {
+                    push_clip_with(ctx, p, *rule);
                 }
                 ctx.set_transform(Affine::IDENTITY);
                 ctx.set_paint(vello_cpu::color::palette::css::WHITE);
@@ -702,11 +719,11 @@ impl Raster<'_> {
             .unwrap_or(&self.page);
         let (ox, oy, w, h) = scratch_bbox(surface.xform, bbox_pt, pad_pt)?;
         let to_scratch = Affine::translate((-ox as f64, -oy as f64)) * surface.xform;
-        let clips: Vec<BezPath> = surface
+        let clips: Vec<(BezPath, Fill)> = surface
             .clips
             .iter()
             .filter_map(|c| match c {
-                Clip::Path(p) => Some(p.clone()),
+                Clip::Path(p, rule) => Some((p.clone(), *rule)),
                 Clip::Mask => None,
             })
             .collect();
@@ -714,8 +731,8 @@ impl Raster<'_> {
         let (sw, sh) = (surface.w, surface.h);
         let mut pix = self.scratch.render(&mut self.res, w, h, |ctx| {
             ctx.set_transform(to_scratch);
-            for p in &clips {
-                ctx.push_clip_path(p);
+            for (p, rule) in &clips {
+                push_clip_with(ctx, p, *rule);
             }
             draw(ctx);
         })?;
@@ -772,6 +789,7 @@ impl Raster<'_> {
         paint: &Paint,
         transform: &CTransform,
         path: &BezPath,
+        rule: Fill,
         stroke: Option<vello_cpu::kurbo::Stroke>,
     ) {
         let Some(brush) = vello_map::resolve_paint(paint, self.list, transform) else {
@@ -790,7 +808,7 @@ impl Raster<'_> {
                     ctx.set_stroke(s);
                     ctx.stroke_path(path);
                 }
-                None => ctx.fill_path(path),
+                None => fill_with(ctx, path, rule),
             }
             ctx.set_blend_mode(PenikoBlendMode::default());
             return;
@@ -802,7 +820,7 @@ impl Raster<'_> {
                     ctx.set_stroke(s.clone());
                     ctx.stroke_path(path);
                 }
-                None => ctx.fill_path(path),
+                None => fill_with(ctx, path, rule),
             }
         };
         let Some((scratch, ox, oy)) = self.coverage_scratch(bbox, pad, draw) else {
@@ -906,13 +924,14 @@ impl Raster<'_> {
                     let Some(brush) = vello_map::resolve_paint(paint, list, &transform) else {
                         continue;
                     };
+                    let rule = vello_map::path_fill(list, *path_id);
                     let splat_brush = (blend == BlendMode::Normal).then(|| brush.clone());
                     let (surface, res, _) = self.split();
-                    surface.fill(res, &path, brush, vello_map::blend_to_peniko(blend));
+                    surface.fill(res, &path, rule, brush, vello_map::blend_to_peniko(blend));
                     if let Some(brush) = splat_brush {
                         self.splat(paint, path.bounding_box(), 1.0, |ctx| {
                             set_brush(ctx, brush);
-                            ctx.fill_path(&path);
+                            fill_with(ctx, &path, rule);
                         });
                     }
                 }
@@ -937,7 +956,13 @@ impl Raster<'_> {
                     ) {
                         StrokeGeometry::Outline(outline) => {
                             let (surface, res, _) = self.split();
-                            surface.fill(res, &outline, brush.clone(), PenikoBlendMode::default());
+                            surface.fill(
+                                res,
+                                &outline,
+                                Fill::NonZero,
+                                brush.clone(),
+                                PenikoBlendMode::default(),
+                            );
                             self.splat(paint, outline.bounding_box(), 1.0, |ctx| {
                                 set_brush(ctx, brush);
                                 ctx.fill_path(&outline);
@@ -963,7 +988,8 @@ impl Raster<'_> {
                     let Some(path) = fills.path(list, *path_id, transform, xform, false) else {
                         continue;
                     };
-                    self.overprint(paint, transform, &path, None);
+                    let rule = vello_map::path_fill(list, *path_id);
+                    self.overprint(paint, transform, &path, rule, None);
                 }
                 DisplayCommand::StrokePathOverprint {
                     path_id,
@@ -978,10 +1004,10 @@ impl Raster<'_> {
                     let ks = vello_map::kurbo_stroke(stroke);
                     match vello_map::stroke_geometry(path, ks, self.active().xform) {
                         StrokeGeometry::Outline(outline) => {
-                            self.overprint(paint, transform, &outline, None)
+                            self.overprint(paint, transform, &outline, Fill::NonZero, None)
                         }
                         StrokeGeometry::Stroke(path, ks) => {
-                            self.overprint(paint, transform, &path, Some(ks))
+                            self.overprint(paint, transform, &path, Fill::NonZero, Some(ks))
                         }
                     }
                 }
@@ -1014,7 +1040,8 @@ impl Raster<'_> {
                         DisplayCommand::PathShadow { .. } => shadow.blur_radius.max(0.0) * 3.5,
                         _ => paged_compose::mask::outer_sigma_pt(shadow.blur_radius),
                     };
-                    self.drop_shadow(&path, color, sigma_pt, shadow.spread, shadow.noise);
+                    let rule = vello_map::fill_of(data.fill_rule);
+                    self.drop_shadow(&path, rule, color, sigma_pt, shadow.spread, shadow.noise);
                 }
                 DisplayCommand::Image {
                     image_id,
@@ -1045,6 +1072,7 @@ impl Raster<'_> {
                     );
                 }
                 DisplayCommand::PushClip { path_id, transform } => {
+                    let rule = vello_map::path_fill(list, *path_id);
                     let path = list
                         .paths
                         .get(*path_id)
@@ -1052,7 +1080,7 @@ impl Raster<'_> {
                         // A missing path clips nothing — but still pushes,
                         // so the matching pop balances.
                         .unwrap_or_else(|| KRect::new(-1.0e6, -1.0e6, 1.0e6, 1.0e6).to_path(0.1));
-                    self.active().push_clip(path);
+                    self.active().push_clip(path, rule);
                 }
                 DisplayCommand::PopClip(_) | DisplayCommand::EndSoftMask(_) => {
                     let floor = self.clip_floor();
@@ -1127,7 +1155,10 @@ impl Raster<'_> {
                         // Sizes disagree only for a malformed bracket;
                         // push a clip that hides nothing so the pop still
                         // balances.
-                        surface.push_clip(KRect::new(-1.0e6, -1.0e6, 1.0e6, 1.0e6).to_path(0.1));
+                        surface.push_clip(
+                            KRect::new(-1.0e6, -1.0e6, 1.0e6, 1.0e6).to_path(0.1),
+                            Fill::NonZero,
+                        );
                     }
                 }
                 DisplayCommand::BeginBlendGroup {
@@ -1341,7 +1372,7 @@ impl Raster<'_> {
             && !info.reads_backdrop
         {
             let surface = self.active();
-            surface.push_clip(bounds_path);
+            surface.push_clip(bounds_path, Fill::NonZero);
             let clip_floor = surface.clips.len();
             self.frames.push(Frame {
                 surface: None,
@@ -1410,7 +1441,7 @@ impl Raster<'_> {
         // Clip to `bounds` — except a blurred layer, whose blur
         // legitimately paints outside them.
         if sigma_pt <= 0.5 {
-            surface.push_clip(bounds_path);
+            surface.push_clip(bounds_path, Fill::NonZero);
         }
         self.frames.push(Frame {
             surface: Some(surface),
@@ -1603,6 +1634,7 @@ impl Raster<'_> {
     fn drop_shadow(
         &mut self,
         path: &BezPath,
+        rule: Fill,
         color: ComposeColor,
         sigma_pt: f32,
         spread: f32,
@@ -1617,6 +1649,7 @@ impl Raster<'_> {
             s.fill(
                 res,
                 path,
+                rule,
                 PaintBrush::Solid(brush),
                 PenikoBlendMode::default(),
             );
@@ -1631,7 +1664,7 @@ impl Raster<'_> {
         let Some(mut stamp) = self.scratch.render(&mut self.res, w, h, |ctx| {
             ctx.set_transform(to_scratch);
             ctx.set_paint(brush);
-            ctx.fill_path(path);
+            fill_with(ctx, path, rule);
         }) else {
             return;
         };
@@ -1755,7 +1788,7 @@ impl Raster<'_> {
         let Some(interior) = self.scratch.render(&mut self.res, w, h, |ctx| {
             ctx.set_transform(to_scratch);
             ctx.set_paint(vello_cpu::color::palette::css::WHITE);
-            ctx.fill_path(&path);
+            fill_with(ctx, &path, vello_map::fill_of(data.fill_rule));
         }) else {
             return;
         };

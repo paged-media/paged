@@ -22,6 +22,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The paged-data-* crates' test fixtures (PM-0015).
+      - "modules/data/conformance/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
   pull_request:
@@ -35,6 +37,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The paged-data-* crates' test fixtures (PM-0015).
+      - "modules/data/conformance/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
 
@@ -104,6 +108,39 @@ jobs:
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # paged.data's binding language stays below the sync, query and
+      # lowering crates (its spec §4 rules; moved here with the crates,
+      # PM-0015). The guard fails explicitly: errexit ignores a `!`.
+      - name: dependency guard (paged-data-expr)
+        run: |
+          if cargo tree -p paged-data-expr --edges normal | grep -E 'paged-data-(sources|query|bind|lower|store)'; then
+            echo "LEAK: paged-data-expr depends on a sources/query/bind/lower/store crate"; exit 1
+          fi
+
+      # paged-pixel and paged-psd moved here from paged.image (PM-0014,
+      # image ADR 466) and keep that module's dependency rule: they are
+      # plain data, reaching no other engine crate and no module crate
+      # (paged-psd depends on paged-pixel only). Each guard asserts an
+      # EMPTY match, so a hit fails the step.
+      - name: guard — paged-pixel and paged-psd stay leaf crates
+        run: |
+          if cargo tree -p paged-pixel -p paged-psd --edges normal --prefix none \
+               | grep -E '^(paged-|image-|idml-)' | grep -vE '^paged-(pixel|psd) '; then
+            echo "::error::paged-pixel / paged-psd reached another engine or module crate"
+            exit 1
+          fi
+      # The shipped wasm carries no conformance code: paged.image's
+      # image-conformance and proptest are test-only, and the moved crates
+      # must not drag them into the canvas wasm's tree (the guard image-ci
+      # runs on image-js, applied to the engine's wasm).
+      - name: guard — the canvas wasm tree excludes test-only crates
+        run: |
+          if cargo tree -p paged-canvas-wasm --target wasm32-unknown-unknown --edges normal \
+               | grep -E 'image-conformance|proptest'; then
+            echo "::error::paged-canvas-wasm's wasm32 tree reaches image-conformance/proptest (TEST-ONLY)"
+            exit 1
+          fi
 
       # The skip convention every Rust workspace's tests use
       # (docs/development/testing.md). It is a path dev-dependency, so
