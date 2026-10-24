@@ -95,9 +95,11 @@ impl PsdSaveBackShape {
                  any original layer structure is NOT in this file"
             }
             PsdSaveBackShape::Layered => {
-                "the layers were written as the file's layers (smart objects as their \
-                 rendered pixels), with masks, groups, opacity, blend, visibility and \
-                 clipping"
+                "the layers were written as the file's layers (smart objects and pattern \
+                 fills as their rendered pixels), with masks, groups, opacity, fill \
+                 opacity, blend, Blend If, knockout, locks, colour labels, visibility, \
+                 clipping, colour and gradient fill layers and Curves, Levels, Exposure, \
+                 Invert and Hue/Saturation adjustment layers"
             }
         }
     }
@@ -613,6 +615,91 @@ fn psd_blend_key(name: &str) -> [u8; 4] {
     }
 }
 
+/// A typed adjustment as Photoshop's own adjustment block — for the five
+/// kinds the layered import reads back (`image_psd::adjustment`), in the
+/// layouts it parses: Curves (`curv`), Levels (`levl`), Exposure
+/// (`expA`), Invert (`nvrt`) and Hue/Saturation (`hue2`). `None` for any
+/// other kind.
+fn adjustment_block(a: &crate::layers::Adjustment) -> Option<AdditionalLayerInfo> {
+    use crate::layers::Adjustment as A;
+    let be16 = |v: &mut Vec<u8>, x: u16| v.extend_from_slice(&x.to_be_bytes());
+    let i16s = |v: &mut Vec<u8>, x: f32| v.extend_from_slice(&(x.round() as i16).to_be_bytes());
+    let (key, data): ([u8; 4], Vec<u8>) = match a {
+        A::Invert => (*b"nvrt", Vec::new()),
+        A::Exposure {
+            exposure,
+            offset,
+            gamma,
+        } => {
+            let mut v = Vec::new();
+            be16(&mut v, 1);
+            for x in [exposure, offset, gamma] {
+                v.extend_from_slice(&x.to_bits().to_be_bytes());
+            }
+            (*b"expA", v)
+        }
+        A::Levels { records } => {
+            let mut v = Vec::new();
+            be16(&mut v, 2);
+            for k in 0..29 {
+                let r = records
+                    .get(k)
+                    .copied()
+                    .unwrap_or([0.0, 255.0, 1.0, 0.0, 255.0]);
+                for x in [r[0], r[1], r[3], r[4]] {
+                    be16(&mut v, x.round().clamp(0.0, 255.0) as u16);
+                }
+                be16(&mut v, (r[2] * 100.0).round().clamp(10.0, 999.0) as u16);
+            }
+            (*b"levl", v)
+        }
+        A::Curves { curves } => {
+            let mut v = vec![0u8];
+            be16(&mut v, 1);
+            let map = curves
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| !c.is_empty())
+                .fold(0u32, |m, (i, _)| m | 1 << i);
+            v.extend_from_slice(&map.to_be_bytes());
+            for c in curves.iter().filter(|c| !c.is_empty()) {
+                be16(&mut v, c.len() as u16);
+                for &(input, output) in c {
+                    // Output first, then input (Photoshop's order).
+                    be16(&mut v, u16::from(output));
+                    be16(&mut v, u16::from(input));
+                }
+            }
+            (*b"curv", v)
+        }
+        A::HueSaturation {
+            colorize,
+            colorize_hsl,
+            master,
+            ranges,
+        } => {
+            let mut v = Vec::new();
+            be16(&mut v, 2);
+            v.push(u8::from(*colorize));
+            v.push(0);
+            for x in colorize_hsl.iter().chain(master) {
+                i16s(&mut v, *x);
+            }
+            for (k, r) in ranges.iter().enumerate() {
+                for b in image_psd::adjustment::HUE_RANGE_DEFAULTS[k] {
+                    v.extend_from_slice(&b.to_be_bytes());
+                }
+                for x in r {
+                    i16s(&mut v, *x);
+                }
+            }
+            (*b"hue2", v)
+        }
+        _ => return None,
+    };
+    Some(crate::psd_layer_ext::raw_block(key, &data))
+}
+
 fn opacity_u8(o: f32) -> u8 {
     (o.clamp(0.0, 1.0) * 255.0).round() as u8
 }
@@ -754,16 +841,22 @@ pub fn psd_write_stack(
             file.header.width, file.header.height
         )));
     }
-    if stack
-        .layers()
-        .iter()
-        .any(|l| matches!(l.kind, LayerKind::Adjustment(_)))
-    {
-        return Err(IngestError::Unsupported(
-            "the stack has adjustment layers, which are not written as PSD adjustment \
-             layers yet"
-                .into(),
-        ));
+    // Adjustment layers are written as Photoshop's own blocks for the
+    // kinds the layered import reads back; any other kind makes the save
+    // fall back to the flatten, which says why.
+    let mut adjustment_blocks = Vec::with_capacity(stack.layers().len());
+    for l in stack.layers() {
+        adjustment_blocks.push(match &l.kind {
+            LayerKind::Adjustment(a) => Some(adjustment_block(a).ok_or_else(|| {
+                IngestError::Unsupported(format!(
+                    "adjustment layer \"{}\" is a {} layer, which is not written as a PSD \
+                     adjustment layer (Curves, Levels, Exposure, Invert and Hue/Saturation are)",
+                    l.name,
+                    a.default_layer_name()
+                ))
+            })?),
+            _ => None,
+        });
     }
     let n = width as usize * height as usize;
     if composite.len() != n * 4 {
@@ -803,7 +896,7 @@ pub fn psd_write_stack(
         )?);
         Ok(())
     };
-    for layer in stack.layers() {
+    for (li, layer) in stack.layers().iter().enumerate() {
         let want = stack.group_chain(layer.group);
         while let Some(&top) = open.last() {
             if want.starts_with(&open) {
@@ -829,12 +922,23 @@ pub fn psd_write_stack(
             open.push(g);
         }
         // Pixels: straight RGBA8 (a 16-bit layer narrows; the file is 8-bit).
+        // An adjustment layer has none: an empty rectangle.
+        let adjustment = adjustment_blocks[li].take();
+        let (rect_h, rect_w) = if adjustment.is_some() {
+            (0, 0)
+        } else {
+            (height, width)
+        };
         let rgba = layer.rgba.to_rgba8();
-        let planes = planes_from_rgba8(&rgba, n, true);
+        let planes = if adjustment.is_some() {
+            vec![Vec::new(); 4]
+        } else {
+            planes_from_rgba8(&rgba, n, true)
+        };
         let mut channels = Vec::new();
         let mut channel_data = Vec::new();
         for (id, plane) in [(-1i16, 3usize), (0, 0), (1, 1), (2, 2)] {
-            let cd = ChannelData::encode_rle(&planes[plane], container, height, width)
+            let cd = ChannelData::encode_rle(&planes[plane], container, rect_h, rect_w)
                 .map_err(|e| IngestError::Decode(e.to_string()))?;
             channels.push(ChannelInfo {
                 id,
@@ -857,12 +961,21 @@ pub fn psd_write_stack(
             }
             None => None,
         };
-        let (name_legacy, addl) = named_record(&layer.name, None);
+        let (name_legacy, mut addl) = named_record(&layer.name, None);
+        // The parity properties (fill opacity, knockout, locks, label),
+        // a fill layer's content and an adjustment's block.
+        addl.extend(crate::psd_layer_ext::ext_blocks(&layer.ext, layer.locked));
+        if let Some(f) = layer.fill() {
+            // A pattern fill's pixels belong in the document's pattern
+            // block, which is not written: it is saved as its render.
+            addl.extend(crate::psd_layer_ext::fill_block(&f.source));
+        }
+        addl.extend(adjustment);
         records.push(LayerRecord {
             top: 0,
             left: 0,
-            bottom: height as i32,
-            right: width as i32,
+            bottom: rect_h as i32,
+            right: rect_w as i32,
             channels,
             blend_sig: *b"8BIM",
             blend_key: psd_blend_key(layer.blend.id),
@@ -871,7 +984,12 @@ pub fn psd_write_stack(
             flags: if layer.visible { 0 } else { 0x02 },
             filler: 0,
             mask,
-            blend_ranges: BlendRanges::default(),
+            blend_ranges: match layer.live_blend_if() {
+                Some(bi) => BlendRanges {
+                    raw: crate::psd_layer_ext::blend_ranges_bytes(Some(bi)),
+                },
+                None => BlendRanges::default(),
+            },
             name_legacy,
             addl,
             extra_raw: None,
@@ -1172,21 +1290,137 @@ mod tests {
         assert!(!g.mask_enabled, "the switch survives");
     }
 
+    /// An adjustment kind the PSD writer has no block for refuses the
+    /// layered save (so the caller flattens and says why); the kinds the
+    /// import reads back are written.
     #[test]
     #[allow(non_snake_case)]
-    fn a_stack_with_adjustment_layers_is_refused_for_the_flatten_fallback__feat__image_io_save_back(
+    fn an_unwritable_adjustment_layer_is_refused_for_the_flatten_fallback__feat__image_io_save_back(
     ) {
+        use crate::layers::Adjustment;
         let mut s = layered_stack();
-        s.add_adjustment(
-            "Grade",
-            crate::ingest::AdjustParams {
-                exposure_ev: 0.2,
-                ..crate::ingest::AdjustParams::default()
-            },
-        );
+        s.add_adjustment_layer("", Adjustment::default_for("vibrance").expect("kind"), None);
         let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
         let err = psd_write_stack(&mut f, &s, &[0u8; 32]).expect_err("refused");
-        assert!(err.to_string().contains("adjustment layers"));
+        assert!(
+            err.to_string()
+                .contains("not written as a PSD adjustment layer"),
+            "{err}"
+        );
+    }
+
+    /// Fill layers, the five readable adjustment kinds and the parity
+    /// properties (fill opacity, Blend If, knockout, locks, colour label)
+    /// survive a layered save and the layered import.
+    #[test]
+    #[allow(non_snake_case)]
+    fn fill_and_adjustment_layers_and_blending_options_round_trip_through_a_psd__feat__image_layers_photoshop_parity(
+    ) {
+        use crate::layers::{
+            Adjustment, BlendIf, ColorStop, FillLayer, FillSource, GradientFill, Knockout,
+            LayerKind, LayerStack,
+        };
+        let solid = |v: u8| std::sync::Arc::from(vec![v; 4 * 2 * 4].into_boxed_slice());
+        let mut s = LayerStack::from_image(4, 2, solid(40)).expect("stack");
+        let fills = [
+            FillSource::Solid { rgb: [200, 10, 30] },
+            FillSource::Gradient(GradientFill {
+                style: crate::fill::GradientKind::Linear,
+                angle: 45.0,
+                scale: 100.0,
+                reverse: false,
+                offset: (0.0, 0.0),
+                stops: vec![
+                    ColorStop {
+                        at: 0.0,
+                        rgb: [0, 0, 0],
+                    },
+                    ColorStop {
+                        at: 1.0,
+                        rgb: [255, 255, 0],
+                    },
+                ],
+            }),
+        ];
+        for f in &fills {
+            let i = s.add_fill_layer("", f.clone());
+            let l = s.layer_at_mut(i).expect("layer");
+            l.kind = LayerKind::Fill(Box::new(FillLayer {
+                source: f.clone(),
+                stale: false,
+            }));
+            l.rgba = crate::pixels::Pixels::from_rgba8(solid(120)).into();
+        }
+        let mut curves = Adjustment::default_for("curves").expect("curves");
+        if let Adjustment::Curves { curves: c } = &mut curves {
+            c[0] = vec![(0, 0), (128, 150), (255, 255)];
+            c[3] = vec![(0, 20), (255, 230)];
+        }
+        let mut levels = Adjustment::default_for("levels").expect("levels");
+        if let Adjustment::Levels { records } = &mut levels {
+            records[0] = [10.0, 240.0, 1.2, 5.0, 250.0];
+            records[2] = [0.0, 200.0, 0.8, 0.0, 255.0];
+        }
+        let typed = [
+            curves,
+            levels,
+            Adjustment::Exposure {
+                exposure: 0.5,
+                offset: -0.02,
+                gamma: 1.1,
+            },
+            Adjustment::Invert,
+            Adjustment::HueSaturation {
+                colorize: false,
+                colorize_hsl: [0.0, 25.0, 0.0],
+                master: [30.0, -20.0, 5.0],
+                ranges: [[0.0; 3]; 6],
+            },
+        ];
+        for a in &typed {
+            s.add_adjustment_layer("", a.clone(), None);
+        }
+        let mut bi = BlendIf::default();
+        bi.channels[0].under = [0, 0, 180, 220];
+        s.set_fill_opacity(1, 0.6).expect("fill");
+        s.set_blend_if(1, Some(bi)).expect("blend if");
+        s.set_color(1, 2).expect("label");
+        let l1 = s.layer_at_mut(1).expect("layer");
+        l1.ext.locks.position = true;
+        s.set_knockout(2, Knockout::Shallow).expect("knockout");
+        s.layer_at_mut(2).expect("layer").locked = true;
+        let mut f = PsdFile::parse(&psd_4x2()).expect("parse");
+        assert_eq!(
+            psd_write_stack(&mut f, &s, &[0u8; 32]).expect("written"),
+            PsdSaveBackShape::Layered
+        );
+        let bytes = f.write().expect("bytes");
+        let f = PsdFile::parse(&bytes).expect("the written file parses");
+        let import = f.layer_plates_rgba8().expect("imports as layers");
+        let back =
+            LayerStack::from_psd_plates_with(&import, Some(&f.layer_mask.layers)).expect("stack");
+        assert_eq!(back.len(), s.len());
+        for (k, want) in fills.iter().enumerate() {
+            let l = &back.layers()[1 + k];
+            assert_eq!(l.fill().map(|f| &f.source), Some(want), "{}", l.name);
+            assert!(
+                !l.fill().expect("fill").stale,
+                "Photoshop's stored render is kept"
+            );
+        }
+        for (k, want) in typed.iter().enumerate() {
+            let l = &back.layers()[3 + k];
+            let got = l.adjustment().expect("an adjustment layer");
+            assert_eq!(got.kind_name(), want.kind_name());
+            assert_eq!(got.to_chain(), want.to_chain(), "{}", l.name);
+        }
+        let l1 = &back.layers()[1];
+        assert!((l1.ext.fill_opacity - 0.6).abs() < 0.003);
+        assert_eq!(l1.ext.blend_if.as_deref(), Some(&bi));
+        assert_eq!(l1.ext.color, 2);
+        assert!(l1.ext.locks.position);
+        assert_eq!(back.layers()[2].ext.knockout, Knockout::Shallow);
+        assert!(back.layers()[2].locked);
     }
 
     /// psd-tools (an independent reader) sees the same layer tree. Opt in:

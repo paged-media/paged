@@ -58,6 +58,7 @@ pub mod layers;
 pub mod mip;
 pub mod paths;
 pub mod pixels;
+pub mod psd_layer_ext;
 pub mod psd_vector_mask;
 pub mod readouts;
 pub mod region_filter;
@@ -3228,7 +3229,7 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&image_handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {image_handle}")))?;
-        let import = PSDS.with(|m| {
+        let (import, stack) = PSDS.with(|m| {
             let map = m.borrow();
             let file = map
                 .get(&psd_handle)
@@ -3237,21 +3238,25 @@ mod wasm {
             // the merged composite took at ingest (`decode_psd`), so the
             // layered open and the flattened one agree; the stack then
             // works in RGB, which the image's treatment already states.
-            if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
+            let import = if file.header.color_mode == image_psd::model::ColorMode::Cmyk {
                 let ink = crate::ingest::psd_ink_transform(file);
                 file.layer_plates_rgba8_via(&|cmyk| ink.to_rgba8(cmyk))
             } else {
                 file.layer_plates_rgba8()
             }
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            if import.width != img.width || import.height != img.height {
+                return Err(JsValue::from_str(&format!(
+                    "PSD layer import is {}×{} but the ingested composite is {}×{}",
+                    import.width, import.height, img.width, img.height
+                )));
+            }
+            // The records too: blending ranges, fill opacity, locks and
+            // fill content live there, not on the plates.
+            let stack = LayerStack::from_psd_plates_with(&import, Some(&file.layer_mask.layers))
+                .map_err(ingest_err)?;
+            Ok::<_, JsValue>((import, stack))
         })?;
-        if import.width != img.width || import.height != img.height {
-            return Err(JsValue::from_str(&format!(
-                "PSD layer import is {}×{} but the ingested composite is {}×{}",
-                import.width, import.height, img.width, img.height
-            )));
-        }
-        let stack = LayerStack::from_psd_plates(&import).map_err(ingest_err)?;
         let smart = import.layers.iter().any(|p| p.smart);
         if smart || import.converted_from_cmyk {
             let ctx = GPU.with(|g| g.borrow().clone());
@@ -3376,7 +3381,7 @@ mod wasm {
                 .enumerate()
                 .map(|(index, layer)| {
                     format!(
-                        "{{\"index\":{index},\"id\":{},\"name\":{},\"visible\":{},\"locked\":{},\"opacity\":{},\"blend\":\"{}\",\"hasMask\":{},\"maskEnabled\":{},\"clipped\":{},\"group\":{},\"kind\":\"{}\"}}",
+                        "{{\"index\":{index},\"id\":{},\"name\":{},\"visible\":{},\"locked\":{},\"opacity\":{},\"blend\":\"{}\",\"hasMask\":{},\"maskEnabled\":{},\"clipped\":{},\"group\":{},\"kind\":\"{}\"",
                         layer.id,
                         json_escape(&layer.name),
                         layer.visible,
@@ -3389,14 +3394,8 @@ mod wasm {
                         layer
                             .group
                             .map_or_else(|| "null".to_string(), |g| g.to_string()),
-                        if layer.adjust_params().is_some() {
-                            "adjustment"
-                        } else if layer.smart_source().is_some() {
-                            "smart"
-                        } else {
-                            "pixels"
-                        },
-                    )
+                        layer.kind_name(),
+                    ) + &layer_parity_json(layer)
                 })
                 .collect();
             let groups: Vec<String> = doc
@@ -3406,7 +3405,8 @@ mod wasm {
                 .map(|g| {
                     format!(
                         "{{\"id\":{},\"name\":{},\"visible\":{},\"opacity\":{},\
-                         \"blend\":\"{}\",\"passThrough\":{},\"isolates\":{},\"parent\":{}}}",
+                         \"blend\":\"{}\",\"passThrough\":{},\"isolates\":{},\"parent\":{},\
+                         \"color\":\"{}\"}}",
                         g.id,
                         json_escape(&g.name),
                         g.visible,
@@ -3418,12 +3418,28 @@ mod wasm {
                         // isolation, and the panel shows what will
                         // actually happen rather than what was asked for.
                         g.isolates(),
-                        g.parent.map_or_else(|| "null".to_string(), |p| p.to_string())
+                        g.parent.map_or_else(|| "null".to_string(), |p| p.to_string()),
+                        crate::layers::COLOR_LABELS[usize::from(g.color).min(7)]
+                    )
+                })
+                .collect();
+            let comps: Vec<String> = doc
+                .stack
+                .comps()
+                .iter()
+                .map(|c| {
+                    format!(
+                        "{{\"id\":{},\"name\":{},\"visibility\":{},\"position\":{},\"appearance\":{}}}",
+                        c.id,
+                        json_escape(&c.name),
+                        c.visibility,
+                        c.position,
+                        c.appearance
                     )
                 })
                 .collect();
             format!(
-                "{{\"active\":{},\"editTarget\":\"{}\",\"layers\":[{}],\"groups\":[{}]}}",
+                "{{\"active\":{},\"editTarget\":\"{}\",\"layers\":[{}],\"groups\":[{}],\"comps\":[{}]}}",
                 doc.stack.active_index(),
                 if doc.stack.edit_target_is_mask() {
                     "mask"
@@ -3431,7 +3447,8 @@ mod wasm {
                     "pixels"
                 },
                 rows.join(","),
-                groups.join(",")
+                groups.join(","),
+                comps.join(",")
             )
         })
     }
@@ -3668,6 +3685,531 @@ mod wasm {
         })
     }
 
+    // ─────────────── Photoshop layer parity (WP5.3) ───────────────
+    //
+    // Fill layers, typed adjustment layers, the blending options, the
+    // locks, labels and links, the Layer menu's merges, Layer via Copy
+    // and Cut, layer comps, and align/distribute. Each is ONE undo step
+    // (`recorded_edit`, or `LayerStack::recorded` inside the async verbs);
+    // the caller re-composites (`layers_composite`), which also renders a
+    // fill layer whose source changed.
+
+    /// The selection of the bound image, if any.
+    fn bound_selection(handle: u32) -> Option<Arc<SelectionCoverage>> {
+        SELECTION.with(|s| s.borrow().mask_for(handle))
+    }
+
+    /// Add a TYPED adjustment layer of `kind` above the active layer, in
+    /// its group: `values` empty takes Photoshop's defaults
+    /// (`Adjustment::default_for`), else they are the kind's block
+    /// (`Adjustment::values`); `cube` is a Color Lookup's. With
+    /// `mask_from_selection` and a selection, the selection becomes its
+    /// mask (Photoshop's). Returns its index.
+    #[wasm_bindgen]
+    pub fn layers_add_typed_adjustment(
+        kind: &str,
+        name: &str,
+        values: &[f32],
+        cube: &[f32],
+        label: &str,
+        mask_from_selection: bool,
+    ) -> Result<usize, JsValue> {
+        use crate::layers::Adjustment;
+        let adj = if values.is_empty() && cube.is_empty() {
+            Adjustment::default_for(kind)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown adjustment kind \"{kind}\"")))?
+        } else {
+            Adjustment::from_wire(kind, values, cube, label).map_err(ingest_err)?
+        };
+        let handle = with_stack(|d| Ok(d.handle))?;
+        let sel = mask_from_selection
+            .then(|| bound_selection(handle))
+            .flatten();
+        recorded_edit("New Adjustment Layer", None, move |st| {
+            let group = st.active().group;
+            let i = st.add_adjustment_layer(name, adj, Some(group));
+            if let Some(cov) = sel {
+                st.set_mask(i, cov)?;
+            }
+            Ok(i)
+        })
+    }
+
+    /// Retune a typed adjustment layer (its Properties). Consecutive edits
+    /// of one layer merge into one undo step (a slider drag).
+    #[wasm_bindgen]
+    pub fn layers_set_typed_adjustment(
+        index: usize,
+        kind: &str,
+        values: &[f32],
+        cube: &[f32],
+        label: &str,
+    ) -> Result<(), JsValue> {
+        let adj =
+            crate::layers::Adjustment::from_wire(kind, values, cube, label).map_err(ingest_err)?;
+        recorded_edit("Adjustment", Some(format!("adjust:{index}")), move |st| {
+            st.set_adjustment_typed(index, adj)
+        })
+    }
+
+    /// A layer's kind-specific parameters as JSON, for its Properties:
+    /// `{"adjustment":kind,"values":[…],"label":…}` for an adjustment
+    /// layer, `{"fill":kind,"values":[…],"name":…,"tile":[w,h]|null}` for a
+    /// fill layer, `{}` otherwise.
+    #[wasm_bindgen]
+    pub fn layers_layer_params(index: usize) -> Result<String, JsValue> {
+        with_stack(|d| {
+            let l = d
+                .stack
+                .layers()
+                .get(index)
+                .ok_or_else(|| JsValue::from_str(&format!("no layer {index}")))?;
+            let nums = |v: Vec<f32>| {
+                v.iter()
+                    .map(|x| format!("{x}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            Ok(if let Some(a) = l.adjustment() {
+                format!(
+                    "{{\"adjustment\":\"{}\",\"values\":[{}],\"label\":{}}}",
+                    a.kind_name(),
+                    nums(a.values()),
+                    json_escape(a.label())
+                )
+            } else if let Some(f) = l.fill() {
+                let (name, tile) = match &f.source {
+                    crate::layers::FillSource::Pattern(p) => {
+                        (p.name.clone(), format!("[{},{}]", p.width, p.height))
+                    }
+                    _ => (String::new(), "null".to_string()),
+                };
+                format!(
+                    "{{\"fill\":\"{}\",\"values\":[{}],\"name\":{},\"tile\":{tile}}}",
+                    f.source.kind_name(),
+                    nums(f.source.values()),
+                    json_escape(&name)
+                )
+            } else {
+                "{}".to_string()
+            })
+        })
+    }
+
+    /// The pattern tile behind `tile_handle` (`-1`: none), as a fill's.
+    fn tile_of(tile_handle: i32) -> Result<Option<(Arc<[u8]>, u32, u32)>, JsValue> {
+        if tile_handle < 0 {
+            return Ok(None);
+        }
+        let img = IMAGES
+            .with(|m| m.borrow().get(&(tile_handle as u32)).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown pattern handle {tile_handle}")))?;
+        Ok(Some((
+            Arc::from(img.rgba.to_rgba8().into_owned().into_boxed_slice()),
+            img.width,
+            img.height,
+        )))
+    }
+
+    /// Layer ▸ New Fill Layer: `kind` solid | gradient | pattern with its
+    /// block (`FillSource::values`); a pattern's tile is the engine image
+    /// `tile_handle`. Rendered on the GPU before it returns. With
+    /// `mask_from_selection` and a selection, the selection is its mask.
+    #[wasm_bindgen]
+    pub async fn layers_add_fill(
+        kind: &str,
+        values: &[f32],
+        tile_handle: i32,
+        name: &str,
+        mask_from_selection: bool,
+    ) -> Result<usize, JsValue> {
+        let source = crate::layers::FillSource::from_wire(kind, values, tile_of(tile_handle)?, "")
+            .map_err(ingest_err)?;
+        let ctx = GPU.with(|g| g.borrow().clone()).ok_or_else(|| {
+            JsValue::from_str("a fill layer renders on the GPU — call init_gpu first")
+        })?;
+        let name = name.to_string();
+        with_stack_async(|mut doc| async move {
+            let sel = mask_from_selection
+                .then(|| bound_selection(doc.handle))
+                .flatten();
+            let r = doc.stack.recorded("New Fill Layer", None, |st| {
+                let i = st.add_fill_layer(&name, source);
+                if let Some(cov) = sel {
+                    st.set_mask(i, cov)?;
+                }
+                Ok(i)
+            });
+            let r = match r {
+                Ok(i) => doc
+                    .stack
+                    .refresh_fills(Some(&ctx))
+                    .await
+                    .map(|_| i)
+                    .map_err(ingest_err),
+                Err(e) => Err(ingest_err(e)),
+            };
+            (doc, r)
+        })
+        .await
+    }
+
+    /// A fill layer's Properties: a new source (same block as
+    /// `layers_add_fill`). Edits of one layer in a row merge.
+    #[wasm_bindgen]
+    pub async fn layers_set_fill(
+        index: usize,
+        kind: &str,
+        values: &[f32],
+        tile_handle: i32,
+    ) -> Result<(), JsValue> {
+        // A pattern keeps its tile unless a new one is given.
+        let tile = match tile_of(tile_handle)? {
+            Some(t) => Some(t),
+            None => with_stack(|d| {
+                Ok(d.stack.layers().get(index).and_then(|l| match l.fill() {
+                    Some(crate::layers::FillLayer {
+                        source: crate::layers::FillSource::Pattern(p),
+                        ..
+                    }) => Some((Arc::clone(&p.tile), p.width, p.height)),
+                    _ => None,
+                }))
+            })?,
+        };
+        let pname = with_stack(|d| {
+            Ok(d.stack.layers().get(index).and_then(|l| match l.fill() {
+                Some(crate::layers::FillLayer {
+                    source: crate::layers::FillSource::Pattern(p),
+                    ..
+                }) => Some(p.name.clone()),
+                _ => None,
+            }))
+        })?
+        .unwrap_or_default();
+        let source =
+            crate::layers::FillSource::from_wire(kind, values, tile, &pname).map_err(ingest_err)?;
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let r = doc
+                .stack
+                .recorded("Fill Layer", Some(&format!("fill:{index}")), |st| {
+                    st.set_fill(index, source)
+                });
+            let r = match r {
+                Ok(()) => doc
+                    .stack
+                    .refresh_fills(ctx.as_deref())
+                    .await
+                    .map(|_| ())
+                    .map_err(ingest_err),
+                Err(e) => Err(ingest_err(e)),
+            };
+            (doc, r)
+        })
+        .await
+    }
+
+    /// Rasterize a fill layer or smart object (its render becomes pixels).
+    #[wasm_bindgen]
+    pub fn layers_rasterize(index: usize) -> Result<(), JsValue> {
+        recorded_edit("Rasterize Layer", None, |st| st.rasterize(index))
+    }
+
+    /// Fill opacity 0–1 (a drag is one undo step).
+    #[wasm_bindgen]
+    pub fn layers_set_fill_opacity(index: usize, fill: f32) -> Result<(), JsValue> {
+        recorded_edit(
+            "Fill opacity",
+            Some(format!("fill-opacity:{index}")),
+            |st| st.set_fill_opacity(index, fill),
+        )
+    }
+
+    /// Blend If: 32 sliders (gray, red, green, blue; each This Layer's
+    /// black low/high and white low/high, then the Underlying Layer's), or
+    /// empty to clear. A drag is one undo step.
+    #[wasm_bindgen]
+    pub fn layers_set_blend_if(index: usize, sliders: &[u8]) -> Result<(), JsValue> {
+        let bi = match sliders.len() {
+            0 => None,
+            32 => Some(crate::layers::BlendIf::from_bytes(
+                sliders.try_into().expect("32"),
+            )),
+            n => {
+                return Err(JsValue::from_str(&format!(
+                    "Blend If takes 32 slider values or none (got {n})"
+                )))
+            }
+        };
+        recorded_edit("Blend If", Some(format!("blend-if:{index}")), |st| {
+            st.set_blend_if(index, bi)
+        })
+    }
+
+    /// Knockout: "none", "shallow" or "deep".
+    #[wasm_bindgen]
+    pub fn layers_set_knockout(index: usize, knockout: &str) -> Result<(), JsValue> {
+        let k = crate::layers::Knockout::from_wire(knockout).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown knockout \"{knockout}\" (none | shallow | deep)"
+            ))
+        })?;
+        recorded_edit("Knockout", None, |st| st.set_knockout(index, k))
+    }
+
+    /// The four locks at once: image pixels, transparent pixels, position
+    /// and all.
+    #[wasm_bindgen]
+    pub fn layers_set_locks(
+        index: usize,
+        pixels: bool,
+        transparency: bool,
+        position: bool,
+        all: bool,
+    ) -> Result<(), JsValue> {
+        recorded_edit("Lock layer", None, |st| {
+            st.set_locks(
+                index,
+                pixels,
+                crate::layers::LayerLocks {
+                    transparency,
+                    position,
+                    all,
+                },
+            )
+        })
+    }
+
+    /// The colour label by name (`none`, `red`, … `gray`).
+    #[wasm_bindgen]
+    pub fn layers_set_color(index: usize, color: &str) -> Result<(), JsValue> {
+        let c = color_code(color)?;
+        recorded_edit("Color label", None, |st| st.set_color(index, c))
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_set_group_color(id: u32, color: &str) -> Result<(), JsValue> {
+        let c = color_code(color)?;
+        recorded_edit("Color label", None, |st| st.set_group_color(id, c))
+    }
+
+    fn color_code(color: &str) -> Result<u8, JsValue> {
+        crate::layers::COLOR_LABELS
+            .iter()
+            .position(|c| *c == color)
+            .map(|c| c as u8)
+            .ok_or_else(|| {
+                JsValue::from_str(&format!(
+                    "unknown colour label \"{color}\" ({})",
+                    crate::layers::COLOR_LABELS.join(" | ")
+                ))
+            })
+    }
+
+    /// LINK the layers at `indices` (two or more). Returns the link id.
+    #[wasm_bindgen]
+    pub fn layers_link(indices: &[u32]) -> Result<u32, JsValue> {
+        let idx: Vec<usize> = indices.iter().map(|&i| i as usize).collect();
+        recorded_edit("Link Layers", None, move |st| st.link(&idx))
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_unlink(index: usize) -> Result<(), JsValue> {
+        recorded_edit("Unlink Layer", None, |st| st.unlink(index))
+    }
+
+    /// A verb that may find nothing to do: one undo step only when it
+    /// changed something (`LayerStack::recorded_if_changed`).
+    fn recorded_changed(
+        label: &str,
+        f: impl FnOnce(&mut LayerStack) -> Result<bool, IngestError>,
+    ) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .recorded_if_changed(label, f)
+                .map(|_| ())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Run one of the async merge verbs on the bound stack.
+    async fn merge_verb<T: 'static>(
+        f: impl for<'a> FnOnce(
+                &'a mut LayerStack,
+                Option<&'a GpuContext>,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = Result<T, IngestError>> + 'a>,
+            > + 'static,
+    ) -> Result<T, JsValue> {
+        let ctx = GPU.with(|g| g.borrow().clone());
+        with_stack_async(|mut doc| async move {
+            let r = f(&mut doc.stack, ctx.as_deref()).await.map_err(ingest_err);
+            (doc, r)
+        })
+        .await
+    }
+
+    /// MERGE DOWN the active layer (GPU). Returns the merged layer's index.
+    #[wasm_bindgen]
+    pub async fn layers_merge_down() -> Result<usize, JsValue> {
+        merge_verb(|st, ctx| Box::pin(st.merge_down(ctx))).await
+    }
+
+    /// MERGE VISIBLE (GPU). Returns the merged layer's index.
+    #[wasm_bindgen]
+    pub async fn layers_merge_visible() -> Result<usize, JsValue> {
+        merge_verb(|st, ctx| Box::pin(st.merge_visible(ctx))).await
+    }
+
+    /// STAMP VISIBLE (GPU): a new layer of the composite above the active.
+    #[wasm_bindgen]
+    pub async fn layers_stamp_visible() -> Result<usize, JsValue> {
+        merge_verb(|st, ctx| Box::pin(st.stamp_visible(ctx))).await
+    }
+
+    /// FLATTEN IMAGE (GPU): one Background layer over white.
+    #[wasm_bindgen]
+    pub async fn layers_flatten() -> Result<(), JsValue> {
+        merge_verb(|st, ctx| Box::pin(st.flatten(ctx))).await
+    }
+
+    /// MERGE GROUP `id` (GPU). Returns the merged layer's index.
+    #[wasm_bindgen]
+    pub async fn layers_merge_group(id: u32) -> Result<usize, JsValue> {
+        merge_verb(move |st, ctx| Box::pin(st.merge_group(id, ctx))).await
+    }
+
+    /// LAYER VIA COPY (`cut` false) or VIA CUT from the active layer and
+    /// the selection. Returns the new layer's index.
+    #[wasm_bindgen]
+    pub fn layers_via(cut: bool) -> Result<usize, JsValue> {
+        let handle = with_stack(|d| Ok(d.handle))?;
+        let sel = SELECTION
+            .with(|s| s.borrow().explicit_for(handle))
+            .ok_or_else(|| {
+                JsValue::from_str(
+                    "select an area first — Layer via Copy and Cut take the selection",
+                )
+            })?;
+        with_stack(|d| d.stack.layer_via(&sel, cut).map_err(ingest_err))
+    }
+
+    /// NEW LAYER COMP recording visibility / position / appearance.
+    #[wasm_bindgen]
+    pub fn layers_comp_new(
+        name: &str,
+        visibility: bool,
+        position: bool,
+        appearance: bool,
+    ) -> Result<u32, JsValue> {
+        recorded_edit("New Layer Comp", None, |st| {
+            Ok(st.new_comp(name, visibility, position, appearance))
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_comp_update(id: u32) -> Result<(), JsValue> {
+        recorded_edit("Update Layer Comp", None, |st| st.update_comp(id))
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_comp_apply(id: u32) -> Result<(), JsValue> {
+        recorded_edit("Apply Layer Comp", None, |st| st.apply_comp(id))
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_comp_delete(id: u32) -> Result<(), JsValue> {
+        recorded_edit("Delete Layer Comp", None, |st| st.delete_comp(id))
+    }
+
+    #[wasm_bindgen]
+    pub fn layers_comp_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        recorded_edit("Rename Layer Comp", Some(format!("comp-name:{id}")), |st| {
+            st.rename_comp(id, name)
+        })
+    }
+
+    /// MOVE the active layer — and every layer linked with it — by whole
+    /// pixels, as one undo step.
+    #[wasm_bindgen]
+    pub fn layers_translate(dx: i32, dy: i32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .recorded_if_changed("Move", |st| {
+                    let targets = st.with_links(st.active_index());
+                    st.translate(&targets, dx, dy)
+                })
+                .map(|_| ())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// ALIGN the active layer and its links: `edge` left | hcenter | right |
+    /// top | vcenter | bottom, `to` "canvas", "selection" (its bounds) or
+    /// "layers" (the targets' joint bounds).
+    #[wasm_bindgen]
+    pub fn layers_align(edge: &str, to: &str) -> Result<(), JsValue> {
+        let edge = crate::layers::AlignEdge::from_wire(edge).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown edge \"{edge}\" (left | hcenter | right | top | vcenter | bottom)"
+            ))
+        })?;
+        let handle = with_stack(|d| Ok(d.handle))?;
+        let sel = bound_selection(handle).and_then(|c| c.bounds());
+        let to = to.to_string();
+        recorded_changed("Align Layers", move |st| {
+            let targets = st.with_links(st.active_index());
+            let canvas = image_core::Region::new(0, 0, st.width(), st.height());
+            let reference = match to.as_str() {
+                "selection" => sel.ok_or_else(|| {
+                    IngestError::Unsupported("there is no selection to align to".into())
+                })?,
+                "layers" => {
+                    let boxes: Vec<image_core::Region> = targets
+                        .iter()
+                        .filter_map(|&i| st.content_bounds(i))
+                        .collect();
+                    let x0 = boxes.iter().map(|b| b.x).min().unwrap_or(0);
+                    let y0 = boxes.iter().map(|b| b.y).min().unwrap_or(0);
+                    let x1 = boxes.iter().map(|b| b.x + b.w as i32).max().unwrap_or(0);
+                    let y1 = boxes.iter().map(|b| b.y + b.h as i32).max().unwrap_or(0);
+                    image_core::Region::new(
+                        x0,
+                        y0,
+                        (x1 - x0).max(0) as u32,
+                        (y1 - y0).max(0) as u32,
+                    )
+                }
+                "canvas" => canvas,
+                other => {
+                    return Err(IngestError::Unsupported(format!(
+                        "unknown alignment reference \"{other}\" (canvas | selection | layers)"
+                    )))
+                }
+            };
+            st.align(&targets, edge, reference)
+        })
+    }
+
+    /// DISTRIBUTE the active layer and its links (three or more) along
+    /// "horizontal" or "vertical".
+    #[wasm_bindgen]
+    pub fn layers_distribute(axis: &str) -> Result<(), JsValue> {
+        let axis = match axis {
+            "horizontal" => crate::layers::Axis::Horizontal,
+            "vertical" => crate::layers::Axis::Vertical,
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown axis \"{other}\" (horizontal | vertical)"
+                )))
+            }
+        };
+        recorded_changed("Distribute Layers", move |st| {
+            let targets = st.with_links(st.active_index());
+            st.distribute(&targets, axis)
+        })
+    }
+
     /// COMPOSITE the stack bottom-up and write the result back into the
     /// bound engine-held image, returning the straight RGBA8 (the C-1
     /// Stage-A payload). GPU-only whenever there is anything to blend; a
@@ -3676,7 +4218,12 @@ mod wasm {
     #[wasm_bindgen]
     pub async fn layers_composite() -> Result<js_sys::Uint8Array, JsValue> {
         let ctx = GPU.with(|g| g.borrow().clone());
-        with_stack_async(|doc| async move {
+        with_stack_async(|mut doc| async move {
+            // A fill layer due a render gets it here, so the stored stack
+            // holds what it shows.
+            if let Err(e) = doc.stack.refresh_fills(ctx.as_deref()).await {
+                return (doc, Err(ingest_err(e)));
+            }
             let result = match doc.stack.composite(ctx.as_deref(), None).await {
                 Ok(rgba) => set_image_pixels(doc.handle, Arc::clone(&rgba))
                     .map(|()| js_sys::Uint8Array::from(&rgba[..])),
@@ -3786,6 +4333,11 @@ mod wasm {
                 }
                 doc.stack
                     .transform_canvas_gpu(ctx.as_deref(), op)
+                    .await
+                    .map_err(ingest_err)?;
+                // Fill layers re-render at the new extent.
+                doc.stack
+                    .refresh_fills(ctx.as_deref())
                     .await
                     .map_err(ingest_err)?;
                 let rgba = doc
@@ -4904,6 +5456,39 @@ mod wasm {
     #[wasm_bindgen]
     pub fn abr_presets(bytes: &[u8]) -> Result<String, JsValue> {
         crate::brushes::presets_json(bytes).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// The parity properties of one `layers_list` row (appended inside
+    /// its object): fill opacity, knockout, locks, colour label, link,
+    /// Blend If's 32 sliders (or null), and the kind detail.
+    fn layer_parity_json(l: &crate::layers::Layer) -> String {
+        let bi = l.live_blend_if().map_or_else(
+            || "null".to_string(),
+            |b| {
+                format!(
+                    "[{}]",
+                    b.to_bytes()
+                        .iter()
+                        .map(u8::to_string)
+                        .collect::<Vec<_>>()
+                        .join(",")
+                )
+            },
+        );
+        format!(
+            ",\"fillOpacity\":{},\"knockout\":\"{}\",\"locks\":{{\"transparency\":{},\"position\":{},\"all\":{}}},\"color\":\"{}\",\"link\":{},\"blendIf\":{bi},\"adjustKind\":{},\"fillKind\":{}}}",
+            l.ext.fill_opacity,
+            l.ext.knockout.as_wire(),
+            l.ext.locks.transparency,
+            l.ext.locks.position,
+            l.ext.locks.all,
+            crate::layers::COLOR_LABELS[usize::from(l.ext.color).min(7)],
+            l.ext.link.map_or_else(|| "null".to_string(), |k| k.to_string()),
+            l.adjustment()
+                .map_or_else(|| "null".to_string(), |a| format!("\"{}\"", a.kind_name())),
+            l.fill()
+                .map_or_else(|| "null".to_string(), |f| format!("\"{}\"", f.source.kind_name())),
+        )
     }
 
     /// Minimal JSON string escape (quotes, backslash, control chars) —

@@ -111,7 +111,46 @@
       "media.paged.image.command.average",
       "media.paged.image.command.imageSize",
       "media.paged.image.command.trim",
-      "media.paged.image.command.rotateArbitrary"
+      "media.paged.image.command.rotateArbitrary",
+      "media.paged.image.command.newFillSolid",
+      "media.paged.image.command.newFillGradient",
+      "media.paged.image.command.newFillPattern",
+      "media.paged.image.command.blendingOptions",
+      "media.paged.image.command.rasterizeLayer",
+      "media.paged.image.command.layerViaCopy",
+      "media.paged.image.command.layerViaCut",
+      "media.paged.image.command.mergeDown",
+      "media.paged.image.command.mergeVisible",
+      "media.paged.image.command.mergeGroup",
+      "media.paged.image.command.stampVisible",
+      "media.paged.image.command.flattenImage",
+      "media.paged.image.command.alignLeft",
+      "media.paged.image.command.alignHCenter",
+      "media.paged.image.command.alignRight",
+      "media.paged.image.command.alignTop",
+      "media.paged.image.command.alignVCenter",
+      "media.paged.image.command.alignBottom",
+      "media.paged.image.command.distributeHorizontal",
+      "media.paged.image.command.distributeVertical",
+      "media.paged.image.command.linkLayers",
+      "media.paged.image.command.unlinkLayer",
+      "media.paged.image.command.newLayerComp",
+      "media.paged.image.command.newAdjustmentBrightnessContrast",
+      "media.paged.image.command.newAdjustmentLevels",
+      "media.paged.image.command.newAdjustmentCurves",
+      "media.paged.image.command.newAdjustmentExposure",
+      "media.paged.image.command.newAdjustmentVibrance",
+      "media.paged.image.command.newAdjustmentHueSaturation",
+      "media.paged.image.command.newAdjustmentColorBalance",
+      "media.paged.image.command.newAdjustmentBlackWhite",
+      "media.paged.image.command.newAdjustmentPhotoFilter",
+      "media.paged.image.command.newAdjustmentChannelMixer",
+      "media.paged.image.command.newAdjustmentColorLookup",
+      "media.paged.image.command.newAdjustmentInvert",
+      "media.paged.image.command.newAdjustmentPosterize",
+      "media.paged.image.command.newAdjustmentThreshold",
+      "media.paged.image.command.newAdjustmentGradientMap",
+      "media.paged.image.command.newAdjustmentSelectiveColor"
     ],
     "tools": [
       "media.paged.image.tool.crop",
@@ -703,6 +742,318 @@
         {
           "id": "media.paged.image.command.rotateArbitrary",
           "title": "Rotate canvas by an arbitrary angle…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newFillSolid",
+          "title": "New fill layer: solid colour",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newFillGradient",
+          "title": "New fill layer: gradient",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newFillPattern",
+          "title": "New fill layer: pattern",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.blendingOptions",
+          "title": "Blending options of the active layer…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.rasterizeLayer",
+          "title": "Rasterize the active layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerViaCopy",
+          "title": "Layer via copy",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.layerViaCut",
+          "title": "Layer via cut",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.mergeDown",
+          "title": "Merge down",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.mergeVisible",
+          "title": "Merge visible",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.mergeGroup",
+          "title": "Merge the active layer's group",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.stampVisible",
+          "title": "Stamp visible",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.flattenImage",
+          "title": "Flatten image",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignLeft",
+          "title": "Align layers: left edges",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignHCenter",
+          "title": "Align layers: horizontal centres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignRight",
+          "title": "Align layers: right edges",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignTop",
+          "title": "Align layers: top edges",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignVCenter",
+          "title": "Align layers: vertical centres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.alignBottom",
+          "title": "Align layers: bottom edges",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.distributeHorizontal",
+          "title": "Distribute layers: horizontal centres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.distributeVertical",
+          "title": "Distribute layers: vertical centres",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.linkLayers",
+          "title": "Link the active layer with the layer below",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.unlinkLayer",
+          "title": "Unlink the active layer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newLayerComp",
+          "title": "New layer comp",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentBrightnessContrast",
+          "title": "New adjustment layer: Brightness/Contrast",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentLevels",
+          "title": "New adjustment layer: Levels",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentCurves",
+          "title": "New adjustment layer: Curves",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentExposure",
+          "title": "New adjustment layer: Exposure",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentVibrance",
+          "title": "New adjustment layer: Vibrance",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentHueSaturation",
+          "title": "New adjustment layer: Hue/Saturation",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentColorBalance",
+          "title": "New adjustment layer: Color Balance",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentBlackWhite",
+          "title": "New adjustment layer: Black & White",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentPhotoFilter",
+          "title": "New adjustment layer: Photo Filter",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentChannelMixer",
+          "title": "New adjustment layer: Channel Mixer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentColorLookup",
+          "title": "New adjustment layer: Color Lookup",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentInvert",
+          "title": "New adjustment layer: Invert",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentPosterize",
+          "title": "New adjustment layer: Posterize",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentThreshold",
+          "title": "New adjustment layer: Threshold",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentGradientMap",
+          "title": "New adjustment layer: Gradient Map",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.newAdjustmentSelectiveColor",
+          "title": "New adjustment layer: Selective Color",
           "args": {
             "kind": "struct",
             "fields": {}

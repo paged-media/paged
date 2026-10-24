@@ -49,6 +49,8 @@ import manifest from "../../manifest.json";
 import type { CurveChannel, ImageSession } from "../session";
 import type {
   AdjustParams,
+  AlignTo,
+  ColorLabel,
   BrushLibraryInfo,
   BrushParams,
   BrushPresetInfo,
@@ -97,6 +99,17 @@ import {
   TrimDialog,
 } from "./sections/image-dialogs";
 import { CurvesTools } from "./sections/curves-tools";
+import {
+  ActiveLayerStrip,
+  BlendingOptionsDialog,
+  ColorLabelPicker,
+  LayerCompsSection,
+  LayerFilterBar,
+  LayerPropertiesSection,
+  LayerVerbs,
+  matchesLayerFilter,
+} from "./sections/layer-parity";
+import type { LayerFilter } from "../session";
 import { FILTERS, filterDef, type FilterId } from "../filters";
 import {
   actionBar,
@@ -1384,6 +1397,9 @@ export function LayersSection({
   onRedoTo,
   onUndo,
   onRedo,
+  filter,
+  onFilter,
+  onColor,
 }: {
   /** BOTTOM-first, as the engine holds them. */
   layers: readonly LayerInfo[];
@@ -1431,9 +1447,17 @@ export function LayersSection({
   onBake: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  /** The search and filter bar (none when omitted). */
+  filter?: LayerFilter;
+  onFilter?: (patch: Partial<LayerFilter>) => void;
+  /** A row's colour label. */
+  onColor?: (index: number, color: ColorLabel) => void;
 }) {
   // Top-down for reading; the engine's indices are preserved on each row.
-  const rows = [...layers].reverse();
+  // The filter bar narrows the rows shown, never the stack.
+  const rows = [...layers]
+    .reverse()
+    .filter((l) => !filter || matchesLayerFilter(l, filter));
   const multi = layers.length > 1;
   return (
     <Section
@@ -1451,6 +1475,15 @@ export function LayersSection({
       ) : (
         <div style={note}>{t(LAYERS.sameStack)}</div>
       )}
+      {filter && onFilter && layers.length > 0 ? (
+        <LayerFilterBar
+          filter={filter}
+          shown={rows.length}
+          total={layers.length}
+          disabled={disabled}
+          onFilter={onFilter}
+        />
+      ) : null}
       {rows.map((l, i) => (
         <Fragment key={l.id}>
           {/* A GROUP HEADER, emitted once at the top of its run (rows
@@ -1535,6 +1568,14 @@ export function LayersSection({
                 disabled={disabled}
                 onChange={(e) => onVisible(l.index, e.target.checked)}
               />
+              {onColor ? (
+                <ColorLabelPicker
+                  value={l.color}
+                  disabled={disabled}
+                  testAttr={{ "data-image-layer-row-color": l.index }}
+                  onChange={(c) => onColor(l.index, c)}
+                />
+              ) : null}
               <button
                 type="button"
                 data-image-layer-select={l.index}
@@ -1552,6 +1593,7 @@ export function LayersSection({
                 }}
               >
                 {l.name}
+                {l.link !== null ? " ⛓" : ""}
                 {l.index === active ? " ●" : ""}
               </button>
             </span>
@@ -2237,6 +2279,7 @@ export function makeImagePanel(session: ImageSession) {
     const [stop0, setStop0] = useState(0);
     const [stop1, setStop1] = useState(1);
     const [noiseAmount, setNoiseAmount] = useState(0.5);
+    const [alignTo, setAlignTo] = useState<AlignTo>("canvas");
 
     const s = live.state();
     const p = s.params;
@@ -2482,6 +2525,21 @@ export function makeImagePanel(session: ImageSession) {
             onCancel={() => void session.closeDialog()}
           />
         )}
+        {s.dialog?.kind === "blendingOptions" &&
+          (() => {
+            const i = s.dialog.index;
+            const l = s.layers.layers[i];
+            return l ? (
+              <BlendingOptionsDialog
+                layer={l}
+                disabled={s.busy}
+                onFill={(v) => void session.setLayerFillOpacity(i, v)}
+                onKnockout={(k) => void session.setLayerKnockout(i, k)}
+                onBlendIf={(b) => void session.setLayerBlendIf(i, b)}
+                onClose={() => void session.closeDialog()}
+              />
+            ) : null;
+          })()}
 
         {/* CMS rung 1 — SAY which colour treatment the ingest applied.
             "sRGB assumed" is the honest majority case (most PNG/JPEG carry
@@ -3352,7 +3410,79 @@ export function makeImagePanel(session: ImageSession) {
           onBake={() => void session.bakeAdjustToLayer()}
           onUndo={() => void session.undo()}
           onRedo={() => void session.redo()}
+          filter={s.layerFilter}
+          onFilter={(patch) => session.setLayerFilter(patch)}
+          onColor={(i, c) => session.setLayerColor(i, c)}
         />
+        {s.layers.layers.length > 0 ? (
+          <>
+            <ActiveLayerStrip
+              layer={s.layers.layers[s.layers.active] ?? null}
+              below={s.layers.layers[s.layers.active - 1] ?? null}
+              disabled={disabled}
+              onFill={(v) =>
+                void session.setLayerFillOpacity(s.layers.active, v)
+              }
+              onLocks={(patch) => session.setLayerLocks(s.layers.active, patch)}
+              onColor={(c) => session.setLayerColor(s.layers.active, c)}
+              onLink={() =>
+                session.linkLayers([s.layers.active - 1, s.layers.active])
+              }
+              onUnlink={() => session.unlinkLayer(s.layers.active)}
+              onBlendingOptions={() => session.openBlendingOptions()}
+              onRasterize={() => void session.rasterizeLayer(s.layers.active)}
+            />
+            <LayerVerbs
+              disabled={disabled}
+              gpu={s.gpu}
+              inGroup={
+                (s.layers.layers[s.layers.active]?.group ?? null) !== null
+              }
+              hasSelection={s.selection !== null}
+              alignTo={alignTo}
+              onAlignTo={setAlignTo}
+              onNewFill={(k) => void session.addFillLayer(k)}
+              onNewAdjustment={(k) => void session.addAdjustmentLayerOf(k)}
+              onVerb={(v) => {
+                if (v === "mergeDown") void session.mergeDown();
+                else if (v === "mergeVisible") void session.mergeVisible();
+                else if (v === "stampVisible") void session.stampVisible();
+                else if (v === "flatten") void session.flattenImage();
+                else if (v === "mergeGroup") void session.mergeGroup();
+                else if (v === "viaCopy") void session.layerViaCopy();
+                else void session.layerViaCut();
+              }}
+              onAlign={(edge) => void session.alignLayers(edge, alignTo)}
+              onDistribute={(axis) => void session.distributeLayers(axis)}
+            />
+            <LayerPropertiesSection
+              key={s.layers.layers[s.layers.active]?.id ?? -1}
+              layer={s.layers.layers[s.layers.active] ?? null}
+              params={live.layerParams(s.layers.active)}
+              disabled={disabled}
+              onAdjust={(values, cube, label) =>
+                void session.setTypedAdjustment(
+                  s.layers.active,
+                  values,
+                  cube,
+                  label,
+                )
+              }
+              onFill={(kind, values) =>
+                void session.setFillLayer(s.layers.active, kind, values)
+              }
+            />
+            <LayerCompsSection
+              comps={s.layers.comps}
+              disabled={disabled}
+              onNew={(name, record) => session.newLayerComp(name, record)}
+              onApply={(id) => void session.applyLayerComp(id)}
+              onUpdate={(id) => session.updateLayerComp(id)}
+              onDelete={(id) => session.deleteLayerComp(id)}
+              onRename={(id, name) => session.renameLayerComp(id, name)}
+            />
+          </>
+        ) : null}
 
         <ColorSection
           session={session}
