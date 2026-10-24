@@ -31,6 +31,8 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 
 - asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
   the column's action chain, placed as a data URI;
+  declared through the door too (`assetColumns`, `setAssetColumn`: an unknown query or field
+  is refused, a change re-reads the query), from the Data panel's picture column editor;
 - paged.sheet edits a table of the document's data in place through `data@1`.
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining

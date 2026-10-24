@@ -205,6 +205,7 @@ import { HostColorPicker } from "../plugin-color-picker";
 import {
   ObjectPropertyField,
   ObjectPropertyFrame,
+  setRegisteredActionsSource,
   setDataDoorSource,
   setDataDropHandler,
 } from "@paged-media/shell";
@@ -598,6 +599,10 @@ function PluginBundles() {
         );
       });
     }
+    // Editor ADR 291: the picture column picker lists the actions every
+    // bundle registers into the one shared registry.
+    if (hostOptions.shared.actions)
+      setRegisteredActionsSource(scope, hostOptions.shared.actions);
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.

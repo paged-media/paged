@@ -2566,6 +2566,9 @@ export function createSession(
       } as ElementId);
     },
     placements: () => props.placements(),
+    assetColumns: () => self.assetColumns(),
+    setAssetColumn: (query, field, def) =>
+      self.setAssetColumn(query, field, def),
     refresh: async () => {
       await self.refreshData();
       await self.lowerAll();

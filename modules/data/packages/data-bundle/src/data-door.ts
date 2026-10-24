@@ -10,6 +10,9 @@
 // binding (`addPropertyBinding`, ADR 558).
 
 import type {
+  ActionStep,
+  DataAssetColumn,
+  DataAssetColumnDef,
   DataBindingInfo,
   DataBindingStatus,
   DataBindingSpec,
@@ -53,6 +56,15 @@ export interface DataDoorDeps {
     query: string,
     field: string,
   ): Promise<{ binding: string; kind: string }>;
+  /** Data ADR 563's asset columns, keyed `<query>.<field>`. */
+  assetColumns(): Record<string, DataAssetColumnDef>;
+  /** Declare (or, with null, undeclare) an asset column; saved with the
+   *  session. */
+  setAssetColumn(
+    query: string,
+    field: string,
+    def: { chain?: ActionStep[]; base?: string } | null,
+  ): void;
   /** Read the data again and lower every binding (the panel's Update). */
   refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
@@ -106,6 +118,35 @@ function window(
   const end = limit === undefined ? undefined : offset + limit;
   const columns = rs.columns.map((c) => c.slice(offset, end));
   return { schema: rs.schema, columns, rowCount: columns[0]?.length ?? 0 };
+}
+
+/** An asset column's definition as the session keeps it, or why not. */
+function assetDef(def: DataAssetColumnDef): {
+  chain?: ActionStep[];
+  base?: string;
+} {
+  if (def.base !== undefined && typeof def.base !== "string")
+    throw new Error("an asset column's base is a URL");
+  const chain = (def.chain ?? []).map((step, i) => {
+    if (!step || typeof step.action !== "string" || step.action === "")
+      throw new Error(`step ${i + 1} of the chain names no action`);
+    if (
+      step.params !== undefined &&
+      (step.params === null ||
+        typeof step.params !== "object" ||
+        Array.isArray(step.params))
+    )
+      throw new Error(`step ${i + 1}'s parameters are not an object`);
+    return {
+      action: step.action,
+      ...(step.params ? { params: { ...step.params } } : {}),
+    };
+  });
+  const base = def.base?.trim();
+  return {
+    ...(chain.length > 0 ? { chain } : {}),
+    ...(base ? { base } : {}),
+  };
 }
 
 export function createDataDoor(deps: DataDoorDeps): DataDoor {
@@ -254,6 +295,34 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
       for (const p of await deps.placements())
         out.push({ ...p, status: statusOf(p.binding) });
       return out;
+    },
+    async assetColumns() {
+      const out: DataAssetColumn[] = [];
+      const names = deps.queries().map((q) => q.id);
+      for (const [key, def] of Object.entries(deps.assetColumns())) {
+        // The key is `<query>.<field>`; a query's name may hold a dot.
+        const query =
+          names.find((n) => key.startsWith(`${n}.`)) ??
+          key.slice(0, Math.max(0, key.indexOf(".")));
+        out.push({ query, field: key.slice(query.length + 1), ...def });
+      }
+      return out;
+    },
+    async setAssetColumn(query, field, def) {
+      const q = queryOf(query);
+      if (!q)
+        throw new Error(
+          `no query "${query}" (an asset column is a query's field)`,
+        );
+      const declared = `${query}.${field}` in deps.assetColumns();
+      // Undeclaring a column whose field went away is allowed.
+      if (def || !declared) {
+        const rs = await (await store()).queryRecords(guarded(q.sql));
+        if (!rs.schema.fields.some((f) => f.name === field))
+          throw new Error(`the query "${query}" has no field "${field}"`);
+      }
+      deps.setAssetColumn(query, field, def ? assetDef(def) : null);
+      door.touched(query);
     },
     async bindings() {
       const out: DataBindingInfo[] = [];
