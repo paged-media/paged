@@ -78,39 +78,33 @@
 // pattern's, because §12.4 names these two verbs on the repeat row.)
 //
 // ------------------------------------------------------- CLIPPING
-// The catalog names clipping, and B-18 makes it real: `pasteInto` nests
-// a top-level item inside a container Rectangle / Oval / Polygon, where
-// it renders CLIPPED by the container's outline, and `releaseFrom` pops
-// it back. So a clipped repeat mints a clip FRAME (the page rect by
-// default — "clip to artboard" — or a caller's `clipRect`) and pastes
-// every instance into it, in the same single batch.
+// The catalog names clipping. A clipped repeat mints a clip FRAME (the
+// page rect by default — "clip to artboard" — or a caller's `clipRect`)
+// and clips every instance by its outline. Two lanes, by what the host
+// says it has:
 //
-// FOUR MEASURED CONSEQUENCES, none of them optional:
-//   1. A CLIPPED REPEAT HAS NO GROUP. `pasteInto` refuses a grouped
-//      child with the engine's own sentence ("B-18: a grouped item
-//      cannot be pasted into a frame (ungroup first)"), so clip and
-//      group are mutually exclusive. An unclipped repeat still gets one.
-//   2. A CLIPPED INSTANCE IS INVISIBLE TO `document.tree()`. The tree
-//      door reports the container with NO children, while
-//      `getMetadata` / `elementGeometry` / `pathAnchors` all still
-//      answer for the child by id. So the link WALK cannot enumerate a
-//      clipped repeat and the RECIPE is the only index — which is why
-//      clipping DEGRADES OFF (with a warning) on a host that wires no
-//      container writer, instead of producing artwork nothing can ever
-//      find again.
-//   3. `deleteFrame` ON A PASTED-IN CHILD IS REFUSED ("B-18: the item is
-//      pasted into a container — release it before removing"). Release
-//      therefore emits `releaseFrom` BEFORE `deleteFrame` for every
-//      clipped instance.
-//   4. DELETING THE CONTAINER ON ENGINE 0.64 DID NOT DELETE ITS CHILDREN
-//      — it ORPHANED them: they left the tree and still answered
-//      `elementGeometry`. 0.65 removes them with it (core's delete fix,
-//      `repeat.spec.ts` CONSEQUENCE 4). The clip frame is still deleted
-//      LAST, after its children are released and removed: that order is
-//      right on both engines, and the bundle runs on whichever is booted.
+//   · A CLIP GROUP (engine ADR 1010, `host.supports(CLIP_GROUP_FEATURE)`).
+//     The clip frame is inserted AFTER the instances, so it is the
+//     top-most, and `createGroup { memberIds: [instances…, frame], clip:
+//     true }` groups them in the SAME batch: the instances paint inside
+//     the frame's outline and the frame paints nothing of its own. So a
+//     clipped repeat is ONE batch and ONE undo step like an unclipped
+//     one, it HAS a group (the clip group), and every instance stays in
+//     `document.tree()` as a member of it. Release dissolves the group
+//     before it deletes the instances and the frame.
+//   · PASTE-INTO (B-18), on a host without clip groups. `pasteInto` nests
+//     each instance inside the frame, in a SECOND batch. Four measured
+//     consequences: (1) no group, because `pasteInto` refused a grouped
+//     child before ADR 1010; (2) before ADR 1010 a pasted-in instance was
+//     invisible to `document.tree()`, so the RECIPE is its index, which
+//     is why clipping DEGRADES OFF (with a warning) on a host that wires
+//     no container writer; (3) `deleteFrame` on a pasted-in child is
+//     refused, so Release emits `releaseFrom` first; (4) the clip frame
+//     is deleted LAST (on 0.64 deleting it first orphaned its children;
+//     0.65 removes them with it).
+//
 //   Only the INSTANCES are clipped. The source stays an ordinary
-//   top-level item, because it is the artwork the user keeps editing and
-//   burying it in a container would hide it from the tree too.
+//   top-level item, because it is the artwork the user keeps editing.
 //
 // ---------------------------------------------------- LIVE, HONESTLY
 // There IS an on-canvas control — `handlers/repeat.ts` + the Repeat tool
@@ -130,13 +124,14 @@
 //
 // ----------------------------------------------- undo counts (MEASURED)
 //   · Make (radial / grid / mirror) = ONE batch ⇒ 1 undo step
-//                                     — TWO ⇒ 2 when CLIPPED.
+//                                     — clipped by a clip group too;
+//                                     TWO ⇒ 2 when clipped by paste-into.
 //   · Update                        = ONE batch ⇒ 1 undo step
-//                                     — TWO ⇒ 2 when CLIPPED.
+//                                     — likewise.
 //   · Expand                        = ONE batch ⇒ 1 undo step.
 //   · Release                       = ONE batch ⇒ 1 undo step.
 //   · Select instances              = no mutation.
-// The clipped case is TWO for a reason that is NOT the contract skew:
+// The paste-into case is TWO for a reason that is NOT the contract skew:
 // `pasteInto` is what makes an instance invisible to `document.tree()`,
 // and a batch outcome reports ONE `createdId`, so the only honest
 // enumeration of what the build minted has to be taken BEFORE the paste
@@ -196,7 +191,11 @@ import {
 } from "@paged-media/draw-geometry";
 
 import { stampDrawMetadata } from "./appearance-bake";
-import { groupMutationFor, ungroupMutationFor } from "./group";
+import {
+  clipGroupMutationFor,
+  groupMutationFor,
+  ungroupMutationFor,
+} from "./group";
 import {
   compoundPaintOf,
   compoundSourceOf,
@@ -298,17 +297,17 @@ export const REPEAT_LIVE_NOTE =
 
 /** What clipping is, and the four things it costs. Pinned by a test. */
 export const REPEAT_CLIP_NOTE =
-  "CLIPPING nests every instance inside a clip FRAME through Paste " +
-  "Into, so the repeat renders clipped by that frame's " +
-  "outline. Four measured consequences: a clipped repeat has NO GROUP " +
-  "(pasteInto refuses a grouped child); a clipped instance is INVISIBLE " +
-  "to the scene tree, though it still answers geometry and metadata by " +
-  "id, so the recipe is the only index and clipping degrades OFF on a " +
-  "host with no container writer; deleteFrame REFUSES a pasted-in child, " +
-  "so Release releases before it removes; and the clip frame goes " +
-  "last (an engine older than 0.65 orphaned a deleted container's " +
-  "children). Only the INSTANCES are clipped — the source stays an " +
-  "ordinary top-level item you can keep editing.";
+  "CLIPPING makes the instances and a clip FRAME one CLIP GROUP, the " +
+  "frame on top, so the repeat renders clipped by that frame's outline " +
+  "in ONE undo step, and every instance stays in the scene tree. On a " +
+  "host without clip groups it nests every instance inside the frame " +
+  "through Paste Into instead, in a second step: then a clipped repeat " +
+  "has NO GROUP, the recipe is the index of what it pasted in (clipping " +
+  "degrades OFF on a host with no container writer), deleteFrame REFUSES " +
+  "a pasted-in child so Release releases before it removes, and the clip " +
+  "frame goes last (an engine older than 0.65 orphaned a deleted " +
+  "container's children). Only the INSTANCES are clipped — the source " +
+  "stays an ordinary top-level item you can keep editing.";
 
 // ---------------------------------------------------------------- model
 
@@ -625,6 +624,11 @@ export const repeatHandle = (copy: number, contour: number): string =>
 /** The clip frame's batch-local handle. */
 export const REPEAT_CLIP_HANDLE = "rclip";
 
+/** The host flag a clip-group repeat rides (engine ADR 1010): with it a
+ *  clipped repeat is ONE batch and its instances one clip group; without
+ *  it, the paste-into lane (module header). */
+export const CLIP_GROUP_FEATURE = "document.clipGroups@1";
+
 /** A `"$h:<handle>"` reference as an `ElementId` — the v59 seam's helper,
  *  re-exported under this module's name so callers do not reach past it. */
 export const handleRef = handleElementId;
@@ -846,9 +850,11 @@ export interface RepeatGeneration {
  * THE BUILD BATCH — Make and Update both ride it, in the ONE order the
  * engine accepts:
  *
- *   1. the CLIP FRAME (when clipping). Its stroke is cleared: an
- *      inserted path defaults to a 1 pt black stroke (measured), and a
- *      clip frame that paints its own outline is a bug, not a feature;
+ *   1. the CLIP FRAME (when clipping by paste-into; a clip group inserts
+ *      it after the copies instead, so it is top-most). Its stroke is
+ *      cleared: an inserted path defaults to a 1 pt black stroke
+ *      (measured), and a clip frame that paints its own outline is a
+ *      bug, not a feature;
  *   2. every COPY — one `insertPath` + `bindCreated` per contour, the
  *      compound re-merge through the same `framePath` door Make Compound
  *      Path uses, the source's paint and the instance link, ALL
@@ -861,8 +867,9 @@ export interface RepeatGeneration {
  *      the spread length the batch STARTED with; 0.71.8 applies it, and a
  *      host may boot either);
  *   4. the SOURCE links;
- *   5. the GROUP — only when NOT clipping, because `pasteInto` refuses a
- *      grouped child.
+ *   5. the GROUP — the sources and copies when NOT clipping; the copies
+ *      and the clip frame as a CLIP GROUP when clipping by one; none
+ *      when clipping by paste-into.
  *
  * ONE batch ⇒ ONE undo step, however many instances. The `pasteInto`
  * that DOES the clipping is deliberately NOT here — see
@@ -872,16 +879,19 @@ export function repeatBatchFor(args: {
   plan: RepeatPlan;
   sourceEnvelopes: readonly (PluginMetadataEnvelope | null)[];
   previous?: RepeatGeneration | null;
+  /** Clip by a CLIP GROUP (engine ADR 1010) rather than paste-into. */
+  clipGroup?: boolean;
 }): MutationInput {
   const { plan } = args;
   const ops: MutationInput[] = [];
   const clipping = plan.clipRect !== null;
+  const clipGroup = clipping && args.clipGroup === true;
 
-  if (plan.clipRect) {
+  const insertClipFrame = (clipRect: RepeatBounds) => {
     ops.push(
       insertPathMutationFor(
         plan.pageId,
-        rectAnchorTable(plan.clipRect).anchors,
+        rectAnchorTable(clipRect).anchors,
         false,
       ),
     );
@@ -894,7 +904,10 @@ export function repeatBatchFor(args: {
         data: { repeatClip: { repeat: plan.repeat } satisfies RepeatClipRef },
       }),
     );
-  }
+  };
+  // Paste-into: the frame first. A clip group: after the copies, so it
+  // is the top-most member — the one that clips.
+  if (plan.clipRect && !clipGroup) insertClipFrame(plan.clipRect);
 
   const copies = repeatCopiesFor(plan);
   copies.forEach((copy, copyIndex) => {
@@ -952,6 +965,8 @@ export function repeatBatchFor(args: {
     );
   });
 
+  if (plan.clipRect && clipGroup) insertClipFrame(plan.clipRect);
+
   const previous = args.previous ?? null;
   if (previous) {
     if (previous.group && typeof previous.group.id === "string") {
@@ -987,6 +1002,14 @@ export function repeatBatchFor(args: {
       groupMutationFor([
         ...plan.sources.map((s) => s.id),
         ...copies.map((_, i) => handleRef(repeatHandle(i, 0))),
+      ]),
+    );
+  }
+  if (clipGroup && copies.length > 0) {
+    ops.push(
+      clipGroupMutationFor([
+        ...copies.map((_, i) => handleRef(repeatHandle(i, 0))),
+        handleRef(REPEAT_CLIP_HANDLE),
       ]),
     );
   }
@@ -1382,13 +1405,17 @@ export async function repeatGenerationOf(
       ? ({ kind: record.clipFrame.kind, id: record.clipFrame.id } as ElementId)
       : null);
   const anchor = links.sources[0]?.id ?? links.instances[0]?.id ?? null;
+  // The tree the links were just read from — the same revision, so the
+  // same tree, and not a second read of it.
+  const tree = await linkIndex(host).tree();
+  // A clip frame inside a group is a CLIP GROUP's path (engine ADR
+  // 1010): that group is the generation's, and nothing is pasted in.
+  const clipGroup = clipFrame ? groupHolding(tree, clipFrame) : null;
   return {
-    // The tree the links were just read from — the same revision, so the
-    // same tree, and not a second read of it.
-    group: anchor ? groupHolding(await linkIndex(host).tree(), anchor) : null,
+    group: clipGroup ?? (anchor ? groupHolding(tree, anchor) : null),
     instances: links.instances.map((i) => i.id),
     clipFrame,
-    clipped: clipFrame !== null,
+    clipped: clipFrame !== null && clipGroup === null,
   };
 }
 
@@ -1452,7 +1479,13 @@ export async function repeatPlanFor(
   }
 
   let params = args.params;
-  if (params.clip && !host.supports(REPEAT_FEATURE)) {
+  // A clip group keeps every instance in the tree, so only the paste-into
+  // lane needs the recipe as its index (module header).
+  if (
+    params.clip &&
+    !host.supports(REPEAT_FEATURE) &&
+    !host.supports(CLIP_GROUP_FEATURE)
+  ) {
     host.log.warn(
       `${label}: clipping needs the \`.paged\` container writer, because a ` +
         "clipped instance is INVISIBLE to document.tree() and the recipe is " +
@@ -1565,10 +1598,12 @@ async function emitRepeat(
   const sourceEnvelopes = await Promise.all(
     plan.sources.map((s) => index.envelopeOf(s.id).catch(() => null)),
   );
+  const clipGroup = plan.clipRect !== null && host.supports(CLIP_GROUP_FEATURE);
   const batch = repeatBatchFor({
     plan,
     sourceEnvelopes,
     previous: args.previous ?? null,
+    clipGroup,
   });
   const built = await mutateMinting(host, batch);
   if (!built.outcome.applied) {
@@ -1605,13 +1640,13 @@ async function emitRepeat(
     instances = links.instances.map((i) => i.id);
     clipFrame = plan.clipRect ? (links.clipFrames[0]?.id ?? null) : null;
     group =
-      !plan.clipRect && instances[0]
+      (!plan.clipRect || clipGroup) && instances[0]
         ? groupHolding(await linkIndex(host).tree(), instances[0])
         : null;
   }
   const made = instances.filter((id): id is ElementId => id !== undefined);
   let undoSteps = 1;
-  if (plan.clipRect && clipFrame && made.length > 0) {
+  if (plan.clipRect && !clipGroup && clipFrame && made.length > 0) {
     const clipped = await host.document.mutate(
       repeatClipBatchFor(clipFrame, made),
     );
@@ -1626,10 +1661,12 @@ async function emitRepeat(
       clipFrame = null;
     }
   }
-  if (plan.clipRect || made.length === 0) group = null;
+  if ((plan.clipRect && !clipGroup) || made.length === 0) group = null;
   await host.selection.set(
     group
-      ? [group]
+      ? clipGroup
+        ? [...plan.sources.map((s) => s.id), group]
+        : [group]
       : clipFrame
         ? [...plan.sources.map((s) => s.id), clipFrame]
         : [...plan.sources.map((s) => s.id), ...made],
