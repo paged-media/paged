@@ -49,21 +49,41 @@ describe("paged.draw commands, no engine — WP6.1 part 2 [plugin-draw.tool-wave
   it("joinScrub: a scrub over the gap extends the first path and welds the second, one batch", async () => {
     covers("command:media.paged.draw.command.joinScrub");
     const r = unitRig(doc(), { selection: [] });
-    await r.run(`${C}.joinScrub`, { page: "page-1", path: [[395, 245], [425, 255]], tolerance: 8 });
+    await r.run(`${C}.joinScrub`, {
+      page: "page-1",
+      path: [
+        [395, 245],
+        [425, 255],
+      ],
+      tolerance: 8,
+    });
     expect(r.sent()).toHaveLength(1);
     expect(r.steps()).toBe(1);
     const ops = r.leaves().map((m) => m.op);
     expect(ops[0]).toBe("setElementProperty");
     expect(ops).toContain("joinPaths");
     await expect(
-      r.run(`${C}.joinScrub`, { page: "page-1", path: [[900, 900], [901, 900]] }),
+      r.run(`${C}.joinScrub`, {
+        page: "page-1",
+        path: [
+          [900, 900],
+          [901, 900],
+        ],
+      }),
     ).rejects.toThrow(/^failed:/);
   });
 
   it("pathErase: a drag across the open path rewrites it and inserts the far piece, one batch", async () => {
     covers("command:media.paged.draw.command.pathErase");
     const r = unitRig(doc(), { selection: [A] });
-    await r.run(`${C}.pathErase`, { page: "page-1", path: [[350, 240], [350, 260]], width: 10 });
+    await r.run(`${C}.pathErase`, {
+      page: "page-1",
+      path: [
+        [350, 240],
+        [350, 260],
+      ],
+      width: 10,
+    });
     expect(r.sent()).toHaveLength(1);
     expect(r.steps()).toBe(1);
     const ops = r.leaves().map((m) => m.op);
@@ -79,10 +99,17 @@ describe("paged.draw commands, no engine — WP6.1 part 2 [plugin-draw.tool-wave
   it("reshapeAt: the selected path's anchor moves, as one framePath batch", async () => {
     covers("command:media.paged.draw.command.reshapeAt");
     const r = unitRig(doc(), { selection: [SQ] });
-    await r.run(`${C}.reshapeAt`, { point: [200, 100], to: [220, 80], radius: 40 });
+    await r.run(`${C}.reshapeAt`, {
+      point: [200, 100],
+      to: [220, 80],
+      radius: 40,
+    });
     expect(r.sent()).toHaveLength(1);
     const ops = r.leaves();
-    expect(ops[0]).toMatchObject({ op: "setElementProperty", args: { path: "framePath" } });
+    expect(ops[0]).toMatchObject({
+      op: "setElementProperty",
+      args: { path: "framePath" },
+    });
     await expect(
       r.run(`${C}.reshapeAt`, { point: [600, 600], to: [610, 600] }),
     ).rejects.toThrow(/^failed: the point is on no anchor/);
@@ -92,29 +119,54 @@ describe("paged.draw commands, no engine — WP6.1 part 2 [plugin-draw.tool-wave
     covers("command:media.paged.draw.command.shaperStroke");
     const r = unitRig([], { selection: [] });
     const tri: [number, number][] = [];
-    const corners: [number, number][] = [[200, 100], [280, 230], [120, 230], [200, 100]];
+    const corners: [number, number][] = [
+      [200, 100],
+      [280, 230],
+      [120, 230],
+      [200, 100],
+    ];
     for (let i = 1; i < corners.length; i++)
       for (let k = 0; k < 20; k++) {
         const [a, b] = [corners[i - 1]!, corners[i]!];
-        tri.push([a[0] + ((b[0] - a[0]) * k) / 20, a[1] + ((b[1] - a[1]) * k) / 20]);
+        tri.push([
+          a[0] + ((b[0] - a[0]) * k) / 20,
+          a[1] + ((b[1] - a[1]) * k) / 20,
+        ]);
       }
     tri.push([201, 102]);
     await r.run(`${C}.shaperStroke`, { page: "page-1", path: tri });
     expect(r.sent()).toHaveLength(1);
-    const insert = r.leaves().find((m) => m.op === "insertPath") as { args: { anchors: unknown[]; open: boolean } };
+    const insert = r.leaves().find((m) => m.op === "insertPath") as {
+      args: { anchors: unknown[]; open: boolean };
+    };
     expect(insert.args.anchors).toHaveLength(3);
     expect(insert.args.open).toBe(false);
     await expect(
-      r.run(`${C}.shaperStroke`, { page: "page-1", path: [[0, 0], [1, 1]] }),
+      r.run(`${C}.shaperStroke`, {
+        page: "page-1",
+        path: [
+          [0, 0],
+          [1, 1],
+        ],
+      }),
     ).rejects.toThrow(/^failed:/);
   });
 
   it("insertStar: one closed 2·points path at the typed centre", async () => {
     covers("command:media.paged.draw.command.insertStar");
     const r = unitRig([], { selection: [] });
-    await r.run(`${C}.insertStar`, { page: "page-1", cx: 100, cy: 100, radius1: 40, radius2: 10, points: 6 });
+    await r.run(`${C}.insertStar`, {
+      page: "page-1",
+      cx: 100,
+      cy: 100,
+      radius1: 40,
+      radius2: 10,
+      points: 6,
+    });
     expect(r.sent()).toHaveLength(1);
-    const insert = r.leaves().find((m) => m.op === "insertPath") as { args: { anchors: { anchor: number[] }[] } };
+    const insert = r.leaves().find((m) => m.op === "insertPath") as {
+      args: { anchors: { anchor: number[] }[] };
+    };
     expect(insert.args.anchors).toHaveLength(12);
     expect(insert.args.anchors[0]!.anchor[1]).toBeCloseTo(60, 9);
   });

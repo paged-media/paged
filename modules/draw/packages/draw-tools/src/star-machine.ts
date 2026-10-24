@@ -106,14 +106,21 @@ export class StarMachine {
         return this.snapshot(null, null);
       case "move":
         if (!this.centre) return this.snapshot(null, null);
-        if (!this.dragging && dist(this.centre, event.point) >= this.options.clickTolerance)
+        if (
+          !this.dragging &&
+          dist(this.centre, event.point) >= this.options.clickTolerance
+        )
           this.dragging = true;
-        if (this.dragging) this.track(event.point, event.modifiers?.shift ?? false);
+        if (this.dragging)
+          this.track(event.point, event.modifiers?.shift ?? false);
         return this.snapshot(null, null);
       case "up": {
         if (!this.centre) return this.snapshot(null, null);
         this.done = true;
-        if (!this.dragging && dist(this.centre, event.point) < this.options.clickTolerance)
+        if (
+          !this.dragging &&
+          dist(this.centre, event.point) < this.options.clickTolerance
+        )
           return this.snapshot(null, [...this.centre]);
         this.track(event.point, event.modifiers?.shift ?? false);
         return this.snapshot(this.star, null);
@@ -124,7 +131,9 @@ export class StarMachine {
           this.star = null;
           return this.snapshot(null, null);
         }
-        this.points = clampPoints(this.points + (event.key === "ArrowUp" ? 1 : -1));
+        this.points = clampPoints(
+          this.points + (event.key === "ArrowUp" ? 1 : -1),
+        );
         if (this.star) this.star = { ...this.star, points: this.points };
         return this.snapshot(null, null);
     }
@@ -143,7 +152,10 @@ export class StarMachine {
     };
   }
 
-  private snapshot(commit: StarShape | null, open: Vec2Mut | null): StarSnapshot {
+  private snapshot(
+    commit: StarShape | null,
+    open: Vec2Mut | null,
+  ): StarSnapshot {
     return { star: this.star, commit, openOptions: open, active: !this.done };
   }
 }
@@ -191,8 +203,13 @@ export class FlareMachine {
       case "down":
         this.pressing = true;
         if (this.step === "size")
-          this.flare = { centre: [event.point[0], event.point[1]], size: 0, end: null };
-        else if (this.flare) this.flare = { ...this.flare, end: [event.point[0], event.point[1]] };
+          this.flare = {
+            centre: [event.point[0], event.point[1]],
+            size: 0,
+            end: null,
+          };
+        else if (this.flare)
+          this.flare = { ...this.flare, end: [event.point[0], event.point[1]] };
         return this.snapshot(null, null);
       case "move":
         if (this.pressing) this.track(event.point);
@@ -219,7 +236,10 @@ export class FlareMachine {
       case "key": {
         this.done = true;
         // Between the steps Escape keeps the flare as sized (no rings).
-        const keep = this.step === "end" && this.flare ? { ...this.flare, end: null } : null;
+        const keep =
+          this.step === "end" && this.flare
+            ? { ...this.flare, end: null }
+            : null;
         if (!keep) this.flare = null;
         return this.snapshot(keep, null);
       }
@@ -233,7 +253,10 @@ export class FlareMachine {
     else this.flare = { ...this.flare, end: [point[0], point[1]] };
   }
 
-  private snapshot(commit: FlareGesture | null, open: Vec2Mut | null): FlareSnapshot {
+  private snapshot(
+    commit: FlareGesture | null,
+    open: Vec2Mut | null,
+  ): FlareSnapshot {
     return {
       step: this.step,
       flare: this.flare,

@@ -86,19 +86,33 @@ describe("ReflectMachine [plugin-draw.tool-wave-3]", () => {
     expect(click.commit).toBeNull();
     m.setDefaultPivot([500, 500]); // a click beats the default
     m.handle({ type: "down", point: [40, 12], modifiers: NONE });
-    const up = m.handle({ type: "up", point: [50, 13], modifiers: { alt: true, shift: true } });
+    const up = m.handle({
+      type: "up",
+      point: [50, 13],
+      modifiers: { alt: true, shift: true },
+    });
     expect(up.commit).toEqual({ pivot: [10, 10], angleDeg: 0, copy: true });
   });
 
   it("Alt+click asks for the options at the clicked axis point; Escape drops a drag", () => {
     const m = new ReflectMachine({ clickTolerance: 2 });
-    m.handle({ type: "down", point: [20, 30], modifiers: { alt: true, shift: false } });
-    const s = m.handle({ type: "up", point: [20, 30], modifiers: { alt: true, shift: false } });
+    m.handle({
+      type: "down",
+      point: [20, 30],
+      modifiers: { alt: true, shift: false },
+    });
+    const s = m.handle({
+      type: "up",
+      point: [20, 30],
+      modifiers: { alt: true, shift: false },
+    });
     expect(s.openOptions).toEqual([20, 30]);
     m.handle({ type: "down", point: [60, 30], modifiers: NONE });
     m.handle({ type: "move", point: [60, 80], modifiers: NONE });
     expect(m.handle({ type: "key", key: "Escape" }).axisAngleDeg).toBeNull();
-    expect(m.handle({ type: "up", point: [60, 80], modifiers: NONE }).commit).toBeNull();
+    expect(
+      m.handle({ type: "up", point: [60, 80], modifiers: NONE }).commit,
+    ).toBeNull();
   });
 
   it("axisAngleOf snaps to 45°", () => {
@@ -109,7 +123,12 @@ describe("ReflectMachine [plugin-draw.tool-wave-3]", () => {
 
 describe("ReshapeMachine [plugin-draw.tool-wave-3]", () => {
   const line: AnchorTable = {
-    anchors: [corner([0, 0]), corner([50, 0]), corner([100, 0]), corner([150, 0])],
+    anchors: [
+      corner([0, 0]),
+      corner([50, 0]),
+      corner([100, 0]),
+      corner([150, 0]),
+    ],
     subpathStarts: [0],
     subpathOpen: [true],
   };
@@ -151,7 +170,13 @@ describe("StarMachine / FlareMachine [plugin-draw.tool-wave-3]", () => {
     m.handle({ type: "down", point: [100, 100] });
     m.handle({ type: "move", point: [140, 100] });
     const s = m.handle({ type: "up", point: [160, 100] });
-    expect(s.commit).toMatchObject({ cx: 100, cy: 100, radius1: 60, radius2: 30, points: 5 });
+    expect(s.commit).toMatchObject({
+      cx: 100,
+      cy: 100,
+      radius1: 60,
+      radius2: 30,
+      points: 5,
+    });
     expect(s.commit!.rotationDeg).toBeCloseTo(90, 9);
   });
 
@@ -162,7 +187,11 @@ describe("StarMachine / FlareMachine [plugin-draw.tool-wave-3]", () => {
     m.handle({ type: "key", key: "ArrowUp" });
     m.handle({ type: "key", key: "ArrowUp" });
     expect(m.handle({ type: "key", key: "ArrowDown" }).star!.points).toBe(6);
-    const s = m.handle({ type: "up", point: [30, 30], modifiers: { shift: true } });
+    const s = m.handle({
+      type: "up",
+      point: [30, 30],
+      modifiers: { shift: true },
+    });
     expect(s.commit!.points).toBe(6);
     expect(s.commit!.rotationDeg).toBe(0);
   });
@@ -191,7 +220,11 @@ describe("StarMachine / FlareMachine [plugin-draw.tool-wave-3]", () => {
     const m = new FlareMachine({ clickTolerance: 2 });
     m.handle({ type: "down", point: [0, 0] });
     m.handle({ type: "up", point: [20, 0] });
-    expect(m.handle({ type: "key", key: "Escape" }).commit).toEqual({ centre: [0, 0], size: 20, end: null });
+    expect(m.handle({ type: "key", key: "Escape" }).commit).toEqual({
+      centre: [0, 0],
+      size: 20,
+      end: null,
+    });
     const c = new FlareMachine({ clickTolerance: 2 });
     c.handle({ type: "down", point: [7, 7] });
     expect(c.handle({ type: "up", point: [7, 7] }).openOptions).toEqual([7, 7]);
