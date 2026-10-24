@@ -240,9 +240,39 @@ const EXPECTED: Record<
 };
 
 describe("every Word command's write (commands.ts)", () => {
-  for (const name of Object.keys(WORD_COMMAND) as WordCommandName[]) {
-    it(name, async () => {
-      covers(`command:${WORD_COMMAND[name]}`);
+  it("each command writes what Word's command does to the selection", async () => {
+    covers("command:media.paged.doc.command.word.bold");
+    covers("command:media.paged.doc.command.word.italic");
+    covers("command:media.paged.doc.command.word.underline");
+    covers("command:media.paged.doc.command.word.strikethrough");
+    covers("command:media.paged.doc.command.word.subscript");
+    covers("command:media.paged.doc.command.word.superscript");
+    covers("command:media.paged.doc.command.word.allCaps");
+    covers("command:media.paged.doc.command.word.smallCaps");
+    covers("command:media.paged.doc.command.word.clearCharacter");
+    covers("command:media.paged.doc.command.word.growFont");
+    covers("command:media.paged.doc.command.word.shrinkFont");
+    covers("command:media.paged.doc.command.word.alignLeft");
+    covers("command:media.paged.doc.command.word.alignCenter");
+    covers("command:media.paged.doc.command.word.alignRight");
+    covers("command:media.paged.doc.command.word.justify");
+    covers("command:media.paged.doc.command.word.spaceBefore");
+    covers("command:media.paged.doc.command.word.increaseIndent");
+    covers("command:media.paged.doc.command.word.decreaseIndent");
+    covers("command:media.paged.doc.command.word.heading1");
+    covers("command:media.paged.doc.command.word.heading2");
+    covers("command:media.paged.doc.command.word.heading3");
+    covers("command:media.paged.doc.command.word.normal");
+    covers("command:media.paged.doc.command.word.bullets");
+    covers("command:media.paged.doc.command.word.numbering");
+    covers("command:media.paged.doc.command.word.listLevelDown");
+    covers("command:media.paged.doc.command.word.listLevelUp");
+    covers("command:media.paged.doc.command.word.copyFormat");
+    covers("command:media.paged.doc.command.word.pasteFormat");
+    covers("command:media.paged.doc.command.word.lineSpacing1");
+    covers("command:media.paged.doc.command.word.lineSpacing15");
+    covers("command:media.paged.doc.command.word.lineSpacing2");
+    for (const name of Object.keys(WORD_COMMAND) as WordCommandName[]) {
       const { host, writes, styles } = textHost({
         characterFontStyle: v("Regular"),
         characterFontSize: v(10),
@@ -254,8 +284,8 @@ describe("every Word command's write (commands.ts)", () => {
       });
       await runWordCommand(host, name, { copied: null });
       EXPECTED[name](writes, styles);
-    });
-  }
+    }
+  });
 
   it("copy then paste formatting writes the copied character format", async () => {
     const { host, writes } = textHost({

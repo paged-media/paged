@@ -47,8 +47,8 @@ import {
 
 function press(
   combo: string,
-  target: unknown = null,
-): KeyEventLike & { target: unknown } {
+  target: object | null = null,
+): KeyEventLike & { target: EventTarget | null } {
   const parts = combo.split("+");
   const key = parts.pop()!;
   const has = (...m: string[]) => parts.some((p) => m.includes(p));
@@ -58,7 +58,7 @@ function press(
     ctrlKey: has("ctrl"),
     altKey: has("alt"),
     shiftKey: has("shift"),
-    target,
+    target: target as EventTarget | null,
   };
 }
 
@@ -95,7 +95,11 @@ describe("scoped keybindings (editor ADR 299)", () => {
     invoked = [];
     commands = createCommandRegistry(() => state);
     for (const id of ["host.chord", "word.bold", "word.level", "host.tool"])
-      commands.register({ id, title: id, handler: () => void invoked.push(id) });
+      commands.register({
+        id,
+        title: id,
+        handler: () => void invoked.push(id),
+      });
   });
   afterEach(() => unstubAllGlobals());
 
@@ -181,7 +185,9 @@ describe("scoped keybindings (editor ADR 299)", () => {
         }),
       ).toThrow(/reserved/);
     }
-    expect(() => r.register({ key: "cmd+s", command: "host.chord" })).not.toThrow();
+    expect(() =>
+      r.register({ key: "cmd+s", command: "host.chord" }),
+    ).not.toThrow();
     r.dispose();
   });
 });
@@ -190,7 +196,12 @@ describe("context-bar registries and the document context (editor ADR 298)", () 
   test("groups list by order and filter by context", () => {
     const groups = createControlBarGroupRegistry();
     const render = () => null;
-    groups.register({ id: "b", order: 200, scope: { editContext: "w" }, render });
+    groups.register({
+      id: "b",
+      order: 200,
+      scope: { editContext: "w" },
+      render,
+    });
     groups.register({ id: "a", scope: { editContext: "w" }, render });
     groups.register({ id: "c", scope: { editContext: "x" }, render });
     expect(groups.forContext("w").map((g) => g.id)).toEqual(["a", "b"]);
@@ -216,7 +227,10 @@ describe("context-bar registries and the document context (editor ADR 298)", () 
     store.set("p", null);
     expect(store.get()).toBeNull();
     expect(
-      activeScopeContext({ editContext: null, documentContext: "wordDocument" }),
+      activeScopeContext({
+        editContext: null,
+        documentContext: "wordDocument",
+      }),
     ).toBe("wordDocument");
     expect(
       activeScopeContext({

@@ -113,8 +113,38 @@ describe.skipIf(!docxPresent)(
         .map(
           (c) => c.value as { key: string; command: string; scope?: unknown },
         );
+      covers("keybinding:cmd+b→media.paged.doc.command.word.bold");
+      covers("keybinding:cmd+i→media.paged.doc.command.word.italic");
+      covers("keybinding:cmd+u→media.paged.doc.command.word.underline");
+      covers("keybinding:cmd+=→media.paged.doc.command.word.subscript");
+      covers("keybinding:cmd+shift+a→media.paged.doc.command.word.allCaps");
+      covers("keybinding:cmd+shift+k→media.paged.doc.command.word.smallCaps");
+      covers(
+        "keybinding:cmd+space→media.paged.doc.command.word.clearCharacter",
+      );
+      covers("keybinding:cmd+shift+>→media.paged.doc.command.word.growFont");
+      covers("keybinding:cmd+shift+<→media.paged.doc.command.word.shrinkFont");
+      covers("keybinding:cmd+l→media.paged.doc.command.word.alignLeft");
+      covers("keybinding:cmd+e→media.paged.doc.command.word.alignCenter");
+      covers("keybinding:cmd+r→media.paged.doc.command.word.alignRight");
+      covers("keybinding:cmd+j→media.paged.doc.command.word.justify");
+      covers("keybinding:cmd+0→media.paged.doc.command.word.spaceBefore");
+      covers(
+        "keybinding:ctrl+shift+m→media.paged.doc.command.word.increaseIndent",
+      );
+      covers(
+        "keybinding:cmd+shift+m→media.paged.doc.command.word.decreaseIndent",
+      );
+      covers("keybinding:cmd+alt+1→media.paged.doc.command.word.heading1");
+      covers("keybinding:cmd+alt+2→media.paged.doc.command.word.heading2");
+      covers("keybinding:cmd+alt+3→media.paged.doc.command.word.heading3");
+      covers("keybinding:cmd+shift+l→media.paged.doc.command.word.bullets");
+      covers("keybinding:tab→media.paged.doc.command.word.listLevelDown");
+      covers("keybinding:shift+tab→media.paged.doc.command.word.listLevelUp");
+      covers("keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat");
+      covers("keybinding:cmd+alt+v→media.paged.doc.command.word.pasteFormat");
+      expect(WORD_KEYS).toHaveLength(24);
       for (const k of WORD_KEYS) {
-        covers(`keybinding:${k.key}→${k.command}`);
         expect(bound).toContainEqual(
           expect.objectContaining({
             key: k.key,
@@ -126,40 +156,40 @@ describe.skipIf(!docxPresent)(
     });
 
     it("character commands toggle the selection's effective format", async () => {
-      covers(`command:${WORD_COMMAND.bold}`);
+      covers("command:media.paged.doc.command.word.bold");
       await run("bold");
       expect(await read("characterFontStyle")).toBe("Bold");
-      covers(`command:${WORD_COMMAND.italic}`);
+      covers("command:media.paged.doc.command.word.italic");
       await run("italic");
       expect(await read("characterFontStyle")).toBe("Bold Italic");
       await run("bold");
       expect(await read("characterFontStyle")).toBe("Italic");
-      covers(`command:${WORD_COMMAND.underline}`);
+      covers("command:media.paged.doc.command.word.underline");
       await run("underline");
       expect(await read("characterUnderline")).toBe(true);
-      covers(`command:${WORD_COMMAND.strikethrough}`);
+      covers("command:media.paged.doc.command.word.strikethrough");
       await run("strikethrough");
       expect(await read("characterStrikethru")).toBe(true);
-      covers(`command:${WORD_COMMAND.subscript}`);
+      covers("command:media.paged.doc.command.word.subscript");
       await run("subscript");
       expect(await read("characterPosition")).toBe("Subscript");
-      covers(`command:${WORD_COMMAND.superscript}`);
+      covers("command:media.paged.doc.command.word.superscript");
       await run("superscript");
       expect(await read("characterPosition")).toBe("Superscript");
-      covers(`command:${WORD_COMMAND.allCaps}`);
+      covers("command:media.paged.doc.command.word.allCaps");
       await run("allCaps");
       expect(await read("characterCase")).toBe("AllCaps");
-      covers(`command:${WORD_COMMAND.smallCaps}`);
+      covers("command:media.paged.doc.command.word.smallCaps");
       await run("smallCaps");
       expect(await read("characterCase")).toBe("SmallCaps");
-      covers(`command:${WORD_COMMAND.growFont}`);
+      covers("command:media.paged.doc.command.word.growFont");
       const size = (await read("characterFontSize")) as number;
       await run("growFont");
       expect(await read("characterFontSize")).toBeGreaterThan(size);
-      covers(`command:${WORD_COMMAND.shrinkFont}`);
+      covers("command:media.paged.doc.command.word.shrinkFont");
       await run("shrinkFont");
       expect(await read("characterFontSize")).toBe(size);
-      covers(`command:${WORD_COMMAND.clearCharacter}`);
+      covers("command:media.paged.doc.command.word.clearCharacter");
       await run("clearCharacter");
       expect(await read("appliedCharacterStyle")).toBe(
         "CharacterStyle/$ID/[No character style]",
@@ -173,23 +203,29 @@ describe.skipIf(!docxPresent)(
     });
 
     it("paragraph commands set the paragraph", async () => {
+      covers("command:media.paged.doc.command.word.alignCenter");
+      covers("command:media.paged.doc.command.word.alignRight");
+      covers("command:media.paged.doc.command.word.justify");
+      covers("command:media.paged.doc.command.word.alignLeft");
+      covers("command:media.paged.doc.command.word.lineSpacing2");
+      covers("command:media.paged.doc.command.word.lineSpacing15");
+      covers("command:media.paged.doc.command.word.lineSpacing1");
       for (const [name, value] of [
         ["alignCenter", "CenterAlign"],
         ["alignRight", "RightAlign"],
         ["justify", "LeftJustified"],
         ["alignLeft", "LeftAlign"],
       ] as const) {
-        covers(`command:${WORD_COMMAND[name]}`);
         await run(name, THANK);
         expect(await read("paragraphJustification")).toBe(value);
       }
-      covers(`command:${WORD_COMMAND.spaceBefore}`);
+      covers("command:media.paged.doc.command.word.spaceBefore");
       await run("spaceBefore", THANK);
       expect(await read("paragraphSpaceBefore")).toBe(12);
-      covers(`command:${WORD_COMMAND.increaseIndent}`);
+      covers("command:media.paged.doc.command.word.increaseIndent");
       await run("increaseIndent", THANK);
       expect(await read("paragraphLeftIndent")).toBe(36);
-      covers(`command:${WORD_COMMAND.decreaseIndent}`);
+      covers("command:media.paged.doc.command.word.decreaseIndent");
       await run("decreaseIndent", THANK);
       expect(await read("paragraphLeftIndent")).toBe(0);
       for (const [name, m] of [
@@ -197,7 +233,6 @@ describe.skipIf(!docxPresent)(
         ["lineSpacing15", 1.5],
         ["lineSpacing1", 1],
       ] as const) {
-        covers(`command:${WORD_COMMAND[name]}`);
         await run(name, THANK);
         const size = (await read("characterFontSize")) as number;
         expect(await read("characterLeading")).toBeCloseTo(size * 1.2 * m, 1);
@@ -205,16 +240,16 @@ describe.skipIf(!docxPresent)(
     });
 
     it("lists: bullets, numbering and the list level", async () => {
-      covers(`command:${WORD_COMMAND.bullets}`);
+      covers("command:media.paged.doc.command.word.bullets");
       await run("bullets", THANK);
       expect(await read("paragraphListType")).toBe("BulletList");
-      covers(`command:${WORD_COMMAND.numbering}`);
+      covers("command:media.paged.doc.command.word.numbering");
       await run("numbering", THANK);
       expect(await read("paragraphListType")).toBe("NumberedList");
-      covers(`command:${WORD_COMMAND.listLevelDown}`);
+      covers("command:media.paged.doc.command.word.listLevelDown");
       await run("listLevelDown", THANK);
       expect(await read("paragraphNumberingLevel")).toBe(2);
-      covers(`command:${WORD_COMMAND.listLevelUp}`);
+      covers("command:media.paged.doc.command.word.listLevelUp");
       await run("listLevelUp", THANK);
       expect(await read("paragraphNumberingLevel")).toBe(1);
       await run("numbering", THANK);
@@ -222,21 +257,21 @@ describe.skipIf(!docxPresent)(
     });
 
     it("styles: the headings and Normal by the document's own names", async () => {
-      covers(`command:${WORD_COMMAND.heading1}`);
+      covers("command:media.paged.doc.command.word.heading1");
       await run("heading1");
       expect(await read("appliedParagraphStyle")).toBe(
         "ParagraphStyle/docx-Heading1",
       );
       // The document has no Heading 2 or 3: the command refuses and the
       // paragraph keeps its style.
-      covers(`command:${WORD_COMMAND.heading2}`);
-      covers(`command:${WORD_COMMAND.heading3}`);
+      covers("command:media.paged.doc.command.word.heading2");
+      covers("command:media.paged.doc.command.word.heading3");
       await run("heading2");
       await run("heading3");
       expect(await read("appliedParagraphStyle")).toBe(
         "ParagraphStyle/docx-Heading1",
       );
-      covers(`command:${WORD_COMMAND.normal}`);
+      covers("command:media.paged.doc.command.word.normal");
       await run("normal");
       expect(await read("appliedParagraphStyle")).toBe(
         "ParagraphStyle/docx-Normal",
@@ -245,9 +280,9 @@ describe.skipIf(!docxPresent)(
 
     it("copy and paste formatting carry the character format", async () => {
       await run("bold", THANK);
-      covers(`command:${WORD_COMMAND.copyFormat}`);
+      covers("command:media.paged.doc.command.word.copyFormat");
       await run("copyFormat", THANK);
-      covers(`command:${WORD_COMMAND.pasteFormat}`);
+      covers("command:media.paged.doc.command.word.pasteFormat");
       const kind = { storyId: STORY, start: 72, end: 76 };
       await run("pasteFormat", kind);
       expect(await read("characterFontStyle")).toBe("Bold");
