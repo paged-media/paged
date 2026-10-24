@@ -274,6 +274,7 @@ fn identity_content(ir: &LoweredDoc) -> StoryContentIn {
                     .map(|r| RunContentIn {
                         text: r.text.clone(),
                         character_style: r.char_style_id.clone(),
+                        ..Default::default()
                     })
                     .collect(),
             })

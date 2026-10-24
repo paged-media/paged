@@ -737,3 +737,272 @@ export async function unpublishDataset(env: SheetEnv): Promise<void> {
     env.host.dataProviders.discover("dataset").map((d) => d.id),
   ).not.toContain("media.paged.sheet.dataset.stock");
 }
+
+// ── the frame grid's verbs and data tools (sheet ADR 510 / 517) ───────────
+//
+// Several of these change grid UI state only (a card under the bar, the
+// circles over invalid cells, the AutoFilter's buttons, hidden rows): that
+// is read off the bundle's session (`env.session`), the one place it lives.
+
+const PROPERTIES_PANEL = "media.paged.sheet.panel.properties";
+
+/** The typed command (no arguments) through the object registry. */
+const invokeTyped = (env: SheetEnv, id: string, args: object = {}) =>
+  env.objects.invoke(`${C}.${id}` as never, args as never);
+
+export async function cutSelection(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "cutSelection")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "cutSelection")).toBe(true);
+  // Nothing selected: the copy half refuses, the clipboard stays empty.
+  await run(env, "cutSelection");
+  expect(env.clipboard.payload).toBeNull();
+  expect(warned(env, "cut:")).toBe(true);
+  // A2:B2 cut: on the clipboard at once, still in place until the paste.
+  selectRect(env, 1, 0, 1, 1);
+  const m = env.mark();
+  await run(env, "cutSelection");
+  expect(env.clipboard.payload?.tabular?.rows).toEqual([["Apples", "12"]]);
+  expect([await cell(env, "A2"), await cell(env, "B2")]).toEqual([
+    "Apples",
+    "12",
+  ]);
+  expect(env.mutationsSince(m)).toEqual([]);
+  // The paste at A4 moves it: the target holds it, the source is empty,
+  // and ONE journal step takes both back.
+  selectCell(env, 3, 0);
+  await run(env, "pasteSelection");
+  expect([await cell(env, "A4"), await cell(env, "B4")]).toEqual([
+    "Apples",
+    "12",
+  ]);
+  expect([await cell(env, "A2"), await cell(env, "B2")]).toEqual(["", ""]);
+  expect(env.editContext().onUndo?.()).toBe(true);
+  expect(await column(env, "A")).toEqual(["name", "Apples", "Pears", "Figs"]);
+  // The typed twin cuts the grid's selection the same way.
+  selectRect(env, 2, 0, 2, 1);
+  await invokeTyped(env, "cutSelection");
+  await env.settle();
+  expect(env.clipboard.payload?.tabular?.rows).toEqual([["Pears", "3"]]);
+}
+
+export async function formatCells(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "formatCells")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "formatCells")).toBe(true);
+  const m = env.mark();
+  const shown = env.opened.length;
+  await run(env, "formatCells");
+  // Format Cells is the Sheet properties panel; the workbook is untouched.
+  expect(env.opened.slice(shown)).toEqual([PROPERTIES_PANEL]);
+  expect(env.mutationsSince(m)).toEqual([]);
+  expect(await column(env, "A")).toEqual(["name", "Apples", "Pears", "Figs"]);
+  await invokeTyped(env, "formatCells");
+  expect(env.opened.slice(shown)).toEqual([PROPERTIES_PANEL, PROPERTIES_PANEL]);
+}
+
+export async function pasteSpecial(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "pasteSpecial")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "pasteSpecial")).toBe(true);
+  expect(env.session.pasteSpecialOpen()).toBe(false);
+  const m = env.mark();
+  await run(env, "pasteSpecial");
+  // The options card opens; nothing is pasted until its OK.
+  expect(env.session.pasteSpecialOpen()).toBe(true);
+  expect(env.mutationsSince(m)).toEqual([]);
+  expect(await column(env, "B")).toEqual(["qty", "12", "3", "7"]);
+  // The card's OK pastes with its options (add) and closes it.
+  env.clipboard.payload = { text: "10", tabular: { rows: [["10"]] } };
+  selectCell(env, 2, 1);
+  const r = await env.session.pasteAtSelection({ operation: "add" });
+  expect(r.ok).toBe(true);
+  expect(env.session.pasteSpecialOpen()).toBe(false);
+  expect(await cell(env, "B3")).toBe("13");
+  // The typed twin opens it too.
+  await invokeTyped(env, "pasteSpecial");
+  expect(env.session.pasteSpecialOpen()).toBe(true);
+  env.session.closePasteSpecial();
+}
+
+export async function dataValidation(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "dataValidation")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "dataValidation")).toBe(true);
+  expect(env.session.dataCard()).toBeNull();
+  selectRect(env, 1, 1, 3, 1); // B2:B4
+  const m = env.mark();
+  await run(env, "dataValidation");
+  // The Data validation card opens on the selection, which has no rule.
+  expect(env.session.dataCard()).toEqual({ kind: "validation" });
+  expect(env.session.validationDraft()).toEqual({ range: "B2:B4", rule: null });
+  expect(env.mutationsSince(m)).toEqual([]);
+  // Its OK puts the rule on the selection and closes the card.
+  expect(
+    env.session.applyValidation({
+      type: "whole",
+      operator: "lessThanOrEqual",
+      formula1: "10",
+    }).ok,
+  ).toBe(true);
+  expect(env.session.dataCard()).toBeNull();
+  expect(env.session.validationDraft()?.rule?.type).toBe("whole");
+  // The typed twin opens the card again.
+  await invokeTyped(env, "dataValidation");
+  expect(env.session.dataCard()).toEqual({ kind: "validation" });
+}
+
+export async function circleInvalid(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "circleInvalid")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "circleInvalid")).toBe(true);
+  // A rule the workbook already breaks: qty ≤ 10 (Apples has 12).
+  selectRect(env, 1, 1, 3, 1);
+  expect(
+    env.session.applyValidation({
+      type: "whole",
+      operator: "lessThanOrEqual",
+      formula1: "10",
+    }).ok,
+  ).toBe(true);
+  expect(env.session.invalidCircles()).toBeNull();
+  const m = env.mark();
+  await run(env, "circleInvalid");
+  // On: exactly the breaking cell is circled (B2, row 1 col 1).
+  expect(env.session.invalidCircles()?.map((c) => [c.row, c.col])).toEqual([
+    [1, 1],
+  ]);
+  expect(env.mutationsSince(m)).toEqual([]);
+  // The verb toggles: off again.
+  await run(env, "circleInvalid");
+  expect(env.session.invalidCircles()).toBeNull();
+  await invokeTyped(env, "circleInvalid");
+  expect(env.session.invalidCircles()).toHaveLength(1);
+}
+
+export async function toggleFilter(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "toggleFilter")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "toggleFilter")).toBe(true);
+  // Nothing selected: refused with the reason, no filter.
+  await run(env, "toggleFilter");
+  expect(warned(env, "toggleFilter: select the data to filter")).toBe(true);
+  expect(env.session.filterButtons()).toBeNull();
+  await expect(invokeTyped(env, "toggleFilter")).rejects.toThrow(
+    /select the data to filter/,
+  );
+  // A cell in the data: the filter covers its region, buttons on the header.
+  selectCell(env, 2, 0);
+  await run(env, "toggleFilter");
+  expect(env.session.filterButtons()).toEqual({
+    row: 0,
+    left: 0,
+    right: 1,
+    filtered: [],
+  });
+  // Again: off.
+  await run(env, "toggleFilter");
+  expect(env.session.filterButtons()).toBeNull();
+  // The typed twin turns it on over the same region.
+  await invokeTyped(env, "toggleFilter");
+  expect(env.session.filterButtons()?.right).toBe(1);
+}
+
+const outline = (env: SheetEnv) => {
+  const e = env.session.state().engine;
+  const sheet = env.session.state().activeSheet;
+  if (!e?.outline || sheet === null) throw new Error("no outline");
+  return e.outline(sheet);
+};
+
+export async function hideSelection(
+  env: SheetEnv,
+  id: "hideSelection" | "unhideSelection",
+): Promise<void> {
+  expect(isOpen(env, id)).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, id)).toBe(true);
+  // Nothing selected: refused, nothing hidden.
+  await run(env, id);
+  expect(warned(env, `${id}:`)).toBe(true);
+  expect(outline(env).hiddenRows).toEqual([]);
+  // Rows 3–4 (Pears, Figs).
+  selectRect(env, 2, 0, 3, 1);
+  const ctx = env.editContext();
+  if (id === "hideSelection") {
+    await run(env, id);
+    expect(outline(env).hiddenRows).toEqual([2, 3]);
+    // One journal step takes it back.
+    expect(ctx.onUndo?.()).toBe(true);
+    expect(outline(env).hiddenRows).toEqual([]);
+    await invokeTyped(env, id);
+    expect(outline(env).hiddenRows).toEqual([2, 3]);
+  } else {
+    await run(env, "hideSelection");
+    expect(outline(env).hiddenRows).toEqual([2, 3]);
+    await run(env, id);
+    expect(outline(env).hiddenRows).toEqual([]);
+    expect(ctx.onUndo?.()).toBe(true);
+    expect(outline(env).hiddenRows).toEqual([2, 3]);
+    await invokeTyped(env, id);
+    expect(outline(env).hiddenRows).toEqual([]);
+  }
+  // Values are untouched: hiding is not deleting.
+  expect(await column(env, "A")).toEqual(["name", "Apples", "Pears", "Figs"]);
+}
+
+export async function groupSelection(
+  env: SheetEnv,
+  id: "groupSelection" | "ungroupSelection",
+): Promise<void> {
+  expect(isOpen(env, id)).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, id)).toBe(true);
+  await run(env, id);
+  expect(warned(env, `${id}:`)).toBe(true);
+  expect(outline(env).rows).toEqual([]);
+  // Rows 2–4: the detail under the header.
+  selectRect(env, 1, 0, 3, 1);
+  const ctx = env.editContext();
+  if (id === "groupSelection") {
+    await run(env, id);
+    expect(outline(env).rows).toMatchObject([{ first: 1, last: 3, level: 1 }]);
+    expect(outline(env).maxRowLevel).toBe(1);
+    expect(ctx.onUndo?.()).toBe(true);
+    expect(outline(env).rows).toEqual([]);
+    await invokeTyped(env, id);
+    expect(outline(env).rows).toHaveLength(1);
+  } else {
+    await run(env, "groupSelection");
+    expect(outline(env).rows).toHaveLength(1);
+    await run(env, id);
+    expect(outline(env).rows).toEqual([]);
+    expect(ctx.onUndo?.()).toBe(true);
+    expect(outline(env).rows).toHaveLength(1);
+    await invokeTyped(env, id);
+    expect(outline(env).rows).toEqual([]);
+  }
+}
+
+export async function goalSeek(env: SheetEnv): Promise<void> {
+  expect(isOpen(env, "goalSeek")).toBe(false);
+  await openBook(env);
+  expect(isOpen(env, "goalSeek")).toBe(true);
+  expect(env.session.canGoalSeek()).toBe(true);
+  const m = env.mark();
+  await run(env, "goalSeek");
+  // The Goal Seek card opens under the bar; nothing is solved yet.
+  expect(env.session.dataCard()).toEqual({ kind: "goalSeek" });
+  expect(env.mutationsSince(m)).toEqual([]);
+  // Its OK: C2 = B2 * 2 reaches 30 by changing B2 to 15, one journal step.
+  expect(env.session.editCell(0, 1, 2, "=B2*2")).toBe(true);
+  const r = env.session.goalSeek("C2", 30, "B2");
+  expect(r).toMatchObject({ ok: true, found: true });
+  expect(await cell(env, "B2")).toBe("15");
+  expect(await cell(env, "C2")).toBe("30");
+  expect(env.editContext().onUndo?.()).toBe(true);
+  expect(await cell(env, "B2")).toBe("12");
+  env.session.closeDataCard();
+  await invokeTyped(env, "goalSeek");
+  expect(env.session.dataCard()).toEqual({ kind: "goalSeek" });
+}

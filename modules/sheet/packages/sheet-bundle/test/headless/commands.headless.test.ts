@@ -187,6 +187,61 @@ describe.skipIf(!ENGINE_BUILT)(
       covers("command:media.paged.sheet.command.unpublishDataset");
       await S.unpublishDataset(env);
     });
+
+    it("cutSelection — gated; copies the selection now and empties it when the paste lands, one journal step", async () => {
+      covers("command:media.paged.sheet.command.cutSelection");
+      await S.cutSelection(env);
+    });
+
+    it("formatCells — gated; opens the Sheet properties panel and changes nothing", async () => {
+      covers("command:media.paged.sheet.command.formatCells");
+      await S.formatCells(env);
+    });
+
+    it("pasteSpecial — gated; opens the paste special card; its OK pastes with the options and closes it", async () => {
+      covers("command:media.paged.sheet.command.pasteSpecial");
+      await S.pasteSpecial(env);
+    });
+
+    it("dataValidation — gated; opens the Data validation card on the selection; its OK puts the rule on it", async () => {
+      covers("command:media.paged.sheet.command.dataValidation");
+      await S.dataValidation(env);
+    });
+
+    it("circleInvalid — gated; circles exactly the cells that break their rule, and toggles off", async () => {
+      covers("command:media.paged.sheet.command.circleInvalid");
+      await S.circleInvalid(env);
+    });
+
+    it("toggleFilter — gated; refuses without a selection; filters the region around the cell, and toggles off", async () => {
+      covers("command:media.paged.sheet.command.toggleFilter");
+      await S.toggleFilter(env);
+    });
+
+    it("hideSelection — gated; refuses without a selection; hides the selected rows, the journal takes it back", async () => {
+      covers("command:media.paged.sheet.command.hideSelection");
+      await S.hideSelection(env, "hideSelection");
+    });
+
+    it("unhideSelection — gated; refuses without a selection; shows the hidden rows again, the journal takes it back", async () => {
+      covers("command:media.paged.sheet.command.unhideSelection");
+      await S.hideSelection(env, "unhideSelection");
+    });
+
+    it("groupSelection — gated; refuses without a selection; groups the selected rows, the journal takes it back", async () => {
+      covers("command:media.paged.sheet.command.groupSelection");
+      await S.groupSelection(env, "groupSelection");
+    });
+
+    it("ungroupSelection — gated; refuses without a selection; ungroups the selected rows, the journal takes it back", async () => {
+      covers("command:media.paged.sheet.command.ungroupSelection");
+      await S.groupSelection(env, "ungroupSelection");
+    });
+
+    it("goalSeek — gated; opens the Goal Seek card; its OK solves the changing cell in one journal step", async () => {
+      covers("command:media.paged.sheet.command.goalSeek");
+      await S.goalSeek(env);
+    });
     // Findings: the behaviour the command should have, failing until the
     // product does it (expected failures; fixing them flips these red).
     it("SHT-1 — importXlsx (typed) rejects bytes that are not a workbook, even with one open", async () => {

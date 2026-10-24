@@ -1244,7 +1244,8 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   both paths alike. In the editor `selection: true` filters within the frame's selection: the
   live one, or the one the session kept when that frame's image closed, resampled when the
   canvas is the same image at another size; another crop or no selection is refused with the
-  reason, as it is headless. A Playwright spec makes a marquee selection and checks that only
+  reason, as it is headless. A kept selection is set back into the engine when its frame's
+  image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
   its pixels change and one undo restores them (`modules/image/docs/status.md`).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
@@ -1278,6 +1279,10 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
   table cells are saved back on export, paragraphs added or removed in a cell included, and a
   placed document's tables are found by their content after the story around them changed.
+  A changed run list is saved back too, in body paragraphs and cells: formatting given to part
+  of a run splits that `w:r` (the parts keep its `w:rPr`, the changed one gets only what
+  changed), direct formatting the engine can express is written, untouched runs stay byte for
+  byte (the engine reads a cell's styled `paragraphs`).
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

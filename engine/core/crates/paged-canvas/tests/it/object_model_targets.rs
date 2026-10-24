@@ -183,6 +183,69 @@ fn a_cell_reads_its_text() {
     );
 }
 
+/// A cell's `paragraphs` reads its paragraphs as the story-content read
+/// gives a story's — each paragraph's runs with their text and formatting,
+/// as JSON text — so a content module can save a cell's run structure and
+/// character formatting back, not only its text.
+#[test]
+fn a_cell_reads_its_styled_paragraphs() {
+    let mut m = load(paged_gen::samples::tables::build());
+    let cell = m.query("cell").unwrap().into_iter().next().expect("a cell");
+    let Address::Cell {
+        table_id, row, col, ..
+    } = &cell
+    else {
+        unreachable!()
+    };
+    let read = |m: &CanvasModel| -> Vec<paged_canvas::channel::ParagraphContent> {
+        let Value::Text(json) = m.get_property_at(&cell, "paragraphs").unwrap() else {
+            panic!("a cell's paragraphs read as JSON text")
+        };
+        serde_json::from_str(&json).expect("StoryContent paragraphs")
+    };
+    let joined = |paras: &[paged_canvas::channel::ParagraphContent]| {
+        paras
+            .iter()
+            .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let Value::Text(text) = m.get_property_at(&cell, "text").unwrap() else {
+        panic!("a cell's text is text")
+    };
+    assert_eq!(joined(&read(&m)), text, "the same text as `text`");
+    let story_id = m
+        .scene()
+        .stories
+        .iter()
+        .find(|s| {
+            s.story
+                .paragraphs
+                .iter()
+                .any(|p| p.table.as_ref().and_then(|t| t.self_id.as_deref()) == Some(table_id))
+        })
+        .map(|s| s.self_id.clone())
+        .expect("the table's story");
+    m.apply_mutation(&Mutation::InsertText {
+        story_id,
+        offset: 0,
+        text: "A\nB".into(),
+        cell: Some(paged_wire::TextCellAddr {
+            table_id: table_id.clone(),
+            row: *row,
+            col: *col,
+        }),
+    })
+    .expect("write into the cell");
+    let paras = read(&m);
+    assert_eq!(joined(&paras), format!("A\nB{text}"));
+    assert_eq!(paras.len(), 2 + text.matches('\n').count());
+    // The run fields are the story read's: a run's text, its applied
+    // character style and its direct overrides.
+    let story_like = serde_json::to_value(&paras[0]).unwrap();
+    assert!(story_like["runs"][0]["text"].is_string());
+}
+
 /// v71 polish — `RequestGet` tells a MIXED value (a range whose runs
 /// disagree) from a path the object does not have, and both from an
 /// address that names nothing or does not parse: each refusal carries a
