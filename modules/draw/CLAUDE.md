@@ -390,11 +390,16 @@ face contours inserted and named, then the replaced fills deleted, the
 holes re-merged, the faces painted and linked. The two-batch lane is the
 fallback.
 
-IMAGE TRACE's commit STAYS TWO BATCHES for the appearance bake's reason:
-the source's trace record names its regions by element id inside its
-JSON metadata (`imageTrace.regions`), where a handle is never resolved.
-What each batch created comes off the reply: 0 tree reads, was 2 (3 with
-a group to find).
+IMAGE TRACE is ONE batch since ADR 360 (the paragraph that used to say
+two was stale), and so is RE-TRACE (WP6.6): the new regions are inserted,
+the previous result's group dissolved and its regions deleted, then the
+new ones finished and grouped, in that order. The old regions are found
+by their `tracedRegion.of` marker, never by an id in the record. A LIVE
+trace re-runs inside the edit that changes its image's link or bytes
+(`commands/image-trace-live.ts`, over `runInStep`, the recipe auto-
+update's step amend); `replaceImageBytes` leaves the `links` row
+unchanged — measured — so the watch also fingerprints a live source's
+bytes.
 
 **"WHAT DID MY BATCH CREATE" HAS ONE SEAM: `commands/minted.ts`.** A
 batch outcome carries ONE `createdId`, so a flow that inserted several

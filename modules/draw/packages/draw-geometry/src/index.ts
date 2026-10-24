@@ -111,6 +111,56 @@ export {
 export { peakedWidthProfile } from "./width";
 // Wave 2 — blend interpolation (anchor-run lerp + sRGB colour mix).
 export { interpolateAnchors, mixRgb } from "./blend";
+// WP6.6 — blend STRUCTURE matching: keys with different anchor or contour
+// counts are brought to one structure without changing either shape, and
+// gradient ramps are resampled to shared stop locations.
+export {
+  subdivideRun,
+  reverseRun,
+  alignClosedRun,
+  collapsedRun,
+  matchContourSets,
+  rampColorAt,
+  solidRamp,
+  matchRamps,
+  interpolateRamps,
+  type ContourSet,
+  type MatchResult,
+  type RampStop,
+} from "./blend-match";
+// WP6.5 — colour harmony: HSB wheel, Lab distance, the harmony rules, the
+// Color Guide variations, deterministic Lab k-means, reduce / map /
+// recolour (Recolor Artwork's pure half).
+export {
+  wrapHue,
+  hueDelta,
+  rgbToHsb,
+  hsbToRgb,
+  rgbToLab,
+  labToRgb,
+  deltaE,
+  sameRgb,
+  HARMONY_RULES,
+  harmonyOf,
+  rotateHues,
+  wheelPoint,
+  wheelColor,
+  wheelDragDelta,
+  VARIATION_KINDS,
+  variationsOf,
+  kMeansLab,
+  reduceColors,
+  nearestColorIndex,
+  NEUTRAL_SATURATION,
+  isNeutral,
+  recolorToHarmony,
+  type Hsb,
+  type Lab,
+  type HarmonyRule,
+  type VariationKind,
+  type WeightedColor,
+  type LabClusters,
+} from "./color-harmony";
 // Wave 2 — the lasso-select region test.
 export {
   pointInPolygon,

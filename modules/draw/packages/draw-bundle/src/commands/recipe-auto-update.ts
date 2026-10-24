@@ -321,6 +321,26 @@ export async function rebuildInStep(
   return { appliedSeq: view.seq(), rebuilt, refused: view.refused() };
 }
 
+/**
+ * Run `work` INSIDE the undo step `appliedSeq` names, the way
+ * {@link rebuildInStep} runs a recipe update: every write `work` makes
+ * through the host it is handed amends that step, and it never moves the
+ * user's selection. For a rebuild that is not a recipe (the live image
+ * trace, `image-trace-live.ts`). Answers what `work` answered, the step's
+ * number afterwards and the engine's `notAmendable` when the step could
+ * no longer be joined.
+ */
+export async function runInStep<T>(
+  host: BundleHost,
+  appliedSeq: number,
+  work: (view: BundleHost) => Promise<T>,
+  own: Set<number> = new Set(),
+): Promise<{ result: T; appliedSeq: number; refused: unknown }> {
+  const view = amendingHost(host, appliedSeq, own);
+  const result = await work(view.host);
+  return { result, appliedSeq: view.seq(), refused: view.refused() };
+}
+
 export function contributeRecipeAutoUpdate(host: BundleHost): RecipeAutoUpdate {
   let rebuilt: readonly string[] = [];
   if (!host.supports(RECIPE_AUTO_UPDATE_FEATURE)) {
