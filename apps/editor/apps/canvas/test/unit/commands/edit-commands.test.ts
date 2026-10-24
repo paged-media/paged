@@ -19,8 +19,7 @@
 
 // The Edit menu's verbs and the two typed Object verbs the canvas app adds:
 // Select all (page items on the spread in view, or the whole story with a
-// caret) and Align / Distribute (ADR 323: declared args, one batch = one
-// undo step). And finding SH-201
+// caret; Align / Distribute is align-plan.test.ts). And finding SH-201
 // (UX audit F-28, fixed by ADR 231): Cut, Copy, Paste, Paste in place and
 // Duplicate for page items.
 
@@ -30,12 +29,6 @@ import type { ElementId } from "@paged-media/client";
 import { createCommandRegistry } from "@paged-media/shell";
 import { covers, expectNoCommit } from "@paged-media/test-kit";
 
-import {
-  ALIGN_ARGS,
-  ALIGN_COMMAND,
-  planAlign,
-  runAlign,
-} from "../../../src/align-plan";
 import {
   APP_KEYBINDINGS,
   APP_MENU_ITEMS,
@@ -217,148 +210,7 @@ describe("Select all", () => {
   });
 });
 
-// ── Align / Distribute ──────────────────────────────────────────────
-
-function alignHarness(
-  bounds: Record<string, [number, number, number, number]>,
-) {
-  const batches: Array<{ ops: unknown[]; label?: string }> = [];
-  const objects = {
-    async get(address: string, path: string) {
-      expect(path).toBe("frameBounds");
-      const b = bounds[address];
-      return b ? { kind: "value", value: b } : { kind: "error" };
-    },
-    async batch(ops: readonly unknown[], opts?: { label?: string }) {
-      batches.push({ ops: [...ops], label: opts?.label });
-      return { applied: true, undoSteps: 1 as const };
-    },
-  };
-  // The canvas app's registration (main.tsx): declared args, runAlign.
-  const registry = createCommandRegistry(() => null);
-  registry.register({
-    id: ALIGN_COMMAND,
-    title: "Align objects",
-    category: "Object",
-    args: ALIGN_ARGS,
-    handler: (_p, payload) => runAlign(objects, payload as never),
-  });
-  return { registry, batches };
-}
-
-describe("Align / Distribute (paged.align.objects)", () => {
-  const boxes = {
-    a: [0, 0, 10, 10] as [number, number, number, number],
-    b: [20, 30, 40, 50] as [number, number, number, number],
-    c: [5, 100, 25, 140] as [number, number, number, number],
-  };
-
-  test("align left: every object to the leftmost edge, in ONE batch", async () => {
-    covers("command:paged.align.objects");
-    const h = alignHarness(boxes);
-    const result = await h.registry.invoke(ALIGN_COMMAND, {
-      kind: "left",
-      targets: ["a", "b", "c"],
-    });
-    expect(result).toEqual({ applied: true, undoSteps: 1 });
-    expect(h.batches).toEqual([
-      {
-        label: "align left",
-        ops: [
-          {
-            op: "set",
-            address: "b",
-            path: "frameBounds",
-            value: [20, 0, 40, 20],
-          },
-          {
-            op: "set",
-            address: "c",
-            path: "frameBounds",
-            value: [5, 0, 25, 40],
-          },
-        ],
-      },
-    ]);
-  });
-
-  test("every alignment kind plans the expected edge", () => {
-    covers("command:paged.align.objects");
-    const entries = Object.entries(boxes).map(([address, b]) => ({
-      address,
-      bounds: b,
-    }));
-    const lefts = (kind: Parameters<typeof planAlign>[0]) =>
-      Object.fromEntries(
-        planAlign(kind, entries).map((o) => {
-          const set = o as { address: string; value: number[] };
-          return [set.address, set.value];
-        }),
-      );
-    expect(lefts("right")).toEqual({
-      a: [0, 130, 10, 140],
-      b: [20, 120, 40, 140],
-    });
-    expect(lefts("top")).toEqual({ b: [0, 30, 20, 50], c: [0, 100, 20, 140] });
-    expect(lefts("bottom")).toEqual({
-      a: [30, 0, 40, 10],
-      c: [20, 100, 40, 140],
-    });
-    expect(lefts("centerH")).toEqual({
-      a: [0, 65, 10, 75],
-      b: [20, 60, 40, 80],
-      c: [5, 50, 25, 90],
-    });
-    expect(lefts("centerV")).toEqual({
-      a: [15, 0, 25, 10],
-      b: [10, 30, 30, 50],
-      c: [10, 100, 30, 140],
-    });
-    // Distribute moves the middle one between the outer two.
-    expect(lefts("distributeH")).toEqual({ b: [20, 52.5, 40, 72.5] });
-    expect(lefts("distributeV")).toEqual({ c: [7.5, 100, 27.5, 140] });
-  });
-
-  test("fewer than two (align) or three (distribute) objects move nothing: zero undo steps", async () => {
-    covers("command:paged.align.objects");
-    const h = alignHarness(boxes);
-    expect(
-      await h.registry.invoke(ALIGN_COMMAND, { kind: "left", targets: ["a"] }),
-    ).toEqual({
-      applied: true,
-      undoSteps: 0,
-    });
-    expect(
-      await h.registry.invoke(ALIGN_COMMAND, {
-        kind: "distributeH",
-        targets: ["a", "b"],
-      }),
-    ).toEqual({ applied: true, undoSteps: 0 });
-    // An address without bounds (a story, a stale id) is skipped.
-    expect(
-      await h.registry.invoke(ALIGN_COMMAND, {
-        kind: "left",
-        targets: ["a", "nope"],
-      }),
-    ).toEqual({ applied: true, undoSteps: 0 });
-    expect(h.batches).toEqual([]);
-  });
-
-  test("a payload that does not match the declared args is refused before anything runs", async () => {
-    covers("command:paged.align.objects");
-    const h = alignHarness(boxes);
-    await expect(
-      h.registry.invoke(ALIGN_COMMAND, { kind: "diagonal", targets: [] }),
-    ).rejects.toThrow(/^invalidValue: paged\.align\.objects/);
-    await expect(h.registry.invoke(ALIGN_COMMAND)).rejects.toThrow(
-      /invalidValue/,
-    );
-    await expect(
-      h.registry.invoke(ALIGN_COMMAND, { kind: "left", targets: "a" }),
-    ).rejects.toThrow(/must be a list/);
-    expect(h.batches).toEqual([]);
-  });
-});
+// ── Align / Distribute: test/unit/commands/align-plan.test.ts ──────
 
 // ── F-28: the clipboard verbs ───────────────────────────────────────
 

@@ -774,6 +774,8 @@ export const CORE_PATHS: Record<
   frameDirectionalFeatherNoise: { scope: "frame", wire: "length", type: PCT },
   frameDirectionalFeatherChoke: { scope: "frame", wire: "length", type: PCT },
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
+  // The fill rule is protocol 76 (engine ADR 1006); a pre-71 engine has none.
+  frameFillRule: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

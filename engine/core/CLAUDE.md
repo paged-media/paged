@@ -132,6 +132,19 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   carries: `cargo run -p paged-wire --features schema --example emit-schema >
 crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
 --features schema` checks it is current and agrees with tsify.
+- `crates/paged-data-*/` — paged.data's engine crates (PM-0015): the types and
+  function registry (`paged-data-core`, rows in `functions/`), the binding language
+  (`-expr`), query shaping, sync (`-bind`), lowering, barcodes, data sets, sources, the
+  Turso store and its file readers (`-store`, data ADR 561), XLSX, batch planning, and the
+  session that joins them with the reader of a document's binding labels (`-session`,
+  ADR 1014). Library
+  names stay `data_*`. Their docs and ADRs stay in `modules/data` (its CLAUDE.md governs
+  them), as do their test fixtures (`modules/data/conformance`) and the wasm surface
+  (`data-js`). `paged-data-expr` must not reach the sync, query, lowering or store crates
+  (core / ci guard).
+- `crates/paged-action/` — actions (ADR 1015): the registry, chains, the content-addressed
+  cache key the SDK's `actions@1` shares (`tests/keys.json`), and JS actions in a bare Boa
+  context with a fixed clock. Data transforms (data ADR 562) run on it.
 - `crates/paged-gen/` — IDML fixture generator (the `paged-gen` bin).
 - `crates/paged-sdk/` — published SDK wasm surface: a WebGPU
   `ViewerSession` (load IDML → present to OffscreenCanvas/Canvas via

@@ -33,12 +33,17 @@
 // (the contract carries no label), never the raw id. Token-layer styling (--pg-*, --space-*, --font-mono,
 // --radius-*) mirrors the workbook panel so it reads native in both themes.
 
-import { type CSSProperties, type ReactElement } from "react";
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { color, font, radius, space, useConfirm } from "@paged-media/panel-kit";
 import { useStrings, type Strings } from "@paged-media/strings";
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, DataTableInfo } from "@paged-media/plugin-api";
 
 import { DATASETS } from "../messages";
 import type { WorkbookSession } from "../session";
@@ -155,6 +160,26 @@ export function makeDatasetsPanel(
     const { armed, confirm } = useConfirm();
     const workbookOpen = live.sheets().length > 0;
 
+    // PM-0015 step 7: the document's data tables (`data@1`), to edit here.
+    const [tables, setTables] = useState<readonly DataTableInfo[]>([]);
+    useEffect(() => {
+      let live = true;
+      const load = () =>
+        void session.dataTables().then((t) => {
+          if (live) setTables(t);
+        });
+      load();
+      const sub = host.supports("data@1")
+        ? host.data.onDidChange(() => load())
+        : null;
+      return () => {
+        live = false;
+        sub?.dispose();
+      };
+    }, []);
+    const editing =
+      st.dataSource?.kind === "table" ? st.dataSource.providerId : null;
+
     return (
       <div
         data-sheet-panel="datasets"
@@ -164,7 +189,61 @@ export function makeDatasetsPanel(
           flexDirection: "column",
         }}
       >
-        <div style={{ ...kicker, marginTop: 0 }}>{t(DATASETS.kicker)}</div>
+        <div style={{ ...kicker, marginTop: 0 }}>
+          {t(DATASETS.tablesKicker)}
+        </div>
+        {tables.length === 0 ? (
+          <p data-data-tables-empty style={{ ...note, marginTop: 0 }}>
+            {t(DATASETS.tablesEmpty)}
+          </p>
+        ) : (
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: space[2] }}
+          >
+            {tables.map((tb) => (
+              <div key={tb.name} data-data-table={tb.name} style={row}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={nameStyle} title={tb.name}>
+                    {tb.name}
+                  </div>
+                  <div style={metaStyle}>
+                    {fieldSummary(strings, tb.schema.fields)}
+                    {!tb.writable && t(DATASETS.derived)}
+                    {editing === tb.name && t(DATASETS.editing)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-data-table-edit
+                  data-armed={armed === `table:${tb.name}` ? "" : undefined}
+                  onClick={() => {
+                    const go = () => void session.sourceFromDataTable(tb.name);
+                    if (workbookOpen && editing !== tb.name)
+                      confirm(`table:${tb.name}`, go);
+                    else go();
+                  }}
+                  title={
+                    tb.writable ? t(DATASETS.editTitle) : t(DATASETS.viewTitle)
+                  }
+                  style={sourceButton}
+                >
+                  {armed === `table:${tb.name}`
+                    ? t(DATASETS.confirmReplace)
+                    : tb.writable
+                      ? t(DATASETS.edit)
+                      : t(DATASETS.view)}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {tables.length > 0 && (
+          <p data-data-tables-honesty style={note}>
+            {t(DATASETS.tablesHonesty)}
+          </p>
+        )}
+
+        <div style={kicker}>{t(DATASETS.kicker)}</div>
 
         {datasets.length === 0 ? (
           // Honest empty state — §2.1 graceful absence: paged.data not

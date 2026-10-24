@@ -759,6 +759,83 @@ pub(crate) fn opacity_mask_losses(scene: &Document) -> Vec<String> {
     out
 }
 
+/// Engine ADR 1006 — the even-odd outlines IDML cannot carry. IDML fills
+/// non-zero and has no attribute for another rule; the writer re-winds an
+/// even-odd outline whose contours cross neither themselves nor each
+/// other (the same area fills), and these are the rest: their contours
+/// cross, so InDesign fills them non-zero (a star's middle fills). Declared
+/// from the model, like the opacity masks, because the twin cannot tell
+/// a re-wound outline from one that never was even-odd.
+pub(crate) fn fill_rule_losses(scene: &Document) -> Vec<String> {
+    use paged_model::FillRule;
+    let mut out = Vec::new();
+    let mut check = |kind: &str,
+                     id: Option<&str>,
+                     rule: FillRule,
+                     anchors: &[paged_model::PathAnchor],
+                     starts: &[usize],
+                     open: &[bool]| {
+        if rule == FillRule::EvenOdd
+            && !paged_model::winding::even_odd_is_expressible(anchors, starts, open)
+        {
+            out.push(format!(
+                "even-odd fill rule on {kind} `{}` is a paged-native property — IDML fills \
+                 non-zero and its contours cross, so no re-winding fills the same area; it \
+                 exports filled non-zero. Save as `.paged` to keep it.",
+                id.unwrap_or("?")
+            ));
+        }
+    };
+    for parsed in &scene.spreads {
+        let sp = &parsed.spread;
+        for f in &sp.text_frames {
+            let id = f.self_id.as_deref();
+            check(
+                "text frame",
+                id,
+                f.fill_rule,
+                &f.anchors,
+                &f.subpath_starts,
+                &f.subpath_open,
+            );
+        }
+        for r in &sp.rectangles {
+            let id = r.self_id.as_deref();
+            check(
+                "rectangle",
+                id,
+                r.fill_rule,
+                &r.anchors,
+                &r.subpath_starts,
+                &r.subpath_open,
+            );
+        }
+        for p in &sp.polygons {
+            let id = p.self_id.as_deref();
+            check(
+                "polygon",
+                id,
+                p.fill_rule,
+                &p.anchors,
+                &p.subpath_starts,
+                &p.subpath_open,
+            );
+        }
+        for l in &sp.graphic_lines {
+            let id = l.self_id.as_deref();
+            check(
+                "line",
+                id,
+                l.fill_rule,
+                &l.anchors,
+                &l.subpath_starts,
+                &l.subpath_open,
+            );
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

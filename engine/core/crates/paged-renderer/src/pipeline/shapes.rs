@@ -445,7 +445,7 @@ fn emit_arrowhead(
     let path_id = page
         .list
         .paths
-        .push_anon(paged_compose::PathData { segments: segs });
+        .push_anon(paged_compose::PathData::new(segs));
     page.list.push(paged_compose::DisplayCommand::FillPath {
         path_id,
         paint,
@@ -699,12 +699,10 @@ fn emit_line_body(
     let (ox, oy) = page.spread_origin;
     let (sx, sy) = (spread_bounds.left - ox, spread_bounds.top - oy);
     let (ex, ey) = (spread_bounds.right - ox, spread_bounds.bottom - oy);
-    let diagonal = paged_compose::PathData {
-        segments: vec![
-            paged_compose::PathSegment::MoveTo { x: sx, y: sy },
-            paged_compose::PathSegment::LineTo { x: ex, y: ey },
-        ],
-    };
+    let diagonal = paged_compose::PathData::new(vec![
+        paged_compose::PathSegment::MoveTo { x: sx, y: sy },
+        paged_compose::PathSegment::LineTo { x: ex, y: ey },
+    ]);
     let key = resolved
         .self_id
         .map_or(0x11E5_0000, |id| fnv_1a_u64(id.as_bytes()));
@@ -821,7 +819,8 @@ fn emit_rectangle_polygon_path(
         // Polygon does (the four names can't address an N-corner path).
         let corner = uniform_corner(&resolved.corners);
         let path =
-            super::text_path::polygon_outline_path(anchors, subpath_starts, subpath_open, corner);
+            super::text_path::polygon_outline_path(anchors, subpath_starts, subpath_open, corner)
+                .with_fill_rule(resolved.fill_rule);
         let cache_key = match resolved.self_id {
             Some(id) => fnv_1a_u64(id.as_bytes()),
             None => path_signature(anchors),
@@ -1015,15 +1014,13 @@ pub(super) fn emit_rectangle_into(
         None => {
             let (id, _) = page.list.paths.intern(
                 paged_compose::UNIT_RECT_KEY,
-                paged_compose::PathData {
-                    segments: vec![
-                        paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                        paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
-                        paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
-                        paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
-                        paged_compose::PathSegment::Close,
-                    ],
-                },
+                paged_compose::PathData::new(vec![
+                    paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
+                    paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
+                    paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
+                    paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
+                    paged_compose::PathSegment::Close,
+                ]),
             );
             (id, Transform::for_rect_in(r, outer), Some(r))
         }
@@ -1235,46 +1232,42 @@ pub(super) fn emit_rectangle_into(
 /// counter-clockwise on the page, down the left edge first.
 pub(crate) fn indesign_rect_path(r: Rect) -> paged_compose::PathData {
     use paged_compose::PathSegment::{Close, LineTo, MoveTo};
-    paged_compose::PathData {
-        segments: vec![
-            MoveTo { x: r.x, y: r.y },
-            LineTo {
-                x: r.x,
-                y: r.y + r.h,
-            },
-            LineTo {
-                x: r.x + r.w,
-                y: r.y + r.h,
-            },
-            LineTo {
-                x: r.x + r.w,
-                y: r.y,
-            },
-            Close,
-        ],
-    }
+    paged_compose::PathData::new(vec![
+        MoveTo { x: r.x, y: r.y },
+        LineTo {
+            x: r.x,
+            y: r.y + r.h,
+        },
+        LineTo {
+            x: r.x + r.w,
+            y: r.y + r.h,
+        },
+        LineTo {
+            x: r.x + r.w,
+            y: r.y,
+        },
+        Close,
+    ])
 }
 
 pub(crate) fn axis_rect_path(r: Rect) -> paged_compose::PathData {
     use paged_compose::PathSegment::{Close, LineTo, MoveTo};
-    paged_compose::PathData {
-        segments: vec![
-            MoveTo { x: r.x, y: r.y },
-            LineTo {
-                x: r.x + r.w,
-                y: r.y,
-            },
-            LineTo {
-                x: r.x + r.w,
-                y: r.y + r.h,
-            },
-            LineTo {
-                x: r.x,
-                y: r.y + r.h,
-            },
-            Close,
-        ],
-    }
+    paged_compose::PathData::new(vec![
+        MoveTo { x: r.x, y: r.y },
+        LineTo {
+            x: r.x + r.w,
+            y: r.y,
+        },
+        LineTo {
+            x: r.x + r.w,
+            y: r.y + r.h,
+        },
+        LineTo {
+            x: r.x,
+            y: r.y + r.h,
+        },
+        Close,
+    ])
 }
 
 /// Half the stroke width to shift the stroke path by, signed so that
@@ -2100,7 +2093,7 @@ pub(crate) fn corner_rect_path(
         );
     }
     segments.push(Close);
-    paged_compose::PathData { segments }
+    paged_compose::PathData::new(segments)
 }
 
 /// B-23 — resolve the single corner effect a POLYGON applies uniformly
@@ -2322,7 +2315,7 @@ pub(crate) fn corner_polygon_path(
         }
         segs.push(Close);
     }
-    any.then_some(paged_compose::PathData { segments: segs })
+    any.then_some(paged_compose::PathData::new(segs))
 }
 
 /// Copy one contour through unchanged (mirrors
@@ -2379,44 +2372,42 @@ pub(super) fn unit_ellipse_path() -> paged_compose::PathData {
     let ry = 0.5;
     let kx = rx * K;
     let ky = ry * K;
-    paged_compose::PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: cx + rx, y: cy },
-            PathSegment::CubicTo {
-                cx1: cx + rx,
-                cy1: cy + ky,
-                cx2: cx + kx,
-                cy2: cy + ry,
-                x: cx,
-                y: cy + ry,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - kx,
-                cy1: cy + ry,
-                cx2: cx - rx,
-                cy2: cy + ky,
-                x: cx - rx,
-                y: cy,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - rx,
-                cy1: cy - ky,
-                cx2: cx - kx,
-                cy2: cy - ry,
-                x: cx,
-                y: cy - ry,
-            },
-            PathSegment::CubicTo {
-                cx1: cx + kx,
-                cy1: cy - ry,
-                cx2: cx + rx,
-                cy2: cy - ky,
-                x: cx + rx,
-                y: cy,
-            },
-            PathSegment::Close,
-        ],
-    }
+    paged_compose::PathData::new(vec![
+        PathSegment::MoveTo { x: cx + rx, y: cy },
+        PathSegment::CubicTo {
+            cx1: cx + rx,
+            cy1: cy + ky,
+            cx2: cx + kx,
+            cy2: cy + ry,
+            x: cx,
+            y: cy + ry,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - kx,
+            cy1: cy + ry,
+            cx2: cx - rx,
+            cy2: cy + ky,
+            x: cx - rx,
+            y: cy,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - rx,
+            cy1: cy - ky,
+            cx2: cx - kx,
+            cy2: cy - ry,
+            x: cx,
+            y: cy - ry,
+        },
+        PathSegment::CubicTo {
+            cx1: cx + kx,
+            cy1: cy - ry,
+            cx2: cx + rx,
+            cy2: cy - ky,
+            x: cx + rx,
+            y: cy,
+        },
+        PathSegment::Close,
+    ])
 }
 
 /// W1.5 — the oval's elliptical outline as a [`PathData`] in the
@@ -2435,44 +2426,42 @@ pub(crate) fn ellipse_outline_path(rect: Rect) -> paged_compose::PathData {
     let ry = rect.h * 0.5;
     let kx = rx * K;
     let ky = ry * K;
-    paged_compose::PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: cx + rx, y: cy },
-            PathSegment::CubicTo {
-                cx1: cx + rx,
-                cy1: cy + ky,
-                cx2: cx + kx,
-                cy2: cy + ry,
-                x: cx,
-                y: cy + ry,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - kx,
-                cy1: cy + ry,
-                cx2: cx - rx,
-                cy2: cy + ky,
-                x: cx - rx,
-                y: cy,
-            },
-            PathSegment::CubicTo {
-                cx1: cx - rx,
-                cy1: cy - ky,
-                cx2: cx - kx,
-                cy2: cy - ry,
-                x: cx,
-                y: cy - ry,
-            },
-            PathSegment::CubicTo {
-                cx1: cx + kx,
-                cy1: cy - ry,
-                cx2: cx + rx,
-                cy2: cy - ky,
-                x: cx + rx,
-                y: cy,
-            },
-            PathSegment::Close,
-        ],
-    }
+    paged_compose::PathData::new(vec![
+        PathSegment::MoveTo { x: cx + rx, y: cy },
+        PathSegment::CubicTo {
+            cx1: cx + rx,
+            cy1: cy + ky,
+            cx2: cx + kx,
+            cy2: cy + ry,
+            x: cx,
+            y: cy + ry,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - kx,
+            cy1: cy + ry,
+            cx2: cx - rx,
+            cy2: cy + ky,
+            x: cx - rx,
+            y: cy,
+        },
+        PathSegment::CubicTo {
+            cx1: cx - rx,
+            cy1: cy - ky,
+            cx2: cx - kx,
+            cy2: cy - ry,
+            x: cx,
+            y: cy - ry,
+        },
+        PathSegment::CubicTo {
+            cx1: cx + kx,
+            cy1: cy - ry,
+            cx2: cx + rx,
+            cy2: cy - ky,
+            x: cx + rx,
+            y: cy,
+        },
+        PathSegment::Close,
+    ])
 }
 
 /// Missing-image placeholder for `<Oval>` (P-16). Stamps the 50% grey
@@ -2684,12 +2673,10 @@ fn emit_diagonal_under_transform(
     paint: Paint,
 ) {
     use paged_compose::{DisplayCommand, PathData, PathSegment};
-    let path = PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: x1, y: y1 },
-            PathSegment::LineTo { x: x2, y: y2 },
-        ],
-    };
+    let path = PathData::new(vec![
+        PathSegment::MoveTo { x: x1, y: y1 },
+        PathSegment::LineTo { x: x2, y: y2 },
+    ]);
     let path_id = list.paths.push_anon(path);
     list.push(DisplayCommand::StrokePath {
         path_id,

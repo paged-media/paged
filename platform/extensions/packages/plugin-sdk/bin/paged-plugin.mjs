@@ -459,6 +459,8 @@ function validateManifest(manifest, manifestDir) {
             "storage",
             "network",
             "dataProviders",
+            "data",
+            "actions",
             "clipboard",
             "wasm",
             "workers",
@@ -487,6 +489,24 @@ function validateManifest(manifest, manifestDir) {
               );
             }
           }
+        }
+      }
+      // The data and actions doors (extensions ADRs 343, 344): boolean roles.
+      for (const [cap, roles] of [
+        ["data", ["serve", "read", "write", "bind"]],
+        ["actions", ["register", "run"]],
+      ]) {
+        const c = caps[cap];
+        if (c === undefined) continue;
+        if (typeof c !== "object" || c === null || Array.isArray(c)) {
+          err(`"capabilities.${cap}" must be an object`);
+          continue;
+        }
+        for (const k of Object.keys(c)) {
+          if (!roles.includes(k))
+            err(`unknown role "capabilities.${cap}.${k}" (${roles.join("|")})`);
+          else if (typeof c[k] !== "boolean")
+            err(`"capabilities.${cap}.${k}" must be a boolean`);
         }
       }
       const doc = caps.document;

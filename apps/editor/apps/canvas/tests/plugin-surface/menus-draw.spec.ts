@@ -19,10 +19,11 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// Eighty-three entries: seventy-five under the Draw menu (folded into Plugins ▸
-// Draw, and shown as a context menu while artwork is selected), four
-// insert verbs filed under Insert (Arc…, Spiral…, Rectangular grid…, Polar
-// grid…) and four under the host's Edit ▸ Select same.
+// Ninety-five entries: most under the Draw menu (folded into Plugins ▸
+// Draw, and shown as a context menu while artwork is selected), the
+// insert verbs filed under Object (Arc…, Spiral…, Rectangular grid…, Polar
+// grid…, Star…, Flare…) beside Rasterize…, the Select same verbs under the host's Edit ▸
+// Select same and Recolor artwork… under Edit ▸ Edit colors.
 //
 // Every test starts from the same artwork, two overlapping filled
 // rectangles with both selected (reloaded before each test), so each verb
@@ -62,6 +63,7 @@ import { Designer } from "../journey/driver/designer";
 import {
   clickEntry,
   contextRouteOf,
+  documentDigest,
   expectGreyedAndInert,
   expectOneUndoRestores,
   openMenuPages,
@@ -1412,16 +1414,284 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Image trace… — runs imageTrace; the selection holds no placed image to trace, so it changes nothing", async () => {
+  test("Object/Insert star… — raises Path Options, where the star is set up", async () => {
+    covers("menu:Object/Insert star…");
+    await expectGreyedAndInert(bare, "Object/Insert star…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert star…",
+      "media.paged.draw.command.insertStarOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Object/Insert flare… — raises Path Options, where the flare is set up", async () => {
+    covers("menu:Object/Insert flare…");
+    await expectGreyedAndInert(bare, "Object/Insert flare…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert flare…",
+      "media.paged.draw.command.insertFlareOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Object/Rasterize… — raises Path Options, where the resolution and background are set [plugin-platform.render-snapshot-v2]", async () => {
+    covers("menu:Object/Rasterize…");
+    await expectGreyedAndInert(bare, "Object/Rasterize…");
+    const out = await clickEntry(
+      live,
+      "Object/Rasterize…",
+      "media.paged.draw.command.rasterizeOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Rasterize, run with its parameters, replaces the two rectangles with one image in the editor, and one Undo takes it back [plugin-platform.render-snapshot-v2]", async () => {
+    covers("command:media.paged.draw.command.rasterize");
+    const before = await documentDigest(live);
+    await runCommand(live, "media.paged.draw.command.rasterize", {
+      ppi: 72,
+      background: "transparent",
+    });
+    await expect
+      .poll(() => documentDigest(live), {
+        message: "Rasterize changes the document",
+        timeout: 10_000,
+      })
+      .not.toBe(before);
+    await expectOneUndoRestores(live, "Rasterize", before);
+  });
+
+  // ── Select same past paint, and Global Edit. Each starts from the back
+  //    rectangle alone; the front one is made to match the criterion, so
+  //    the click must GROW the selection to both — and, being selection
+  //    only, leave the document as it was. Which leaves a criterion
+  //    excludes is plugin-surface/draw.spec.ts's Select-same test. ──
+
+  /** Select the back rectangle alone, click `path`, and assert the
+   *  selection grew to `expected` while the document stayed put. */
+  async function selectsFromBack(
+    path: string,
+    command: string,
+    expected: Array<{ kind: string; id: string }>,
+  ): Promise<void> {
+    const designer = new Designer(live);
+    await designer.selectElements([pair[0]!]);
+    await expectGreyedAndInert(bare, path);
+    const out = await clickEntry(live, path, command);
+    expect(out.shell).toEqual([]);
+    await expect
+      .poll(
+        async () => (await designer.elementSelection()).map((e) => e.id).sort(),
+        { message: `${path} selects the matches`, timeout: 8_000 },
+      )
+      .toEqual(expected.map((e) => e.id).sort());
+    expect(out.after, "selecting changes no document").toBe(out.before);
+  }
+
+  /** Set one typed property on an element (setup). */
+  async function setProperty(
+    ref: { kind: string; id: string },
+    path: string,
+    value: unknown,
+  ): Promise<void> {
+    await live.evaluate(
+      (m) =>
+        (
+          globalThis as unknown as {
+            __canvas: { client: { mutate(m: unknown): Promise<unknown> } };
+          }
+        ).__canvas.client.mutate(m),
+      { op: "setElementProperty", args: { elementId: ref, path, value } },
+    );
+  }
+
+  test("Edit/Select same/Opacity — grows the selection to the rectangle of the same opacity", async () => {
+    covers("menu:Edit/Select same/Opacity");
+    for (const ref of pair) {
+      await setProperty(ref, "frameOpacity", { type: "length", value: 40 });
+    }
+    await selectsFromBack(
+      "Edit/Select same/Opacity",
+      "media.paged.draw.command.selectSameOpacity",
+      pair,
+    );
+  });
+
+  test("Edit/Select same/Blending mode — grows the selection to the rectangle of the same blending mode", async () => {
+    covers("menu:Edit/Select same/Blending mode");
+    for (const ref of pair) {
+      await setProperty(ref, "frameBlendMode", {
+        type: "text",
+        value: "Multiply",
+      });
+    }
+    await selectsFromBack(
+      "Edit/Select same/Blending mode",
+      "media.paged.draw.command.selectSameBlendMode",
+      pair,
+    );
+  });
+
+  test("Edit/Select same/Appearance — grows the selection to the rectangle painted alike", async () => {
+    covers("menu:Edit/Select same/Appearance");
+    // The front one is paper; painted black like the back, it is the same
+    // appearance.
+    await setProperty(pair[1]!, "frameFillColor", {
+      type: "colorRef",
+      value: "Color/Black",
+    });
+    await selectsFromBack(
+      "Edit/Select same/Appearance",
+      "media.paged.draw.command.selectSameAppearance",
+      pair,
+    );
+  });
+
+  test("Edit/Select same/Graphic style — grows the selection to the rectangle linked to the same style", async () => {
+    covers("menu:Edit/Select same/Graphic style");
+    // Saving a style from both selected rectangles links both.
+    await runCommand(live, "media.paged.draw.command.saveGraphicStyle");
+    await selectsFromBack(
+      "Edit/Select same/Graphic style",
+      "media.paged.draw.command.selectSameGraphicStyle",
+      pair,
+    );
+  });
+
+  test("Edit/Select same/Symbol instance — selects every instance of the reference's symbol, not its source", async () => {
+    covers("menu:Edit/Select same/Symbol instance");
+    const paths = () =>
+      live.evaluate(async () => {
+        const r = await (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                executeScript(s: string): Promise<{ output: string[] }>;
+              };
+            };
+          }
+        ).__canvas.client.executeScript("paged.tree()");
+        const out: string[] = [];
+        type N = { id?: { kind: string; id: string }; children?: N[] };
+        const visit = (n: N) => {
+          if (n.id?.kind === "polygon") out.push(n.id.id);
+          for (const ch of n.children ?? []) visit(ch);
+        };
+        for (const n of JSON.parse(r.output[0] ?? "[]") as N[]) visit(n);
+        return out;
+      });
+    // An instance re-emits the definition through insertPath: its leaf is
+    // a path, whatever the source was.
+    const designer = new Designer(live);
+    await designer.selectElements([pair[0]!]);
+    await runCommand(live, "media.paged.draw.command.defineSymbol");
+    const placed: Array<{ kind: string; id: string }> = [];
+    for (const x of [450, 520]) {
+      const was = await paths();
+      await runCommand(live, "media.paged.draw.command.placeSymbolInstance", {
+        symbolId: "sym-1",
+        x,
+        y: 420,
+      });
+      await expect
+        .poll(async () => (await paths()).length)
+        .toBe(was.length + 1);
+      const id = (await paths()).find((r) => !was.includes(r))!;
+      placed.push({ kind: "polygon", id });
+    }
+    await designer.selectElements([placed[0]!]);
+    await expectGreyedAndInert(bare, "Edit/Select same/Symbol instance");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Symbol instance",
+      "media.paged.draw.command.selectSameSymbolInstance",
+    );
+    expect(out.shell).toEqual([]);
+    await expect
+      .poll(
+        async () => (await designer.elementSelection()).map((e) => e.id).sort(),
+        { timeout: 8_000 },
+      )
+      .toEqual(placed.map((e) => e.id).sort());
+    expect(out.after, "selecting changes no document").toBe(out.before);
+  });
+
+  test("Edit/Select same/Shape kind — grows the selection to the other rectangle", async () => {
+    covers("menu:Edit/Select same/Shape kind");
+    await selectsFromBack(
+      "Edit/Select same/Shape kind",
+      "media.paged.draw.command.selectSameShapeKind",
+      pair,
+    );
+  });
+
+  test("Edit/Select same/Geometry (Global Edit) — grows the selection to the same-sized rectangle elsewhere", async () => {
+    covers("menu:Edit/Select same/Geometry (Global Edit)");
+    // The two rectangles are 180 × 120 pt each, at different places.
+    await selectsFromBack(
+      "Edit/Select same/Geometry (Global Edit)",
+      "media.paged.draw.command.globalEdit",
+      pair,
+    );
+  });
+
+  test("Draw/Image trace… — raises the Image Trace panel, where the preset and options are set", async () => {
     covers("menu:Draw/Image trace…");
     await expectGreyedAndInert(bare, "Draw/Image trace…");
     const out = await clickEntry(
       live,
       "Draw/Image trace…",
-      "media.paged.draw.command.imageTrace",
+      "media.paged.draw.command.imageTraceOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.imageTrace" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Draw/Re-trace image — runs retraceImage; nothing selected was traced, so it changes nothing", async () => {
+    covers("menu:Draw/Re-trace image");
+    await expectGreyedAndInert(bare, "Draw/Re-trace image");
+    const out = await clickEntry(
+      live,
+      "Draw/Re-trace image",
+      "media.paged.draw.command.retraceImage",
     );
     expect(out.shell).toEqual([]);
-    expect(out.after, "the selection holds no placed image to trace").toBe(
+    expect(out.after, "the selection holds no traced image").toBe(out.before);
+  });
+
+  test("Edit/Edit colors/Recolor artwork… — raises the Recolor Artwork panel", async () => {
+    covers("menu:Edit/Edit colors/Recolor artwork…");
+    await expectGreyedAndInert(bare, "Edit/Edit colors/Recolor artwork…");
+    const out = await clickEntry(
+      live,
+      "Edit/Edit colors/Recolor artwork…",
+      "media.paged.draw.command.recolorArtworkOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.recolorArtwork" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
       out.before,
     );
   });

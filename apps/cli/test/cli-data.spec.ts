@@ -19,8 +19,8 @@
 // @feat: plugin-platform.object-model.node-cli
 //
 // ADR 324 — `paged merge` / `paged apply` over TODAY's paged.data session
-// (@paged-media/data, the workspace bundle): the real data-js engine, DuckDB in-process
-// (Node blocking build + the bundle's shipped engine wasm) and real core.
+// (@paged-media/data, the workspace bundle): the real data-js engine with its
+// query store inside it (ADR 561) and real core.
 // The merge is compared with InDesign's own Data Merge recording of the
 // long-record-set fixture, read from paged.data's lane
 // (modules/data/conformance/indesign-merge): 57 records, 2 columns, columns

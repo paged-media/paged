@@ -33,8 +33,8 @@
 //     holds the old query. (Before 69 the session part does not follow undo;
 //     the label checks are skipped.)
 //
-// Gate: under REQUIRE_REAL_DUCKDB=1 a DuckDB that does not boot FAILS the
-// journey (data-duckdb-gate.ts); otherwise it skips and says why.
+// Gate: under REQUIRE_REAL_ENGINE=1 a data engine that does not boot FAILS the
+// journey (data-engine-gate.ts); otherwise it skips and says why.
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +43,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { dataFields, partText, sessionLabel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -78,9 +78,9 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   } catch {
     const got =
       (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(
+    skipWithoutEngine(
       got,
-      `the refresh-undo journey needs DuckDB-WASM to boot (engine status "${got}")`,
+      `the refresh-undo journey needs the data engine to boot (engine status "${got}")`,
     );
   }
 }

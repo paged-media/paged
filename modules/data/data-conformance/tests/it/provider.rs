@@ -42,7 +42,7 @@ fn query(id: &str) -> Query {
 fn data_provider_publish() {
     let mut s = DataSession::new(0);
     s.define_query(query("q1"));
-    // Ingest out of natural order (sku b,a,c) — DuckDB iteration is unordered.
+    // Ingest out of natural order (sku b,a,c) — a query's iteration is unordered.
     s.ingest_result(
         QueryId::from("q1"),
         record_set(
@@ -81,7 +81,7 @@ fn data_provider_publish() {
 
 #[test]
 fn data_provider_publish_revision_is_permutation_invariant() {
-    // The refresh token tracks the DATA, not DuckDB's iteration order: the same
+    // The refresh token tracks the DATA, not the query's iteration order: the same
     // rows ingested in a different order publish the SAME revision, so a consumer
     // does not re-pull on a meaningless reorder (§6.1 stabilize / §7.1 sync).
     let mut a = DataSession::new(0);

@@ -1,11 +1,11 @@
-// Wave 6 — local import and the query lane against REAL DuckDB (the shipped
-// bin/duckdb-engine.wasm through the Node blocking build) and the REAL data-js
-// wasm (its XLSX reader). A session is built with both boots pointed at the
-// Node builds; nothing else is faked. The host is a minimal stub: these
+// Wave 6 — local import and the query lane against the REAL data-js wasm and
+// the query store inside it (ADR 561: every format read by the engine). A
+// session is built with the engine boot pointed at the Node load of the
+// shipped wasm; nothing else is faked. The host is a minimal stub: these
 // specs never write the document.
 //
-// Gate: skips when DuckDB or the data-js wasm is missing, EXCEPT under
-// REQUIRE_REAL_DUCKDB=1, where a missing piece is a failure.
+// Gate: skips when the data-js wasm is missing, EXCEPT under
+// REQUIRE_REAL_ENGINE=1, where a missing piece is a failure.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -15,44 +15,28 @@ import { importActual } from "@paged-media/test-kit";
 
 import type { DataSourceSession } from "../src/session";
 import {
-  bootRealDuckDB,
   bootRealEngine,
   DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
-import {
-  NODE_EXTENSION_REPO,
-  refusedExtensionUrls,
-  servedExtensionUrls,
-} from "./duckdb-node-ext";
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "..", "..", "conformance", "sources");
 const XLSX = readFileSync(join(FIXTURES, "products.xlsx"));
 const PARQUET = readFileSync(join(FIXTURES, "products.parquet"));
 
-const probe = await bootRealDuckDB();
-const ready = probe.handle !== undefined && existsSync(DATA_JS_WASM);
+const ready = existsSync(DATA_JS_WASM);
 
 async function loadSessionModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/session");
 }
@@ -80,16 +64,13 @@ const stubHost = {
   },
 } as never;
 
-describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
-  "local import into real DuckDB [data.source.adapters]",
+describe.skipIf(!ready && !REQUIRE_REAL_ENGINE)(
+  "local import into the real query store [data.source.adapters]",
   () => {
     let mod: Awaited<ReturnType<typeof loadSessionModule>>;
     let s: DataSourceSession;
     beforeAll(async () => {
-      expect(
-        ready,
-        `real DuckDB and the data-js wasm must be available: ${probe.error ?? ""}`,
-      ).toBe(true);
+      expect(ready, "the data-js wasm must be available").toBe(true);
       mod = await loadSessionModule();
     });
     const fresh = () => (s = mod.createSession(stubHost, 0));
@@ -115,9 +96,10 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       });
 
       expect(await s.describeSource("catalog")).toEqual([
-        { name: "sku", type: "VARCHAR" },
-        { name: "price", type: "DOUBLE" },
-        { name: "tags", type: "VARCHAR[]" },
+        { name: "sku", type: "TEXT" },
+        { name: "price", type: "REAL" },
+        // A list is kept as its JSON text.
+        { name: "tags", type: "TEXT" },
       ]);
       const p = await s.previewQuery(
         "SELECT sku, price FROM catalog ORDER BY sku",
@@ -145,8 +127,8 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
         format: "parquet",
       });
       expect(await s.describeSource("products")).toEqual([
-        { name: "sku", type: "VARCHAR" },
-        { name: "price", type: "DECIMAL(10,2)" },
+        { name: "sku", type: "TEXT" },
+        { name: "price", type: "DECIMAL(18,2)" },
         { name: "qty", type: "INTEGER" },
         { name: "launched", type: "DATE" },
       ]);
@@ -171,15 +153,15 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       expect(
         (await s.describeSource("products")).map((c) => `${c.name}:${c.type}`),
       ).toEqual([
-        "sku:VARCHAR",
-        "price:DOUBLE",
-        "qty:BIGINT",
+        "sku:TEXT",
+        "price:REAL",
+        "qty:INTEGER",
         "launched:DATE",
         "updated:TIMESTAMP",
         "active:BOOLEAN",
-        "note:VARCHAR",
-        "column_8:VARCHAR",
-        "sku_2:VARCHAR",
+        "note:TEXT",
+        "column_8:TEXT",
+        "sku_2:TEXT",
       ]);
       const p = await s.previewQuery(
         "SELECT sku, price, qty, launched, updated, active FROM products ORDER BY sku",
@@ -187,7 +169,7 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       expect(p.rows).toEqual([
         ["A-1", "9.99", "3", "2026-01-15", "2026-01-15 09:30:00", "true"],
         ["B-2", "19.5", "10", "2026-02-01", "2026-02-01 00:00:00", "false"],
-        ["C-3", "7.0", null, null, "2026-03-01 18:45:15", "true"],
+        ["C-3", "7", null, null, "2026-03-01 18:45:15", "true"],
         ["D-4", null, "5", "2026-04-01", null, null],
       ]);
       // The #DIV/0! cell is NULL and said so.
@@ -202,28 +184,12 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
         (await s.previewQuery("SELECT * FROM products ORDER BY region")).rows,
       ).toEqual([
         ["de", "1.19"],
-        ["en", "1.0"],
+        ["en", "1"],
       ]);
       expect(s.getState().files[0]).toMatchObject({
         source: "products",
         sheet: "Prices",
       });
-    });
-
-    it("JSON, Parquet and XLSX load DuckDB's json/parquet extensions from the shipped bin/duckdb-ext, never the network [data.source.adapters]", () => {
-      // The specs above ran read_json_auto, read_parquet and read_json; each
-      // needed an extension the eh build lacks. They came from the bundle's
-      // own files (bin/duckdb-ext), the same ones the browser loads.
-      expect(refusedExtensionUrls).toEqual([]);
-      const names = servedExtensionUrls.map((u) =>
-        u.slice(NODE_EXTENSION_REPO.length),
-      );
-      expect(new Set(names)).toEqual(
-        new Set([
-          "/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
-          "/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
-        ]),
-      );
     });
 
     it("an unknown extension and a corrupt workbook are visible errors [data.source.adapters]", async () => {
@@ -246,8 +212,8 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
   },
 );
 
-describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
-  "the query lane over real DuckDB [data.query.seam]",
+describe.skipIf(!ready && !REQUIRE_REAL_ENGINE)(
+  "the query lane over the real query store [data.query.seam]",
   () => {
     let s: DataSourceSession;
     beforeAll(async () => {
@@ -284,24 +250,22 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
         });
       }
       expect(s.listQueries()).toEqual([]);
-      // range() reads nothing and is allowed.
-      expect((await s.previewQuery("SELECT * FROM range(3)")).rows).toEqual([
-        ["0"],
-        ["1"],
-        ["2"],
-      ]);
+      // generate_series() reads nothing and is allowed.
+      expect(
+        (await s.previewQuery("SELECT value FROM generate_series(0, 2)")).rows,
+      ).toEqual([["0"], ["1"], ["2"]]);
     });
 
-    it("DuckDB errors come back with their class and position in the query as written [data.query.seam]", async () => {
-      const parse = await s.previewQuery("SELECT sku\nFORM products");
-      expect(parse.diagnostic).toMatchObject({ kind: "Parser", line: 2 });
+    it("store errors come back with their class and position in the query as written [data.query.seam]", async () => {
+      const parse = await s.previewQuery("SELECT sku\nFROM products WHERE");
+      expect(parse.diagnostic).toMatchObject({ kind: "Parser" });
       const bind = await s.previewQuery("SELECT sku,\n  nope FROM products");
       expect(bind.diagnostic).toMatchObject({
-        kind: "Binder",
+        kind: "Catalog",
         line: 2,
         column: 3,
       });
-      expect(bind.diagnostic!.message).toMatch(/"nope" not found/);
+      expect(bind.diagnostic!.message).toMatch(/no such column: nope/);
       const cat = await s.previewQuery("SELECT * FROM missing");
       expect(cat.diagnostic).toMatchObject({
         kind: "Catalog",
@@ -329,7 +293,7 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       s.addQuery("broken", "SELECT nope FROM products", "recordStream");
       await s.refreshData();
       const q = s.getState().diagnostics.filter((d) => d.source === "query");
-      expect(q.at(-1)?.message).toMatch(/query "broken" failed — Binder:/);
+      expect(q.at(-1)?.message).toMatch(/query "broken" failed — Catalog:/);
       expect(await s.recordCount("cheap")).toBe(2);
     });
 

@@ -1,6 +1,7 @@
 # ADR 190 — A placed SVG draws its filters
 
-- **Status:** Accepted 2026-10-19; amended 2026-10-20 (a placed SVG is drawn as vectors).
+- **Status:** Accepted 2026-10-19; amended 2026-10-20 (a placed SVG is drawn as vectors);
+  amended 2026-10-24 (even-odd, [ADR 1006](1006-fill-rule-is-a-native-property.md)).
 - **Scope:**
   - `crates/paged-gpu`: `svg_filter.rs` (new: the filter graph and its seventeen primitives),
     `svg.rs` (a filtered group, straight-alpha gradients, pattern tiles on whole pixels),
@@ -236,3 +237,11 @@ the raster's (the SVG's size rounded up), so no placement moves.
   dependency, `usvg` was already linked): `paged_canvas_wasm_bg.wasm` 29,442,406 →
   29,472,434 bytes (+30,028), the viewer's `paged_sdk_bg.wasm` 11,563,246 → 11,591,718
   (+28,472). The app-wide budget grows by the canvas-wasm delta, 0.03 MB.
+
+## Amendment — 2026-10-24: even-odd is drawn even-odd
+
+[ADR 1006](1006-fill-rule-is-a-native-property.md) gives the display list a fill rule per
+path. An even-odd shape is now drawn as an even-odd path, so "Even-odd as non-zero" applies
+only to a clip path of several shapes (one path has one rule), and "an even-odd shape whose
+contours cross" leaves the list of what keeps the raster. The re-wind and its crossing test
+moved to `paged_model::winding`.

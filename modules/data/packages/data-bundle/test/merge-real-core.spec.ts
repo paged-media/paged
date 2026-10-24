@@ -44,7 +44,7 @@ import {
   type RecordsPerPage,
 } from "../src/merge";
 import { ENGINE_ANCHOR, REQUIRE_REAL_CORE } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM } from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM } from "./real-engine";
 
 const LANE = fileURLToPath(
   new URL("../../../conformance/indesign-merge/", import.meta.url),

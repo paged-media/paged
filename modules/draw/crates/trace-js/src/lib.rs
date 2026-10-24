@@ -124,4 +124,22 @@ mod tests {
         assert_eq!(json["regions"].as_array().unwrap().len(), 1);
         assert_eq!(json["regions"][0]["color"][0], 0);
     }
+
+    #[test]
+    fn a_centreline_trace_crosses_as_strokes() {
+        // A 3 px horizontal bar: one open stroke, no fills.
+        let (w, h) = (32u32, 12u32);
+        let mut pixels = vec![255u8; (w * h * 4) as usize];
+        for y in 5..8 {
+            for x in 2..30 {
+                let i = ((y * w + x) * 4) as usize;
+                pixels[i..i + 3].copy_from_slice(&[0, 0, 0]);
+            }
+        }
+        let out = trace_rgba_json(&pixels, w, h, r#"{"mode":"centerline"}"#).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(json["regions"].as_array().unwrap().len(), 0);
+        assert_eq!(json["strokes"].as_array().unwrap().len(), 1);
+        assert_eq!(json["strokes"][0]["closed"], false);
+    }
 }

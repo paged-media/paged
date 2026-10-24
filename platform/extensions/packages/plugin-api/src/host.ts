@@ -1568,16 +1568,52 @@ export interface TextRange {
 
 // ----------------------------------------------------------------- render
 
-/** v70 — what `host.render.snapshot` renders. */
+/** v70 — what `host.render.snapshot` renders. The fields after
+ *  `hideItems` are `render.snapshot@2` (extensions ADR 338): an engine
+ *  without them draws the whole page as a PNG, and the SDK then answers
+ *  `null` for a request whose reply it cannot honour (`clip`, `trim`,
+ *  `format: "rgba"`). */
 export interface RenderSnapshotOptions {
   /** Width of the image in device pixels, 1 to 8192; the height follows
-   *  the page's aspect. The engine renders at a resolution derived from
-   *  it, so the image can be a pixel off: `RenderedPage.widthPx` is exact. */
-  widthPx: number;
+   *  the page's aspect (the clip's, with `clip`). The engine renders at a
+   *  resolution derived from it, so the image can be a pixel off:
+   *  `RenderedPage.widthPx` is exact. Required unless `dpi` is given. */
+  widthPx?: number;
   /** Items to leave out of this image only (a build step whose shapes
    *  have not appeared yet). The document is not changed and no undo
    *  step is recorded. */
   hideItems?: ElementId[];
+  /** @2 — the resolution in pixels per inch (72 = one pixel per pt),
+   *  1 to 2400. Wins over `widthPx`. */
+  dpi?: number;
+  /** @2 — draw nothing but these items, in their stacking order, on a
+   *  page otherwise empty: a group draws its members, a container what
+   *  is pasted into it, a story (`{ kind: "storyRange" }`) every frame of
+   *  its thread. Layout is the page's own: a text wrap from an item left
+   *  out still shapes the text. */
+  only?: ElementId[];
+  /** @2 — draw this region of the page alone, in page pt (`(0, 0)` the
+   *  page's top-left; it may reach onto the pasteboard). Grown outward to
+   *  whole pixels: `RenderedPage.region` is the region drawn. */
+  clip?: RenderRect;
+  /** @2 — `"png"` (the default) or `"rgba"`: raw pixels in
+   *  `RenderedPage.rgba` instead of a PNG. */
+  format?: "png" | "rgba";
+  /** @2 — what lies under the content: `"paper"` (white, the default)
+   *  or `"transparent"`. */
+  background?: "paper" | "transparent";
+  /** @2 — with a transparent background, crop the image to the pixels
+   *  something was drawn on — an item's stroke and effects included,
+   *  which no geometry read reports. `null` when nothing is drawn. */
+  trim?: boolean;
+}
+
+/** @2 — a rectangle in page pt. */
+export interface RenderRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** v70 — one rendered page. */
@@ -1586,26 +1622,70 @@ export interface RenderedPage {
   /** The image's own size, within a pixel of the requested width. */
   widthPx: number;
   heightPx: number;
-  /** PNG bytes; `createImageBitmap(new Blob([png]))` draws them. */
+  /** PNG bytes; `createImageBitmap(new Blob([png]))` draws them. Empty
+   *  when the request asked for `format: "rgba"`. */
   png: Uint8Array;
   /** The engine's layout generation the image shows: an image with an
    *  older generation than a page's current one is stale. */
   layoutGeneration: number;
+  /** @2 — `"rgba"` when `rgba` holds the pixels, else `"png"`. */
+  format?: "png" | "rgba";
+  /** @2 — `format: "rgba"`: `widthPx × heightPx` pixels, four bytes each
+   *  (R, G, B, A), rows top to bottom, STRAIGHT alpha (not
+   *  premultiplied) — `new ImageData(new Uint8ClampedArray(rgba.buffer),
+   *  widthPx)` draws them. A PNG of a transparent image is straight
+   *  alpha too. */
+  rgba?: Uint8Array;
+  /** @2 — the page region the image covers, in page pt, when the request
+   *  had a `clip` or `trim`: the image maps onto it exactly. */
+  region?: RenderRect;
+}
+
+/** @2 — what `host.render.element` renders. */
+export interface RenderElementOptions {
+  /** Pixels per inch, 1 to 2400 (default 72: one pixel per pt). */
+  dpi?: number;
+  /** `"png"` (the default) or `"rgba"`. */
+  format?: "png" | "rgba";
+  /** `"transparent"` (the default) or `"paper"`. */
+  background?: "paper" | "transparent";
+  /** How far past the item's geometric bounds, in pt, the image may
+   *  reach for its stroke and effects (default 72). The image is trimmed
+   *  to what the item draws within that margin. */
+  marginPt?: number;
+}
+
+/** @2 — one rendered item: a page image of nothing but the item, cropped
+ *  to it, with the page region it covers. */
+export interface RenderedElement extends RenderedPage {
+  region: RenderRect;
 }
 
 /**
  * v70 — render a page to an image with the engine's own renderer (CPU),
  * the same pixels the canvas shows: slide thumbnails, a slideshow's
  * frames, a build step's frames. A READ: gated on
- * `capabilities.document.read`. `supports("render.snapshot@1")`.
+ * `capabilities.document.read`. `supports("render.snapshot@1")`;
+ * `supports("render.snapshot@2")` adds the region, item, raw-pixel and
+ * transparent options and `element` (extensions ADR 338).
  */
 export interface RenderSurface {
   /** The page as a PNG, or `null` when the page is unknown or the
-   *  engine refused (an invalid width). */
+   *  engine refused (an invalid width, a region too large, nothing
+   *  drawn with `trim`). */
   snapshot(
     pageId: PageId,
     options: RenderSnapshotOptions,
   ): Promise<RenderedPage | null>;
+  /** @2 — one item as it draws on its page, alone, cropped to what it
+   *  draws (stroke and effects included) at `dpi`: what a rasterize
+   *  command, an image layer of a story or a vector smart object needs.
+   *  `null` for an unknown item, one on the pasteboard (no page draws
+   *  it), one that draws nothing, or an engine without @2. */
+  element(
+    id: ElementId,
+    options?: RenderElementOptions,
+  ): Promise<RenderedElement | null>;
 }
 
 // ----------------------------------------------------------------- text
@@ -2159,6 +2239,221 @@ export interface DataProvidersSurface {
   onDidChange(id: string, listener: (revision: string) => void): Disposable;
 }
 
+// ------------------------------------------------------------ data (data@1)
+//
+// The DATA door (extensions ADR 343, PM-0015): the document's data as a
+// platform layer. One bundle SERVES it (paged.data in the editor: its
+// sources, queries and bindings over the engine's store); every other bundle
+// READS tables and records, WRITES rows (paged.sheet edits a table) and BINDS
+// object properties, without knowing who serves. The host only routes and
+// fans out changes. The record shape is the provider shape above, so a
+// consumer of `dataProviders@1` reads `data@1` with the same code.
+
+/** One table of the document's data: an imported source or a query. */
+export interface DataTableInfo {
+  name: string;
+  kind: "source" | "query";
+  schema: ProviderSchema;
+  rowCount: number;
+  /** An opaque content etag; it changes whenever the rows do. */
+  revision: string;
+  /** Whether `write` accepts edits to it (a source table, not a query). */
+  writable: boolean;
+}
+
+/** A window of a table's rows (`offset` from 0, at most `limit`). */
+export interface DataRange {
+  offset?: number;
+  limit?: number;
+}
+
+/** One edit of a table's rows. `row` is the 0-based row of the table as
+ *  `records` returned it at the revision the edit was made against. */
+export type DataRowEdit =
+  | { op: "set"; row: number; field: string; value: unknown }
+  | { op: "insert"; values: Readonly<Record<string, unknown>> }
+  | { op: "delete"; row: number };
+
+/** What a write left behind. */
+export interface DataWriteResult {
+  revision: string;
+  rowCount: number;
+}
+
+/** A binding of one object property to data: `target` is an address or a
+ *  selector (ADR 131), `path` a property path of it (ADR 132), `expr` an
+ *  expression of the binding language over `query`'s fields. */
+export interface DataBindingSpec {
+  target: string;
+  path: string;
+  query: string;
+  expr: string;
+}
+
+/** A defined binding. */
+export interface DataBindingInfo extends DataBindingSpec {
+  id: string;
+}
+
+/** A table whose rows changed. */
+export interface DataChange {
+  table: string;
+  revision: string;
+}
+
+/** What a serving bundle implements (`host.data.serve`). Members it leaves
+ *  out are refused for every consumer with the reason. */
+export interface DataService {
+  tables(): Promise<readonly DataTableInfo[]> | readonly DataTableInfo[];
+  records(table: string, range?: DataRange): Promise<ProviderRecordSet>;
+  /** One query over the tables, checked by the service's own guard. */
+  query?(sql: string): Promise<ProviderRecordSet>;
+  write?(
+    table: string,
+    edits: readonly DataRowEdit[],
+  ): Promise<DataWriteResult>;
+  bind?(spec: DataBindingSpec): Promise<DataBindingInfo>;
+  unbind?(id: string): Promise<void>;
+  bindings?(): Promise<readonly DataBindingInfo[]>;
+  /** An expression's value at a record of `query`, defining nothing (a bind
+   *  popover's live preview, editor ADR 292). */
+  evaluate?(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<DataEvaluation>;
+}
+
+/** What an expression gives at a record. */
+export interface DataEvaluation {
+  /** As a field shows it. */
+  display: string;
+  /** As JSON (`null` when it has none or failed). */
+  value: unknown;
+  /** The parse or evaluation error. */
+  error?: string;
+}
+
+/** The handle a serving bundle holds. */
+export interface DataServiceHandle {
+  /** Announce changed rows; every `onDidChange` listener hears it. */
+  changed(change: DataChange): void;
+  /** Stop serving; consumers' calls are refused again. */
+  dispose(): void;
+}
+
+export interface DataSurface {
+  /** SERVE side (`capabilities.data.serve`). One service at a time: a
+   *  second `serve` while one is live throws. */
+  serve(service: DataService): DataServiceHandle;
+  /** Whether a service is live (calls below reject when not). */
+  available(): boolean;
+  /** READ side (`capabilities.data.read`). */
+  tables(): Promise<readonly DataTableInfo[]>;
+  records(table: string, range?: DataRange): Promise<ProviderRecordSet>;
+  query(sql: string): Promise<ProviderRecordSet>;
+  /** WRITE side (`capabilities.data.write`). */
+  write(table: string, edits: readonly DataRowEdit[]): Promise<DataWriteResult>;
+  /** BIND side (`capabilities.data.bind`). */
+  bind(spec: DataBindingSpec): Promise<DataBindingInfo>;
+  unbind(id: string): Promise<void>;
+  bindings(): Promise<readonly DataBindingInfo[]>;
+  /** An expression's value at a record of `query` (`read`). */
+  evaluate(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<DataEvaluation>;
+  /** Fires when a table's rows change (`read`). */
+  onDidChange(listener: (change: DataChange) => void): Disposable;
+}
+
+// ------------------------------------------------------ actions (actions@1)
+//
+// The ACTIONS door (extensions ADR 344, PM-0015): named, typed, PURE steps
+// any bundle registers and any bundle runs, alone or chained. An action
+// computes; it never edits the document (a command may apply its result in
+// one undo step). A result is cached under the hash of its input and of the
+// chain with its parameters, so running it again computes nothing.
+
+/** What an action takes and gives. `asset` is bytes (`Uint8Array`) with a
+ *  media type, `table` a `ProviderRecordSet`, `selection` a snapshot of
+ *  addresses, `value` any JSON value. */
+export type ActionValueKind = "asset" | "table" | "selection" | "value";
+
+/** An asset as actions pass it. */
+export interface ActionAsset {
+  bytes: Uint8Array;
+  mediaType: string;
+}
+
+/** What `run` hands an action besides its input. */
+export interface ActionContext {
+  /** Aborted when the caller gives up. */
+  readonly signal?: AbortSignal;
+}
+
+/** An action as its bundle registers it. */
+export interface ActionDefinition {
+  /** Unique across bundles: `<bundle id>/<name>` by convention. */
+  id: string;
+  title: string;
+  input: ActionValueKind;
+  output: ActionValueKind;
+  /** The parameters' defaults; also what a picker shows. */
+  params?: Readonly<Record<string, unknown>>;
+  /** Runs only where its host can (an npm-backed action in paged-node). */
+  headlessOnly?: boolean;
+  run(
+    input: unknown,
+    params: Readonly<Record<string, unknown>>,
+    context: ActionContext,
+  ): Promise<unknown> | unknown;
+}
+
+/** A registered action (no code). */
+export interface ActionInfo {
+  id: string;
+  title: string;
+  input: ActionValueKind;
+  output: ActionValueKind;
+  params: Readonly<Record<string, unknown>>;
+  headlessOnly: boolean;
+}
+
+/** One step of a chain. */
+export interface ActionStep {
+  action: string;
+  params?: Readonly<Record<string, unknown>>;
+}
+
+/** What a run gave. `key` is the cache key (input hash + chain hash). */
+export interface ActionRunResult {
+  output: unknown;
+  key: string;
+  cached: boolean;
+}
+
+export interface ActionsSurface {
+  /** `capabilities.actions.register`. An id already registered throws. */
+  register(definition: ActionDefinition): Disposable;
+  /** Every registered action, or those taking `input`. */
+  list(input?: ActionValueKind): readonly ActionInfo[];
+  /** `capabilities.actions.run`. */
+  run(
+    action: string,
+    input: unknown,
+    params?: Readonly<Record<string, unknown>>,
+    context?: ActionContext,
+  ): Promise<ActionRunResult>;
+  /** Each step's output is the next step's input; the kinds must agree. */
+  runChain(
+    steps: readonly ActionStep[],
+    input: unknown,
+    context?: ActionContext,
+  ): Promise<ActionRunResult>;
+}
+
 // ---------------------------------------------------------- diagnostics
 
 export interface Diagnostic {
@@ -2378,6 +2673,17 @@ export interface BundleHost {
    *  no shared registry, `discover()` is empty + `register()` is a no-op and
    *  `supports("dataProviders@1")` is false (the honest no-registry posture). */
   readonly dataProviders: DataProvidersSurface;
+  /** The DATA door (extensions ADR 343): the document's tables, records and
+   *  bindings, served by one bundle and read, written and bound by any,
+   *  gated on `capabilities.data`. Always present; when the host wires no
+   *  data backend every call rejects and `supports("data@1")` is false. */
+  readonly data: DataSurface;
+  /** The ACTIONS door (extensions ADR 344): named pure steps registered by
+   *  any bundle and run, alone or chained, by any, with their results
+   *  cached; gated on `capabilities.actions`. Always present; when the host
+   *  wires no action registry `register` throws, `list` is empty and
+   *  `supports("actions@1")` is false. */
+  readonly actions: ActionsSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */

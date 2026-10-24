@@ -1,0 +1,7 @@
+$ paged data bindings bound.paged
+--- exit: 0
+--- stdout
+op	property	q	rectangle:u1
+v_name	variable	q	frame:u1
+--- stderr
+source products: --source products=products.csv

@@ -4,7 +4,7 @@
 
 Three lanes check `paged.data` against something other than itself:
 
-- native DuckDB, for queries;
+- native SQLite, for queries (the store is Turso, a Rust implementation of SQLite);
 - Adobe InDesign Data Merge, for merging records into pages;
 - generated inputs with independent decoders, for the engine's invariants.
 
@@ -13,87 +13,61 @@ reference tool. Where we disagree with the reference today, the test pins the di
 a numbered defect. A pinned defect stays green while the defect exists and fails the day the
 behaviour changes, so the fix and the pin change land in the same commit.
 
-| Lane       | Reference                            | Recorded in                                    | Replayed by                                                                                      |
-| ---------- | ------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| DuckDB SQL | `duckdb` CLI v1.1.1                  | `conformance/duckdb-sql/recorded/results.json` | `packages/data-bundle/test/duckdb-sql-oracle.spec.ts`                                            |
-| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`   | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-duckdb.spec.ts` |
-| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                            | `data-conformance/tests/it/oracle_props.rs`                                                      |
+| Lane       | Reference                            | Recorded in                                                                  | Replayed by                                                                                     |
+| ---------- | ------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SQLite SQL | `sqlite3` CLI 3.51.0                 | `engine/core/crates/paged-data-store/tests/sqlite-sql/recorded/results.json` | `data-store/tests/sqlite_oracle.rs`                                                             |
+| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`                                 | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-store.spec.ts` |
+| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                                                          | `data-conformance/tests/it/oracle_props.rs`                                                     |
 
-## 1. DuckDB SQL lane
+## 1. SQLite SQL lane
 
-**Question.** Does a query that runs through the shipped path give the same answer as native
-DuckDB? The shipped path is `bin/duckdb-engine.wasm` → Arrow → `src/query/recordset.ts` →
-`data-js` `ingest_result`.
+**Question.** Does a query the store runs (ADR 561: Turso, compiled into the engine) give the
+answer SQLite gives? The store's path is `data-store` `Store::query` → `data_core::RecordSet`,
+the result every binding reads.
 
-**Fixtures.** The fixtures are `conformance/duckdb-sql/cases.json`, 18 SQL cases. Before the
-cases run, each `csv/*.csv` is registered as a table.
+**Fixtures.** `engine/core/crates/paged-data-store/tests/sqlite-sql/cases.json`: a setup (two tables, one of UTF-8 names and
+cities, one of prices with NULLs) and 25 queries:
 
-- Types: every integer width, HUGEINT, UBIGINT, DOUBLE, FLOAT, DECIMAL at storage widths 16, 32,
-  64 and 128 bits with signs and scale 0, DATE and TIMESTAMP before and after 1970 (`_S`, `_MS`,
-  `_NS`), BOOLEAN, VARCHAR, and TIME, INTERVAL, UUID, BLOB, LIST and STRUCT.
-- Values: NULL in every type, NaN, ±0, ±∞, and 1e300.
-- Ordering: the default NULLS LAST, `DESC NULLS FIRST`, binary text order, and ties broken by a
-  second key.
-- Text: UTF-8 with combining marks, emoji, CJK and right-to-left text.
-- CSV quoting: embedded commas, doubled quotes, an embedded newline, padded and empty fields.
-- CSV type sniffing: leading zeros, an integer above 2^53, mixed nulls.
-- Aggregates: SUM of DECIMAL, AVG, COUNT, and a grouped `string_agg`.
+- Types and values: integers, integer division and modulo, floats with 1e300 and rounding,
+  text with UTF-8, padding, tabs and the empty string, `typeof`, casts (`'12abc'` to an
+  integer, a float truncated), NULL handling (`coalesce`, `nullif`, `ifnull`).
+- Ordering: SQLite's default NULLS FIRST, `NULLS LAST`, `DESC NULLS FIRST`, binary text order,
+  ties broken by a second key.
+- Text functions: `length`, `upper` and `lower` (ASCII only, as SQLite has them), `LIKE`
+  case-insensitivity, `substr`, `instr`, `replace`, `trim`, `printf`.
+- Aggregates and grouping: `count`, `sum`, `total`, `avg`, `min`, `max`, `group_concat`.
+- Queries: a CTE, `WITH RECURSIVE`, window functions (`row_number`, `lag`), `CASE` and `iif`,
+  JSON (`json_extract`, `->>`, `json_array_length`, `json_object`), dates (`date` with
+  modifiers, `strftime`, `julianday`), `generate_series`.
 
-**Recording.** Each cell is recorded losslessly as DuckDB's own `CAST(… AS VARCHAR)`, together
-with the `DESCRIBE` type of its column. The sniffed column types of every registered CSV are
-recorded too.
+**Recording.** `record.mjs` runs the setup and each case through the `sqlite3` CLI in JSON
+mode (`-json`) and records the rows as JSON values.
 
-**Comparison.** The expected cell is derived from (type, text) by the data-core contract:
+**Comparison.** A cell agrees when the store's value is the JSON value: the same string, null,
+or a number within 1e-12 relative (the CLI prints 1e300 as `9.999999999999999e+299`).
 
-| DuckDB type            | Expected cell                                               |
-| ---------------------- | ----------------------------------------------------------- |
-| integer types          | `number` (f64)                                              |
-| DOUBLE, FLOAT, DECIMAL | `number`                                                    |
-| DATE                   | `date`, as days since 1970-01-01                            |
-| TIMESTAMP              | `datetime`, as milliseconds UTC (sub-millisecond truncated) |
-| BOOLEAN                | `bool`                                                      |
-| BLOB                   | `bytes`                                                     |
-| anything else          | `text`, in DuckDB's rendering                               |
+**Agreement today:** 24 of 25 cases agree in full. One is a pinned gap:
 
-Numbers are compared bit for bit with `Object.is`, so NaN equals NaN and −0 differs from 0. The
-tolerance is zero. The lane also checks the following, all exactly:
+- **SQ-1.** `group_concat(… ORDER BY …)`, an ordered aggregate, is not supported by Turso
+  0.8.3 ("ORDER BY clause is not supported yet in aggregate functions"). The case is marked
+  `gap`; the replay fails the day Turso answers it, and the pin goes in that commit.
 
-- the shipped engine reports the recorded version and source id;
-- `registerCsv` sniffs the same column types as `read_csv_auto`;
-- `data-js` accepts every result, counts its rows and maps its column types.
+Turso's own compatibility list names `WITH RECURSIVE` and `lag` as unsupported; 0.8.3 answers
+both as SQLite does, and the lane pins that.
 
-**Agreement today:**
-
-- 13 of 18 cases agree in full, and all 3 CSV sniffs agree.
-- 15 of 18 results ingest into `data-js`.
-- Decimals agree at every width, which shows the decimal-scale fix holds.
-- UTF-8, quoting, ordering and NULL handling agree.
-
-**Defects found, all FIXED in Step 2** (`src/query/recordset.ts` now reads Arrow's raw
-buffers by type id, and `src/query/duckdb.ts` casts the types without a data-core kind to
-VARCHAR in SQL):
-
-- **DQ-1.** DATE cells arrived as epoch milliseconds, not days, and `data-js` rejected the whole
-  result (`expected i32`). The DateDay buffer is days and is now read directly.
-- **DQ-2.** A TIMESTAMP column with no nulls was read in its storage unit (µs, or s / ns for
-  `_S` / `_NS`). The buffer is now floored to ms by its unit.
-- **DQ-3.** HUGEINT (an Arrow Decimal(38, 0)) was classified `float`. It is `int` now; a
-  declared DECIMAL(38, 0) reads the same way, and its values are integers too.
-- **DQ-4.** TIME, INTERVAL, LIST and STRUCT (and MAP, UNION, DURATION) cross as DuckDB's own
-  text: when a result has such a column, the handle re-runs the query with exactly those
-  columns cast to VARCHAR. BLOB crosses as bytes.
-
-**Re-recording.** The CLI must be the engine inside the vendored duckdb-wasm. For
-`@duckdb/duckdb-wasm` 1.29.0 that is v1.1.1 (`af39bd0dcf`): download
-`duckdb_cli-osx-universal.zip` from the v1.1.1 GitHub release. Homebrew and PyPI ship newer
-engines; `record.mjs` refuses any other version, because CSV sniffing changes between releases.
+**Re-recording.** Any recent `sqlite3` (the one macOS ships is enough; Turso tracks SQLite
+3.50's dialect):
 
 ```sh
-DUCKDB=/path/to/duckdb node conformance/duckdb-sql/record.mjs
+SQLITE3=/path/to/sqlite3 node ../../engine/core/crates/paged-data-store/tests/sqlite-sql/record.mjs
 ```
 
-After bumping duckdb-wasm, re-record with the matching CLI and review the diff of
-`results.json`.
+A Turso upgrade is replayed against the recording; a changed answer is a finding to read, not
+a recording to refresh (Renovate holds `turso_core` for approval).
+
+The DuckDB SQL lane this replaced (`conformance/duckdb-sql`, 18 cases against DuckDB v1.1.1)
+tested DuckDB's own type system — HUGEINT, DECIMAL widths, TIME, INTERVAL, LIST, STRUCT —
+which a SQLite engine does not have; it went with DuckDB (PM-0015).
 
 ## 2. InDesign Data Merge lane
 
@@ -154,7 +128,7 @@ rewriting all of them at once hides which answer changed.
 
    **The record flow** (reference lane). `DataSession` resolves a record-flow binding whose template comes from the
    fixture lines. It ingests the CSV with every field as text, as Data Merge reads it, and with
-   empty fields as null, as DuckDB reads them. `paginate_flow` packs the records into the
+   empty fields as null. `paginate_flow` packs the records into the
    natural chain: one frame per page of the template frame's height for Single Record, and one
    frame per column of the margin-box height for Multiple Records.
 
@@ -201,9 +175,10 @@ Over the text ingest, the engine's record texts agree with InDesign's except whe
 removal (DM-5) applies. Its placement agrees only by accident. The paginator's packing
 arithmetic agrees for every columns-first layout.
 
-`indesign-merge-duckdb.spec.ts` runs the same CSVs through the shipped duckdb-wasm and the
-`data-js` record flow, and compares texts only. 81 of 90 records agree. DuckDB keeps leading
-zeros and mixed number text as VARCHAR, so `number-text` agrees in full.
+`indesign-merge-store.spec.ts` runs the same CSVs the way a user's file goes, into the engine's
+query store (types inferred) and through the `data-js` record flow, and compares texts only.
+89 of 90 records agree (DuckDB's sniffer agreed on 81): a decimal column keeps its written
+scale and a column of codes (leading zeros, a `+`) stays text. The one left is DM-5.
 
 **The writer lane** (`packages/data-bundle/test/merge-real-core.spec.ts`, real core and the
 real data-js wasm). It opens each `templates/<id>.idml`, reads the template off the page
@@ -237,20 +212,18 @@ lane still shows them, by design):
 - **DM-5.** There is no Remove Blank Lines for Empty Fields.
 - **DM-6.** A record-flow template has no image field.
 - **DM-7.** The record height is not measured text, so an overset record is not flagged.
-- **DM-8.** A CSV column that DuckDB sniffs as DOUBLE loses its trailing zeros (`1234.50` prints
-  as `1234.5`). Data Merge prints the field text. PARTLY FIXED (Step 2): a DECIMAL(p, s) column
-  now carries its scale (`Field.scale`), and a bare reference to it displays `1234.50`. A
-  DOUBLE-sniffed CSV column has no scale left to carry, so the record-flow lane stays pinned.
-  FIXED FOR DATA MERGE (2026-10-20): the CSV import keeps a text twin of every CSV source (the
-  same file read with every column VARCHAR, `csvTextTwin` in `query/duckdb.ts`), and a merge
-  (`session.ts`, `asWritten`) runs its query once more over the twins and plans from that
-  result, so a field is the text as written (`9.90`, `1234.50`, `01/02/2026`); a value is typed
-  only where the query asks for one (a `CAST`, a computation). The typed result the bindings
-  read is unchanged. A query that does not run over text (arithmetic without a `CAST`) merges
-  the typed values and says so. `indesign-merge-duckdb.spec.ts` runs both reads: the typed one
-  keeps its DM-8 pins, the merge's as-written one agrees with every InDesign text except the
-  record flow's own DM-5. A sort over a twin is a text sort: `ORDER BY CAST(price AS DOUBLE)`
-  sorts numbers.
+- **DM-8.** A CSV column read as a float loses its trailing zeros (`1234.50` prints as
+  `1234.5`). Data Merge prints the field text. FIXED. A decimal column carries its scale
+  (`Field.scale`), and the store types a column of fixed decimals as one (`DECIMAL_S2`,
+  ADR 561), so a bare reference displays `1234.50`; a column of codes (`0007`, `+12`) stays
+  text. Data Merge also reads as written (since 2026-10-20): the store keeps every CSV twice,
+  typed and as written (every column text), and a merge (`session.ts`, `asWritten`) runs its
+  query over the as-written tables, so a field is the text as written (`9.90`, `1234.50`,
+  `01/02/2026`); a value is typed only where the query asks for one (a `CAST`, a computation).
+  A query that does not run over text (arithmetic without a `CAST`) merges the typed values and
+  says so. `indesign-merge-store.spec.ts` runs both reads; both agree with every InDesign text
+  except the record flow's own DM-5. A sort over the as-written table is a text sort:
+  `ORDER BY CAST(price AS REAL)` sorts numbers.
 
 ## 3. Property lane
 

@@ -26,17 +26,15 @@ import {
   REQUIRE_REAL_CORE,
 } from "./real-core";
 import {
-  bootRealDuckDB,
   bootRealEngine,
   DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const fixture = (name: string) =>
   new Uint8Array(
@@ -136,23 +134,15 @@ describe("the Data Merge template writer against InDesign's oracle [data.export.
   });
 });
 
-const probe = await bootRealDuckDB();
-const ready =
-  ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 
-describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB))(
+describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE))(
   "Export as InDesign Data Merge template, real stack [data.export.datamerge]",
   () => {
     it("a placed field and a literal <<field>> become native placeholders; core reads the result [data.export.datamerge]", async () => {
       mock.module("../src/engine", () => ({
         ...actualEngine,
         bootEngine: (t: number) => bootRealEngine(t),
-      }));
-      mock.module("../src/query/duckdb", () => ({
-        ...actualDuckdb,
-        bootDuckDB: async () => (await bootRealDuckDB()).handle!,
       }));
       const mod = await import("../src/index");
       const h = await openRealHost();

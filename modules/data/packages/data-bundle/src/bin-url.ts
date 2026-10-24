@@ -7,12 +7,12 @@ import type { BundleHost, HostedModule } from "@paged-media/plugin-api";
 // same mechanism engine.ts uses for `../bin/data_js.js`. It holds for the
 // layout the bundle runs from, the source tree (`src/bin-url.ts` → `bin/`),
 // which the editor builds. A host serves `bin/` next to the code that imports
-// it; see the editor's DuckDB route for the dev server and the build-output
+// it; see the editor's data route for the dev server and the build-output
 // copy.
 //
 // The path is kept out of a `new URL("<literal>", import.meta.url)` expression
 // on purpose: Vite rewrites that literal form into a hashed asset at build time,
-// which would move the file away from the siblings the DuckDB worker expects.
+// which would move the file away from the glue that loads it.
 const BIN_DIR = "../bin/";
 
 /** The absolute URL of a file in the bundle's `bin/`. */
@@ -29,7 +29,6 @@ export type WasmResolver = (
 /** The manifest's artifact names this bundle resolves through the module door. */
 export const WASM_ARTIFACTS = {
   engine: "data-engine",
-  duckdb: "duckdb-engine",
 } as const;
 
 /** The module door (plugin-sdk ADR 326) as a resolver: the host's URL and

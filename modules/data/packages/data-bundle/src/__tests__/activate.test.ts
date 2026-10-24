@@ -17,10 +17,10 @@
  */
 
 // data.plugin.bundle.activate — registration wiring against a minimal
-// hand-rolled fake BundleHost (no editor, no engine, no DuckDB): the bundle
+// hand-rolled fake BundleHost (no editor, no engine): the bundle
 // contributes the two panels + the four commands, the open commands open their
 // panels, and dispose tears the session down cleanly (the honesty smoke test).
-// Engine/DuckDB behavior is NOT exercised here — this is wiring only.
+// Engine behavior is NOT exercised here — this is wiring only.
 
 import { describe, expect, it } from "bun:test";
 

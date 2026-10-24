@@ -278,6 +278,10 @@ export interface LoweredContent {
    *  instead of leaving it to the document's default stroke. Absent on
    *  every other lowering, whose missing rules mean "unspecified". */
   noGridlines?: true;
+  /** Set by the bundle (not the engine) on a frame page: the left and
+   *  right text inset of every cell with text, pt — the grid's own text
+   *  padding, so the page sets the text where the grid drew it (ADR 510). */
+  textInsetPt?: number;
   /** Set by the bundle (not the engine): the sparklines in this content's
    *  cells (sheet indices), each with its chart primitives in its cell box
    *  (W4 `sparklineGeometry`). The page draws them over the table like

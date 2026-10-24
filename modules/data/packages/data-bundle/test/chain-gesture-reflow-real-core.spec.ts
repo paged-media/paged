@@ -9,8 +9,8 @@
 // nothing (display geometry only, §8.5).
 //
 // The REAL stack: real core (headless canvas-wasm), the real data-js wasm,
-// real DuckDB. Gate: skips without the pieces, EXCEPT under
-// REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1 / REQUIRE_REAL_DUCKDB=1, where
+// its query store. Gate: skips without the pieces, EXCEPT under
+// REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1, where
 // a missing piece fails.
 
 import {
@@ -26,13 +26,13 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import {
   BUDGET_TIMEOUT_MS,
-  bootCountedDuck,
+  bootCountedStore,
   bootCountedEngine,
   openDataHost,
   productCsv,
   RUN_BUDGETS,
   sessionOver,
-  type CountedDuck,
+  type CountedStore,
 } from "./perf/harness";
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
@@ -96,14 +96,12 @@ describe.skipIf(!RUN_BUDGETS)(
   "a record flow follows a handle resize, real core [data.lower.v43-consumers]",
   () => {
     let h: HeadlessHost | null = null;
-    let duck: CountedDuck | null = null;
+    let store: CountedStore | null = null;
     afterEach(() => {
       h?.dispose();
       h = null;
     });
-    afterAll(async () => {
-      await duck?.handle.close();
-    });
+    afterAll(async () => {});
 
     /** A 40-record flow paginated over two threaded frames; the first frame's
      *  id, the chain's story, the flows the subscription reported, and the
@@ -111,8 +109,8 @@ describe.skipIf(!RUN_BUDGETS)(
     async function paginatedChain() {
       h = await openDataHost();
       const engine = await bootCountedEngine();
-      duck ??= await bootCountedDuck();
-      const s = await sessionOver(h.host, engine, duck);
+      store = bootCountedStore(engine);
+      const s = await sessionOver(h.host, engine, store);
       const name = `p${Math.random().toString(36).slice(2, 8)}`;
       await s.registerCsvSource(name, productCsv(40));
       s.addQuery("q", `SELECT sku, name FROM ${name}`, "recordStream");

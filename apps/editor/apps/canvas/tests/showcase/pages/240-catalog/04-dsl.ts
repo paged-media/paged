@@ -20,7 +20,7 @@
 // The expression language (p114, E-Data verso).
 //
 // The roster is read at BUILD time from the plugin's own per-function
-// registry (registry/functions/*.yaml — the files data-core's build.rs
+// registry (paged-data-core/functions/*.yaml — the files data-core's build.rs
 // turns into the dispatch table, so a function outside them is
 // uncallable by construction), printed per family with counts that must
 // sum to the DSL's forty-two.
@@ -130,7 +130,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
   } else {
     notes.push(
-      "the paged.data function registry (modules/data/registry/functions) " +
+      "the paged.data function registry (engine/core/crates/paged-data-core/functions) " +
         "is absent — the roster could not be read and the page says so.",
     );
     const missing = await proseFrame(
@@ -140,7 +140,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       [
         {
           text:
-            "The function registry (modules/data/registry/functions) " +
+            "The function registry (engine/core/crates/paged-data-core/functions) " +
             "is absent from this checkout; the roster cannot be printed " +
             "honestly and is not.",
           style: STYLE.bodySmall,
@@ -347,7 +347,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "The DuckDB network lane is dormant by consent design — remote " +
+      "The network lane is dormant by consent design — remote " +
         "sources stay inert until their origin is granted, and none is. No " +
         "container part carries the imported data yet: the document travels " +
         "with its metadata envelopes and the lowered native content, and a " +

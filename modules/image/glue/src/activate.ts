@@ -51,6 +51,7 @@ import de from "../locales/de.json" with { type: "json" };
 import manifest from "../manifest.json";
 
 import { createImageSession } from "./session";
+import { filterDef } from "./filters";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { makeCropGesture } from "./crop-tool";
@@ -58,12 +59,17 @@ import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
 import { makeGradientGesture } from "./gradient-tool";
 import { makeRedEyeGesture } from "./red-eye-tool";
+import {
+  makeColorSamplerGesture,
+  makeEyedropperGesture,
+} from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
+import { makeColorBindingProvider } from "./binding-provider/color-provider";
 import {
   contributeImageObjectModel,
   type UntypedCommand,
@@ -111,6 +117,11 @@ const CMD = defineMessages("image.command", {
   deselectImage: "Deselect (image)",
   invertSelectionImage: "Invert selection (image)",
   featherSelectionImage: "Feather selection (image)",
+  filterDialog: "{label}… (filter)",
+  averageBlur: "Average (fill the selection with its average colour)",
+  imageSize: "Image size…",
+  trim: "Trim…",
+  rotateArbitrary: "Rotate canvas by an arbitrary angle…",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -119,6 +130,8 @@ const TOOL = defineMessages("image.tool", {
   paintBucket: "Paint bucket",
   gradient: "Gradient",
   redEye: "Red eye",
+  eyedropper: "Eyedropper",
+  colorSampler: "Color sampler",
   marqueeRectangle: "Marquee (rectangle)",
   marqueeEllipse: "Marquee (ellipse)",
   lasso: "Lasso",
@@ -161,6 +174,8 @@ const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
 const RED_EYE_TOOL_ID = "media.paged.image.tool.redEye";
+const EYEDROPPER_TOOL_ID = "media.paged.image.tool.eyedropper";
+const COLOR_SAMPLER_TOOL_ID = "media.paged.image.tool.colorSampler";
 const DODGE_TOOL_ID = "media.paged.image.tool.dodge";
 const BURN_TOOL_ID = "media.paged.image.tool.burn";
 const SPONGE_TOOL_ID = "media.paged.image.tool.sponge";
@@ -282,6 +297,8 @@ export function activate(host: BundleHost): BundleHandle {
         wand: MAGIC_WAND_TOOL_ID,
         bucket: BUCKET_TOOL_ID,
         gradient: GRADIENT_TOOL_ID,
+        eyedropper: EYEDROPPER_TOOL_ID,
+        colorSampler: COLOR_SAMPLER_TOOL_ID,
       })
     : null;
   const optionsFor = (toolId: string) =>
@@ -346,6 +363,30 @@ export function activate(host: BundleHost): BundleHandle {
     group: HEAL_TOOL_ID,
     section: "drawType",
     gesture: () => makeRedEyeGesture(host, session),
+  });
+
+  // EYEDROPPER (WP4.10) — the colour under the pointer into the
+  // foreground (Alt: background); its own slot, with the Color Sampler in
+  // its flyout (Photoshop's pairing). No key: the shortcut register is full
+  // and `i` is the host's own Eyedropper.
+  contributeTool(host, {
+    id: EYEDROPPER_TOOL_ID,
+    ...optionsFor(EYEDROPPER_TOOL_ID),
+    title: t(TOOL.eyedropper),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeEyedropperGesture(host, session),
+  });
+  // COLOR SAMPLER — up to four fixed sampling points, read live.
+  contributeTool(host, {
+    id: COLOR_SAMPLER_TOOL_ID,
+    ...optionsFor(COLOR_SAMPLER_TOOL_ID),
+    title: t(TOOL.colorSampler),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeColorSamplerGesture(host, session),
   });
 
   // The crop commit command (also surfaced as the panel's "Apply crop"
@@ -724,6 +765,79 @@ export function activate(host: BundleHost): BundleHandle {
       },
     });
   }
+  // FILTER ▸ … — each one-shot filter opens the generic Filter dialog
+  // (live preview on the canvas, OK one undo step, Cancel restores).
+  // The table is literal so every command id is readable as written.
+  for (const [suffix, id] of [
+    ["filterBoxBlur", "boxBlur"],
+    ["filterSurfaceBlur", "surfaceBlur"],
+    ["filterMotionBlur", "motionBlur"],
+    ["filterRadialBlur", "radialBlur"],
+    ["filterLensBlur", "lensBlur"],
+    ["filterAddNoise", "addNoise"],
+    ["filterDespeckle", "despeckle"],
+    ["filterDustScratches", "dustScratches"],
+    ["filterMedian", "median"],
+    ["filterReduceNoise", "reduceNoise"],
+    ["filterHighPass", "highPass"],
+    ["filterMaximum", "maximum"],
+    ["filterMinimum", "minimum"],
+    ["filterOffset", "offset"],
+    ["filterSmartSharpen", "smartSharpen"],
+    ["filterEmboss", "emboss"],
+    ["filterFindEdges", "findEdges"],
+    ["filterGlowingEdges", "glowingEdges"],
+    ["filterMosaic", "mosaic"],
+    ["filterHalftone", "halftone"],
+    ["filterPaintDaubs", "paintDaubs"],
+    ["filterPosterEdges", "posterEdges"],
+    ["filterFilmGrain", "filmGrain"],
+    ["filterSpatter", "spatter"],
+    ["filterCrosshatch", "crosshatch"],
+    ["filterBasRelief", "basRelief"],
+    ["filterPhotocopy", "photocopy"],
+    ["filterStainedGlass", "stainedGlass"],
+    ["filterGlass", "glass"],
+    ["filterTexturizer", "texturizer"],
+    ["filterGradientMap", "gradientMap"],
+    ["filterSelectiveColour", "selectiveColour"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.filterDialog, { label: t(filterDef(id).label) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.openFilterDialog(id);
+      },
+    });
+  }
+  command({
+    id: "media.paged.image.command.average",
+    title: t(CMD.averageBlur),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      void session.applyAverage();
+    },
+  });
+  // IMAGE ▸ Image Size / Trim / Image Rotation ▸ Arbitrary — dialogs on
+  // top of the Image panel.
+  for (const [suffix, title, kind] of [
+    ["imageSize", CMD.imageSize, "imageSize"],
+    ["trim", CMD.trim, "trim"],
+    ["rotateArbitrary", CMD.rotateArbitrary, "rotate"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        session.openDialog(kind);
+      },
+    });
+  }
   command({
     id: "media.paged.image.command.commitImage",
     title: t(CMD.commitImageEditsToTheDocument),
@@ -1031,6 +1145,8 @@ export function activate(host: BundleHost): BundleHandle {
     [MAGIC_WAND_TOOL_ID]: "wand",
     [BUCKET_TOOL_ID]: "wand",
     [GRADIENT_TOOL_ID]: "gradient",
+    [EYEDROPPER_TOOL_ID]: "eyedropper",
+    [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
   });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
@@ -1080,6 +1196,8 @@ export function activate(host: BundleHost): BundleHandle {
         BUCKET_TOOL_ID,
         GRADIENT_TOOL_ID,
         RED_EYE_TOOL_ID,
+        EYEDROPPER_TOOL_ID,
+        COLOR_SAMPLER_TOOL_ID,
         DODGE_TOOL_ID,
         BURN_TOOL_ID,
         SPONGE_TOOL_ID,
@@ -1155,6 +1273,14 @@ export function activate(host: BundleHost): BundleHandle {
           makeTextBindingProvider(session, () =>
             typeToolActive ? TYPE_TOOL_ID : null,
           ).provider,
+        ),
+      );
+      // COLOUR (WP4.10) — the host Color panel's fill / stroke wells are
+      // the foreground / background, and a host swatch picks one.
+      providerHandles.push(
+        host.contribute.bindingProvider(
+          "rasterImage",
+          makeColorBindingProvider(host, session).provider,
         ),
       );
       // A provider's values change without an ENGINE mutation — a layer

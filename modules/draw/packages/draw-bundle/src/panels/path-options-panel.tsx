@@ -52,9 +52,16 @@ import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
 import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
+import {
+  FLARE_MAX_RAYS,
+  FLARE_MAX_RINGS,
+  STAR_MAX_POINTS,
+  STAR_MIN_POINTS,
+} from "@paged-media/draw-geometry";
 import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
 import { supportsDuplicate, DUPLICATE_ENGINE } from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
+import { MAX_RASTERIZE_PPI, MIN_RASTERIZE_PPI } from "../commands/rasterize";
 import {
   outlineParamsFrom,
   supportsPathOps,
@@ -78,6 +85,11 @@ import {
   type PathOptionSection,
   type PathOptions,
 } from "../commands/path-options";
+import {
+  clearSimplifyPreview,
+  showSimplifyPreview,
+  simplifyPreviewOf,
+} from "../commands/simplify-preview";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
   About,
@@ -112,6 +124,13 @@ const M = defineMessages("draw.pathOptionsPanel", {
   joins: "Joins",
   miterLimit: "Miter limit",
   tolerance: "Tolerance (pt)",
+  cornerAngle: "Corner angle (°, 0 = none)",
+  simplifyPreview: "Preview: {before} → {after} anchors",
+  simplifyEngineNote:
+    "The dashed outline previews the result. With no corner angle, Apply runs the engine's own simplify, which can keep a slightly different number of anchors; with a corner angle, anchors at least that sharp stay corners and Apply writes exactly what is previewed.",
+  aboutPoint: "About a point (else the selection's centre)",
+  pointX: "Point X (pt)",
+  pointY: "Point Y (pt)",
   overrideWidth: "Override the width",
   width: "Width (pt)",
   caps: "Caps",
@@ -144,6 +163,17 @@ const M = defineMessages("draw.pathOptionsPanel", {
   radius: "Radius (pt)",
   rings: "Rings",
   spokes: "Spokes",
+  radius1: "Radius 1 (pt, the tips)",
+  radius2: "Radius 2 (pt, between the tips)",
+  points: "Points",
+  rotation: "Rotation (°)",
+  centreRadius: "Centre radius (pt)",
+  haloScale: "Halo (× the centre)",
+  rays: "Rays",
+  rayLength: "Longest ray (pt)",
+  ringRadius: "Largest ring (pt)",
+  endX: "Rings end X (pt)",
+  endY: "Rings end Y (pt)",
   ownStrokeIs: "The path's own stroke: {stroke}.",
   ownStrokeEach: "Each path is outlined at its own stroke unless overridden.",
   needReference: "Select the reference object first.",
@@ -156,6 +186,14 @@ const M = defineMessages("draw.pathOptionsPanel", {
   profileStart: "Width at the start (pt)",
   profileMiddle: "Width in the middle (pt)",
   profileEnd: "Width at the end (pt)",
+  ppi: "Resolution (ppi)",
+  background: "Background",
+  transparent: "Transparent",
+  white: "White",
+  rasterizeNote:
+    "Replaces the selection with one image of it at this resolution, effects and text included, cropped to what it draws. The image goes to the front of its layer. One undo step.",
+  rasterizeN:
+    "{count, plural, one {Rasterize # object} other {Rasterize # objects}}",
   title: "Path options",
 });
 
@@ -187,6 +225,10 @@ export function dashPatternLabel(lengths: readonly number[]): string {
 /** What the Reflect section says, verbatim (pinned by a test). */
 export const REFLECT_SECTION_NOTE = M.reflectNote;
 
+/** What the Simplify section says about its preview, verbatim (pinned by
+ *  a test). */
+export const SIMPLIFY_PREVIEW_ENGINE_NOTE = M.simplifyEngineNote;
+
 /** What the Reflect section says when the engine cannot copy. */
 export const REFLECT_COPY_UNAVAILABLE_NOTE = M.reflectCopyUnavailable;
 
@@ -196,6 +238,9 @@ export const SELECT_SAME_TOLERANCE_NOTE = M.selectSameNote;
 
 /** What the Width profile section says, verbatim (pinned by a test). */
 export const WIDTH_PROFILE_SECTION_NOTE = M.widthProfileNote;
+
+/** What the Rasterize section says, verbatim (pinned by a test). */
+export const RASTERIZE_SECTION_NOTE = M.rasterizeNote;
 
 const rowStyle: React.CSSProperties = {
   display: "flex",
@@ -320,6 +365,14 @@ export function makePathOptionsPanel(host: BundleHost): {
     const [copyAvailable, setCopyAvailable] = React.useState<boolean | null>(
       null,
     );
+    /** Simplify's preview counts, while its section is open. */
+    const [simplifyCounts, setSimplifyCounts] = React.useState<{
+      before: number;
+      after: number;
+    } | null>(null);
+    /** Bumped by every reload, so the Simplify preview follows the
+     *  selection and the document. */
+    const [reloads, setReloads] = React.useState(0);
 
     // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
     const setOpen = React.useCallback((section: PathOptionSection) => {
@@ -373,6 +426,38 @@ export function makePathOptionsPanel(host: BundleHost): {
       };
     }, [open, copyAvailable]);
 
+    // SIMPLIFY'S LIVE PREVIEW (`commands/simplify-preview.ts`): while the
+    // section is open, every edit of its values — and every reload — draws
+    // the simplified selection over the canvas; closing the section or
+    // the panel clears it.
+    React.useEffect(() => {
+      if (open !== "simplify") {
+        clearSimplifyPreview(host);
+        return;
+      }
+      let live = true;
+      void simplifyPreviewOf(host, host.selection.get(), {
+        tolerance: draft.simplify.tolerance,
+        cornerAngle: draft.simplify.cornerAngle,
+      })
+        .then((preview) => {
+          if (!live) return;
+          showSimplifyPreview(host, preview.shapes);
+          setSimplifyCounts(
+            preview.shapes.length > 0
+              ? { before: preview.before, after: preview.after }
+              : null,
+          );
+        })
+        .catch((err) =>
+          host.log.debug(`simplify preview failed: ${String(err)}`),
+        );
+      return () => {
+        live = false;
+      };
+    }, [open, draft.simplify.tolerance, draft.simplify.cornerAngle, reloads]);
+    React.useEffect(() => () => clearSimplifyPreview(host), []);
+
     // WHAT A RELOAD COSTS (`test/panels/path-options-panel.dom.test.tsx`):
     // nothing with no path selected, and ONE property read — the first
     // selected path's own stroke, which is what the Outline stroke
@@ -391,6 +476,7 @@ export function makePathOptionsPanel(host: BundleHost): {
         const entries = props?.entries ?? [];
         setTargets(paths.length);
         setSelected(selection.length);
+        setReloads((n) => n + 1);
         setOwn(first ? outlineParamsFrom(entries) : null);
         // Follow the STORED last-used values — only the sections that
         // changed since this panel last took them, so neither a reload
@@ -538,10 +624,27 @@ export function makePathOptionsPanel(host: BundleHost): {
             </>
           );
         case "simplify":
-          return numberRow("simplify", "tolerance", s.t(M.tolerance), {
-            step: 0.25,
-            min: 0,
-          });
+          return (
+            <>
+              {numberRow("simplify", "tolerance", s.t(M.tolerance), {
+                step: 0.25,
+                min: 0,
+              })}
+              {numberRow("simplify", "cornerAngle", s.t(M.cornerAngle), {
+                step: 5,
+                min: 0,
+                max: 180,
+              })}
+              {open === "simplify" && simplifyCounts && (
+                <div style={mutedStyle} data-draw-pathopts-simplify-preview>
+                  {s.t(M.simplifyPreview, simplifyCounts)}
+                </div>
+              )}
+              <div style={mutedStyle} data-draw-pathopts-simplify-note>
+                {s.t(SIMPLIFY_PREVIEW_ENGINE_NOTE)}
+              </div>
+            </>
+          );
         case "outlineStroke":
           return (
             <>
@@ -639,6 +742,13 @@ export function makePathOptionsPanel(host: BundleHost): {
               {checkRow("reflect", "copy", s.t(M.copy), {
                 disabled: copyAvailable !== true,
               })}
+              {checkRow("reflect", "aboutPoint", s.t(M.aboutPoint))}
+              {numberRow("reflect", "x", s.t(M.pointX), {
+                disabled: !draft.reflect.aboutPoint,
+              })}
+              {numberRow("reflect", "y", s.t(M.pointY), {
+                disabled: !draft.reflect.aboutPoint,
+              })}
               {copyAvailable === false && (
                 <div style={mutedStyle} data-draw-pathopts-reflect-copy-note>
                   {s.t(REFLECT_COPY_UNAVAILABLE_NOTE, {
@@ -720,6 +830,46 @@ export function makePathOptionsPanel(host: BundleHost): {
               })}
             </>
           );
+        case "star":
+          return (
+            <>
+              {numberRow("star", "cx", s.t(M.centreX))}
+              {numberRow("star", "cy", s.t(M.centreY))}
+              {numberRow("star", "radius1", s.t(M.radius1), { min: 0 })}
+              {numberRow("star", "radius2", s.t(M.radius2), { min: 0 })}
+              {numberRow("star", "points", s.t(M.points), {
+                min: STAR_MIN_POINTS,
+                max: STAR_MAX_POINTS,
+              })}
+              {numberRow("star", "rotationDeg", s.t(M.rotation))}
+            </>
+          );
+        case "flare":
+          return (
+            <>
+              {numberRow("flare", "cx", s.t(M.centreX))}
+              {numberRow("flare", "cy", s.t(M.centreY))}
+              {numberRow("flare", "centreRadius", s.t(M.centreRadius), {
+                min: 0.5,
+              })}
+              {numberRow("flare", "haloScale", s.t(M.haloScale), {
+                step: 0.25,
+                min: 1,
+              })}
+              {numberRow("flare", "rays", s.t(M.rays), {
+                min: 0,
+                max: FLARE_MAX_RAYS,
+              })}
+              {numberRow("flare", "rayLength", s.t(M.rayLength), { min: 0 })}
+              {numberRow("flare", "rings", s.t(M.rings), {
+                min: 0,
+                max: FLARE_MAX_RINGS,
+              })}
+              {numberRow("flare", "ringRadius", s.t(M.ringRadius), { min: 0 })}
+              {numberRow("flare", "endX", s.t(M.endX))}
+              {numberRow("flare", "endY", s.t(M.endY))}
+            </>
+          );
         case "selectSameWeight":
           return (
             <>
@@ -753,6 +903,23 @@ export function makePathOptionsPanel(host: BundleHost): {
               </div>
             </>
           );
+        case "rasterize":
+          return (
+            <>
+              {numberRow("rasterize", "ppi", s.t(M.ppi), {
+                step: 1,
+                min: MIN_RASTERIZE_PPI,
+                max: MAX_RASTERIZE_PPI,
+              })}
+              {selectRow("rasterize", "background", s.t(M.background), [
+                { value: "transparent", label: s.t(M.transparent) },
+                { value: "paper", label: s.t(M.white) },
+              ])}
+              <div style={mutedStyle} data-draw-pathopts-rasterize-note>
+                {s.t(RASTERIZE_SECTION_NOTE)}
+              </div>
+            </>
+          );
       }
     };
 
@@ -772,9 +939,10 @@ export function makePathOptionsPanel(host: BundleHost): {
           const needsSelection = SELECTION_SECTIONS.has(section);
           const selects = section === "selectSameWeight";
           const reflects = section === "reflect";
+          const rasterizes = section === "rasterize";
           // A path operation needs a PATH; Select same needs a reference;
-          // Reflect takes any object (groups included).
-          const have = selects || reflects ? selected : targets;
+          // Reflect and Rasterize take any object (groups included).
+          const have = selects || reflects || rasterizes ? selected : targets;
           return (
             <div
               key={section}
@@ -800,7 +968,7 @@ export function makePathOptionsPanel(host: BundleHost): {
                     <div style={mutedStyle} data-draw-pathopts-needs-selection>
                       {selects
                         ? s.t(M.needReference)
-                        : reflects
+                        : reflects || rasterizes
                           ? s.t(M.needSomething)
                           : s.t(M.needPath)}
                     </div>
@@ -820,9 +988,11 @@ export function makePathOptionsPanel(host: BundleHost): {
                       ? s.t(M.selectMatching)
                       : reflects
                         ? s.t(M.reflectN, { count: selected })
-                        : needsSelection
-                          ? s.t(M.applyToN, { count: targets })
-                          : s.t(M.insert)}
+                        : rasterizes
+                          ? s.t(M.rasterizeN, { count: selected })
+                          : needsSelection
+                            ? s.t(M.applyToN, { count: targets })
+                            : s.t(M.insert)}
                   </button>
                 </div>
               )}

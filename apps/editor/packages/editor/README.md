@@ -63,9 +63,9 @@ A host that serves files itself copies `node_modules/@paged-media/editor/dist/` 
 `createEditor(element, { assetBase: "/paged-editor/" })`. `engineWasm` names the engine's wasm
 alone. Workers must be same-origin with the page.
 
-The paged.data bundle's engines (its query engine and DuckDB) are not in the package: the editor
-loads them from `https://modules.paged.media` when a profile activates paged.data, and DuckDB's
-worker from the package's `dist/bin/` (beside its chunk, or under `assetBase`).
+The paged.data bundle's engine (with its query store) is not in the package: the editor loads it
+from `https://modules.paged.media` when a profile activates paged.data, and its loader from the
+package's `dist/bin/` (beside its chunk, or under `assetBase`).
 
 ## Licence
 

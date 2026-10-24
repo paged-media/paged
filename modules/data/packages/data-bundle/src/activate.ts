@@ -17,7 +17,7 @@
  */
 
 // The paged.data bundle entry. M0 scope (the honest slice): import a CSV into
-// the vendored DuckDB-WASM engine, define a query + binding, resolve through the
+// the engine's query store, define a query + binding, resolve through the
 // Rust engine, and lower to a page frame (variable replacement + single-region
 // dynamic table degraded to tab-text + rules, D-02). Remote/DB sources +
 // network consent, record flow, the data-provider contract are wired; the
@@ -94,7 +94,7 @@ export function activate(host: BundleHost): BundleHandle {
   // The document's saved session (the `session` container part) comes back
   // in the background; the panels re-render when it lands. Opening a document
   // boots the data engine only when the document carries a session, and never
-  // boots DuckDB or fetches a remote source by itself.
+  // loads its data into the store or fetches a remote source by itself.
   void session.restore();
   // Activation runs once, at app start; documents come and go after it. On
   // every open (`document.onDidOpen`) the session drops the previous
@@ -137,6 +137,15 @@ export function activate(host: BundleHost): BundleHandle {
     component: makeQueryPanel(host, session),
     defaultDock: "right",
   });
+
+  // Extensions ADR 343 — serve the document's data to every other bundle
+  // (paged.sheet edits a table, an extension binds its objects). One
+  // service per editor: a host with no data backend says so in supports().
+  if (host.supports("data@1")) {
+    const door = session.dataDoor();
+    const handle = host.data.serve(door.service);
+    door.onChange((change) => handle.changed(change));
+  }
 
   // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
   // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).

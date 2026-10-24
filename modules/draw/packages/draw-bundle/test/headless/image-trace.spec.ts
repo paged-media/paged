@@ -954,9 +954,11 @@ describe("draw conformance — IMAGE TRACE v0", () => {
       expect(cmd.title).toBe(t(IMAGE_TRACE_COMMAND_TITLE));
       // The title itself has to carry the scope — CommandContribution has
       // no description field.
-      expect(cmd.title).toContain("one-shot");
-      expect(cmd.title).toContain("fills only");
-      expect(cmd.title).toContain("not Illustrator's live Image Trace");
+      // (WP6.6: presets and Re-trace exist now, and the title says how
+      // the result behaves — ordinary artwork that Re-trace rebuilds.)
+      expect(cmd.title).toContain("preset");
+      expect(cmd.title).toContain("Re-trace rebuilds it");
+      expect(cmd.title).toContain("ordinary artwork");
       expect(cmd.category).toBe("Image");
 
       // Driving it through the recorded handler takes the same refusal

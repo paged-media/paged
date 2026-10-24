@@ -162,6 +162,20 @@ fn main() -> Result<()> {
         } => paged_cli::invoke::run(&doc, &assets, &op, args.as_deref(), out.as_ref(), &pdf),
         Command::Ops { json } => paged_cli::invoke::list(json),
         Command::Parts { what } => paged_cli::parts::run(&what),
+        Command::Data { what } => match what {
+            paged_cli::cli::DataCommand::Bindings { doc, json, assets } => {
+                paged_cli::data::bindings(&doc, &assets, json)
+            }
+            paged_cli::cli::DataCommand::Apply {
+                doc,
+                sources,
+                record,
+                out,
+                json,
+                pdf,
+                assets,
+            } => paged_cli::data::apply(&doc, &assets, &sources, record, out.as_ref(), &pdf, json),
+        },
         Command::Query {
             doc,
             selector,

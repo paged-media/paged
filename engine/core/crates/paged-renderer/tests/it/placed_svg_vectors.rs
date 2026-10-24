@@ -245,3 +245,58 @@ fn a_placed_svg_with_a_filter_keeps_its_raster() {
         .count();
     assert_eq!(images, 1);
 }
+
+/// Engine ADR 1006 — an even-odd star whose one contour crosses itself
+/// and two crossing even-odd squares. The list could not say either
+/// before it carried the rule, so the SVG drew its raster; now it is
+/// drawn as vectors, by the even-odd rule, and matches the SVG.
+const EVEN_ODD_STAR: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80">
+  <path fill-rule="evenodd" fill="#c02040"
+        d="M40 5 L63.5 72.4 L3.9 30.6 L76.1 30.6 L16.5 72.4 Z"/>
+  <path fill-rule="evenodd" fill="#2040c0"
+        d="M80 10 h30 v30 h-30 Z M95 25 h20 v40 h-20 Z"/>
+</svg>"##;
+
+#[test]
+#[allow(non_snake_case)]
+fn an_even_odd_placed_svg_is_drawn_exactly__feat__frames_paths_fill_rule_even_odd() {
+    let br = resolver("star.svg", EVEN_ODD_STAR.as_bytes().to_vec());
+    let document = idml_import::import_idml_doc(&frame("star.svg", "1 0 0 1 20 20")).unwrap();
+    let built = pipeline::build_document(&document, &options(&br)).unwrap();
+    let list = &built.pages[0].list;
+    assert!(
+        !list
+            .commands
+            .iter()
+            .any(|c| matches!(c, DisplayCommand::Image { .. })),
+        "the SVG is drawn as vectors, not its raster"
+    );
+    let even_odd = list
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            DisplayCommand::FillPath { path_id, .. } => list.paths.get(*path_id),
+            _ => None,
+        })
+        .filter(|p| p.fill_rule == paged_compose::FillRule::EvenOdd)
+        .count();
+    assert_eq!(even_odd, 2, "both shapes fill by the even-odd rule");
+    // Against the SVG rasterized at the render's resolution.
+    let dpi = 216.0;
+    let k = dpi / 72.0;
+    let vectors = render(&frame("star.svg", "1 0 0 1 20 20"), &br, dpi);
+    let third = 1.0 / k;
+    let sharp = render(
+        &frame("star.png", &format!("{third} 0 0 {third} 20 20")),
+        &resolver("star.png", raster_png(EVEN_ODD_STAR, k)),
+        dpi,
+    );
+    let (mean, far) = difference(&vectors, &sharp, k);
+    assert!(
+        mean < 0.5 && far < 0.002,
+        "vectors vs the 3x raster: mean {mean}, far {far}"
+    );
+    // The star's middle is empty (white), as the SVG draws it.
+    let middle = vectors.get_pixel(((20.0 + 40.0) * k) as u32, ((20.0 + 42.0) * k) as u32);
+    assert!(middle.0[..3].iter().all(|c| *c > 240), "middle {middle:?}");
+}

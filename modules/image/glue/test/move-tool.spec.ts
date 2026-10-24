@@ -38,6 +38,7 @@ function sessionWith(
       calls.push(`offsetLayer(${dx},${dy},${edge})`);
       return true;
     },
+    takeCurvesPick: () => false,
   } as unknown as ImageSession;
   return { session, calls };
 }

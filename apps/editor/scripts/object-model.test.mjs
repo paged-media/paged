@@ -1006,78 +1006,85 @@ const ALIGN = await import(
   ).href
 );
 
-test("align plans frameBounds writes: AABB edges and centres, already-aligned skipped", () => {
+const box = (address, b) => ({
+  address,
+  box: b,
+  pageId: "p1",
+  spreadId: "s1",
+  composed: null,
+});
+
+test("align plans spread-space moves on transformed boxes, already-aligned skipped", () => {
   const e = [
-    { address: "rectangle:a", bounds: [0, 0, 10, 10] },
-    { address: "rectangle:b", bounds: [20, 30, 40, 50] },
+    box("rectangle:a", [0, 0, 10, 10]),
+    box("rectangle:b", [20, 30, 40, 50]),
   ];
-  assert.deepEqual(ALIGN.planAlign("left", e), [
+  assert.deepEqual(ALIGN.planAlign({ kind: "left" }, e), [
+    { address: "rectangle:b", delta: [-30, 0] },
+  ]);
+  assert.deepEqual(ALIGN.planAlign({ kind: "bottom" }, e), [
+    { address: "rectangle:a", delta: [0, 30] },
+  ]);
+  assert.deepEqual(
+    ALIGN.planAlign({ kind: "left" }, e.slice(0, 1)),
+    [],
+    "align to the selection needs two objects",
+  );
+  // The move is written through frameTransform, composed onto the
+  // object's own transform.
+  assert.deepEqual(ALIGN.alignOps(ALIGN.planAlign({ kind: "left" }, e), e), [
     {
       op: "set",
       address: "rectangle:b",
-      path: "frameBounds",
-      value: [20, 0, 40, 20],
+      path: "frameTransform",
+      value: [1, 0, 0, 1, -30, 0],
     },
   ]);
-  assert.deepEqual(ALIGN.planAlign("bottom", e), [
-    {
-      op: "set",
-      address: "rectangle:a",
-      path: "frameBounds",
-      value: [30, 0, 40, 10],
-    },
-  ]);
-  assert.deepEqual(
-    ALIGN.planAlign("centerH", e).map((o) => o.value[1]),
-    [20, 15],
-  );
-  assert.deepEqual(
-    ALIGN.planAlign("left", e.slice(0, 1)),
-    [],
-    "align needs two objects",
-  );
 });
 
 test("distribute spaces centres evenly and needs three objects", () => {
   const e = [
-    { address: "a", bounds: [0, 0, 10, 10] },
-    { address: "c", bounds: [0, 90, 10, 100] },
-    { address: "b", bounds: [0, 10, 10, 20] },
+    box("a", [0, 0, 10, 10]),
+    box("c", [0, 90, 10, 100]),
+    box("b", [0, 10, 10, 20]),
   ];
-  assert.deepEqual(ALIGN.planAlign("distributeH", e), [
-    { op: "set", address: "b", path: "frameBounds", value: [0, 45, 10, 55] },
+  assert.deepEqual(ALIGN.planAlign({ kind: "distributeH" }, e), [
+    { address: "b", delta: [35, 0] },
   ]);
-  assert.deepEqual(ALIGN.planAlign("distributeV", e.slice(0, 2)), []);
+  assert.deepEqual(ALIGN.planAlign({ kind: "distributeV" }, e.slice(0, 2)), []);
 });
 
-test("runAlign reads through host.objects and commits ONE batch; declared args check", async () => {
-  const bounds = {
-    "rectangle:a": [0, 0, 10, 10],
-    "rectangle:b": [20, 30, 40, 50],
-  };
+test("runAlign reads, plans and commits ONE batch; declared args check", async () => {
   const batches = [];
-  const objects = {
-    get: async (a) => ({ kind: "value", value: bounds[a] }),
+  const deps = {
+    targets: async () => [
+      box("rectangle:a", [0, 0, 10, 10]),
+      box("rectangle:b", [20, 30, 40, 50]),
+    ],
+    pages: async () => [],
     batch: async (ops) => {
       batches.push(ops);
       return { applied: true, undoSteps: 1 };
     },
   };
-  const r = await ALIGN.runAlign(objects, {
+  const r = await ALIGN.runAlign(deps, {
     kind: "top",
     targets: ["rectangle:a", "rectangle:b"],
   });
   assert.deepEqual(r, { applied: true, undoSteps: 1 });
   assert.equal(batches.length, 1);
-  assert.deepEqual(batches[0][0].value, [0, 30, 20, 50]);
-  const nothing = await ALIGN.runAlign(objects, {
-    kind: "top",
-    targets: ["rectangle:a"],
-  });
-  assert.equal(nothing.undoSteps, 0);
-  assert.equal(batches.length, 1, "nothing to move = no write");
+  assert.deepEqual(batches[0][0].value, [1, 0, 0, 1, 0, -20]);
   assert.equal(
     M.checkArgs(ALIGN.ALIGN_ARGS, { kind: "left", targets: ["rectangle:a"] }),
+    null,
+  );
+  assert.equal(
+    M.checkArgs(ALIGN.ALIGN_ARGS, {
+      kind: "spaceH",
+      targets: ["rectangle:a"],
+      to: "margins",
+      spacing: 6,
+    }),
     null,
   );
   assert.match(

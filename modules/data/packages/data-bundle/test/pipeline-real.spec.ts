@@ -2,7 +2,7 @@
 // standalone test-integration/pipeline.e2e.mjs that no runner executed),
 // now inside bun test under the same dual gate as engine-real.spec.ts:
 // skip locally without the built artifact, FAIL under REQUIRE_REAL_ENGINE=1.
-// Part B (real DuckDB) lives in duckdb-real.spec.ts.
+// Part B (the real query store) lives in store-real.spec.ts.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "bun:test";

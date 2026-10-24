@@ -44,7 +44,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, test } from "bun:test";
 
 import { buildAppCommands } from "../../../src/app-commands";
-import { ALIGN_COMMAND } from "../../../src/align-plan";
+import { buildTransformCommands } from "../../../src/transform-commands";
+import { buildTransformEachDialogCommands } from "../../../src/panels/transform-each-dialog";
 import { buildCoreCommandEntries } from "../../../src/core-command-entries";
 import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
@@ -52,6 +53,7 @@ import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
+import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { hostCommands } from "../../../src/app/instance";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
@@ -129,7 +131,7 @@ const INLINE_IDS: Record<string, string[]> = {
     "paged.actions.play",
   ],
   "packages/shell/src/bundles/sample-bundle.worker.ts": ["paged.sample.hello"],
-  "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND, ALIGN_COMMAND],
+  "apps/canvas/src/app/mount.tsx": [AI_ASK_COMMAND],
   "apps/canvas/src/panels/schema-list-demo-panel.tsx": [
     "paged.demo.applySwatchStroke",
   ],
@@ -159,7 +161,10 @@ function tableIds(): string[] {
     ...buildObjectCommands(noop),
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
+    ...buildTransformCommands(noop),
     ...GLOBAL_LIGHT_COMMANDS,
+    ...buildTransformEachDialogCommands(() => []),
+    ...buildBatchCommands(),
     ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
     // Registered only when an embedding host supplies the action.
@@ -202,8 +207,8 @@ describe("the host command inventory", () => {
         ].some((m) => m[2] === id && src.includes(`id: ${m[1]}`));
         const viaImport =
           file === "apps/canvas/src/app/mount.tsx" &&
-          ((id === AI_ASK_COMMAND && src.includes("id: AI_ASK_COMMAND")) ||
-            (id === ALIGN_COMMAND && src.includes("id: ALIGN_COMMAND")));
+          id === AI_ASK_COMMAND &&
+          src.includes("id: AI_ASK_COMMAND");
         const viaBuilder =
           file.endsWith("PagedShell.tsx") && !id.startsWith("paged.chrome.");
         expect({
@@ -238,6 +243,8 @@ describe("the host command inventory", () => {
       "insertCommands",
       "alignCommands",
       "GLOBAL_LIGHT_COMMANDS",
+      "transformEachDialogCommands",
+      "buildBatchCommands()",
       "OPEN_AS_TEMPLATE_COMMANDS",
       "SELECT_ALL_COMMAND",
       "buildCoreCommandEntries()",

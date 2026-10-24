@@ -52,9 +52,7 @@ impl GlyphOutliner for TtfOutliner<'_> {
         let mut builder = PathBuilder::default();
         self.face
             .outline_glyph(ttf_parser::GlyphId(glyph_id as u16), &mut builder)?;
-        Some(PathData {
-            segments: builder.segments,
-        })
+        Some(PathData::new(builder.segments))
     }
 
     fn units_per_em(&self) -> f32 {
@@ -110,15 +108,13 @@ impl Default for UnitSquareOutliner {
 impl GlyphOutliner for UnitSquareOutliner {
     fn outline(&self, _glyph_id: u32) -> Option<PathData> {
         let e = self.units_per_em;
-        Some(PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: e, y: 0.0 },
-                PathSegment::LineTo { x: e, y: e },
-                PathSegment::LineTo { x: 0.0, y: e },
-                PathSegment::Close,
-            ],
-        })
+        Some(PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: e, y: 0.0 },
+            PathSegment::LineTo { x: e, y: e },
+            PathSegment::LineTo { x: 0.0, y: e },
+            PathSegment::Close,
+        ]))
     }
 
     fn units_per_em(&self) -> f32 {

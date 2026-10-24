@@ -1,0 +1,21 @@
+[package]
+name = "paged-data-automation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data print-automation / batch generation (spec §10). The batch-PLAN engine (partition a result into per-record / per-group / one-catalog generation units) is implemented; the napi-rs native execution binding + the Boa scripting surface are the remaining T2 work. Pure — depends only on data-core + data-query."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_automation is a later mechanical pass).
+name = "data_automation"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+paged-data-query = { path = "../paged-data-query" }
+serde = { version = "1", features = ["derive"] }

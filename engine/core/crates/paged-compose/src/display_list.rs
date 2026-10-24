@@ -306,12 +306,55 @@ pub enum PathSegment {
     Close,
 }
 
-#[derive(Debug, Clone, Default)]
+/// Which points a filled path covers (engine ADR 1006). `NonZero` is
+/// IDML's rule and the default; `EvenOdd` is a native property of a
+/// frame, and what a placed SVG's `fill-rule="evenodd"` or a placed
+/// PDF's `f*` / `W*` asks for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum FillRule {
+    #[default]
+    NonZero,
+    EvenOdd,
+}
+
+/// A path and the rule its fill and clip use. The rule belongs to the
+/// path, not to the command that draws it, so every command naming the
+/// path (fill, clip, shadow, effect) fills it alike. A stroke ignores it.
+#[derive(Clone, Default, PartialEq)]
 pub struct PathData {
     pub segments: Vec<PathSegment>,
+    pub fill_rule: FillRule,
+}
+
+// Written by hand so a `NonZero` path prints as it did before the rule
+// existed: `DisplayList::digest` hashes this form, and a document without
+// even-odd content keeps its digest (ADR 101).
+impl std::fmt::Debug for PathData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut d = f.debug_struct("PathData");
+        d.field("segments", &self.segments);
+        if self.fill_rule != FillRule::NonZero {
+            d.field("fill_rule", &self.fill_rule);
+        }
+        d.finish()
+    }
 }
 
 impl PathData {
+    /// A `NonZero` path of `segments`.
+    pub fn new(segments: Vec<PathSegment>) -> Self {
+        Self {
+            segments,
+            fill_rule: FillRule::NonZero,
+        }
+    }
+
+    /// This path filled by `rule`.
+    pub fn with_fill_rule(mut self, rule: FillRule) -> Self {
+        self.fill_rule = rule;
+        self
+    }
+
     pub fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }
@@ -325,7 +368,7 @@ pub struct PathId(pub u32);
 /// Owns all path-segment data and hands out `PathId`s. Uses a caller-
 /// supplied cache key for interning, so (glyph_id, font_id, size)
 /// combinations share outlines across the command stream.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PathBuffer {
     paths: Vec<PathData>,
     /// Cache key → PathId. Callers are responsible for making the key
@@ -980,9 +1023,9 @@ pub enum DisplayCommand {
     },
     /// Push a clip path onto the rasterizer's clip stack. Subsequent
     /// drawing commands are masked to the *intersection* of every
-    /// pushed clip until a matching `PopClip` lands. Paths are filled
-    /// with `FillRule::NonZero` (matching IDML's path-geometry
-    /// convention); the clip is anti-aliased.
+    /// pushed clip until a matching `PopClip` lands. The path clips by
+    /// its own [`PathData::fill_rule`] (`NonZero` unless the path says
+    /// otherwise, IDML's convention); the clip is anti-aliased.
     ///
     /// The transform maps `path_id` from its local space into page
     /// coordinates, exactly like `FillPath::transform`. The
@@ -1224,9 +1267,9 @@ pub enum DisplayCommand {
         transform: Transform,
     },
     /// C-28 opacity mask — open a soft-mask bracket. Unlike
-    /// [`PushClip`](DisplayCommand::PushClip) (a hard binary NonZero
-    /// clip) this carries **per-pixel coverage**: the mask artwork's
-    /// luminosity or alpha modulates the masked content's alpha
+    /// [`PushClip`](DisplayCommand::PushClip) (a hard binary clip by
+    /// the path's fill rule) this carries **per-pixel coverage**: the
+    /// mask artwork's luminosity or alpha modulates the masked content's alpha
     /// continuously, so a black→white gradient fades the content
     /// out.
     ///
@@ -1680,6 +1723,47 @@ impl DisplayList {
         }
     }
 
+    /// Move everything the list draws by `(dx, dy)` page pt: every
+    /// command's transform (the stub ones too, harmlessly), the page-space
+    /// `bounds` of the group and layer commands, and the glyph-run
+    /// entries. A snapshot of a region (`requestSnapshot.clip`) shifts
+    /// the region's corner to the origin this way and rasterizes a
+    /// region-sized page.
+    pub fn translate(&mut self, dx: f32, dy: f32) {
+        let n = self.commands.len();
+        self.map_transforms(0..n, |t| {
+            t.0[4] += dx;
+            t.0[5] += dy;
+        });
+        for cmd in &mut self.commands {
+            if let DisplayCommand::BeginBlendGroup { bounds, .. }
+            | DisplayCommand::PushLayer { bounds, .. } = cmd
+            {
+                bounds.x += dx;
+                bounds.y += dy;
+            }
+        }
+    }
+
+    /// A copy of what the rasterizers read (the side channels for the PDF
+    /// exporter, `glyph_runs` and `link_regions`, are left out), moved by
+    /// `(dx, dy)` as [`Self::translate`] moves it.
+    pub fn translated_for_raster(&self, dx: f32, dy: f32) -> DisplayList {
+        let mut list = DisplayList {
+            paths: self.paths.clone(),
+            commands: self.commands.clone(),
+            gradients: self.gradients.clone(),
+            radial_gradients: self.radial_gradients.clone(),
+            sweep_gradients: self.sweep_gradients.clone(),
+            images: self.images.clone(),
+            spot_inks: self.spot_inks.clone(),
+            glyph_runs: None,
+            link_regions: None,
+        };
+        list.translate(dx, dy);
+        list
+    }
+
     /// Append a linear gradient and return its id.
     pub fn push_linear_gradient(&mut self, g: LinearGradient) -> GradientId {
         let id = GradientId(self.gradients.len() as u32);
@@ -1838,21 +1922,83 @@ mod tests {
         assert_eq!(t.compose(&Transform::IDENTITY).0, t.0);
     }
 
+    /// Extensions ADR 338 — a region snapshot moves the whole list: each
+    /// command's transform and the page-space bounds of a group.
+    #[test]
+    fn translate_moves_transforms_and_group_bounds() {
+        let mut list = DisplayList::new();
+        let path_id = list.paths.push_anon(PathData::default());
+        list.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                w: 5.0,
+                h: 5.0,
+            },
+            blend_mode: BlendMode::Normal,
+            opacity: 0.5,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.push(DisplayCommand::FillPath {
+            path_id,
+            paint: Paint::Solid(Color::WHITE),
+            transform: Transform([2.0, 0.0, 0.0, 2.0, 30.0, 40.0]),
+        });
+        list.translate(-10.0, -20.0);
+        let DisplayCommand::BeginBlendGroup { bounds, .. } = &list.commands[0] else {
+            panic!("group first");
+        };
+        assert_eq!((bounds.x, bounds.y, bounds.w), (0.0, 0.0, 5.0));
+        assert_eq!(
+            list.commands[1].clone().transform_mut().0,
+            [2.0, 0.0, 0.0, 2.0, 20.0, 20.0]
+        );
+    }
+
     #[test]
     fn path_buffer_interns_by_key() {
         let mut pb = PathBuffer::new();
         let key = 42u64;
         let (id1, fresh1) = pb.intern(
             key,
-            PathData {
-                segments: vec![PathSegment::MoveTo { x: 0.0, y: 0.0 }],
-            },
+            PathData::new(vec![PathSegment::MoveTo { x: 0.0, y: 0.0 }]),
         );
         assert!(fresh1);
         let (id2, fresh2) = pb.intern(key, PathData::default());
         assert!(!fresh2, "second intern under same key should not store");
         assert_eq!(id1, id2);
         assert_eq!(pb.len(), 1);
+    }
+
+    /// Engine ADR 1006 — a non-zero path prints, and so digests, as it
+    /// did before the rule existed (ADR 101); an even-odd one differs.
+    #[test]
+    #[allow(non_snake_case)]
+    fn a_non_zero_path_keeps_its_digest__feat__frames_paths_fill_rule_even_odd() {
+        let segments = vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 0.5 },
+            PathSegment::Close,
+        ];
+        assert_eq!(
+            format!("{:?}", PathData::new(segments.clone())),
+            "PathData { segments: [MoveTo { x: 0.0, y: 0.0 }, LineTo { x: 1.0, y: 0.5 }, Close] }"
+        );
+        let digest = |rule: FillRule| {
+            let mut list = DisplayList::new();
+            let path_id = list
+                .paths
+                .push_anon(PathData::new(segments.clone()).with_fill_rule(rule));
+            list.push(DisplayCommand::FillPath {
+                path_id,
+                paint: Paint::Solid(Color::rgba(0.0, 0.0, 0.0, 1.0)),
+                transform: Transform::IDENTITY,
+            });
+            list.digest()
+        };
+        assert_ne!(digest(FillRule::NonZero), digest(FillRule::EvenOdd));
     }
 
     #[test]

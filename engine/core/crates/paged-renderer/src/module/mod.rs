@@ -48,7 +48,7 @@ pub(crate) mod object_style;
 pub(crate) mod stroke_paint;
 
 #[allow(unused_imports)]
-pub(crate) use frame::{Geometry, RenderCtx, ResolvedFrame};
+pub(crate) use frame::{list_fill_rule, Geometry, RenderCtx, ResolvedFrame};
 
 #[allow(unused_imports)]
 pub(crate) use corner_path::{corner_path_module, CornerPaths};

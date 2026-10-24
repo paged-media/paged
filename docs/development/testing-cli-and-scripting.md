@@ -115,8 +115,7 @@ Outside resources are avoided or skipped honestly: `ai` runs against a local fak
 endpoint, and its no-credential case runs as a child process with an empty home;
 `modules-upload` sees an unroutable module host and a fake `npx` on `PATH`; `preflight` loads
 the workspace's paged.publish bundle by path; the `apply`, `merge` and `generate` successes
-need the paged.data engine wasm (`modules/data`: `scripts/build-wasm.sh`
-and `scripts/vendor-duckdb.sh`), print `unavailable: <resource>: <reason>` without it, and
+need the paged.data engine wasm (`modules/data`: `scripts/build-wasm.sh`), print `unavailable: <resource>: <reason>` without it, and
 fail under `PAGED_REQUIRE_DATA_ENGINE=1`.
 
 ## The Boa `paged.*` bridge

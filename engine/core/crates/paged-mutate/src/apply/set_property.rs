@@ -3081,6 +3081,38 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1006 — the outline's fill rule, on every kind with
+        // an outline. The inverse names the rule it replaced, so undo
+        // restores it exactly (an unset rule reads "NonZero", the value
+        // it stood for).
+        (
+            NodeId::TextFrame(_)
+            | NodeId::Rectangle(_)
+            | NodeId::Oval(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_),
+            PropertyPath::FrameFillRule,
+        ) => {
+            let new_val = expect_text(path, value)?;
+            let rule = paged_model::FillRule::parse(&new_val).ok_or_else(|| {
+                OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!("a fill rule is \"NonZero\" or \"EvenOdd\", not {new_val:?}"),
+                }
+            })?;
+            let slot = find_fill_rule_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = *slot;
+            *slot = rule;
+            (
+                Value::Text(prev.as_str().into()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         (
             NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
             PropertyPath::FrameStrokeMiterLimit,

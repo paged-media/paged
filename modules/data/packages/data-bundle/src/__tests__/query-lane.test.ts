@@ -1,6 +1,6 @@
 // Wave 6 query lane, pure parts: the builders' SQL, the guard's lexer,
-// DuckDB error text → diagnostics, file naming and quoting. The same SQL is
-// run against real DuckDB in test/sources-real.spec.ts.
+// Store errors → diagnostics, file naming and quoting. The same SQL is
+// run against the real store in test/sources-real.spec.ts.
 
 import { describe, expect, it } from "bun:test";
 
@@ -10,13 +10,11 @@ import {
   quoteIdent,
   quoteLiteral,
   sourceNameOf,
-  virtualFileName,
 } from "../query/import";
 import {
   checkQuery,
-  diagnoseDuckDBError,
+  diagnoseStoreError,
   positionOf,
-  previewSql,
   trimSql,
 } from "../query/sql";
 import { ALLOWED, REFUSED } from "../../test/guard-matrix";
@@ -42,7 +40,6 @@ describe("file names and quoting [data.source.adapters]", () => {
   it("quotes identifiers and literals so a name can never become SQL", () => {
     expect(quoteIdent('a"b')).toBe('"a""b"');
     expect(quoteLiteral("it's")).toBe("'it''s'");
-    expect(virtualFileName("s", "xlsx")).toBe("paged_src_s.xlsx.json");
   });
 });
 
@@ -68,7 +65,7 @@ describe("query builders [data.query.seam]", () => {
       [
         'SELECT "sku", "price"',
         'FROM "products"',
-        `WHERE "price" > 10 AND starts_with(CAST("sku" AS VARCHAR), 'A''') AND ("note" IS NULL OR CAST("note" AS VARCHAR) = '')`,
+        `WHERE "price" > 10 AND substr(CAST("sku" AS TEXT), 1, 2) = 'A''' AND ("note" IS NULL OR CAST("note" AS TEXT) = '')`,
         'ORDER BY "price" DESC, "sku" ASC',
         "LIMIT 5",
       ].join("\n"),
@@ -114,7 +111,7 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
     for (const [sql] of ALLOWED) expect(checkQuery(sql), sql).toBeNull();
   });
 
-  it("reads strings, quoted names and comments the way DuckDB does", () => {
+  it("reads strings, quoted names and comments the way SQLite does", () => {
     // Statement words inside strings, quoted names and comments are data.
     expect(
       checkQuery("SELECT 'DROP TABLE x; read_csv(1)' AS s FROM t"),
@@ -170,35 +167,37 @@ describe("the query guard's lexer and allow-list [data.security.gates]", () => {
   });
 });
 
-describe("DuckDB error text → diagnostics [data.query.seam]", () => {
-  it("reads the class, the message and the caret, shifted back by the wrapper", () => {
-    const err = new Error(
-      'Binder Error: Referenced column "zz" not found in FROM clause!\nCandidate bindings: "t.a"\nLINE 2: SELECT zz FROM t\n               ^',
-    );
-    expect(diagnoseDuckDBError(err, 1)).toEqual({
-      kind: "Binder",
-      message:
-        'Referenced column "zz" not found in FROM clause!\nCandidate bindings: "t.a"',
-      line: 1,
-      column: 8,
+describe("store errors → diagnostics [data.query.seam]", () => {
+  it("reads the kind and turns the byte offset into a line and column", () => {
+    // `é` is two bytes: the offset counts bytes, the column characters.
+    const sql = "SELECT 'é',\n  1::INT";
+    const err = Object.assign(new Error('Parser: near ":": syntax error'), {
+      kind: "Parser",
+      offset: new TextEncoder().encode("SELECT 'é',\n  1").length,
+    });
+    expect(diagnoseStoreError(err, sql)).toEqual({
+      kind: "Parser",
+      message: 'near ":": syntax error',
+      line: 2,
+      column: 4,
     });
   });
 
   it("keeps a message without a position as it is", () => {
-    expect(diagnoseDuckDBError("Error: IO Error: No files found")).toEqual({
-      kind: "IO",
-      message: "No files found",
+    const err = Object.assign(new Error("Catalog: no such table: x"), {
+      kind: "Catalog",
     });
-    expect(diagnoseDuckDBError(new Error("boom"))).toEqual({
+    expect(diagnoseStoreError(err, "SELECT * FROM x")).toEqual({
+      kind: "Catalog",
+      message: "no such table: x",
+    });
+    expect(diagnoseStoreError(new Error("boom"))).toEqual({
       kind: "Error",
       message: "boom",
     });
   });
 
-  it("puts the user's query on its own line in a preview", () => {
-    expect(previewSql("SELECT 1;  \n", 10)).toBe(
-      "SELECT * FROM (\nSELECT 1\n) AS paged_preview LIMIT 10",
-    );
+  it("trims a query and finds a position", () => {
     expect(trimSql("  SELECT 1 ;;\n")).toBe("SELECT 1");
     expect(positionOf("ab\ncd", 4)).toEqual({ line: 2, column: 2 });
   });

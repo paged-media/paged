@@ -49,6 +49,11 @@ clap = { version = "4", features = ["derive"] }
 # `paged mcp` and `paged library`: the repository (ADR 180) and the MCP surface.
 paged-repo = { path = "../paged-repo" }
 paged-mcp = { path = "../paged-mcp" }
+# `paged data`: the bindings a document carries, read and applied without
+# the data module (core ADR 1014; PM-0015).
+paged-data-core = { path = "../paged-data-core" }
+paged-data-store = { path = "../paged-data-store" }
+paged-data-session = { path = "../paged-data-session" }
 base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = "1"

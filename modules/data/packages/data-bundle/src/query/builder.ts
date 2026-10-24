@@ -82,7 +82,7 @@ export function valueLiteral(value: string): string {
 
 function condition(f: QueryFilter): string {
   const col = quoteIdent(f.column);
-  const text = `CAST(${col} AS VARCHAR)`;
+  const text = `CAST(${col} AS TEXT)`;
   const v = f.value ?? "";
   switch (f.op) {
     case "is empty":
@@ -90,9 +90,9 @@ function condition(f: QueryFilter): string {
     case "is not empty":
       return `(${col} IS NOT NULL AND ${text} <> '')`;
     case "contains":
-      return `contains(lower(${text}), lower(${quoteLiteral(v)}))`;
+      return `instr(lower(${text}), lower(${quoteLiteral(v)})) > 0`;
     case "starts with":
-      return `starts_with(${text}, ${quoteLiteral(v)})`;
+      return `substr(${text}, 1, ${[...v].length}) = ${quoteLiteral(v)}`;
     default:
       return `${col} ${f.op} ${valueLiteral(v)}`;
   }

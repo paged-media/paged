@@ -589,6 +589,12 @@ export type ResampleFilter = "nearest" | "mitchell" | "lanczos3";
 export type CanvasOpKind =
   "rotate-cw" | "rotate-ccw" | "rotate-180" | "flip-h" | "flip-v" | "canvas";
 
+/** What Image ▸ Trim trims away (`trimRect`). */
+export type TrimBy = "transparent" | "top-left" | "bottom-right";
+
+/** The rank filters a radius applies to (`applyRankRadius`). */
+export type RankKind = "median" | "max" | "min";
+
 /** Select ▸ Modify operations (`selectionModify`). */
 export type SelectionModifyOp = "expand" | "contract" | "border" | "smooth";
 
@@ -1448,6 +1454,57 @@ export interface ImageEngine {
   applyMedian(handle: number): Promise<DecodedInfo>;
   /** OTHER — Maximum ("max") or Minimum ("min"), 3×3. */
   applyMorph(handle: number, kind: "max" | "min"): Promise<DecodedInfo>;
+  /** NOISE ▸ Median / OTHER ▸ Maximum, Minimum at a RADIUS; `round` a
+   *  disc instead of the square. Radius 1 square is the 3×3 kernel;
+   *  past the kernel's bound (median 10, max/min 32) it THROWS. */
+  applyRankRadius(
+    handle: number,
+    kind: RankKind,
+    radius: number,
+    round: boolean,
+  ): Promise<DecodedInfo>;
+  /** BLUR ▸ Box Blur (radius ≤ 32 px; radius 0 is the identity). */
+  applyBoxBlur(handle: number, radius: number): Promise<DecodedInfo>;
+  /** BLUR ▸ Surface Blur (radius ≤ 16 px; `threshold` in [0, 1],
+   *  0 the identity). */
+  applySurfaceBlur(
+    handle: number,
+    radius: number,
+    threshold: number,
+  ): Promise<DecodedInfo>;
+  /** OTHER ▸ High Pass: image − Gaussian(σ = `radiusPx`) + 50 % grey. */
+  applyHighPass(handle: number, radiusPx: number): Promise<DecodedInfo>;
+  /** NOISE ▸ Add Noise; `amount` 0 is the identity. */
+  applyAddNoise(
+    handle: number,
+    seed: number,
+    amount: number,
+    gaussian: boolean,
+    mono: boolean,
+  ): Promise<DecodedInfo>;
+  /** BLUR ▸ Average: fill the selection with its average colour. */
+  applyAverage(handle: number): Promise<DecodedInfo>;
+  /** Curves ▸ Auto: per-channel `[black, white]` input levels of the
+   *  image, `clip` (0.001 = 0.1 %) of the pixels clipped at each end. */
+  autoContrastLevels(
+    handle: number,
+    clip: number,
+  ): [[number, number], [number, number], [number, number]];
+  /** Image ▸ Trim's rectangle over the composite, or null when the trim
+   *  would leave nothing. */
+  trimRect(
+    handle: number,
+    by: TrimBy,
+  ): { x: number; y: number; w: number; h: number } | null;
+  /** The ppi a PNG (`pHYs`) or JPEG (JFIF) declares, or null. */
+  readPpi(bytes: Uint8Array): number | null;
+  /** Encoded PNG / JPEG bytes declaring `ppi`; other bytes unchanged. */
+  stampPpi(bytes: Uint8Array, ppi: number): Uint8Array;
+  /** Image ▸ Image Rotation ▸ Arbitrary over the whole stack: every
+   *  layer and mask turned by `degrees` (positive = clockwise) onto a
+   *  canvas grown to the rotated bounds (GPU-only; a quarter turn is the
+   *  exact op). One undo step; drops the selection. */
+  layersRotate(degrees: number): Promise<{ width: number; height: number }>;
   /** ADJUST — Color Lookup through a 9×9×9 cube (729 rgb triples, red
    *  fastest; `cube.ts` resamples a .cube file to this edge). */
   applyLut3d(handle: number, cube: Float32Array): Promise<DecodedInfo>;
@@ -1708,6 +1765,16 @@ export interface ImageEngine {
    *  the straight RGBA8. GPU-only whenever there is anything to blend; a
    *  single plain visible layer needs no device at all. */
   layersComposite(): Promise<Uint8Array>;
+  /** WP4.10 — the window `(x, y, w, h)` of layer `index`'s OWN pixels
+   *  (not the composite) as straight RGBA8, clipped to the canvas; empty
+   *  for an adjustment layer (`layers_window_rgba8`). */
+  layersWindow(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   /** BAKE the adjustment chain destructively into the ACTIVE layer
    *  (journaled, so undoable). The panel's chain is otherwise a
    *  re-runnable preview that mutates nothing. Throws at identity, on a
@@ -2117,6 +2184,34 @@ export interface ImageWasmModule {
     darken: number,
   ): Promise<DecodedHandleWasm>;
   apply_morph(handle: number, kind: string): Promise<DecodedHandleWasm>;
+  apply_rank_radius(
+    handle: number,
+    kind: string,
+    radius: number,
+    round: boolean,
+  ): Promise<DecodedHandleWasm>;
+  apply_box_blur(handle: number, radius: number): Promise<DecodedHandleWasm>;
+  apply_surface_blur(
+    handle: number,
+    radius: number,
+    threshold: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_high_pass(
+    handle: number,
+    radius_px: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_add_noise(
+    handle: number,
+    seed: number,
+    amount: number,
+    gaussian: boolean,
+    mono: boolean,
+  ): Promise<DecodedHandleWasm>;
+  apply_average(handle: number): Promise<DecodedHandleWasm>;
+  auto_contrast_levels(handle: number, clip: number): Float32Array;
+  trim_rect(handle: number, by: string): Uint32Array;
+  read_ppi(bytes: Uint8Array): number | undefined;
+  stamp_ppi(bytes: Uint8Array, ppi: number): Uint8Array;
   apply_lut3d(handle: number, cube: Float32Array): Promise<DecodedHandleWasm>;
   fill_solid(handle: number, color: Float32Array): Promise<DecodedHandleWasm>;
   fill_gradient_line(
@@ -2314,6 +2409,13 @@ export interface ImageWasmModule {
   layers_set_group_blend(id: number, blend: string): void;
   layers_set_group_pass_through(id: number, passThrough: boolean): void;
   layers_composite(): Promise<Uint8Array>;
+  layers_window_rgba8(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   layers_bake_adjust(
     exposure_ev: number,
     brightness: number,
@@ -2854,6 +2956,63 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     async applyMorph(handle, kind) {
       return decodedInfoOf(await wasm.apply_morph(handle, kind));
     },
+    async applyRankRadius(handle, kind, radius, round) {
+      return decodedInfoOf(
+        await wasm.apply_rank_radius(handle, kind, radius, round),
+      );
+    },
+    async applyBoxBlur(handle, radius) {
+      return decodedInfoOf(await wasm.apply_box_blur(handle, radius));
+    },
+    async applySurfaceBlur(handle, radius, threshold) {
+      return decodedInfoOf(
+        await wasm.apply_surface_blur(handle, radius, threshold),
+      );
+    },
+    async applyHighPass(handle, radiusPx) {
+      return decodedInfoOf(await wasm.apply_high_pass(handle, radiusPx));
+    },
+    async applyAddNoise(handle, seed, amount, gaussian, mono) {
+      return decodedInfoOf(
+        await wasm.apply_add_noise(handle, seed >>> 0, amount, gaussian, mono),
+      );
+    },
+    async applyAverage(handle) {
+      return decodedInfoOf(await wasm.apply_average(handle));
+    },
+    autoContrastLevels(handle, clip) {
+      const v = wasm.auto_contrast_levels(handle, clip);
+      return [
+        [v[0], v[1]],
+        [v[2], v[3]],
+        [v[4], v[5]],
+      ];
+    },
+    trimRect(handle, by) {
+      const r = wasm.trim_rect(handle, by);
+      return r.length === 4 ? { x: r[0], y: r[1], w: r[2], h: r[3] } : null;
+    },
+    readPpi(bytes) {
+      const v = wasm.read_ppi(bytes);
+      return typeof v === "number" ? v : null;
+    },
+    stampPpi(bytes, ppi) {
+      return wasm.stamp_ppi(bytes, ppi);
+    },
+    async layersRotate(degrees) {
+      const wh = await wasm.layers_canvas_op(
+        "rotate",
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        degrees,
+        "",
+      );
+      return { width: wh[0], height: wh[1] };
+    },
     async applyLut3d(handle, cube) {
       return decodedInfoOf(await wasm.apply_lut3d(handle, cube));
     },
@@ -3174,6 +3333,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetGroupPassThrough: (id, pt) =>
       wasm.layers_set_group_pass_through(id, pt),
     layersComposite: () => wasm.layers_composite(),
+    layersWindow: (index, x, y, w, h) =>
+      wasm.layers_window_rgba8(index, x, y, w, h),
     layersAddAdjustment: (name, p) =>
       // The SAME wire block the bake and the preview use — one decode,
       // one meaning. The only difference is where the chain LIVES.

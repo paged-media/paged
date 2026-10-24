@@ -1,5 +1,7 @@
 # paged.data — Core Layer Technical Specification
 
+_Status note (2026-10-24): the engine decision below (DuckDB-WASM) is superseded. The query store is Turso compiled into the data engine ([ADR 561](adr/561-turso-is-the-data-engine.md), [PM-0015](../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md)); the sections that name DuckDB describe the plan as it was._
+
 June 2026. Concept paper. Sections describe intent; where the implementation differs, `status.md` and the ADRs in `adr/` are authoritative.
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.

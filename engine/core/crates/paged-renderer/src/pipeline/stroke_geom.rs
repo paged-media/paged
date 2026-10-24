@@ -564,7 +564,7 @@ pub(crate) fn polyline_to_path(line: &Polyline) -> PathData {
             segments.push(PathSegment::Close);
         }
     }
-    PathData { segments }
+    PathData::new(segments)
 }
 
 /// Wrap several polylines into one multi-contour [`PathData`]. Each
@@ -585,7 +585,7 @@ pub(crate) fn polylines_to_path(lines: &[Polyline]) -> PathData {
             }
         }
     }
-    PathData { segments }
+    PathData::new(segments)
 }
 
 #[cfg(test)]
@@ -601,12 +601,10 @@ mod tests {
 
     #[test]
     fn flatten_path_straight_line_passes_through() {
-        let p = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: 10.0, y: 0.0 },
-            ],
-        };
+        let p = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 10.0, y: 0.0 },
+        ]);
         let lines = flatten_path(&p, FLATTEN_STEPS);
         assert_eq!(lines.len(), 1);
         assert_eq!(lines[0].points, vec![(0.0, 0.0), (10.0, 0.0)]);
@@ -615,20 +613,18 @@ mod tests {
 
     #[test]
     fn flatten_path_cubic_produces_dense_samples_and_closes() {
-        let p = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::CubicTo {
-                    cx1: 0.0,
-                    cy1: 10.0,
-                    cx2: 10.0,
-                    cy2: 10.0,
-                    x: 10.0,
-                    y: 0.0,
-                },
-                PathSegment::Close,
-            ],
-        };
+        let p = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::CubicTo {
+                cx1: 0.0,
+                cy1: 10.0,
+                cx2: 10.0,
+                cy2: 10.0,
+                x: 10.0,
+                y: 0.0,
+            },
+            PathSegment::Close,
+        ]);
         let lines = flatten_path(&p, 8);
         assert_eq!(lines.len(), 1);
         assert!(lines[0].closed);
@@ -640,15 +636,13 @@ mod tests {
 
     #[test]
     fn flatten_path_two_contours() {
-        let p = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: 1.0, y: 0.0 },
-                PathSegment::Close,
-                PathSegment::MoveTo { x: 5.0, y: 5.0 },
-                PathSegment::LineTo { x: 6.0, y: 5.0 },
-            ],
-        };
+        let p = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 0.0 },
+            PathSegment::Close,
+            PathSegment::MoveTo { x: 5.0, y: 5.0 },
+            PathSegment::LineTo { x: 6.0, y: 5.0 },
+        ]);
         let lines = flatten_path(&p, FLATTEN_STEPS);
         assert_eq!(lines.len(), 2);
         assert!(lines[0].closed);
@@ -972,7 +966,7 @@ mod w15_polygon_path_offset_tests {
             },
             PathSegment::Close,
         ];
-        let lines = flatten_path(&PathData { segments: segs }, FLATTEN_STEPS);
+        let lines = flatten_path(&PathData::new(segs), FLATTEN_STEPS);
         assert_eq!(lines.len(), 1);
         assert!(lines[0].closed);
         let inw = offset_closed_outline(&lines[0], 10.0, true);

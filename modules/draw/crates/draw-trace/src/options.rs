@@ -60,6 +60,11 @@ pub enum TraceMode {
     /// [`TraceOptions::ignore_white`] decides whether the light one is
     /// artwork or background.
     Bw,
+    /// CENTRELINE tracing (line art): threshold at
+    /// [`TraceOptions::bw_threshold`], thin to a skeleton and emit OPEN
+    /// STROKED paths down the middle of the ink, at the ink's mean width
+    /// (`crate::centerline`). No filled regions.
+    Centerline,
 }
 
 /// How a walked boundary becomes geometry.
@@ -136,6 +141,15 @@ pub struct TraceOptions {
     /// depend on z-order to look right, which matters when the emitted
     /// elements can be re-ordered by hand afterwards.
     pub stacked: bool,
+    /// PALETTE TARGET: snap every pixel to at most this many colours
+    /// before clustering (a deterministic k-means, `crate::palette`).
+    /// `0` = no target, the clusterer decides (the v0 behaviour).
+    /// Illustrator's "3 / 6 / 16 Colors" presets. Colour mode only.
+    pub max_colors: usize,
+    /// Trace in GREYS: the raster is converted to luma first, and with
+    /// [`TraceOptions::max_colors`] reduced to that many grey levels.
+    /// Illustrator's "Shades of Gray". Colour mode only.
+    pub grayscale: bool,
 }
 
 impl Default for TraceOptions {
@@ -154,6 +168,8 @@ impl Default for TraceOptions {
             max_iterations: 10,
             max_regions: 512,
             stacked: false,
+            max_colors: 0,
+            grayscale: false,
         }
     }
 }
@@ -174,6 +190,7 @@ impl TraceOptions {
             splice_threshold_deg: clamp_finite(self.splice_threshold_deg, 0.0, 180.0, 45.0),
             max_iterations: self.max_iterations.clamp(1, 64),
             max_regions: self.max_regions.clamp(1, 20_000),
+            max_colors: self.max_colors.min(256),
             ..self
         }
     }
@@ -209,6 +226,8 @@ mod tests {
         assert!(d.ignore_white);
         assert_eq!(d.max_regions, 512);
         assert!(!d.stacked);
+        assert_eq!(d.max_colors, 0);
+        assert!(!d.grayscale);
     }
 
     #[test]
@@ -262,5 +281,21 @@ mod tests {
         // Unspecified fields keep their documented defaults.
         assert_eq!(opts.filter_speckle, 4);
         assert_eq!(opts.max_regions, 512);
+    }
+
+    #[test]
+    fn the_preset_fields_read_from_json() {
+        let opts: TraceOptions =
+            serde_json::from_str(r#"{"mode":"centerline","maxColors":6,"grayscale":true}"#)
+                .unwrap();
+        assert_eq!(opts.mode, TraceMode::Centerline);
+        assert_eq!(opts.max_colors, 6);
+        assert!(opts.grayscale);
+        let capped = TraceOptions {
+            max_colors: 9000,
+            ..Default::default()
+        }
+        .sanitized();
+        assert_eq!(capped.max_colors, 256);
     }
 }

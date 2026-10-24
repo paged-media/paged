@@ -230,7 +230,7 @@ fn map_path(
             S::Close => S::Close,
         })
         .collect();
-    paged_compose::PathData { segments }
+    paged_compose::PathData::new(segments).with_fill_rule(path.fill_rule)
 }
 
 /// Open a feathered object: when `effects` carries a feather, emit the
@@ -369,7 +369,7 @@ fn content_outline(
             _ => return None,
         }
     }
-    (!segments.is_empty()).then_some(paged_compose::PathData { segments })
+    (!segments.is_empty()).then_some(paged_compose::PathData::new(segments))
 }
 
 /// Every post-fill effect on one path, interior effects then feathers:

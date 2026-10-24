@@ -125,6 +125,24 @@ export {
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
+export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
+// Editor ADRs 291, 292 — the document's data (data@1) for the editor's own
+// surfaces; the app points it at the shared backend.
+export {
+  setDataDoorSource,
+  useDataService,
+  useDataRevision,
+  type DataDoorSource,
+} from "./state/data-door";
+export {
+  ALIGN_SCOPE,
+  ALIGN_TO,
+  clickKeyObject,
+  effectiveKeyObject,
+  isSameElement,
+  type AlignScopeState,
+  type AlignTo,
+} from "./state/align-scope";
 export type {
   PathEditAnchor,
   PathEditHit,
@@ -472,6 +490,12 @@ export {
   setPendingImportSource,
   takePendingImportSource,
 } from "./state/import-source";
+export {
+  notifyImported,
+  onImported,
+  withImportHooksSuppressed,
+  type ImportedFile,
+} from "./state/import-hooks";
 
 // ── Shell root ─────────────────────────────────────────────────
 export { PagedShell, type PagedShellProps } from "./PagedShell";
@@ -557,6 +581,10 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  isolationDimContribution,
+  isolationScopeRoot,
+  isolationOutline,
+  isolationVeilPath,
   marginGuidesContribution,
   marginGuides,
   pathEditContribution,

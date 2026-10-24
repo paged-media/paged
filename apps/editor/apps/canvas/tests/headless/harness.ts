@@ -164,13 +164,16 @@ import {
   GLOBAL_LIGHT_COMMANDS,
   GLOBAL_LIGHT_MENU_ITEMS,
 } from "../../src/panels/global-light-dialog";
-import { COCKPIT_MENU_SEAMS } from "../../src/cockpit-menus";
 import {
-  ALIGN_ARGS,
-  ALIGN_COMMAND,
-  runAlign,
-  type AlignKind,
-} from "../../src/align-plan";
+  buildTransformEachDialogCommands,
+  TRANSFORM_EACH_MENU_ITEMS,
+} from "../../src/panels/transform-each-dialog";
+import {
+  BATCH_MENU_ITEMS,
+  buildBatchCommands,
+} from "../../src/panels/batch-dialog";
+import { COCKPIT_MENU_SEAMS } from "../../src/cockpit-menus";
+import { buildTransformCommands } from "../../src/transform-commands";
 import { editorObjectsOf } from "../../src/object-model";
 import type { ObjectRegistry } from "@paged-media/plugin-sdk";
 import {
@@ -967,19 +970,10 @@ export async function createHeadlessEditor(
     placeImage: freshInsert((p) => placeImage(p, insertReport)),
     newPage: freshInsert((p) => addPage(p, insertReport)),
   });
-  const alignCommands = [
-    {
-      id: ALIGN_COMMAND,
-      title: "Align objects",
-      category: "Object",
-      args: ALIGN_ARGS,
-      handler: (_paged: unknown, payload?: unknown) =>
-        runAlign(
-          objectRegistry,
-          payload as { kind: AlignKind; targets: string[] },
-        ),
-    },
-  ];
+  const alignCommands = buildTransformCommands(
+    objectRegistry,
+    (address) => editorObjectsOf(scope).model.elementIdOf?.(address) ?? null,
+  );
   setAssistantOpener(scope, () => {
     opened.push({ kind: "assistant" });
   });
@@ -1024,6 +1018,12 @@ export async function createHeadlessEditor(
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      ...buildTransformEachDialogCommands((paged) =>
+        ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+          (id) => editorObjectsOf(scope).addressOfElement(id),
+        ),
+      ),
+      ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
       ...buildCoreCommandEntries(),
       ...shellCommands,
@@ -1036,6 +1036,8 @@ export async function createHeadlessEditor(
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...TRANSFORM_EACH_MENU_ITEMS,
+      ...BATCH_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ].map((m) => registries.menus.register(m)),
     ...[

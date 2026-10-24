@@ -45,7 +45,7 @@ export const PLUGIN_BUNDLES: readonly BundleEntry<PluginBundle>[] = [
   },
   // paged.data (the §7.1 PROVIDER — publishes a governed query) + paged.sheet
   // (the consumer, S-15). Both rendezvous through the host's `dataProviders`.
-  // Engines boot lazily; a missing engine / DuckDB degrades honestly in-panel.
+  // Engines boot lazily; a missing engine degrades honestly in-panel.
   {
     id: "media.paged.data",
     lane: "boot",

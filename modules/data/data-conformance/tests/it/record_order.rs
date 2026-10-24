@@ -18,8 +18,8 @@
 
 //! Record N is the Nth record of the data as its query delivers it, when the
 //! query defines that order (spec §6.1): an explicit `ORDER BY`, or a scan of
-//! one table, which DuckDB delivers in insertion order (`preserve_insertion_order`,
-//! on by default). Only a result whose order is undefined (a join, a grouping,
+//! one table, which the store delivers in insertion order (a rowid table
+//! scanned in rowid order). Only a result whose order is undefined (a join, a grouping,
 //! a set operation, no SQL at all) is numbered by content, so a re-delivery in
 //! another order is no change (defect DP-4, still fixed).
 //!

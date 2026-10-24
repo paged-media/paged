@@ -29,7 +29,7 @@
 // 3 pages, 26 + 26 + 5 records.
 //
 //   · OPEN the template (File ▸ Open, the .idml InDesign saved);
-//   · IMPORT the CSV in the Sources panel (DuckDB boots and sniffs it);
+//   · IMPORT the CSV in the Sources panel (the engine reads and types it);
 //   · MERGE from the Bindings panel's Data Merge row (Multiple records,
 //     columns first, the template page consumed): 3 pages, and on every page
 //     exactly InDesign's record texts;
@@ -40,8 +40,8 @@
 //     there), one more the first merge — the template, as InDesign left it.
 //     Before 69 a merge is two steps (pages, then content), so four undos.
 //
-// Gate: under REQUIRE_REAL_DUCKDB=1 a DuckDB that does not boot FAILS the
-// journey (data-duckdb-gate.ts); otherwise it skips and says why.
+// Gate: under REQUIRE_REAL_ENGINE=1 a data engine that does not boot FAILS the
+// journey (data-engine-gate.ts); otherwise it skips and says why.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -51,7 +51,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 
 const HARNESS = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -172,9 +172,9 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   } catch {
     const got =
       (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(
+    skipWithoutEngine(
       got,
-      `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`,
+      `the data-merge journey needs the data engine to boot (engine status "${got}")`,
     );
   }
 }

@@ -1,0 +1,26 @@
+[package]
+name = "paged-data-bind"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data binding + synchronization engine (spec §8), salsa-shaped: resolution graph (sources->queries->bindings->targets), ResolveStamp invalidation, sync states (Linked/Pinned/Overridden/Stale/Error), record-identity stable diff, non-destructive conflict policy. Depends on data-core + data-expr + data-query."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_bind is a later mechanical pass).
+name = "data_bind"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+paged-data-expr = { path = "../paged-data-expr" }
+paged-data-query = { path = "../paged-data-query" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+[features]
+# Work counters for the perf budgets (data-query/src/perf.rs).
+perf-counters = ["paged-data-query/perf-counters"]

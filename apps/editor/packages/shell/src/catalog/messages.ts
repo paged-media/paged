@@ -38,6 +38,46 @@ export const FIELD = defineMessages("shell.field", {
   close: "Close",
 });
 
+/** The bind popover (editor ADR 292). */
+export const BIND = defineMessages("shell.bind", {
+  title: "Bind {property} to data",
+  query: "Records",
+  modeField: "Field",
+  modeRules: "Rules",
+  modeMap: "Map",
+  modeExpression: "Expression",
+  search: "Search fields",
+  noFields: "No field matches",
+  unreadable: "Not a bare name: give it an alias in the query",
+  when: "When",
+  then: "then",
+  otherwise: "Otherwise",
+  addRule: "Add a rule",
+  removeRule: "Remove the rule",
+  mapField: "Value of",
+  addEntry: "Add a value",
+  key: "Value",
+  result: "Result",
+  expressionHint: "An expression over the record's fields, e.g. MM(weight) * 2",
+  compiled: "Expression",
+  preview: "Record {n} of {count}",
+  previous: "Previous record",
+  next: "Next record",
+  previewError: "Not a value: {error}",
+  noData:
+    "No data yet. Import a source and define a query in paged.data, then bind.",
+  bind: "Bind",
+  cancel: "Cancel",
+  opEquals: "is",
+  opNot: "is not",
+  opLess: "is less than",
+  opLessEq: "is at most",
+  opMore: "is more than",
+  opMoreEq: "is at least",
+  opContains: "contains",
+  opBlank: "is empty",
+});
+
 // `showMore` closes its bracket apart: the strings guard reads a "})"
 // inside a message as the end of the call.
 export const LIST = defineMessages("shell.list", {

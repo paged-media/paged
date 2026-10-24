@@ -134,7 +134,7 @@ const MODULES = [
     name: "data",
     dir: "modules/data/packages/data-bundle",
     own: ["@paged-media/data-host-model"],
-    extra: ["@duckdb/duckdb-wasm", "apache-arrow"],
+    extra: [],
   },
   {
     name: "doc",

@@ -1645,6 +1645,20 @@
   tests:
     rust: ["image-conformance/tests/it/family_gen.rs"]
 
+- id: gen.add_noise
+  rust_path: families::gen::GEN_ADD_NOISE
+  state_row: image.kernel.family-t2
+  class: point
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 1 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "the gen.noise PCG stream (Jarzynski & Olano, JCGT 2020) added to the image: uniform u − ½, or an Irwin–Hall n = 4 bell (sum of four draws) — adds only, so the hash and the noise value are bit-identical on both lanes"
+    - "monochromatic shares one draw across R, G, B; added in premultiplied space scaled by α and clamped to [0, α]; amount 0 is the identity"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
+
 # ── morph family (T3; morphology + rank, 3×3 windowed modules) ───
 
 - id: morph.dilate
@@ -1760,6 +1774,44 @@
     - "tolerance is Exact because both branches write an existing f16 sample; the only arithmetic is the decision"
   tests:
     rust: ["image-kernels/tests/it/rank_noise.rs"]
+- id: morph.dilate_r
+  rust_path: families::morph::MORPH_DILATE_R
+  state_row: image.kernel.family-t3
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: vips
+  status: implemented
+  provenance:
+    - "grey dilation (windowed max) over a square or disc structuring element at a runtime radius ≤ 32: mathematical morphology, standard literature; no reference reading"
+    - "Filter > Other > Maximum with Photoshop's Squareness/Roundness choice; radius 0 is the identity"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
+- id: morph.erode_r
+  rust_path: families::morph::MORPH_ERODE_R
+  state_row: image.kernel.family-t3
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: vips
+  status: implemented
+  provenance:
+    - "grey erosion (windowed min), the dual of morph.dilate_r; standard literature; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
+- id: rank.median_r
+  rust_path: families::morph::RANK_MEDIAN_R
+  state_row: image.kernel.family-t3
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: vips
+  status: implemented
+  provenance:
+    - "order statistic by BISECTION ON THE VALUE: bracket [min, max], 32 halvings each one counting pass, then the smallest sample above the bracket's low end — textbook selection by counting; exact (an existing sample) for data within ±256"
+    - "radius ≤ 10 bounds the cost at 33 passes over 441 taps; the 3×3 case stays on rank.median3's comparator network"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
 - id: geom.move_selection
   rust_path: families::geom::GEOM_MOVE_SELECTION
   state_row: image.kernel.family-t2
@@ -1849,6 +1901,43 @@
     - "unsharp masking with two gates plain unsharp has not got: a threshold below which local contrast is treated as noise and left alone, and a clamp on the correction"
     - "the clamp is what suppresses halos — an unclamped high-contrast edge overshoots into the bright fringe that makes oversharpening recognisable at a glance"
     - "identity: amount 0, and separately any region whose local contrast falls below the threshold"
+- id: conv.box_r
+  rust_path: families::conv::CONV_BOX_R
+  state_row: image.kernel.family-t2
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: vips
+  status: implemented
+  provenance:
+    - "unweighted (2r+1)² mean at a runtime radius ≤ 32, fixed dy/dx summation order; standard literature; no reference reading"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
+- id: conv.surface
+  rust_path: families::conv::CONV_SURFACE
+  state_row: image.kernel.family-t2
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "edge-preserving mean with a per-channel triangular range weight max(0, 1 − |s − c| / 2.5t) and no spatial falloff — the sigma-filter family (Lee, CVGIP 1983) and bilateral filtering (Tomasi & Manduchi, ICCV 1998); the triangular weight and its factor are this kernel's choice"
+    - "identities: radius 0, threshold ≤ 0"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
+- id: conv.high_pass
+  rust_path: families::conv::CONV_HIGH_PASS
+  state_row: image.kernel.family-t2
+  class: windowed
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "high-pass = signal − 2D Gaussian low-pass, re-centred on 50 % grey (premultiplied: + α/2, clamped to [0, α]); standard signal processing; σ ≤ 32/3 so the taps reach 3σ"
+  tests:
+    rust: ["image-conformance/tests/it/filters_radius.rs"]
 - id: conv.radial
   rust_path: families::conv::CONV_RADIAL
   state_row: image.kernel.family-t2

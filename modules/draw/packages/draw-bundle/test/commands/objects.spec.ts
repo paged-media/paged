@@ -613,6 +613,21 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
     await raises(`${C}.insertPolarGridOptions`, "polarGrid");
   });
 
+  it("Star… raises Path Options at Star [plugin-draw.tool-wave-3]", async () => {
+    covers("command:media.paged.draw.command.insertStarOptions");
+    await raises(`${C}.insertStarOptions`, "star");
+  });
+
+  it("Flare… raises Path Options at Flare [plugin-draw.tool-wave-3]", async () => {
+    covers("command:media.paged.draw.command.insertFlareOptions");
+    await raises(`${C}.insertFlareOptions`, "flare");
+  });
+
+  it("Rasterize… raises Path Options at Rasterize [plugin-platform.render-snapshot-v2]", async () => {
+    covers("command:media.paged.draw.command.rasterizeOptions");
+    await raises(`${C}.rasterizeOptions`, "rasterize");
+  });
+
   it("Stroke weight within… raises Path Options at Select same weight", async () => {
     covers("command:media.paged.draw.command.selectSameStrokeWeightOptions");
     await raises(`${C}.selectSameStrokeWeightOptions`, "selectSameWeight");
