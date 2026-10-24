@@ -19,7 +19,9 @@
 //! Raster / vector image decoding: format sniffing (JPEG, SVG, EPS),
 //! DCT-scaled JPEG decode for oversized rasters, SVG rasterisation,
 //! and lazy dimension peeking. RGBA conversion lives in
-//! [`super::image_convert`].
+//! [`super::image_convert`]. A TIFF decodes through `paged-raster`, the
+//! same call paged-gpu makes at raster time on wasm32, so a CMYK or Lab
+//! TIFF converts through paged-color with its embedded profile.
 
 use super::*;
 
@@ -172,6 +174,16 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
         let h = (src_h * k / 8).max(1);
         return Some((w, h));
     }
+    // A TIFF reports the size its capped decode will have.
+    if paged_raster::is_tiff(bytes) {
+        if let Ok(info) = paged_raster::probe(bytes) {
+            return Some(paged_raster::shrunk_dimensions(
+                info.width,
+                info.height,
+                Some(max_px),
+            ));
+        }
+    }
     // PNG / WebP / etc — header read via the image crate's lazy
     // dimension probe, which doesn't materialise pixels.
     let cursor = std::io::Cursor::new(bytes);
@@ -215,6 +227,11 @@ pub(super) fn decode_image_bytes_with_target_max(
             }
         }
     }
+    if paged_raster::is_tiff(bytes) {
+        if let Some(d) = decode_tiff(bytes, max_px) {
+            return Some(d);
+        }
+    }
     let img = image::load_from_memory(bytes).ok()?;
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
@@ -227,90 +244,56 @@ pub(super) fn decode_image_bytes_with_target_max(
     })
 }
 
+/// A TIFF through `paged-raster`, shrunk to `max_px` and converted with
+/// paged-color. `None` lets the caller try the `image` crate, the decoder
+/// TIFFs used before.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+fn decode_tiff(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+    let img = match paged_raster::decode(
+        bytes,
+        paged_raster::DecodeOptions {
+            page: 0,
+            max_dim: Some(max_px),
+        },
+    ) {
+        Ok(img) => img,
+        Err(err) => {
+            tracing::warn!(error = %err, "TIFF decode failed; trying the image crate");
+            return None;
+        }
+    };
+    let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour).ok()?;
+    Some(paged_compose::DecodedImage {
+        width: rgba.width,
+        height: rgba.height,
+        encoded: bytes::Bytes::copy_from_slice(bytes),
+        rgba: bytes::Bytes::from(rgba.data),
+        icc: tiff_icc(&img.info),
+    })
+}
+
+/// The profile a decoded TIFF carries on: the embedded one, except a Lab
+/// image's, whose pixels arrive as sRGB (the PDF export tags an RGB
+/// raster with any three-channel profile it is given; a CMYK profile it
+/// leaves off the converted pixels, as it does a CMYK JPEG's).
+fn tiff_icc(info: &paged_raster::RasterInfo) -> Option<bytes::Bytes> {
+    if info.color_model == paged_raster::ColorModel::Lab {
+        return None;
+    }
+    info.icc.clone().map(bytes::Bytes::from)
+}
+
 /// Extract an embedded ICC profile from JPEG (APP2 `ICC_PROFILE`
-/// segments, reassembled in chunk order) or PNG (`iCCP` chunk,
-/// zlib-inflated). Header-only scans — no pixel decode. The PDF
+/// segments, reassembled in chunk order), PNG (`iCCP` chunk,
+/// zlib-inflated) or TIFF (tag 34675; not for a Lab TIFF, see
+/// [`tiff_icc`]). Header-only scans — no pixel decode. The PDF
 /// exporter tags the image's /ColorSpace with this; the rasterizer
 /// keeps using its own decode-time conversion.
 pub(super) fn extract_icc(bytes: &[u8]) -> Option<bytes::Bytes> {
-    if is_jpeg_magic(bytes) {
-        return extract_jpeg_icc(bytes);
+    if paged_raster::is_tiff(bytes) {
+        return tiff_icc(&paged_raster::probe(bytes).ok()?);
     }
-    if bytes.len() > 8 && bytes[..8] == [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
-        return extract_png_icc(bytes);
-    }
-    None
-}
-
-fn extract_jpeg_icc(bytes: &[u8]) -> Option<bytes::Bytes> {
-    const MARKER: &[u8] = b"ICC_PROFILE\0";
-    let mut chunks: Vec<(u8, &[u8])> = Vec::new();
-    let mut i = 2usize;
-    while i + 4 <= bytes.len() {
-        if bytes[i] != 0xFF {
-            break;
-        }
-        let marker = bytes[i + 1];
-        // Standalone markers without length.
-        if (0xD0..=0xD9).contains(&marker) || marker == 0x01 {
-            i += 2;
-            continue;
-        }
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if len < 2 || i + 2 + len > bytes.len() {
-            break;
-        }
-        let seg = &bytes[i + 4..i + 2 + len];
-        if marker == 0xE2 && seg.len() > MARKER.len() + 2 && seg.starts_with(MARKER) {
-            let seq = seg[MARKER.len()];
-            let data = &seg[MARKER.len() + 2..];
-            chunks.push((seq, data));
-        }
-        // Stop at start-of-scan: APP segments precede it.
-        if marker == 0xDA {
-            break;
-        }
-        i += 2 + len;
-    }
-    if chunks.is_empty() {
-        return None;
-    }
-    chunks.sort_by_key(|(seq, _)| *seq);
-    let total: usize = chunks.iter().map(|(_, d)| d.len()).sum();
-    let mut icc = Vec::with_capacity(total);
-    for (_, d) in chunks {
-        icc.extend_from_slice(d);
-    }
-    Some(bytes::Bytes::from(icc))
-}
-
-fn extract_png_icc(bytes: &[u8]) -> Option<bytes::Bytes> {
-    let mut i = 8usize;
-    while i + 8 <= bytes.len() {
-        let len = u32::from_be_bytes(bytes[i..i + 4].try_into().ok()?) as usize;
-        let kind = &bytes[i + 4..i + 8];
-        if kind == b"iCCP" {
-            let data = bytes.get(i + 8..i + 8 + len)?;
-            // profile name (latin1, NUL-terminated) + compression
-            // method byte (0 = zlib) + compressed profile.
-            let nul = data.iter().position(|b| *b == 0)?;
-            let method = *data.get(nul + 1)?;
-            if method != 0 {
-                return None;
-            }
-            let compressed = data.get(nul + 2..)?;
-            let mut out = Vec::new();
-            let mut dec = flate2::read::ZlibDecoder::new(compressed);
-            use std::io::Read as _;
-            dec.read_to_end(&mut out).ok()?;
-            return Some(bytes::Bytes::from(out));
-        }
-        if kind == b"IDAT" || kind == b"IEND" {
-            break;
-        }
-        i += 12 + len; // length + type + data + crc
-    }
-    None
+    paged_raster::extract_icc(bytes).map(bytes::Bytes::from)
 }
 
 fn is_jpeg_magic(bytes: &[u8]) -> bool {

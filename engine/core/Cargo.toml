@@ -8,6 +8,7 @@ members = [
     "crates/paged-scene",
     "crates/paged-text",
     "crates/paged-color",
+    "crates/paged-raster",
     "crates/paged-compose",
     "crates/paged-gpu",
     "crates/paged-renderer",
@@ -85,6 +86,10 @@ quick-xml = { version = "0.41", features = ["serialize"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp"] }
+# TIFF decode and encode for paged-raster. The
+# features are the ones `image`'s own `tiff` feature turns on (deflate, fax,
+# jpeg, lzw), so the graph keeps one build of the crate.
+tiff = { version = "0.11", default-features = false, features = ["deflate", "fax", "jpeg", "lzw"] }
 base64 = "0.23"
 tsify-next = { version = "0.5", default-features = false, features = ["js"] }
 # ADR 187 — the wire's JSON Schema, derived next to the `Tsify` derives behind
