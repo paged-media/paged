@@ -1357,11 +1357,21 @@ export interface DocumentSurface {
     filter?: HitFilter,
   ): Promise<HitResult | null>;
   elementGeometry(ids: ElementId[]): Promise<ElementGeometryItem[]>;
+  /**
+   * The scene outline: spread → page → page items, a group's members as
+   * its `children`. Engine ADR 1010 (`supports("document.clipGroups@1")`):
+   * a frame's pasted-in (paste-into) content is listed as ITS `children`
+   * too, so every page item of the document is reachable here — a bundle
+   * no longer keeps its own index of what it pasted in — and a clip
+   * group's row carries `clip: true` (its last child is the clipping
+   * path). An older engine lists no pasted-in content.
+   */
   tree(): Promise<SceneTreeNode[]>;
   /**
    * C-16 — the per-element PARENTAGE read: the nearest ANCESTOR that is
-   * itself an addressable element (a group today — the only element kind
-   * that nests page items), or `null` when there is none.
+   * itself an addressable element (a group, or since engine ADR 1010 the
+   * frame a page item is pasted into — the two element kinds that nest
+   * page items), or `null` when there is none.
    *
    * Consumer: paged.draw's `selectParentGroup` command
    * (`draw-bundle/src/commands/select-parent-group.ts`), which climbs to
@@ -2322,6 +2332,49 @@ export interface DataService {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** Every binding with its sync state (the Data panel's colour cues). */
+  status?(): Promise<readonly DataBindingStatus[]>;
+  /** Read the data again and bring the placed content up to date (the Data
+   *  panel's Update document). */
+  refresh?(): Promise<void>;
+  /** Where the bindings are placed: each page item a binding's content lands
+   *  in, with the binding's sync state (the canvas field markers, a binding's
+   *  instances in the Data panel). */
+  placements?(): Promise<readonly DataPlacement[]>;
+  /** Place a field on a page item, as dropping it there means (the Data
+   *  panel's drag to place): into a text frame a variable, onto a graphic
+   *  frame its picture. The service refuses a target it cannot place on. */
+  place?(target: string, query: string, field: string): Promise<DataPlaced>;
+}
+
+/** What a placed field became. */
+export interface DataPlaced {
+  binding: string;
+  kind: string;
+}
+
+/** One placed instance of a binding: the page item its content lands in. */
+export interface DataPlacement {
+  /** The binding's id (`DataBindingStatus.id`). */
+  binding: string;
+  /** The ADR 131 address of the placed page item (`rectangle:u12`,
+   *  `textFrame:u3`). */
+  address: string;
+  status: DataBindingStatus["status"];
+}
+
+/** A binding and its sync state: `linked` (placed and in step with the
+ *  data), `stale` (the data changed since it was placed), `pinned` or
+ *  `overridden` (kept as it is on purpose), `error`, `unresolved` (not
+ *  resolved yet). */
+export interface DataBindingStatus {
+  id: string;
+  kind: string;
+  query?: string;
+  /** The fields its expressions read. */
+  fields: readonly string[];
+  status: "linked" | "stale" | "pinned" | "overridden" | "error" | "unresolved";
+  message?: string;
 }
 
 /** What an expression gives at a record. */
@@ -2364,6 +2417,14 @@ export interface DataSurface {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** Every binding with its sync state (`read`). */
+  status(): Promise<readonly DataBindingStatus[]>;
+  /** Read the data again and update the document (`bind`). */
+  refresh(): Promise<void>;
+  /** The page items each binding is placed in (`read`). */
+  placements(): Promise<readonly DataPlacement[]>;
+  /** Place a field on a page item (`bind`). */
+  place(target: string, query: string, field: string): Promise<DataPlaced>;
   /** Fires when a table's rows change (`read`). */
   onDidChange(listener: (change: DataChange) => void): Disposable;
 }

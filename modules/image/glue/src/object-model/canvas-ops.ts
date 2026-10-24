@@ -190,3 +190,20 @@ export function applyCanvasOp(stack: PgilStack, op: CanvasOp): void {
   stack.width = width;
   stack.height = height;
 }
+
+/** A selection's coverage (one byte per pixel) after `op`, as the
+ *  editor's own canvas operations carry its live selection: a quarter turn
+ *  or a flip moves it with the pixels, exactly; a crop or a canvas resize
+ *  drops it (null), as a crop does in the editor. */
+export function coverageAfterCanvasOp(
+  sel: { width: number; height: number; coverage: Uint8Array },
+  op: CanvasOp,
+): { width: number; height: number; coverage: Uint8Array } | null {
+  if (op.kind === "crop" || op.kind === "canvas") return null;
+  const { width, height, at } = plan(sel.width, sel.height, op);
+  return {
+    width,
+    height,
+    coverage: remap(sel.coverage, 1, sel.width, width, height, at, 0),
+  };
+}

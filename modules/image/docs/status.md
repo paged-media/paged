@@ -151,10 +151,16 @@ frame keeps its previous image until a GPU realm re-composites it.
   keeps the last four frames' selections until another document opens). When that frame's
   image opens again, its kept selection is set back into the engine and is the live
   selection again (`selection_set_coverage`; resampled to the image when it is the same
-  image at another size, dropped when it is another crop). A selection made
-  on the same image at another size (the aspect agrees within a pixel) is resampled to the
-  canvas; one of another aspect (another crop) is refused, and so is a frame with no
-  selection, headless or not, with the reason. A mask that covers no pixel is refused.
+  image at another size, dropped when it is another crop). A kept selection belongs to the
+  stored revision of the frame it was made on (its marker's record): a quarter turn or flip
+  committed on that frame through the object model carries it along to the revision it makes
+  (the revision before keeps the old one, for an undo), a crop or canvas resize drops it as
+  the editor's own do, and on any revision it was not carried to it is refused with the
+  reason that the image changed since, so it is never laid over pixels an edit moved. A
+  selection made on the same image at another size (the aspect agrees within a pixel) is
+  resampled to the canvas; one of another aspect (another crop, whose offset nothing
+  records) is refused, and so is a frame with no selection, headless or not, with the
+  reason. A mask that covers no pixel is refused.
   `tests/plugin-surface/image-filter-selection.spec.ts` drives it in the running editor: a
   marquee drag, then the typed command, then one undo.
 - **Interactive twins refuse headless.** A typed twin that acts on the image open in the
@@ -178,6 +184,29 @@ the baked image), beside the module's own label on the frame.
   creates it, later writes set every parameter to the preset's value or its default.
 - The picture's read reports `pending`, so a form or `paged template fields` can say the
   frame still shows the previous composite.
+
+## Actions
+
+On a host with `actions@1` (extensions ADR 344, PM-0015) the bundle registers pure steps over
+an encoded picture (`glue/src/actions.ts`; manifest `capabilities.actions.register`). Each
+takes a PNG, JPEG or PSD composite (sniffed) and, but `info`, gives back a PNG or JPEG
+(`format`: `keep` — JPEG for a JPEG, PNG otherwise — `png` or `jpeg`; `quality` 1–100). They
+run on the engine wasm's CPU lane, so they need no GPU device:
+
+| Id                            | In → out      | What it does                                                                                                                |
+| ----------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.image/info`      | asset → value | width, height, format, colour treatment at decode, 16-bit reduction, ppi                                                    |
+| `media.paged.image/convert`   | asset → asset | decode to sRGB (CMYK and ICC profiles converted) and encode as `format` (default PNG)                                       |
+| `media.paged.image/crop`      | asset → asset | cut `x`, `y`, `width`, `height` (0 = to the edge); `aspect` > 0 takes the largest centred rectangle of that shape inside it |
+| `media.paged.image/adjust`    | asset → asset | the adjustment chain, `adjust` mapping the adjustment layer's parameter paths to values                                     |
+| `media.paged.image/greyscale` | asset → asset | the Black & White stage at its default mix                                                                                  |
+| `media.paged.image/sharpen`   | asset → asset | the unsharp stage at `amount`                                                                                               |
+
+The chain runs on the GPU when this realm's engine has a device and on the CPU twins
+otherwise (ADR 465). Not registered, and why: a resize or fit to a box is a resample, and the
+resample kernels are GPU-only (`resize_image`), as is a straightened crop; an action may not
+depend on whether the realm has a device. They wait for a CPU resample from the engine's
+`paged-raster` / `paged-kernels` (PM-0014). WebP is neither decoded nor encoded.
 
 ## Limits of what is shipped
 
@@ -259,7 +288,11 @@ the baked image), beside the module's own label on the frame.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
   until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
   8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
-  step that keeps the history, and drops the selection. The undo list keeps 200 structure steps; its pixel steps live in a tile
+  step that keeps the history, and drops the selection (a crop does in Photoshop too); a
+  quarter turn or flip carries the selection with the pixels, and a canvas resize drops it.
+  A selection is session state ([ADR 460](adr/460-document-is-not-the-store.md)): it is
+  never written to the document, so a reopened document has none, as in Photoshop, where
+  keeping one means saving it as a channel. The undo list keeps 200 structure steps; its pixel steps live in a tile
   journal of at most 32 entries and 256 MiB.
 - **Raster type** has no line wrapping. **Content-aware fill** searches a bounded window.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third

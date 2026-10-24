@@ -136,11 +136,11 @@ fn message(e: impl std::fmt::Display) -> String {
     e.to_string().lines().next().unwrap_or_default().to_string()
 }
 
-/// Evaluate `source` (a function expression) on `args` in a bare context.
-pub fn call(source: &str, args: &[Value], budget: JsBudget) -> Result<Value, String> {
-    // A fixed clock: an action is pure, and cached by its input, so the time
-    // must not reach its result (`Date.now()` is the epoch). Boa's default
-    // clock also panics on wasm32-unknown-unknown.
+/// A bare context: the built-ins, the budget, a fixed clock. The clock is
+/// fixed because an action is pure and cached by its input, so the time must
+/// not reach its result (`Date.now()` is the epoch); Boa's default clock also
+/// panics on wasm32-unknown-unknown.
+fn context(budget: JsBudget) -> Result<Context, String> {
     let mut ctx = Context::builder()
         .clock(Rc::new(FixedClock))
         .build()
@@ -149,6 +149,21 @@ pub fn call(source: &str, args: &[Value], budget: JsBudget) -> Result<Value, Str
         .set_loop_iteration_limit(budget.loop_iterations);
     ctx.runtime_limits_mut()
         .set_recursion_limit(budget.recursion_depth);
+    Ok(ctx)
+}
+
+/// Evaluate a script in a bare context and give its completion value as
+/// JSON (`None` for `undefined`): a build script that computes and returns a
+/// spec (paged.data's automation, data spec §10).
+pub fn eval(source: &str, budget: JsBudget) -> Result<Option<Value>, String> {
+    let mut ctx = context(budget)?;
+    let out = ctx.eval(Source::from_bytes(source)).map_err(message)?;
+    out.to_json(&mut ctx).map_err(message)
+}
+
+/// Evaluate `source` (a function expression) on `args` in a bare context.
+pub fn call(source: &str, args: &[Value], budget: JsBudget) -> Result<Value, String> {
+    let mut ctx = context(budget)?;
     let f = ctx
         .eval(Source::from_bytes(&format!("({source}\n)")))
         .map_err(message)?;

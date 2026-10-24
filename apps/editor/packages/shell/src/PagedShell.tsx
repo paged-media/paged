@@ -208,6 +208,11 @@ export interface PagedShellProps {
    * specific controls (zoom indicator, color profile selector,
    * fps badge, …) that don't fit the panel-or-menu pattern. */
   headerExtras?: ReactNode;
+  /** Notices shown in a strip under the header and the edit-context
+   *  breadcrumb, above the work area (a document opened as what it is
+   *  not edited as: the template notice, ADR 293). Each renders nothing
+   *  when it has nothing to say. */
+  notices?: ReactNode;
   /** Cockpit — workflow-mode contributions (Design / Content /
    * Prepress / Data layout / Review / Export). Same data-driven
    * pattern as `panels`; the ModeSwitcher renders the registry. */
@@ -297,6 +302,7 @@ export function PagedShell({
   overlays,
   tools,
   headerExtras,
+  notices,
   modes,
   panelRail,
   canvasComponent,
@@ -396,6 +402,7 @@ export function PagedShell({
                                                           headerExtras={
                                                             headerExtras
                                                           }
+                                                          notices={notices}
                                                           modes={modes}
                                                           panelRail={panelRail}
                                                           canvasComponent={
@@ -504,6 +511,7 @@ function ShellChrome({
   overlays,
   tools,
   headerExtras,
+  notices,
   modes,
   panelRail,
   canvasComponent,
@@ -515,6 +523,7 @@ function ShellChrome({
   overlays?: OverlayContribution[];
   tools?: ToolContribution[];
   headerExtras?: ReactNode;
+  notices?: ReactNode;
   modes?: ModeContribution[];
   panelRail?: PanelRailItem[];
   canvasComponent?: ComponentType<PanelProps>;
@@ -1403,6 +1412,7 @@ function ShellChrome({
        *   emphasis, tool focus, and selection-driven auto-exit. */}
       <EditContextController />
       <EditContextBreadcrumb />
+      {notices}
 
       {/* Body row: the left tool rail (shell chrome, OUTSIDE the
        *   dockview substrate) + the work area — either the fixed

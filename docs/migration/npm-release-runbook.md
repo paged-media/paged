@@ -298,6 +298,12 @@ for them.
 2. `git tag -a v0.<protocol>.<patch> <commit on main> -m "<what changed>"` and
    `git push origin v0.<protocol>.<patch>`.
 3. Watch the run; re-run the tag to finish a partial release.
+4. The release notes (the tag's GitHub release) carry the editor's deprecated ids
+   ([PM-0013](../adr/PM-0013-editor-package.md), amendment 2): paste the table
+   `bun apps/editor/scripts/feature-ids.mjs --release-notes` prints, and name the aliases this
+   release removes (the entries whose `removeIn` is this release, gone from
+   `apps/editor/apps/canvas/deprecated-ids.json` since the last tag). The release job refuses a
+   tag that still carries an alias whose window has ended.
 
 A protocol bump on `main` needs its tag in the same push (core-ci's `protocol-tag-guard`), so the
 first release of a protocol is `v0.<new protocol>.0`.

@@ -21,6 +21,9 @@ paged-introspect = { path = "../paged-introspect" }
 # ADR 132 — `VirtualTarget`, the `Set` target a script names (and the op
 # roster the reachability gate reads).
 paged-wire = { path = "../paged-wire" }
+# Core ADR 1015 — `paged.actions.*`: the registry, chains, the cache key and
+# the sandbox actions run in.
+paged-action = { path = "../paged-action" }
 serde = { workspace = true }
 serde_json = "1"
 

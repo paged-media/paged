@@ -32,6 +32,7 @@ import { covers } from "@paged-media/test-kit";
 import type {
   BundleHost,
   CommandContribution,
+  KeybindingContribution,
   MenuContribution,
   MutationInput,
 } from "@paged-media/plugin-api";
@@ -41,6 +42,7 @@ import {
   CMD,
   COMMAND_PREFIX,
   PPTX_ACCEPT,
+  SLIDE_KEYBINDINGS,
   contributeSlideCommands,
 } from "../src/commands";
 import { contributeMenu, MENU_ENTRIES } from "../src/menu";
@@ -77,6 +79,8 @@ function recordingHost(
 ) {
   const commands = new Map<string, CommandContribution>();
   const menus: MenuContribution[] = [];
+  const keys: KeybindingContribution[] = [];
+  let caret: unknown = null;
   const logs: string[] = [];
   const mutations: MutationInput[] = [];
   const invoked: Array<{ command: string; args: unknown }> = [];
@@ -101,7 +105,12 @@ function recordingHost(
         menus.push(c);
         return { dispose: () => menus.splice(menus.indexOf(c), 1) };
       },
+      keybinding(c: KeybindingContribution) {
+        keys.push(c);
+        return { dispose: () => keys.splice(keys.indexOf(c), 1) };
+      },
     },
+    text: { caret: () => caret },
     document: {
       collection: async () => pageIds().map((selfId) => ({ selfId })),
       async mutate(m: MutationInput) {
@@ -136,6 +145,10 @@ function recordingHost(
     host,
     commands,
     menus,
+    keys,
+    setCaret(c: unknown) {
+      caret = c;
+    },
     logs,
     mutations,
     invoked,
@@ -150,6 +163,8 @@ function recordingHost(
 
 const ALL = [
   "contribute.command@1",
+  "contribute.keybinding@1",
+  "text.caret@1",
   "storage.parts@1",
   "viewport.pages@1",
   "objects@1",
@@ -221,6 +236,68 @@ describe("paged.slide palette commands", () => {
     s.handle.dispose();
     expect(s.menus).toEqual([]);
     expect(s.commands.size).toBe(0);
+  });
+
+  it("binds keys to the slide verbs, offered where the verb is and no text caret is active", async () => {
+    covers(
+      "keybinding:alt+cmd+n→media.paged.slide.command.newSlide",
+      "keybinding:alt+ctrl+n→media.paged.slide.command.newSlide",
+      "keybinding:alt+shift+cmd+n→media.paged.slide.command.duplicateSlide",
+      "keybinding:alt+shift+ctrl+n→media.paged.slide.command.duplicateSlide",
+      "keybinding:alt+cmd+backspace→media.paged.slide.command.deleteSlide",
+      "keybinding:alt+ctrl+backspace→media.paged.slide.command.deleteSlide",
+      "keybinding:cmd+arrowup→media.paged.slide.command.moveSlideUp",
+      "keybinding:ctrl+arrowup→media.paged.slide.command.moveSlideUp",
+      "keybinding:cmd+arrowdown→media.paged.slide.command.moveSlideDown",
+      "keybinding:ctrl+arrowdown→media.paged.slide.command.moveSlideDown",
+    );
+    const s = setup({ slides: 3, active: 2 });
+    expect(s.keys.map((k) => `${k.key}→${k.command}`)).toEqual(
+      SLIDE_KEYBINDINGS.map(([k, c]) => `${k}→${c}`),
+    );
+    // Every Cmd chord has its Ctrl twin, and every key names a command the
+    // bundle registered.
+    for (const k of s.keys) {
+      expect(s.commands.has(k.command)).toBe(true);
+      if (k.key.includes("cmd"))
+        expect(
+          s.keys.some(
+            (o) =>
+              o.key === k.key.replace("cmd", "ctrl") && o.command === k.command,
+          ),
+        ).toBe(true);
+    }
+    const on = (key: string) => {
+      const k = s.keys.find((x) => x.key === key)!;
+      return typeof k.when === "function" ? k.when(null) : true;
+    };
+    for (const k of s.keys) expect(on(k.key), k.key).toBe(true);
+    // A key follows its command: no slide above the first.
+    s.state.active = 1;
+    expect(on("cmd+arrowup")).toBe(false);
+    expect(on("cmd+arrowdown")).toBe(true);
+    // A text caret owns the keys (Cmd+Up moves it to the story's start).
+    s.setCaret({ story: "u1", offset: 0 });
+    for (const k of s.keys) expect(on(k.key), k.key).toBe(false);
+    s.setCaret(null);
+    // Not a deck: no slide key applies.
+    s.state.deck = false;
+    for (const k of s.keys) expect(on(k.key), k.key).toBe(false);
+    // A key runs its command.
+    s.state.deck = true;
+    s.state.active = 2;
+    const key = s.keys.find((k) => k.key === "cmd+arrowdown")!;
+    await s.commands.get(key.command)!.handler(null);
+    expect(s.mutations).toEqual([
+      { op: "movePage", args: { page: "p2", after: "p3" } },
+    ]);
+    s.handle.dispose();
+    expect(s.keys).toEqual([]);
+  });
+
+  it("binds no keys on a host without the slide store", () => {
+    const s = setup({ withStore: false });
+    expect(s.keys).toEqual([]);
   });
 
   it("offers the slide verbs only on a deck with a slide active", () => {

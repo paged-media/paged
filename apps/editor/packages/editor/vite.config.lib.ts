@@ -75,6 +75,9 @@ const DATA_PLUGIN = "media.paged.data";
 const VIRTUAL: Record<string, string> = {
   "virtual:paged-editor/runtime": join(CANVAS, "src/embed/index.ts"),
   "virtual:paged-editor/presets": join(CANVAS, "src/profiles/presets.ts"),
+  // Small and React-free: the entry refuses a page that is not isolated
+  // before it loads the editor.
+  "virtual:paged-editor/errors": join(CANVAS, "src/embed/errors.ts"),
 };
 
 /** `@paged-media/canvas-wasm`'s glue and wasm: the glue is bundled into the

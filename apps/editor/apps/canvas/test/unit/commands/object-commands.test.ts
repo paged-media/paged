@@ -48,7 +48,7 @@ import {
   nudgeKeyApplies,
   nudgeSelection,
   objectVerbApplies,
-  OBJECT_METADATA_KEY,
+  editClippingContents,
   releaseClippingMask,
   selectParentGroup,
   showAllOnSpread,
@@ -146,6 +146,7 @@ function objects(
     nudge: (direction, large) => nudgeSelection(deps, direction, large),
     makeClippingMask: () => makeClippingMask(deps),
     releaseClippingMask: () => releaseClippingMask(deps),
+    editClippingContents: () => editClippingContents(deps),
     lock: () => lockSelection(deps),
     unlockAllOnSpread: () => unlockAllOnSpread(deps),
     hide: () => hideSelection(deps),
@@ -500,50 +501,21 @@ describe("Delete", () => {
     ]);
   });
 
-  test("a clipping path takes its clipped content with it (released first, deepest first)", async () => {
+  test("a frame takes its pasted-in content with it: the engine removes both", async () => {
     covers("command:paged.object.delete");
-    const inside = id("oval", "uIn");
-    const index: ElementProperties = {
-      entries: [
-        {
-          path: "pluginMetadata",
-          value: {
-            type: "pluginMetadata",
-            value: {
-              key: OBJECT_METADATA_KEY,
-              value: JSON.stringify({ v: 1, data: { clipContent: [inside] } }),
-            },
-          },
-        },
-      ],
-    } as unknown as ElementProperties;
-    const h = objects({
-      tree: flat(),
-      selection: [A],
-      properties: { [key(A)]: index },
-      // The nested item exists (geometry answers) but is not in the tree.
-      geometry: (e) =>
-        key(e) === key(inside)
-          ? {
-              id: inside,
-              pageId: "page-1",
-              bounds: [0, 0, 1, 1],
-              itemTransform: null,
-            }
-          : null,
-    });
+    // Engine ADR 1010: the tree lists what a frame holds.
+    const tree = [
+      spread(
+        page(
+          { ...leaf("rectangle", "uA"), children: [leaf("oval", "uIn")] },
+          leaf("rectangle", "uB"),
+        ),
+      ),
+    ];
+    const h = objects({ tree, selection: [A] });
     await h.invoke("paged.object.delete");
     expect(h.fake.mutations()).toEqual([
-      {
-        op: "batch",
-        args: {
-          ops: [
-            { op: "releaseFrom", args: { childId: inside } },
-            { op: "deleteFrame", args: { frameId: "uIn" } },
-            { op: "deleteFrame", args: { frameId: "uA" } },
-          ],
-        },
-      },
+      { op: "deleteFrame", args: { frameId: "uA" } },
     ]);
   });
 
@@ -745,44 +717,55 @@ describe("Nudge ×8", () => {
 
 // ── Clipping masks ──────────────────────────────────────────────────
 
-describe("Make / release clipping mask", () => {
-  test("Make: the topmost object clips the rest, pasted back to front, plus the index, in ONE batch", async () => {
+describe("Make / release clipping mask, edit its contents", () => {
+  /** A clip group of A and B under the path C, beside a free T. */
+  const clipped = () => [
+    spread(
+      page(
+        {
+          ...group(
+            "uG",
+            leaf("rectangle", "uA"),
+            leaf("rectangle", "uB"),
+            leaf("oval", "uC"),
+          ),
+          clip: true,
+        } as ReturnType<typeof group>,
+        leaf("textFrame", "uT"),
+      ),
+    ),
+  ];
+
+  test("Make: ONE clip group of the selection, the topmost clipping, and the group is selected", async () => {
     covers("command:paged.object.makeClippingMask");
-    const h = objects({ tree: flat(), selection: [A, C, B] });
+    const h = objects({
+      tree: flat(),
+      selection: [A, C, B],
+      mutate: (m) => (m.op === "createGroup" ? appliedWith(G) : undefined),
+    });
     await h.invoke("paged.object.makeClippingMask");
     expect(h.fake.mutations()).toEqual([
       {
-        op: "batch",
-        args: {
-          ops: [
-            { op: "pasteInto", args: { containerId: C, childId: A } },
-            { op: "pasteInto", args: { containerId: C, childId: B } },
-            {
-              op: "setPluginMetadata",
-              args: {
-                elementId: C,
-                key: OBJECT_METADATA_KEY,
-                value: JSON.stringify({
-                  v: 1,
-                  data: {
-                    clipContent: [
-                      { kind: "rectangle", id: "uA" },
-                      { kind: "rectangle", id: "uB" },
-                    ],
-                  },
-                }),
-              },
-            },
-          ],
-        },
+        op: "createGroup",
+        args: { memberIds: [A, B, C], clip: true },
       },
     ]);
     expectOneCommit(h.fake);
-    expect(h.selection()).toEqual([C]);
+    expect(h.selection()).toEqual([G]);
   });
 
-  test("Make: one object, a text frame on top, or a group as content are refused before the wire", async () => {
+  test("Make: a group can be clipped; a grouped object, one object or a text frame on top are refused", async () => {
     covers("command:paged.object.makeClippingMask");
+    const withGroup = objects({
+      tree: [
+        spread(page(group("uG", leaf("rectangle", "uA")), leaf("oval", "uC"))),
+      ],
+      selection: [G, C],
+    });
+    await withGroup.invoke("paged.object.makeClippingMask");
+    expect(withGroup.fake.mutations()).toEqual([
+      { op: "createGroup", args: { memberIds: [G, C], clip: true } },
+    ]);
     const cases: Array<[ElementId[], RegExp, ReturnType<typeof flat>]> = [
       [[A], /needs two or more objects/, flat()],
       [
@@ -791,11 +774,11 @@ describe("Make / release clipping mask", () => {
         [spread(page(leaf("rectangle", "uA"), leaf("textFrame", "uT")))],
       ],
       [
-        [G, B],
-        /group uG cannot be clipped/,
+        [A, C],
+        /rectangle uA is inside group uG/,
         [
           spread(
-            page(group("uG", leaf("oval", "uC")), leaf("rectangle", "uB")),
+            page(group("uG", leaf("rectangle", "uA")), leaf("oval", "uC")),
           ),
         ],
       ],
@@ -819,37 +802,31 @@ describe("Make / release clipping mask", () => {
     }
   });
 
-  test("Release: pops the indexed content out beneath its path and clears the index, in ONE batch", async () => {
+  test("Release: a clip group (or something inside it) is dissolved, its members selected", async () => {
+    covers("command:paged.object.releaseClippingMask");
+    for (const selection of [[G], [B]]) {
+      const h = objects({ tree: clipped(), selection });
+      await h.invoke("paged.object.releaseClippingMask");
+      expect(h.fake.mutations()).toEqual([
+        { op: "dissolveGroup", args: { groupId: "uG" } },
+      ]);
+      expectOneCommit(h.fake);
+      expect(h.selection()).toEqual([A, B, C]);
+    }
+  });
+
+  test("Release: a frame's pasted-in content pops out beneath it, in ONE batch", async () => {
     covers("command:paged.object.releaseClippingMask");
     const inside = id("rectangle", "uIn");
-    const index = {
-      entries: [
-        {
-          path: "pluginMetadata",
-          value: {
-            type: "pluginMetadata",
-            value: {
-              key: OBJECT_METADATA_KEY,
-              value: JSON.stringify({ v: 1, data: { clipContent: [inside] } }),
-            },
-          },
-        },
-      ],
-    } as unknown as ElementProperties;
-    const h = objects({
-      tree: flat(),
-      selection: [C],
-      properties: { [key(C)]: index },
-      geometry: (e) =>
-        key(e) === key(inside)
-          ? {
-              id: inside,
-              pageId: "page-1",
-              bounds: [0, 0, 1, 1],
-              itemTransform: null,
-            }
-          : null,
-    });
+    const tree = [
+      spread(
+        page(leaf("rectangle", "uA"), leaf("rectangle", "uB"), {
+          ...leaf("oval", "uC"),
+          children: [leaf("rectangle", "uIn")],
+        }),
+      ),
+    ];
+    const h = objects({ tree, selection: [C] });
     await h.invoke("paged.object.releaseClippingMask");
     expect(h.fake.mutations()).toEqual([
       {
@@ -863,10 +840,6 @@ describe("Make / release clipping mask", () => {
               op: "reorderElement",
               args: { elementId: inside, to: { index: 2 } },
             },
-            {
-              op: "setPluginMetadata",
-              args: { elementId: C, key: OBJECT_METADATA_KEY, value: null },
-            },
           ],
         },
       },
@@ -875,20 +848,31 @@ describe("Make / release clipping mask", () => {
     expect(h.selection()).toEqual([inside, C]);
   });
 
-  test("Release: no clipping-path kind selected, or no index, is reported", async () => {
+  test("Release: nothing that clips is reported", async () => {
     covers("command:paged.object.releaseClippingMask");
     const noPath = objects({ tree: flat(), selection: [T] });
     await noPath.invoke("paged.object.releaseClippingMask");
-    expect(noPath.reports[0]?.[1]).toMatch(/select a clipping path/);
-    const noIndex = objects({ tree: flat(), selection: [A] });
-    await noIndex.invoke("paged.object.releaseClippingMask");
-    expect(noIndex.fake.mutations()).toEqual([]);
-    expect(noIndex.reports[0]?.[1]).toMatch(
-      /holds no content this editor clipped/,
-    );
+    expect(noPath.reports[0]?.[1]).toMatch(/select a clipping mask/);
+    const nothingInside = objects({ tree: flat(), selection: [A] });
+    await nothingInside.invoke("paged.object.releaseClippingMask");
+    expect(nothingInside.fake.mutations()).toEqual([]);
+    expect(nothingInside.reports[0]?.[1]).toMatch(/rectangle uA clips nothing/);
     const empty = objects({ tree: flat(), selection: [] });
     await empty.invoke("paged.object.releaseClippingMask");
     expect(empty.reports).toEqual([]);
+  });
+
+  test("Edit contents: selects what the mask clips, the clipping path left out; writes nothing", async () => {
+    covers("command:paged.object.editClippingContents");
+    for (const selection of [[G], [C]]) {
+      const h = objects({ tree: clipped(), selection });
+      await h.invoke("paged.object.editClippingContents");
+      expectNoCommit(h.fake);
+      expect(h.selection()).toEqual([A, B]);
+    }
+    const none = objects({ tree: clipped(), selection: [T] });
+    await none.invoke("paged.object.editClippingContents");
+    expect(none.reports[0]?.[1]).toMatch(/select a clipping mask/);
   });
 });
 

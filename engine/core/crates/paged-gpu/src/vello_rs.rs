@@ -4952,4 +4952,63 @@ mod tests {
             assert_eq!(red_at(buf, 90, 14), 0, "and its points are inside");
         }
     }
+
+    /// Engine ADR 1010 — a clip group nested in a paste-into is two
+    /// `PushClip` brackets, one inside the other: both lanes intersect
+    /// them alike (only the overlap of the two outlines paints).
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn nested_clips_match_the_cpu_lane__feat__frames_paths_clip_groups() {
+        use paged_compose::{DisplayCommand, Paint, PathData, PathSegment, Rect, Transform};
+        let square = |x: f32, y: f32, s: f32| {
+            PathData::new(vec![
+                PathSegment::MoveTo { x, y },
+                PathSegment::LineTo { x: x + s, y },
+                PathSegment::LineTo { x: x + s, y: y + s },
+                PathSegment::LineTo { x, y: y + s },
+                PathSegment::Close,
+            ])
+        };
+        let mut list = DisplayList::new();
+        let black = Paint::Solid(ComposeColor::rgba(0.0, 0.0, 0.0, 1.0));
+        for clip in [square(10.0, 10.0, 60.0), square(40.0, 20.0, 60.0)] {
+            let path_id = list.paths.push_anon(clip);
+            list.commands.push(DisplayCommand::PushClip {
+                path_id,
+                transform: Transform::IDENTITY,
+            });
+        }
+        paged_compose::emit_rect(
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 120.0,
+                h: 100.0,
+            },
+            black,
+            &mut list,
+        );
+        for _ in 0..2 {
+            list.commands
+                .push(DisplayCommand::PopClip(Transform::IDENTITY));
+        }
+        let mut opts = RasterOptions::new(120.0, 100.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+            return;
+        };
+        assert!(
+            ndiff <= 40 && worst <= 64,
+            "lanes differ on {ndiff} pixels (worst {worst})"
+        );
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        for buf in [&gpu, &cpu] {
+            assert_eq!(red_at(buf, 55, 45), 0, "inside both outlines");
+            assert_eq!(red_at(buf, 20, 45), 255, "inside the outer only");
+            assert_eq!(red_at(buf, 90, 45), 255, "inside the inner only");
+        }
+    }
 }

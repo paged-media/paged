@@ -24,6 +24,7 @@
 // fails this typecheck (`bun run typecheck`), never a host's build.
 
 import type * as Impl from "../../../apps/canvas/src/embed/index";
+import type * as ImplErrors from "../../../apps/canvas/src/embed/errors";
 import type * as Connect from "../../../apps/canvas/src/embed/connect";
 import type { PRESETS as ImplPresets } from "../../../apps/canvas/src/profiles/presets";
 import type * as Public from "../src/types";
@@ -40,6 +41,9 @@ ok<Assignable<Public.ConnectConfig, Connect.ConnectConfig>>();
 ok<Assignable<Impl.EditorHandle, Public.EditorHandle>>();
 ok<Assignable<Impl.EditorEvent, Public.EditorEvent>>();
 ok<Assignable<Impl.FieldValue, Public.FieldValue>>();
+ok<Assignable<Impl.EditorError, Public.EditorError>>();
+ok<Assignable<Public.EditorErrorCode, Impl.EditorErrorCode>>();
+ok<Assignable<Impl.EditorErrorCode, Public.EditorErrorCode>>();
 ok<Assignable<Connect.RemoteEditorHandle, Public.RemoteEditorHandle>>();
 ok<
   Assignable<typeof ImplPresets, Readonly<Record<string, Public.EditorProfile>>>
@@ -54,3 +58,8 @@ ok<Assignable<typeof Impl.createEditor, Runtime["createEditor"]>>();
 ok<Assignable<typeof Impl.mountEditor, Runtime["mountEditor"]>>();
 ok<Assignable<typeof Impl.setDefaultFontUrls, Runtime["setDefaultFontUrls"]>>();
 ok<Assignable<typeof Connect.connectEditor, Iframe["connectEditor"]>>();
+type Errors = typeof import("virtual:paged-editor/errors");
+ok<Assignable<typeof Impl.isEditorError, Errors["isEditorError"]>>();
+ok<
+  Assignable<typeof ImplErrors.assertEmbeddable, Errors["assertEmbeddable"]>
+>();

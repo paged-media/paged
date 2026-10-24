@@ -19,7 +19,7 @@
 //! TIFF probe and decode through the `tiff` crate.
 
 pub(crate) mod encode;
-mod raw;
+pub(crate) mod raw;
 
 use std::borrow::Cow;
 use std::io::Cursor;

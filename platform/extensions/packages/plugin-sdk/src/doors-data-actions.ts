@@ -187,6 +187,22 @@ export function createDataSurface(
       const s = service("evaluate", "read");
       return member(s, "evaluate", "evaluate")(query, expr, record);
     },
+    async status() {
+      const s = service("status", "read");
+      return [...(await member(s, "status", "status")())];
+    },
+    async refresh() {
+      const s = service("refresh", "bind");
+      return member(s, "refresh", "refresh")();
+    },
+    async placements() {
+      const s = service("placements", "read");
+      return [...(await member(s, "placements", "placements")())];
+    },
+    async place(target, query, field) {
+      const s = service("place", "bind");
+      return member(s, "place", "place")(target, query, field);
+    },
     onDidChange(listener) {
       requireDeclared(
         cap?.read === true,

@@ -1611,8 +1611,10 @@ pub enum Mutation {
     /// child keeps its document-space geometry (nothing moves on
     /// canvas) and renders clipped by the container's outline. Rides
     /// `Operation::PasteInto`; one undo pops the child back to its
-    /// exact stacking slot. Grouped / already-nested children and
-    /// non-container hosts are rejected with an honest error.
+    /// exact stacking slot. Already-nested children and non-container
+    /// hosts are rejected with an honest error. Engine ADR 1010: the
+    /// child may be a group, and a grouped item pastes its outermost
+    /// group in (the reply's op names that group).
     PasteInto {
         container_id: ElementId,
         child_id: ElementId,
@@ -1753,8 +1755,19 @@ pub enum Mutation {
     /// id as `createdId` so the editor can select it. W1.20 (groups
     /// v2): `member_ids` may include existing `Group`s, producing a
     /// nested group-of-groups.
+    ///
+    /// Engine ADR 1010 (additive, rides v76): `clip: true` makes a CLIP
+    /// GROUP — Illustrator's Make Clipping Mask: the top-most member is
+    /// the clipping path, the rest paint inside its outline, and the
+    /// path itself paints nothing. Refused unless the top-most member is
+    /// a Rectangle, Oval or Polygon hosting no pasted-in content.
+    /// Release is `dissolveGroup` (or `groupClip` false to keep the
+    /// group).
     CreateGroup {
         member_ids: Vec<ElementId>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[tsify(optional)]
+        clip: bool,
     },
     /// B-04 (protocol v32) — dissolve a group; members return to the
     /// group's paint slot in stored order. W1.20 (groups v2):

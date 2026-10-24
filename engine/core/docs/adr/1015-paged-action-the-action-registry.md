@@ -54,5 +54,21 @@ Values cross as JSON. An error is reported as its first line (Boa appends the JS
 - The data engine wasm carries Boa: 11.4 → 14.0 MiB, inside the 16 MiB its manifest declares. The
   editor then holds two Boa copies, the canvas worker's and the data engine's. A transform could
   move to the canvas worker later, at the cost of the store's rows crossing to it.
-- `paged.actions.*` in `paged-script`, and image and draw actions over `paged-raster` and
-  `paged-kernels`, build on this registry; they are not part of this record.
+- Image and draw actions over `paged-raster` and `paged-kernels` build on this registry; they
+  are not part of this record.
+
+## Amendment (2026-10-24): `paged.actions.*` in the interpreter
+
+`paged-script` exposes the registry as `paged.actions.register / list / run / runChain`
+(`src/actions.rs`). The registry lives as long as the engine, in the editor's worker or for one
+CLI run, so a later script runs what an earlier one registered.
+
+`register({ id, title?, input, output, params?, run })` keeps `run`'s source text as a
+`JsAction`, so an action runs in the bare sandbox, never in the script that registered it.
+Whoever runs it later, it cannot reach `paged`: `paged.pages()` there is a reference error. A
+taken id is refused. `run` and `runChain` answer `{ output, key, cached }` with the SDK's key.
+paged.data's build scripts (`data-script`) evaluate in the same sandbox (`js::eval`), so the
+module no longer embeds an interpreter of its own.
+
+The same bridge carries `paged.data.*`, the data an embedder attaches to one run (core
+[ADR 1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md), amendment of 2026-10-24).

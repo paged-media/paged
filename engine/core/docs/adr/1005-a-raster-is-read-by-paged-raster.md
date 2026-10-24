@@ -1,6 +1,6 @@
 # ADR 1005 — A raster is read by `paged-raster`, and a TIFF through `tiff`
 
-- **Status:** Accepted 2026-10-24; amended 2026-10-24 (PSD/PSB through `paged-psd`).
+- **Status:** Accepted 2026-10-24; amended 2026-10-24 (PSD/PSB through `paged-psd`), 2026-10-24 (EPS preview, DNG, AVIF, JPEG XL and the small formats).
 - **Scope:** no wire change (protocol unchanged). New crate `paged-raster`; `paged-renderer`
   (`pipeline/image_decode.rs`), `paged-gpu` (`vcpu.rs`, `vello_rs.rs`: the wasm32 raster-time
   decode), `paged-cli` (`place.rs`). The first part of the raster plan's codec matrix; the
@@ -93,6 +93,92 @@ module's; the engine draws the composite (a TIFF's own image, a PSD's merged com
   probe would add `paged-raster`'s tree to a crate that has none of it.
 - `paged-psd` and `paged-pixel` stay leaf crates, checked by a `cargo tree` guard in
   `core-ci.yml`.
+
+## Amendment — 2026-10-24: the first format extensions (EPS preview, DNG, AVIF, JPEG XL, small formats)
+
+**Decision.** `paged-raster` sniffs, probes and decodes these formats, and the render paths reach
+them through the one call they already make (`decode_rgba8`, and the renderer's
+`reads_through_raster`, now `paged_raster::reads_natively`):
+
+| Format | Sniff | Decoder | Notes |
+|---|---|---|---|
+| EPS, DOS EPS binary | `C5 D0 D3 C6` | its TIFF section, through the TIFF reader | a metafile-only file is refused by name |
+| EPS, EPSI | `%!PS` + `%%BeginPreview` | own: 1/2/4/8-bit hexadecimal gray, 0 = white | a preview-less EPS is refused (no interpreter) |
+| DNG | TIFF + DNGVersion (50706) | own, over the TIFF container; lossless JPEG (`SOF3`) own | a good default develop, below |
+| AVIF | `ftyp` brand `avif`/`avis` | `avif-parse` (MPL-2.0) + rav1d (BSD-2-Clause) as `sqzer-rav1d`, one thread, no assembly | feature `avif` |
+| JPEG XL | `FF 0A` or the JXL container | `jxl-oxide` (MIT OR Apache-2.0), no rayon | feature `jxl` |
+| OpenEXR | `76 2F 31 01` | `image` + `exr` (BSD-3-Clause) | feature `exr`; scene-linear |
+| Radiance HDR | `#?RADIANCE` / `#?RGBE` | `image` | scene-linear |
+| TGA | v2 footer, or a consistent header | `image` | no magic number |
+| QOI, ICO | `qoif`, `00 00 01 00` | `image` | ICO: the entry `image` picks |
+
+**EPS.** The engine has no PostScript interpreter (that is WP9.1's `paged-ps`), so an EPS draws the
+preview it carries for screens. `eps_bounding_box` reads `%%HiResBoundingBox` (else
+`%%BoundingBox`); the renderer places the preview over that box in points, whatever its pixel
+size, as the PostScript would cover it, and `RasterInfo::resolution` states the preview's ppi
+against it. A placed EPS drawn this way records `ImageDrawnFromPreview` (warning; the PDF
+export's finding `image_drawn_from_preview`), and neither `ImageDecodeFailed` nor the
+ghost-cross of `degraded_asset_markers`, which stays for content nothing can draw. An EPS
+without a readable preview keeps the earlier outcome (frame fill, `ImageDecodeFailed`). An inline
+`<EPS><Contents>` is still only flagged by the importer (its bytes are not kept), so it keeps the
+`ImageContentUnrenderable` path. A placed `.ai` is a PDF and keeps drawing through hayro.
+
+**DNG.** The raw IFD is IFD0 or a SubIFD with NewSubFileType 0 and CFA or LinearRaw. Its strips
+or tiles are read uncompressed (1 to 16 bits; 8 and 16 in the file's byte order, other depths
+packed MSB first) or as lossless JPEG (compression 7: Huffman, predictors 1 to 7, restart
+intervals, the DNG convention of coding a CFA tile as a frame of two components). Deflate (8),
+lossy JPEG (34892) and JPEG XL (52546) are refused by name. The develop is a documented
+default, not a raw converter: LinearizationTable, BlackLevel (repeat pattern and deltas),
+WhiteLevel, inside ActiveArea; a bilinear demosaic for any red/green/blue repeat pattern (the
+mean of the nearest same-colour neighbours); white balance by AsShotNeutral, BaselineExposure;
+ColorMatrix (the D65 one) to linear sRGB the way dcraw derives it; clipped, sRGB-encoded,
+DefaultCrop, 16-bit RGB. Opcode lists, ForwardMatrix, camera calibration and profiles,
+AnalogBalance and highlight recovery are not applied; the image module's Develop adjustment
+(WP5.2) owns finer control.
+
+**AVIF.** rav1d is the decoder the plan names, but neither its 1.1 release nor `re_rav1d` compiles
+for `wasm32-unknown-unknown` (they import `libc` types that target lacks), and `avif-decode`
+spawns worker threads, which panic there. `sqzer-rav1d` is rav1d's upstream main with the safe
+Rust API of upstream PR 1439 and a `wasm32` shim of those `libc` names, published under rav1d's
+BSD-2-Clause licence, so `paged-raster` keeps `forbid(unsafe_code)`; it is swapped for an
+upstream release once one carries both. One thread, no assembly (so no `nasm` on x86 CI).
+YUV converts with the stream's matrix and range (BT.601 when unspecified), chroma by
+replication; the alpha item is decoded and merged (`prem` → associated). Other primaries, PQ
+and HLG, and a container ICC profile are not converted. 10 and 12-bit streams arrive as 16-bit
+samples.
+
+**JPEG XL.** `jxl-oxide` renders the first keyframe with orientation applied: to sRGB when the
+image is XYB or enumerated, in its own space with its ICC profile carried on otherwise. CMYK is
+refused.
+
+**Scene-linear.** `Format::is_scene_linear` (HDR, EXR): `to_rgba8` clips those floats at 1 and
+sRGB-encodes them, a display-referred default without tone mapping.
+
+**Size.** The three larger decoders are default features of `paged-raster` (`avif`, `jxl`,
+`exr`), on in every build, so a build can still leave one out (it then sniffs the format and
+refuses it, naming the feature). Measured on `paged-canvas-wasm` (`--features gpu`,
+`wasm-release`, `wasm-bindgen`, `wasm-opt -Oz`, `brotli --best`):
+
+| Build | `-Oz` wasm | brotli | brotli delta |
+|---|---|---|---|
+| before this amendment | 30,562,669 B | 6,583,108 B | |
+| features off (EPS, DNG, TGA, QOI, ICO, HDR, renderer) | 30,712,755 B | 6,611,915 B | +28.1 KiB |
+| default (`avif`, `jxl`, `exr` on) | 33,506,022 B | 7,310,529 B | +710.4 KiB |
+
+The three features together cost +682 KiB brotli. Built alone into an empty `cdylib` (an upper
+bound, their shared dependencies counted each time), AVIF is about 252 KiB, JPEG XL 248 KiB and
+OpenEXR 80 KiB brotli.
+
+All three together stay far below the +1 MB brotli line that would have kept them out of the
+editor's wasm.
+
+**Consequences.**
+- A linked EPS with a preview draws (low resolution, and the diagnostic says so); DNG, AVIF and
+  JPEG XL links render instead of the frame fill.
+- `Format` grows nine variants; `RasterInfo` is unchanged. No wire change (protocol unchanged):
+  the new `DiagnosticCode` is appended at the end, and diagnostics are not on the wire.
+- WP9.1 (`paged-ps`) replaces the EPS preview with the artwork and keeps the preview as the
+  fallback; WP9.4 owns the encoders.
 
 ## Note — 2026-10-24: the frame's intent ([ADR 1016](1016-one-cms-with-intents-and-bpc.md))
 

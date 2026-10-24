@@ -40,10 +40,11 @@
 // `{ "$file": "<path>" }`.
 
 import { readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { basename, extname, resolve } from "node:path";
 
 import { flagBool, flagStr, type OptionSpec } from "./args";
 import { CliError, EXIT } from "./errors";
+import { pendingContent, pendingLine } from "./module-content";
 import type { CliSession } from "./session";
 import type { Verb } from "./verbs";
 
@@ -410,6 +411,17 @@ export const template: Verb = {
       if (!out) throw new CliError(EXIT.usage, "template fill needs -o <file>");
       const s = await session(doc);
       await fill(s, readValues(cwd, valuesArg), cwd);
+      // A PDF of content this session cannot draw (an edited picture whose
+      // composite needs a GPU) would show the old picture: refused, loudly.
+      if (extname(out).toLowerCase() === ".pdf") {
+        const pending = await pendingContent(s);
+        if (pending.length > 0)
+          throw new CliError(
+            EXIT.failed,
+            `template fill: ${pending.length} object(s) cannot be drawn here; write .paged and export it where they render`,
+            { pending: pending.map(pendingLine) },
+          );
+      }
       const saved = await s.save(out);
       return {
         json: { ...saved, fields: await fields(s) },
@@ -455,11 +467,17 @@ export const template: Verb = {
         if (wanted.get(key) !== actual.get(key)) differences.push(key);
       }
       const ok = differences.length === 0;
+      // Content a headless session draws as an older picture: not a change
+      // outside the fields, but what a PDF written here would get wrong.
+      const pending = await pendingContent(submitted);
       return {
-        json: { ok, values, differences },
-        text: ok
-          ? "ok: only the template's fields differ"
-          : `changed outside the template's fields:\n${differences.join("\n")}`,
+        json: { ok, values, differences, pending },
+        text: [
+          ok
+            ? "ok: only the template's fields differ"
+            : `changed outside the template's fields:\n${differences.join("\n")}`,
+          ...pending.map(pendingLine),
+        ].join("\n"),
         exit: ok ? EXIT.ok : EXIT.failed,
       };
     }

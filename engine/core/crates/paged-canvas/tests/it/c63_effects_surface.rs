@@ -354,6 +354,7 @@ fn group_of_two(m: &mut CanvasModel) -> ElementId {
         m,
         Mutation::CreateGroup {
             member_ids: members,
+            clip: false,
         },
     )
 }

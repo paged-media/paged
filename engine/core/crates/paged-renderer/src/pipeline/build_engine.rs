@@ -266,7 +266,30 @@ pub(super) fn frame_ref_local_pages(
             .polygons
             .get(i)
             .map(|f| transform_bounds(f.bounds, f.item_transform)),
-        F::Group(_) => None,
+        // Engine ADR 1010: a group is on every page one of its members
+        // is on (a clip group brackets its members on each of them).
+        F::Group(gi) => {
+            let mut pages: Vec<usize> = Vec::new();
+            for &m in spread
+                .groups
+                .get(gi)
+                .map(|g| g.members.as_slice())
+                .unwrap_or(&[])
+            {
+                if matches!(m, F::Group(c) if c == gi) {
+                    continue;
+                }
+                for p in frame_ref_local_pages(spread, m, local_geoms) {
+                    if !pages.contains(&p) {
+                        pages.push(p);
+                    }
+                }
+            }
+            if pages.is_empty() {
+                pages.push(0);
+            }
+            return pages;
+        }
     };
     let Some(b) = b else { return vec![0] };
     let overlaps = pages_overlapping_frame(&b, local_geoms);
@@ -366,70 +389,58 @@ pub(super) fn container_clip_geometry(
 pub(super) type NestedTextClips = HashMap<String, Vec<(PathData, Option<[f32; 6]>)>>;
 
 pub(super) fn collect_nested_text_clips(document: &Document) -> NestedTextClips {
+    use paged_model::FrameRef as F;
     let mut out: NestedTextClips = HashMap::new();
     for parsed in &document.spreads {
         let spread = &parsed.spread;
-        if spread.nested_children.is_empty() {
+        let clips_anything =
+            !spread.nested_children.is_empty() || spread.groups.iter().any(|g| g.clip);
+        if !clips_anything {
             continue;
         }
-        // Reverse index: child self id → host self id, for the
-        // ancestor walk (a container can itself be nested).
-        let mut host_of: HashMap<&str, &str> = HashMap::new();
+        // Reverse index: item → the item whose list names it (a B-18
+        // container, or a group), for the ancestor walk. Engine ADR
+        // 1010: a container's child may be a group, and a clip group
+        // clips its members, so both kinds of owner are walked.
+        let mut owner_of: HashMap<F, F> = HashMap::new();
         for (host, children) in &spread.nested_children {
+            let Some(host_ref) = frame_ref_for_self_id(spread, host) else {
+                continue;
+            };
             for &c in children {
-                let child_id = match c {
-                    paged_model::FrameRef::TextFrame(i) => {
-                        spread.text_frames.get(i).and_then(|f| f.self_id.as_deref())
-                    }
-                    paged_model::FrameRef::Rectangle(i) => {
-                        spread.rectangles.get(i).and_then(|f| f.self_id.as_deref())
-                    }
-                    paged_model::FrameRef::Oval(i) => {
-                        spread.ovals.get(i).and_then(|f| f.self_id.as_deref())
-                    }
-                    paged_model::FrameRef::Polygon(i) => {
-                        spread.polygons.get(i).and_then(|f| f.self_id.as_deref())
-                    }
-                    paged_model::FrameRef::GraphicLine(i) => spread
-                        .graphic_lines
-                        .get(i)
-                        .and_then(|f| f.self_id.as_deref()),
-                    paged_model::FrameRef::Group(_) => None,
-                };
-                if let Some(id) = child_id {
-                    host_of.insert(id, host.as_str());
-                }
+                owner_of.insert(c, host_ref);
             }
         }
-        for (host, children) in &spread.nested_children {
-            for &c in children {
-                let paged_model::FrameRef::TextFrame(i) = c else {
-                    continue;
+        for (gi, g) in spread.groups.iter().enumerate() {
+            for &m in &g.members {
+                owner_of.insert(m, F::Group(gi));
+            }
+        }
+        for i in 0..spread.text_frames.len() {
+            let Some(child_id) = spread.text_frames[i].self_id.clone() else {
+                continue;
+            };
+            // Ancestor chain, innermost → outermost, then flipped.
+            let mut clips: Vec<(PathData, Option<[f32; 6]>)> = Vec::new();
+            let mut cursor = F::TextFrame(i);
+            for _ in 0..64 {
+                let Some(&up) = owner_of.get(&cursor) else {
+                    break;
                 };
-                let Some(child_id) = spread.text_frames.get(i).and_then(|f| f.self_id.clone())
-                else {
-                    continue;
+                let clip_host = match up {
+                    F::Group(gi) => spread.groups.get(gi).and_then(|g| g.clip_member()),
+                    other => Some(other),
                 };
-                // Ancestor chain, innermost → outermost, then flip.
-                let mut chain: Vec<&str> = vec![host.as_str()];
-                let mut cursor = host.as_str();
-                while let Some(&h) = host_of.get(cursor) {
-                    // Defensive: a malformed cycle must not hang the
-                    // build.
-                    if chain.len() > 64 || chain.contains(&h) {
-                        break;
+                if let Some(id) = clip_host.and_then(|h| frame_ref_self_id(spread, h)) {
+                    if let Some(c) = container_clip_geometry(spread, id) {
+                        clips.push(c);
                     }
-                    chain.push(h);
-                    cursor = h;
                 }
-                chain.reverse();
-                let clips: Vec<(PathData, Option<[f32; 6]>)> = chain
-                    .iter()
-                    .filter_map(|h| container_clip_geometry(spread, h))
-                    .collect();
-                if !clips.is_empty() {
-                    out.insert(child_id, clips);
-                }
+                cursor = up;
+            }
+            if !clips.is_empty() {
+                clips.reverse();
+                out.insert(child_id, clips);
             }
         }
     }
@@ -2241,7 +2252,41 @@ pub(super) fn build_document_inner(
                 }
                 paged_model::FrameRef::Group(gi) => {
                     if let Some(g) = spread.groups.get(gi) {
+                        // Engine ADR 1010: a clip group paints its
+                        // members inside the top-most one's outline and
+                        // never paints that one itself. The clip goes on
+                        // every page a member reaches, so a member
+                        // straying onto a neighbour page is clipped there
+                        // too.
+                        let clip_member = g.clip_member();
+                        let clip = clip_member
+                            .and_then(|c| frame_ref_self_id(spread, c))
+                            .and_then(|id| container_clip_geometry(spread, id));
+                        let clip_pages = if clip.is_some() {
+                            frame_ref_local_pages(
+                                spread,
+                                paged_model::FrameRef::Group(gi),
+                                local_geoms,
+                            )
+                        } else {
+                            Vec::new()
+                        };
+                        if let Some((path, transform)) = &clip {
+                            for &local_idx in &clip_pages {
+                                let page = &mut pages[range.start + local_idx];
+                                let path_id = page.list.paths.push_anon(path.clone());
+                                let transform =
+                                    super::text_frame::frame_outer_transform(page, *transform);
+                                page.list.push(paged_compose::DisplayCommand::PushClip {
+                                    path_id,
+                                    transform,
+                                });
+                            }
+                        }
                         for &m in &g.members {
+                            if clip.is_some() && Some(m) == clip_member {
+                                continue;
+                            }
                             emit_one(
                                 m,
                                 spread,
@@ -2259,6 +2304,13 @@ pub(super) fn build_document_inner(
                                 color_ctx,
                                 auto_sized_bounds,
                             );
+                        }
+                        if clip.is_some() {
+                            for &local_idx in &clip_pages {
+                                pages[range.start + local_idx].list.push(
+                                    paged_compose::DisplayCommand::PopClip(Transform::IDENTITY),
+                                );
+                            }
                         }
                     }
                 }
@@ -9668,7 +9720,16 @@ fn master_paint_order(spread: &paged_model::Spread) -> Vec<paged_model::FrameRef
     for &fr in &spread.frames_in_order {
         walk(spread, fr, &mut order, 0);
     }
-    let seen = |fr: &FrameRef| order.contains(fr);
+    // Engine ADR 1010: a master's clip group paints its members without
+    // the clip (masters walk leaves; the clip bracket is the body
+    // spreads' — a residual) but never the clipping path itself.
+    let clip_paths: Vec<FrameRef> = spread
+        .groups
+        .iter()
+        .filter_map(|g| g.clip_member())
+        .collect();
+    order.retain(|fr| !clip_paths.contains(fr));
+    let seen = |fr: &FrameRef| order.contains(fr) || clip_paths.contains(fr);
     let legacy = (0..spread.text_frames.len())
         .map(FrameRef::TextFrame)
         .chain((0..spread.rectangles.len()).map(FrameRef::Rectangle))

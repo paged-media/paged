@@ -36,32 +36,16 @@
 // batch, not a user-facing verb, so they keep their one shared shape
 // rather than open-coding the op three times.
 //
-// A CLIP GROUP is still not representable — but "paste into" IS, and
-// this note used to say otherwise. Both halves, kept apart:
-//
-//  · STILL TRUE: the wire `GroupSpec` carries only `selfId` / `members`
-//    + the W1.20 inverse-only fields (`parent`, `itemTransform`), and
-//    core's parsed `Group` (paged-parse `spread.rs`) carries members +
-//    transparency + item_transform — NO clip flag, NO mask member, NO
-//    clip path. Metadata-tagging a plain group as a "mask" would render
-//    nothing and lie on save, so no Group-based clipping is offered.
-//  · NO LONGER TRUE (corrected 2026-08-05): "a 'paste into' cannot be
-//    expressed end-to-end". B-18 landed — `pasteInto { containerId,
-//    childId }` nests a top-level item inside a container Rectangle /
-//    Oval / Polygon, where it renders CLIPPED by that container's
-//    outline, and `releaseFrom { childId }` pops it back. Both are in
-//    the booted engine's op vocabulary (measured), and
-//    `commands/repeat.ts` ships on them for §12.4's clipping. The
-//    builders are in `commands/batch-handles.ts`; the four measured consequences of
-//    nesting (no group, invisible to `document.tree()`, `deleteFrame`
-//    refused, a deleted container ORPHANED its children before 0.65) are documented
-//    there and in `commands/repeat.ts`.
-//
-// So what remains for the cross-repo RFI
-// (the internal gap register) is a
-// GroupSpec/scene clip extension — an ARBITRARY clip path over a set of
-// items — not the container-nesting case, which is built.
-//
+// A CLIP GROUP IS REPRESENTABLE since engine ADR 1010: `createGroup
+// { memberIds, clip: true }` makes the top-most member the clipping path
+// (a Rectangle, Oval or Polygon; it paints nothing of its own) and clips
+// the rest by its outline — Illustrator's clipping mask, on the wire.
+// `commands/repeat.ts` clips a repeat that way where the host says it
+// can (`document.clipGroups@1`). B-18's paste-into (`pasteInto` /
+// `releaseFrom`) stays the other lane: InDesign's construct, which the
+// IDML writer lowers a clip group to anyway. Since ADR 1010 a group can
+// be pasted in too, and `document.tree()` lists what a frame holds.
+
 // Host-agnostic: imports only plugin-api types.
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
@@ -71,6 +55,13 @@ import type { ElementId, Mutation } from "@paged-media/plugin-api";
  *  drift between pattern / symbols / image-trace. */
 export function groupMutationFor(memberIds: ElementId[]): Mutation {
   return { op: "createGroup", args: { memberIds } };
+}
+
+/** Engine ADR 1010 — the `createGroup { memberIds, clip: true }`
+ *  mutation: a CLIP GROUP whose LAST member (the top-most, once the
+ *  engine orders them by stacking) clips the rest. */
+export function clipGroupMutationFor(memberIds: ElementId[]): Mutation {
+  return { op: "createGroup", args: { memberIds, clip: true } } as Mutation;
 }
 
 /** The `dissolveGroup { groupId }` mutation — the exact inverse. */

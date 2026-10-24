@@ -70,12 +70,12 @@
 // A revision's caches are dropped as a set, so nothing from one revision
 // is ever combined with another's.
 //
-// WHAT IT DOES NOT SEE. An element nested by `pasteInto` is INVISIBLE to
-// `document.tree()` (CLAUDE.md, "B-18 NESTING IS REAL") and so is not in
-// a snapshot — while still answering `getMetadata` BY ID. `envelopeOf`
-// therefore falls through to a direct read for any id the walk did not
-// reach, which is exactly what `repeatLinks` did for its clipped
-// instances before this module existed.
+// WHAT IT DID NOT SEE. Before engine ADR 1010 an element nested by
+// `pasteInto` was INVISIBLE to `document.tree()` (CLAUDE.md, "B-18
+// NESTING IS REAL") and so was in no snapshot — while still answering
+// `getMetadata` BY ID. The tree lists it under its frame now, and the
+// walk reaches it; `envelopeOf` still falls through to a direct read for
+// any id the walk did not reach (an older engine's pasted-in content).
 //
 // RECIPE WRITES. A `.paged` container-part write emits no document event,
 // so a command that saved its recipe AFTER its last mutation left every
@@ -189,19 +189,22 @@ const LEAF_READ_WINDOW = 64;
 export const BIND_RECIPE_REVISION = "media.paged.draw.recipeRevision";
 
 /** Flatten the scene tree to its selectable LEAF element ids (frames +
- *  paths — NOT groups/spreads/pages; we match on per-frame paint). A
- *  node with children is a container; a node with an id and no children
- *  is a leaf. Groups (id + children) are descended into, not matched. */
+ *  paths — NOT groups/spreads/pages; we match on per-frame paint). Every
+ *  page item but a group is a leaf. Spreads, pages and groups are
+ *  descended into, not matched — and so, since engine ADR 1010, is a
+ *  frame, whose children are what is pasted into it (it is a leaf
+ *  itself, and so is each of them). */
+export function isLeafNode(node: SceneTreeNode): boolean {
+  return !!node.id && node.id.kind !== "group";
+}
+
 export function leafIdsOf(roots: readonly SceneTreeNode[]): ElementId[] {
   const out: ElementId[] = [];
   const walk = (nodes: readonly SceneTreeNode[]) => {
     for (const node of nodes) {
+      if (isLeafNode(node)) out.push(node.id!);
       const children = node.children ?? [];
-      if (children.length > 0) {
-        walk(children);
-      } else if (node.id) {
-        out.push(node.id);
-      }
+      if (children.length > 0) walk(children);
     }
   };
   walk(roots);
@@ -388,11 +391,8 @@ function createLinkIndex(host: BundleHost): LinkIndex {
     const walk = (nodes: readonly SceneTreeNode[]) => {
       for (const node of nodes) {
         const children = node.children ?? [];
-        if (children.length > 0) {
-          walk(children);
-          continue;
-        }
-        if (!node.id) continue;
+        if (children.length > 0) walk(children);
+        if (!isLeafNode(node) || !node.id) continue;
         const key = keyOf(node.id);
         if (rev.envelopes.has(key)) continue;
         const envelope = treeEnvelopeOf(node);

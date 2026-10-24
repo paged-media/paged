@@ -25,6 +25,7 @@
 // Bytes travel as transferred ArrayBuffers.
 
 import type { EditorConfig, EditorEvent, EditorHandle } from "./create-editor";
+import type { EditorErrorCode } from "./errors";
 
 /** The handle's methods a host reaches through the frame: the ones whose
  *  arguments and answers are data. */
@@ -75,7 +76,7 @@ export type HostToFrame =
 export type FrameToHost =
   | { type: "paged:loaded" }
   | { type: "paged:ready" }
-  | { type: "paged:failed"; error: string }
+  | { type: "paged:failed"; error: string; code?: EditorErrorCode }
   | {
       type: "paged:reply";
       id: number;

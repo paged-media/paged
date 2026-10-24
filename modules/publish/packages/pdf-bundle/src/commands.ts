@@ -81,7 +81,7 @@ export function contributePdfCommands(
   if (!host.supports("contribute.objectModel@1")) return null;
   const importPdf: TypedCommandContribution<
     PdfImportArgs,
-    { mode: "editable" | "image"; pageCount: number }
+    { mode: "editable" | "image"; pageCount: number; sourcePageCount: number }
   > = {
     id: IMPORT_PDF_COMMAND,
     title: t(M.openPdf),

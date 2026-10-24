@@ -5,16 +5,30 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Raster images: probe, decode and encode (TIFF through `tiff`, PSD/PSB composites through paged-psd, the web formats through `image`), with colour conversion through paged-color."
+description = "Raster images: probe, decode and encode (TIFF and DNG through `tiff`'s container, PSD/PSB composites through paged-psd, EPS previews, AVIF, JPEG XL, the web formats through `image`), with colour conversion through paged-color."
 
 [lints]
 workspace = true
 
+# The larger decoders, each a feature so a build can leave it out; all on by
+# default (the wasm size each costs is in ADR 1005's amendment).
+[features]
+default = ["avif", "jxl", "exr"]
+avif = ["dep:avif-parse", "dep:rav1d"]
+jxl = ["dep:jxl-oxide"]
+exr = ["image/exr"]
+
 [dependencies]
 # TIFF decode and encode (features: the workspace pin).
 tiff = { workspace = true }
-# PNG, JPEG, WebP, GIF and BMP decode exactly as the renderer always did.
-image = { workspace = true }
+# PNG, JPEG, WebP, GIF and BMP decode exactly as the renderer always did;
+# TGA, QOI, ICO and Radiance HDR are small decoders of the same crate.
+image = { workspace = true, features = ["tga", "qoi", "ico", "hdr"] }
+# AVIF: the container and the AV1 decoder (feature `avif`).
+avif-parse = { workspace = true, optional = true }
+rav1d = { workspace = true, optional = true }
+# JPEG XL (feature `jxl`).
+jxl-oxide = { workspace = true, optional = true }
 # PNG iCCP inflation (already in the graph through PNG and TIFF Deflate).
 flate2 = { workspace = true }
 # CMYK and Lab rasters convert through the engine's one CMS: lcms2 on native,

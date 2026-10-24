@@ -611,7 +611,7 @@ mod tests {
         )
         .expect("decode");
         match substitute(&child, &scope).expect("resolve") {
-            Mutation::CreateGroup { member_ids } => {
+            Mutation::CreateGroup { member_ids, .. } => {
                 assert_eq!(
                     member_ids,
                     vec![

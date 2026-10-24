@@ -22,11 +22,17 @@
 //! 1-bit, palette, YCbCr, Lab, big-endian).
 //!
 //! The `__feat__images_graphics_tiff_raster` suffix links the main tests
-//! to the `images-graphics.tiff-raster` feature row; it is the evidence
-//! join's convention, hence the lint allowance.
+//! to the `images-graphics.tiff-raster` feature row, and
+//! `__feat__images_graphics_format_extensions` those of the EPS preview,
+//! DNG, AVIF, JPEG XL and the small formats to
+//! `images-graphics.format-extensions`; it is the evidence join's
+//! convention, hence the lint allowance.
 #![allow(non_snake_case)]
 
+mod codecs;
 mod colour;
+mod dng;
+mod eps;
 mod formats;
 mod layouts;
 mod matrix;

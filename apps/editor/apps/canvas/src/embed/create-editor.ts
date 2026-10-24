@@ -40,12 +40,16 @@ import {
   type StorageAdapter,
   openDocumentFile,
   type EditorProfile,
+  type FeatureId,
   type FeatureStore,
+  type IdAliases,
+  type IdDeprecation,
+  type ShellObjectsSurface,
 } from "@paged-media/shell";
 import { loadLocale } from "@paged-media/strings";
 
 import type { HostActions, ShellAccess } from "../app/instance";
-import { mountEditor } from "../main";
+import { assertEmbeddable } from "./errors";
 
 /** A field's value, as the handle takes and gives it. */
 export type FieldValue = TemplateFieldValue["value"];
@@ -99,7 +103,8 @@ function storageOf(choice: EditorConfig["storage"]): StorageAdapter {
 export type EditorEvent =
   | { type: "ready" }
   | { type: "change" }
-  | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] };
+  | { type: "fieldChange"; fields: readonly TemplateFieldSummary[] }
+  | ({ type: "idDeprecated" } & IdDeprecation);
 
 export interface EditorHandle {
   /** Open a document (replaces the open one). */
@@ -133,9 +138,12 @@ export interface EditorHandle {
   >;
   /** Change the session's role (the engine's and the UI's). */
   setRole(role: Role): Promise<void>;
-  /** Switch features on and off (ids from `feature-ids.json`). */
+  /** Switch features on and off (ids from `feature-ids.json`; a deprecated
+   *  id is read as its replacement, PM-0013, amendment 2). */
   readonly features: FeatureStore;
-  /** Listen; returns the unsubscribe. */
+  /** Listen; returns the unsubscribe. `idDeprecated` reaches every
+   *  listener, for the old ids met before it subscribed too (the config's
+   *  profile). */
   on(listener: (event: EditorEvent) => void): () => void;
   /**
    * The element a profile's `{ kind: "host", id }` region item leaves for
@@ -145,6 +153,10 @@ export interface EditorHandle {
   hostSlot(id: string): HTMLElement | null;
   /** The engine client, for what the handle does not cover. */
   readonly client: CanvasClient;
+  /** The object model the loaded modules contribute to: their typed
+   *  commands (`invoke`, `commands`) and objects, for what the handle does
+   *  not cover (paged.publish's PDF preflight and exporter, say). */
+  readonly objects: ShellObjectsSurface;
   /** Unmount the editor and release its worker. */
   dispose(): void;
 }
@@ -170,11 +182,48 @@ const DOCUMENT_KINDS = new Set([
   "documentLoaded",
 ]);
 
-/** Mount an editor into `element` and resolve to its handle. */
+/** The feature store with a host's deprecated ids read as their
+ *  replacements (PM-0013, amendment 2); an id with none switches nothing. */
+export function aliasedFeatures(
+  store: FeatureStore,
+  aliases: IdAliases,
+): FeatureStore {
+  const map = (p: FeatureId | readonly FeatureId[]): FeatureId[] =>
+    (typeof p === "string" ? [p] : [...p]).flatMap((id) => {
+      const next = aliases.feature(id);
+      return next === null ? [] : [next];
+    });
+  return {
+    ...store,
+    enable: (p) => store.set(map(p), true),
+    disable: (p) => store.set(map(p), false),
+    set: (p, rule) => store.set(map(p), rule),
+    reset(p) {
+      const [next] = map(p);
+      if (next) store.reset(next);
+    },
+    isEnabled(id) {
+      const next = aliases.feature(id);
+      return next === null ? true : store.isEnabled(next);
+    },
+    allows: (kind, id) => {
+      const next = aliases.feature(`${kind}:${id}`);
+      return next === null ? true : store.isEnabled(next);
+    },
+  };
+}
+
+/**
+ * Mount an editor into `element` and resolve to its handle. On a page that
+ * is not cross-origin isolated it mounts nothing and rejects with an
+ * `EditorError` of code `notCrossOriginIsolated` (decision 1 of 2026-10-24:
+ * no degraded mode; the iframe is the path for such a host).
+ */
 export async function createEditor(
   element: HTMLElement,
   config: EditorConfig = {},
 ): Promise<EditorHandle> {
+  assertEmbeddable();
   const preset = config.profile ?? "full";
   const profile: EditorProfile =
     typeof preset === "string"
@@ -185,6 +234,8 @@ export async function createEditor(
     ...(config.assetBase ? { assetBase: config.assetBase } : {}),
   });
   if (problem) console.warn(`createEditor: ${problem}`);
+  // Loaded once the page is known to run it: a refused page loads nothing.
+  const { mountEditor } = await import("../main");
   let resolveShell!: (shell: ShellAccess) => void;
   const shellReady = new Promise<ShellAccess>((r) => (resolveShell = r));
   const mounted = mountEditor(element, {
@@ -199,12 +250,16 @@ export async function createEditor(
   const shell = await shellReady;
   await mounted.instance.services.boot.settled();
   const { client, paged, registries } = shell;
+  const aliases = mounted.instance.idAliases;
 
   const listeners = new Set<(event: EditorEvent) => void>();
   const themed = new Set<string>();
   const emit = (event: EditorEvent) => {
     for (const l of [...listeners]) l(event);
   };
+  const offAliases = aliases.subscribe((d) =>
+    emit({ type: "idDeprecated", ...d }),
+  );
   let lastFields = "";
   const offClient = client.subscribe((msg) => {
     if (!DOCUMENT_KINDS.has(msg.kind)) return;
@@ -262,9 +317,16 @@ export async function createEditor(
       mounted.instance.role.set(role);
       await client.setSessionPolicy({ role, overrides: [] });
     },
-    features: registries.features,
+    features: aliasedFeatures(registries.features, aliases),
     on(listener) {
       listeners.add(listener);
+      // Sticky: the old ids met before this listener (the config's profile).
+      const past = [...aliases.used()];
+      if (past.length)
+        queueMicrotask(() => {
+          if (!listeners.has(listener)) return;
+          for (const d of past) listener({ type: "idDeprecated", ...d });
+        });
       return () => listeners.delete(listener);
     },
     setTheme({ mode, tokens }) {
@@ -290,8 +352,10 @@ export async function createEditor(
         `[data-host-component="${CSS.escape(id)}"]`,
       ),
     client,
+    objects: mounted.instance.services.objects.model.objects,
     dispose() {
       offClient();
+      offAliases();
       listeners.clear();
       for (const name of themed) shell.root.style.removeProperty(name);
       mounted.dispose();

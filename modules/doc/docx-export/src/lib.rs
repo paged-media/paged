@@ -33,12 +33,12 @@ mod overlay;
 mod rpr;
 mod splice;
 
-pub use bindings::{build_bindings, BlockBinding, DocxBindings, RunBinding};
+pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBinding, RunLock};
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 pub use overlay::{
-    overlay_cells, overlay_story_content, CellContentIn, ParagraphContentIn, RunContentIn,
-    StoryContentIn,
+    add_canvas_colors, overlay_cells, overlay_story_content, overlay_tables, CellContentIn,
+    ParagraphContentIn, RunContentIn, StoryContentIn, TableContentIn,
 };
 
 use std::collections::BTreeMap;
@@ -64,7 +64,15 @@ pub fn apply_edits(
 ) -> Result<Vec<String>, OoxmlError> {
     let mut skips: Vec<String> = Vec::new();
     let mut targets: Vec<ResolvedTarget> = Vec::new();
+    let locks = Locks::of(bindings, edits);
     for e in &edits.runs {
+        if let Some(why) = locks.run(e.block, e.run) {
+            skips.push(format!(
+                "run edit skipped: block {} run {} {why}",
+                e.block, e.run
+            ));
+            continue;
+        }
         let Some(addr) = bindings.resolve(e.block, e.run) else {
             skips.push(format!(
                 "run edit skipped: block {} run {} is not patchable",
@@ -108,6 +116,14 @@ pub fn apply_edits(
     for s in &edits.structural {
         match s {
             StructuralEdit::DeleteCellParagraph { block, cell, para } => {
+                if let Some(why) =
+                    bindings.cell_paragraph_refusal(*block, *cell, *para, ParaUse::Delete)
+                {
+                    skips.push(format!(
+                        "delete-cell-paragraph skipped: block {block} cell {cell} paragraph {para} {why}"
+                    ));
+                    continue;
+                }
                 let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
                     skips.push(format!(
                         "delete-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
@@ -122,7 +138,17 @@ pub fn apply_edits(
                 para,
                 before,
                 text,
+                base,
+                pieces,
             } => {
+                if let Some(why) =
+                    bindings.cell_paragraph_refusal(*block, *cell, *para, ParaUse::Address)
+                {
+                    skips.push(format!(
+                        "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} {why}"
+                    ));
+                    continue;
+                }
                 let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
                     skips.push(format!(
                         "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
@@ -130,7 +156,9 @@ pub fn apply_edits(
                     continue;
                 };
                 let src = pkg.require(main_part)?;
-                let Some(frag) = splice::clone_cell_paragraph(src, path, text, !*before) else {
+                let Some(frag) =
+                    splice::clone_cell_paragraph(src, path, text, !*before, base.as_ref(), pieces)
+                else {
                     skips.push(format!(
                         "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not in the document part"
                     ));
@@ -149,6 +177,14 @@ pub fn apply_edits(
                 para,
                 text,
             } => {
+                if let Some(why) = locks.cell_para(*block, *cell, *para).or_else(|| {
+                    bindings.cell_paragraph_refusal(*block, *cell, *para, ParaUse::Address)
+                }) {
+                    skips.push(format!(
+                        "insert-cell-run skipped: block {block} cell {cell} paragraph {para} {why}"
+                    ));
+                    continue;
+                }
                 let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
                     skips.push(format!(
                         "insert-cell-run skipped: block {block} cell {cell} paragraph {para} is not a resolvable cell paragraph"
@@ -167,6 +203,10 @@ pub fn apply_edits(
                 base,
                 pieces,
             } => {
+                if let Some(why) = locks.run(*block, *run) {
+                    skips.push(format!("run split skipped: block {block} run {run} {why}"));
+                    continue;
+                }
                 let Some(a) = bindings.resolve(*block, *run) else {
                     skips.push(format!(
                         "run split skipped: block {block} run {run} is not patchable"
@@ -190,6 +230,10 @@ pub fn apply_edits(
                 cell_splits.push((*block, *cell, *para, *run, base.clone(), pieces.clone()));
             }
             StructuralEdit::DeleteRun { block, run } => {
+                if let Some(why) = locks.run(*block, *run) {
+                    skips.push(format!("delete-run skipped: block {block} run {run} {why}"));
+                    continue;
+                }
                 let Some(a) = bindings.resolve(*block, *run) else {
                     skips.push(format!(
                         "delete-run skipped: block {block} run {run} is not patchable"
@@ -219,6 +263,11 @@ pub fn apply_edits(
                 match run {
                     // After an existing run.
                     Some(run) => {
+                        if let Some(why) = locks.run(*block, *run) {
+                            skips
+                                .push(format!("insert-run skipped: block {block} run {run} {why}"));
+                            continue;
+                        }
                         let Some(a) = bindings.resolve(*block, *run) else {
                             skips.push(format!(
                                 "insert-run skipped: block {block} run {run} is not patchable"
@@ -241,6 +290,13 @@ pub fn apply_edits(
                     }
                     // At the paragraph's start.
                     None => {
+                        if let Some(why) = locks
+                            .paragraph(*block)
+                            .or_else(|| bindings.paragraph_refusal(*block, ParaUse::Address))
+                        {
+                            skips.push(format!("insert-run skipped: block {block} {why}"));
+                            continue;
+                        }
                         let Some(p) = bindings.para_ord(*block) else {
                             skips.push(format!(
                                 "insert-run skipped: block {block} is not a body paragraph"
@@ -255,6 +311,12 @@ pub fn apply_edits(
             // whether a new column widens a span or splits it is ambiguous, so
             // the op is skipped rather than corrupting the table.
             StructuralEdit::DeleteColumn { block, col } => {
+                if let Some(why) = bindings.table_refusal(*block) {
+                    skips.push(format!(
+                        "delete-column skipped: table at block {block} {why}"
+                    ));
+                    continue;
+                }
                 let Some(t) = bindings.uniform_table_ord(*block) else {
                     skips.push(format!(
                         "delete-column skipped: table at block {block} has a gridSpan \
@@ -269,6 +331,12 @@ pub fn apply_edits(
                 after_col,
                 text,
             } => {
+                if let Some(why) = bindings.table_refusal(*block) {
+                    skips.push(format!(
+                        "insert-column skipped: table at block {block} {why}"
+                    ));
+                    continue;
+                }
                 let Some(t) = bindings.uniform_table_ord(*block) else {
                     skips.push(format!(
                         "insert-column skipped: table at block {block} has a gridSpan \
@@ -285,6 +353,10 @@ pub fn apply_edits(
                 );
             }
             StructuralEdit::DeleteRow { block, row } => {
+                if let Some(why) = bindings.table_refusal(*block) {
+                    skips.push(format!("delete-row skipped: table at block {block} {why}"));
+                    continue;
+                }
                 let Some(t) = bindings.table_ord(*block) else {
                     skips.push(format!(
                         "delete-row skipped: block {block} row {row} is not a resolvable table"
@@ -297,19 +369,31 @@ pub fn apply_edits(
                 block,
                 after_row,
                 cells,
+                before,
             } => {
+                if let Some(why) = bindings.table_refusal(*block) {
+                    skips.push(format!("insert-row skipped: table at block {block} {why}"));
+                    continue;
+                }
                 let Some(t) = bindings.table_ord(*block) else {
                     skips.push(format!(
                         "insert-row skipped: block {block} is not a resolvable table"
                     ));
                     continue;
                 };
-                rows.entry((t, *after_row))
-                    .or_default()
-                    .insert_after
-                    .push(rpr::render_table_row(cells));
+                let row = rows.entry((t, *after_row)).or_default();
+                let frag = rpr::render_table_row(cells);
+                if *before {
+                    row.insert_before.push(frag);
+                } else {
+                    row.insert_after.push(frag);
+                }
             }
             StructuralEdit::DeleteParagraph { block } => {
+                if let Some(why) = bindings.paragraph_refusal(*block, ParaUse::Delete) {
+                    skips.push(format!("delete-paragraph skipped: block {block} {why}"));
+                    continue;
+                }
                 let Some(p) = bindings.para_ord(*block) else {
                     skips.push(format!(
                         "delete-paragraph skipped: block {block} is not a body paragraph"
@@ -323,6 +407,15 @@ pub fn apply_edits(
                 after,
                 text,
             } => {
+                if let Some(why) = bindings
+                    .paragraph_refusal(*source, ParaUse::Address)
+                    .or_else(|| bindings.paragraph_refusal(*after, ParaUse::Address))
+                {
+                    skips.push(format!(
+                        "clone-paragraph skipped: block {source} or {after} {why}"
+                    ));
+                    continue;
+                }
                 let (Some(from), Some(at)) =
                     (bindings.para_ord(*source), bindings.para_ord(*after))
                 else {
@@ -346,6 +439,10 @@ pub fn apply_edits(
                 para_style,
                 rstyle,
             } => {
+                if let Some(why) = bindings.paragraph_refusal(*block, ParaUse::Address) {
+                    skips.push(format!("insert-paragraph skipped: block {block} {why}"));
+                    continue;
+                }
                 let Some(p) = bindings.para_ord(*block) else {
                     skips.push(format!(
                         "insert-paragraph skipped: block {block} is not a body paragraph"
@@ -361,6 +458,13 @@ pub fn apply_edits(
 
     // Increment 3 — paragraph `<w:pPr>` edits.
     for pe in &edits.paragraphs {
+        if let Some(why) = bindings.paragraph_refusal(pe.block, ParaUse::Format) {
+            skips.push(format!(
+                "paragraph-format edit skipped: block {} {why}",
+                pe.block
+            ));
+            continue;
+        }
         let Some(p) = bindings.para_ord(pe.block) else {
             skips.push(format!(
                 "paragraph-format edit skipped: block {} is a table or out of range",
@@ -375,6 +479,13 @@ pub fn apply_edits(
     // Table-cell run edits — their own `w:tbl`/`w:tr`/`w:tc`/`w:p` locator path.
     let mut cell_targets: Vec<ResolvedCellTarget> = Vec::new();
     for c in &edits.cells {
+        if let Some(why) = locks.cell_run(c.block, c.cell, c.para, c.run) {
+            skips.push(format!(
+                "cell edit skipped: block {} cell {} para {} run {} {why}",
+                c.block, c.cell, c.para, c.run
+            ));
+            continue;
+        }
         let Some((path, run_ord, wrapper)) = bindings.resolve_cell(c.block, c.cell, c.para, c.run)
         else {
             skips.push(format!(
@@ -383,7 +494,7 @@ pub fn apply_edits(
             ));
             continue;
         };
-        if c.new_text.is_none() && c.new_props.is_none() {
+        if c.new_text.is_none() && c.new_props.is_none() && !c.delete {
             continue;
         }
         let (new_rpr, rpr_merge) =
@@ -403,9 +514,16 @@ pub fn apply_edits(
             ),
             rpr_merge,
             split: Vec::new(),
+            delete: c.delete,
         });
     }
     for (block, cell, para, run, base, pieces) in &cell_splits {
+        if let Some(why) = locks.cell_run(*block, *cell, *para, *run) {
+            skips.push(format!(
+                "cell run split skipped: block {block} cell {cell} para {para} run {run} {why}"
+            ));
+            continue;
+        }
         let Some((path, run_ord, wrapper)) = bindings.resolve_cell(*block, *cell, *para, *run)
         else {
             skips.push(format!(
@@ -427,6 +545,7 @@ pub fn apply_edits(
             ),
             rpr_merge: None,
             split: split_pieces(base, pieces),
+            delete: false,
         });
     }
 
@@ -458,6 +577,95 @@ pub fn apply_edits(
         pkg.set_part(main_part, patched);
     }
     Ok(skips)
+}
+
+/// The paragraphs an edit reaches a locked run in (a run inside a tracked
+/// change or a content control). Every run-level edit of such a paragraph
+/// is refused, not only the one on the locked run: the canvas text is one
+/// edit, and applying part of it would leave Word's paragraph saying
+/// something neither the source nor the canvas says.
+struct Locks<'b> {
+    bindings: &'b DocxBindings,
+    blocks: std::collections::BTreeMap<usize, RunLock>,
+    cell_paras: std::collections::BTreeMap<(usize, usize, usize), RunLock>,
+}
+
+impl<'b> Locks<'b> {
+    fn of(bindings: &'b DocxBindings, edits: &EditSet) -> Self {
+        let mut blocks = std::collections::BTreeMap::new();
+        let mut cell_paras = std::collections::BTreeMap::new();
+        let mut body = |block: usize, run: usize| {
+            if let Some(lock) = bindings.run_lock(block, run) {
+                blocks.entry(block).or_insert(lock);
+            }
+        };
+        for e in &edits.runs {
+            body(e.block, e.run);
+        }
+        for s in &edits.structural {
+            match s {
+                StructuralEdit::DeleteRun { block, run }
+                | StructuralEdit::SplitRun { block, run, .. }
+                | StructuralEdit::InsertRun {
+                    block,
+                    run: Some(run),
+                    ..
+                } => body(*block, *run),
+                StructuralEdit::SplitCellRun {
+                    block,
+                    cell,
+                    para,
+                    run,
+                    ..
+                } => {
+                    if let Some(lock) = bindings.cell_run_lock(*block, *cell, *para, *run) {
+                        cell_paras.entry((*block, *cell, *para)).or_insert(lock);
+                    }
+                }
+                _ => {}
+            }
+        }
+        for c in &edits.cells {
+            if let Some(lock) = bindings.cell_run_lock(c.block, c.cell, c.para, c.run) {
+                cell_paras.entry((c.block, c.cell, c.para)).or_insert(lock);
+            }
+        }
+        Locks {
+            bindings,
+            blocks,
+            cell_paras,
+        }
+    }
+
+    /// Why a run-level edit of body run `(block, run)` is refused.
+    fn run(&self, block: usize, run: usize) -> Option<String> {
+        if let Some(lock) = self.bindings.run_lock(block, run) {
+            return Some(format!("is {}", lock.describe()));
+        }
+        self.paragraph(block).map(str::to_string)
+    }
+
+    /// Why any run-level edit of body block `block` is refused.
+    fn paragraph(&self, block: usize) -> Option<&'static str> {
+        self.blocks.get(&block).map(|_| {
+            "is kept as it was: the edit of its paragraph reaches text inside a tracked \
+             change or a content control"
+        })
+    }
+
+    fn cell_run(&self, block: usize, cell: usize, para: usize, run: usize) -> Option<String> {
+        if let Some(lock) = self.bindings.cell_run_lock(block, cell, para, run) {
+            return Some(format!("is {}", lock.describe()));
+        }
+        self.cell_para(block, cell, para).map(str::to_string)
+    }
+
+    fn cell_para(&self, block: usize, cell: usize, para: usize) -> Option<&'static str> {
+        self.cell_paras.get(&(block, cell, para)).map(|_| {
+            "is kept as it was: the edit of its paragraph reaches text inside a tracked \
+             change or a content control"
+        })
+    }
 }
 
 /// How a run edit's new look is written: merged into the run's own

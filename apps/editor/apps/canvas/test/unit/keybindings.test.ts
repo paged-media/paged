@@ -38,6 +38,8 @@ import {
   type KeybindingContribution,
 } from "@paged-media/shell";
 
+import { SLIDE_KEYBINDINGS } from "@paged-media/slide";
+
 import { APP_KEYBINDINGS } from "../../src/app-commands";
 import { INSERT_KEYBINDINGS } from "../../src/insert-commands";
 import { OBJECT_KEYBINDINGS } from "../../src/object-commands";
@@ -356,6 +358,37 @@ describe("the tables as a whole", () => {
     expect(resolveBinding(all, press("cmd+d"), () => AT_ROOT)?.command).toBe(
       "paged.insert.placeImage",
     );
+  });
+
+  test("paged.slide's keys are chords the editor leaves free", () => {
+    covers(
+      "keybinding:alt+cmd+n→media.paged.slide.command.newSlide",
+      "keybinding:cmd+arrowup→media.paged.slide.command.moveSlideUp",
+    );
+    const slide: KeybindingContribution[] = SLIDE_KEYBINDINGS.map(
+      ([key, command]) => ({ key, command, when: () => true }),
+    );
+    const taken = new Set(TABLES.map((k) => k.key));
+    for (const { key, command } of slide) {
+      // No app binding on the chord, at the root or anywhere else.
+      expect(taken.has(key), key).toBe(false);
+      expect(fires(key), key).toBeNull();
+      // Registered after the app's tables, the chord is the slide verb's.
+      expect(
+        resolveBinding([...TABLES, ...slide], press(key), () => AT_ROOT)
+          ?.command,
+      ).toBe(command);
+    }
+    // The object keys stay the object's: plain Backspace deletes the
+    // selection, a plain arrow nudges it.
+    expect(
+      resolveBinding([...TABLES, ...slide], press("backspace"), () => AT_ROOT)
+        ?.command,
+    ).toBe("paged.object.delete");
+    expect(
+      resolveBinding([...TABLES, ...slide], press("arrowup"), () => AT_ROOT)
+        ?.command,
+    ).not.toContain("media.paged.slide");
   });
 
   // Finding SH-9 (UX F-16), fixed: Cmd+0 and Cmd+1 (Zoom to 100%) worked
