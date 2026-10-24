@@ -1084,7 +1084,10 @@ describe("draw conformance — BLENDS v1 (§16.2)", () => {
       // The panel's About text says the same two things as the module's
       // notes, without their internal terms.
       expect(t(BLEND_PANEL_NOTE)).toContain(
-        "does not change the intermediates until",
+        "editing a key object rebuilds the intermediates in the same undo step",
+      );
+      expect(t(BLEND_PANEL_NOTE)).toContain(
+        "with it off, they change only when you choose Update",
       );
       expect(t(BLEND_PANEL_NOTE)).toContain(
         "the artwork is only rebuilt when you build or update",
