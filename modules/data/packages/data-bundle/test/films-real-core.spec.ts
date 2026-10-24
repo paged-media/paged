@@ -1,6 +1,6 @@
 // The paged.media films' data scenes against the REAL stack: real core
 // (canvas-wasm, headless host with `host.objects`), the real data-js engine
-// and real DuckDB. Each test is a defect the films recorded:
+// with its query store. Each test is a defect the films recorded:
 //
 //   · an unindexed EAN-13 barcode over the product list encodes the FIRST
 //     row's EAN (it encoded the alphabetically first product's);
@@ -9,8 +9,8 @@
 //   · Data Merge runs from a script: `media.paged.data.merge` through
 //     host.objects, the same path the menu command takes.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
@@ -20,18 +20,12 @@ import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 /** The first rows of the films' product list, in file order: the first row is
  *  not the first by content ("Bookmark set" sorts before it). */
@@ -45,25 +39,15 @@ const CSV = [
   "",
 ].join("\n");
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -168,7 +152,7 @@ async function prop(
 }
 
 describe.skipIf(!ready && !required)(
-  "the films' data scenes, real core + engine + DuckDB [data.plugin.bundle]",
+  "the films' data scenes, real core + engine [data.plugin.bundle]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {
@@ -270,7 +254,7 @@ describe.skipIf(!ready && !required)(
     it("DATA-1: an unindexed EAN-13 barcode encodes the first row's EAN [data.barcode.symbology]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const { host, s } = await open(mod);
@@ -297,7 +281,7 @@ describe.skipIf(!ready && !required)(
     it("DATA-2: merged frames keep the template frame's fill, inset and stroke [data.lower.merge-writer]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const { host, s } = await open(mod);
@@ -336,7 +320,7 @@ describe.skipIf(!ready && !required)(
     it("DATA-4: a script starts Data Merge through media.paged.data.merge, as the menu does [data.object-model]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const { h, host } = await open(mod);

@@ -49,7 +49,7 @@ import { countingHost, type WorkLog } from "./counting-host";
 import {
   BUDGET_TIMEOUT_MS,
   openDataHost,
-  bootCountedDuck,
+  bootCountedStore,
   bootCountedEngine,
   expectBudget,
   LABELLED,
@@ -63,7 +63,7 @@ import {
   sessionOver,
   undoMark,
   undoSteps,
-  type CountedDuck,
+  type CountedStore,
   type CountedEngine,
   type Measured,
 } from "./harness";
@@ -78,11 +78,11 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 function resetAll(
   work: WorkLog,
   engine: CountedEngine,
-  duck: CountedDuck | null,
+  store: CountedStore | null,
 ): void {
   work.reset();
   engine.reset();
-  duck?.reset();
+  store?.reset();
 }
 
 /** A fresh text frame on the fixture page; its story id. */
@@ -119,16 +119,14 @@ describe.skipIf(!RUN_BUDGETS)(
   "perf budgets — data commands [data.perf.gates]",
   () => {
     let h: HeadlessHost | null = null;
-    let duck: CountedDuck | null = null;
     afterEach(() => {
       h?.dispose();
       h = null;
     });
     afterAll(async () => {
       printTable();
-      await duck?.handle.close();
     });
-    const sharedDuck = async () => (duck ??= await bootCountedDuck());
+    const storeOf = (engine: CountedEngine) => bootCountedStore(engine);
 
     // ── W1: import a CSV, lower a 500-row table ───────────────────────────────
     // AS FOUND: the import is one DuckDB registration; the lower re-runs EVERY
@@ -150,7 +148,7 @@ describe.skipIf(!RUN_BUDGETS)(
       stabilizeCalls: 0,
       keyAllocs: 0,
       fingerprints: 0,
-      duckQueries: 0,
+      storeQueries: 0,
     };
     // Wave 4 (persistence): +1 parts.write (the session part), +1 supports, +1 log; +1 payload +1 sync_report to build it (one payload, shared with the lowered label's definition hash).
     // Wave 2: frame + table + cells + label are ONE batch addressed by C-15
@@ -163,7 +161,10 @@ describe.skipIf(!RUN_BUDGETS)(
     // parser about the query once (`json_serialize_sql`, query/sql.ts guardQuery).
     // Guard fix (browser): -1 — the guard is a TypeScript lexer that asks DuckDB
     // nothing (json_serialize_sql trapped in the browser worker); the config
-    // lock is boot cost (LOCKDOWN_SQL in bootDuckDB). duckQueries 2 → 1.
+    // lock is boot cost (LOCKDOWN_SQL in bootDuckDB). storeQueries 2 → 1.
+    // The query store (ADR 561): the refresh's rows go from the store to the
+    // binding session inside the engine (one store statement, counted in
+    // storeQueries), not across the column door: wasmCalls 9 → 4.
     // Wave 5 (update in place): +1 read — document.tree, to find a table this
     // binding lowered before and swap it inside its own frame.
     // Settled before counting (the setup's debounced save no longer lands in
@@ -176,7 +177,7 @@ describe.skipIf(!RUN_BUDGETS)(
         mutationOps: 1506,
         undoSteps: 1,
         placeholdersRead: 0,
-        wasmCalls: 9,
+        wasmCalls: 4,
         cellsIn: 0,
         resolves: 1,
         // 1 → 0: a scan of one table (`SELECT … FROM products_w1`) is numbered as DuckDB
@@ -185,7 +186,7 @@ describe.skipIf(!RUN_BUDGETS)(
         // Was 9 840 (sort keys built per comparison); in-place since Wave 2.
         keyAllocs: 0,
         fingerprints: 0,
-        duckQueries: 1,
+        storeQueries: 1,
       },
       { mutationOps: 1507 },
     );
@@ -193,7 +194,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      const d = await sharedDuck();
+      const d = storeOf(engine);
       const s = await sessionOver(host, engine, d);
       // A save the setup scheduled (debounced) must land before counting, or
       // a slow runner counts it against the command.
@@ -294,7 +295,7 @@ describe.skipIf(!RUN_BUDGETS)(
           stabilizeCalls: 0,
           keyAllocs: 0,
           fingerprints: 0,
-          duckQueries: 0,
+          storeQueries: 0,
         },
         { mutationOps: 101 },
       ),
@@ -304,7 +305,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      const d = await sharedDuck();
+      const d = storeOf(engine);
       const s = await sessionOver(host, engine, d);
       // One record, columns c0..c99; field k reads column k.
       const N = 100;
@@ -420,7 +421,7 @@ describe.skipIf(!RUN_BUDGETS)(
           stabilizeCalls: 0,
           keyAllocs: 0,
           fingerprints: 0,
-          duckQueries: 0,
+          storeQueries: 0,
         },
         { mutationOps: 21 },
       ),
@@ -430,7 +431,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      const d = await sharedDuck();
+      const d = storeOf(engine);
       const s = await sessionOver(host, engine, d);
       await s.registerCsvSource("products_w3", productCsv(20));
       s.addQuery("q1", "SELECT sku, name FROM products_w3", "recordStream");
@@ -492,7 +493,7 @@ describe.skipIf(!RUN_BUDGETS)(
         stabilizeCalls: 0,
         keyAllocs: 0,
         fingerprints: 0,
-        duckQueries: 0,
+        storeQueries: 0,
       },
       { mutationOps: 674 },
     );
@@ -500,7 +501,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      const d = await sharedDuck();
+      const d = storeOf(engine);
       const s = await sessionOver(host, engine, d);
       await s.registerCsvSource("products_w4", productCsv(3));
       s.addQuery("q1", "SELECT sku FROM products_w4", "recordStream");
@@ -559,7 +560,9 @@ describe.skipIf(!RUN_BUDGETS)(
     // Wave 6 (query guard): +1 DuckDB statement — `json_serialize_sql` once for the
     // one query on its first refresh (query/sql.ts guardQuery).
     // Guard fix (browser): -1 — the guard asks DuckDB nothing now (a TypeScript
-    // lexer; the config lock is boot cost). duckQueries 2 → 1.
+    // lexer; the config lock is boot cost). storeQueries 2 → 1.
+    // The query store (ADR 561): the refresh's rows reach the binding session
+    // inside the engine, not across the column door: wasmCalls 26 → 21.
     // Wave 9: the command plans every variable first and places them in ONE
     // batch (each fresh frame named by `bindCreated`, its field addressing the
     // frame's story as `$h:v<i>`): 2 reads, one supports, one caret probe,
@@ -578,13 +581,13 @@ describe.skipIf(!RUN_BUDGETS)(
           mutationOps: 40,
           undoSteps: 1,
           placeholdersRead: 0,
-          wasmCalls: 26,
+          wasmCalls: 21,
           cellsIn: 0,
           resolves: 20,
           stabilizeCalls: 0,
           keyAllocs: 0,
           fingerprints: 0,
-          duckQueries: 1,
+          storeQueries: 1,
         },
         { mutationOps: 41 },
       ),
@@ -594,7 +597,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      const d = await sharedDuck();
+      const d = storeOf(engine);
       const s = await sessionOver(host, engine, d);
       await s.registerCsvSource("products_w5", productCsv(50));
       s.addQuery(

@@ -1,6 +1,6 @@
 # paged.data feature registry — performance gates (spec §12.5, the Rust-engine
-# half). The DuckDB-WASM query gate (1M-row CSV -> grouped RecordSet < 1.5s) runs
-# in the worker (TS), not here. These gate the engine path the spec budgets; the
+# half). The store's 1M-row timings are measured in
+# docs/design/turso-spike-2026-10.md, not here. These gate the engine path the spec budgets; the
 # budgets pass with large margin (pure-Rust paginate/diff is ms-scale) so they
 # catch O(n²) regressions rather than micro-benchmarking.
 

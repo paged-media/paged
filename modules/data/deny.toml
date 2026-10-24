@@ -7,9 +7,9 @@
 # silently. The §3 license-boundary gate is ENFORCED here too: only
 # permissive licenses are allowed, so a source-available/ELv2/SSPL data
 # engine cannot be pulled in (it would fail the [licenses] allow-list).
-# Apache-2.0 is allowed for the Arrow interchange line (arrow-rs lands at
-# the M1 Arrow-IPC seam); MIT covers the vendored DuckDB-WASM artifact
-# (vendored as a built artifact, NOT compiled in-tree — see vendor/).
+# Apache-2.0 is allowed for the Arrow interchange line (the `parquet` reader
+# of data-store); the store engine itself is Turso (MIT), compiled in
+# (ADR 561, PM-0015).
 
 [advisories]
 version = 2

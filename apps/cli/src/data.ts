@@ -64,7 +64,7 @@ export async function requireData(s: CliSession): Promise<void> {
     )?.error;
     throw new CliError(
       EXIT.usage,
-      `this verb needs the paged.data bundle (media.paged.data), and none is loaded. The published @paged-media/paged does not include it: paged.data is built into the editor and runs on DuckDB-WASM (34 MiB). In a checkout of the repository, build its wasm (\`moon run data:wasm\`)` +
+      `this verb needs the paged.data bundle (media.paged.data), and none is loaded. The published @paged-media/paged does not include it: paged.data is built into the editor. In a checkout of the repository, build its wasm (\`moon run data:wasm\`)` +
         (why ? ` (it was found but: ${why})` : ""),
     );
   }
@@ -225,10 +225,20 @@ export async function selectRecords(
   indices: readonly number[],
 ): Promise<string> {
   const id = `${QUERY_ID}-unit`;
+  // Each run of consecutive records is one LIMIT/OFFSET slice of the base
+  // query, the slices joined in order: plain SQL, no column named.
+  const runs: { start: number; n: number }[] = [];
+  for (const i of indices) {
+    const last = runs.at(-1);
+    if (last && last.start + last.n === i) last.n += 1;
+    else runs.push({ start: i, n: 1 });
+  }
+  const slice = (r: { start: number; n: number }) =>
+    `SELECT * FROM (SELECT * FROM (${base}) LIMIT ${r.n} OFFSET ${r.start})`;
   const sql =
-    indices.length === 1
-      ? `SELECT * FROM (${base}) LIMIT 1 OFFSET ${indices[0]}`
-      : `SELECT * EXCLUDE (paged_row) FROM (SELECT *, row_number() OVER () - 1 AS paged_row FROM (${base})) WHERE paged_row IN (${indices.join(", ")}) ORDER BY paged_row`;
+    runs.length === 1
+      ? `SELECT * FROM (${base}) LIMIT ${runs[0]!.n} OFFSET ${runs[0]!.start}`
+      : runs.map(slice).join(" UNION ALL ");
   await defineQuery(s, id, sql);
   return id;
 }

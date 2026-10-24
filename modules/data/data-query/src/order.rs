@@ -20,21 +20,22 @@
 //!
 //! Record N of a result is the Nth record as delivered when the query defines
 //! that order, and the Nth by content only when it does not (see
-//! [`crate::stable_order`]). DuckDB defines the order of:
+//! [`crate::stable_order`]). The store (SQLite semantics, Turso) defines the
+//! order of:
 //!
 //! - a statement with a top-level `ORDER BY` — the sort order;
 //! - a scan of ONE table through order-preserving clauses only (`SELECT`,
 //!   `WHERE`, `LIMIT`, `OFFSET`, `UNION ALL`, a derived table or a CTE over
-//!   such a scan) — the table's insertion order, which DuckDB keeps while
-//!   `preserve_insertion_order` is on (the default; the bundle never turns it
-//!   off, and `lock_configuration` keeps a query from doing so). An imported
-//!   file is a table inserted in file order, so record 1 is the file's first
-//!   row, as Data Merge, the Dataset preview and InDesign number it.
+//!   such a scan) — the table's insertion order: an imported table is a rowid
+//!   table scanned in rowid order, and the store creates no index that could
+//!   reorder a scan. An imported file is a table inserted in file order, so
+//!   record 1 is the file's first row, as Data Merge, the Dataset preview and
+//!   InDesign number it.
 //!
 //! It does NOT define the order of a join (`JOIN`, or several tables in one
 //! `FROM`), a grouping (`GROUP BY`, `HAVING`, `DISTINCT`), a set operation
 //! other than `UNION ALL`, a window with a partition or an order, `PIVOT`,
-//! sampling, or a subquery outside `FROM` (DuckDB plans those as joins). Nor
+//! sampling, or a subquery outside `FROM` (a planner may run those as joins). Nor
 //! of an empty statement (a result handed in without SQL). Those results are
 //! numbered by content, so the same rows delivered in another order are the
 //! same records.
@@ -175,7 +176,7 @@ pub fn result_order_is_defined(sql: &str) -> bool {
         Some(Tok::Word(w)) => Some(w.as_str()),
         _ => None,
     };
-    // A statement at all: SELECT, WITH, DuckDB's FROM-first form, VALUES or
+    // A statement at all: SELECT, WITH, a FROM-first form, VALUES or
     // TABLE <name>.
     if !matches!(
         word(0),

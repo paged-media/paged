@@ -1479,8 +1479,8 @@ The K-3 design note
 ([`docs/design/worker-capability.md`](docs/design/worker-capability.md)) is
 the deliberation record; this section is the contract summary. The
 deferral (Wave 3b, no-speculative-surface) lifts because two real
-consumers exist: paged.image's decode pool and paged.data's DuckDB
-worker. A bundle never touches `new Worker()` directly — the SDK owns the
+consumers exist: paged.image's decode pool and (until data ADR 561
+removed it) paged.data's DuckDB worker. A bundle never touches `new Worker()` directly — the SDK owns the
 primitive, the manifest gates it, the host budgets + tears it down (the
 same posture as every other door).
 
@@ -2651,10 +2651,8 @@ publish of `@paged-media/ai`. Record: [ADR 324](docs/adr/324-node-cli-over-the-h
 - **`get <addr>` without a path** is `getAll`: heavy rows and `content` are
   skipped unless `--content` (§21.8).
 - **apply / merge** run on TODAY's paged.data session (`sessionFor(host)`,
-  canary.10): DuckDB runs in-process (its own `AsyncDuckDBDispatcher` over
-  the Node blocking build — `@duckdb/duckdb-wasm` 1.29.0, an optional peer —
-  driving the bundle's shipped engine wasm), behind narrow `fetch(file:.wasm)`
-  / `Worker` / extension-XHR shims (`src/node-shims.ts`). `apply` carries an
+  canary.10): the bundle's engine wasm, its query store inside it (data ADR
+  561), behind a narrow `fetch(file:.wasm)` shim (`src/node-shims.ts`). `apply` carries an
   INTERIM `property` binding (field → typed property, one
   `host.objects.batch`); expressions wait for Binding::Property (Wave 5).
 - **The bin is `paged-node` (2026-10-16).** Core's Rust CLI installs a

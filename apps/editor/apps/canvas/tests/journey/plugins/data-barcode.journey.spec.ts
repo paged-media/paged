@@ -48,7 +48,7 @@ import { Designer } from "../driver/designer";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { addBindingThroughPanel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -120,11 +120,11 @@ test.describe("journey · paged.data barcode symbology", () => {
           .last()
           .getAttribute("data-status")
           .catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
-        `barcode symbology needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
-          "standard editor dev server (Vite duckdbDistRoute + COOP/COEP isolation); this skip only " +
-          "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
+        `barcode symbology needs the data engine to boot (engine status "${got}"). It boots on the ` +
+          "standard editor dev server; this skip only " +
+          "fires if the package shipped no bin/data_js_bg.wasm.",
       );
     }
     await expect(page.getByText(/data_people/).first()).toBeVisible({

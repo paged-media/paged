@@ -212,3 +212,33 @@ fn data_plugin_redefine_replaces_in_the_payload__feat__data_plugin_persistence()
         "a replaced definition keeps its place"
     );
 }
+
+/// ADR 561: the store is the data, not the recipe. A `load_payload` (an undo
+/// that names another session version) keeps the imported tables, so the
+/// next refresh reads them without importing the files again; the results
+/// delivered before start fresh, as they always did.
+#[test]
+#[allow(non_snake_case)] // `__feat__<id>`: the cockpit test-to-feature join
+fn data_plugin_load_payload_keeps_the_store__feat__data_store_turso() {
+    let saved = build().payload();
+    let mut live = DataSession::new(0);
+    live.store_import(
+        "products",
+        data_store::Format::Csv,
+        b"sku,price\nA-1,9.99\n",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        live.store_ingest(QueryId::from("q1"), "SELECT * FROM products")
+            .unwrap(),
+        1
+    );
+    live.load_payload(saved);
+    assert_eq!(live.store_tables().unwrap(), ["products"]);
+    assert_eq!(
+        live.store_ingest(QueryId::from("q1"), "SELECT * FROM products")
+            .unwrap(),
+        1
+    );
+}

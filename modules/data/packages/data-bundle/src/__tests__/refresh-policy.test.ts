@@ -60,36 +60,32 @@ vi.mock("../engine", () => ({
   },
 }));
 
-vi.mock("../query/duckdb", () => ({
-  DUCKDB_NOT_VENDORED: "duckdb not vendored",
-  bootDuckDB: async () => ({
-    async registerCsv() {},
-    async registerFileBuffer() {},
-    async query() {
-      return { schema: { fields: [] }, columns: [], row_count: 0 };
+vi.mock("../query/store", () => ({
+  STORE_MISSING: "no store",
+  storeHandle: (e: { ingest_result(q: string, r: unknown): void }) => ({
+    importFile: (name: string) => ({
+      table: name,
+      columns: [],
+      rows: 0,
+      errorCells: 0,
+      asWritten: false,
+    }),
+    importCsv: (name: string) => ({
+      table: name,
+      columns: [],
+      rows: 0,
+      errorCells: 0,
+      asWritten: true,
+    }),
+    dropSource() {},
+    tables: () => [],
+    ingest: (q: string) => {
+      e.ingest_result(q, { schema: { fields: [] }, columns: [], row_count: 0 });
+      return 0;
     },
-    async rows() {
-      // Not the guard any more (it asks DuckDB nothing); kept for older callers.
-      const ast = {
-        error: false,
-        statements: [
-          {
-            node: {
-              from_table: {
-                type: "BASE_TABLE",
-                table_name: "feed",
-                schema_name: "",
-                catalog_name: "",
-              },
-            },
-          },
-        ],
-      };
-      return { columns: ["j"], rows: [[JSON.stringify(ast)]] };
-    },
-    async exec() {},
-    async dropFile() {},
-    async close() {},
+    ingestAsWritten: () => null,
+    describe: () => [],
+    preview: () => ({ columns: [], rows: [], count: 0 }),
   }),
 }));
 

@@ -1,5 +1,5 @@
 // ADR 558 / 559 against the REAL stack: real core (canvas-wasm, headless
-// host with `host.objects`), the real data-js engine and real DuckDB.
+// host with `host.objects`), the real data-js engine with its query store.
 //
 //   · a property binding on a core frame property, written through
 //     host.objects: set, step a record, undo ONE step;
@@ -12,8 +12,8 @@
 //   · data's own object model through `host.objects`;
 //   · the count budget: 50 property bindings apply as ONE batch.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
 
 import { afterEach, describe, expect, it, vi, mock } from "bun:test";
 import { waitFor, importActual } from "@paged-media/test-kit";
@@ -24,43 +24,27 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 import { readZip, stripContainerParts, text } from "./zip";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const KEY = "x-paged:media.paged.data";
 const CSV =
   'sku,weight_mm,tint,shown\nA-1,2,#ff0000,yes\nB-2,4,Black,no\nC-3,,"cmyk(0,100,0,0)",yes\n';
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -81,7 +65,7 @@ async function exportPaged(host: BundleHost): Promise<Uint8Array> {
 type Mod = Awaited<ReturnType<typeof loadBundleModule>>;
 
 describe.skipIf(!ready && !required)(
-  "universal property binding, real core + engine + DuckDB [data.bind.property]",
+  "universal property binding, real core + engine [data.bind.property]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {
@@ -121,7 +105,7 @@ describe.skipIf(!ready && !required)(
     it("binds a core frame property through host.objects; one apply is one undo step [data.bind.property]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const { h, host, s } = await open(mod);

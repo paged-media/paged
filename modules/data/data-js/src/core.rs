@@ -368,6 +368,8 @@ pub struct DataSession {
     /// Each query's result as of the last time the document was written from
     /// it (`mark_rows_applied`): the "before" of the row diff.
     applied_rows: HashMap<QueryId, RecordSet>,
+    /// The store the imported sources live in (ADR 561), made on first use.
+    store: Option<data_store::Store>,
 }
 
 impl DataSession {
@@ -388,7 +390,86 @@ impl DataSession {
             variables: VariableSet::new("binding1"),
             binding_locales: BTreeMap::new(),
             applied_rows: HashMap::new(),
+            store: None,
         }
+    }
+
+    /// The store (ADR 561), made on first use.
+    pub fn store(&mut self) -> Result<&data_store::Store, data_store::StoreError> {
+        if self.store.is_none() {
+            self.store = Some(data_store::Store::new()?);
+        }
+        Ok(self.store.as_ref().expect("made above"))
+    }
+
+    /// Read a file into the store as the source table `name`, replacing it.
+    pub fn store_import(
+        &mut self,
+        name: &str,
+        format: data_store::Format,
+        bytes: &[u8],
+        sheet: Option<&str>,
+    ) -> Result<data_store::ImportReport, data_store::StoreError> {
+        self.store()?.import(name, format, bytes, sheet)
+    }
+
+    /// Drop a source's table (and its as-written twin) from the store.
+    pub fn store_drop(&mut self, name: &str) -> Result<(), data_store::StoreError> {
+        self.store()?.drop_source(name)
+    }
+
+    /// The store's source tables.
+    pub fn store_tables(&mut self) -> Result<Vec<String>, data_store::StoreError> {
+        self.store()?.tables()
+    }
+
+    /// Run `sql` in the store and deliver its rows as `query`'s result, like
+    /// [`ingest_result`](Self::ingest_result): no rows cross a boundary, and
+    /// a result equal to the one delivered before changes nothing. Returns
+    /// the row count.
+    pub fn store_ingest(
+        &mut self,
+        query: QueryId,
+        sql: &str,
+    ) -> Result<usize, data_store::StoreError> {
+        let records = self.store()?.query(sql)?;
+        let rows = records.row_count;
+        self.ingest_result(query, records);
+        Ok(rows)
+    }
+
+    /// Run `sql` over the CSV `sources` as written (every column text, the way
+    /// Data Merge reads a CSV) and deliver the rows as `query`'s result.
+    /// `None` when no source is kept as written.
+    pub fn store_ingest_as_written(
+        &mut self,
+        query: QueryId,
+        sql: &str,
+        sources: &[String],
+    ) -> Result<Option<usize>, data_store::StoreError> {
+        let Some(records) = self.store()?.query_as_written(sql, sources)? else {
+            return Ok(None);
+        };
+        let rows = records.row_count;
+        self.ingest_result(query, records);
+        Ok(Some(rows))
+    }
+
+    /// The columns a query produces, with their types.
+    pub fn store_describe(
+        &mut self,
+        sql: &str,
+    ) -> Result<Vec<data_store::ColumnInfo>, data_store::StoreError> {
+        self.store()?.describe(sql)
+    }
+
+    /// The first `limit` rows of a query as text, and its row count.
+    pub fn store_preview(
+        &mut self,
+        sql: &str,
+        limit: usize,
+    ) -> Result<data_store::Preview, data_store::StoreError> {
+        self.store()?.preview(sql, limit)
     }
 
     /// Register a data source (recipe; used for the §11 manifest + gate).
@@ -442,7 +523,8 @@ impl DataSession {
         self.engine.set_locale(locale);
     }
 
-    /// Deliver a query's result (from the DuckDB-WASM query layer → RecordSet).
+    /// Deliver a query's result (a RecordSet from the store, or one a host
+    /// materialised itself).
     pub fn ingest_result(&mut self, query: QueryId, records: RecordSet) {
         // A RecordSet ingest replaces whatever the column door last delivered.
         self.column_hashes.remove(&query);
@@ -718,7 +800,7 @@ impl DataSession {
     /// ready to register with the core data-provider registry once that SDK
     /// contract lands (D-09). The data is stabilized to a deterministic order so
     /// the snapshot — and its revision etag — is identity-stable across
-    /// refreshes regardless of DuckDB's unordered iteration (§6.1), the
+    /// refreshes regardless of a query's unordered iteration (§6.1), the
     /// precondition for a meaningful refresh signal. Errors if the query has no
     /// ingested result yet.
     pub fn publish_provider(
@@ -1239,8 +1321,12 @@ impl DataSession {
     /// as they do for a session built by `from_payload`.
     pub fn load_payload(&mut self, payload: DocumentPayload) {
         let locale = self.engine.locale();
+        // The store is the data, not the recipe: its tables stay (an undo
+        // that reloads a session version must not drop the imported sources).
+        let store = self.store.take();
         *self = DataSession::from_payload(payload, self.today);
         self.engine.set_locale(locale);
+        self.store = store;
     }
 
     /// Session metadata.

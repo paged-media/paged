@@ -52,7 +52,6 @@
     "@paged-media/tools": "workspace:*",
     "@paged-media/ui": "workspace:*",
     "@paged-media/web": "workspace:*",
-    "apache-arrow": "^17.0.0",
     "react": "catalog:",
     "react-dom": "catalog:"
   },

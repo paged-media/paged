@@ -125,3 +125,9 @@ the token. The three existing packages keep publishing through OIDC in that run.
 - A layout that does not put `@paged-media/paged` beside the package (npm nesting it under a
   conflicting version, Yarn Plug'n'Play) needs `engineWasm` or `assetBase`; `consumer-test.sh`
   checks the npm and Bun layouts.
+
+## Amendment (2026-10-24): one data engine
+
+paged.data's engine is one wasm (data ADR 561, [PM-0015](PM-0015-data-and-actions-are-platform-layers.md)):
+there is no DuckDB, no worker and no extension directory in `dist/bin/`. The data engine is
+still hosted, as item 6 says.

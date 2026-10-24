@@ -34,7 +34,7 @@
 //     live cross-plugin consume is the sheet-dataset journey (S-15).
 //   • data.i18n.display — the locale select (en/de) drives the §9.1 display
 //     kernels (NUMBER/CURRENCY/PERCENT/DATEFMT formatting locale).
-//   • data.query.seam — "Preview rows" re-runs the DuckDB query (the
+//   • data.query.seam — "Preview rows" re-runs the store query (the
 //     CSV→Arrow→RecordSet seam) before materializing.
 //
 // The dataset panel shows "No queries yet" until a query exists, so this
@@ -49,7 +49,7 @@ import { Designer } from "../driver/designer";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { addBindingThroughPanel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -114,7 +114,7 @@ test.describe("journey · paged.data dataset panel", () => {
     await designer.open();
     await designer.newDocument();
 
-    // ── 1. IMPORT — register the inline/file source adapter through DuckDB. ──
+    // ── 1. IMPORT — register the inline/file source adapter through the store. ──
     const ready = await importCsv(page);
     if (!ready) {
       const got =
@@ -123,11 +123,11 @@ test.describe("journey · paged.data dataset panel", () => {
           .last()
           .getAttribute("data-status")
           .catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
-        `dataset panel needs DuckDB-WASM to boot (engine status "${got}"). It boots on the ` +
-          "standard editor dev server (Vite duckdbDistRoute + COOP/COEP isolation); this skip only " +
-          "fires if the package shipped no bin/duckdb-engine.wasm or the context is not cross-origin isolated.",
+        `dataset panel needs the data engine to boot (engine status "${got}"). It boots on the ` +
+          "standard editor dev server; this skip only " +
+          "fires if the package shipped no bin/data_js_bg.wasm.",
       );
     }
     await expect(page.getByText(/data_people/).first()).toBeVisible({
@@ -156,7 +156,7 @@ test.describe("journey · paged.data dataset panel", () => {
       timeout: 8_000,
     });
 
-    // ── 4. CATALOG (§7) — "Preview rows" re-runs the DuckDB query
+    // ── 4. CATALOG (§7) — "Preview rows" re-runs the store query
     //    (data.query.seam) and materializes the resolved schema: the panel
     //    headlines the column count of the imported source's records and
     //    shows its first rows. The CSV fixture has 2 columns (name, role)

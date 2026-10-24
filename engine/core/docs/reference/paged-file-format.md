@@ -119,7 +119,7 @@ The key insight for "where does the embedded content live" is that "embedded con
 
 | Role        | What it is                                                                                                           | Characteristics                                                     | Source of truth?                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
-| **Spec**    | The declarative definition: formula set, chart definition, DuckDB query + field-to-frame bindings, image layer stack | Small, JSON, human-readable, diffable, authored                     | **Yes** — canonical, must round-trip |
+| **Spec**    | The declarative definition: formula set, chart definition, SQL query + field-to-frame bindings, image layer stack | Small, JSON, human-readable, diffable, authored                     | **Yes** — canonical, must round-trip |
 | **Source**  | The bytes the spec operates on: cell inputs, dataset rows, pixel layers                                              | Potentially large, binary-friendly; may live _outside_ the document | Yes (but may be linked, see §6)      |
 | **Derived** | The computed output: evaluated values, rendered chart, composited image                                              | Regenerable; kept for viewers without a compute engine              | **No** — regenerable cache           |
 
@@ -135,7 +135,7 @@ paged/sheet/<id>/spec.json        spec   (formulas, chart definition)
 paged/sheet/<id>/values.parquet   source (literal cell inputs)
 paged/sheet/<id>/chart-1.svg      derived (IDML-visible flatten)
 
-paged/data/<id>/query.sql         spec   (DuckDB query)
+paged/data/<id>/query.sql         spec   (SQL query)
 paged/data/<id>/source.json       spec   (external URI + fetch metadata)
 paged/data/<id>/snapshot.parquet  source (cached snapshot of external)
 

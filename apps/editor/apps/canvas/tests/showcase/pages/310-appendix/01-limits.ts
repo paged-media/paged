@@ -66,7 +66,7 @@ const ENGINE_FINDINGS: string[] = [
   "position-keyed line-breaker sliver — certain exact rects compose character-wrapped while an identical rect a row down sets clean.",
   "characterOtfFeatures is authoring-only — the tag list stores and round-trips; the shaper never reads it.",
   "in-chain mutation cost scaling — ~3.8 s per op against the full book vs ~1 s solo; recompose scales with content.",
-  "DuckDB date-ingest refusal — the provider's serde refuses any result set carrying a DATE column, whole.",
+  "Date-ingest refusal — the provider's serde refuses any result set carrying a DATE column, whole.",
   "unstyled DOCX pour paint — synthesized styles apply over the story but the paint shows one face and size.",
   "export-center missing plugin exporters — the plugin section never renders its rows; save-backs ride the exporter registry.",
 ];

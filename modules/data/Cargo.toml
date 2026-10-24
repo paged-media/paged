@@ -10,6 +10,7 @@ members = [
     "data-expr",
     "data-sources",
     "data-xlsx",
+    "data-store",
     "data-query",
     "data-bind",
     "data-lower",

@@ -18,7 +18,7 @@
 
 // The surface-conformance environments for paged.data: the REAL bundle
 // (`dataBundle.activate`, every contribution it registers) over the real
-// data-js engine and a real DuckDB, on two hosts:
+// data-js engine with its query store, on two hosts:
 //
 //   · `unitEnv()` — the SDK's in-process `BundleHost` adapter over the
 //     gesture kit's RECORDING fake editor (no canvas engine: mutations are
@@ -26,11 +26,10 @@
 //   · `headlessEnv()` — the plugin-sdk harness over the REAL canvas engine,
 //     the minimal one-page document (page "usp", rectangle "urect") loaded.
 //
-// The bundle boots its two engines the browser's way (the glue fetches the
-// wasm by URL; DuckDB-WASM spawns a worker). Node can do neither, so the
-// two boot functions are swapped for the Node boots of ./real-duckdb.ts —
-// the same artifacts, booted from disk. `loadDataModule()` does that and
-// imports the bundle after it.
+// The bundle boots its engine the browser's way (the glue fetches the wasm by
+// URL). Node cannot, so the boot is swapped for the Node boot of
+// ../real-engine.ts — the same artifact, read from disk; the query store is
+// inside it. `loadDataModule()` does that and imports the bundle after it.
 //
 // `shell.openPanel` (which panel a command opened) is recorded around the
 // host, and so is every write the bundle makes: `document.mutate` and
@@ -62,30 +61,13 @@ import type {
 import { importActual } from "@paged-media/test-kit";
 
 import { existsSync } from "node:fs";
-import { join } from "node:path";
 
 import { minimalIdml } from "../fixtures/minimal-idml";
 import { ENGINE_ANCHOR } from "../real-core";
-import {
-  BIN,
-  DATA_JS_WASM,
-  bootRealDuckDB,
-  bootRealEngine,
-} from "../real-duckdb";
-
-const DUCKDB_NODE = join(
-  BIN,
-  "..",
-  "..",
-  "..",
-  "vendor",
-  "duckdb-wasm",
-  "dist",
-  "duckdb-node-blocking.cjs",
-);
+import { DATA_JS_WASM, bootRealEngine } from "../real-engine";
 
 /** What the suites need, and what is missing: the data-js wasm
- *  (scripts/build-wasm.sh), DuckDB-WASM (scripts/vendor-duckdb.sh) and, for
+ *  (scripts/build-wasm.sh) and, for
  *  the headless layer, the canvas engine. `required` is the CI lane's
  *  promise that they are there (REQUIRE_REAL_*): then a missing one fails. */
 export function readiness(headless: boolean): {
@@ -97,16 +79,12 @@ export function readiness(headless: boolean): {
     existsSync(DATA_JS_WASM)
       ? null
       : "the data-js wasm (bash scripts/build-wasm.sh)",
-    existsSync(join(BIN, "duckdb-engine.wasm")) && existsSync(DUCKDB_NODE)
-      ? null
-      : "DuckDB-WASM (bash scripts/vendor-duckdb.sh)",
     !headless || ENGINE_ANCHOR ? null : "the canvas engine (canvas-wasm)",
   ].filter((m): m is string => m !== null);
   return {
     ready: missing.length === 0,
     missing: missing.join(", "),
     required:
-      process.env.REQUIRE_REAL_DUCKDB === "1" ||
       process.env.REQUIRE_REAL_ENGINE === "1" ||
       process.env.REQUIRE_REAL_CORE === "1",
   };
@@ -122,18 +100,9 @@ export function loadDataModule(): Promise<DataModule> {
   if (!loaded) {
     loaded = (async () => {
       const engine = await importActual(() => import("../../src/engine"));
-      const duckdb = await importActual(() => import("../../src/query/duckdb"));
       mock.module("../../src/engine", () => ({
         ...engine,
         bootEngine: (today: number) => bootRealEngine(today),
-      }));
-      mock.module("../../src/query/duckdb", () => ({
-        ...duckdb,
-        bootDuckDB: async () => {
-          const b = await bootRealDuckDB();
-          if (!b.handle) throw new Error(b.error);
-          return b.handle;
-        },
       }));
       return import("../../src/index");
     })();

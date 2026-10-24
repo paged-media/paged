@@ -165,10 +165,31 @@ export interface DataEngineLike {
    *  source over bundle-fetched bytes. Optional: a wasm artifact built before
    *  the M1 slice lacks it (the session degrades honestly). */
   remote_invalidation_key?(source: string, bytes: Uint8Array): string;
-  /** Wave 6: read one worksheet of an `.xlsx` (data-xlsx) as
-   *  `{sheet, sheets, columns, rows, errorCells, json}` for DuckDB. Optional:
-   *  a wasm built before it lacks it (the import says so). */
-  xlsx_import?(bytes: Uint8Array, sheet?: string): unknown;
+  /** The query store (ADR 561, `query/store.ts`): read a file as a source
+   *  table (`StoreImport`). Optional only so a test double can leave the
+   *  store out; the shipped engine has it. */
+  store_import?(
+    name: string,
+    format: string,
+    bytes: Uint8Array,
+    sheet?: string,
+  ): unknown;
+  /** Drop a source's table and its as-written twin. */
+  store_drop?(name: string): void;
+  /** The store's source tables. */
+  store_tables?(): string[];
+  /** Run SQL in the store and deliver the rows as a query's result. */
+  store_ingest?(query: string, sql: string): number;
+  /** The same, over the CSV sources as written; undefined without a twin. */
+  store_ingest_as_written?(
+    query: string,
+    sql: string,
+    sources: string[],
+  ): number | undefined;
+  /** The columns a query produces (`StoreColumn[]`). */
+  store_describe?(sql: string): unknown;
+  /** The first rows of a query as text and its count (`StorePreview`). */
+  store_preview?(sql: string, limit: number): unknown;
   /** §9.1: override one binding's formatting locale (a tag; `null` clears).
    *  Optional: absent on a wasm artifact built before the locale table. */
   set_binding_locale?(binding: string, locale: string | null): void;

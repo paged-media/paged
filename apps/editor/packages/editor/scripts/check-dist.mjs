@@ -88,8 +88,8 @@ for (const f of files) {
     fail(
       `${f} (${bytes} bytes): the engine is the @paged-media/paged dependency's, never a copy`,
     );
-  if (/(^|\/)(data_js_bg|duckdb-engine)[^/]*\.wasm$/.test(f))
-    fail(`${f}: paged.data's engines are hosted (ADR 220), not shipped`);
+  if (/(^|\/)data_js_bg[^/]*\.wasm$/.test(f))
+    fail(`${f}: paged.data's engine is hosted (ADR 220), not shipped`);
   if (!/\.(m?js|d\.ts|css|json|html|txt)$/.test(f)) continue;
   // Comments name files too (a JSDoc example); only code counts.
   const code = readFileSync(abs, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");

@@ -1,12 +1,12 @@
 // Persistence against the REAL stack: real core (canvas-wasm headless host),
-// real data-js engine, real DuckDB. A session is built through the loaded
+// real data-js engine with its query store. A session is built through the loaded
 // bundle, the document is saved as a `.paged` container (exportPaged), a NEW
 // host loads those bytes, the bundle activates again, and the restored session
-// must work: sources re-register in DuckDB, queries run, the placed field is
+// must work: sources load into the store again, queries run, the placed field is
 // found again (not placed twice), refresh writes it, and undo behaves.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1, where a missing piece is a
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1, where a missing piece is a
 // failure.
 
 import { afterEach, describe, expect, it, vi, mock } from "bun:test";
@@ -22,42 +22,26 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 /** The bundle module, with the two engine boots pointed at real Node builds. */
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -81,7 +65,7 @@ async function ours(host: BundleHost) {
 }
 
 describe.skipIf(!ready && !required)(
-  "session persistence through a saved .paged, real core + engine + DuckDB [data.plugin.persistence]",
+  "session persistence through a saved .paged, real core + engine [data.plugin.persistence]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {
@@ -98,7 +82,7 @@ describe.skipIf(!ready && !required)(
     it("import, bind, save, reopen: the restored session refreshes the same field [data.plugin.persistence]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
 
@@ -143,7 +127,7 @@ describe.skipIf(!ready && !required)(
         ["v_sku", "A-1"],
       ]);
 
-      // Refresh works: the CSV re-registers in DuckDB on first use, the query
+      // Refresh works: the CSV loads into the store again on first use, the query
       // runs, and the preview writes the field in place.
       await s2.refreshData();
       await s2.previewRecord("v_sku", 1);
