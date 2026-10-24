@@ -2,6 +2,7 @@
   "kind": "struct",
   "fields": {
     "mode": { "kind": "enum", "members": ["editable", "image"] },
-    "pageCount": { "kind": "number", "integer": true }
+    "pageCount": { "kind": "number", "integer": true },
+    "sourcePageCount": { "kind": "number", "integer": true }
   }
 }

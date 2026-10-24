@@ -44,6 +44,7 @@ import {
   type FeatureStore,
   type IdAliases,
   type IdDeprecation,
+  type ShellObjectsSurface,
 } from "@paged-media/shell";
 import { loadLocale } from "@paged-media/strings";
 
@@ -152,6 +153,10 @@ export interface EditorHandle {
   hostSlot(id: string): HTMLElement | null;
   /** The engine client, for what the handle does not cover. */
   readonly client: CanvasClient;
+  /** The object model the loaded modules contribute to: their typed
+   *  commands (`invoke`, `commands`) and objects, for what the handle does
+   *  not cover (paged.publish's PDF preflight and exporter, say). */
+  readonly objects: ShellObjectsSurface;
   /** Unmount the editor and release its worker. */
   dispose(): void;
 }
@@ -347,6 +352,7 @@ export async function createEditor(
         `[data-host-component="${CSS.escape(id)}"]`,
       ),
     client,
+    objects: mounted.instance.services.objects.model.objects,
     dispose() {
       offClient();
       offAliases();

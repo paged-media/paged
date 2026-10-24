@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 457,
-    "keybinding": 88,
-    "menu": 335,
+    "command": 458,
+    "keybinding": 98,
+    "menu": 336,
     "panel": 127,
     "tool": 81
   },
@@ -2276,6 +2276,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.toggleDataMarkers",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.toggleHeadingAnchors",
       "kind": "command",
       "owner": "editor"
@@ -2331,6 +2336,16 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:alt+cmd+backspace→media.paged.slide.command.deleteSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:alt+cmd+n→media.paged.slide.command.newSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:alt+ctrl+0→paged.view.fitSpread",
       "kind": "keybinding",
       "owner": "editor"
@@ -2341,14 +2356,34 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:alt+ctrl+backspace→media.paged.slide.command.deleteSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:alt+ctrl+n→media.paged.slide.command.newSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
     },
     {
+      "id": "keybinding:alt+shift+cmd+n→media.paged.slide.command.duplicateSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:alt+shift+ctrl+n→media.paged.slide.command.duplicateSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:arrowdown→paged.object.nudgeDown",
@@ -2419,6 +2454,16 @@
       "id": "keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+arrowdown→media.paged.slide.command.moveSlideDown",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:cmd+arrowup→media.paged.slide.command.moveSlideUp",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:cmd+a→paged.edit.selectAll",
@@ -2574,6 +2619,16 @@
       "id": "keybinding:ctrl+alt+shift+v→paged.edit.pasteInPlace",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+arrowdown→media.paged.slide.command.moveSlideDown",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:ctrl+arrowup→media.paged.slide.command.moveSlideUp",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:ctrl+a→paged.edit.selectAll",
@@ -4362,6 +4417,11 @@
     },
     {
       "id": "menu:View/Fit spread in window",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
     },

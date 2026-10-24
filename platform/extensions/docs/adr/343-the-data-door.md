@@ -39,6 +39,10 @@ built-in does.
   - `query(sql)`;
   - `write(table, edits)`: set, insert and delete rows of a source table;
   - `bind`, `unbind` and `bindings`: a property binding (ADR 558) on any address or selector;
+  - `evaluate`, `status` and `refresh` (amended 2026-10-24, editor ADRs 291 and 292): an
+    expression's value at a record, each binding's sync state, and an update of the document;
+  - `placements` (amended 2026-10-24, read role): each page item a binding places content in,
+    by ADR 131 address, with the binding's sync state (the editor's canvas field markers);
   - `onDidChange`: a table and its new revision.
 - **Routing only.** The host routes calls and fans out changes; no bundle names another.
 

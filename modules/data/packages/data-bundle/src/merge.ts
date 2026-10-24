@@ -254,6 +254,9 @@ const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
   // Core reads a knocked-out shadow (InDesign's default) on every frame, a
   // fresh one included: v0.71.13 does, v0.71.1 listed no such property.
   frameDropShadowKnockedOut: [true],
+  // Core ADR 1006: every frame with an outline reads its fill rule, and a
+  // fresh one is non-zero (IDML has no other); only even-odd is worth a copy.
+  frameFillRule: ["NonZero"],
   textFrameColumnCount: [1],
   textFrameVerticalJustification: ["TopAlign"],
   textFrameFirstBaseline: ["AscentOffset"],

@@ -182,6 +182,16 @@
 [fill="var(--status-approved)"] {
   fill: var(--status-approved);
 }
+/* Editor ADR 291 — the data field markers stroke a binding's sync state. */
+[stroke="var(--status-approved)"] {
+  stroke: var(--status-approved);
+}
+[stroke="var(--status-review)"] {
+  stroke: var(--status-review);
+}
+[stroke="var(--status-error)"] {
+  stroke: var(--status-error);
+}
 
 /* ── Panel baseline for NATIVE controls ─────────────────────────────
    Host panels use the kit's components. Plugin panels mostly draw raw

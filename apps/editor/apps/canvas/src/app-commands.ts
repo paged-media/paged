@@ -64,6 +64,7 @@ const M = defineMessages("app.appCommands", {
   showTextThreads: "Show text threads",
   snapToPoints: "Snap to points",
   showHeadingAnchors: "Show heading anchors",
+  showDataMarkers: "Show data markers",
   docs: "Documentation",
   idmlReference: "IDML format reference",
   reportIssue: "Report an issue…",
@@ -135,6 +136,9 @@ export const PAGED_VIEW_TOGGLE_SNAP_TO_POINTS = "paged.view.toggleSnapToPoints";
  *  diagnostic drawn only on request. */
 export const PAGED_VIEW_TOGGLE_HEADING_ANCHORS =
   "paged.view.toggleHeadingAnchors";
+/** View ▸ Show data markers — the frames the document's data is placed in,
+ *  bracketed in their binding's sync state (editor ADR 291). */
+export const PAGED_VIEW_TOGGLE_DATA_MARKERS = "paged.view.toggleDataMarkers";
 
 /** Help — the places the app sends you to learn it. */
 const HELP_LINKS = [
@@ -365,6 +369,14 @@ export function buildAppCommands(
         toggleViewToggle(scopeOf(paged), "headingAnchors");
       },
     },
+    {
+      id: PAGED_VIEW_TOGGLE_DATA_MARKERS,
+      title: t(M.showDataMarkers),
+      category: "View",
+      handler: (paged) => {
+        toggleViewToggle(scopeOf(paged), "dataMarkers");
+      },
+    },
     ...HELP_LINKS.map((l) => ({
       id: l.id,
       title: t(l.label),
@@ -539,6 +551,13 @@ export const APP_MENU_ITEMS: MenuItemContribution[] = [
     command: PAGED_VIEW_TOGGLE_HEADING_ANCHORS,
     checked: (paged) => getViewToggle(scopeOf(paged), "headingAnchors"),
     order: 65,
+    group: "extras",
+  },
+  {
+    path: "View/Show data markers",
+    command: PAGED_VIEW_TOGGLE_DATA_MARKERS,
+    checked: (paged) => getViewToggle(scopeOf(paged), "dataMarkers"),
+    order: 66,
     group: "extras",
   },
 ];

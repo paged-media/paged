@@ -30,6 +30,7 @@
 
 import type {
   DataBindingInfo,
+  DataPlacement,
   DataRowEdit,
   DataService,
   DataTableInfo,
@@ -65,6 +66,10 @@ export const silentConsole: Readonly<
   error: () => {},
 });
 
+/** One page item's address (ADR 131): the fake's placements name these. */
+const PAGE_ITEM =
+  /^(textFrame|textframe|rectangle|rect|oval|polygon|graphicLine|graphicline|group|frame):[^\s,>]+$/;
+
 /** One table of a {@link fakeDataService}: its fields and its rows. */
 export interface FakeDataTable {
   fields: readonly ProviderField[];
@@ -79,7 +84,9 @@ export interface FakeDataTable {
  * bundle's `host.data.serve`), and a consumer under test reads, writes and
  * binds as it would against paged.data. `query` answers `SELECT * FROM
  * <table>` only, and says so for anything else: the fake runs no SQL.
- * Bindings are recorded, not resolved.
+ * Bindings are recorded, not resolved: `placements` names each binding whose
+ * target is one page item's address (`rectangle:u1`, not a selector) as
+ * placed there and `linked`.
  */
 export function fakeDataService(
   tables: Readonly<Record<string, FakeDataTable>>,
@@ -181,6 +188,13 @@ export function fakeDataService(
         };
       const value = t.rows[record]?.[field] ?? null;
       return { display: value === null ? "" : String(value), value };
+    },
+    async placements() {
+      const placed: DataPlacement[] = [];
+      for (const b of bindings.values())
+        if (PAGE_ITEM.test(b.target))
+          placed.push({ binding: b.id, address: b.target, status: "linked" });
+      return placed;
     },
     rows: (name) => table(name).rows,
   };

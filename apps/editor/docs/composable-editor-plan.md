@@ -45,8 +45,8 @@ orientation only.
 | F3 preflight, F4 author overlay                  | Done: the `templateFindings` collection, the Template panel's Problems, markers on the author's field outlines                          | `paged-template/src/preflight.rs`                                                   |
 | G1, G2 module field kinds, routing               | Done                                                                                                                                    | extensions ADR 335, engine ADR 1000 amendment                                       |
 | G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
-| G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
-| H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
+| G4 coverage gaps                                 | Done: CLI imports and bytes, typed commands per module, headless module content; what stays by design is listed in G4                   |                                                                                     |
+| H demos                                          | Done: a gallery of thirteen pages (module fields and PDF/X-4 included), journeys                                                        | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
 | Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                     | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
 | Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                      | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
@@ -1221,7 +1221,11 @@ first, since they unblock several modules at once:
 4. **Headless rendering of module content.** Image composites with adjustments need a GPU and
    web frames are not stored as rendered content, so a headless PDF shows stale pixels or a
    fallback. Fail loudly (`pending` reported by `template check`), and bake web frames before
-   export.
+   export. **Done:** every PDF `paged-node` writes bakes each web frame to native items through
+   paged.web's typed `bakeWebFrame` first and takes the bake's undo steps back afterwards; any
+   module object whose `pending` row reads true is listed in the export's diagnostics and by
+   `template check`, and `template fill -o x.pdf` refuses to write it
+   (`apps/cli/src/module-content.ts`, `cli-module-content.spec.ts`).
 5. **The Rust CLI** has no plugin host; the module surface is `paged-node` only, and its docs say
    so.
 
@@ -1293,8 +1297,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
   and New, Duplicate, Delete, Move up and Move down of the active slide under Plugins ▸ Slide,
-  each offered only where it applies (`modules/slide/docs/status.md`).
-- **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
+  each offered only where it applies, each slide verb with a key that the editor leaves free
+  (Option+Cmd+N, Option+Shift+Cmd+N, Option+Cmd+Backspace, Cmd+Up, Cmd+Down; silent with a text
+  caret) (`modules/slide/docs/status.md`).
+- **web:** done. The typed `importHtml` (a whole file split into its lanes, sanitised) and
+  `makeWebFrame` (an existing frame made a web frame, from a starter template), the
+  `webFrame.diagnostics` row (what the source panel lints) and `webFrame.page` (the page number
+  `{{frame.page}}` renders as); a headless PDF bakes the frames first (shared gap 4).
 - **publish / pdf:** done. Bookmarks and tagged PDF are options of the typed `exportPdf`; every
   PDF `paged-node` writes (`template fill -o x.pdf`, `merge`, `generate`, `-o x.pdf`) goes
   through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
@@ -1305,6 +1314,9 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   `--no-paged` leaves it out; the Rust `paged package` the same). Fonts are collected only
   from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
   whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
+  Both stay by design: a package can hold only the font files it is given, and a licence that
+  forbids copying a face is the font vendor's rule. A PDF import that leaves pages out past
+  its cap says so (`sourcePageCount`, a log line).
 
 ## 9b. Workstream H — Demos
 

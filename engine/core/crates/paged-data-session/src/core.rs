@@ -1250,7 +1250,7 @@ impl DataSession {
                 error: Some(e.to_string()),
             },
             Ok(Value::Error(e)) => EvalPreview {
-                display: Value::Error(e.clone()).as_display(),
+                display: Value::Error(e).as_display(),
                 value: serde_json::Value::Null,
                 error: Some(Value::Error(e).as_display()),
             },
