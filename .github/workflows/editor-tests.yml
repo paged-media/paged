@@ -823,7 +823,13 @@ jobs:
         # Three shards lost their runner to a shutdown signal on 2026-10-20,
         # each after a minute of silence mid-suite: the signature of a runner
         # out of memory. Every 30 s the step logs the memory left and the
-        # largest processes, so the next loss shows what grew.
+        # largest processes, so the next loss shows what grew. It did again
+        # on 2026-10-23 and 2026-10-24 (shard 2): the Playwright worker grew
+        # by about 1.5 GB every 30 s across dozens of passing tests until the
+        # runner died, at a different point of the shard each time. The dot
+        # reporter named no test, so the list reporter runs beside the blob:
+        # the next loss names the test that was running when the growth
+        # began.
         run: |
           (while sleep 30; do
             echo "::group::memory $(date -u +%H:%M:%S)"
@@ -840,7 +846,7 @@ jobs:
             --grep-invert @quarantine \
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --global-timeout=3300000 \
-            --reporter=blob
+            --reporter=blob,list
           status=$?
           kill "$logger"
           exit "$status"
