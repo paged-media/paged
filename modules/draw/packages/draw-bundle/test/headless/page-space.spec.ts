@@ -64,6 +64,7 @@ import {
 import { bindMinted, mutateMinting } from "../../src/commands/minted";
 import { ovalStandIns } from "../../src/handlers/oval-stand-ins";
 import { applyCreateOutlines } from "../../src/commands/create-outlines";
+import { importSvg } from "../../src/io/svg";
 import { pageOriginOf, storedTransformOf } from "../../src/page-origin";
 import { buildIdml, packageWithSpread } from "../fixtures/build-idml";
 import { openHost } from "./host";
@@ -356,6 +357,27 @@ describe("draw conformance — page space on a page that does not start at its s
       await spreadOutline(copy),
       source.map((c) => c.map(([x, y]) => [x + dx, y + dy] as Vec)),
     );
+  });
+
+  it("SVG import: a ring is ONE compound and lands where its page coordinates say (an engine that reports the origin) [plugin-draw.svg-io]", async () => {
+    // Page coordinates in the file; `insertPath` adds the origin to the
+    // first contour and the importer's `framePath` table must carry it
+    // too, or the hole lands 612 pt away from its ring.
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="612" height="792" viewBox="0 0 612 792">` +
+      `<path d="M100 100h100v100h-100Z M130 130v40h40v-40Z" fill="#cc3300"/>` +
+      `</svg>`;
+    const ids = await importSvg(h.host, {
+      name: "ring.svg",
+      bytes: new TextEncoder().encode(svg),
+      mimeType: "image/svg+xml",
+    });
+    expect(ids).toHaveLength(1);
+    const at = (x: number, y: number): Vec => [x + ORIGIN[0], y + ORIGIN[1]];
+    near(await spreadOutline(ids[0]!), [
+      [at(100, 100), at(200, 100), at(200, 200), at(100, 200)],
+      [at(130, 130), at(130, 170), at(170, 170), at(170, 130)],
+    ]);
   });
 });
 
