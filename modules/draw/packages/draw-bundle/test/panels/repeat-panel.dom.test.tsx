@@ -47,6 +47,7 @@ import {
   REPEAT_PANEL_NOTE,
 } from "../../src";
 import { openHost } from "../headless/host";
+import { recipeAutoUpdateEnabled } from "../../src/commands/recipe-auto-update";
 import {
   documentBurst,
   drive,
@@ -137,6 +138,20 @@ describe("Repeat options panel — rendered against the engine", () => {
     });
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
+
+    it("the automatic-update checkbox shows and writes the one setting", async () => {
+      const panel = await mountPanel(h, makeRepeatPanel);
+      const box = () =>
+        panel.get<HTMLInputElement>('[data-draw-recipe-auto-update="repeat"]');
+      expect(box().checked).toBe(true);
+      expect(recipeAutoUpdateEnabled(h.host)).toBe(true);
+      await panel.click('[data-draw-recipe-auto-update="repeat"]');
+      expect(box().checked).toBe(false);
+      expect(recipeAutoUpdateEnabled(h.host)).toBe(false);
+      await panel.click('[data-draw-recipe-auto-update="repeat"]');
+      expect(box().checked).toBe(true);
+      expect(recipeAutoUpdateEnabled(h.host)).toBe(true);
+    });
 
     it("the form shows the fields of the chosen kind only", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);

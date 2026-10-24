@@ -350,12 +350,29 @@ export interface PartChange {
  * with the minted element's id after the commit. Omitted: each of those
  * creates answers `""`. A list of the wrong length is refused (`failed`)
  * before anything applies.
+ *
+ * `followUp` — a write the committed one provokes and that must be part of
+ * its undo step (extensions ADR 337, amendment: a recipe parameter written,
+ * then the artwork rebuilt from it — the rebuild mints ids the record
+ * names, so it can only be planned once the write committed). After the
+ * commit the registry calls it with the step's `appliedSeq`; it writes
+ * through `host.document.mutate(…, { amend })` and answers the step's
+ * number from then on (or nothing, when it wrote nothing). A follow-up that
+ * throws or is refused leaves the committed write as it is (the registry
+ * logs it); the batch's result still reports one undo step. Follow-ups run
+ * in planner order, each amending the number the previous one answered.
+ * Called only on a host with `supports("document.mutate.amend@1")`.
  */
+export type ObjectFollowUp = (step: {
+  appliedSeq: number;
+}) => Promise<number | void>;
+
 export type ObjectWrite =
   | {
       kind: "mutations";
       mutations: readonly MutationInput[];
       created?: readonly Address[];
+      followUp?: ObjectFollowUp;
     }
   | {
       kind: "state";
@@ -364,6 +381,7 @@ export type ObjectWrite =
       labelKey: string;
       labelValue: string;
       created?: readonly Address[];
+      followUp?: ObjectFollowUp;
     }
   | {
       kind: "both";
@@ -373,6 +391,7 @@ export type ObjectWrite =
       labelKey: string;
       labelValue: string;
       created?: readonly Address[];
+      followUp?: ObjectFollowUp;
     }
   | { kind: "rejected"; reason: string };
 

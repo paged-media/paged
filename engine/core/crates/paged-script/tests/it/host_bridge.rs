@@ -691,3 +691,104 @@ fn the_command_calls_have_their_wire_shape() {
         ]
     );
 }
+
+// ── Engine ADR 1004 amendment: a script run is one step it reports ────
+
+/// A write a change provokes: a document label (`x-paged:` namespace).
+fn follow_up() -> paged_canvas::channel::Mutation {
+    paged_canvas::channel::Mutation::SetDocumentMetadata {
+        key: "x-paged:paged.test".into(),
+        value: Some(r#"{"v":1,"data":{"rebuilt":true}}"#.into()),
+        caller: None,
+    }
+}
+
+fn bleeds(model: &mut CanvasModel) -> String {
+    execute_script(
+        model,
+        "console.log(paged.get('doc','documentBleedTop'), paged.get('doc','documentBleedBottom'))",
+    )
+    .output
+    .join("")
+}
+
+#[test]
+fn a_script_run_is_one_step_and_reports_it() {
+    let mut model = blank();
+    let before = model.applied_log_len();
+    let pristine = bleeds(&mut model);
+    let r = execute_script(
+        &mut model,
+        "paged.set('doc','documentBleedTop','3mm'); paged.set('doc','documentBleedBottom','4mm');",
+    );
+    assert_eq!(r.error, None);
+    assert_eq!(r.writes, Some(2));
+    assert_eq!(model.applied_log_len(), before + 1, "ONE undo step");
+    let step = r.applied_seq.expect("the run names its step");
+    assert_eq!(model.applied_log_back().unwrap().applied_seq, step);
+    // A follow-up write joins it, as it joins an edit's step.
+    model
+        .apply_mutation_amending(&follow_up(), step)
+        .map(|_| ())
+        .unwrap_or_else(|e| panic!("the script's step is amendable: {e:?}"));
+    assert_eq!(model.applied_log_len(), before + 1);
+    assert!(model.undo().is_some());
+    assert_eq!(bleeds(&mut model), pristine, "one undo reverts the run");
+}
+
+#[test]
+fn a_read_only_run_reports_no_step() {
+    let mut model = blank();
+    let r = execute_script(&mut model, "paged.get('doc','documentBleedTop')");
+    assert_eq!(r.error, None);
+    assert_eq!(r.applied_seq, None);
+}
+
+#[test]
+fn a_run_that_moves_the_history_reports_no_step() {
+    let mut model = blank();
+    let first = execute_script(&mut model, "paged.set('doc','documentBleedTop','3mm')");
+    assert!(first.applied_seq.is_some());
+    let r = execute_script(
+        &mut model,
+        "paged.undo(); paged.set('doc','documentBleedBottom','4mm');",
+    );
+    assert_eq!(r.error, None);
+    assert_eq!(r.applied_seq, None, "an undo ran during the run");
+}
+
+/// A host commit the script reported, amended by a follow-up write while
+/// the script still waited, is the script's own all the same: the run
+/// stays one step, and it reports the step's current number.
+#[test]
+fn a_host_commit_amended_while_the_script_waits_stays_the_scripts() {
+    let mut model = blank();
+    let before = model.applied_log_len();
+    let pristine = bleeds(&mut model);
+    let (_, session) = suspended(start(
+        &mut model,
+        r#"
+paged.set('doc', 'documentBleedTop', '3mm');
+paged.set('plugin:paged.test/thing/1', 'name', 'A');
+"#,
+    ));
+    let host = execute_script(&mut model, "paged.set('doc', 'documentBleedBottom', '4mm')");
+    let host_seq = host.applied_seq.expect("the host's commit is one step");
+    // The follow-up (a rebuild the host commit provoked) amends it.
+    let amended = model
+        .apply_mutation_amending(&follow_up(), host_seq)
+        .unwrap_or_else(|e| panic!("amendable: {e:?}"))
+        .applied_seq;
+    assert_ne!(amended, host_seq);
+    let r = done(session.resume(
+        &mut model,
+        &[ok(json!({ "applied": true, "undoSteps": 1 }))],
+        &[host_seq],
+        &clock,
+    ));
+    assert_eq!(r.error, None);
+    assert_eq!(model.applied_log_len(), before + 1, "ONE undo step");
+    assert_eq!(r.applied_seq, Some(amended));
+    assert!(model.undo().is_some());
+    assert_eq!(bleeds(&mut model), pristine);
+}

@@ -59,6 +59,7 @@ import {
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
+import { RecipeAutoUpdateToggle } from "./recipe-auto-update-toggle";
 import { elementKindLabel, PanelIntro, tokenLabel } from "./panel-parts";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
@@ -286,6 +287,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
           summary={s.t(OBJECTS_ON_PATH_SUMMARY)}
           attr="data-draw-onpath-intro"
         />
+        <RecipeAutoUpdateToggle host={host} panel="onpath" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             {s.t(M.heading)} ({records.length})

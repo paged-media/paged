@@ -1200,6 +1200,77 @@ test.describe("plugin surface · paged.draw", () => {
       .toBe(rebuilt);
   });
 
+  // ── 8c. the automatic update's checkbox ────────────────────────────
+
+  test("the recipe panels' checkbox turns the automatic update off and on @feat:plugin-draw.repeats @level:happy", async ({
+    page,
+  }) => {
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+    const seed = await designer.drawRectangle({
+      x0: 260,
+      y0: 120,
+      x1: 320,
+      y1: 170,
+    });
+    await designer.applyFill("rectangle", seed);
+    await designer.selectElement("rectangle", seed);
+    await designer.runCommand("media.paged.draw.command.makeRadialRepeat");
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).length, {
+        timeout: 12_000,
+      })
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(500);
+    const made = (await idsOfKind(page, "polygon")).join(",");
+
+    await designer.openPanel("media.paged.draw.panel.repeat");
+    const box = page.locator('[data-draw-recipe-auto-update="repeat"]');
+    await expect(box).toBeVisible({ timeout: 8_000 });
+    await expect(box).toBeChecked();
+    await box.uncheck();
+    await expect(box).not.toBeChecked();
+
+    const opacity = (value: number) =>
+      page.evaluate(
+        async (v) => {
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: { mutate: (m: unknown) => Promise<unknown> };
+              };
+            }
+          ).__canvas.client;
+          return c.mutate({
+            op: "setElementProperty",
+            args: {
+              elementId: { kind: "rectangle", id: v.seed },
+              path: "frameOpacity",
+              value: { type: "length", value: v.value },
+            },
+          });
+        },
+        { seed, value },
+      );
+
+    // Off: an edit of the source leaves the copies as they were.
+    await opacity(40);
+    await page.waitForTimeout(1_000);
+    expect((await idsOfKind(page, "polygon")).join(",")).toBe(made);
+
+    // On again: the next edit rebuilds them.
+    await box.check();
+    await expect(box).toBeChecked();
+    await opacity(60);
+    await expect
+      .poll(async () => (await idsOfKind(page, "polygon")).join(","), {
+        timeout: 12_000,
+      })
+      .not.toBe(made);
+    await designer.runCommand("media.paged.draw.command.releaseRepeat");
+  });
+
   // ── 9. pattern + objects-on-path ──────────────────────────────────
 
   test("a pattern field bakes from the selection and objects distribute onto a path @feat:plugin-draw.pattern-bake @feat:plugin-draw.objects-on-path @level:happy", async ({

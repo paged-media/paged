@@ -203,6 +203,19 @@ export interface PagedEditor {
   ): ReturnType<CanvasClient["mutateWithBytes"]>;
 
   /**
+   * Engine ADR 1004 amendment — `mutateWithBytes` applied INTO the undo step
+   * `appliedSeq` names (`client.amendWithBytes`). Satisfies the optional
+   * `Api.PagedEditor.amendWithBytes` the plugin-sdk host routes
+   * `host.document.mutateWithBytes(…, { amend })` to.
+   */
+  amendWithBytes(
+    appliedSeq: number,
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer?: boolean,
+  ): ReturnType<CanvasClient["amendWithBytes"]>;
+
+  /**
    * C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. Routes to the
    * worker's `claimImageResource` / `submitResourceTiles` /
    * `releaseImageResource` messages (the v44 wire) and surfaces the
@@ -371,6 +384,8 @@ function PagedEditorBinder({
       },
       mutateWithBytes: (mutation, bytes, transfer) =>
         client.mutateWithBytes(mutation, bytes, transfer),
+      amendWithBytes: (appliedSeq, mutation, bytes, transfer) =>
+        client.amendWithBytes(appliedSeq, mutation, bytes, transfer),
       images: {
         claim: (claim) => client.claimImageResource(claim),
         release: (imageId) => client.releaseImageResource(imageId),

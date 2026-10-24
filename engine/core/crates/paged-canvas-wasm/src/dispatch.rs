@@ -1567,6 +1567,7 @@ impl WorkerCore {
                         stats: None,
                         writes: None,
                         page_ids: None,
+                        applied_seq: None,
                     });
                 };
                 // B-09 / W-08 — the worker's injected wall clock
@@ -1627,6 +1628,7 @@ impl WorkerCore {
                         stats: None,
                         writes: None,
                         page_ids: None,
+                        applied_seq: None,
                     });
                 };
                 let step = script.resume(model, &answers, &committed, clock);
@@ -1837,6 +1839,8 @@ impl WorkerCore {
                 // v0.71.13 — whether it wrote, and the pages its writes changed.
                 writes: result.writes,
                 page_ids: result.page_ids,
+                // ADR 1004 amendment — the one step the run ended in.
+                applied_seq: result.applied_seq,
             },
             (paged_script::ScriptStep::Suspended { calls }, Some(session)) => {
                 let id = session.id();
@@ -1853,6 +1857,7 @@ impl WorkerCore {
                 stats: None,
                 writes: None,
                 page_ids: None,
+                applied_seq: None,
             },
         }
     }
@@ -2001,6 +2006,33 @@ impl WorkerCore {
         bytes: Vec<u8>,
         clock: &Clock<'_>,
     ) -> (WorkerToMain, CacheEffect) {
+        self.mutate_with_bytes_into(seq, None, mutation_json, bytes, clock)
+    }
+
+    /// v76 (engine ADR 1004, amendment 2026-10-23) —
+    /// `amendWithBytesDirect`: [`Self::mutate_with_bytes`] applied INTO the
+    /// undo step `applied_seq` names, as `AmendMutation` applies a JSON
+    /// mutation: refused with `NotAmendable` (nothing applied) once that
+    /// step is no longer the last one or an undo or a redo ran since.
+    pub fn amend_with_bytes(
+        &mut self,
+        seq: u64,
+        applied_seq: u64,
+        mutation_json: &str,
+        bytes: Vec<u8>,
+        clock: &Clock<'_>,
+    ) -> (WorkerToMain, CacheEffect) {
+        self.mutate_with_bytes_into(seq, Some(applied_seq), mutation_json, bytes, clock)
+    }
+
+    fn mutate_with_bytes_into(
+        &mut self,
+        seq: u64,
+        amend: Option<u64>,
+        mutation_json: &str,
+        bytes: Vec<u8>,
+        clock: &Clock<'_>,
+    ) -> (WorkerToMain, CacheEffect) {
         let fail = |what: String| {
             (
                 Self::envelope(
@@ -2023,11 +2055,18 @@ impl WorkerCore {
                 "mutateWithBytes: no replaceImageBytes with an empty `bytes` slot to fill".into(),
             );
         }
+        let kind = match amend {
+            Some(applied_seq) => MainToWorkerKind::AmendMutation {
+                applied_seq,
+                mutation: m,
+            },
+            None => MainToWorkerKind::Mutate(m),
+        };
         self.dispatch(
             MainToWorker {
                 seq,
                 protocol: PROTOCOL_VERSION,
-                kind: MainToWorkerKind::Mutate(m),
+                kind,
             },
             clock,
         )
