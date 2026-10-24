@@ -116,6 +116,34 @@ export interface BindingData {
    *  where a later session redraws it and the size it is drawn at. Absent on
    *  a table frame and on charts placed before it was recorded. */
   box?: [number, number, number, number];
+  /** A placed chart's ART when it was drawn: the page-space outline of the
+   *  element that carries this binding, `[top, left, bottom, right]` (pt).
+   *  A later session compares it with where that element stands now to
+   *  follow a chart moved (or scaled) on the page. Absent on charts drawn
+   *  before it was recorded. */
+  art?: [number, number, number, number];
+  /** A range paginated across a frame chain (ADR 522 amendment): on the
+   *  chain's first frame, what a later session needs to find the chain
+   *  again and keep it live. Absent on every other placement. */
+  chain?: ChainRecord;
+}
+
+/** One table of a paginated chain, in story order: its id, a hash of the
+ *  content it shows and the widths it was sized with. */
+export interface ChainTableRecord {
+  tableId: string;
+  hash: string;
+  widths: number[];
+}
+
+/** What a paginated chain records on its first frame: the areas paginated
+ *  in sequence (a print area of several ranges; absent for one range, which
+ *  is the binding's `range`), the rows repeated on every frame, and the
+ *  tables the last pass left, in story order. */
+export interface ChainRecord {
+  areas?: string[];
+  repeatHeaderRows: number;
+  tables: ChainTableRecord[];
 }
 
 /** The full envelope as it sits on the page item: a versioned wrapper
@@ -134,6 +162,8 @@ export interface BindingViewOptions {
   freeze?: { rows: number; cols: number };
   sizing?: FrameSizing;
   box?: [number, number, number, number];
+  art?: [number, number, number, number];
+  chain?: ChainRecord;
 }
 
 /** The top-left cell of an A1 range (`"B2:D9"` -> `"B2"`, `"C3"` -> `"C3"`),
@@ -184,6 +214,8 @@ export function makeBinding(
     ...(options.freeze ? { freeze: { ...options.freeze } } : {}),
     sizing: options.sizing ?? "fit",
     ...(options.box ? { box: [...options.box] } : {}),
+    ...(options.art ? { art: [...options.art] } : {}),
+    ...(options.chain ? { chain: copyChain(options.chain) } : {}),
   };
   return { v: BINDING_VERSION, data };
 }
@@ -200,7 +232,17 @@ export function withView(
     freeze: options.freeze ?? d.freeze,
     sizing: options.sizing ?? d.sizing,
     box: options.box ?? d.box,
+    art: options.art ?? d.art,
+    chain: options.chain ?? d.chain,
   });
+}
+
+function copyChain(c: ChainRecord): ChainRecord {
+  return {
+    ...(c.areas ? { areas: [...c.areas] } : {}),
+    repeatHeaderRows: c.repeatHeaderRows,
+    tables: c.tables.map((t) => ({ ...t, widths: [...t.widths] })),
+  };
 }
 
 /** A short, stable hash of a value's JSON (FNV-1a, 32-bit, hex) — what a
@@ -281,6 +323,8 @@ export function parseBinding(input: unknown): Binding | null {
     freeze: parseFreeze(v2.freeze),
     sizing: v2.sizing === "window" ? "window" : "fit",
     box: parseBox(v2.box),
+    art: parseBox(v2.art),
+    chain: parseChain(v2.chain),
   });
 }
 
@@ -313,6 +357,37 @@ function parseBox(
     input.every((n) => typeof n === "number" && Number.isFinite(n))
     ? (input as [number, number, number, number])
     : undefined;
+}
+
+function parseChain(input: unknown): ChainRecord | undefined {
+  if (typeof input !== "object" || input === null) return undefined;
+  const c = input as Record<string, unknown>;
+  const rows = c.repeatHeaderRows;
+  if (typeof rows !== "number" || !Number.isInteger(rows) || rows < 0)
+    return undefined;
+  if (!Array.isArray(c.tables)) return undefined;
+  const tables: ChainTableRecord[] = [];
+  for (const t of c.tables as unknown[]) {
+    if (typeof t !== "object" || t === null) return undefined;
+    const r = t as Record<string, unknown>;
+    if (typeof r.tableId !== "string" || typeof r.hash !== "string")
+      return undefined;
+    if (
+      !Array.isArray(r.widths) ||
+      !r.widths.every((w) => typeof w === "number" && Number.isFinite(w))
+    )
+      return undefined;
+    tables.push({
+      tableId: r.tableId,
+      hash: r.hash,
+      widths: [...(r.widths as number[])],
+    });
+  }
+  const areas =
+    Array.isArray(c.areas) && c.areas.every((a) => typeof a === "string")
+      ? [...(c.areas as string[])]
+      : undefined;
+  return { ...(areas ? { areas } : {}), repeatHeaderRows: rows, tables };
 }
 
 function parseFreeze(

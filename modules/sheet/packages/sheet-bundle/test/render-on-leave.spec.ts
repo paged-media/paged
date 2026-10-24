@@ -41,6 +41,7 @@ import {
   WASM,
   authorWorkbook,
   blankPageIdml,
+  exportedIdmlParts,
   exportedTableCells,
   openHost,
   settle,
@@ -311,6 +312,69 @@ describe.skipIf(!ENGINE_BUILT)("render on leave [sheet.lower.page]", () => {
     const st = page.styles?.find((x) => x.key === key);
     expect(st?.fillSwatch).toBe("Color/Brand Red");
     expect(s.styleAtTarget()?.fillSwatch?.model).toBe("spot");
+  });
+
+  it("full screen outlines where the page window lands on leaving", async () => {
+    const { s, frame } = await placed();
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    expect(s.pageWindowsOnLeave()).toEqual([
+      { top: 0, left: 0, bottom: 4, right: 2 },
+    ]);
+    expect(s.scrollInFrame(10, 1)).toBe(true);
+    const [w] = s.pageWindowsOnLeave();
+    expect(w!.top).toBe(10);
+    expect(w!.left).toBe(1);
+    expect(w!.bottom - w!.top).toBe(4);
+    s.hideGridInFrame();
+  });
+
+  it("a cell filled with a document swatch names it on the page, so a swatch edit recolours the table (P7)", async () => {
+    const { s, frame } = await placed();
+    const spec = (value: number[]) => ({
+      selfId: "Color/Brand Red",
+      name: "Brand Red",
+      space: "CMYK",
+      value,
+      model: "Spot",
+    });
+    expect(
+      (
+        await host.document.mutate({
+          op: "createSwatch",
+          args: { spec: spec([0, 100, 80, 5]) },
+        })
+      ).applied,
+    ).toBe(true);
+    expect(await s.showGridInFrame(frame)).toBe(true);
+    s.selectCell(0, 0);
+    expect((await s.applyDocumentSwatch("fill", "Color/Brand Red")).ok).toBe(
+      true,
+    );
+    s.hideGridInFrame();
+    await s.refreshPlacements();
+    await settle();
+    const cellsNaming = async () => {
+      const parts = await exportedIdmlParts(h);
+      return [...parts.entries()]
+        .filter(([name]) => name.startsWith("Stories/"))
+        .map(
+          ([, xml]) =>
+            (xml.match(/FillColor="Color\/Brand Red"/g) ?? []).length,
+        )
+        .reduce((a, b) => a + b, 0);
+    };
+    // The page names the document's swatch (not a minted copy)...
+    expect(await cellsNaming()).toBeGreaterThan(0);
+    // ...so editing the swatch changes it there without re-lowering.
+    expect(
+      (
+        await host.document.mutate({
+          op: "editSwatch",
+          args: { swatchId: "Color/Brand Red", spec: spec([100, 0, 0, 0]) },
+        })
+      ).applied,
+    ).toBe(true);
+    expect(await cellsNaming()).toBeGreaterThan(0);
   });
 
   it("a locked view snaps back on leaving", async () => {

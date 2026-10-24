@@ -67,6 +67,7 @@ export const SHEET_PANEL_FIELDS: ReadonlyArray<{
 }> = [
   { kind: "workbook", path: "name", group: "Workbook" },
   { kind: "workbook", path: "iterative", group: "Workbook" },
+  { kind: "workbook", path: "chartStyle", group: "Workbook" },
   { kind: "sheet", path: "name", group: "Sheet" },
   { kind: "sheet", path: "freezeRows", group: "Sheet" },
   { kind: "sheet", path: "freezeCols", group: "Sheet" },
@@ -109,6 +110,8 @@ export const SHEET_PANEL_FIELDS: ReadonlyArray<{
   { kind: "chart", path: "valueAxisTitle", group: "Chart" },
   { kind: "chart", path: "valueAxisMin", group: "Chart" },
   { kind: "chart", path: "valueAxisMax", group: "Chart" },
+  { kind: "chart", path: "roles", group: "Chart" },
+  { kind: "chart", path: "seriesColorGroup", group: "Chart" },
   { kind: "table", path: "name", group: "Table" },
   { kind: "table", path: "range", group: "Table" },
   { kind: "table", path: "totalsRow", group: "Table" },

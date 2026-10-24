@@ -75,8 +75,13 @@ import {
 } from "./engine";
 import {
   forgetShownContent,
+  adoptChain,
   lowerPaginatedToChain,
   lowerSelectionToFrame,
+  lowerAreasToFrames,
+  REFUSED_AREAS,
+  type AreaPlacement,
+  type LowerLaneOptions,
   a1OfCell,
   pageContent,
   placementContent,
@@ -84,7 +89,6 @@ import {
   pageBodyTracks,
   placementWindow,
   rangeFramePage,
-  refreshWantsReplace,
   selectionBox,
   WINDOW_SLACK_PT,
   stampPlacedView,
@@ -106,12 +110,34 @@ import type { EnterResult } from "./engine-w2";
 import {
   chartPlacement,
   chartSizeOf,
+  elementsOutline,
+  followBox,
   lowerChartToFrame,
   placedChartCopies,
   type PlacedChart,
   type PlacedChartCopy,
 } from "./lower-chart";
-import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
+import {
+  readFilterViewsPart,
+  readWorkbookPart,
+  writeFilterViewsPart,
+  writeWorkbookPart,
+} from "./workbook-part";
+import {
+  availableStyleIds,
+  createDocStylesPlan,
+  defaultDocStyleEntries,
+  missingDocReferences,
+  readDocumentStyleLists,
+  type DocumentStyleLists,
+  type MissingReference,
+} from "./doc-styles";
+import type {
+  DocStyleMap,
+  DocStyleTarget,
+  NamedStyleUsage,
+} from "./engine-docstyles";
+import { readKnownSwatchIds } from "./swatch-mints";
 import {
   csvBytes,
   type CsvExportOptions,
@@ -146,6 +172,23 @@ export const REFRESH_DEBOUNCE_MS = 300;
 
 /** A session verb's outcome: done, or the reason it was not. */
 export type SessionResult = { ok: true } | { ok: false; message: string };
+
+/** Sheet ADR 524 — the workbook's document-style mapping as the panel
+ *  shows it. */
+export interface DocStylesInfo {
+  enabled: boolean;
+  entries: Record<string, DocStyleTarget>;
+  usage: NamedStyleUsage[];
+}
+
+/** How a document paragraph / character style looks (ADR 524 grid parity). */
+export interface DocStyleLook {
+  family?: string;
+  style?: string;
+  sizePt?: number;
+  /** `#rrggbb`, colour managed. */
+  color?: string;
+}
 
 /** One journaled FORMAT change (Wave 9): its two directions against the
  *  engine, captured from the engine's own reads around the change. */
@@ -218,6 +261,22 @@ const BASIC_PARAGRAPH_STYLES = [
   "ParagraphStyle/$ID/NormalParagraphStyle",
   "ParagraphStyle/$ID/[No paragraph style]",
 ];
+
+/** A style property entry's text (an unset entry reads as "" or null). */
+function styleEntryText(v: unknown): string | null {
+  const raw =
+    v && typeof v === "object" && "value" in v
+      ? (v as { value: unknown }).value
+      : null;
+  return raw === null || raw === undefined || raw === "" ? null : String(raw);
+}
+
+/** A style property entry's number, or null. */
+function styleEntryNum(v: unknown): number | null {
+  const t = styleEntryText(v);
+  const n = t === null ? NaN : Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 
 /** The regions (one bounding box per sheet) covering `cells`. */
 export function regionsOf(
@@ -418,6 +477,15 @@ export interface WorkbookSession extends DataToolsApi {
   /** Lower the active sheet's selected range to a new page frame
    *  (the two-phase flow in lower.ts). Returns the created frame id. */
   lowerSelection(opts?: PlaceOptions): Promise<string | null>;
+  /** ADR 522 amendment — several ranges of the active sheet (a print area
+   *  of several areas) placed one table per range, in order, each under the
+   *  one before, as ONE document write and one undo step (area by area on a
+   *  host without in-batch handles). The frame ids in range order, or null
+   *  when any could not be placed. */
+  placeAreas(
+    ranges: readonly string[],
+    opts?: PlaceOptions,
+  ): Promise<string[] | null>;
   /** C-1 / S-02 — render the active sheet's grid INSIDE a frame as a live
    *  vector layer (`host.contribute.sceneLayer()`): gridlines + cell fills
    *  + cell values, clipped to the frame's content box by core. `frameId`
@@ -496,6 +564,13 @@ export interface WorkbookSession extends DataToolsApi {
    *  colour model and the sRGB the document shows it as, the fallback an
    *  xlsx reader sees. Null when the document has no such swatch. */
   documentSwatchRef(id: string): Promise<DocSwatch | null>;
+  /** Sheet ADR 517 — named filter views on the active sheet: save the
+   *  current filter under `name`, apply one, delete one, list them. Saved
+   *  beside the workbook with the next save. */
+  saveFilterView(name: string): SessionResult;
+  applyFilterView(name: string): SessionResult;
+  deleteFilterView(name: string): SessionResult;
+  filterViewNames(): string[];
   /** How document swatches `ids` show on screen now (`#rrggbb`, colour
    *  managed), for the grid to draw referenced colours as the canvas does.
    *  Unknown ids are left out. */
@@ -523,6 +598,36 @@ export interface WorkbookSession extends DataToolsApi {
     style: string | null;
     sizePt: number | null;
   } | null>;
+  /** Sheet ADR 524 — how a mapped document style looks (resolved through
+   *  `basedOn`): face, size and the colour the document shows. Unreadable
+   *  ids are left out. Re-read when `documentStyleRevision` moves. */
+  documentStyleLooks(
+    ids: readonly { collection: "paragraph" | "character"; id: string }[],
+  ): Promise<Map<string, DocStyleLook>>;
+  /** Sheet ADR 524 — the workbook's "Use document styles" switch, its
+   *  mapping table and the named styles the cells use. Null without a
+   *  workbook (or an engine without the doors). */
+  docStyles(): DocStylesInfo | null;
+  /** The document's paragraph / character / cell styles and swatches, and
+   *  what the workbook names that the document lacks. Null when unread. */
+  documentStyleLists(): Promise<{
+    lists: DocumentStyleLists;
+    missing: MissingReference[];
+  } | null>;
+  /** Turn "Use document styles" on (pre-filling unmapped Excel styles whose
+   *  name matches a document paragraph style, and Normal → the basic
+   *  paragraph style) or off. One undo step. */
+  setDocStylesEnabled(on: boolean): Promise<SessionResult>;
+  /** Map one Excel named style (an empty target clears it). One undo
+   *  step. */
+  setDocStyleMapping(style: string, target: DocStyleTarget): SessionResult;
+  /** For every Excel named style the cells use without an entry: create a
+   *  document paragraph style with its face, size, weight and colour, and
+   *  map it. Turns the switch on. */
+  createDocStylesFromWorkbook(): Promise<SessionResult & { created?: number }>;
+  /** Point every workbook reference to document style / swatch `from` at
+   *  `to` (the cells and the mapping table). */
+  remapDocReference(from: string, to: string): Promise<SessionResult>;
   /** Extensions ADR 334 — route the in-frame grid to a FRAME SURFACE
    *  instead of the scene layer: every grid state (window, selection, the
    *  open cell edit, the fill preview) goes to `sink`, windowed to
@@ -903,6 +1008,16 @@ export interface WorkbookSession extends DataToolsApi {
   /** Every area of the selection: those Ctrl/Cmd-click added, then the
    *  current one. */
   selectionAreas(): GridSelection[];
+  /** Where the entered window frame's page window will land when the frame
+   *  is left (the same rule leaving applies, `viewToContain`), as sheet
+   *  cell ranges — one per frame of a chain. Empty for a frame that is not
+   *  a window. The full-screen grid outlines them. */
+  pageWindowsOnLeave(): {
+    top: number;
+    left: number;
+    bottom: number;
+    right: number;
+  }[];
   /** What a press at `(x, y)` would grab: the selection's border (move),
    *  the fill handle, or a cell — for the pointer's cursor. */
   grabAt(contentX: number, contentY: number): "move" | "fill" | "cell" | null;
@@ -2926,6 +3041,11 @@ export function createWorkbookSession(
     return persistChain;
   }
 
+  /** The workbook had named filter views when last saved or restored. */
+  let hadFilterViews = false;
+  /** A named filter view was saved, applied or deleted since the last save. */
+  let filterViewsTouched = false;
+
   function cancelPendingPersist(): void {
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = null;
@@ -2980,7 +3100,39 @@ export function createWorkbookSession(
         // An engine without the door keeps no slots.
       }
     }
-    return enqueueWrite(bytes, state.fileName ?? "workbook.xlsx", chartSlots);
+    // Sheet ADR 517 — the named filter views live beside the workbook (the
+    // xlsx has no place for them); written with it, and once more after
+    // the last one is deleted.
+    // Asked only of a workbook that has (or just changed) views, so a
+    // plain edit's save costs no extra engine call.
+    let views: readonly unknown[] | null = null;
+    if (hadFilterViews || filterViewsTouched) {
+      filterViewsTouched = false;
+      try {
+        views = state.engine.listFilterViews?.() ?? null;
+      } catch {
+        views = null;
+      }
+    }
+    const written = enqueueWrite(
+      bytes,
+      state.fileName ?? "workbook.xlsx",
+      chartSlots,
+    );
+    if (views && (views.length > 0 || hadFilterViews)) {
+      const epoch = docEpoch;
+      const toWrite = views;
+      hadFilterViews = toWrite.length > 0;
+      persistChain = persistChain.then(() =>
+        epoch === docEpoch
+          ? writeFilterViewsPart(host, toWrite).catch((err) =>
+              host.log.warn("filter views persist failed", err),
+            )
+          : undefined,
+      );
+      return persistChain;
+    }
+    return written;
   }
 
   // A .paged save takes the workbook part as it stands; an edit still in the
@@ -3071,6 +3223,7 @@ export function createWorkbookSession(
     // grid re-reads the document's colours (debounced with the rest).
     docStyleRevision += 1;
     scheduleStyleNotice();
+    scheduleDocStyleSync();
     for (const frameId of loweredTables.keys()) unverified.add(frameId);
     // ADR 510 (P6) — a window frame's box is its window: a resize shows
     // what fits now. The engine names the resized frame's content box; a
@@ -3149,6 +3302,105 @@ export function createWorkbookSession(
   }
   /** The last frame box seen per window frame (`rereadWindowBoxes`). */
   const resizedBoxes = new Map<string, string>();
+
+  // ── Sheet ADR 524 — document styles for Excel named styles ────────────
+
+  /** Tell the engine which document style ids exist, so a mapping naming
+   *  one the document lost falls back to the workbook's look. `known`
+   *  skips the read (`null` = unreadable: nothing changes); without it the
+   *  document is read only while the mapping is on. */
+  async function syncDocStyleAvailability(
+    known?: DocumentStyleLists | null,
+  ): Promise<void> {
+    const engine = state.engine;
+    if (!engine?.setDocumentStylesAvailable || !engine.docStyleMap) return;
+    if (known === undefined) {
+      try {
+        if (!engine.docStyleMap().enabled) return;
+      } catch {
+        return;
+      }
+    }
+    const lists =
+      known === undefined ? await readDocumentStyleLists(host) : known;
+    if (!lists || state.engine !== engine) return;
+    let changed = false;
+    try {
+      changed = engine.setDocumentStylesAvailable(availableStyleIds(lists));
+    } catch (err) {
+      host.log.debug("document styles: availability not set", err);
+      return;
+    }
+    if (changed) {
+      readCache.clear();
+      revision += 1;
+      scheduleRefresh();
+      emitter.emit();
+    }
+  }
+  let docStyleSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleDocStyleSync(): void {
+    if (docStyleSyncTimer !== null) clearTimeout(docStyleSyncTimer);
+    docStyleSyncTimer = setTimeout(() => {
+      docStyleSyncTimer = null;
+      void syncDocStyleAvailability();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  /** Run a change of the document-style mapping as ONE undo step (the map
+   *  before and after, put back whole). */
+  function journalDocMap(apply: (e: SheetEngine) => void): SessionResult {
+    return journalFormat(
+      (e) => {
+        if (!e.docStyleMap || !e.setDocStyleMap)
+          throw new Error("engine wasm predates the document-style doors");
+        const before = e.docStyleMap();
+        return () => {
+          const after = e.docStyleMap!();
+          return {
+            undo: (x) => x.setDocStyleMap!(before),
+            redo: (x) => x.setDocStyleMap!(after),
+          };
+        };
+      },
+      (e) => {
+        apply(e);
+      },
+    );
+  }
+
+  /** "Use document styles" on, its default mapping pre-filled. */
+  async function enableDocStyles(): Promise<SessionResult> {
+    const engine = state.engine;
+    if (!engine) return { ok: false, message: "no workbook open" };
+    const lists = await readDocumentStyleLists(host);
+    if (state.engine !== engine)
+      return { ok: false, message: "the workbook changed" };
+    const r = journalDocMap((e) => {
+      const map = e.docStyleMap!();
+      const add =
+        lists && e.namedStyleUsage
+          ? defaultDocStyleEntries(e.namedStyleUsage(), lists, map)
+          : {};
+      e.setDocStyleMap!({
+        enabled: true,
+        entries: { ...map.entries, ...add },
+      } satisfies DocStyleMap);
+    });
+    if (r.ok) await syncDocStyleAvailability(lists);
+    return r;
+  }
+
+  /** A workbook made in paged takes the document's styles from the start
+   *  (not an undo step of its own). */
+  async function adoptWithDocStyles(): Promise<void> {
+    if (!state.engine?.setDocStyleMap) return;
+    const r = await enableDocStyles();
+    if (r.ok) {
+      editJournal = [];
+      journalCursor = 0;
+    }
+  }
 
   /** P7 — the document style revision the grid follows. */
   let docStyleRevision = 0;
@@ -3312,14 +3564,10 @@ export function createWorkbookSession(
             const bands = unverified.has(frameId)
               ? await refreshBands(host, info, info.content)
               : { header: info.headerRows ?? 0, footer: 0 };
-            // A scroll that re-pours most of a window frame writes a new
-            // table instead (fewer ops, and no host band to keep).
-            const rewrite =
-              moved &&
-              info.sizing === "window" &&
-              !(bands?.header ?? 0) &&
-              refreshWantsReplace(info, next);
-            if (bands && !rewrite) {
+            // A scroll re-pours in place too, in ONE batch: a new table would
+            // take two document steps (the table, then its cells), and one
+            // Undo of the leave must put the page back whole.
+            if (bands) {
               const banded = { ...info, headerRows: bands.header || undefined };
               const updated = await ownWrite(() =>
                 refreshLoweredTable(host, banded, next, version, name),
@@ -3347,7 +3595,7 @@ export function createWorkbookSession(
           if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
         }
         const charts: PlacedChart[] = [];
-        for (const placed of placedCharts) {
+        for (let placed of placedCharts) {
           if (
             placed.contentVersion === version ||
             placed.elementIds.length === 0
@@ -3355,6 +3603,9 @@ export function createWorkbookSession(
             charts.push(placed);
             continue;
           }
+          // ADR 522 amendment — redrawn where the chart stands now: moved
+          // (or scaled) on the page since it was drawn, its box goes along.
+          placed = await followChart(placed);
           let key: string;
           try {
             key = JSON.stringify(
@@ -3427,6 +3678,10 @@ export function createWorkbookSession(
     const sheets = engine.listSheets();
     let found = 0;
     let stale = false;
+    const chainHeads: {
+      frameId: string;
+      binding: NonNullable<ReturnType<typeof parseBinding>>;
+    }[] = [];
     for (const frameId of frames) {
       if (loweredTables.has(frameId)) continue;
       let binding: ReturnType<typeof parseBinding>;
@@ -3438,6 +3693,11 @@ export function createWorkbookSession(
           } as ElementId),
         );
       } catch {
+        continue;
+      }
+      if (binding?.data.chain) {
+        // ADR 522 amendment — the first frame of a paginated chain.
+        chainHeads.push({ frameId, binding });
         continue;
       }
       const rec = binding?.data.table;
@@ -3507,12 +3767,66 @@ export function createWorkbookSession(
       lastFrameId ??= frameId;
       found += 1;
     }
-    if (stale) {
+    const chainsFound = await rediscoverChains(chainHeads);
+    found += chainsFound.found;
+    if (stale || chainsFound.stale) {
       revision += 1;
       scheduleRefresh();
     }
     found += await rediscoverCharts();
     return found;
+  }
+
+  /** ADR 522 amendment — keep live the chains an earlier session paginated:
+   *  each first frame whose binding records a chain names the story, the
+   *  source and the tables it holds (`adoptChain`), and the chain is
+   *  subscribed as `paginateSelection` subscribes one — re-paginated on a
+   *  resize and on every refresh after an edit, its tables refreshed in
+   *  place. A chain this session already keeps is skipped. `stale` when a
+   *  chain's tables no longer show what the workbook paginates to (the
+   *  next refresh replaces them). */
+  async function rediscoverChains(
+    heads: readonly {
+      frameId: string;
+      binding: NonNullable<ReturnType<typeof parseBinding>>;
+    }[],
+  ): Promise<{ found: number; stale: boolean }> {
+    const engine = state.engine;
+    let found = 0;
+    let stale = false;
+    if (!engine) return { found, stale };
+    for (const { frameId, binding } of heads) {
+      const record = binding.data.chain;
+      if (!record) continue;
+      const sheet = engine
+        .listSheets()
+        .find((x) => x.name === binding.data.sheet);
+      if (!sheet) continue;
+      const storyId = await storyOfFrame(host, frameId);
+      if (!storyId || chains.has(storyId)) continue;
+      const range: string | readonly string[] =
+        record.areas && record.areas.length > 1
+          ? record.areas
+          : binding.data.range;
+      const from = await adoptChain(
+        host,
+        engine,
+        sheet.id,
+        range,
+        storyId,
+        record,
+      );
+      if (!from) continue;
+      const sub = subscribeChainReflow(host, engine, sheet.id, range, storyId, {
+        from,
+        repeatedHeaderRows: record.repeatHeaderRows,
+      });
+      chains.set(storyId, { sub, sheet: sheet.id, range });
+      chainHeaderRows.set(storyId, record.repeatHeaderRows);
+      if (from.tables.some((t) => t.stale)) stale = true;
+      found += 1;
+    }
+    return { found, stale };
   }
 
   /** Plan G4 — track the placed charts the page carries and this session
@@ -3583,6 +3897,8 @@ export function createWorkbookSession(
         groupId: copy.groupId ?? null,
         contentVersion: revision,
         geometryKey,
+        anchor: copy.anchor,
+        ...(at.art ? { art: at.art } : {}),
       });
       for (const id of ids) known.add(id);
       added += 1;
@@ -3590,47 +3906,173 @@ export function createWorkbookSession(
     return added;
   }
 
-  /** Where a found chart copy stands: its page (from its elements'
-   *  geometry) and its recorded box, else the page-space extent of its
-   *  elements. Null when no element has a page. */
+  /** Where a found chart copy stands (ADR 522 and its amendment): its page
+   *  and box, and where the element carrying its binding stands now (the
+   *  `art` a refresh follows). A copy whose binding recorded both its box
+   *  and its art is followed to where its art stands now, so a chart moved
+   *  in an earlier session is redrawn where it is; one that recorded only
+   *  its box stands at it; one placed before either was recorded gets its
+   *  box on discovery — the page-space outline of its elements — and from
+   *  then on behaves as a new one (its next redraw records both). Null
+   *  when no element is on a page. */
   async function chartCopyBox(copy: PlacedChartCopy): Promise<{
     pageId: PageId;
     bounds: [number, number, number, number];
+    art?: [number, number, number, number];
   } | null> {
-    let geom: Awaited<ReturnType<typeof host.document.elementGeometry>>;
+    const outline = await elementsOutline(host, copy.elementIds);
+    if (!outline) return null;
+    const anchor = copy.elementIds.some(
+      (id) => String(id.id) === String(copy.anchor.id),
+    )
+      ? await elementsOutline(host, [copy.anchor])
+      : null;
+    const art = anchor?.bounds;
+    const scale = copy.anchor.kind !== "textFrame";
+    const bounds =
+      copy.box && copy.art && art
+        ? (followBox(copy.box, copy.art, art, scale) ?? copy.box)
+        : (copy.box ?? outline.bounds);
+    return {
+      pageId: anchor?.pageId ?? outline.pageId,
+      bounds,
+      ...(art ? { art } : {}),
+    };
+  }
+
+  /** ADR 522 amendment — a tracked chart carried to where its art stands
+   *  now: the element carrying its binding is read, and when it has moved
+   *  (or been scaled) since the chart was drawn or last followed, the box
+   *  moves (and scales) with it. The chart as it was when nothing moved or
+   *  the read cannot say. */
+  async function followChart(placed: PlacedChart): Promise<PlacedChart> {
+    if (!placed.anchor || !placed.art) return placed;
+    const live = await elementsOutline(host, [placed.anchor]);
+    if (!live) return placed;
+    const bounds = followBox(
+      placed.bounds,
+      placed.art,
+      live.bounds,
+      placed.anchor.kind !== "textFrame",
+    );
+    if (!bounds && live.pageId === placed.pageId) return placed;
+    return {
+      ...placed,
+      pageId: live.pageId,
+      bounds: bounds ?? placed.bounds,
+      art: live.bounds,
+    };
+  }
+
+  /** What placing `range` as a frame takes (plan G4): the content it
+   *  shows, where it goes and how it is sized, and its view — the lowering
+   *  options `lowerSelectionToFrame` (or, for several areas,
+   *  `lowerAreasToFrames`) writes it with. Null when it cannot be lowered. */
+  async function preparePlacement(
+    engine: SheetEngine,
+    sheet: number,
+    range: string,
+    opts: PlaceOptions,
+  ): Promise<{ range: string; opts: LowerLaneOptions } | null> {
+    const kind = opts.sizing ?? "window";
+    const print = {
+      headings: opts.print?.headings ?? false,
+      gridlines: opts.print?.gridlines ?? false,
+    };
+    const topLeft = opts.view?.topLeft ?? rangeTopLeft(range);
+    // Wave 4 — land at the current selection, not a fixed page inset.
+    let placement;
+    let content: LoweredContent;
+    let shown = range;
+    let boxPt = kind === "fixed" ? opts.boxPt : undefined;
     try {
-      geom = await host.document.elementGeometry(copy.elementIds);
-    } catch {
+      if (kind === "fit") {
+        // The earlier behaviour: a fixed range, text-measured widths.
+        content = pageContent(engine, sheet, range);
+      } else {
+        // ADR 510 — a window frame shows the range's own tracks lowered as
+        // a frame page: the lowering every later refresh makes, so the
+        // first edit re-pours one cell, not the table.
+        const own = rangeFramePage(engine, sheet, range, print);
+        if (kind === "window" && topLeft === rangeTopLeft(range)) {
+          content = own;
+        } else {
+          // Plan G4 — a window that starts elsewhere, or a fixed box: the
+          // window of the sheet that fits the box from the view's cell.
+          const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+          boxPt ??= {
+            widthPt: sum(own.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
+            heightPt: sum(own.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
+          };
+          const win = placementWindow(engine, {
+            sheet,
+            range,
+            view: { topLeft, lock: false },
+            print,
+            sizing: "window",
+            boxPt,
+          });
+          if (!win) throw new Error("engine wasm predates get_frame_page");
+          content = win.content;
+          shown = win.range ?? range;
+        }
+      }
+      placement = await placementForContent(host, content);
+      // Plan G4 — the next area of a print area goes under the last one.
+      const under = opts.below ? await selectionBox(host) : null;
+      if (placement && under) {
+        const [t, l, b, r] = placement.bounds;
+        const top = under.bottom + PLACE_GAP_PT;
+        placement = {
+          pageId: under.pageId,
+          bounds: [top, under.left, top + (b - t), under.left + (r - l)] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        };
+      }
+      if (placement && kind === "fixed" && boxPt) {
+        const [t, l] = placement.bounds;
+        placement = {
+          ...placement,
+          bounds: [t, l, t + boxPt.heightPt, l + boxPt.widthPt] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+        };
+      }
+    } catch (err) {
+      host.log.warn("lowerSelection: could not lower the range", err);
       return null;
     }
-    const pageId = geom.find((g) => g?.pageId)?.pageId;
-    if (!pageId) return null;
-    if (copy.box) return { pageId, bounds: copy.box };
-    let top = Infinity;
-    let left = Infinity;
-    let bottom = -Infinity;
-    let right = -Infinity;
-    for (const g of geom) {
-      if (!g?.bounds) continue;
-      const [t, l, b, r] = g.bounds;
-      const [a, bb, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-      for (const [x, y] of [
-        [l, t],
-        [r, t],
-        [r, b],
-        [l, b],
-      ] as const) {
-        const px = a * x + c * y + tx;
-        const py = bb * x + d * y + ty;
-        top = Math.min(top, py);
-        bottom = Math.max(bottom, py);
-        left = Math.min(left, px);
-        right = Math.max(right, px);
-      }
-    }
-    return Number.isFinite(top)
-      ? { pageId, bounds: [top, left, bottom, right] }
-      : null;
+    return {
+      range: shown,
+      opts: {
+        placement: placement ?? undefined,
+        // The placement's height is the workbook's rows; the lowering
+        // sizes it to the table the engine lays out — unless the caller
+        // fixed the box.
+        fitHeight: kind !== "fixed",
+        contentVersion: revision,
+        content,
+        // ADR 510 — the frame is a window onto the sheet (plan G4: with
+        // the caller's view, print options and box).
+        sizing: kind === "fit" ? "fit" : "window",
+        view: { topLeft, lock: opts.view?.lock ?? false },
+        print,
+        ...(boxPt ? { boxPt } : {}),
+        // S-04 — record the resolved native table so "new style from cell"
+        // can address its cells.
+        onLowered: (info) => {
+          lastLoweredTable = info;
+          loweredTables.set(info.frameId, info);
+        },
+      },
+    };
   }
 
   /** The placements belong to the workbook they were lowered from: a new
@@ -3789,6 +4231,8 @@ export function createWorkbookSession(
     // old one are moot (and must not overwrite the import below).
     cancelPendingPersist();
     if (persist) await enqueueWrite(bytes, name);
+    // ADR 524 — a mapping naming a style this document lacks falls back.
+    await syncDocStyleAvailability();
     emitter.emit();
     return true;
   }
@@ -3859,10 +4303,21 @@ export function createWorkbookSession(
         epoch,
         fromPart.chartSlots,
       );
-      if (ok)
+      if (ok) {
+        // The named filter views saved beside the workbook (ADR 517).
+        const views = await readFilterViewsPart(host);
+        if (views.length > 0 && state.engine?.setFilterViews) {
+          try {
+            state.engine.setFilterViews(views as never);
+            hadFilterViews = true;
+          } catch (err) {
+            host.log.warn("filter views restore failed", err);
+          }
+        }
         await rediscoverPlacements().catch((err) =>
           host.log.warn("rediscover failed", err),
         );
+      }
       return ok;
     }
 
@@ -4106,107 +4561,62 @@ export function createWorkbookSession(
       }
       const engine = state.engine;
       const sheet = state.activeSheet;
-      const range = state.selectedRange;
-      const kind = opts.sizing ?? "window";
-      const print = {
-        headings: opts.print?.headings ?? false,
-        gridlines: opts.print?.gridlines ?? false,
-      };
-      const topLeft = opts.view?.topLeft ?? rangeTopLeft(range);
-      // Wave 4 — land at the current selection, not a fixed page inset.
-      let placement;
-      let content: LoweredContent;
-      let shown = range;
-      let boxPt = kind === "fixed" ? opts.boxPt : undefined;
-      try {
-        if (kind === "fit") {
-          // The earlier behaviour: a fixed range, text-measured widths.
-          content = pageContent(engine, sheet, range);
-        } else {
-          // ADR 510 — a window frame shows the range's own tracks lowered as
-          // a frame page: the lowering every later refresh makes, so the
-          // first edit re-pours one cell, not the table.
-          const own = rangeFramePage(engine, sheet, range, print);
-          if (kind === "window" && topLeft === rangeTopLeft(range)) {
-            content = own;
-          } else {
-            // Plan G4 — a window that starts elsewhere, or a fixed box: the
-            // window of the sheet that fits the box from the view's cell.
-            const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-            boxPt ??= {
-              widthPt: sum(own.cols.map((c) => c.widthPt)) + WINDOW_SLACK_PT,
-              heightPt: sum(own.rows.map((r) => r.heightPt)) + WINDOW_SLACK_PT,
-            };
-            const win = placementWindow(engine, {
-              sheet,
-              range,
-              view: { topLeft, lock: false },
-              print,
-              sizing: "window",
-              boxPt,
-            });
-            if (!win) throw new Error("engine wasm predates get_frame_page");
-            content = win.content;
-            shown = win.range ?? range;
-          }
-        }
-        placement = await placementForContent(host, content);
-        // Plan G4 — the next area of a print area goes under the last one.
-        const under = opts.below ? await selectionBox(host) : null;
-        if (placement && under) {
-          const [t, l, b, r] = placement.bounds;
-          const top = under.bottom + PLACE_GAP_PT;
-          placement = {
-            pageId: under.pageId,
-            bounds: [top, under.left, top + (b - t), under.left + (r - l)] as [
-              number,
-              number,
-              number,
-              number,
-            ],
-          };
-        }
-        if (placement && kind === "fixed" && boxPt) {
-          const [t, l] = placement.bounds;
-          placement = {
-            ...placement,
-            bounds: [t, l, t + boxPt.heightPt, l + boxPt.widthPt] as [
-              number,
-              number,
-              number,
-              number,
-            ],
-          };
-        }
-      } catch (err) {
-        host.log.warn("lowerSelection: could not lower the range", err);
-        return null;
-      }
+      const prepared = await preparePlacement(
+        engine,
+        sheet,
+        state.selectedRange,
+        opts,
+      );
+      if (!prepared) return null;
       const id = await ownWrite(() =>
-        lowerSelectionToFrame(host, engine, sheet, shown, {
-          placement: placement ?? undefined,
-          // The placement's height is the workbook's rows; the lowering
-          // sizes it to the table the engine lays out — unless the caller
-          // fixed the box.
-          fitHeight: kind !== "fixed",
-          contentVersion: revision,
-          content,
-          // ADR 510 — the frame is a window onto the sheet (plan G4: with
-          // the caller's view, print options and box).
-          sizing: kind === "fit" ? "fit" : "window",
-          view: { topLeft, lock: opts.view?.lock ?? false },
-          print,
-          ...(boxPt ? { boxPt } : {}),
-          // S-04 — record the resolved native table so "new style from cell"
-          // can address its cells.
-          onLowered: (info) => {
-            lastLoweredTable = info;
-            loweredTables.set(info.frameId, info);
-          },
-        }),
+        lowerSelectionToFrame(
+          host,
+          engine,
+          sheet,
+          prepared.range,
+          prepared.opts,
+        ),
       );
       if (id) lastFrameId = id; // remember the in-frame grid target (S-02)
       return id;
+    },
+
+    async placeAreas(ranges, opts = {}) {
+      const engine = state.engine;
+      const sheet = state.activeSheet;
+      if (!engine || sheet === null || ranges.length === 0) {
+        host.log.warn("placeAreas: no workbook / sheet / range");
+        return null;
+      }
+      const areas: AreaPlacement[] = [];
+      for (const range of ranges) {
+        const prepared = await preparePlacement(engine, sheet, range, {
+          ...opts,
+          below: false,
+        });
+        if (!prepared) return null;
+        areas.push({ range: prepared.range, opts: prepared.opts });
+      }
+      // ADR 522 amendment — one batch, one undo step for every area.
+      const placed = await ownWrite(() =>
+        lowerAreasToFrames(host, engine, sheet, areas, PLACE_GAP_PT),
+      );
+      if (placed !== REFUSED_AREAS) {
+        const ids = placed.filter((f): f is string => !!f);
+        if (ids.length !== ranges.length) return null;
+        lastFrameId = ids[ids.length - 1] ?? lastFrameId;
+        return ids;
+      }
+      // A host without in-batch handles: area by area, each under the one
+      // before (an undo step each).
+      const ids: string[] = [];
+      for (const [i, range] of ranges.entries()) {
+        api.setRange(range);
+        const id = await api.lowerSelection({ ...opts, below: i > 0 });
+        if (!id) return null;
+        ids.push(id);
+      }
+      return ids;
     },
 
     async showGridInFrame(frameId?: string) {
@@ -4293,6 +4703,18 @@ export function createWorkbookSession(
       };
       if (!inFrameActive) sessionFloor = journalCursor; // the modal boundary
       inFrameActive = true;
+      // Excel always has an active cell: entered without one (the keyboard,
+      // a frame entered for the first time), the grid starts on its view's
+      // top-left cell so the keys work at once.
+      if (!state.gridSelection) {
+        applyGridSelection(
+          lastGridWindow.firstRow,
+          lastGridWindow.firstCol,
+          1,
+          1,
+        );
+        emitter.emit();
+      }
       const ok = await submitInFrameGrid();
       if (!ok) host.log.warn("showGridInFrame: grid windowing failed");
       return ok;
@@ -4571,6 +4993,65 @@ export function createWorkbookSession(
       return docStyleRevision;
     },
 
+    saveFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.saveFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.saveFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      return { ok: true as const };
+    },
+
+    applyFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.applyFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.applyFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      void submitInFrameGrid();
+      return { ok: true as const };
+    },
+
+    deleteFilterView(name) {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.deleteFilterView || sheet === null)
+        return { ok: false as const, message: "no workbook / filter views" };
+      try {
+        e.deleteFilterView(sheet, name);
+      } catch (err) {
+        return { ok: false as const, message: String(err) };
+      }
+      filterViewsTouched = true;
+      markEdited();
+      emitter.emit();
+      return { ok: true as const };
+    },
+
+    filterViewNames() {
+      try {
+        return (state.engine?.listFilterViews?.() ?? []).map(
+          (v) => (v as { name: string }).name,
+        );
+      } catch {
+        return [];
+      }
+    },
+
     async documentSwatchRef(id) {
       if (!host.supports("document.swatchDisplay@1")) return null;
       try {
@@ -4634,6 +5115,177 @@ export function createWorkbookSession(
         host.log.debug("documentTextDefault: style read failed", err);
         return null;
       }
+    },
+
+    async documentStyleLooks(ids) {
+      const out = new Map<string, DocStyleLook>();
+      if (!host.supports("document.styleProperties@1")) return out;
+      const colorOf = new Map<string, string>();
+      for (const { collection, id } of ids) {
+        try {
+          const props = await host.document.styleProperties(collection, id);
+          if (!props) continue;
+          const entry = (path: string) =>
+            props.entries.find((e) => e.path === path)?.value ?? null;
+          const look: DocStyleLook = {};
+          const family = styleEntryText(entry("characterFontFamily"));
+          const style = styleEntryText(entry("characterFontStyle"));
+          const size = styleEntryNum(entry("characterFontSize"));
+          if (family) look.family = family;
+          if (style) look.style = style;
+          if (size !== null) look.sizePt = size;
+          const swatch = styleEntryText(entry("characterFillColor"));
+          if (swatch) colorOf.set(id, swatch);
+          out.set(id, look);
+        } catch (err) {
+          host.log.debug(`documentStyleLooks: ${id} unreadable`, err);
+        }
+      }
+      if (colorOf.size > 0 && host.supports("document.swatchDisplay@1")) {
+        try {
+          const shown = new Map(
+            (
+              await host.document.swatchDisplay([...new Set(colorOf.values())])
+            ).map((x) => [x.id, x.rgbHex] as const),
+          );
+          for (const [id, sw] of colorOf) {
+            const hex = shown.get(sw);
+            const look = out.get(id);
+            if (hex && look) look.color = hex.startsWith("#") ? hex : `#${hex}`;
+          }
+        } catch (err) {
+          host.log.debug("documentStyleLooks: swatch read failed", err);
+        }
+      }
+      return out;
+    },
+
+    docStyles() {
+      const e = state.engine;
+      if (!e?.docStyleMap || !e.namedStyleUsage) return null;
+      const hit = readCache.get("docStyles") as DocStylesInfo | undefined;
+      if (hit) return hit;
+      try {
+        const map = e.docStyleMap();
+        const info: DocStylesInfo = {
+          enabled: map.enabled,
+          entries: map.entries,
+          usage: e.namedStyleUsage(),
+        };
+        readCache.set("docStyles", info);
+        return info;
+      } catch (err) {
+        host.log.debug("docStyles: engine read failed", err);
+        return null;
+      }
+    },
+
+    async documentStyleLists() {
+      const lists = await readDocumentStyleLists(host);
+      if (!lists) return null;
+      const e = state.engine;
+      let missing: MissingReference[] = [];
+      try {
+        if (e?.docReferences)
+          missing = missingDocReferences(e.docReferences(), lists);
+      } catch (err) {
+        host.log.debug("documentStyleLists: references unreadable", err);
+      }
+      await syncDocStyleAvailability(lists);
+      return { lists, missing };
+    },
+
+    async setDocStylesEnabled(on) {
+      if (on) return enableDocStyles();
+      return journalDocMap((e) => {
+        if (!e.setDocStylesEnabled)
+          throw new Error("engine wasm predates set_doc_styles_enabled");
+        e.setDocStylesEnabled(false);
+      });
+    },
+
+    setDocStyleMapping(style, target) {
+      const r = journalDocMap((e) => {
+        if (!e.setDocStyleMapping)
+          throw new Error("engine wasm predates set_doc_style_mapping");
+        e.setDocStyleMapping(style, target);
+      });
+      if (r.ok) scheduleDocStyleSync();
+      return r;
+    },
+
+    async createDocStylesFromWorkbook() {
+      const engine = state.engine;
+      if (!engine?.docStyleMap || !engine.namedStyleUsage)
+        return { ok: false as const, message: "no workbook open" };
+      const [lists, swatches] = await Promise.all([
+        readDocumentStyleLists(host),
+        readKnownSwatchIds(host),
+      ]);
+      if (!lists)
+        return {
+          ok: false as const,
+          message: "the document's styles could not be read",
+        };
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      const plan = createDocStylesPlan(
+        engine.namedStyleUsage(),
+        engine.docStyleMap(),
+        lists,
+        swatches,
+      );
+      const created = plan.ops.filter(
+        (op) => op.op === "createParagraphStyle",
+      ).length;
+      if (plan.ops.length > 0) {
+        const res = await ownWrite(() =>
+          host.document.mutate({ op: "batch", args: { ops: plan.ops } }),
+        );
+        if (!res.applied)
+          return {
+            ok: false as const,
+            message: "the document refused the new styles",
+          };
+        docStyleRevision += 1;
+      }
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      const r = journalDocMap((e) => {
+        const map = e.docStyleMap!();
+        e.setDocStyleMap!({
+          enabled: true,
+          entries: { ...map.entries, ...plan.entries },
+        });
+      });
+      await syncDocStyleAvailability(await readDocumentStyleLists(host));
+      return r.ok ? { ok: true as const, created } : r;
+    },
+
+    async remapDocReference(from, to) {
+      const engine = state.engine;
+      if (!engine?.remapDocReference)
+        return { ok: false as const, message: "no workbook open" };
+      const lists = await readDocumentStyleLists(host);
+      let model: string | null = null;
+      if (lists?.swatches.includes(to)) {
+        const ref = await api.documentSwatchRef(to);
+        model = ref?.model ?? null;
+      }
+      if (state.engine !== engine)
+        return { ok: false as const, message: "the workbook changed" };
+      try {
+        engine.remapDocReference(from, to, model);
+      } catch (err) {
+        return {
+          ok: false as const,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+      markEdited();
+      await syncDocStyleAvailability(lists);
+      emitter.emit();
+      return { ok: true as const };
     },
 
     async documentFontFace(family, style) {
@@ -5694,6 +6346,7 @@ export function createWorkbookSession(
         return;
       }
       adoptWorkbook(engine, "Book1.xlsx");
+      await adoptWithDocStyles();
     },
 
     async importOds(bytes, name) {
@@ -5743,6 +6396,7 @@ export function createWorkbookSession(
         return;
       }
       adoptWorkbook(engine, `${base}.xlsx`);
+      await adoptWithDocStyles();
     },
 
     addSheet(name) {
@@ -6250,6 +6904,44 @@ export function createWorkbookSession(
       applyModel(mods?.shift && m ? extendTo(m, hit) : collapsed(hit));
       drag = { kind: "select" };
       return true;
+    },
+
+    pageWindowsOnLeave() {
+      const id = enteredContinuation?.head ?? lastFrameId;
+      const info = id ? loweredTables.get(id) : undefined;
+      if (!info || info.sizing !== "window" || !info.view || !info.content)
+        return [];
+      const page = pageBodyTracks(info.content);
+      if (page.rows.length === 0 || page.cols.length === 0) return [];
+      const at = cellOfA1(info.view.topLeft) ?? { row: 0, col: 0 };
+      let next = at;
+      const vp = lastGridScene?.viewport;
+      if (!info.view.lock && vp && lastGridWindow) {
+        const win = lastGridWindow;
+        next = viewToContain(at, page, {
+          rows: Array.from(
+            { length: Math.max(0, vp.rows - (vp.frozenRows ?? 0)) },
+            (_, i) => win.firstRow + i,
+          ),
+          cols: Array.from(
+            { length: Math.max(0, vp.cols - (vp.frozenCols ?? 0)) },
+            (_, i) => win.firstCol + i,
+          ),
+        });
+      }
+      const dRow = next.row - at.row;
+      const dCol = next.col - at.col;
+      const left = Math.min(...page.cols) + dCol;
+      const right = Math.max(...page.cols) + dCol;
+      // A chain: each frame's rows start where the last window split them.
+      const starts = info.chainStarts ?? [Math.min(...page.rows)];
+      const last = Math.max(...page.rows);
+      return starts.map((start, i) => ({
+        top: start + dRow,
+        bottom: (i + 1 < starts.length ? starts[i + 1]! - 1 : last) + dRow,
+        left,
+        right,
+      }));
     },
 
     selectionAreas() {

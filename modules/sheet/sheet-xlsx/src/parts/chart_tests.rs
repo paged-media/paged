@@ -293,6 +293,23 @@ fn document_references_return_only_while_the_value_holds__feat__sheet_chart_styl
 }
 
 #[test]
+fn a_reference_keeps_its_colour_model_and_the_chart_its_palette__feat__sheet_chart_style_roles() {
+    let x = format!(
+        r#"<c:chartSpace {NS}><c:chart><c:plotArea><c:barChart><c:barDir val="col"/>
+<c:ser><c:idx val="0"/><c:spPr><a:solidFill><a:srgbClr val="00A0E0"/></a:solidFill></c:spPr><c:val><c:numRef><c:f>Sheet1!$B$1:$B$3</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart>
+<c:extLst><c:ext uri="{PAGED_EXT_URI}" xmlns:pg="{PAGED_EXT_NS}"><pg:refs><pg:ref role="series/0/fill" rgb="00A0E0" swatch="Color/Brand" model="spot"/></pg:refs><pg:palette group="ColorGroup/Brand"><pg:swatch ref="Color/A|cmyk|0A141E"/><pg:swatch ref="Color/B|lab|28323C"/></pg:palette></c:ext></c:extLst></c:chartSpace>"#
+    );
+    let m = model(x.as_bytes());
+    let fill = m.series().next().unwrap().fill.clone().unwrap();
+    assert_eq!(fill.doc.as_ref().unwrap().model, DocColorModel::Spot);
+    let p = m.palette.as_ref().unwrap();
+    assert_eq!(p.group, "ColorGroup/Brand");
+    assert_eq!(p.swatches.len(), 2);
+    assert_eq!(p.swatches[0].model, DocColorModel::Cmyk);
+    assert_eq!(p.swatches[1].fallback_rgb, (0x28, 0x32, 0x3C));
+}
+
+#[test]
 fn unknown_sheet_falls_back_to_host_and_quotes_resolve() {
     let m = parse(&wrap(r#"<c:barChart><c:ser><c:val><c:numRef><c:f>Ghost!$B$2:$B$4</c:f></c:numRef></c:val></c:ser></c:barChart>"#), 3, &names())
         .unwrap()

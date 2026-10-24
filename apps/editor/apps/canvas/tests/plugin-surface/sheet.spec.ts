@@ -62,6 +62,7 @@
 //   which is the only way a "known bad" note stays honest.
 
 import { expect, test, type Page } from "@playwright/test";
+import { covers } from "@paged-media/test-kit";
 import { fitFirstPage } from "../fidelity/canvas-driver";
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
@@ -106,20 +107,27 @@ const DATASETS_PANEL = "media.paged.sheet.panel.datasets";
 const PROPERTIES_PANEL = "media.paged.sheet.panel.properties";
 const IMPORTER = "media.paged.sheet.importer.xlsx";
 const CSV_IMPORTER = "media.paged.sheet.importer.csv";
+const ODS_IMPORTER = "media.paged.sheet.importer.ods";
 const EXPORTER = "media.paged.sheet.exporter.xlsx";
+const XLSM_EXPORTER = "media.paged.sheet.exporter.xlsm";
+const CSV_EXPORTER = "media.paged.sheet.exporter.csv";
 
-/** THE TWENTY IDS, SPELLED OUT.
+/** THE IDS, SPELLED OUT — a FLOOR, not the whole list.
  *
  *  Comparing the manifest to the registries proves they AGREE; it cannot
  *  prove either is complete, because a bundle that silently drops a
  *  command from both sides still agrees with itself. Pinning the list
- *  here is the third party that notices — and it is also what makes the
- *  surface-coverage gate (which matches literal id strings across
- *  `tests/`) able to see that these are exercised at all. */
+ *  here is the third party that notices a DROP: every id below must stay
+ *  in the manifest. An id the bundle ADDS is not a regression, so the
+ *  manifest may hold more; those are checked against the registries and
+ *  run like the rest (the manifest is what the tests enumerate). */
 const DECLARED = {
   panels: [WORKBOOK_PANEL, GRID_PANEL, DATASETS_PANEL, PROPERTIES_PANEL],
   commands: [
     "media.paged.sheet.command.importXlsx",
+    // The files work: CSV out and the R1C1 formula display.
+    "media.paged.sheet.command.exportCsv",
+    "media.paged.sheet.command.toggleR1C1",
     "media.paged.sheet.command.lowerToFrame",
     "media.paged.sheet.command.lowerChartToFrame",
     "media.paged.sheet.command.openGrid",
@@ -158,8 +166,8 @@ const DECLARED = {
     "media.paged.sheet.command.ungroupSelection",
     "media.paged.sheet.command.goalSeek",
   ],
-  importers: [IMPORTER, CSV_IMPORTER],
-  exporters: [EXPORTER],
+  importers: [IMPORTER, CSV_IMPORTER, ODS_IMPORTER],
+  exporters: [EXPORTER, XLSM_EXPORTER, CSV_EXPORTER],
   editContexts: ["sheet"],
   objectTypes: ["sheetFrame"],
   partTypes: ["workbook"],
@@ -408,16 +416,23 @@ test.describe("plugin surface · paged.sheet", () => {
     });
 
     const c = MANIFEST.contributes;
-    // The manifest matches the pinned list — a contribution silently
-    // added to or dropped from the published bundle lands here first.
-    expect([...c.panels].sort()).toEqual([...DECLARED.panels].sort());
-    expect([...c.commands].sort()).toEqual([...DECLARED.commands].sort());
-    expect([...c.importers]).toEqual([...DECLARED.importers]);
-    expect([...c.exporters]).toEqual([...DECLARED.exporters]);
-    expect(c.editContexts.map((e) => e.type)).toEqual([
-      ...DECLARED.editContexts,
-    ]);
-    expect(c.objectTypes.map((o) => o.type)).toEqual([...DECLARED.objectTypes]);
+    // Every pinned id is still in the manifest — a contribution silently
+    // dropped from the bundle lands here first. (Added ones are welcome;
+    // the loops below check them against the host like the rest.)
+    const floor = (have: readonly string[], pinned: readonly string[]) =>
+      expect(pinned.filter((id) => !have.includes(id))).toEqual([]);
+    floor(c.panels, DECLARED.panels);
+    floor(c.commands, DECLARED.commands);
+    floor(c.importers, DECLARED.importers);
+    floor(c.exporters, DECLARED.exporters);
+    floor(
+      c.editContexts.map((e) => e.type),
+      DECLARED.editContexts,
+    );
+    floor(
+      c.objectTypes.map((o) => o.type),
+      DECLARED.objectTypes,
+    );
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
     for (const id of c.commands)
@@ -475,9 +490,25 @@ test.describe("plugin surface · paged.sheet", () => {
 
   // ── 3. COMMANDS ──────────────────────────────────────────────────
 
-  test("all twenty-four declared commands are registered, titled, and actually run", async ({
+  test("every declared command is registered, titled, and actually runs", async ({
     page,
   }) => {
+    // The frame grid's verbs and data tools (sheet ADR 510 / 517) and the
+    // files work's commands, run here on the live host like every other.
+    covers("command:media.paged.sheet.command.cutSelection");
+    covers("command:media.paged.sheet.command.formatCells");
+    covers("command:media.paged.sheet.command.pasteSpecial");
+    covers("command:media.paged.sheet.command.dataValidation");
+    covers("command:media.paged.sheet.command.circleInvalid");
+    covers("command:media.paged.sheet.command.toggleFilter");
+    covers("command:media.paged.sheet.command.hideSelection");
+    covers("command:media.paged.sheet.command.unhideSelection");
+    covers("command:media.paged.sheet.command.groupSelection");
+    covers("command:media.paged.sheet.command.ungroupSelection");
+    covers("command:media.paged.sheet.command.goalSeek");
+    covers("command:media.paged.sheet.command.exportCsv");
+    covers("command:media.paged.sheet.command.toggleR1C1");
+    const commands = MANIFEST.contributes.commands;
     const registered = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       return r.commands
@@ -489,18 +520,47 @@ test.describe("plugin surface · paged.sheet", () => {
           category: c.category ?? null,
         }));
     });
-    expect(registered.map((c) => c.id).sort()).toEqual(
-      [...DECLARED.commands].sort(),
-    );
+    expect(registered.map((c) => c.id).sort()).toEqual([...commands].sort());
     for (const c of registered) {
       expect(c.title, `${c.id} has a palette title`).toBeTruthy();
       expect(c.category, `${c.id} is grouped under a category`).toBe("Sheet");
     }
 
+    // The save door answers at once (and records what it was handed): a
+    // native save dialog would park the command.
+    await page.evaluate(() => {
+      const w = globalThis as unknown as {
+        __saved?: string[];
+        __shellDoors?: Record<string, (...a: unknown[]) => unknown>;
+      };
+      const doors = w.__shellDoors;
+      if (!doors) throw new Error("no __shellDoors — not a dev build");
+      w.__saved = [];
+      const opened: string[] = [];
+      (w as { __opened?: string[] }).__opened = opened;
+      const openPanel = doors.openPanel;
+      doors.openPanel = (...a: unknown[]) => {
+        opened.push(String(a[0]));
+        return openPanel?.(...a);
+      };
+      doors.saveFile = async (o: unknown) => {
+        w.__saved!.push((o as { suggestedName: string }).suggestedName);
+        return true;
+      };
+    });
+    const warnings: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "warning" && m.text().includes("media.paged.sheet"))
+        warnings.push(m.text());
+    });
+
     // INVOCABLE, proven through the registry's own observer — the single
     // place a handler is ever called. A command refused by its `when`
     // emits nothing, which is exactly how we tell "ran" from "declined".
-    const ids = DECLARED.commands.filter(
+    // In the manifest's order: `newWorkbook` opens a workbook, so the
+    // commands after it find one.
+    const NEW_WORKBOOK = "media.paged.sheet.command.newWorkbook";
+    const ids = commands.filter(
       // the picker command is exercised separately (it parks on a dialog)
       (id) => id !== "media.paged.sheet.command.importXlsx",
     );
@@ -527,17 +587,42 @@ test.describe("plugin surface · paged.sheet", () => {
     expect(result.threw, "no sheet command throws out of invoke()").toEqual([]);
     expect(result.failed, "no sheet command settles with an error").toEqual([]);
 
-    // With no workbook open the two clipboard commands and pagination
-    // DECLINE (their `when` is `workbookIsOpen`) — the ADR-024 gate,
-    // working. Everything else ran: `newWorkbook` needs no workbook and
-    // OPENS one, so the commands listed after it (fill, clear, find,
-    // structural edits) find a workbook and run.
+    // With no workbook open the commands gated on one (`when:
+    // workbookIsOpen`) DECLINE — the ADR-024 gate, working. Everything
+    // else ran: `newWorkbook` needs no workbook and OPENS one, so the
+    // gated commands listed after it find a workbook and run.
     const declined = ids.filter((id) => !result.started.includes(id));
-    expect(declined.sort()).toEqual([
-      "media.paged.sheet.command.copySelection",
-      "media.paged.sheet.command.paginateToChain",
-      "media.paged.sheet.command.pasteSelection",
-    ]);
+    const afterNew = ids.slice(ids.indexOf(NEW_WORKBOOK));
+    expect(
+      declined.filter((id) => afterNew.includes(id)),
+      "every command after newWorkbook runs",
+    ).toEqual([]);
+    expect(declined).toEqual(
+      expect.arrayContaining([
+        "media.paged.sheet.command.copySelection",
+        "media.paged.sheet.command.paginateToChain",
+        "media.paged.sheet.command.pasteSelection",
+      ]),
+    );
+    // The grid verbs that need a selection said so instead of failing.
+    for (const id of [
+      "toggleFilter",
+      "hideSelection",
+      "unhideSelection",
+      "groupSelection",
+      "ungroupSelection",
+    ])
+      expect
+        .poll(() => warnings.some((w) => w.includes(`${id}:`)), {
+          message: `${id} names what it needs`,
+        })
+        .toBe(true);
+    // Format cells raised the Sheet properties panel.
+    expect(
+      await page.evaluate(
+        () => (globalThis as unknown as { __opened: string[] }).__opened,
+      ),
+    ).toContain(PROPERTIES_PANEL);
 
     // …and they become live once a workbook is loaded, which is the
     // other half of the gate being real rather than permanently off.
@@ -549,6 +634,7 @@ test.describe("plugin surface · paged.sheet", () => {
         if (e.phase === "started") started.push(e.invocation.id);
       });
       await r.commands.invoke("media.paged.sheet.command.copySelection");
+      await r.commands.invoke("media.paged.sheet.command.exportCsv");
       sub.dispose();
       return started;
     });
@@ -556,6 +642,14 @@ test.describe("plugin surface · paged.sheet", () => {
       nowEnabled,
       "copySelection is offered once a workbook is open",
     ).toContain("media.paged.sheet.command.copySelection");
+    // CSV out hands the save door the active sheet as a .csv file.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (globalThis as unknown as { __saved: string[] }).__saved,
+        ),
+      )
+      .toContainEqual(expect.stringMatching(/\.csv$/));
   });
 
   test("'Import workbook (.xlsx)' opens the host file picker and loads the chosen file", async ({
@@ -742,7 +836,8 @@ test.describe("plugin surface · paged.sheet", () => {
     }, XLSX_MIME);
 
     expect(wiring.entry).not.toBeNull();
-    expect(wiring.entry!.ext).toEqual([".xlsx"]);
+    // The xlsx family (macro-enabled and template variants open too).
+    expect(wiring.entry!.ext).toContain(".xlsx");
     expect(wiring.entry!.mime).toContain(XLSX_MIME);
     // Extension resolution is case-insensitive; both spellings a user
     // can produce reach the plugin.

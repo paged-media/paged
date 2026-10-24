@@ -46,6 +46,11 @@ import {
   type SheetEngineW2,
   type SheetWasmEngineW2,
 } from "./engine-w2";
+import {
+  wrapDocStyles,
+  type SheetEngineDocStyles,
+  type SheetWasmEngineDocStyles,
+} from "./engine-docstyles";
 
 import type {
   ChartGeometry,
@@ -82,6 +87,10 @@ export interface SheetInfo {
   cols: number;
   /** The tab's visibility as the workbook saved it (read-only). */
   state?: "visible" | "hidden" | "veryHidden";
+  /** A tab that is one chart (sheet ADR 519); absent = worksheet. */
+  kind?: "worksheet" | "chartsheet";
+  /** A chartsheet's chart (an index into `listCharts`). */
+  chart?: number;
 }
 
 /** One changed cell after an edit — the engine returns the recomputed
@@ -306,7 +315,8 @@ export interface FunctionInfo {
 
 /** The stable engine contract the bundle codes against. Every method is
  *  a forward to the wasm surface; the facade only renames + shapes. */
-export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
+export interface SheetEngine
+  extends SheetEngineW2, SheetEngineFiles, SheetEngineDocStyles {
   /** Parse XLSX bytes into the in-memory model (preservation-first; the
    *  bytes round-trip on save — spec §10). */
   loadXlsx(bytes: Uint8Array): void;
@@ -681,6 +691,14 @@ export interface SheetEngine extends SheetEngineW2, SheetEngineFiles {
   /** ADR 323 — patch one chart (validated whole; spliced into its part
    *  on save, sheet ADR 519). */
   updateChart?(index: number, patch: ChartPatch): void;
+  /** Sheet ADR 525 — the workbook's document chart style. */
+  chartStyle?(): ChartStyle;
+  /** Sheet ADR 525 — replace it (`{roles: {}}` clears it); spliced into
+   *  the workbook part, so it rides the next save. */
+  setChartStyle?(style: ChartStyle): void;
+  /** Sheet ADR 525 — chart `index`'s overrides become the workbook
+   *  default; the chart then follows it. */
+  useChartStyleAsDefault?(index: number): void;
   /** Plan G4 — delete one chart (its slot stays: the other charts keep
    *  their indices). A chart read from the file leaves the package on the
    *  next save; its slot is then a tombstone (`chartTombstones`). */
@@ -755,7 +773,51 @@ export interface ChartSpec {
   style?: number | null;
   flattened3d?: boolean;
   titleParagraphStyle?: string | null;
+  /** Sheet ADR 525 — the chart's own document-style overrides by role;
+   *  a role absent here follows the workbook default. */
+  roles?: Record<string, ChartRoleStyle>;
+  /** The chart's own series palette (a document colour group). */
+  seriesPalette?: ChartPalette | null;
 }
+
+/** Sheet ADR 525 — one chart style role's document references (a colour
+ *  role uses `swatch` only; a text role all three). */
+export interface ChartRoleStyle {
+  swatch?: DocSwatch | null;
+  paragraphStyle?: string | null;
+  characterStyle?: string | null;
+}
+
+/** A document colour group as series colours (series `i` takes swatch
+ *  `i mod n`). */
+export interface ChartPalette {
+  group: string;
+  swatches: DocSwatch[];
+}
+
+/** Sheet ADR 525 — the workbook's document chart style: what every chart
+ *  follows where it does not override a role. */
+export interface ChartStyle {
+  roles: Record<string, ChartRoleStyle>;
+  palette?: ChartPalette | null;
+}
+
+/** The colour roles, then the text roles, in panel order (the engine's
+ *  `sheet_chart::style` tags). */
+export const CHART_COLOR_ROLES = [
+  "chartArea",
+  "plotArea",
+  "axisLine",
+  "gridlines",
+] as const;
+export const CHART_TEXT_ROLES = [
+  "text",
+  "title",
+  "axisTitle",
+  "tickLabels",
+  "legend",
+  "dataLabels",
+] as const;
 
 /** A chart patch: absent = unchanged, `null` clears a nullable field. A
  *  series argument's empty strings mean none. */
@@ -768,7 +830,8 @@ export interface ChartPatch {
     categories: string;
     name: string;
     color: string;
-    colorSwatch?: string;
+    /** A document swatch: the full reference, or a bare id. */
+    colorSwatch?: string | DocSwatch;
     /** A combo: this series' kind tag (empty = the chart's). */
     kind?: string;
     secondary?: boolean;
@@ -785,6 +848,13 @@ export interface ChartPatch {
   dataLabels?: boolean;
   style?: number | null;
   titleParagraphStyle?: string | null;
+  /** Sheet ADR 525 — per-role overrides, merged; `null` gives a role's
+   *  override up (the workbook default applies). */
+  roles?: Record<string, ChartRoleStyle | null>;
+  /** Give every override up first (roles, series swatches, palette). */
+  resetRoles?: boolean;
+  /** The chart's own series palette; `null` = the workbook default's. */
+  seriesPalette?: ChartPalette | null;
 }
 
 /** A range argument resolved by the engine: its sheet, normalized A1, and
@@ -994,7 +1064,7 @@ export const SYSTEM_CLOCK: HostClock = {
  *  only the members the bundle drives. The artifact lands in Phase 2;
  *  this shape is the contract the facade maps over. */
 export interface SheetWasmEngine
-  extends SheetWasmEngineW2, SheetWasmEngineFiles {
+  extends SheetWasmEngineW2, SheetWasmEngineFiles, SheetWasmEngineDocStyles {
   load_xlsx(bytes: Uint8Array): void;
   save_xlsx(): Uint8Array;
   set_cell(
@@ -1181,6 +1251,9 @@ export interface SheetWasmEngine
   list_tables?(): TableInfo[];
   chart_specs?(): ChartSpec[];
   update_chart?(index: number, patch: ChartPatch): void;
+  chart_style?(): ChartStyle;
+  set_chart_style?(style: ChartStyle): void;
+  use_chart_style_as_default?(index: number): void;
   delete_chart?(index: number): void;
   chart_tombstones?(): Uint32Array | number[];
   restore_chart_slots?(slots: Uint32Array): void;
@@ -1416,6 +1489,13 @@ export function wrapEngine(
     updateChart: (index, patch) => {
       need("update_chart")(index, patch);
     },
+    chartStyle: () => need("chart_style")() as ChartStyle,
+    setChartStyle: (style) => {
+      need("set_chart_style")(style);
+    },
+    useChartStyleAsDefault: (index) => {
+      need("use_chart_style_as_default")(index);
+    },
     deleteChart: (index) => {
       need("delete_chart")(index);
     },
@@ -1433,6 +1513,8 @@ export function wrapEngine(
     ...wrapW2(need as Parameters<typeof wrapW2>[0], tick),
     // Sheet ADR 521 — files and dialect (src/engine-files.ts).
     ...wrapFiles(need as Parameters<typeof wrapFiles>[0], tick),
+    // Sheet ADR 524 — the document-style mapping (src/engine-docstyles.ts).
+    ...wrapDocStyles(need as Parameters<typeof wrapDocStyles>[0]),
   };
   return guardTraps(facade);
 }
