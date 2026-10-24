@@ -1,0 +1,266 @@
+{
+  "about": "The query guard's security matrix (data ADR 561, core ADR 1014): every reach outside the imported tables is refused, ordinary queries over them are admitted and run. Fixture tables people(name, role) and orders(name, qty). `why` is a substring of the refusal's message. Replayed by the bundle's guard (data-bundle/src/query/sql.ts: test/query-guard.spec.ts, test/store-browser.spec.ts, src/__tests__/query-lane.test.ts) and the engine's (paged-data-store/src/guard.rs: tests/guard.rs).",
+  "fixtureCsv": {
+    "people": "name,role\nAda,Author\nGrace,Engineer\n",
+    "orders": "name,qty\nAda,2\nAda,3\nGrace,5\n"
+  },
+  "refused": [
+    {
+      "sql": "SELECT * FROM read_csv('https://example.com/x.csv')",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM read_csv_auto('people.csv')",
+      "why": "read_csv_auto() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM read_parquet('https://example.com/x.parquet')",
+      "why": "read_parquet() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM read_json('/etc/passwd')",
+      "why": "read_json() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM read_text('/etc/hosts')",
+      "why": "read_text() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM 'https://example.com/x.parquet'",
+      "why": "not an imported source table"
+    },
+    {
+      "sql": "SELECT * FROM 'people.csv'",
+      "why": "not an imported source table"
+    },
+    {
+      "sql": "SELECT * FROM \"https://example.com/x.csv\"",
+      "why": "not an imported source table"
+    },
+    {
+      "sql": "SELECT * FROM people, read_csv('x.csv')",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM people JOIN read_csv('x.csv') r ON true",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM people, LATERAL read_csv(people.name)",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT (SELECT count(*) FROM read_text('/etc/hosts'))",
+      "why": "read_text() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM people WHERE name IN (FROM read_csv('x.csv'))",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "WITH x AS (SELECT * FROM read_csv('x.csv')) SELECT * FROM x",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM (read_csv('x.csv'))",
+      "why": "read_csv() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM query_table('people')",
+      "why": "query_table() reads files or URLs"
+    },
+    {
+      "sql": "SELECT * FROM other.people",
+      "why": "not an imported source table"
+    },
+    {
+      "sql": "ATTACH 'https://example.com/x.db' AS x",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "ATTACH ':memory:' AS m",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "COPY people TO 'out.csv'",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "INSTALL httpfs",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "LOAD json",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "SET enable_external_access = true",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "RESET lock_configuration",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "PRAGMA enable_external_access=true",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "DROP TABLE people",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "WITH x AS (SELECT 1) DELETE FROM people",
+      "why": "DELETE is not allowed"
+    },
+    {
+      "sql": "CALL pragma_version()",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "PRAGMA query_only = 0",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "VACUUM INTO 'copy.db'",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "ATTACH DATABASE 'x.db' AS x",
+      "why": "only a SELECT query"
+    },
+    {
+      "sql": "SELECT * FROM pragma_table_info('people')",
+      "why": "pragma_table_info() reads files or URLs"
+    },
+    {
+      "sql": "SELECT 1; SELECT 2",
+      "why": "exactly one SELECT"
+    },
+    {
+      "sql": "SELECT 1; DROP TABLE people",
+      "why": "exactly one SELECT"
+    },
+    {
+      "sql": "SELECT 1 /* ; */ ; DROP TABLE people",
+      "why": "exactly one SELECT"
+    },
+    {
+      "sql": "SELECT 'a'';' AS s; DROP TABLE people",
+      "why": "exactly one SELECT"
+    },
+    {
+      "sql": "SELECT E'\\' ; DROP TABLE people --'",
+      "why": "escape string"
+    },
+    {
+      "sql": "SELECT $$ x $$",
+      "why": "dollar"
+    },
+    {
+      "sql": "SELECT 'unterminated",
+      "why": "not terminated"
+    },
+    {
+      "sql": "SELECT 1 /* unterminated",
+      "why": "not terminated"
+    },
+    {
+      "sql": "",
+      "why": "empty"
+    }
+  ],
+  "allowed": [
+    {
+      "sql": "SELECT name FROM people ORDER BY name",
+      "rows": [
+        [
+          "Ada"
+        ],
+        [
+          "Grace"
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT * FROM main.people WHERE role = 'Author';",
+      "rows": [
+        [
+          "Ada",
+          "Author"
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT \"name\" FROM \"people\" WHERE name = 'Gr;ace'",
+      "rows": []
+    },
+    {
+      "sql": "SELECT p.name, sum(o.qty) AS q FROM people p JOIN orders o ON o.name = p.name GROUP BY p.name ORDER BY q DESC, p.name",
+      "rows": [
+        [
+          "Ada",
+          "5"
+        ],
+        [
+          "Grace",
+          "5"
+        ]
+      ]
+    },
+    {
+      "sql": "WITH t AS (SELECT name, qty FROM orders WHERE qty > 2) SELECT name, count(*) FROM t GROUP BY name ORDER BY name",
+      "rows": [
+        [
+          "Ada",
+          "1"
+        ],
+        [
+          "Grace",
+          "1"
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT count(*) FROM people, orders",
+      "rows": [
+        [
+          "6"
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT name FROM people WHERE name IN (SELECT name FROM orders WHERE qty = 5)",
+      "rows": [
+        [
+          "Grace"
+        ]
+      ]
+    },
+    {
+      "sql": "SELECT value FROM generate_series(0, 2)",
+      "rows": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ]
+      ]
+    },
+    {
+      "sql": "-- a comment; with a semicolon\nSELECT upper(name) FROM people /* ; */ ORDER BY 1",
+      "rows": [
+        [
+          "ADA"
+        ],
+        [
+          "GRACE"
+        ]
+      ]
+    }
+  ]
+}

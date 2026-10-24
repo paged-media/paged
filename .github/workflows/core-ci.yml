@@ -22,6 +22,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The paged-data-* crates' test fixtures (PM-0015).
+      - "modules/data/conformance/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
   pull_request:
@@ -35,6 +37,8 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The paged-data-* crates' test fixtures (PM-0015).
+      - "modules/data/conformance/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
 
@@ -104,6 +108,15 @@ jobs:
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # paged.data's binding language stays below the sync, query and
+      # lowering crates (its spec §4 rules; moved here with the crates,
+      # PM-0015). The guard fails explicitly: errexit ignores a `!`.
+      - name: dependency guard (paged-data-expr)
+        run: |
+          if cargo tree -p paged-data-expr --edges normal | grep -E 'paged-data-(sources|query|bind|lower|store)'; then
+            echo "LEAK: paged-data-expr depends on a sources/query/bind/lower/store crate"; exit 1
+          fi
 
       # The skip convention every Rust workspace's tests use
       # (docs/development/testing.md). It is a path dev-dependency, so

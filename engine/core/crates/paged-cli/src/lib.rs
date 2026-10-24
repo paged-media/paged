@@ -27,6 +27,7 @@
 //! protocol from the same code.
 
 pub mod cli;
+pub mod data;
 pub mod diff;
 pub mod engine;
 pub mod engine_serve;

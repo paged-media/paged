@@ -1,0 +1,34 @@
+[package]
+name = "paged-data-session"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data's session (PM-0015): the plain-Rust DataSession that joins the data crates (sources, queries, the store, bindings, sync, lowering, batch), and the bindings a document carries in its labels (core ADR 1014). The wasm surface (modules/data/data-js), the module's CLI and its script surface wrap it; the engine's CLI resolves a document's bindings through it."
+
+[lib]
+name = "data_session"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+paged-data-sources = { path = "../paged-data-sources" }
+paged-data-bind = { path = "../paged-data-bind" }
+paged-data-expr = { path = "../paged-data-expr" }
+paged-data-lower = { path = "../paged-data-lower" }
+paged-data-barcode = { path = "../paged-data-barcode" }
+paged-data-dataset = { path = "../paged-data-dataset" }
+paged-data-query = { path = "../paged-data-query" }
+paged-data-automation = { path = "../paged-data-automation" }
+paged-data-store = { path = "../paged-data-store" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+
+[features]
+# The engine work counters (paged-data-query/src/perf.rs). Off here, like
+# the crates below it; data-js turns them on for the shipped wasm.
+perf-counters = ["paged-data-bind/perf-counters", "paged-data-query/perf-counters"]
