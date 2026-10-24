@@ -82,6 +82,7 @@ use paged_scene::{Document, ParsedStory};
 
 pub mod based_on;
 pub mod cell_insets;
+mod clip_groups;
 pub mod dangling;
 mod document_labels;
 mod effects;
@@ -380,6 +381,10 @@ pub(crate) fn write_package(
     keep_container_parts: bool,
     opts: &ExportOptions,
 ) -> Result<IdmlExport, WriteError> {
+    // Engine ADR 1010: IDML has no clip group; each is written as the
+    // paste-into that paints the same.
+    let lowered = clip_groups::lower(doc);
+    let doc = lowered.as_ref().unwrap_or(doc);
     let mut src = zip::ZipArchive::new(Cursor::new(original))?;
     // The files every placed image's `<Link>` will point at (empty
     // without a link base — see `images`).

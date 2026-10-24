@@ -1868,7 +1868,10 @@ fn paged_create_group(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> J
     if member_ids.len() < 2 {
         return Ok(JsValue::from(false));
     }
-    let mutation = Mutation::CreateGroup { member_ids };
+    let mutation = Mutation::CreateGroup {
+        member_ids,
+        clip: false,
+    };
     Ok(JsValue::from(with_model(|m| {
         m.apply_mutation(&mutation).is_ok()
     })))

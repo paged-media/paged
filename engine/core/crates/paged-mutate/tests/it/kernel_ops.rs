@@ -1321,8 +1321,9 @@ fn paste_into_rejections_leave_the_document_untouched() {
     .expect_err("cycle");
     assert!(format!("{err:?}").contains("nest the container"), "{err:?}");
 
-    // Grouped child: a member of the fixture's first group can't be
-    // pasted into a frame without ungrouping first.
+    // Grouped child (engine ADR 1010): a member of the fixture's first
+    // group stands for its outermost group, which is what is pasted in —
+    // and the applied op says so. Its inverse puts the group back.
     let grouped_node = {
         let spread = &doc.spreads[0].spread;
         let grouped_ref = spread.groups[0].members[0];
@@ -1345,7 +1346,7 @@ fn paste_into_rejections_leave_the_document_untouched() {
         }
     };
     if let Some(grouped_node) = grouped_node {
-        let err = apply(
+        let applied = apply(
             &mut doc,
             &Operation::PasteInto {
                 container: NodeId::Rectangle("b18Host".to_string()),
@@ -1353,8 +1354,18 @@ fn paste_into_rejections_leave_the_document_untouched() {
                 child_index: None,
             },
         )
-        .expect_err("grouped child");
-        assert!(format!("{err:?}").contains("ungroup first"), "{err:?}");
+        .expect("a grouped child pastes its group");
+        assert!(
+            matches!(
+                &applied.op,
+                Operation::PasteInto {
+                    child: NodeId::Group(_),
+                    ..
+                }
+            ),
+            "{applied:?}"
+        );
+        apply(&mut doc, &applied.inverse).expect("release the group again");
     }
 
     // Untouched check: the child is nested exactly once from the one

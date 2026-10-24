@@ -431,8 +431,10 @@ function leavesOf(roots: readonly SceneTreeNode[]): ElementId[] {
   const out: ElementId[] = [];
   const walk = (nodes: readonly SceneTreeNode[]) => {
     for (const node of nodes) {
+      // A group is descended into; every other page item is a leaf, a
+      // frame holding pasted-in content (engine ADR 1010) included.
+      if (node.id && node.id.kind !== "group") out.push(node.id as ElementId);
       if (node.children && node.children.length > 0) walk(node.children);
-      else if (node.id) out.push(node.id as ElementId);
     }
   };
   walk(roots);
