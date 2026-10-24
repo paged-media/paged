@@ -20,6 +20,7 @@ mod c83_gradient_axis_read;
 mod caret_reads_effective_attributes;
 mod cell_style_undo;
 mod cell_text;
+mod clip_groups;
 mod color_settings;
 mod composition_part;
 mod content_gesture;

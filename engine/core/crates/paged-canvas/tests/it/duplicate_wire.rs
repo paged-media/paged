@@ -204,6 +204,7 @@ fn a_group_duplicates_as_one_minted_element_with_its_own_members() {
     let group = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: members.clone(),
+            clip: false,
         })
         .expect("group")
         .created_id

@@ -1073,12 +1073,42 @@ pub struct Group {
     /// [`Rectangle::corners`] and [`Group::corner_radius`].
     #[serde(default)]
     pub corners: [CornerSpec; 4],
+    /// Engine ADR 1010 — a **clip group** (Illustrator's clipping mask):
+    /// the TOP-most member (the last of `members`, which list bottom
+    /// first) is the clipping path and the members under it paint inside
+    /// its outline. The clipping path is geometry only: its own fill and
+    /// stroke are not painted while it clips. Only a Rectangle, Oval or
+    /// Polygon clips; with any other top member the flag is inert and
+    /// the group paints as a plain group.
+    ///
+    /// IDML has no clip group. The writer lowers one to InDesign's
+    /// paste-into: the clipping path becomes the container element (fill
+    /// and stroke `None`) with a `<Group>` of the other members inside,
+    /// which paints the same; the reader opens that as a container with
+    /// a pasted-in group. Skipped when false, so a document without clip
+    /// groups serialises (and hashes) as before the field existed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub clip: bool,
+}
+
+impl Group {
+    /// The member that clips the rest when [`Group::clip`] is set: the
+    /// top-most one, when it is a kind with a closed outline.
+    pub fn clip_member(&self) -> Option<FrameRef> {
+        if !self.clip {
+            return None;
+        }
+        match self.members.last()? {
+            r @ (FrameRef::Rectangle(_) | FrameRef::Oval(_) | FrameRef::Polygon(_)) => Some(*r),
+            _ => None,
+        }
+    }
 }
 
 /// Reference to one of a `Spread`'s page-item vecs. Carries the
 /// integer index back into the matching `Vec<...>` so the renderer
 /// can look up the frame's data without a name search.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FrameRef {
     TextFrame(usize),
     Rectangle(usize),

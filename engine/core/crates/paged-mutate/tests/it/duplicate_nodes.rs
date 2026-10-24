@@ -532,6 +532,7 @@ fn a_member_duplicated_inside_its_group_stays_in_that_group() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -836,6 +837,7 @@ fn an_element_named_with_its_own_group_is_refused() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )

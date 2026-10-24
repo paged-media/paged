@@ -1523,6 +1523,12 @@ pub enum PropertyPath {
     GroupIsolateBlending,
     /// `<Group>`'s `<BlendingSetting KnockoutGroup>`, `Value::Bool`.
     GroupKnockout,
+    /// Engine ADR 1010 — the group is a clip group: its top-most member
+    /// clips the others (`paged_model::Group::clip`), `Value::Bool`.
+    /// Setting it refuses a group whose top-most member is not a
+    /// Rectangle, Oval or Polygon, or hosts pasted-in content. No IDML
+    /// attribute: the writer lowers a clip group to paste-into.
+    GroupClip,
 
     // ---- R-11 — drop-shadow attributes and the global light -------
     /// `<DropShadowSetting BlendMode>`; `""` is InDesign's `Multiply`.
@@ -1948,6 +1954,7 @@ impl PropertyPath {
             PropertyPath::FrameContentBlendMode => "frame.contentBlendMode",
             PropertyPath::GroupIsolateBlending => "group.isolateBlending",
             PropertyPath::GroupKnockout => "group.knockout",
+            PropertyPath::GroupClip => "group.clip",
             PropertyPath::FrameDropShadowBlendMode => "frame.dropShadowBlendMode",
             PropertyPath::FrameDropShadowSpread => "frame.dropShadowSpread",
             PropertyPath::FrameDropShadowNoise => "frame.dropShadowNoise",
@@ -3150,6 +3157,14 @@ pub struct GroupSpec {
     /// BlendMode>`; see [`GroupSpec::opacity`].
     #[serde(default)]
     pub blend_mode: Option<String>,
+    /// Engine ADR 1010 — make the group a CLIP GROUP (Illustrator's
+    /// Make Clipping Mask): the top-most member clips the others and is
+    /// not painted itself. The top-most member must be a Rectangle, Oval
+    /// or Polygon that hosts no pasted-in content; anything else is
+    /// refused. Also what the `DissolveGroup` inverse carries, so undo of
+    /// an ungroup brings the clip back.
+    #[serde(default)]
+    pub clip: bool,
 }
 
 /// W1.20 — `(parent_group_id, index_within_parent_members)` carried by

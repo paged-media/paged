@@ -309,6 +309,26 @@ fn compose_matrix(a: &[f32; 6], b: &[f32; 6]) -> [f32; 6] {
 
 /// Accumulate a group-transform stack the way the parser does (outer
 /// groups apply first). `None` ⇒ no group carries a transform (identity).
+/// Engine ADR 1010 — [`accumulate_group_xforms`] over a stack that may
+/// hold a group pasted into a container. Such a group's members compose
+/// from the container's MODEL transform (which already folds everything
+/// above the container), not from the groups around the container:
+/// `bases` records, per pasted-in group open, the stack length at its
+/// open and the container's transform. The parser composes the same way
+/// (`effective_item_transform` over the container's raw transform), so an
+/// untouched member replays to its model value bit for bit.
+fn stack_accum(
+    stack: &[Option<[f32; 6]>],
+    bases: &[(usize, Option<[f32; 6]>)],
+) -> Option<[f32; 6]> {
+    match bases.last() {
+        None => accumulate_group_xforms(stack),
+        Some(&(at, base)) => {
+            compose_opt(base, accumulate_group_xforms(&stack[at.min(stack.len())..]))
+        }
+    }
+}
+
 fn accumulate_group_xforms(stack: &[Option<[f32; 6]>]) -> Option<[f32; 6]> {
     let mut acc: Option<[f32; 6]> = None;
     for g in stack {
@@ -2222,6 +2242,21 @@ fn group_transform_on_disk(
             .position(|g| g.members.contains(&idml_import::FrameRef::Group(i)))
     };
     let own = spread.groups[gi].item_transform;
+    // Engine ADR 1010: a group pasted into a container stores its frame
+    // in spread space, and IDML writes it relative to the container: the
+    // source spelling when it still composes to the model's frame (the
+    // reader composed exactly `container ∘ raw`), else the re-based one.
+    if let Some(host) = spread.nested_children.iter().find_map(|(h, c)| {
+        c.contains(&idml_import::FrameRef::Group(gi))
+            .then_some(h.as_str())
+    }) {
+        let host_tx = model_transform_of(spread, host);
+        let raw = attr_value(e, b"ItemTransform").and_then(|s| parse_matrix(&s));
+        if raw.is_some() && compose_opt(host_tx, raw) == own {
+            return Some(raw);
+        }
+        return Some(relative_to_parent(host_tx, own));
+    }
     let model_parent = parent_of(gi);
     if model_parent.and_then(|p| spread.groups[p].self_id.as_deref()) == enclosing {
         return Some(own);
@@ -2550,15 +2585,31 @@ fn write_new_group(
     let Some(self_id) = group.self_id.as_deref() else {
         return Ok(());
     };
+    // Engine ADR 1010: a group pasted into a container keeps its frame
+    // in spread space; it is written relative to the container, and its
+    // members relative to that frame.
+    let pasted_in = spread.nested_children.values().any(|c| {
+        c.iter().any(|r| {
+            nested_ref_self_id(spread, *r) == Some(self_id)
+                && matches!(r, idml_import::FrameRef::Group(_))
+        })
+    });
+    let (written, accum) = if pasted_in {
+        (
+            relative_to_parent(ancestor_accum, group.item_transform),
+            group.item_transform,
+        )
+    } else {
+        (
+            group.item_transform,
+            compose_opt(ancestor_accum, group.item_transform),
+        )
+    };
     let mut attrs = vec![
         ("Self", self_id.to_string()),
         (
             "ItemTransform",
-            format_matrix(
-                &group
-                    .item_transform
-                    .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
-            ),
+            format_matrix(&written.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])),
         ),
     ];
     push_item_name(&mut attrs, spread, self_id);
@@ -2575,7 +2626,6 @@ fn write_new_group(
     emit_start_with_attrs(writer, "Group", &attrs)?;
     // R-10 — the group's own setting, with how its members composite.
     write_group_transparency(writer, &group.transparency)?;
-    let accum = compose_opt(ancestor_accum, group.item_transform);
     for &m in &group.members {
         let Some(id) = nested_ref_self_id(spread, m) else {
             continue;
@@ -3299,6 +3349,10 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
     // `Self` per open SOURCE group, whether or not the model still knows
     // it — what a group's own `ItemTransform` is written relative to.
     let mut source_group_ids: Vec<Option<String>> = Vec::new();
+    // Engine ADR 1010: per open source `<Group>` the model pastes into a
+    // container, the stack length at its open and the container's model
+    // transform (see [`stack_accum`]).
+    let mut group_bases: Vec<(usize, Option<[f32; 6]>)> = Vec::new();
 
     // ---- plugin-metadata Label patching state ----
     // Element-name stack (depth tracking) + the innermost open page
@@ -3457,6 +3511,44 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                 // sits in the SOURCE (top level vs nested under an
                 // eligible container) against where the MODEL wants it
                 // (`nested_owner`).
+                // Engine ADR 1010: a `<Group>` takes part in the paste-into
+                // lanes like a frame does. Pasted into a container by the
+                // model (or into another one) it is dropped here and
+                // written inside the container at its close; released
+                // from one, it is dropped and written by the insert lane.
+                // Everywhere else a source group stays where it is.
+                if name_owned == b"Group" {
+                    if let Some(id) = attr_value(&e, b"Self") {
+                        let source_host: Option<String> = open_items
+                            .last()
+                            .filter(|it| it.eligible && it.groups_at_open == group_depth)
+                            .and_then(|it| it.self_id.clone());
+                        let model_host = nested_owner.get(id.as_str()).copied();
+                        let in_model = spread
+                            .groups
+                            .iter()
+                            .any(|g| g.self_id.as_deref() == Some(id.as_str()));
+                        match (source_host.as_deref(), model_host) {
+                            (Some(sh), Some(mh)) if sh == mh => {
+                                present_in
+                                    .entry(mh.to_string())
+                                    .or_default()
+                                    .insert(id.clone());
+                            }
+                            (_, Some(_)) => {
+                                remove_depth = depth;
+                                buf.clear();
+                                continue;
+                            }
+                            (Some(_), None) if in_model => {
+                                remove_depth = depth;
+                                buf.clear();
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 if ITEM_KINDS.contains(&name_owned.as_slice()) {
                     if let Some(id) = attr_value(&e, b"Self") {
                         let source_host: Option<String> = open_items
@@ -3572,7 +3664,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                     Some(tx) => Some(tx),
                     None => {
                         if group_depth > 0 {
-                            Some(accumulate_group_xforms(&group_xforms))
+                            Some(stack_accum(&group_xforms, &group_bases))
                         } else {
                             None
                         }
@@ -3605,6 +3697,11 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                     None => writer.write_event(Event::Start(e.clone().into_owned()))?,
                 }
                 if name_owned == b"Group" {
+                    if let Some(host) = attr_value(&e, b"Self")
+                        .and_then(|id| nested_owner.get(id.as_str()).copied())
+                    {
+                        group_bases.push((group_xforms.len(), model_transform_of(spread, host)));
+                    }
                     group_depth += 1;
                     // The transform the group is WRITTEN with — its
                     // members are written relative to that.
@@ -3832,7 +3929,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                     Some(tx) => Some(tx),
                     None => {
                         if group_depth > 0 {
-                            Some(accumulate_group_xforms(&group_xforms))
+                            Some(stack_accum(&group_xforms, &group_bases))
                         } else {
                             None
                         }
@@ -4081,6 +4178,11 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                 if name_owned == b"Group" {
                     group_depth = group_depth.saturating_sub(1);
                     let own_xform = group_xforms.pop().flatten();
+                    // The group's own base, if it opened one, still applies
+                    // to the flush below; it is dropped after it.
+                    let drop_base = group_bases
+                        .last()
+                        .is_some_and(|&(at, _)| at == group_xforms.len());
                     let gid = group_ids.pop().flatten();
                     source_group_ids.pop();
                     // C-19: an EXISTING group that gained members (a
@@ -4099,7 +4201,7 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                             // composed transform as WRITTEN — that is the
                             // element they are being written inside of.
                             let accum =
-                                compose_opt(accumulate_group_xforms(&group_xforms), own_xform);
+                                compose_opt(stack_accum(&group_xforms, &group_bases), own_xform);
                             let present = present_in_group.get(gid);
                             for &m in &g.members {
                                 let Some(mid) = nested_ref_self_id(spread, m) else {
@@ -4113,6 +4215,9 @@ pub fn rewrite_spread(original: &[u8], spread: &Spread) -> Result<Vec<u8>, quick
                                 write_new_item(&mut writer, spread, m, accum)?;
                             }
                         }
+                    }
+                    if drop_base {
+                        group_bases.pop();
                     }
                 }
                 depth = depth.saturating_sub(1);
@@ -9176,6 +9281,7 @@ mod tests {
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            clip: false,
         }
     }
 

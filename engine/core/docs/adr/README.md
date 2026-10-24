@@ -147,6 +147,7 @@ is not written yet.
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24 |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
+| [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
