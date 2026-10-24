@@ -73,6 +73,9 @@ import {
   useCollectionOpOffered,
   useProvidedCollection,
   useProviderFirstMutate,
+  useBindingProviderHost,
+  useProviderProperty,
+  writeSelectionProperty,
 } from "@paged-media/shell";
 
 import type {
@@ -108,6 +111,10 @@ const M = defineMessages("app.swatchesPanel", {
 
 export const SWATCHES_PANEL_ID = "paged.swatches";
 
+/** The selection, as a provider target (module-level: the hook keys on
+ *  it). */
+const SELECTION = { kind: "selection", scope: "element" } as const;
+
 function SwatchCollection() {
   const strings = useStrings();
   // The ONE declaration the ADR turns on, twice: two CORE collection
@@ -122,6 +129,23 @@ function SwatchCollection() {
 
   const mutate = useProviderFirstMutate();
   const active = useActiveBindingProviders();
+  // WP4.10 — when an edit context OWNS the selection's fill (paged.image:
+  // the foreground colour), a click on a swatch applies it there — Alt to
+  // the stroke well (the background) — the way Photoshop's Swatches panel
+  // sets the foreground. Over core the rows keep their behaviour; the
+  // composition's fill select applies to page items as before.
+  const fillOwner = useProviderProperty("frameFillColor", SELECTION);
+  const providerHost = useBindingProviderHost();
+  const applyToOwner =
+    fillOwner.source === "provider" && providerHost
+      ? (swatchId: string, alt: boolean) =>
+          void writeSelectionProperty(
+            providerHost,
+            alt ? "frameStrokeColor" : "frameFillColor",
+            "element",
+            { type: "colorRef", value: swatchId },
+          )
+      : undefined;
 
   // ------------------------------------------------------- capability
   //
@@ -251,6 +275,7 @@ function SwatchCollection() {
           canEdit={canEdit}
           canDelete={canDelete}
           canAssignGroup={canAssignGroup}
+          onApply={applyToOwner}
         />
       ))}
     </ul>

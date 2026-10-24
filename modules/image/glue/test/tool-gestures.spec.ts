@@ -499,3 +499,60 @@ describe("IMG-2 — Escape cancels the gesture (INV-2)", () => {
     k.dispose();
   });
 });
+
+// WP4.10 — the Eyedropper and Color Sampler tools. The frame is 200×100 pt
+// over 4×2 px (50 pt per pixel): columns 0–1 red, 2–3 blue.
+describe("colour tools [editor-shell.raster-color-binding]", () => {
+  const rgb255 = (c: readonly number[] | null | undefined) =>
+    c ? c.slice(0, 3).map((v) => Math.round(v * 255)) : null;
+
+  it("eyedropper: press takes the foreground, Alt the background, a drag follows the pointer", async () => {
+    covers("tool:media.paged.image.tool.eyedropper");
+    const k = await ingested();
+    const g = gestures(k.toolTarget);
+    await g.tool(`${T}.eyedropper`).settle().click([125, 25]).settle();
+    expect(rgb255(k.session.state().colors.fg)).toEqual([0, 0, 200]);
+    await g.click([25, 25], { mods: ["alt"] }).settle();
+    expect(rgb255(k.session.state().colors.bg)).toEqual([200, 0, 0]);
+    // A drag keeps sampling: it ends on the colour under the release.
+    await g.drag({ from: [25, 75], to: [175, 75] }).settle();
+    expect(rgb255(k.session.state().colors.fg)).toEqual([0, 0, 200]);
+    // Sampling is not a document edit.
+    expect(k.docOps()).toEqual([]);
+    k.dispose();
+  });
+
+  it("eyedropper: the sample size averages the window around the point", async () => {
+    covers("tool:media.paged.image.tool.eyedropper");
+    const k = await ingested();
+    k.session.setEyedropperOptions({ size: 5 });
+    await gestures(k.toolTarget)
+      .tool(`${T}.eyedropper`)
+      .settle()
+      .click([75, 25])
+      .settle();
+    // 5×5 around pixel (1, 0) clips to columns 0–3: half red, half blue.
+    expect(rgb255(k.session.state().colors.fg)).toEqual([100, 0, 100]);
+    k.dispose();
+  });
+
+  it("color sampler: clicks place numbered samplers, a drag moves one, Alt-click removes it", async () => {
+    covers("tool:media.paged.image.tool.colorSampler");
+    const k = await ingested();
+    const g = gestures(k.toolTarget);
+    await g.tool(`${T}.colorSampler`).settle().click([25, 25]).settle();
+    await g.click([175, 75]).settle();
+    const read = () =>
+      k.session.state().samplers.map((s) => [s.id, s.at, rgb255(s.colour)]);
+    expect(read()).toEqual([
+      [1, [0, 0], [200, 0, 0]],
+      [2, [3, 1], [0, 0, 200]],
+    ]);
+    await g.drag({ from: [25, 25], to: [125, 25] }).settle();
+    expect(read()[0]).toEqual([1, [2, 0], [0, 0, 200]]);
+    await g.click([125, 25], { mods: ["alt"] }).settle();
+    expect(read()).toEqual([[2, [3, 1], [0, 0, 200]]]);
+    expect(k.docOps()).toEqual([]);
+    k.dispose();
+  });
+});

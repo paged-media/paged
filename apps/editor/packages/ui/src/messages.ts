@@ -39,6 +39,8 @@ export const COLOR = defineMessages("ui.color", {
   brightness: "Brightness",
   gray: "Gray",
   outOfGamut: "Out of gamut for the document's CMYK working space",
+  naiveCmyk:
+    "CMYK of an RGB colour by a simple conversion, not the document's colour settings",
   mixedSelection: "Mixed selection",
   tint: "Tint (%)",
   apply: "Apply",

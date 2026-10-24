@@ -308,6 +308,68 @@ export function changesTheDocument(msg: WorkerToMain): boolean {
   }
 }
 
+/** What an undo group became (`CanvasClient.endUndoGroup`). */
+export interface UndoGroupResult {
+  /** Undo steps the group's writes ended in: 1 when nothing came between
+   *  them, more when a gesture or an undo broke the chain, 0 when none of
+   *  them applied. */
+  steps: number;
+  /** Writes that applied. */
+  writes: number;
+  /** Of those, the ones that joined an existing step. */
+  joined: number;
+  /** The step the group ended in (`appliedSeq`), or null. */
+  lastSeq: number | null;
+}
+
+/** The bookkeeping of one open undo group. */
+class UndoGroupState {
+  steps = 0;
+  writes = 0;
+  joined = 0;
+  private chain: Promise<unknown> = Promise.resolve();
+
+  constructor(public seq: number | null) {}
+
+  /** Run `send` after the group's previous write settled, with the step
+   *  to join (null: none). A refused amend is retried as a write of its
+   *  own; the step it ends in is the one the next write joins. */
+  serial(
+    send: (seq: number | null) => Promise<WorkerToMain>,
+  ): Promise<WorkerToMain> {
+    const run = async (): Promise<WorkerToMain> => {
+      const joining = this.seq;
+      let reply = await send(joining);
+      if (
+        joining !== null &&
+        reply.kind === "mutationFailed" &&
+        reply.payload.error.kind === "notAmendable"
+      ) {
+        this.seq = null;
+        reply = await send(null);
+        return this.note(reply, false);
+      }
+      return this.note(reply, joining !== null);
+    };
+    const next = this.chain.then(run, run);
+    this.chain = next.catch(() => undefined);
+    return next;
+  }
+
+  private note(reply: WorkerToMain, amended: boolean): WorkerToMain {
+    if (reply.kind !== "mutationApplied") return reply;
+    this.writes += 1;
+    if (amended) this.joined += 1;
+    else this.steps += 1;
+    this.seq = reply.payload.appliedSeq;
+    return reply;
+  }
+
+  settled(): Promise<unknown> {
+    return this.chain;
+  }
+}
+
 export class CanvasClient {
   private readonly worker: Worker;
   /** The selection last posted (`setSelection`); `documentStats` posts it
@@ -364,6 +426,8 @@ export class CanvasClient {
   private openDocId: string | null = null;
   /** The load in flight, if any. */
   private loading: Promise<unknown> | null = null;
+  /** WP4.11 — the open undo group, if any (see {@link beginUndoGroup}). */
+  private undoGroup: UndoGroupState | null = null;
 
   constructor(options: CanvasClientOptions) {
     this.defaultFontProvider = options.defaultFontProvider;
@@ -395,6 +459,22 @@ export class CanvasClient {
    * notifications and flow through `subscribe(...)` instead.
    */
   async send(kind: MainToWorkerKind): Promise<WorkerToMain> {
+    const group = this.undoGroup;
+    if (group) {
+      if (kind.kind === "mutate") {
+        return group.serial((seq) =>
+          seq === null
+            ? this.post(kind)
+            : this.post({
+                kind: "amendMutation",
+                payload: { appliedSeq: seq, mutation: kind.payload },
+              }),
+        );
+      }
+      // An undo or a redo ends the chain: the engine would refuse the
+      // next amend anyway (ADR 1004), and the step after it is new.
+      if (kind.kind === "undo" || kind.kind === "redo") group.seq = null;
+    }
     if (kind.kind === "loadDocument" || kind.kind === "newBlankDocument") {
       return this.replacingDocument(
         () => this.post(kind),
@@ -422,6 +502,50 @@ export class CanvasClient {
     });
     this.worker.postMessage({ kind: "channel", msg: envelope });
     return promise;
+  }
+
+  /**
+   * WP4.11 — group the document writes that follow into ONE undo step,
+   * until {@link endUndoGroup}. The first `mutate` (or `mutateWithBytes`)
+   * in the group commits as usual; every later one is sent as the engine's
+   * `amendMutation` into that step (engine ADR 1004), so one Cmd-Z
+   * reverts them all. The group's writes are serialised, which is what
+   * lets each one name the step the previous one ended in.
+   *
+   * Something that makes its own undo step in between — a canvas gesture,
+   * a script run, an undo — moves the step the group holds off the top of
+   * the history; the engine then refuses the amend (`notAmendable`), and
+   * the write starts a new step instead. Nothing is lost and nothing is
+   * hidden: {@link endUndoGroup} reports how many steps the group became.
+   *
+   * `continueSeq` re-opens a chain a previous group ended in (a paused
+   * action resuming): the first write tries to join it and, refused,
+   * starts a step of its own. A group does not nest: beginning one while
+   * one is open keeps the open one.
+   */
+  beginUndoGroup(options: { continueSeq?: number | null } = {}): void {
+    if (this.undoGroup) return;
+    this.undoGroup = new UndoGroupState(options.continueSeq ?? null);
+  }
+
+  /** Close the group {@link beginUndoGroup} opened, once its writes have
+   *  settled, and say what it became. `null` when none was open. */
+  async endUndoGroup(): Promise<UndoGroupResult | null> {
+    const group = this.undoGroup;
+    if (!group) return null;
+    this.undoGroup = null;
+    await group.settled();
+    return {
+      steps: group.steps,
+      writes: group.writes,
+      joined: group.joined,
+      lastSeq: group.seq,
+    };
+  }
+
+  /** Is an undo group open? */
+  get undoGroupOpen(): boolean {
+    return this.undoGroup !== null;
   }
 
   /** Subscribe to unsolicited worker → main notifications. */
@@ -1588,6 +1712,21 @@ export class CanvasClient {
     bytes: Uint8Array,
     transfer = false,
   ): Promise<WorkerToMain> {
+    const group = this.undoGroup;
+    if (group) {
+      return group.serial((seq) =>
+        seq === null
+          ? this.postDirect(
+              {
+                op: "mutateWithBytes",
+                mutationJson: JSON.stringify(mutation),
+                bytes,
+              },
+              transfer ? transferable([bytes]) : [],
+            )
+          : this.amendWithBytes(seq, mutation, bytes, transfer),
+      );
+    }
     return this.postDirect(
       { op: "mutateWithBytes", mutationJson: JSON.stringify(mutation), bytes },
       transfer ? transferable([bytes]) : [],

@@ -42,6 +42,7 @@ import { NumberInput } from "../inputs/NumberInput";
 import {
   defaultValue,
   hexToRgb,
+  rgbInSpace,
   SPACE_CHANNELS,
   valueToSwatchSpec,
   type MixerValue,
@@ -125,11 +126,21 @@ export function ColorMixer(props: ColorMixerProps) {
       return rgbToHsb(rgb);
     }
     if (tab === value.space) return value.value;
-    // Tab differs from the canonical space (user is switching) —
-    // seed from the computed display RGB where possible.
-    if (tab === "RGB") return hexToRgb(compute.rgbHex) ?? defaultValue("RGB");
-    return defaultValue(tab);
-  }, [value, tab, channels, compute.rgbHex]);
+    // Tab differs from the canonical space: show THIS colour in the tab's
+    // space (WP4.10), from the canonical RGB when it is RGB, else from the
+    // engine's display RGB (and its CMYK when the value has one).
+    const rgb = value.space === "RGB" ? value.value : hexToRgb(compute.rgbHex);
+    if (!rgb) return defaultValue(tab);
+    return rgbInSpace(rgb, tab, value.space === "RGB" ? null : compute.cmyk);
+  }, [value, tab, channels, compute.rgbHex, compute.cmyk]);
+  // The CMYK field of an RGB colour is the naive conversion (see
+  // `rgbInSpace`); the field says so rather than passing for the
+  // document's separation.
+  const naiveCmyk =
+    tab === "CMYK" &&
+    value !== null &&
+    value.space !== "CMYK" &&
+    !(value.space !== "RGB" && compute.cmyk);
 
   const emit = (next: MixerValue, phase: "change" | "commit") => {
     if (phase === "change") onChange?.(next);
@@ -281,6 +292,23 @@ export function ColorMixer(props: ColorMixerProps) {
           )}
         </div>
       ))}
+
+      {naiveCmyk && (
+        <div
+          data-mixer-naive-cmyk
+          style={{ fontSize: 10, opacity: 0.65, lineHeight: 1.3 }}
+        >
+          {strings.t(COLOR.naiveCmyk)}
+        </div>
+      )}
+      {compute.outOfGamut && !mixed && (
+        <div
+          data-mixer-gamut-note
+          style={{ fontSize: 10, color: "var(--status-review)" }}
+        >
+          {strings.t(COLOR.outOfGamut)}
+        </div>
+      )}
 
       {/* Hex (RGB convenience) */}
       <div style={channelRow}>
