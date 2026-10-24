@@ -21,7 +21,6 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [606](606-skeleton-is-a-native-document.md) | The standalone-open skeleton is a native document built with the engine's model crates | Accepted 2026-10-19 |
 | [607](607-the-ooxml-foundation-is-shared.md) | The OOXML foundation is one shared crate, and every package read has a memory budget | Accepted 2026-10-19 |
 | [608](608-word-inside-paged-the-editing-model.md) | Word inside paged: the editing model (amends 603: no frame surface) | Accepted 2026-10-24 |
-
 | [617](617-pagination-policy.md) | Pagination policy: Word's rules, the engine's first-fit composer | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
