@@ -692,6 +692,16 @@ an unknown path (an outcome) and reads no row. paged.draw's SVG importer
 asks it before choosing between writing the rule and re-winding the
 contours for non-zero.
 
+`"document.clipGroups@1"` (engine ADR 1010) says the vendored wire
+carries clip groups — `createGroup { memberIds, clip: true }`, whose
+top-most member clips the rest and paints nothing, and the `groupClip`
+path — that `pasteInto` / `releaseFrom` take a group (a grouped item
+stands for its outermost group), and that `tree()` lists a frame's
+pasted-in children under it, a clip group's row marked `clip: true`.
+Additive at protocol 76 like the fill rule: an older engine makes a plain
+group of `clip: true` and refuses a group child. paged.draw's clipped
+repeat asks it before choosing a clip group over paste-into.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers
