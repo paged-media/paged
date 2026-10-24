@@ -97,6 +97,7 @@ fn anchor_at(point: (f32, f32)) -> GestureAnchor {
         page_id: paged_renderer::PageId("p1".into()),
         point_in_page: point,
         pivot_in_page: None,
+        shear_axis: None,
     }
 }
 
@@ -231,4 +232,54 @@ fn shear_without_anchor_is_rejected() {
         matches!(err, GestureError::MissingAnchor),
         "expected MissingAnchor, got {err:?}"
     );
+}
+
+/// Free Transform (editor ADR 293) — `shearAxis: "y"` slants along y.
+/// Grab the RIGHT edge midpoint (300, 200) of tf1 [100,100,300,300],
+/// pivot the LEFT edge midpoint (100, 200) — the opposite side, as a
+/// side handle of the box passes it: lever = 300 − 100 = 200. Drag +50
+/// in y → k = 0.25; the pivot side stays and the grabbed side follows.
+#[test]
+#[allow(non_snake_case)]
+fn shear_y_axis_slants_vertically_about_the_pivot__feat__editor_tools_free_transform() {
+    let mut m = model();
+    let before = tf_transform(&m, "tf1");
+    let anchor = GestureAnchor {
+        page_id: paged_renderer::PageId("p1".into()),
+        point_in_page: (300.0, 200.0),
+        pivot_in_page: Some((100.0, 200.0)),
+        shear_axis: Some(paged_canvas::ShearAxis::Y),
+    };
+    let h = m
+        .begin_gesture(
+            vec![ElementId::TextFrame("tf1".into())],
+            GestureType::Shear,
+            Some(anchor),
+        )
+        .expect("begin");
+    // The x component of the drag is ignored on the Y axis.
+    m.update_gesture(h, (30.0, 50.0), GestureModifiers::default())
+        .expect("update");
+    m.commit_gesture(h).expect("commit");
+    let mt = tf_transform(&m, "tf1").expect("transform present");
+    let k = 0.25_f32;
+    // Identity composed with y-shear k: [1, k, 0, 1, 0, −k·pivot.x].
+    assert!((mt[0] - 1.0).abs() < 1e-3, "a={}", mt[0]);
+    assert!((mt[1] - k).abs() < 1e-3, "b={}", mt[1]);
+    assert!(mt[2].abs() < 1e-3, "c={}", mt[2]);
+    assert!((mt[3] - 1.0).abs() < 1e-3, "d={}", mt[3]);
+    let map = |x: f32, y: f32| (mt[0] * x + mt[2] * y + mt[4], mt[1] * x + mt[3] * y + mt[5]);
+    let (px, py) = map(100.0, 200.0);
+    assert!(
+        (px - 100.0).abs() < 1e-2 && (py - 200.0).abs() < 1e-2,
+        "pivot moved to ({px}, {py})"
+    );
+    let (gx, gy) = map(300.0, 200.0);
+    assert!((gx - 300.0).abs() < 1e-2, "x is untouched: {gx}");
+    assert!(
+        (gy - 250.0).abs() < 1e-2,
+        "the grabbed side followed the pointer: {gy}"
+    );
+    m.undo().expect("undo");
+    assert_eq!(tf_transform(&m, "tf1"), before, "one undo step restores it");
 }

@@ -769,6 +769,7 @@ mod tests {
             modifiers: GestureModifiers::default(),
             anchor_spread: None,
             pivot_spread: None,
+            shear_axis: crate::gesture::ShearAxis::X,
             camera_scale: None,
             scale_frame: None,
             group_frames: std::collections::HashMap::new(),
