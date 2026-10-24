@@ -66,6 +66,7 @@ import {
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
+import { RecipeAutoUpdateToggle } from "./recipe-auto-update-toggle";
 import { PanelIntro } from "./panel-parts";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
@@ -211,6 +212,7 @@ export function makeLivePaintPanel(host: BundleHost): {
           summary={s.t(LIVE_PAINT_SUMMARY)}
           attr="data-draw-live-paint-intro"
         />
+        <RecipeAutoUpdateToggle host={host} panel="live-paint" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             {s.t(M.heading)} ({groups.length})

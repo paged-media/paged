@@ -22,6 +22,8 @@
 //! `xmlns:w` decl on the root element (copied verbatim in the surrounding bytes).
 
 use docx_core::{Justification, ParaProps, RunProps, VertAlign, LINE_BREAK, SOFT_HYPHEN};
+
+use crate::edit::RunFormat;
 use quick_xml::escape::escape;
 
 /// Word's element for a NEW character of the kinds the import reads from a
@@ -311,6 +313,171 @@ pub fn render_table_row(cells: &[String]) -> Vec<u8> {
 /// Emit a boolean toggle property: `Some(true)` ⇒ `<w:NAME/>`, `Some(false)` ⇒
 /// `<w:NAME w:val="false"/>`, `None` ⇒ omitted (inherit). Matches the `on()`
 /// reading in `docx-import` (absent `w:val` ⇒ true).
+/// `CT_RPr`'s children in schema order (the place a new one goes).
+const RPR_ORDER: &[&str] = &[
+    "rStyle",
+    "rFonts",
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "caps",
+    "smallCaps",
+    "strike",
+    "dstrike",
+    "outline",
+    "shadow",
+    "emboss",
+    "imprint",
+    "noProof",
+    "snapToGrid",
+    "vanish",
+    "webHidden",
+    "color",
+    "spacing",
+    "w",
+    "kern",
+    "position",
+    "sz",
+    "szCs",
+    "highlight",
+    "u",
+    "effect",
+    "bdr",
+    "shd",
+    "fitText",
+    "vertAlign",
+    "rtl",
+    "cs",
+    "em",
+    "lang",
+    "eastAsianLayout",
+    "specVanish",
+    "oMath",
+    "rPrChange",
+];
+
+/// The `<w:rPr>` children of what differs between two looks: per changed
+/// property, its element name and its new element (`None`: the new look
+/// does not set it, so the element goes).
+fn changed_elements(from: &RunFormat, to: &RunFormat) -> Vec<(&'static str, Option<String>)> {
+    let mut out: Vec<(&'static str, Option<String>)> = Vec::new();
+    let one = |props: &RunProps, rstyle: Option<&str>| -> Option<String> {
+        let bytes = render_rpr(props, rstyle);
+        let s = String::from_utf8(bytes).unwrap_or_default();
+        let inner = s
+            .strip_prefix("<w:rPr>")
+            .and_then(|r| r.strip_suffix("</w:rPr>"))
+            .unwrap_or("");
+        (!inner.is_empty()).then(|| inner.to_string())
+    };
+    let (a, b) = (&from.props, &to.props);
+    if from.rstyle != to.rstyle {
+        out.push(("rStyle", one(&RunProps::default(), to.rstyle.as_deref())));
+    }
+    macro_rules! field {
+        ($f:ident, $name:literal) => {
+            if a.$f != b.$f {
+                let props = RunProps {
+                    $f: b.$f.clone(),
+                    ..RunProps::default()
+                };
+                out.push(($name, one(&props, None)));
+            }
+        };
+    }
+    field!(font, "rFonts");
+    field!(bold, "b");
+    field!(italic, "i");
+    field!(caps, "caps");
+    field!(small_caps, "smallCaps");
+    field!(strike, "strike");
+    field!(color, "color");
+    field!(baseline_half_pts, "position");
+    field!(size_half_pts, "sz");
+    field!(underline, "u");
+    field!(vert_align, "vertAlign");
+    out
+}
+
+/// A run's `<w:rPr>` with only what differs between its look `from` and
+/// the look `to` rewritten: each changed property's element replaced (or
+/// added at its schema place, or removed when `to` does not set it), every
+/// other child — and the element's own tag — byte for byte. `original` is
+/// the run's `<w:rPr>` element (`None`: it has none). `None` when nothing
+/// differs, so the run keeps what it has.
+pub fn merge_rpr(original: Option<&[u8]>, from: &RunFormat, to: &RunFormat) -> Option<Vec<u8>> {
+    use quick_xml::events::Event;
+    use quick_xml::Reader;
+    let changed = changed_elements(from, to);
+    if changed.is_empty() {
+        return None;
+    }
+    let rank = |n: &[u8]| RPR_ORDER.iter().position(|o| o.as_bytes() == n);
+    // The original's open and close tags and its children, as bytes.
+    let (mut open, mut close) = (b"<w:rPr>".to_vec(), b"</w:rPr>".to_vec());
+    let mut kids: Vec<(Vec<u8>, &[u8])> = Vec::new();
+    if let Some(src) = original {
+        let mut r = Reader::from_reader(src);
+        r.config_mut().trim_text(false);
+        let mut depth = 0usize;
+        loop {
+            let start = r.buffer_position() as usize;
+            match r.read_event() {
+                Ok(Event::Start(e)) if depth == 0 => {
+                    open = src[start..r.buffer_position() as usize].to_vec();
+                    close =
+                        format!("</{}>", String::from_utf8_lossy(e.name().as_ref())).into_bytes();
+                    depth = 1;
+                }
+                Ok(Event::Empty(e)) if depth == 0 => {
+                    let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
+                    let tag = &src[start..r.buffer_position() as usize];
+                    let tag = tag.strip_suffix(b"/>").unwrap_or(tag);
+                    let mut o = tag.strip_suffix(b" ").unwrap_or(tag).to_vec();
+                    o.push(b'>');
+                    open = o;
+                    close = format!("</{name}>").into_bytes();
+                    break;
+                }
+                Ok(Event::Start(e)) => {
+                    let name = e.name().as_ref().to_vec();
+                    let _ = r.read_to_end(quick_xml::name::QName(&name));
+                    let ln = paged_ooxml::xml::local_name(&name).to_vec();
+                    kids.push((ln, &src[start..r.buffer_position() as usize]));
+                }
+                Ok(Event::Empty(e)) => {
+                    let ln = paged_ooxml::xml::local_name(e.name().as_ref()).to_vec();
+                    kids.push((ln, &src[start..r.buffer_position() as usize]));
+                }
+                Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    }
+    let gone = |n: &[u8]| changed.iter().any(|(c, _)| c.as_bytes() == n);
+    let mut fresh: Vec<(usize, String)> = changed
+        .iter()
+        .filter_map(|(name, el)| Some((rank(name.as_bytes())?, el.clone()?)))
+        .collect();
+    fresh.sort_by_key(|(r, _)| *r);
+    let mut fresh = fresh.into_iter().peekable();
+    let mut out = open;
+    for (ln, bytes) in kids.iter().filter(|(ln, _)| !gone(ln)) {
+        if let Some(r) = rank(ln) {
+            while let Some((_, el)) = fresh.next_if(|(fr, _)| *fr < r) {
+                out.extend_from_slice(el.as_bytes());
+            }
+        }
+        out.extend_from_slice(bytes);
+    }
+    for (_, el) in fresh {
+        out.extend_from_slice(el.as_bytes());
+    }
+    out.extend_from_slice(&close);
+    Some(out)
+}
+
 fn toggle(s: &mut String, name: &str, v: Option<bool>) {
     match v {
         Some(true) => s.push_str(&format!("<w:{name}/>")),
@@ -322,6 +489,65 @@ fn toggle(s: &mut String, name: &str, v: Option<bool>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn look(f: impl FnOnce(&mut RunProps)) -> RunFormat {
+        let mut props = RunProps::default();
+        f(&mut props);
+        RunFormat {
+            props,
+            rstyle: None,
+        }
+    }
+
+    #[test]
+    fn merge_rewrites_only_what_changed_and_keeps_the_rest() {
+        let src = br#"<w:rPr w:rsidR="1"><w:rFonts w:ascii="A" w:eastAsia="B"/><w:sz w:val="20"/><w:lang w:val="de-AT"/></w:rPr>"#;
+        let from = look(|p| {
+            p.font = Some("A".into());
+            p.size_half_pts = Some(20);
+        });
+        // Bold added: placed after rFonts, everything else verbatim.
+        let mut to = from.clone();
+        to.props.bold = Some(true);
+        let out = String::from_utf8(merge_rpr(Some(src), &from, &to).unwrap()).unwrap();
+        assert_eq!(
+            out,
+            r#"<w:rPr w:rsidR="1"><w:rFonts w:ascii="A" w:eastAsia="B"/><w:b/><w:sz w:val="20"/><w:lang w:val="de-AT"/></w:rPr>"#
+        );
+        // Size changed, a style set: replaced in place, rStyle first.
+        let mut to = from.clone();
+        to.props.size_half_pts = Some(28);
+        to.rstyle = Some("Strong".into());
+        let out = String::from_utf8(merge_rpr(Some(src), &from, &to).unwrap()).unwrap();
+        assert_eq!(
+            out,
+            r#"<w:rPr w:rsidR="1"><w:rStyle w:val="Strong"/><w:rFonts w:ascii="A" w:eastAsia="B"/><w:sz w:val="28"/><w:lang w:val="de-AT"/></w:rPr>"#
+        );
+        // A property the new look does not set goes; nothing else does.
+        let mut to = from.clone();
+        to.props.size_half_pts = None;
+        let out = String::from_utf8(merge_rpr(Some(src), &from, &to).unwrap()).unwrap();
+        assert!(!out.contains("w:sz"), "{out}");
+        assert!(out.contains("w:lang"), "{out}");
+        // No change: nothing to write.
+        assert!(merge_rpr(Some(src), &from, &from).is_none());
+        // A run with no rPr gets one with just the change.
+        let out = merge_rpr(
+            None,
+            &RunFormat::default(),
+            &look(|p| p.italic = Some(true)),
+        )
+        .unwrap();
+        assert_eq!(out, b"<w:rPr><w:i/></w:rPr>");
+        // An empty `<w:rPr/>` opens under its own name.
+        let out = merge_rpr(
+            Some(b"<w:rPr/>"),
+            &RunFormat::default(),
+            &look(|p| p.bold = Some(true)),
+        )
+        .unwrap();
+        assert_eq!(out, b"<w:rPr><w:b/></w:rPr>");
+    }
 
     #[test]
     fn wt_line_breaks_become_w_br() {

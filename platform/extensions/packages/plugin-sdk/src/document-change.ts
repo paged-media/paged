@@ -27,7 +27,9 @@
 //   gestureCommitted  a canvas gesture (a frame dragged, resized, rotated by
 //                     its handles) committed on the engine — not a mutation
 //   scriptResult      a `paged.*` script finished; it wrote through the model
-//                     without a `mutationApplied`
+//                     without a `mutationApplied`. Its writes are one undo
+//                     step, which the reply names (`appliedSeq`) while it
+//                     can still be amended (engine ADR 1004 amendment)
 //
 // Since engine 0.71.13 (core ADR 159) two of those replies say more, and
 // this file keys off PRESENCE, never off a version: a gesture that resized
@@ -74,14 +76,20 @@ export function documentChangeOf(
     case "redoApplied":
       return { kind: msg.kind, pageIds: [...(msg.payload.pageIds ?? [])] };
     case "scriptResult": {
-      const { writes, pageIds } = msg.payload;
+      const { writes, pageIds, appliedSeq } = msg.payload;
       // The script committed nothing of its own: it only read. (Writes the
       // host made answering it were `mutationApplied`s of their own.)
       if (writes === 0) return null;
       // The pages its writes changed; empty is a write no page draws (a
       // label), which still changed the document.
       if (typeof writes === "number" && Array.isArray(pageIds)) {
-        return { kind: msg.kind, pageIds: [...pageIds] };
+        // Engine ADR 1004 amendment — a run is one undo step, and the reply
+        // names it while a follow-up write may still join it.
+        return {
+          kind: msg.kind,
+          pageIds: [...pageIds],
+          ...(typeof appliedSeq === "number" ? { appliedSeq } : {}),
+        };
       }
       // An older engine (or no document): neither the pages nor whether it
       // wrote is known, so every page may have changed.

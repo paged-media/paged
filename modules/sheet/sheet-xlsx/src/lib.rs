@@ -951,6 +951,11 @@ impl XlsxDocument {
         let part = self.workbook_part.clone();
         self.set_part_bytes(&part, out);
         self.chart_style = style;
+        // Every chart shows the default where it does not override it, so
+        // each is written again with the colours it now draws.
+        for c in self.charts.iter_mut() {
+            c.dirty = true;
+        }
         Ok(())
     }
 

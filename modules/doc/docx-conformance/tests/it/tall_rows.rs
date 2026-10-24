@@ -76,6 +76,7 @@ fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
         runs: vec![RunContentIn {
             text: text.to_string(),
             character_style: None,
+            ..Default::default()
         }],
     };
     // What the editor reads back: before, the flowed paragraphs, after

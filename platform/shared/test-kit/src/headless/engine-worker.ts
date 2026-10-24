@@ -301,6 +301,16 @@ export function createEngineWorker(
             m["bytes"] as Uint8Array,
           ),
         );
+      case "amendWithBytes":
+        if (!engine.amendWithBytesDirect) return missing();
+        return settleJson(
+          engine.amendWithBytesDirect(
+            seq,
+            m["appliedSeq"] as number,
+            m["mutationJson"] as string,
+            m["bytes"] as Uint8Array,
+          ),
+        );
       case "readPagedPart":
         if (!engine.readPagedPartDirect) return missing();
         return postBack({

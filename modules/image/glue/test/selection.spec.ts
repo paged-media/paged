@@ -81,6 +81,34 @@ async function ingest() {
   return { fake, handle, session, machine: session.selectionMachine()! };
 }
 
+/** A `w`×`h` 8-bit RGB PSD (RAW), every pixel (10, 30, 50) → (20, 40,
+ *  60) left to right, as `psdBytes` at another size. */
+function rgbPsd(w: number, h: number): Uint8Array {
+  const b: number[] = [];
+  const u16 = (v: number) => b.push((v >> 8) & 0xff, v & 0xff);
+  const u32 = (v: number) =>
+    b.push((v >>> 24) & 0xff, (v >>> 16) & 0xff, (v >>> 8) & 0xff, v & 0xff);
+  b.push(0x38, 0x42, 0x50, 0x53, 0, 1, 0, 0, 0, 0, 0, 0);
+  u16(3);
+  u32(h);
+  u32(w);
+  u16(8);
+  u16(3);
+  u32(0);
+  u32(0);
+  u32(0);
+  u16(0);
+  for (const [lo, hi] of [
+    [10, 20],
+    [30, 40],
+    [50, 60],
+  ])
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++)
+        b.push(Math.round(lo! + ((hi! - lo!) * x) / Math.max(w - 1, 1)));
+  return Uint8Array.from(b);
+}
+
 /** A minimal canvas pointer event at a page-local point. */
 function ev(
   pagePoint: [number, number],
@@ -165,18 +193,20 @@ describe("the session selection surface (real engine wasm)", () => {
     expect(session.liveSelection("u3")).toMatchObject({
       refused: expect.stringMatching(/no selection was made on u3/),
     });
-    // u1 opens again: its live selection (none) is the one that counts.
+    // u1 opens again: the selection it kept is its live selection again.
     fake.emitSelection([{ kind: "rectangle", id: "u1" }]);
     expect(await session.ingestSelection()).toBe(true);
     expect(session.liveSelection("u1")).toEqual({
-      refused: "nothing is selected in the editor",
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([255, 255]),
     });
+    expect(session.state().selection).toMatchObject({ w: 2, h: 1 });
     // u2 closed without a selection: none kept.
     expect(session.liveSelection("u2")).toMatchObject({
       refused: expect.stringMatching(/no selection was made on u2/),
     });
     // A kept selection does not outlive its document.
-    expect(session.selectAll()).toBe(true);
     fake.emitSelection([{ kind: "rectangle", id: "u2" }]);
     expect(await session.ingestSelection()).toBe(true);
     expect(session.liveSelection("u1")).toMatchObject({ width: 2 });
@@ -184,6 +214,68 @@ describe("the session selection surface (real engine wasm)", () => {
     expect(session.liveSelection("u1")).toMatchObject({
       refused: expect.stringMatching(/no selection was made on u1/),
     });
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("a frame's image that opens again takes back the selection it kept, resampled to its size, and a cleared one stays cleared", async () => {
+    // @feat: image.editor.region-filter — the kept selection is restored
+    // into the engine (selection_set_coverage) when its frame reopens.
+    const { fake, handle, session } = await ingest();
+    // A partial selection: the luma channel of the two pixels.
+    expect(session.selectionFromChannel("luma")).toBe(true);
+    const made = session.liveSelection("u1") as { coverage: Uint8Array };
+    const [a, b] = made.coverage;
+    expect(a).toBeGreaterThan(0);
+    expect(b).toBeGreaterThan(a!);
+    expect(b).toBeLessThan(255);
+
+    const reopen = async (id: string) => {
+      fake.emitSelection([{ kind: "rectangle", id }]);
+      expect(await session.ingestSelection()).toBe(true);
+    };
+    fake.placed.set("u2", psdBytes());
+    fake.geometry.set("u2", geomFor("u2", [0, 0, 100, 200]));
+    await reopen("u2");
+    expect(session.state().selection).toBeNull();
+    // Back on u1: exactly the bytes it had, live in the engine.
+    await reopen("u1");
+    expect(session.liveSelection("u1")).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([a!, b!]),
+    });
+    expect(session.state().selection?.coverage).toBeCloseTo(
+      (a! + b!) / 2 / 255,
+      2,
+    );
+
+    // u1 now holds the same image at twice the size: resampled to it.
+    await reopen("u2");
+    fake.placed.set("u1", rgbPsd(4, 2));
+    await reopen("u1");
+    const big = session.liveSelection("u1") as {
+      width: number;
+      coverage: Uint8Array;
+    };
+    expect(big.width).toBe(4);
+    expect(big.coverage.length).toBe(8);
+    expect(big.coverage[0]).toBe(a);
+    expect(big.coverage[3]).toBe(b);
+    expect(big.coverage[1]! > a! && big.coverage[2]! < b!).toBe(true);
+
+    // Another crop of the image (another aspect): nothing to restore.
+    await reopen("u2");
+    fake.placed.set("u1", rgbPsd(2, 4));
+    await reopen("u1");
+    expect(session.state().selection).toBeNull();
+
+    // A selection cleared before the frame closed is not brought back.
+    expect(session.selectAll()).toBe(true);
+    session.deselect();
+    await reopen("u2");
+    await reopen("u1");
+    expect(session.state().selection).toBeNull();
     session.dispose();
     handle.dispose();
   });

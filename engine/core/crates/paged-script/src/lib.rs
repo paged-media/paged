@@ -224,6 +224,13 @@ pub struct ScriptResult {
     /// write changed a page. `None` when it cannot say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page_ids: Option<Vec<paged_canvas::PageId>>,
+    /// Engine ADR 1004 (amendment 2026-10-23) — the undo step the run's
+    /// writes ended in, when they are ONE step a follow-up write may still
+    /// join (`AmendMutation`): the script's own, the last in the history,
+    /// with no undo or redo since it began. Absent for a read-only run, a
+    /// run that moved the history, and one a foreign edit split.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_seq: Option<u64>,
 }
 
 // SAFETY pattern: Boa runs host functions synchronously inside the
@@ -452,6 +459,9 @@ pub struct ScriptSession {
     /// Bridge promises the host's answers rejected, in rejection order.
     rejected: Vec<JsObject>,
     undo_mark: u64,
+    /// `CanvasModel::history_moves` when the run began: a run that moved
+    /// the history reports no step to amend.
+    history_mark: u64,
     /// The `applied_seq`s that are this script's own: every record logged
     /// while one of its segments ran (`(after, upto]` ranges — the worker
     /// is single-threaded, so nothing else writes then), plus the host
@@ -466,7 +476,6 @@ pub struct ScriptSession {
     /// while the script waited on the host is never counted as its own).
     writes: u64,
     changed_pages: std::collections::BTreeSet<paged_canvas::PageId>,
-    host_writes: bool,
     rounds: u32,
     // Last: everything above may hold GC handles of this context.
     ctx: Context,
@@ -534,6 +543,7 @@ pub fn start_script(
     session_id: u32,
 ) -> (ScriptStep, Option<ScriptSession>) {
     let undo_mark = model.last_applied_seq();
+    let history_mark = model.history_moves();
     model.begin_page_change_tracking();
     enter_segment(model, &budget, clock);
     host_bridge::open_queue(host_objects);
@@ -547,12 +557,12 @@ pub fn start_script(
         budget,
         rejected: Vec::new(),
         undo_mark,
+        history_mark,
         own_segments: Vec::new(),
         host_commits: Vec::new(),
         segment_start: undo_mark,
         writes: 0,
         changed_pages: std::collections::BTreeSet::new(),
-        host_writes: false,
         rounds: 0,
         ctx,
     };
@@ -595,7 +605,8 @@ impl ScriptSession {
                 self.outcome = Outcome::Failed(format_error(&e, &mut self.ctx));
             }
         }
-        let (queued, writes) = host_bridge::close_queue();
+        // Whether the queue writes no longer matters: every run folds.
+        let (queued, _writes) = host_bridge::close_queue();
         // The segment ends here (a suspended script runs nothing more until
         // resumed; `finish` writes nothing): what it logged is its own.
         self.own_segments
@@ -613,7 +624,6 @@ impl ScriptSession {
                 ));
             } else {
                 self.rounds += 1;
-                self.host_writes |= writes;
                 let calls = host_bridge::calls_of(&queued);
                 self.pending = queued;
                 self.output.extend(leave_segment());
@@ -662,12 +672,17 @@ impl ScriptSession {
             })
         });
         let budget_kind = error.as_deref().and_then(classify_budget_message);
-        if self.host_writes {
-            let (segments, commits) = (&self.own_segments, &self.host_commits);
-            model.group_undo_runs_since(self.undo_mark, |seq| {
-                commits.contains(&seq) || segments.iter().any(|&(a, b)| seq > a && seq <= b)
-            });
-        }
+        // One script run is one undo step (engine ADR 1004 amendment): its
+        // own records fold, whether it wrote through the host or only
+        // here. A foreign edit made while it waited is never taken.
+        let (segments, commits) = (&self.own_segments, &self.host_commits);
+        let is_own =
+            |seq: u64| commits.contains(&seq) || segments.iter().any(|&(a, b)| seq > a && seq <= b);
+        model.group_undo_runs_since(self.undo_mark, is_own);
+        let applied_seq = (model.history_moves() == self.history_mark)
+            .then(|| model.sole_step_since(self.undo_mark))
+            .flatten()
+            .filter(|&seq| model.amend_lineage(seq).into_iter().any(is_own));
         let mut output = std::mem::take(&mut self.output);
         output.extend(leave_segment());
         ScriptResult {
@@ -676,6 +691,7 @@ impl ScriptSession {
             budget_kind,
             writes: Some(u32::try_from(self.writes).unwrap_or(u32::MAX)),
             page_ids: Some(model.in_document_order(&self.changed_pages)),
+            applied_seq,
         }
     }
 }

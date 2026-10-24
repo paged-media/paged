@@ -313,6 +313,56 @@ fn mutate_with_bytes_fills_the_empty_slot_inside_a_batch() {
     assert_eq!(json(&reply)["kind"], "mutationFailed");
 }
 
+/// Engine ADR 1004 amendment — the binary lane can join the undo step an
+/// edit committed: one undo reverts the edit and the bytes, and a step that
+/// is no longer the last one is refused with nothing applied.
+#[test]
+fn amend_with_bytes_joins_the_step_it_names() {
+    let mut core = loaded();
+    let send = |core: &mut WorkerCore, kind: serde_json::Value| -> serde_json::Value {
+        let mut msg = kind;
+        msg["protocol"] = serde_json::json!(0);
+        let (reply, _) = core.handle_message(&msg.to_string(), &clock);
+        serde_json::from_str(&reply).unwrap()
+    };
+    let opacity = |v: f64| {
+        serde_json::json!({ "op": "setElementProperty", "args": {
+            "elementId": { "kind": "rectangle", "id": "r1" },
+            "path": "frameOpacity", "value": { "type": "length", "value": v } } })
+    };
+    let edit = send(
+        &mut core,
+        serde_json::json!({ "seq": 2, "kind": "mutate", "payload": opacity(40.0) }),
+    );
+    assert_eq!(edit["kind"], "mutationApplied", "{edit}");
+    let step = edit["payload"]["appliedSeq"].as_u64().unwrap();
+    let depth = core.model.as_ref().unwrap().applied_log_len();
+    let slot = serde_json::json!({
+        "op": "replaceImageBytes", "args": { "elementId": "r1", "bytes": [] } });
+    let (reply, _) = core.amend_with_bytes(3, step, &slot.to_string(), png_1x1(), &clock);
+    let reply = json(&reply);
+    assert_eq!(reply["kind"], "mutationApplied", "{reply}");
+    assert_eq!(
+        core.model.as_ref().unwrap().applied_log_len(),
+        depth,
+        "the bytes joined the edit's step"
+    );
+    assert!(core.placed_asset_bytes("r1").is_some());
+    // One undo reverts both: the opacity and the bytes.
+    let undone = send(&mut core, serde_json::json!({ "seq": 4, "kind": "undo" }));
+    assert_eq!(undone["kind"], "undoApplied", "{undone}");
+    assert!(
+        core.placed_asset_bytes("r1").is_none(),
+        "the bytes went with the edit"
+    );
+    // The history moved: the step may not be joined any more.
+    let (reply, _) = core.amend_with_bytes(5, step, &slot.to_string(), png_1x1(), &clock);
+    let reply = json(&reply);
+    assert_eq!(reply["kind"], "mutationFailed", "{reply}");
+    assert_eq!(reply["payload"]["error"]["kind"], "notAmendable", "{reply}");
+    assert!(core.placed_asset_bytes("r1").is_none(), "nothing applied");
+}
+
 #[test]
 fn a_deleted_part_leaves_the_saved_container() {
     let mut core = loaded();

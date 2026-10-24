@@ -28,12 +28,15 @@
 // WRITES are plugin state — the label-hash pattern (src/recipe-store.ts):
 // a content-addressed part + the document label in the registry's ONE
 // commit, so a parameter edit is ONE undo step and undo brings the old
-// parameters back. A write changes the RECIPE, not the artwork: the
-// artwork follows on the typed `update*` / `edit*` / `regenerate*`
-// command. They cannot share one step: an update mints new element ids
-// and the recipe records them, so the recipe can only be written once
-// the artwork batch has answered (recorded as a gap / contract issue —
-// an `ObjectWrite` with a post-commit continuation would close it).
+// parameters back. The ARTWORK follows in the same step: an update mints
+// new element ids the recipe records, so it can only run once the label
+// write has answered — it is the write's `followUp` (extensions ADR 337
+// amendment), which the registry runs after the commit and which amends
+// that commit's step (`rebuildInStep`, engine ADR 1004). One undo restores
+// the old parameters and the old artwork. Where the host cannot amend, or
+// the automatic recipe update is off, the write changes the recipe only
+// and the artwork follows on the typed `update*` / `edit*` /
+// `regenerate*` command, as before. A name write rebuilds nothing.
 // `create` and `delete` are the typed make / release commands, which
 // build and remove artwork.
 
@@ -47,6 +50,13 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { EASE_KINDS } from "@paged-media/draw-geometry";
+
+import {
+  rebuildInStep,
+  recipeAutoUpdateEnabled,
+  RECIPE_AUTO_UPDATE_FEATURE,
+} from "../commands/recipe-auto-update";
+import type { RecipeKind } from "../commands/recipe-update";
 
 import {
   BLEND_DEFAULTS,
@@ -370,6 +380,8 @@ function makeRecipeKind<L>(
         ? { params: { ...(r.params as Record<string, unknown>) } }
         : {}),
     }));
+    /** The recipes whose parameters this batch writes. */
+    const rebuild = new Set<string>();
     for (const op of ops) {
       if (op.op === "create") {
         return rejected(
@@ -388,8 +400,36 @@ function makeRecipeKind<L>(
       if (!writable.has(op.path))
         return rejected(`${spec.kind} has no writable "${op.path}"`);
       if (op.path === "name") rec.name = String(op.value);
-      else (rec.params as Record<string, unknown>)[op.path] = op.value;
+      else {
+        (rec.params as Record<string, unknown>)[op.path] = op.value;
+        rebuild.add(rec.id);
+      }
     }
+    // A parameter changes the artwork: rebuild it inside the write's undo
+    // step (extensions ADR 337 amendment), where the host can amend and
+    // the automatic update is on. A name changes nothing drawn.
+    const followUps =
+      rebuild.size > 0 &&
+      host.supports(RECIPE_AUTO_UPDATE_FEATURE) &&
+      recipeAutoUpdateEnabled(host)
+        ? [
+            async ({ appliedSeq }: { appliedSeq: number }) => {
+              const r = await rebuildInStep(
+                host,
+                [...rebuild].map((id) => ({
+                  kind: spec.kind as RecipeKind,
+                  id,
+                })),
+                appliedSeq,
+              );
+              if (r.refused !== null)
+                host.log.info(
+                  `${spec.kind}: the parameters were written, but the artwork could not join their step — run the update`,
+                );
+              return r.appliedSeq;
+            },
+          ]
+        : [];
     return plan({
       libraries: [
         {
@@ -397,6 +437,7 @@ function makeRecipeKind<L>(
           bytes: spec.serialize(spec.withRecords(lib, records)),
         },
       ],
+      followUps,
     });
   }
 }

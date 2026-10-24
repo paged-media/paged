@@ -196,15 +196,22 @@ impl XlsxDocument {
         let host = self.charts[i].host_sheet;
         let names = LiveNames(model);
         let before = parse(&orig, host, &names)?.model;
-        let after = self.charts[i].model.clone();
+        // The extension records the chart's OWN references; the part shows
+        // the colours the chart draws, the workbook default chart style
+        // applied (sheet ADR 525), so another application sees them too.
+        let own = self.charts[i].model.clone();
+        let after = sheet_chart::style::effective(&own, &self.chart_style);
         let mut root = paged_ooxml::tree::parse(&orig).map_err(XlsxError::Structure)?;
-        let ext = Some(ext_of(&after, i as u32, tomb));
+        let ext = Some(ext_of(&own, i as u32, tomb));
         if root.is(Ns::Cx, "chartSpace") {
             // A chartEx part: only the extension and the title are spliced
             // (its data dimensions name the same cells); a structural edit
             // regenerates it.
             if before.plots != after.plots || before.title != after.title {
-                let out = chart_ex_out(&after, model, i as u32, tomb);
+                let out = chart_ex_out(&after, model, i as u32, tomb).map(|mut o| {
+                    o.ext = ext.clone();
+                    o
+                });
                 if let Some(out) = out {
                     self.set_part_bytes(&part, w::generate_ex(&out).into_bytes());
                     self.charts[i].dirty = false;
@@ -217,7 +224,8 @@ impl XlsxDocument {
             return Ok(());
         }
         w::ensure_prefixes(&mut root);
-        let out = chart_out(&after, model, i as u32, tomb);
+        let mut out = chart_out(&after, model, i as u32, tomb);
+        out.ext = ext.clone();
         splice_tree(&mut root, &before, &after, &out).map_err(XlsxError::Structure)?;
         w::put_ext(&mut root, ext.as_ref(), PAGED_EXT_URI).map_err(XlsxError::Structure)?;
         self.set_part_bytes(&part, w::serialise(&orig, &root));
@@ -234,15 +242,24 @@ impl XlsxDocument {
     ) -> Result<(), XlsxError> {
         let chart = self.charts[i].clone();
         let ex = chart.model.kind().is_chart_ex();
+        // Drawn colours with the workbook default applied; the extension
+        // keeps the chart's own references (ADR 525).
+        let shown = sheet_chart::style::effective(&chart.model, &self.chart_style);
+        let own_ext = Some(ext_of(&chart.model, i as u32, tomb));
         let bytes = if ex {
-            match chart_ex_out(&chart.model, model, i as u32, tomb) {
-                Some(out) => w::generate_ex(&out).into_bytes(),
+            match chart_ex_out(&shown, model, i as u32, tomb) {
+                Some(mut out) => {
+                    out.ext = own_ext;
+                    w::generate_ex(&out).into_bytes()
+                }
                 None => return Ok(()),
             }
         } else if chart.model.kind() == ChartKind::Unsupported {
             return Ok(());
         } else {
-            w::generate(&chart_out(&chart.model, model, i as u32, tomb)).into_bytes()
+            let mut out = chart_out(&shown, model, i as u32, tomb);
+            out.ext = own_ext;
+            w::generate(&out).into_bytes()
         };
         // The part.
         let stem = if ex { "chartEx" } else { "chart" };
@@ -1069,6 +1086,7 @@ pub(crate) fn ext_of(m: &ChartModel, index: u32, removed: &[u32]) -> ExtOut {
                         Some((u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b))
                     }),
                     swatch: Some(d.id.clone()),
+                    model: Some(d.model.as_str().to_string()),
                     ..w::RefOut::default()
                 });
             }
@@ -1091,6 +1109,16 @@ pub(crate) fn ext_of(m: &ChartModel, index: u32, removed: &[u32]) -> ExtOut {
         refs,
         index: Some(index),
         removed: removed.to_vec(),
+        // Sheet ADR 525 — the chart's own colour-group palette.
+        palette: m.palette.as_ref().map(|p| {
+            (
+                p.group.clone(),
+                p.swatches
+                    .iter()
+                    .map(crate::parts::chart_style::encode_swatch)
+                    .collect(),
+            )
+        }),
     }
 }
 

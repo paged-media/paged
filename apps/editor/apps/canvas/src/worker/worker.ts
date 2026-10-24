@@ -187,6 +187,12 @@ interface CanvasWorkerInstance {
     mutationJson: string,
     bytes: Uint8Array,
   ): string;
+  amendWithBytesDirect?(
+    seq: number,
+    appliedSeq: number,
+    mutationJson: string,
+    bytes: Uint8Array,
+  ): string;
 }
 
 interface CanvasWasmModule {
@@ -507,6 +513,14 @@ type DirectMessage =
       seq: number;
       mutationJson: string;
       bytes: Uint8Array;
+    }
+  | {
+      kind: "direct";
+      op: "amendWithBytes";
+      seq: number;
+      appliedSeq: number;
+      mutationJson: string;
+      bytes: Uint8Array;
     };
 
 /** v66 — pack tiles for `submitSceneImageTilesDirect`: one `x, y, w, h`
@@ -697,6 +711,13 @@ function dispatchDirect(w: CanvasWorkerInstance, m: DirectMessage): void {
     case "mutateWithBytes": {
       if (!w.mutateWithBytesDirect) return missing();
       settle(w.mutateWithBytesDirect(m.seq, m.mutationJson, m.bytes));
+      return;
+    }
+    case "amendWithBytes": {
+      if (!w.amendWithBytesDirect) return missing();
+      settle(
+        w.amendWithBytesDirect(m.seq, m.appliedSeq, m.mutationJson, m.bytes),
+      );
       return;
     }
     case "readPagedPart": {

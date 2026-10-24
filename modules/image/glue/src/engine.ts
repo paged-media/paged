@@ -1287,6 +1287,13 @@ export interface ImageEngine {
   selectionStats(): SelectionStats | null;
   /** The raw u8 coverage (`width·height`, row-major); empty when none. */
   selectionCoverageBytes(): Uint8Array;
+  /** Set the selection from coverage bytes (`width·height` of the bound
+   *  image, row-major), folded under `mode` (`replace`: exactly these
+   *  bytes) — a selection given back as data, as `selectionCoverageBytes`
+   *  read it. Throws when the length is not the bound image's pixel
+   *  count (where a selection lies on another size is the caller's
+   *  decision, not a resample here). */
+  selectionSetCoverage(bytes: Uint8Array, mode: SelectionMode): void;
   /** Re-point the selection at a NEW handle of the SAME extent, KEEPING
    *  the coverage (the destructive-fill lane: the generator registers a
    *  new engine image at identical dimensions, and the selection is
@@ -1944,6 +1951,7 @@ export interface ImageWasmModule {
   selection_bounds(): Uint32Array;
   selection_stats(): Float32Array;
   selection_coverage_bytes(): Uint8Array;
+  selection_set_coverage(bytes: Uint8Array, mode: number): void;
   selection_transfer(handle: number): boolean;
   brush_stroke_begin(
     handle: number,
@@ -2679,6 +2687,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       };
     },
     selectionCoverageBytes: () => wasm.selection_coverage_bytes(),
+    selectionSetCoverage: (bytes, mode) =>
+      wasm.selection_set_coverage(bytes, selectionModeCode(mode)),
     selectionTransfer: (handle) => wasm.selection_transfer(handle),
     brushBegin: (handle, tool, p) =>
       wasm.brush_stroke_begin(

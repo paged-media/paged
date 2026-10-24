@@ -412,6 +412,7 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                                 parts.last_mut().unwrap().runs.push(RunContentIn {
                                     text: std::mem::take(&mut piece),
                                     character_style: r.char_style_id.clone(),
+                                    ..Default::default()
                                 });
                             }
                             parts.push(ParagraphContentIn {
@@ -425,6 +426,7 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
                     parts.last_mut().unwrap().runs.push(RunContentIn {
                         text: piece,
                         character_style: r.char_style_id.clone(),
+                        ..Default::default()
                     });
                 }
                 parts

@@ -1418,9 +1418,17 @@ export {
 export {
   RECIPE_AUTO_UPDATE_FEATURE,
   RECIPE_AUTO_UPDATE_KEY,
+  RECIPE_SCRIPT_FEATURE,
   contributeRecipeAutoUpdate,
+  onRecipeAutoUpdateChange,
+  rebuildInStep,
   recipeAutoUpdateEnabled,
   recipeAutoUpdateOf,
   setRecipeAutoUpdate,
   type RecipeAutoUpdate,
+  type StepRebuild,
 } from "./commands/recipe-auto-update";
+export {
+  RecipeAutoUpdateToggle,
+  RECIPE_AUTO_UPDATE_LABEL,
+} from "./panels/recipe-auto-update-toggle";

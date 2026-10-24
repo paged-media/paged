@@ -73,7 +73,7 @@ test.describe.serial("plugin menus — paged.sheet", () => {
 
   // ── no workbook yet ──
 
-  test("Object/Insert spreadsheet… — Insert ▸ Spreadsheet… asks for one .xlsx / .csv / .tsv file", async () => {
+  test("Object/Insert spreadsheet… — Insert ▸ Spreadsheet… asks for one workbook, CSV or TSV file", async () => {
     covers("menu:Object/Insert spreadsheet…");
     await expectGreyedAndInert(bare, "Object/Insert spreadsheet…");
     const out = await clickEntry(
@@ -81,12 +81,25 @@ test.describe.serial("plugin menus — paged.sheet", () => {
       "Object/Insert spreadsheet…",
       "media.paged.sheet.command.importXlsx",
     );
-    expect(out.shell).toEqual([
-      {
-        door: "pickFile",
-        arg: '{"accept":[".xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",".csv",".tsv","text/csv","text/tab-separated-values"],"multiple":false}',
-      },
-    ]);
+    expect(out.shell.map((c) => c.door)).toEqual(["pickFile"]);
+    const asked = JSON.parse(out.shell[0].arg) as {
+      accept: string[];
+      multiple: boolean;
+    };
+    // One file, of the kinds the sheet opens (the xlsx and OpenDocument
+    // families grow; these are the floor).
+    expect(asked.multiple).toBe(false);
+    expect(asked.accept).toEqual(
+      expect.arrayContaining([
+        ".xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".ods",
+        ".csv",
+        ".tsv",
+        "text/csv",
+        "text/tab-separated-values",
+      ]),
+    );
     expect(out.after, "a cancelled pick leaves the document alone").toBe(
       out.before,
     );
