@@ -91,6 +91,44 @@ in memory for the last import and returns `null` without one
 never read ([ADR 603](603-two-entry-points.md)). The baseline must be lowered at save as it
 was at import (`packages/doc-bundle/src/engine.ts:93-99`).
 
+## Amendment 2026-10-24 — content the canvas does not show
+
+Wave W0 of the Word-parity program made the import show tracked changes as
+accepted, keep content-control content, and leave hidden runs out (see
+`docs/status.md`, "W0"). Those runs and paragraphs sit on XML paths the
+patcher does not address, or are not on the canvas at all. The splice gains
+these rules:
+
+- **Locked runs.** A run inside `w:ins` / `w:moveTo` (`RunSource::Tracked`)
+  or inside a run-level content control (`RunSource::ContentControl`), and
+  every run of a paragraph inside a block, row or cell content control, binds
+  as `RunBinding::Locked`. An edit reaching one is refused, and so is every
+  other run-level edit of the same paragraph: the canvas text is one edit, and
+  applying part of it would leave Word's paragraph saying something neither
+  the source nor the canvas says.
+- **Held paragraphs** (`docx_core::ParagraphHeld`). A paragraph inside a
+  content control is not addressed at all: no delete, format, insert-after or
+  run insert. Deleting a paragraph that holds runs the canvas does not show
+  (tracked deletions, hidden runs) is refused. Rewriting a `w:pPr` that
+  records a tracked change (`w:pPrChange`, a mark's insertion or deletion) is
+  refused, because the rewrite would drop it.
+- **Tables with row or cell content controls** refuse row and column edits:
+  the patcher's `<w:tr>` / `<w:tc>` ordinals skip the controlled ones.
+- **Unseen runs keep their ordinals.** A hidden direct run, and a deleted run
+  (not a direct child), never shift the ordinals of the runs around them, so
+  edits beside them land on their own `<w:r>`. Their bytes are never
+  addressed and survive every edit except the deletion of their whole
+  paragraph, which is refused.
+- **The locator counts what the import counts**: body runs, wrappers and
+  `w:pPr` only as direct children of `body › p`; wrapper runs only as direct
+  children of such a wrapper; cell runs only under `tc › p`; addressable tables
+  only at body level (`body › (sdt › sdtContent)*`), with no table open around
+  them. Empty `<w:r/>`, `<w:hyperlink/>` and `<w:fldSimple/>` count. A target
+  the pass never meets joins the refusal ledger.
+
+The zero-edit save stays byte-identical per part. Every refusal is named in the
+ledger and reaches the host's diagnostics as before.
+
 ## Related
 
 - [ADR 601](601-own-package-container.md), [ADR 600](600-docx-lowered-onto-native-model.md), [ADR 603](603-two-entry-points.md) — the container that carries untouched parts; the lowering that is diffed; where the source bytes come from

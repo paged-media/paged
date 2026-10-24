@@ -40,12 +40,6 @@ use serde::{Deserialize, Serialize};
 pub struct StoryContentIn {
     pub self_id: String,
     pub paragraphs: Vec<ParagraphContentIn>,
-    /// The RGB (`RRGGBB`, a leading `#` allowed) of document swatches the
-    /// read-back names that the import did not make — a colour made on
-    /// the canvas — by swatch id, so a run filled with one is written with
-    /// its `w:color` (the host's swatch display colour).
-    #[serde(default)]
-    pub colors: std::collections::BTreeMap<String, String>,
 }
 
 /// One read-back paragraph.
@@ -228,7 +222,6 @@ fn fold_segments(
 /// an edit style ([`run_token`]), and the differ maps them onto the Word runs.
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
     let mut edited = baseline.clone();
-    add_canvas_colors(&mut edited, &content.colors);
     // The edit styles are gathered here while the blocks are borrowed.
     let mut styles = std::mem::take(&mut edited.styles);
     let mut ci = 0usize;
@@ -259,11 +252,15 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
     edited
 }
 
-/// Give `edited` the swatches the canvas made (`colors`: id → RGB hex) that
-/// the import did not, so the differ resolves a run's fill to its colour.
-/// A value that is not six hex digits is left out (the run's colour is then
-/// not written, as before).
-fn add_canvas_colors(edited: &mut LoweredDoc, colors: &std::collections::BTreeMap<String, String>) {
+/// Give `edited` the swatches the canvas made that the import did not
+/// (`colors`: swatch id → the RGB the host displays it in, `RRGGBB`, a
+/// leading `#` allowed), so the differ resolves a run filled with one to
+/// its `w:color`. A value that is not six hex digits is left out (the run's
+/// colour is then not written).
+pub fn add_canvas_colors(
+    edited: &mut LoweredDoc,
+    colors: &std::collections::BTreeMap<String, String>,
+) {
     for (id, hex) in colors {
         if edited.swatches.iter().any(|s| &s.id == id) {
             continue;
@@ -748,7 +745,6 @@ mod tests {
 
     fn read(runs: Vec<RunContentIn>) -> StoryContentIn {
         StoryContentIn {
-            colors: Default::default(),
             self_id: "s".into(),
             paragraphs: vec![ParagraphContentIn {
                 paragraph_style: None,

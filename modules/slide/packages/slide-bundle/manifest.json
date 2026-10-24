@@ -12,6 +12,7 @@
       "openNative": true
     },
     "clipboard": "none",
+    "keybindings": true,
     "assets": ["fonts"],
     "wasm": [
       {

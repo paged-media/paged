@@ -229,7 +229,6 @@ fn doc03_read_overlay_diff_save_round_trips() {
     // The read-back reflects the plugin's own story: each run's characterStyle IS
     // the plugin's char_style_id token, so it mirrors the baseline exactly...
     let mut content = StoryContentIn {
-        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -284,7 +283,6 @@ fn doc03_identity_content_is_a_no_op() {
     let (model, _pkg, _main) = docx_import::import_docx_with_package(&original).unwrap();
     let base = docx_lower::lower(&model);
     let content = StoryContentIn {
-        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -328,7 +326,6 @@ fn structural_edits_insert_and_delete_runs_and_paragraphs() {
     let base = docx_lower::lower(&model);
 
     let mut content = StoryContentIn {
-        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story
@@ -1133,7 +1130,6 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
     // The body as the engine reads it back: one run per paragraph (no run
     // carries a character style here).
     let story = StoryContentIn {
-        colors: Default::default(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1228,7 +1224,6 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
     let session = DocSession::load(&source).unwrap();
     let base = session.lowered();
     let story = StoryContentIn {
-        colors: Default::default(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1398,7 +1393,6 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
     ];
     paragraphs[2].runs[1].font_style = Some("Bold Italic".into());
     let content = StoryContentIn {
-        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs,
     };
@@ -1445,7 +1439,6 @@ fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
     let session = DocSession::load(&source).unwrap();
     let base = session.lowered();
     let story = StoryContentIn {
-        colors: Default::default(),
         self_id: "s".into(),
         paragraphs: base
             .story
@@ -1566,11 +1559,13 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     paragraphs[0].runs[0].tracking = Some(100.0);
     paragraphs[2].runs[2].fill_color = Some("Color/Canvas green".into());
     let content = StoryContentIn {
-        colors: [("Color/Canvas green".to_string(), "#12ab34".to_string())].into(),
         self_id: "Story/doc".into(),
         paragraphs,
     };
-    let (saved, skips) = session.save_edited_from_content(&content).unwrap();
+    let colors = [("Color/Canvas green".to_string(), "#12ab34".to_string())].into();
+    let (saved, skips) = session
+        .save_edited_from_content_cells_and_tables(&content, &[], &[], &colors)
+        .unwrap();
     assert!(skips.is_empty(), "{skips:?}");
     let xml = doc_xml(&saved);
     // memo's text is Word's default 10 pt: 100/1000 em = 1 pt = 20 twips.
@@ -1600,7 +1595,6 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     paragraphs[2].runs[2].fill_color = Some("Color/Unknown".into());
     let (saved, _) = session
         .save_edited_from_content(&StoryContentIn {
-            colors: Default::default(),
             self_id: "Story/doc".into(),
             paragraphs,
         })
@@ -1655,7 +1649,6 @@ fn tracking_canvas_colours_and_added_cell_paragraph_looks_are_saved_back__feat__
     let (saved, skips) = session
         .save_edited_from_content_and_cells(
             &StoryContentIn {
-                colors: Default::default(),
                 self_id: "s".into(),
                 paragraphs: identity(&base),
             },
@@ -1687,7 +1680,6 @@ fn rows_added_and_removed_on_the_canvas_are_saved_back__feat__plugin_doc_object_
         String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
     };
     let story = StoryContentIn {
-        colors: Default::default(),
         self_id: "s".into(),
         paragraphs: vec![],
     };
@@ -1698,6 +1690,7 @@ fn rows_added_and_removed_on_the_canvas_are_saved_back__feat__plugin_doc_object_
                 &story,
                 &[],
                 &[TableContentIn { block: 0, rows }],
+                &Default::default(),
             )
             .unwrap()
     };
@@ -1755,7 +1748,6 @@ fn a_cell_emptied_with_no_styled_paragraph_is_saved_back() {
     let (saved, skips) = session
         .save_edited_from_content_and_cells(
             &StoryContentIn {
-                colors: Default::default(),
                 self_id: "s".into(),
                 paragraphs: vec![],
             },

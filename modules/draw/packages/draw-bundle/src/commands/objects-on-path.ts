@@ -167,6 +167,7 @@ import {
 } from "../page-origin";
 import { stampDrawMetadata } from "./appearance-bake";
 import { blendSourceFrom } from "./blend";
+import { noteRecipeRebuilt } from "./recipe-steps";
 import { announceRecipeChange, linkIndex } from "../link-index";
 import {
   registrationPointOf,
@@ -1192,6 +1193,9 @@ async function commitPlan(
     );
     return false;
   }
+  // The objects this moved are the recipe's own sources: the automatic
+  // update must not read the move as an edit and place them once more.
+  noteRecipeRebuilt("objectsOnPath", plan.onPath, outcome.appliedSeq);
   return true;
 }
 

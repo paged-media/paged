@@ -1049,6 +1049,11 @@ describe("draw conformance — OBJECTS ON A PATH (§16.3)", () => {
       expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain(
         "Objects are kept on the page",
       );
+      // It says what the automatic update does, as the other recipe
+      // panels' notes do.
+      expect(t(OBJECTS_ON_PATH_PANEL_NOTE)).toContain(
+        "While Update automatically is on, editing the path or one of the objects places them again in the same undo step",
+      );
       // (1) It MOVES rather than copies — the opposite of every other row.
       expect(OBJECTS_ON_PATH_NOTE).toContain("THIS MOVES YOUR OBJECTS");
       expect(OBJECTS_ON_PATH_NOTE).toContain("IT CREATES NONE");

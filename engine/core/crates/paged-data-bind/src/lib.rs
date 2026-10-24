@@ -375,6 +375,12 @@ impl ResolutionEngine {
         self.templates.insert(template.id.clone(), template);
     }
 
+    /// Remove a per-record template; `true` when it existed. A record flow
+    /// still naming it fails to resolve until it names another.
+    pub fn remove_template(&mut self, id: &TemplateRef) -> bool {
+        self.templates.remove(id).is_some()
+    }
+
     /// Register a placeholder (the anchor).
     pub fn add_placeholder(&mut self, placeholder: Placeholder) {
         self.placeholders

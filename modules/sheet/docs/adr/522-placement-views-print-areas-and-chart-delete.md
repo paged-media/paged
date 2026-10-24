@@ -117,3 +117,22 @@ brought back — like every chart placed in an earlier session — was not refre
 Consequences: a host that cannot amend an undo step keeps no record of a first pagination (the
 chain stays live for that session only); a chart placed by the version just before this one has
 a box but no art, and a move made to it before reopening is not followed.
+
+## Amendment 2 (2026-10-24): the leftovers
+
+1. **A chart placed by the version just before Amendment 1** recorded its box but not its art.
+   Its art is where its first element stood when the chart was drawn at that box, and drawing
+   the chart again there (`chartArtAt`, writing nothing) gives that outline, as the chart's
+   geometry is a function of the workbook. Such a chart is followed from it like a new one, so a
+   move made before the document was reopened is followed.
+2. **A renamed sheet keeps its placements.** Bindings and chain records name the sheet; a rename
+   (a session verb or the object model's `name` write) is noted, and the next refresh re-stamps
+   the placed tables' bindings and each chain's record with the new name (a record's key
+   includes the name). Without it the placements were found by the old name on reopen, which no
+   longer exists.
+3. **Left as they are, with the reason** (`docs/status.md`): a first pagination on a host
+   that cannot amend keeps no record until its first in-place refresh (the ids the record names
+   exist only after the batch; the alternative is a second undo step); a chartsheet's chart
+   stays in the file (decision 3: deleting it is deleting the sheet, which a workbook with
+   charts does not support); and an older version opening bytes saved after a delete sees later
+   charts renumbered (it counts chart parts; only a kept chart part would hold the index).

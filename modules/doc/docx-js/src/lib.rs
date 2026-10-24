@@ -180,11 +180,17 @@ mod wasm {
                 cells: Vec<docx_export::CellContentIn>,
                 #[serde(default)]
                 tables: Vec<docx_export::TableContentIn>,
+                #[serde(default)]
+                colors: std::collections::BTreeMap<String, String>,
             }
-            let Cells { cells, tables } = serde_json::from_str(content_json)
+            let Cells {
+                cells,
+                tables,
+                colors,
+            } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let (bytes, skips) = session
-                .save_edited_from_content_cells_and_tables(&content, &cells, &tables)
+                .save_edited_from_content_cells_and_tables(&content, &cells, &tables, &colors)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)

@@ -460,11 +460,27 @@ function webFrameKind(host: BundleHost): ObjectKindContribution {
           return val(cssVarNames(source.css));
         case "diagnostics":
           return val(await sourceDiagnostics(host, elementId, source));
+        case "page":
+          return val(await framePage(host, elementId));
         default:
           return refuse("unknownPath", `webFrame has no path "${path}"`);
       }
     },
   };
+}
+
+/** The 1-based number of the page `id` is on (`{{frame.page}}`), or null. */
+async function framePage(
+  host: BundleHost,
+  id: ElementId,
+): Promise<number | null> {
+  const [geo] = await host.document.elementGeometry([id]);
+  if (!geo?.pageId) return null;
+  const pages = await host.document.collection<{
+    selfId: string;
+    index: number;
+  }>("pages");
+  return pages.find((p) => p.selfId === geo.pageId)?.index ?? null;
 }
 
 /** A web frame create: `insertFrame` on the page + its label on the frame

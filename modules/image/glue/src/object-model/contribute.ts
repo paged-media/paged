@@ -34,6 +34,7 @@ import {
   type ImageCodec,
   type ImageKind,
   type ImageObjects,
+  type SelectionFollow,
   type SelectionSource,
 } from "./image-objects";
 import { ANCHORS, QUARTER_OPS } from "./canvas-ops";
@@ -387,7 +388,9 @@ export { KIND_CONTENT };
  * Register the object model. Null when the host has no object registry
  * (`contribute.objectModel@1` false) — the bundle then works as before.
  * `selection` reads the editor session's live selection for
- * `filterRegion`'s `selection: true` (absent headless, where it refuses).
+ * `filterRegion`'s `selection: true` (absent headless, where it refuses);
+ * `selectionFollow` carries the selections the session kept along the
+ * canvas operations committed here.
  */
 export function contributeImageObjectModel(
   host: BundleHost,
@@ -395,9 +398,10 @@ export function contributeImageObjectModel(
   codec: () => Promise<ImageCodec> = engineCodec(),
   live?: () => boolean,
   selection?: SelectionSource,
+  selectionFollow?: SelectionFollow,
 ): { handle: ObjectModelHandle; objects: ImageObjects } | null {
   if (!host.supports("contribute.objectModel@1")) return null;
-  const objects = createImageObjects(host, codec, selection);
+  const objects = createImageObjects(host, codec, selection, selectionFollow);
   const handle = host.contribute.objectModel({
     kinds: objects.kinds,
     batch: objects.batch,

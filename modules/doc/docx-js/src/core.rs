@@ -268,20 +268,23 @@ impl DocSession {
         content: &StoryContentIn,
         cells: &[CellContentIn],
     ) -> Result<(Vec<u8>, Vec<String>), String> {
-        self.save_edited_from_content_cells_and_tables(content, cells, &[])
+        self.save_edited_from_content_cells_and_tables(content, cells, &[], &Default::default())
     }
 
     /// [`Self::save_edited_from_content_and_cells`], plus the tables whose
     /// rows were added or removed on the canvas, read back whole
-    /// ([`docx_export::overlay_tables`]).
+    /// ([`docx_export::overlay_tables`]), and the colours of the swatches
+    /// the canvas made ([`docx_export::add_canvas_colors`]).
     pub fn save_edited_from_content_cells_and_tables(
         &self,
         content: &StoryContentIn,
         cells: &[CellContentIn],
         tables: &[docx_export::TableContentIn],
+        colors: &std::collections::BTreeMap<String, String>,
     ) -> Result<(Vec<u8>, Vec<String>), String> {
         let baseline = self.lowered();
         let mut edited = overlay_story_content(&baseline, content);
+        docx_export::add_canvas_colors(&mut edited, colors);
         let mut skips = docx_export::overlay_tables(&mut edited, tables);
         skips.extend(overlay_cells(&mut edited, cells));
         let edits = diff(&baseline, &edited, &self.bindings);

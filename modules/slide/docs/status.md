@@ -53,6 +53,11 @@ Read from the code on 2026-10-14.
   slide active, more than one slide to delete, a neighbour to pass) and acts on the active slide;
   New and Duplicate run the typed commands, so the palette, a script and the Node CLI make the
   same slide; each is one undo step. A bare invoke that cannot act logs why and does nothing.
+  Each slide verb has a key, a Cmd chord with its Ctrl twin (`SLIDE_KEYBINDINGS`): Option+Cmd+N
+  new slide, Option+Shift+Cmd+N duplicate, Option+Cmd+Backspace delete, Cmd+Up and Cmd+Down
+  move (PowerPoint's own; its Cmd+Shift+N and Cmd+D are the browser's new window and the
+  editor's Place). A key is offered where its command is and no text caret is active; the
+  editor's keybinding test holds the chords free of its own.
 - **The importer** (`packages/slide-bundle`, `@paged-media/slide`). File ▸ Open of `.pptx`,
   `.ppsx` and `.potx`: one wasm call (`importPptx`, 1.3 MB, 373 KB gzipped) returns the package and
   a report; the host opens the package, and the source deck and the report are kept as container

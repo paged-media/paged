@@ -389,7 +389,6 @@ fn a_split_paragraph_saves_back_as_one_word_paragraph() {
     // What the host reads back: one paragraph per native paragraph, a run
     // split in two where a break cut it.
     let read_back = || StoryContentIn {
-        colors: Default::default(),
         self_id: "docx_s0".into(),
         paragraphs: ir
             .story
