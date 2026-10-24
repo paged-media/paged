@@ -23,6 +23,7 @@
 pub mod autofilter;
 pub mod cf_model;
 pub mod chart;
+pub mod chart_style;
 pub mod comments;
 pub mod conditional_format;
 pub mod data_validation;

@@ -59,6 +59,7 @@ mod radial;
 pub mod scale;
 pub mod sparkline;
 mod special;
+pub mod style;
 
 pub use geometry::{generate, ChartGeometry, PlotData, Primitive, TextAnchor};
 pub use model::{

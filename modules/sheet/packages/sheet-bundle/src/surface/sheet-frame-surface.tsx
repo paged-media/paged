@@ -58,6 +58,7 @@ import {
 import type { WorkbookSession } from "../session";
 import type { DataToolsApi } from "../data-tools";
 import { DataCards } from "./data-cards";
+import { useDocStyleLooks, withDocumentStyles } from "./doc-style-looks";
 import {
   REF_COLORS,
   a1Of,
@@ -84,11 +85,13 @@ export type FrameSurfaceSession = Pick<
   | "styleAtTarget"
   | "setStyle"
   | "documentStyleRevision"
+  | "documentStyleLooks"
   | "setFrameViewLock"
   | "pointerDownInFrame"
   | "pointerMoveInFrame"
   | "grabAt"
   | "selectionAreas"
+  | "pageWindowsOnLeave"
   | "scrollInFrame"
   | "pointerUpInFrame"
   | "wheelInFrame"
@@ -540,8 +543,14 @@ function SheetFrameSurfaceView({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
-  const [scene, setScene] = useState<GridScene | null>(null);
+  const [rawScene, setScene] = useState<GridScene | null>(null);
   const textDefault = useDocumentTextDefault(session);
+  // ADR 524 — cells in document styles draw in those styles' looks.
+  const docLooks = useDocStyleLooks(session, rawScene);
+  const scene = useMemo(
+    () => (rawScene ? withDocumentStyles(rawScene, docLooks) : null),
+    [rawScene, docLooks],
+  );
   const swatchColors = useSwatchColors(session, scene);
   const facesLoaded = useDocumentFaces(
     session,
@@ -748,12 +757,24 @@ function SheetFrameSurfaceView({
       ctx.strokeStyle = "#2b6cb0";
       ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 4]);
-      ctx.strokeRect(
-        headW,
-        headH,
-        props.frameBoxPt.widthPt,
-        props.frameBoxPt.heightPt,
-      );
+      // Where the page window lands on leaving (one per chain frame); a
+      // frame that is no window keeps the frame-sized box at the origin.
+      const windows = session.pageWindowsOnLeave();
+      if (windows.length === 0) {
+        ctx.strokeRect(
+          headW,
+          headH,
+          props.frameBoxPt.widthPt,
+          props.frameBoxPt.heightPt,
+        );
+      } else {
+        ctx.translate(headW, headH);
+        for (const w of windows) {
+          const box = rangeRect(scene, w.top, w.left, w.bottom, w.right);
+          if (box)
+            ctx.strokeRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+        }
+      }
       ctx.restore();
     }
     if (resizeGhost) {
@@ -1638,7 +1659,11 @@ function SheetBarView({
           : "",
       sheet: session.sheets().find((s) => s.id === st.activeSheet)?.name ?? "",
       sheetId: st.activeSheet,
-      sheetList: session.sheets().map((x) => ({ id: x.id, name: x.name })),
+      sheetList: session.sheets().map((x) => ({
+        id: x.id,
+        name: x.name,
+        chart: x.kind === "chartsheet",
+      })),
       stats:
         sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
       pasteSpecial: session.pasteSpecialOpen(),
@@ -1789,7 +1814,8 @@ function SheetBarView({
           }}
         >
           {view.sheetList.map((sh) => (
-            <option key={sh.id} value={sh.id}>
+            // A chart sheet holds a chart, not cells: a frame cannot show it.
+            <option key={sh.id} value={sh.id} disabled={sh.chart}>
               {sh.name}
             </option>
           ))}

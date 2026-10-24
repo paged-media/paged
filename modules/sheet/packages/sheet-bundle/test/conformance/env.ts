@@ -37,6 +37,8 @@
 
 import { readFileSync } from "node:fs";
 
+import { mock } from "bun:test";
+
 import {
   createBundleHost,
   createDataProviderRegistry,
@@ -67,7 +69,38 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { sheetBundle } from "../../src";
+import * as sessionModule from "../../src/session";
+import type { WorkbookSession } from "../../src/session";
 import { blankPageIdml, settle } from "../perf/workload";
+
+// The bundle's workbook session, as `activate` creates it. A command whose
+// effect is grid UI state (a card under the bar, the circles over invalid
+// cells, the AutoFilter's buttons, hidden rows) changes nothing the object
+// model or a host door reports, so a scenario reads it off the session the
+// bundle runs on. The factory is wrapped, never replaced: every session is
+// the real one.
+const realCreateSession = sessionModule.createWorkbookSession;
+const createdSessions: WorkbookSession[] = [];
+mock.module("../../src/session", () => ({
+  ...sessionModule,
+  createWorkbookSession: (
+    ...args: Parameters<typeof realCreateSession>
+  ): WorkbookSession => {
+    const s = realCreateSession(...args);
+    createdSessions.push(s);
+    return s;
+  },
+}));
+
+/** Activate `run` and answer the session it created. */
+function sessionOf<T>(run: () => T): { out: T; session: WorkbookSession } {
+  const before = createdSessions.length;
+  const out = run();
+  const session = createdSessions[before];
+  if (!session || createdSessions.length !== before + 1)
+    throw new Error("the sheet bundle did not create exactly one session");
+  return { out, session };
+}
 
 const PKG = new URL("../..", import.meta.url).pathname;
 
@@ -111,11 +144,15 @@ export interface SheetEnv {
   /** Document mutations applied since `mark()` (the fake's log, or the
    *  harness's fan-out of every `mutate`). */
   mark(): number;
-  mutationsSince(mark: number): Array<{ op: string; applied: boolean }>;
+  mutationsSince(
+    mark: number,
+  ): Array<{ op: string; applied: boolean; amended?: boolean }>;
   undo(): Promise<void>;
   redo(): Promise<void>;
   /** The page every scenario places into. */
   pageId: string;
+  /** The workbook session the bundle created (grid UI state only). */
+  session: WorkbookSession;
   /** Wait for the bundle's queued work (persist, refresh, reconcile). */
   settle(): Promise<void>;
   dispose(): void;
@@ -155,7 +192,7 @@ function withEditorDoors(
   opened: string[],
   scene: SceneCall[],
   pickQueue: PickedFile[][],
-  mutations: Array<{ op: string; applied: boolean }>,
+  mutations: Array<{ op: string; applied: boolean; amended?: boolean }>,
 ): BundleHost {
   const surface = {
     submit: async (elementId: string, layer: { items: unknown[] }) => {
@@ -191,11 +228,16 @@ function withEditorDoors(
   const document = new Proxy(host.document, {
     get(o, p, r) {
       if (p === "mutate") {
-        return async (m: Parameters<BundleHost["document"]["mutate"]>[0]) => {
-          const outcome = await o.mutate(m);
+        return async (
+          m: Parameters<BundleHost["document"]["mutate"]>[0],
+          options?: Parameters<BundleHost["document"]["mutate"]>[1],
+        ) => {
+          const outcome = await o.mutate(m, options);
           mutations.push({
             op: (m as { op: string }).op,
             applied: !!(outcome as { applied?: boolean }).applied,
+            // A write that joined the step before it (engine ADR 1004).
+            ...(options?.amend !== undefined ? { amended: true } : {}),
           });
           return outcome;
         };
@@ -277,7 +319,8 @@ export function unitEnv(
       },
     },
   );
-  const mutations: Array<{ op: string; applied: boolean }> = [];
+  const mutations: Array<{ op: string; applied: boolean; amended?: boolean }> =
+    [];
   const host = withEditorDoors(
     handle.host,
     opened,
@@ -285,7 +328,7 @@ export function unitEnv(
     pickQueue,
     mutations,
   );
-  const bundle = sheetBundle.activate(host);
+  const { out: bundle, session } = sessionOf(() => sheetBundle.activate(host));
   const reg = <T extends { id?: string; type?: string }>(
     name: Parameters<FakeEditor["registered"]>[0],
     id: string,
@@ -322,6 +365,7 @@ export function unitEnv(
       await host.document.redo();
     },
     pageId: fake.pages[0]!.id,
+    session,
     settle: async () => {
       await settle();
       await fake.settle();
@@ -356,15 +400,18 @@ export async function headlessEnv(): Promise<SheetEnv & { h: HeadlessHost }> {
   const [pageId] = await h.load(blankPageIdml());
   // The REAL bundle, loaded the way the editor loads it; its own host is
   // captured so the two UI doors can be recorded around it.
-  const mutations: Array<{ op: string; applied: boolean }> = [];
+  const mutations: Array<{ op: string; applied: boolean; amended?: boolean }> =
+    [];
   let captured: BundleHost | null = null;
-  const loaded = h.loadBundle({
-    ...sheetBundle,
-    activate: (host: BundleHost) => {
-      captured = withEditorDoors(host, opened, scene, pickQueue, mutations);
-      return sheetBundle.activate(captured);
-    },
-  } as typeof sheetBundle);
+  const { out: loaded, session } = sessionOf(() =>
+    h.loadBundle({
+      ...sheetBundle,
+      activate: (host: BundleHost) => {
+        captured = withEditorDoors(host, opened, scene, pickQueue, mutations);
+        return sheetBundle.activate(captured);
+      },
+    } as typeof sheetBundle),
+  );
   if (!captured) throw new Error("the sheet bundle did not activate");
   const host: BundleHost = captured;
   const of = <T>(kind: string, id: string): T => {
@@ -407,6 +454,7 @@ export async function headlessEnv(): Promise<SheetEnv & { h: HeadlessHost }> {
       await settle();
     },
     pageId: pageId!,
+    session,
     settle: async () => {
       for (let i = 0; i < 4; i++) await settle();
     },

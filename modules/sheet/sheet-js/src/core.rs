@@ -50,8 +50,10 @@ use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, 
 use sheet_xlsx::XlsxDocument;
 
 mod cf;
+mod chart_style;
 mod charts;
 pub mod csv;
+mod docstyles;
 pub mod files;
 mod fill;
 pub mod filter;
@@ -64,7 +66,11 @@ pub mod sort;
 pub mod tables;
 pub mod validation;
 pub mod whatif;
+pub use chart_style::{
+    ChartStyleIn, ChartStyleOut, PaletteIn, PaletteOut, RoleIn, RoleOut, SwatchIn,
+};
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
+pub use docstyles::{DocReferences, NamedStyleUsage};
 pub use format::{
     DocSwatchArg, EdgeArg, GradientArg, GradientStopArg, MergeResult, NameInfo, NamedStyleInfo,
     ResolvedRange, SetStyleResult, SheetLayoutInfo, StylePatchArg,
@@ -270,6 +276,12 @@ pub struct SheetInfo {
     /// The tab's visibility as the workbook saved it: `"visible"`,
     /// `"hidden"` or `"veryHidden"` (read-only).
     pub state: &'static str,
+    /// The tab's kind: `"worksheet"` or `"chartsheet"` (a tab that is one
+    /// chart, ADR 519).
+    pub kind: &'static str,
+    /// A chartsheet's chart (an index into the chart list).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart: Option<u32>,
 }
 
 /// A worksheet's frozen-pane split for the panel/grid (spec §8.1). Read-only
@@ -2103,6 +2115,25 @@ impl SheetSession {
             eval.as_ref().map(|e| e as &dyn sheet_lower::CellCfSource),
         );
 
+        // Sparklines in the visible cells (sheet ADR 519).
+        for g in self.doc.sparklines.get(&sheet).into_iter().flatten() {
+            for (data, at) in &g.sparklines {
+                let Some((x, y, w, h)) = scene.viewport.cell_box(at.row, at.col) else {
+                    continue;
+                };
+                let vals = charts::resolve_values(model, data);
+                scene.sparklines.push(sheet_grid::GridSparkline {
+                    row: at.row,
+                    col: at.col,
+                    x,
+                    y,
+                    w,
+                    h,
+                    prims: sheet_chart::sparkline(g, &vals, w, h, self.doc.chart_theme),
+                });
+            }
+        }
+
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —
         // selection is engine state the panel requests, not scene-derived).
         // `grid_scene` always returns `selection: None` (Phase A); a selection
@@ -2194,12 +2225,27 @@ impl SheetSession {
                     Some(ur) => (ur.row1 + 1, ur.col1 + 1),
                     None => (0, 0),
                 };
+                let chartsheet = self.doc.chartsheets.contains(&(i as SheetId));
                 SheetInfo {
                     id: i as u16,
                     name: ws.name.to_string(),
                     rows,
                     cols,
                     state: ws.state.as_str(),
+                    kind: if chartsheet {
+                        "chartsheet"
+                    } else {
+                        "worksheet"
+                    },
+                    chart: chartsheet
+                        .then(|| {
+                            self.doc
+                                .charts
+                                .iter()
+                                .position(|c| c.chartsheet && c.host_sheet == i as SheetId)
+                                .map(|p| p as u32)
+                        })
+                        .flatten(),
                 }
             })
             .collect()

@@ -1257,9 +1257,12 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   chain. A typed `deleteChart` removes the chart and every placed copy of it; a chart read from
   the xlsx leaves the saved file (only the parts the delete touches change), its slot kept so the
   other charts keep their indices, and placed charts are tracked from the page after an undo or
-  redo and on open, so the art an undone delete restored refreshes with later edits. Each is one
-  undo step (the chain's first pagination is one batch on a host with in-batch handles; each area
-  of a print area placed without a chain is one step); `apps/cli/test/cli-sheet.spec.ts` runs
+  redo and on open, so the art an undone delete restored refreshes with later edits; a chart
+  moved or scaled on the page is redrawn where it stands, and one placed before its box was
+  recorded gets one on discovery. A paginated chain records its source and tables on its first
+  frame, so a reopened document finds it again and keeps it live. Each is one undo step (the
+  chain's first pagination and every area of a print area are one batch on a host with in-batch
+  handles); `apps/cli/test/cli-sheet.spec.ts` runs
   placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
