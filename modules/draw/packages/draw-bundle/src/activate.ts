@@ -71,6 +71,18 @@ import de from "../locales/de.json" with { type: "json" };
 
 import { drawTools } from "./tools";
 import {
+  contributePathToolCommands,
+  PATH_TOOL_COMMAND_IDS,
+} from "./commands/path-tools";
+import {
+  contributeStarFlareCommands,
+  STAR_FLARE_COMMAND_IDS,
+} from "./commands/star-flare";
+import {
+  contributeShaperCommand,
+  SHAPER_STROKE_COMMAND_ID,
+} from "./commands/shaper";
+import {
   contributeAppearanceCommands,
   APPEARANCE_COMMAND_IDS,
 } from "./commands/appearance";
@@ -517,6 +529,15 @@ export function activate(host: BundleHost): BundleHandle {
   const textOnPathCommandsSub = contributeTextOnPathCommands(host);
   // The Knife, Scissors and Shape Builder as commands (their gesture as data).
   const cutCommandsSub = contributeCutCommands(host);
+  // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
+  // data, and the Star / Flare inserts (a payload-free run repeats the
+  // Path Options panel's last-used values).
+  const pathToolCommandsSub = contributePathToolCommands(host);
+  const shaperCommandSub = contributeShaperCommand(host);
+  const starFlareCommandsSub = contributeStarFlareCommands(host, {
+    star: () => lastUsedPayload(host, "star"),
+    flare: () => lastUsedPayload(host, "flare"),
+  });
   // The width profile as data, and the rebuild of the recipes a changed
   // source feeds (G4).
   const widthProfileCommandsSub = contributeWidthProfileCommands(host, () =>
@@ -664,6 +685,9 @@ export function activate(host: BundleHost): BundleHandle {
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
         CUT_COMMAND_IDS.length +
+        PATH_TOOL_COMMAND_IDS.length +
+        STAR_FLARE_COMMAND_IDS.length +
+        [SHAPER_STROKE_COMMAND_ID].length +
         WIDTH_PROFILE_COMMAND_IDS.length +
         RECIPE_UPDATE_COMMAND_IDS.length
       } commands + 1 edit context + ` +
@@ -692,6 +716,9 @@ export function activate(host: BundleHost): BundleHandle {
       globalEditCommandSub.dispose();
       textOnPathCommandsSub.dispose();
       cutCommandsSub.dispose();
+      pathToolCommandsSub.dispose();
+      shaperCommandSub.dispose();
+      starFlareCommandsSub.dispose();
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
       recipeAutoUpdateSub.dispose();
