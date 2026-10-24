@@ -136,6 +136,9 @@
   --overlay-guide: #7c5cff; /* violet — margin guides                   */
   --overlay-snap: #0f766e; /* teal — snap lines                        */
   --overlay-target: #dc2626; /* red — hit/target markers                 */
+  /* isolation mode: the veil over everything outside the entered scope,
+     white at 50 % as Illustrator draws it */
+  --overlay-isolation-dim: rgba(255, 255, 255, 0.5);
 
   /* ── type ──────────────────────────────────────────────────── */
   --font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
@@ -232,6 +235,8 @@
 
   /* overlays keep their print-cue hues; nudge snap for contrast */
   --overlay-snap: #14b8a6;
+  /* the isolation veil follows the dark chrome instead of glaring white */
+  --overlay-isolation-dim: rgba(24, 24, 27, 0.55);
 
   /* floating UI needs a heavier shadow on dark */
   --shadow-pop: 0 6px 20px rgba(0, 0, 0, 0.5);
