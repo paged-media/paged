@@ -234,6 +234,35 @@ pub struct DocumentPayload {
     /// overrides is byte-identical to one written before the field existed.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub locales: BTreeMap<String, Locale>,
+    /// Transforms (data ADR 562): JavaScript over tables, run in order after
+    /// the sources are imported and before the queries, each giving a
+    /// derived table in the store. Omitted when empty (the additive rule).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transforms: Vec<TransformDef>,
+}
+
+/// A transform (data ADR 562): `source` is a function expression
+/// `(tables, params) => rows`, where `tables[name]` is the rows of each named
+/// input (a source table or an earlier transform) as objects, and `rows` an
+/// array of objects (keys in column order, types inferred as an import infers
+/// them). It runs in a bare, sandboxed interpreter (`paged-action`'s JS
+/// actions): it can compute and nothing else.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransformDef {
+    /// The derived table's name.
+    pub id: String,
+    pub inputs: Vec<String>,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub params: serde_json::Map<String, serde_json::Value>,
+}
+
+/// One transform of a [`DataSession::run_transforms`]: its row count, or why
+/// it gave no table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransformRun {
+    pub transform: String,
+    pub outcome: Result<usize, String>,
 }
 
 /// One source's authorization verdict (§11 data-source manifest review).
@@ -378,6 +407,8 @@ pub struct DataSession {
     applied_rows: HashMap<QueryId, RecordSet>,
     /// The store the imported sources live in (ADR 561), made on first use.
     store: Option<data_store::Store>,
+    /// Transforms (data ADR 562), in run order.
+    transforms: Vec<TransformDef>,
 }
 
 impl DataSession {
@@ -399,6 +430,7 @@ impl DataSession {
             binding_locales: BTreeMap::new(),
             applied_rows: HashMap::new(),
             store: None,
+            transforms: Vec::new(),
         }
     }
 
@@ -504,7 +536,10 @@ impl DataSession {
     /// A query's rows in the provider shape (the data door's `query`). The
     /// caller has run the query guard: this runs on the store's
     /// `query_only` connection like every user query.
-    pub fn store_query_records(&mut self, sql: &str) -> Result<serde_json::Value, data_store::StoreError> {
+    pub fn store_query_records(
+        &mut self,
+        sql: &str,
+    ) -> Result<serde_json::Value, data_store::StoreError> {
         let rs = self.store()?.query(sql)?;
         Ok(record_set_json(&rs))
     }
@@ -518,6 +553,79 @@ impl DataSession {
         edits: &[data_store::RowEdit],
     ) -> Result<usize, data_store::StoreError> {
         self.store()?.edit(table, edits)
+    }
+
+    /// Define (or redefine, by id) a transform (data ADR 562).
+    pub fn define_transform(&mut self, def: TransformDef) {
+        match self.transforms.iter_mut().find(|t| t.id == def.id) {
+            Some(t) => *t = def,
+            None => self.transforms.push(def),
+        }
+    }
+
+    /// Remove a transform; its derived table is dropped from the store.
+    pub fn remove_transform(&mut self, id: &str) -> bool {
+        let before = self.transforms.len();
+        self.transforms.retain(|t| t.id != id);
+        if let Some(store) = self.store.as_ref() {
+            let _ = store.drop_source(id);
+        }
+        self.transforms.len() != before
+    }
+
+    /// The transforms, in run order.
+    pub fn transforms(&self) -> &[TransformDef] {
+        &self.transforms
+    }
+
+    /// Run every transform in order (after the sources are imported, before
+    /// the queries refresh): its inputs' rows go in as objects, its rows come
+    /// back as the derived table `id`. One that fails is reported and leaves
+    /// its table out; a later transform reading it fails in turn.
+    pub fn run_transforms(&mut self) -> Vec<TransformRun> {
+        let defs = self.transforms.clone();
+        defs.into_iter()
+            .map(|t| TransformRun {
+                outcome: self.run_transform(&t),
+                transform: t.id,
+            })
+            .collect()
+    }
+
+    fn run_transform(&mut self, t: &TransformDef) -> Result<usize, String> {
+        let store = self.store().map_err(|e| e.to_string())?;
+        let mut tables = serde_json::Map::new();
+        for input in &t.inputs {
+            let rs = store
+                .records(input, 0, None)
+                .map_err(|e| format!("input {input}: {e}"))?;
+            tables.insert(input.clone(), rows_json(&rs));
+        }
+        // The rows come back as JSON text: `JSON.stringify` keeps the keys in
+        // the order the transform wrote them, and the store's JSON reader
+        // types the columns as an import does.
+        let wrapped = format!(
+            "(tables, params) => JSON.stringify(({}\n)(tables, params))",
+            t.source
+        );
+        let out = paged_action::js::call(
+            &wrapped,
+            &[
+                serde_json::Value::Object(tables),
+                serde_json::Value::Object(t.params.clone()),
+            ],
+            paged_action::js::JsBudget::default(),
+        )?;
+        let text = out
+            .as_str()
+            .ok_or("the transform gave nothing (return an array of rows)")?;
+        if !text.trim_start().starts_with('[') {
+            return Err("a transform returns an array of rows (objects)".into());
+        }
+        let report = store
+            .import(&t.id, data_store::Format::Json, text.as_bytes(), None)
+            .map_err(|e| e.to_string())?;
+        Ok(report.rows)
     }
 
     /// The columns a query produces, with their types.
@@ -1348,6 +1456,7 @@ impl DataSession {
             bindings: self.bindings.clone(),
             variables: self.variables.clone(),
             locales: self.binding_locales.clone(),
+            transforms: self.transforms.clone(),
         }
     }
 
@@ -1374,6 +1483,7 @@ impl DataSession {
         for (id, l) in payload.locales {
             s.set_binding_locale(&BindingId::from(id.as_str()), Some(l));
         }
+        s.transforms = payload.transforms;
         s
     }
 
@@ -1877,4 +1987,24 @@ pub fn record_set_json(rs: &RecordSet) -> serde_json::Value {
         "columns": rs.columns.iter().map(|c| c.iter().map(cell).collect::<Vec<_>>()).collect::<Vec<_>>(),
         "rowCount": rs.row_count,
     })
+}
+
+/// A record set's rows as JSON objects (a transform's input).
+fn rows_json(rs: &RecordSet) -> serde_json::Value {
+    let set = record_set_json(rs);
+    let names: Vec<String> = rs.schema.fields.iter().map(|f| f.name.clone()).collect();
+    let columns = set["columns"].as_array().cloned().unwrap_or_default();
+    serde_json::Value::Array(
+        (0..rs.row_count)
+            .map(|r| {
+                serde_json::Value::Object(
+                    names
+                        .iter()
+                        .zip(&columns)
+                        .map(|(n, c)| (n.clone(), c[r].clone()))
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
 }

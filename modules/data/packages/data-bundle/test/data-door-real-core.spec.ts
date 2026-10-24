@@ -129,7 +129,7 @@ describe.skipIf(!ready && !required)(
         ["A-1", "B-2", "C-3"],
         [28.5, 60, 5],
       ]);
-      await expect(consumer.data.write("q", [])).rejects.toThrow(/is a query/);
+      await expect(consumer.data.write("q", [])).rejects.toThrow(/is derived/);
       await expect(
         consumer.data.query("SELECT * FROM read_csv('/etc/passwd')"),
       ).rejects.toThrow(/read_csv\(\) reads files or URLs/);
@@ -149,6 +149,29 @@ describe.skipIf(!ready && !required)(
       ).toEqual([[b.id, "frameOpacity"]]);
       await consumer.data.unbind(b.id);
       expect(await consumer.data.bindings()).toEqual([]);
+
+      // Data ADR 562: a transform's derived table is a read-only table of the
+      // door, refreshed before the queries.
+      expect(
+        await s.defineTransform({
+          id: "lowStock",
+          inputs: ["products"],
+          source: "(t, p) => t.products.filter((r) => r.stock < p.below)",
+          params: { below: 5 },
+        }),
+      ).toBeNull();
+      await s.refreshData();
+      const low = (await consumer.data.tables()).find(
+        (t) => t.name === "lowStock",
+      );
+      expect(low).toMatchObject({
+        kind: "query",
+        rowCount: 2,
+        writable: false,
+      });
+      await expect(consumer.data.write("lowStock", [])).rejects.toThrow(
+        /is derived/,
+      );
     });
   },
 );

@@ -244,6 +244,37 @@ describe("host.actions — the actions door (extensions ADR 344) [plugin-platfor
     ).rejects.toThrow(/gives value, media.paged.image\/invert takes asset/);
   });
 
+  it("the key is the engine's: paged-action replays the same cases (core ADR 1015)", async () => {
+    const file = (await Bun.file(
+      new URL(
+        "../../../../../engine/core/crates/paged-action/tests/keys.json",
+        import.meta.url,
+      ),
+    ).json()) as {
+      cases: {
+        name: string;
+        input: {
+          kind: string;
+          value?: unknown;
+          bytes?: number[];
+          mediaType?: string;
+        };
+        steps: { action: string; params: Record<string, unknown> }[];
+        key: string;
+      }[];
+    };
+    for (const c of file.cases) {
+      const input =
+        c.input.kind === "asset"
+          ? {
+              bytes: new Uint8Array(c.input.bytes!),
+              mediaType: c.input.mediaType,
+            }
+          : c.input.value;
+      expect(await actionKey(input, c.steps), c.name).toBe(c.key);
+    }
+  });
+
   it("the key is the same for equal inputs whatever their key order", async () => {
     const a = await actionKey({ b: 1, a: [1, 2] }, [
       { action: "x", params: { p: 1, q: 2 } },

@@ -192,6 +192,14 @@ export interface DataEngineLike {
   store_preview?(sql: string, limit: number): unknown;
   /** A window of a source table in the provider shape (`limit` 0 = all). */
   store_records?(table: string, offset: number, limit: number): unknown;
+  /** Transforms (data ADR 562). */
+  define_transform?(def: TransformDefJson): void;
+  remove_transform?(id: string): boolean;
+  transforms?(): TransformDefJson[];
+  run_transforms?(): {
+    transform: string;
+    outcome: { Ok: number } | { Err: string };
+  }[];
   /** A query's rows in the provider shape (the guard has run). */
   store_query_records?(sql: string): unknown;
   /** Apply row edits to a source table; the row count. */
@@ -363,4 +371,13 @@ export function ingestColumnBatch(
     }
   }
   return e.finish_columns() === "unchanged" ? "unchanged" : "changed";
+}
+
+/** A transform as the engine keeps it (data ADR 562): `source` is a
+ *  function expression `(tables, params) => rows`. */
+export interface TransformDefJson {
+  id: string;
+  inputs: string[];
+  source: string;
+  params?: Record<string, unknown>;
 }

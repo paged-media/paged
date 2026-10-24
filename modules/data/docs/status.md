@@ -15,11 +15,22 @@ under [Releases](#releases).
 [PM-0015](../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) (2026-10-24) makes
 data a platform layer. Bindings move into the engine's model and the data crates into
 `engine/core/crates`. Modules and extensions reach data through a `data@1` door, and
-transforms and asset actions run in the engine's script interpreter. The first two steps are
-on `main`: the measured spike ([`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md))
-and the engine swap — the query store is Turso inside the data engine
-([ADR 561](adr/561-turso-is-the-data-engine.md)), and DuckDB-WASM is gone. The rest is not
-built yet.
+transforms and asset actions run in the engine's script interpreter. On `main`:
+
+- the measured spike ([`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md)) and the
+  engine swap: the query store is Turso inside the data engine
+  ([ADR 561](adr/561-turso-is-the-data-engine.md)), and DuckDB-WASM is gone;
+- the engine-level crates and the session in `engine/core/crates/paged-data-*`; the engine
+  reads a document's binding labels, guards its queries and applies property and variable
+  bindings from the command line (`paged data bindings` / `apply`, core ADR 1014);
+- the `data@1` and `actions@1` doors in the public SDK (extensions ADRs 343, 344), served by
+  this module (`src/data-door.ts`): tables, typed records, row writes, bindings, changes;
+- transforms ([ADR 562](adr/562-transforms-are-javascript-over-tables.md)), JavaScript over
+  tables run in the sandboxed interpreter before the queries, on the engine's action registry
+  (core ADR 1015).
+
+Not built yet: the Data panel and the bind popover (editor ADRs 291, 292), asset columns (563),
+the sheet editing a table through `data@1`, and the remaining binding kinds headless.
 
 ## Shipped
 

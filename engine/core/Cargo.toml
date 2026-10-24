@@ -56,6 +56,8 @@ members = [
     "crates/paged-data-xlsx",
     "crates/paged-data-automation",
     "crates/paged-data-session",
+    # Actions (core ADR 1015): the registry, chains, the cache key, JS actions.
+    "crates/paged-action",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",

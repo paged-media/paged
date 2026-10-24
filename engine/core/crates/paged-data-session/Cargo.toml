@@ -24,6 +24,8 @@ paged-data-dataset = { path = "../paged-data-dataset" }
 paged-data-query = { path = "../paged-data-query" }
 paged-data-automation = { path = "../paged-data-automation" }
 paged-data-store = { path = "../paged-data-store" }
+# Transforms (data ADR 562) run as JS actions (core ADR 1015).
+paged-action = { path = "../paged-action" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"

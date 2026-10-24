@@ -1,6 +1,6 @@
 // The data door (`data@1`, extensions ADR 343; PM-0015): paged.data serves
-// the document's data to every other bundle — the source tables and the
-// queries over them, typed records, row writes into a source table, and
+// the document's data to every other bundle — the source tables, the
+// transforms' derived tables (data ADR 562) and the queries over them, typed records, row writes into a source table, and
 // property bindings — through `host.data`, so paged.sheet edits a table and
 // an extension binds its own objects without knowing this module.
 //
@@ -27,6 +27,8 @@ export interface DataDoorDeps {
   ensureStore(): Promise<QueryHandle>;
   sourceNames(): readonly string[];
   queries(): readonly { id: string; sql: string }[];
+  /** The transforms' derived tables (data ADR 562), in run order. */
+  transforms(): readonly string[];
   addPropertyBinding(
     id: string,
     spec: DataBindingSpec,
@@ -86,16 +88,29 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     async tables() {
       const d = await store();
       const out: DataTableInfo[] = [];
-      for (const name of deps.sourceNames()) {
-        const rs = await d.records(name, 0, 0);
+      // One row for the schema, the count in the store: a table's rows do
+      // not cross to be counted.
+      const stored = async (name: string, kind: "source" | "query") => {
+        const rs = await d.records(name, 0, 1);
+        const n = await d.queryRecords(
+          `SELECT count(*) AS n FROM "${name.replace(/"/g, '""')}"`,
+        );
         out.push({
           name,
-          kind: "source",
+          kind,
           schema: rs.schema,
-          rowCount: rs.rowCount,
+          rowCount: Number(n.columns[0]?.[0] ?? 0),
           revision: revision(name),
-          writable: true,
+          writable: kind === "source",
         });
+      };
+      for (const name of deps.sourceNames()) await stored(name, "source");
+      for (const name of deps.transforms()) {
+        try {
+          await stored(name, "query");
+        } catch {
+          // Not run yet, or it failed: the refresh reported why.
+        }
       }
       for (const q of deps.queries()) {
         try {
@@ -124,16 +139,21 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
           range?.offset,
           range?.limit,
         );
-      if (!deps.sourceNames().includes(table))
-        throw new Error(`no table "${table}" (a source or a query)`);
+      if (
+        !deps.sourceNames().includes(table) &&
+        !deps.transforms().includes(table)
+      )
+        throw new Error(
+          `no table "${table}" (a source, a transform or a query)`,
+        );
       return d.records(table, range?.offset ?? 0, range?.limit ?? 0);
     },
     async query(sql) {
       return (await store()).queryRecords(guarded(sql));
     },
     async write(table, edits: readonly DataRowEdit[]) {
-      if (queryOf(table))
-        throw new Error(`"${table}" is a query: write its source tables`);
+      if (queryOf(table) || deps.transforms().includes(table))
+        throw new Error(`"${table}" is derived: write its source tables`);
       if (!deps.sourceNames().includes(table))
         throw new Error(`no source table "${table}"`);
       const rowCount = await (await store()).edit(table, edits);
