@@ -66,7 +66,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.objectsOnPathPanel", {
   summary:
     "Move the selected objects onto a path, spaced evenly or at a set distance; the path is the object you select last.",
-  note: "This moves the objects you selected; it does not copy them (for copies, use a repeat). Text frames work too. Release puts every object back exactly where it was. Objects are kept on the page: an object moved far off the page could not be measured to place it again. Making, updating, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
+  note: "This moves the objects you selected; it does not copy them (for copies, use a repeat). Text frames work too. Release puts every object back exactly where it was. While Update automatically is on, editing the path or one of the objects places them again in the same undo step; with it off, they move only when you choose Update. Objects are kept on the page: an object moved far off the page could not be measured to place it again. Making, updating, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
   selectObjectsThenPath: "Select the objects, then the path last",
   selectAtLeastOne: "Select at least one object and then the path",
   lastIsPath: "The last object you select is used as the path.",

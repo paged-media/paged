@@ -109,6 +109,10 @@ import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
 import { readPgil } from "./object-model/pgil";
 import { coverageAt } from "./object-model/image-objects";
+import {
+  coverageAfterCanvasOp,
+  type CanvasOp,
+} from "./object-model/canvas-ops";
 import { collectGarbage } from "./session-store";
 import { createDecodePool, type DecodePool } from "./decode-pool";
 import { createCropMachine, type CropMachine } from "./crop-machine";
@@ -878,9 +882,24 @@ export interface ImageSession {
    *  instead). */
   liveSelection(
     frameId: string,
+    /** The stored revision the frame shows now (its marker's record, null
+     *  for none). A kept selection answers only on the revision it was
+     *  made on or one a followed canvas operation made from it; omitted,
+     *  the newest kept one answers. */
+    record?: string | null,
   ):
     | { width: number; height: number; coverage: Uint8Array }
     | { refused: string };
+  /** A canvas operation committed on `frameId` through the object model,
+   *  from stored revision `from` to `to`: the selection kept for `from`
+   *  is carried along to `to` (a quarter turn or flip moves it with the
+   *  pixels; a crop or canvas resize drops it, as in the editor). */
+  followCanvasOps(
+    frameId: string,
+    from: string | null,
+    to: string,
+    ops: readonly CanvasOp[],
+  ): void;
   /** Select the whole image (an explicit full-extent selection). */
   selectAll(): boolean;
   /** Deselect (back to "no selection" — adjust applies everywhere). */
@@ -2053,25 +2072,82 @@ export function createImageSession(host: BundleHost): ImageSession {
   // still filter within it (`liveSelection`). A few frames, newest last;
   // a frame that opens again takes its live selection instead, and a
   // document that opens drops them all (frame ids are per document).
-  const keptSelections = new Map<
-    string,
-    { width: number; height: number; coverage: Uint8Array }
-  >();
+  //
+  // Each is tied to the stored revision of the frame it was made on (the
+  // marker's record, null for a frame with none), so it is never laid over
+  // pixels a later edit moved: a canvas operation committed through the
+  // object model carries it along to the revision it makes
+  // (`followCanvasOps`), keeping the old one for an undo, and a revision it
+  // was not carried to answers that the image changed since.
+  type KeptSelection = {
+    record: string | null;
+    width: number;
+    height: number;
+    coverage: Uint8Array;
+  };
+  const keptSelections = new Map<string, KeptSelection[]>();
   const KEEP_SELECTIONS = 4;
+  /** Revisions a frame's kept selection is carried to, at most. */
+  const KEEP_REVISIONS_OF_SELECTION = 8;
+  /** The never-matching record of a selection made on canvas changes not
+   *  committed yet (the document's image is not the one it was made on). */
+  const UNCOMMITTED = "\u0000uncommitted";
+  /** The stored revision the open frame shows (`frameRecordOf`), and
+   *  whether a canvas operation changed it since. */
+  let openRecord: string | null = null;
+  let canvasSinceCommit = false;
   const keepSelection = () => {
     const src = state.source;
     if (!engine || !src?.elementId) return;
     keptSelections.delete(src.elementId);
     if (!engine.selectionStats()) return;
-    keptSelections.set(src.elementId, {
-      width: src.width,
-      height: src.height,
-      coverage: engine.selectionCoverageBytes().slice(),
-    });
+    keptSelections.set(src.elementId, [
+      {
+        record: canvasSinceCommit ? UNCOMMITTED : openRecord,
+        width: src.width,
+        height: src.height,
+        coverage: engine.selectionCoverageBytes().slice(),
+      },
+    ]);
     for (const k of keptSelections.keys()) {
       if (keptSelections.size <= KEEP_SELECTIONS) break;
       keptSelections.delete(k);
     }
+  };
+  /** The newest of `kept` made on (or carried to) revision `record`. */
+  const keptOn = (
+    kept: readonly KeptSelection[],
+    record: string | null,
+  ): KeptSelection | null => {
+    for (let i = kept.length - 1; i >= 0; i--)
+      if (kept[i]!.record === record) return kept[i]!;
+    return null;
+  };
+  /** The selection kept for `frameId` on revision `record` (the newest when
+   *  `record` is undefined). */
+  const keptFor = (
+    frameId: string,
+    record: string | null | undefined,
+  ): KeptSelection | null => {
+    const all = keptSelections.get(frameId) ?? [];
+    if (record === undefined) return all.at(-1) ?? null;
+    return keptOn(all, record);
+  };
+  /** The stored revision a frame shows: its marker's record when the
+   *  frame's image is exactly what that revision baked (the object model's
+   *  and the reopen's rule), else null. */
+  const frameRecordOf = async (
+    ref: ElementId,
+    placed: Uint8Array,
+  ): Promise<string | null> => {
+    type Marker = { v?: number; data?: Partial<CommittedMarker> } | null;
+    const marker = (await host.document
+      .getMetadata(ref)
+      .catch(() => null)) as unknown as Marker;
+    if (marker?.v !== 2 || !marker.data?.record) return null;
+    return (await sha256Hex(placed)) === marker.data.baked
+      ? marker.data.record
+      : null;
   };
 
   // A frame's image opens again: the selection it kept becomes the live
@@ -2079,11 +2155,7 @@ export function createImageSession(host: BundleHost): ImageSession {
   // resampled when the frame now holds the same image at another size
   // (`coverageAt`). Another crop of the image cannot say where it lies:
   // that one is dropped, as a crop drops a live selection.
-  const restoreSelection = (kept: {
-    width: number;
-    height: number;
-    coverage: Uint8Array;
-  }) => {
+  const restoreSelection = (kept: KeptSelection) => {
     const src = state.source;
     if (!engine || !src) return;
     try {
@@ -2559,6 +2631,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     bytes: Uint8Array,
     origin: "selection" | "import",
     elementId: string | null,
+    /** The frame's element (its kind included), to read its marker. */
+    ref?: ElementId,
   ): Promise<boolean> => {
     if (!engine) return false;
     try {
@@ -2578,7 +2652,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       };
       // The open frame's selection is its live one now: the one it kept
       // when it closed is set again once the image is bound (below).
-      const kept = elementId ? keptSelections.get(elementId) : undefined;
+      openRecord = null;
+      canvasSinceCommit = false;
+      const keptAll = elementId ? keptSelections.get(elementId) : undefined;
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
       state.saveBack = null;
@@ -2601,7 +2677,13 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
-      if (kept) restoreSelection(kept);
+      // The selection kept for the revision the frame shows now; one kept
+      // for another revision lay over pixels that have moved since.
+      if (ref) openRecord = await frameRecordOf(ref, bytes).catch(() => null);
+      if (keptAll) {
+        const kept = keptOn(keptAll, openRecord);
+        if (kept) restoreSelection(kept);
+      }
       setStatus(
         t(decodePool ? S.decodedOffThread : S.decoded, {
           name,
@@ -2914,6 +2996,7 @@ export function createImageSession(host: BundleHost): ImageSession {
           asset.bytes,
           "selection",
           id,
+          ids[0] as ElementId,
         );
         if (ok) {
           // ADR-023 / K-13 — MARK THE FRAME AS OURS, so double-clicking
@@ -3226,6 +3309,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         return false;
       }
       adoptCanvasExtent(src, wh);
+      canvasSinceCommit = true;
       if (src.elementId) await api.apply();
       if (state.dialog?.kind === "trim") state.dialog = null;
       setStatus(t(S.trimmed, { width: wh.width, height: wh.height }));
@@ -3953,6 +4037,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         );
         state.committedRev = rev;
         state.uncommitted = false;
+        openRecord = path;
+        canvasSinceCommit = false;
         // Old revisions and the layer data only they used go (the
         // document's undo can reach the last KEEP_REVISIONS commits; older
         // ones are unreachable anyway). Awaited, not fired off: a collection
@@ -4312,11 +4398,34 @@ export function createImageSession(host: BundleHost): ImageSession {
       emit();
     },
 
-    liveSelection(frameId) {
+    followCanvasOps(frameId, from, to, ops) {
+      const kept = keptSelections.get(frameId);
+      const base = kept ? keptOn(kept, from) : null;
+      if (!kept || !base) return;
+      let next: Omit<KeptSelection, "record"> | null = base;
+      for (const op of ops) {
+        if (!next) break;
+        next = coverageAfterCanvasOp(next, op);
+      }
+      if (!next) return;
+      kept.push({ ...next, record: to });
+      while (kept.length > KEEP_REVISIONS_OF_SELECTION) kept.shift();
+    },
+
+    liveSelection(frameId, record) {
       const src = state.source;
       if (!engine || !src || src.elementId !== frameId) {
-        const kept = keptSelections.get(frameId);
-        if (kept) return { ...kept, coverage: kept.coverage.slice() };
+        const kept = keptFor(frameId, record);
+        if (kept)
+          return {
+            width: kept.width,
+            height: kept.height,
+            coverage: kept.coverage.slice(),
+          };
+        if ((keptSelections.get(frameId)?.length ?? 0) > 0)
+          return {
+            refused: `the image of ${frameId} has changed since its selection was made (a crop, a canvas resize or another edit moved its pixels); select again`,
+          };
         return {
           refused: !src
             ? `no image is open in the editor and no selection was made on ${frameId}, so there is no selection`

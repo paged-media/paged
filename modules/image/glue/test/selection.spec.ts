@@ -218,6 +218,91 @@ describe("the session selection surface (real engine wasm)", () => {
     handle.dispose();
   });
 
+  it("a quarter turn or a flip carries the live selection with the pixels; a canvas resize drops it", async () => {
+    // @feat: image.editor.region-filter — the selection follows the
+    // canvas operations that move pixels without resampling them.
+    const { handle, session } = await ingest();
+    expect(session.selectionFromChannel("luma")).toBe(true);
+    const { coverage } = session.liveSelection("u1") as {
+      coverage: Uint8Array;
+    };
+    const [a, b] = coverage;
+    expect(a).not.toBe(b);
+    expect(await session.canvasOp("flip-h")).toBe(true);
+    expect(session.liveSelection("u1")).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([b!, a!]),
+    });
+    // Clockwise: the left pixel goes to the top.
+    expect(await session.canvasOp("rotate-cw")).toBe(true);
+    expect(session.liveSelection("u1")).toEqual({
+      width: 1,
+      height: 2,
+      coverage: new Uint8Array([b!, a!]),
+    });
+    expect(
+      await session.canvasOp("canvas", {
+        width: 3,
+        height: 2,
+        anchorX: 0,
+        anchorY: 0,
+      }),
+    ).toBe(true);
+    expect(session.liveSelection("u1")).toEqual({
+      refused: "nothing is selected in the editor",
+    });
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("a kept selection follows the canvas operations committed on its frame, and answers only for the revision it is on", async () => {
+    // @feat: image.editor.region-filter — a kept selection is never laid
+    // over pixels a later edit moved.
+    const { fake, handle, session } = await ingest();
+    expect(session.selectionFromChannel("luma")).toBe(true);
+    const { coverage } = session.liveSelection("u1") as {
+      coverage: Uint8Array;
+    };
+    const [a, b] = coverage;
+    fake.placed.set("u2", psdBytes());
+    fake.geometry.set("u2", geomFor("u2", [0, 0, 100, 200]));
+    fake.emitSelection([{ kind: "rectangle", id: "u2" }]);
+    expect(await session.ingestSelection()).toBe(true);
+    // u1 closed on a frame with no stored revision (null).
+    expect(session.liveSelection("u1", null)).toMatchObject({ width: 2 });
+    // A flip committed through the object model: carried along, and the
+    // revision before it (an undo) still has the selection as it was.
+    session.followCanvasOps("u1", null, "r1", [{ kind: "flipHorizontal" }]);
+    expect(session.liveSelection("u1", "r1")).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([b!, a!]),
+    });
+    expect(session.liveSelection("u1", null)).toEqual({
+      width: 2,
+      height: 1,
+      coverage: new Uint8Array([a!, b!]),
+    });
+    session.followCanvasOps("u1", "r1", "r2", [{ kind: "rotateCcw" }]);
+    expect(session.liveSelection("u1", "r2")).toEqual({
+      width: 1,
+      height: 2,
+      coverage: new Uint8Array([a!, b!]),
+    });
+    // A crop drops it, as in the editor; so does any revision it was not
+    // carried to.
+    session.followCanvasOps("u1", "r2", "r3", [
+      { kind: "crop", x: 0, y: 0, width: 1, height: 1 },
+    ]);
+    for (const record of ["r3", "elsewhere"])
+      expect(session.liveSelection("u1", record)).toMatchObject({
+        refused: expect.stringMatching(/has changed since its selection/),
+      });
+    session.dispose();
+    handle.dispose();
+  });
+
   it("a frame's image that opens again takes back the selection it kept, resampled to its size, and a cleared one stays cleared", async () => {
     // @feat: image.editor.region-filter — the kept selection is restored
     // into the engine (selection_set_coverage) when its frame reopens.

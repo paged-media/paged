@@ -52,6 +52,7 @@ import {
   type DiscoveryProblem,
 } from "./plugins";
 import { installNodeShims } from "./node-shims";
+import { withModuleContentDrawn } from "./module-content";
 import { findingLine, pdfCommand, typedPdf } from "./pdf";
 import { CliError, EXIT } from "./errors";
 
@@ -487,13 +488,36 @@ export async function openSession(
       ) {
         const typed = await pdfCommand(session, undefined);
         if (typed) {
-          const r = await typedPdf(session, typed);
+          const { value: r, notes } = await withModuleContentDrawn(
+            session,
+            () => typedPdf(session, typed),
+          );
           return {
             bytes: r.bytes,
             format: "pdf",
-            diagnostics: r.findings.map(findingLine),
+            diagnostics: [...notes, ...r.findings.map(findingLine)],
             via: typed.id,
           };
+        }
+      }
+      if (f === "pdf") {
+        // Core's door: web frames baked and pending content reported as
+        // for the typed exporter.
+        try {
+          const { value: out, notes } = await withModuleContentDrawn(
+            session,
+            () => h.exportDocument("pdf", exportOptions),
+          );
+          return {
+            ...out,
+            diagnostics: [...notes, ...out.diagnostics],
+            format: "pdf",
+          };
+        } catch (err) {
+          throw new CliError(
+            EXIT.failed,
+            `export pdf failed: ${(err as Error).message}`,
+          );
         }
       }
       if (f === "paged" || f === "idml" || f === "pdf") {

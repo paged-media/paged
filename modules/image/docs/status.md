@@ -151,10 +151,16 @@ frame keeps its previous image until a GPU realm re-composites it.
   keeps the last four frames' selections until another document opens). When that frame's
   image opens again, its kept selection is set back into the engine and is the live
   selection again (`selection_set_coverage`; resampled to the image when it is the same
-  image at another size, dropped when it is another crop). A selection made
-  on the same image at another size (the aspect agrees within a pixel) is resampled to the
-  canvas; one of another aspect (another crop) is refused, and so is a frame with no
-  selection, headless or not, with the reason. A mask that covers no pixel is refused.
+  image at another size, dropped when it is another crop). A kept selection belongs to the
+  stored revision of the frame it was made on (its marker's record): a quarter turn or flip
+  committed on that frame through the object model carries it along to the revision it makes
+  (the revision before keeps the old one, for an undo), a crop or canvas resize drops it as
+  the editor's own do, and on any revision it was not carried to it is refused with the
+  reason that the image changed since, so it is never laid over pixels an edit moved. A
+  selection made on the same image at another size (the aspect agrees within a pixel) is
+  resampled to the canvas; one of another aspect (another crop, whose offset nothing
+  records) is refused, and so is a frame with no selection, headless or not, with the
+  reason. A mask that covers no pixel is refused.
   `tests/plugin-surface/image-filter-selection.spec.ts` drives it in the running editor: a
   marquee drag, then the typed command, then one undo.
 - **Interactive twins refuse headless.** A typed twin that acts on the image open in the
@@ -282,7 +288,11 @@ depend on whether the realm has a device. They wait for a CPU resample from the 
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
   until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
   8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
-  step that keeps the history, and drops the selection. The undo list keeps 200 structure steps; its pixel steps live in a tile
+  step that keeps the history, and drops the selection (a crop does in Photoshop too); a
+  quarter turn or flip carries the selection with the pixels, and a canvas resize drops it.
+  A selection is session state ([ADR 460](adr/460-document-is-not-the-store.md)): it is
+  never written to the document, so a reopened document has none, as in Photoshop, where
+  keeping one means saving it as a channel. The undo list keeps 200 structure steps; its pixel steps live in a tile
   journal of at most 32 entries and 256 MiB.
 - **Raster type** has no line wrapping. **Content-aware fill** searches a bounded window.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
