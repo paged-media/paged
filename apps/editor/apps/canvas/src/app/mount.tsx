@@ -52,6 +52,7 @@ import {
   tableCellOverlayContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  dataMarkersContribution,
   loadDocumentFile,
   fetchDefaultFont,
   fetchDefaultFontFaces,
@@ -333,6 +334,9 @@ const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   // B4 — the story's route across the spread (View ▸ Show text
   // threads). Draws nothing and fetches nothing until toggled on.
   threadLinesContribution,
+  // Editor ADR 291 — View ▸ Show data markers: the frames the data is
+  // placed in, in their sync state. Reads nothing until toggled on.
+  dataMarkersContribution,
   // W3.A2 — selected table cell outline.
   tableCellOverlayContribution,
   contentGrabberContribution,

@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 456,
+    "command": 457,
     "keybinding": 88,
-    "menu": 334,
+    "menu": 335,
     "panel": 127,
     "tool": 81
   },
@@ -2271,6 +2271,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.toggleDataMarkers",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.toggleHeadingAnchors",
       "kind": "command",
       "owner": "editor"
@@ -4352,6 +4357,11 @@
     },
     {
       "id": "menu:View/Fit spread in window",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
     },
