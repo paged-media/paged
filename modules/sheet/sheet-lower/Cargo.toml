@@ -20,3 +20,4 @@ serde.workspace = true
 # determinism JSON-equality (the SHIPPING crate carries no serde_json — the
 # wasm surface serializes via serde-wasm-bindgen in sheet-js).
 serde_json.workspace = true
+proptest.workspace = true

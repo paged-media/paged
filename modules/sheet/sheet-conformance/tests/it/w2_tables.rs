@@ -264,3 +264,35 @@ fn corpus_table_round_trips_and_edits__feat__sheet_table_edit() {
     let back = SheetSession::load_xlsx(&s.save_xlsx().unwrap()).unwrap();
     assert!(back.table_detail(&t.name).unwrap().banded_columns);
 }
+
+#[test]
+fn a_tables_own_autofilter__feat__sheet_filter_criteria() {
+    use sheet_js::core::filter::CriterionArg;
+    let mut s = sales();
+    s.create_table(0, "A1:C4", true, None, None).unwrap();
+    // Column 1 of the range B1:B4 is the table's column 1 (Units).
+    let r = s
+        .set_filter_column(
+            0,
+            "B1:B4",
+            0,
+            Some(CriterionArg::Top {
+                n: 1.0,
+                percent: false,
+                top: true,
+            }),
+        )
+        .unwrap();
+    assert_eq!(r.hidden_rows, vec![1, 3]);
+    let v = s.table_filter_column_values("Table1", 1).unwrap();
+    assert_eq!(v.items.len(), 3);
+    let part = read_part(&s.save_xlsx().unwrap(), "xl/tables/table1.xml");
+    assert!(
+        part.contains(r#"<filterColumn colId="1"><top10 val="1"/></filterColumn>"#),
+        "{part}"
+    );
+    assert!(s.filter_state(0).unwrap().is_none(), "no sheet AutoFilter");
+    let r = s.clear_table_filter("Table1").unwrap();
+    assert!(r.hidden_rows.is_empty());
+    assert!(s.outline(0).unwrap().hidden_rows.is_empty());
+}

@@ -70,6 +70,33 @@ pub struct CellRunEdit {
     pub new_text: Option<String>,
     pub new_props: Option<RunProps>,
     pub rstyle: Option<Option<String>>,
+    /// The run's look before the edit, given with `new_props`: then only
+    /// the properties that differ are rewritten in the run's own
+    /// `<w:rPr>` and every other child of it stays (see [`RunEdit::base`]).
+    #[serde(default)]
+    pub base: Option<RunFormat>,
+}
+
+/// A run's look: its effective DIRECT character properties and the real
+/// Word `<w:rStyle>` it carries (the pair the differ derives from a lowered
+/// style token).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunFormat {
+    pub props: RunProps,
+    #[serde(default)]
+    pub rstyle: Option<String>,
+}
+
+/// One piece of a split run: its text, and its look — `None` for the
+/// run's own (its `<w:rPr>` bytes verbatim), `Some` for another (the
+/// run's `<w:rPr>` with the properties that differ rewritten).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunPiece {
+    pub text: String,
+    #[serde(default)]
+    pub format: Option<RunFormat>,
 }
 
 impl CellRunEdit {
@@ -165,6 +192,29 @@ pub enum StructuralEdit {
         before: bool,
         text: String,
     },
+    /// Split body run `run` of paragraph `block` into `pieces`, in order:
+    /// each piece is a copy of the run's `<w:r>` (its attributes, its
+    /// `<w:rPr>`) carrying the piece's text, with the piece's look merged
+    /// into the copy's `<w:rPr>` ([`RunPiece`]); `base` is the run's own
+    /// look. What a word made bold inside a run, or a character style
+    /// applied to part of it, becomes. A run holding anything but text
+    /// (a drawing, a field character, a note reference) is not split.
+    SplitRun {
+        block: usize,
+        run: usize,
+        base: RunFormat,
+        pieces: Vec<RunPiece>,
+    },
+    /// [`StructuralEdit::SplitRun`] for run `run` of paragraph `para` of
+    /// lowered cell `cell` of the table at `block`.
+    SplitCellRun {
+        block: usize,
+        cell: usize,
+        para: usize,
+        run: usize,
+        base: RunFormat,
+        pieces: Vec<RunPiece>,
+    },
     /// Give cell paragraph `para` (a Word paragraph with no text run, so no
     /// run to patch) one run carrying `text`, at the end of its content.
     InsertCellRun {
@@ -203,6 +253,13 @@ pub struct RunEdit {
     /// Word style id; `None` leaves the existing `rStyle` untouched. Emitted only
     /// alongside `new_props` (rStyle is a child of `w:rPr`).
     pub rstyle: Option<Option<String>>,
+    /// The run's look before the edit. Given with `new_props`, the patcher
+    /// rewrites only the properties that differ from it in the run's own
+    /// `<w:rPr>`, keeping every other child (a language, an East Asian
+    /// font, a kerning) byte for byte; without it the whole `<w:rPr>` is
+    /// replaced by `new_props` + `rstyle`.
+    #[serde(default)]
+    pub base: Option<RunFormat>,
 }
 
 impl RunEdit {

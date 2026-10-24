@@ -60,6 +60,8 @@ export {
   type FrameSizing,
   type FrameView,
   type TableRecord,
+  type ChainRecord,
+  type ChainTableRecord,
 } from "./binding";
 
 export {
@@ -141,6 +143,7 @@ export {
   type FramePageSpec,
   type TracksSpec,
   type GridDataBar,
+  type GridSparkline,
   type GridFreeze,
   type GridMerge,
   type GridScene,

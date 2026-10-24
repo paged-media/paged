@@ -354,7 +354,7 @@
 
 - id: sheet.chart.sparklines
   title: Sparklines (x14 line, column, win/loss) read and drawn in a cell box
-  ruling: "x14:sparklineGroups in a worksheet's captured extLst become SparklineGroups (colours rgb or theme+tint, markers, high/low/first/last/negative, axis, custom bounds, blanks); sheet_chart::sparkline draws one in its cell's box; the captured bytes round-trip unchanged (ADR 519)."
+  ruling: "x14:sparklineGroups in a worksheet's captured extLst become SparklineGroups (colours rgb or theme+tint, markers, high/low/first/last/negative, axis, custom bounds, blanks); sheet_chart::sparkline draws one in its cell's box; the grid scene carries the visible cells' sparklines (GridScene.sparklines) and the frame surface and scene layer paint them; the captured bytes round-trip unchanged. Not drawn on the page yet (ADR 519)."
   status: implemented
   provenance: ["[MS-XLSX] §2.6.86 (sparklineGroup)", "sheet-xlsx/src/parts/sparkline.rs", "sheet-chart/src/sparkline.rs"]
   tests:
@@ -362,6 +362,8 @@
       - "sheet-xlsx/src/parts/sparkline.rs::reads_groups_colours_and_cells"
       - "sheet-chart/src/sparkline.rs::three_kinds_draw_in_the_cell"
       - "sheet-chart/tests/kinds.rs::sparklines_draw_in_their_cell"
+      - "sheet-conformance/tests/it/chart_write.rs::sparklines_draw_in_the_grid_scene"
+    vitest: ["packages/sheet-host-model/test/grid-paint.spec.ts"]
 
 - id: sheet.chart.writer
   title: Charts written back into the xlsx — edited charts spliced, authored ones generated, deleted ones removed
@@ -384,3 +386,11 @@
       - "sheet-conformance/tests/it/chart_write.rs::an_authored_chart_keeps_its_index"
       - "sheet-conformance/tests/it/excel_opencheck.rs::excel_opens_the_charts_paged_writes"
       - "sheet-xlsx/src/chart_write_tests.rs::recorded_indexes_keep_every_handle"
+
+- id: sheet.chart.chartsheets
+  title: Chartsheets — a sheet tab that is one chart
+  ruling: "A workbook sheet whose relationship is a chartsheet loads as an empty sheet (indexes unchanged) and is reported as a tab kind (list_sheets kind=chartsheet with its chart; list_chartsheets); its chart is flagged chartsheet, drawn, edited and written back like any chart, and never deleted (the tab is the chart). The workbook panel labels the tab; the frame surface does not offer it (a frame shows cells) (ADR 519)."
+  status: implemented
+  provenance: ["ECMA-376 §18.3.1.12 (chartsheet)", "ADR 519"]
+  tests:
+    rust: ["sheet-conformance/tests/it/chart_write.rs::a_chartsheet_is_a_tab_kind"]

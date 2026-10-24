@@ -106,6 +106,15 @@ import {
   type ChartElements,
 } from "./lower-chart";
 import type { CellRegion, ObjectBridge, WorkbookSession } from "./session";
+import {
+  chartStyleFromIds,
+  emptyStyleRefs,
+  idsOf,
+  paletteFromId,
+  readStyleRefs,
+  rolesFromIds,
+  type StyleRefs,
+} from "./chart-style";
 
 export const PLUGIN_ID = manifest.id;
 export const SHEET_KINDS = [
@@ -179,6 +188,25 @@ const text: ValueType = { kind: "text" };
 const bool: ValueType = { kind: "bool" };
 const int: ValueType = { kind: "number", integer: true };
 const grid: ValueType = { kind: "list", of: { kind: "list", of: text } };
+/** Sheet ADR 525 — a role map: role tag → its document ids. */
+const chartRoles: ValueType = {
+  kind: "map",
+  of: {
+    kind: "struct",
+    fields: {
+      swatch: { ...text, optional: true },
+      paragraphStyle: { ...text, optional: true },
+      characterStyle: { ...text, optional: true },
+    },
+  },
+};
+const chartStyle: ValueType = {
+  kind: "struct",
+  fields: {
+    roles: chartRoles,
+    seriesColorGroup: { ...text, optional: true },
+  },
+};
 const series: ValueType = {
   kind: "list",
   of: {
@@ -264,6 +292,12 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
       summary: "The content hash the document's label names.",
     }),
     derived("dataSource", text, { title: "Dataset", nullable: true }),
+    rw("chartStyle", chartStyle, {
+      title: "Chart style",
+      nullable: true,
+      summary:
+        "The document chart style every chart follows where it does not override a role: role → {swatch, paragraphStyle, characterStyle} (document ids), and a document colour group for the series. Null clears it.",
+    }),
   ],
   sheet: [
     rw("name", text, { title: "Name" }),
@@ -368,6 +402,17 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
       { kind: "number" },
       { title: "Value axis maximum", nullable: true },
     ),
+    rw("roles", chartRoles, {
+      title: "Style roles",
+      summary:
+        "The chart's own document-style overrides: chartArea, plotArea, axisLine, gridlines (a swatch); text, title, axisTitle, tickLabels, legend, dataLabels (paragraph style, character style, swatch). A write replaces them; a role left out follows the workbook chart style.",
+    }),
+    rw("seriesColorGroup", text, {
+      title: "Series colours",
+      nullable: true,
+      summary:
+        "A document colour group the series take their colours from, in order; null = the workbook chart style's.",
+    }),
     derived("sheet", text, { title: "Sheet" }),
   ],
 };
@@ -533,6 +578,10 @@ export function contributeObjectModel(
     baselineHash = null;
     chartOps = [];
   }
+
+  /** The document references the write being planned names (read by
+   *  `batchWrite` before planning). */
+  let styleRefs: StyleRefs = emptyStyleRefs();
 
   const engineOrThrow = (): SheetEngine => {
     const e = bridge.engine();
@@ -717,6 +766,15 @@ export function contributeObjectModel(
               return value(loadedHash);
             case "dataSource":
               return value(st.dataSource?.providerId ?? null);
+            case "chartStyle": {
+              const cs = engine.chartStyle?.();
+              const ids = idsOf(cs?.roles, cs?.palette);
+              return value(
+                Object.keys(ids.roles).length === 0 && !ids.seriesColorGroup
+                  ? null
+                  : ids,
+              );
+            }
           }
           break;
         }
@@ -824,6 +882,10 @@ export function contributeObjectModel(
               return value(c.valueAxisMin ?? null);
             case "valueAxisMax":
               return value(c.valueAxisMax ?? null);
+            case "roles":
+              return value(idsOf(c.roles, null).roles);
+            case "seriesColorGroup":
+              return value(c.seriesPalette?.group ?? null);
             case "sheet":
               return value(sheetName(engine, c.hostSheet));
           }
@@ -971,6 +1033,14 @@ export function contributeObjectModel(
     switch (kind) {
       case "workbook":
         if (path === "name") return () => bridge.setName(String(v));
+        if (path === "chartStyle") {
+          const style = chartStyleFromIds(v, styleRefs);
+          return (e) => {
+            if (!e.setChartStyle)
+              throw new Refuse("engine wasm predates set_chart_style");
+            e.setChartStyle(style);
+          };
+        }
         if (path === "iterative") {
           return (e) => {
             const cs = e.calcSettings?.();
@@ -1180,6 +1250,12 @@ export function contributeObjectModel(
             break;
           case "series":
             patch.series = v as ChartPatch["series"];
+            break;
+          case "roles":
+            patch.roles = rolesFromIds(v, styleRefs, "all");
+            break;
+          case "seriesColorGroup":
+            patch.seriesPalette = paletteFromId(v, styleRefs);
             break;
           default:
             throw new Refuse(`chart has no writable path "${path}"`);
@@ -1488,6 +1564,26 @@ export function contributeObjectModel(
    *  doc-hosted `state` write. */
   async function batchWrite(ops: readonly ObjectOp[]): Promise<ObjectWrite> {
     const deletedCharts: number[] = [];
+    // Sheet ADR 525 — the document references a chart-style write names
+    // are read first: planning is synchronous.
+    const styleValues = ops
+      .filter(
+        (op) =>
+          op.op === "set" &&
+          ["roles", "seriesColorGroup", "chartStyle"].includes(op.path),
+      )
+      .map((op) => (op as { value: unknown }).value);
+    try {
+      styleRefs =
+        styleValues.length > 0
+          ? await readStyleRefs(host, session, styleValues)
+          : emptyStyleRefs();
+    } catch (err) {
+      return {
+        kind: "rejected",
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
     const r = await write((engine) =>
       ops.map((op) => {
         const kind = kindOf(op);

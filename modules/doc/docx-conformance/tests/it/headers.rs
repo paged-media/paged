@@ -234,6 +234,7 @@ fn a_body_edit_leaves_every_header_footer_and_settings_part_byte_identical__feat
                     .map(|r| RunContentIn {
                         text: r.text.clone(),
                         character_style: r.char_style_id.clone(),
+                        ..Default::default()
                     })
                     .collect(),
             })
