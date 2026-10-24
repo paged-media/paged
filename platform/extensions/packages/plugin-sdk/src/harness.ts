@@ -976,6 +976,28 @@ export async function createHeadlessHost(
     return new Error(`headless load failed (${reply.kind}: ${errKind})`);
   };
 
+  // Extensions ADR 348 — the caret the test plays and the document
+  // context a bundle holds, shared across the harness's hosts.
+  let textSel: TextSelection | null = null;
+  const textSelListeners = new Set<() => void>();
+  const textSelection: TextSelectionBackend = {
+    read: () => textSel,
+    subscribe(listener) {
+      textSelListeners.add(listener);
+      return () => textSelListeners.delete(listener);
+    },
+  };
+  let docContext: { pluginId: string; type: string } | null = null;
+  const documentContext: DocumentContextBackend = {
+    set(pluginId, type) {
+      if (type === null) {
+        if (docContext?.pluginId === pluginId) docContext = null;
+        return true;
+      }
+      docContext = { pluginId, type };
+      return true;
+    },
+  };
   // D-26 — the headless documents backend: exportPaged through the engine,
   // open = the keep/discard decision (only when dirty) + a direct load whose
   // `documentLoaded` reply is FANNED OUT to subscribers, as the editor's
@@ -1014,6 +1036,7 @@ export async function createHeadlessHost(
       }
       const reply = loadDirect(bytes);
       if (reply.kind !== "documentLoaded") throw loadFailure(reply);
+      docContext = null;
       fanOut(reply);
       opened.push({
         name: request.name,
@@ -1065,6 +1088,7 @@ export async function createHeadlessHost(
           async open(bytes) {
             const reply = loadDirect(bytes);
             if (reply.kind !== "documentLoaded") throw loadFailure(reply);
+            docContext = null;
             objects.core?.invalidate();
             fanOut(reply);
           },
@@ -1130,28 +1154,6 @@ export async function createHeadlessHost(
   // adapter falls back to `localStorage`, which a browser-like realm
   // (happy-dom) shares between tests.
   const storage = options.storage ?? mapBacking();
-  // Extensions ADR 348 — the caret the test plays and the document
-  // context a bundle holds, shared across the harness's hosts.
-  let textSel: TextSelection | null = null;
-  const textSelListeners = new Set<() => void>();
-  const textSelection: TextSelectionBackend = {
-    read: () => textSel,
-    subscribe(listener) {
-      textSelListeners.add(listener);
-      return () => textSelListeners.delete(listener);
-    },
-  };
-  let docContext: { pluginId: string; type: string } | null = null;
-  const documentContext: DocumentContextBackend = {
-    set(pluginId, type) {
-      if (type === null) {
-        if (docContext?.pluginId === pluginId) docContext = null;
-        return true;
-      }
-      docContext = { pluginId, type };
-      return true;
-    },
-  };
 
   const buildHost = (
     manifest: PluginManifest,
@@ -1396,6 +1398,7 @@ export async function createHeadlessHost(
         },
       } as MainToWorkerKind)) as WorkerToMain;
       if (reply.kind === "documentLoaded") {
+        docContext = null;
         objects.core?.invalidate();
         fanOut(reply);
         return reply.payload.pageIds;
