@@ -171,6 +171,7 @@ import {
   OPEN_AS_TEMPLATE_MENU_ITEMS,
   OpenAsTemplateDialog,
 } from "../panels/template/open-as-template-dialog";
+import { TemplateNotice } from "../panels/template/template-notice";
 import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
@@ -211,12 +212,17 @@ import { placeDroppedField } from "../data-drop";
 import {
   cockpitActionsOf,
   createEditorScope,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdDeprecation,
   memoryStorage,
   setEditorStorage,
   type EditorScope,
   type StorageAdapter,
 } from "@paged-media/shell";
 import { assertCrossOriginIsolated } from "../boot/cross-origin-isolation-check";
+import DEPRECATED_IDS from "../../deprecated-ids.json" with { type: "json" };
 import {
   APP_KEYBINDINGS,
   APP_MENU_ITEMS,
@@ -1664,6 +1670,9 @@ function CanvasAppRoot() {
       // The corpus picker is an Envato IDML-pack browser — DTP
       // furniture with no meaning in a drawing app.
       headerExtras={instance.surfaces.plain ? <CorpusPicker /> : null}
+      // A template opened as a document says so and offers "Edit
+      // template" (ADR 293).
+      notices={<TemplateNotice />}
       initialMode={instance.surfaces.initialMode}
       initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
       regions={instance.profile.regions}
@@ -1760,13 +1769,21 @@ export interface MountOptions {
 export function createEditorInstance(
   options: MountOptions = {},
 ): EditorInstance {
+  // PM-0013, amendment 2: a host's old ids are read as their replacements, and each is
+  // reported once (the console here; the handle's `idDeprecated` event).
+  const idAliases = createIdAliases(
+    DEPRECATED_IDS.deprecated as readonly IdDeprecation[],
+  );
+  idAliases.subscribe((d) =>
+    console.warn(`[editor profile] ${deprecationWarning(d)}`),
+  );
   const resolved =
     options.profile === undefined
       ? profileFromSearch(options.search ?? "")
       : resolveProfile(
           typeof options.profile === "string"
             ? { extends: options.profile }
-            : options.profile,
+            : migrateProfileIds(options.profile, idAliases),
           PRESETS,
         );
   const profile = resolved.profile;
@@ -1805,6 +1822,7 @@ export function createEditorInstance(
     guardUnload: options.guardUnload === true,
     scope,
     services: createEditorServices(scope),
+    idAliases,
     ...(options.engineWasm ? { engineWasm: options.engineWasm } : {}),
   };
 }

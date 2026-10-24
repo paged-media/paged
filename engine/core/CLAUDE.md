@@ -97,8 +97,9 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
 - `crates/paged-color/` — the CMS: lcms2 on native, qcms (pure Rust) on wasm32; the naive
   CMYK conversion is the fallback on both when no CMYK profile is configured.
 - `crates/paged-raster/` — raster probe/decode/encode (ADR 1005): TIFF through `tiff`,
-  PSD/PSB merged composites through paged-psd, the web formats through `image`; CMYK/Lab
-  through paged-color. The renderer and paged-gpu's wasm32 raster-time decode both call
+  PSD/PSB merged composites through paged-psd, EPS previews, DNG (a default develop), AVIF
+  (rav1d) and JPEG XL (jxl-oxide) behind default features, the web and small formats through
+  `image`; CMYK/Lab through paged-color. The renderer and paged-gpu's wasm32 raster-time decode both call
   `decode_rgba8`.
 - `crates/paged-psd/` — PSD/PSB model, parser, preservation writer, composite decode,
   layer records (also of a layered TIFF's tag 37724). `crates/paged-pixel/` — the frozen

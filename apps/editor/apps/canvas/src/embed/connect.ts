@@ -28,6 +28,7 @@
 
 import type { EditorEvent, EditorHandle } from "./create-editor";
 import type { HostActions } from "../app/instance";
+import { editorError } from "./errors";
 import {
   BRIDGED_METHODS,
   SCRIPT_METHOD,
@@ -122,7 +123,12 @@ export function connectEditor(
         case "paged:failed":
           clearTimeout(timer);
           window.removeEventListener("message", onMessage);
-          reject(new Error(`connectEditor: ${msg.error}`));
+          // A refusal the editor names keeps its code (EditorError).
+          reject(
+            msg.code
+              ? editorError(msg.code, `connectEditor: ${msg.error}`)
+              : new Error(`connectEditor: ${msg.error}`),
+          );
           return;
         case "paged:reply": {
           const call = calls.get(msg.id);
