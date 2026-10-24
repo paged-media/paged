@@ -35,13 +35,18 @@
 //!
 //! ## What this is NOT (v0, stated so the command title can be honest)
 //!
-//! * **Not Illustrator's Image Trace.** There are no presets, no
-//!   live/expandable trace object, no re-trace-on-edit, and no
-//!   centreline/stroke detection — every region is a FILLED shape.
-//! * **Not a palette extractor.** Colour mode emits one region per
-//!   CLUSTER, filled with that cluster's mean colour, and each colour
-//!   becomes its own document swatch. There is no palette reduction to a
-//!   target count and no "limited palette" mode.
+//! * **Not a live object by itself.** The kernel is a pure function; the
+//!   PRESETS (Illustrator's names, mapped onto these options) and the
+//!   re-trace that replaces a result live in draw-bundle
+//!   (`commands/image-trace.ts`), which keeps the options in the source's
+//!   record.
+//! * **Centreline is line art only.** [`TraceMode::Centerline`] thresholds,
+//!   thins and walks the skeleton ([`centerline`]): open strokes at ONE
+//!   mean width. A variable-width line is not reconstructed.
+//! * **A palette target is a pre-pass.** [`TraceOptions::max_colors`]
+//!   snaps the raster to at most N colours (or greys) with a deterministic
+//!   k-means ([`palette`]) before the clusterer runs; without it the
+//!   clusterer decides how many colours there are.
 //! * **Not transparency-aware.** Alpha is composited onto WHITE before
 //!   luminance/clustering; a traced PNG with a transparent background
 //!   behaves like one on a white page.
@@ -66,9 +71,12 @@
 //! fit before calling in, and reports the factor, so such a photo is
 //! still traceable at a stated loss of detail.
 
+pub mod centerline;
 mod contour;
 mod options;
+pub mod palette;
 
+pub use centerline::Stroke;
 pub use contour::{contours_of, Anchor, Contour};
 pub use options::{
     PathMode, TraceMode, TraceOptions, MAX_DIMENSION, MAX_PIXELS, WHITE_CHANNEL_FLOOR,
@@ -116,6 +124,12 @@ pub struct TraceResult {
     pub truncated: usize,
     /// Regions dropped by [`TraceOptions::filter_speckle`].
     pub speckles: usize,
+    /// CENTRELINE strokes, longest first ([`TraceMode::Centerline`] only;
+    /// empty otherwise). Open paths to STROKE, never fill.
+    pub strokes: Vec<Stroke>,
+    /// The palette the raster was snapped to before clustering
+    /// ([`TraceOptions::max_colors`]); empty without a target.
+    pub palette: Vec<[u8; 3]>,
 }
 
 /// Why a trace produced nothing.
@@ -226,10 +240,16 @@ pub fn trace_rgba(
 ) -> Result<TraceResult, TraceError> {
     check_raster(pixels, width, height)?;
     let options = options.sanitized();
-    let image = flatten_onto_white(pixels, width, height);
+    let mut image = flatten_onto_white(pixels, width, height);
     let mut result = match options.mode {
-        TraceMode::Color => trace_color(image, options),
+        TraceMode::Color => {
+            let palette = palette::quantize(&mut image, options.max_colors, options.grayscale);
+            let mut out = trace_color(image, options);
+            out.palette = palette;
+            out
+        }
         TraceMode::Bw => trace_bw(&image, options),
+        TraceMode::Centerline => trace_centerline(&image, options),
     };
     result.width = width;
     result.height = height;
@@ -319,6 +339,31 @@ fn trace_color(image: ColorImage, options: TraceOptions) -> TraceResult {
         clusters: found,
         truncated,
         speckles,
+        strokes: Vec::new(),
+        palette: Vec::new(),
+    }
+}
+
+/// CENTRELINE: threshold, thin, walk, fit ([`centerline`]).
+fn trace_centerline(image: &ColorImage, options: TraceOptions) -> TraceResult {
+    let (width, height) = (image.width, image.height);
+    let threshold = options.bw_threshold as f64;
+    let mut mask = centerline::Mask::new(width, height);
+    for i in 0..width * height {
+        mask.bits[i] = luma(image.get_pixel_at(i)) < threshold;
+    }
+    let mut found = centerline::trace_centerlines(mask, options);
+    let truncated = found.strokes.len().saturating_sub(options.max_regions);
+    found.strokes.truncate(options.max_regions);
+    TraceResult {
+        width: width as u32,
+        height: height as u32,
+        regions: Vec::new(),
+        clusters: found.found,
+        truncated,
+        speckles: found.speckles,
+        strokes: found.strokes,
+        palette: Vec::new(),
     }
 }
 
@@ -374,6 +419,8 @@ fn trace_bw(image: &ColorImage, options: TraceOptions) -> TraceResult {
         clusters: found,
         truncated,
         speckles,
+        strokes: Vec::new(),
+        palette: Vec::new(),
     }
 }
 
@@ -726,5 +773,116 @@ mod tests {
         assert!(json.contains("\"truncated\""));
         let back: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(back["regions"][0]["contours"].as_array().unwrap().len(), 2);
+    }
+
+    /// A gradient strip: 64 distinct greens left to right.
+    fn ramp(w: u32, h: u32) -> Vec<u8> {
+        raster(w, h, |x, _| {
+            let v = (x * 255 / (w - 1)) as u8;
+            [v / 3, v, 255 - v, 255]
+        })
+    }
+
+    #[test]
+    fn a_palette_target_caps_the_traced_colours() {
+        let out = trace_rgba(
+            &ramp(64, 16),
+            64,
+            16,
+            TraceOptions {
+                max_colors: 3,
+                ignore_white: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(out.palette.len(), 3);
+        let distinct: std::collections::BTreeSet<[u8; 3]> =
+            out.regions.iter().map(|r| r.color).collect();
+        assert!(distinct.len() <= 3, "{} colours", distinct.len());
+        assert!(!out.regions.is_empty());
+    }
+
+    #[test]
+    fn grayscale_traces_in_greys() {
+        let out = trace_rgba(
+            &ramp(64, 16),
+            64,
+            16,
+            TraceOptions {
+                max_colors: 4,
+                grayscale: true,
+                ignore_white: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!out.regions.is_empty());
+        for r in &out.regions {
+            assert!(
+                r.color[0].abs_diff(r.color[1]) <= 1 && r.color[1].abs_diff(r.color[2]) <= 1,
+                "{:?} is not grey",
+                r.color
+            );
+        }
+    }
+
+    #[test]
+    fn centreline_mode_traces_a_drawn_line_to_one_open_stroke() {
+        // A 4 px thick diagonal-ish line across a white raster.
+        let pixels = raster(64, 64, |x, y| {
+            let d = (y as i32 - (x as i32) / 2 - 10).abs();
+            if (4..60).contains(&x) && d < 2 {
+                BLACK
+            } else {
+                WHITE
+            }
+        });
+        let out = trace_rgba(
+            &pixels,
+            64,
+            64,
+            TraceOptions {
+                mode: TraceMode::Centerline,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(out.regions.is_empty(), "centreline emits no fills");
+        assert_eq!(out.strokes.len(), 1, "{:?}", out.strokes);
+        let s = &out.strokes[0];
+        assert!(!s.closed);
+        assert!(s.width >= 2.5 && s.width <= 5.5, "width {}", s.width);
+        // The stroke runs most of the line's length.
+        let first = s.anchors.first().unwrap().anchor;
+        let last = s.anchors.last().unwrap().anchor;
+        assert!((last[0] - first[0]).abs() > 40.0);
+        let json = serde_json::to_string(&out).unwrap();
+        assert!(json.contains("\"strokes\""));
+        assert!(json.contains("\"closed\""));
+    }
+
+    #[test]
+    fn centreline_mode_on_a_ring_is_one_closed_stroke() {
+        let out = trace_rgba(
+            &raster(48, 48, |x, y| {
+                let (dx, dy) = (x as f64 - 23.5, y as f64 - 23.5);
+                let r = (dx * dx + dy * dy).sqrt();
+                if (14.0..18.0).contains(&r) {
+                    BLACK
+                } else {
+                    WHITE
+                }
+            }),
+            48,
+            48,
+            TraceOptions {
+                mode: TraceMode::Centerline,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(out.strokes.len(), 1);
+        assert!(out.strokes[0].closed);
     }
 }
