@@ -29,6 +29,7 @@ import { covers } from "@paged-media/test-kit";
 
 import type {
   DataBindingStatus,
+  DataPlacement,
   DataService,
   DataTableInfo,
   ProviderRecordSet,
@@ -37,6 +38,7 @@ import { createDataRegistry } from "@paged-media/plugin-sdk";
 import { createEditorScope, setDataDoorSource } from "@paged-media/shell";
 
 import { DataPanel } from "../../src/panels/data-panel";
+import { shapesScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 
 afterEach(unmountAll);
@@ -131,7 +133,11 @@ const TABLE: DataTableInfo = {
   writable: true,
 };
 
-function serve(tables: DataTableInfo[], statuses: DataBindingStatus[] = []) {
+function serve(
+  tables: DataTableInfo[],
+  statuses: DataBindingStatus[] = [],
+  placements?: () => DataPlacement[],
+) {
   const backend = createDataRegistry();
   const scope = createEditorScope();
   setDataDoorSource(scope, backend);
@@ -148,6 +154,7 @@ function serve(tables: DataTableInfo[], statuses: DataBindingStatus[] = []) {
     async refresh() {
       refreshed++;
     },
+    ...(placements ? { placements: async () => placements() } : {}),
   };
   const handle = act(() => void backend.serve("media.paged.data", service));
   return { scope, backend, queries, handle, refreshes: () => refreshed };
@@ -276,5 +283,88 @@ describe("Data panel", () => {
       (g) => g.getAttribute("data-data-group-row"),
     );
     expect(groups).toEqual(["New", "Sale"]);
+  });
+
+  test("double-click a bound field's header: its bindings' placed frames are selected [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    let placed: DataPlacement[] = [];
+    const { scope, queries } = serve(
+      [TABLE],
+      [
+        {
+          id: "b1",
+          kind: "property",
+          query: "products",
+          fields: ["price"],
+          status: "linked",
+        },
+        {
+          id: "b2",
+          kind: "image",
+          query: "products",
+          fields: ["price", "sku"],
+          status: "stale",
+        },
+        {
+          id: "b3",
+          kind: "variable",
+          query: "products",
+          fields: ["cat"],
+          status: "linked",
+        },
+      ],
+      () => placed,
+    );
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      scene: shapesScene,
+      scope,
+    });
+    const address = (id: { kind: string; id: unknown }) =>
+      `${id.kind}:${String(id.id)}`;
+    placed = [
+      { binding: "b1", address: address(h.scene.rect), status: "linked" },
+      { binding: "b2", address: address(h.scene.oval), status: "stale" },
+      { binding: "b2", address: address(h.scene.rect), status: "stale" },
+      { binding: "b3", address: address(h.scene.locked), status: "linked" },
+    ];
+    await settle();
+    const header = h.root.querySelector(
+      "[data-data-header='price']",
+    ) as HTMLElement;
+    expect(header.title).toContain("double-click to select");
+    const from = h.mark();
+    await h.user.dblClick(header);
+    await h.settle();
+    await settle();
+    const sent = h.sent("setElementSelection", from);
+    expect(sent.length).toBe(1);
+    const payload = sent[0]!.payload as {
+      ids: { kind: string; id: unknown }[];
+      mode: string;
+    };
+    expect(payload.mode).toBe("replace");
+    // b1 and b2 read price; b3 (cat) is not selected; the rect once.
+    expect(payload.ids.map(address)).toEqual([
+      address(h.scene.rect),
+      address(h.scene.oval),
+    ]);
+    // The double-click's second click did not reverse the sort.
+    expect(queries.at(-1)).toContain('ORDER BY "price" LIMIT');
+
+    // Another field: only the frames of the bindings reading it.
+    const mark = h.mark();
+    await h.user.dblClick(
+      h.root.querySelector("[data-data-header='cat']") as HTMLElement,
+    );
+    await h.settle();
+    await settle();
+    const again = h.sent("setElementSelection", mark);
+    expect(again.length).toBe(1);
+    expect(
+      (again[0]!.payload as { ids: { kind: string; id: unknown }[] }).ids.map(
+        address,
+      ),
+    ).toEqual([address(h.scene.locked)]);
   });
 });

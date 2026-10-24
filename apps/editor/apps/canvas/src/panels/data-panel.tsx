@@ -26,7 +26,8 @@
 //     all or any); grouping by a field, each group with its count; columns
 //     shown or hidden;
 //   · a field that a binding reads is marked in its header, with how many
-//     bindings read it;
+//     bindings read it; a double-click on that header selects the page
+//     items those bindings are placed in (the service's `placements`);
 //   · the grid is windowed: the service sorts and filters (guarded SQL), and
 //     only the rows in view cross;
 //   · with no data yet, a three-step start: import, query, bind.
@@ -41,10 +42,14 @@ import type {
 } from "@paged-media/plugin-api";
 import { color, font, radius, space, status } from "@paged-media/panel-kit";
 import {
+  elementOfPlacement,
+  useCanvasClient,
   useCockpitActions,
   useDataRevision,
   useDataService,
+  useSelection,
 } from "@paged-media/shell";
+import type { ElementId } from "@paged-media/client";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 import {
@@ -101,6 +106,7 @@ const M = defineMessages("app.dataPanel", {
   fieldLinked: "every binding reading it is in step",
   fieldStale: "the data changed since it was placed",
   fieldError: "a binding reading it failed",
+  selectHint: "double-click to select where it is placed",
 });
 
 const ROW_H = 22;
@@ -179,6 +185,49 @@ const TONE_COLOR: Record<Tone, string> = {
   none: color.mutedFg,
 };
 
+/** What `selectPlaced` acts through: the grid's hooks, handed over. */
+interface SelectDeps {
+  service: DataService;
+  client: ReturnType<typeof useCanvasClient>;
+  setElementSelection: ReturnType<typeof useSelection>["setElementSelection"];
+  setElementGeometry: ReturnType<typeof useSelection>["setElementGeometry"];
+}
+
+/** Select the page items the bindings reading `field` of `table` are
+ *  placed in. Nothing happens when none is placed, or the service cannot
+ *  say where (no `placements`). Outside the component: the React Compiler
+ *  does not compile a conditional inside a `try` (ADR 229). */
+async function selectPlaced(
+  { service, client, setElementSelection, setElementGeometry }: SelectDeps,
+  statuses: readonly DataBindingStatus[],
+  table: string,
+  field: string,
+): Promise<void> {
+  if (typeof service.placements !== "function") return;
+  const reading = new Set(
+    statuses
+      .filter((b) => b.query === table && b.fields.includes(field))
+      .map((b) => b.id),
+  );
+  if (reading.size === 0) return;
+  try {
+    const ids: ElementId[] = [];
+    const seen = new Set<string>();
+    for (const p of await service.placements()) {
+      const id = reading.has(p.binding) ? elementOfPlacement(p.address) : null;
+      if (!id || seen.has(p.address)) continue;
+      seen.add(p.address);
+      ids.push(id);
+    }
+    if (ids.length === 0) return;
+    const applied = await client.setElementSelection(ids, "replace");
+    setElementSelection(applied);
+    setElementGeometry(await client.elementGeometry(applied));
+  } catch {
+    // A placement that vanished meanwhile: the selection stays as it was.
+  }
+}
+
 function cell(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "boolean") return v ? "true" : "false";
@@ -247,6 +296,8 @@ function Grid({
 }) {
   const { t } = useStrings();
   const revision = useDataRevision();
+  const client = useCanvasClient();
+  const { setElementSelection, setElementGeometry } = useSelection();
   const [sort, setSort] = useState<SortKey[]>([]);
   const [filters, setFilters] = useState<FilterRow[]>([]);
   const [match, setMatch] = useState<"all" | "any">("all");
@@ -558,13 +609,32 @@ function Grid({
                 data-bound={n > 0 ? (b?.tone ?? "none") : undefined}
                 title={
                   n > 0
-                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })} · ${cue}`
+                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })} · ${cue} · ${t(M.selectHint)}`
                     : t(M.sortHint)
                 }
                 aria-sort={
                   s < 0 ? "none" : keys[s]!.desc ? "descending" : "ascending"
                 }
-                onClick={(e) => setSort(nextSort(sort, f.name, e.shiftKey))}
+                onClick={(e) => {
+                  // A double-click's second click selects, it does not
+                  // reverse the sort the first one set.
+                  if (e.detail > 1) return;
+                  setSort(nextSort(sort, f.name, e.shiftKey));
+                }}
+                onDoubleClick={() => {
+                  if (n === 0) return;
+                  void selectPlaced(
+                    {
+                      service,
+                      client,
+                      setElementSelection,
+                      setElementGeometry,
+                    },
+                    statuses,
+                    table.name,
+                    f.name,
+                  );
+                }}
                 style={{
                   ...small,
                   width: colW,
