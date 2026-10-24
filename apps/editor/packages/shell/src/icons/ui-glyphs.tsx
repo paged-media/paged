@@ -496,6 +496,29 @@ export const UI_GLYPHS: Record<string, ReactNode> = {
   // Circle so the shadcn primitives stay on the in-house registry).
   "ui-dot": <circle cx={12} cy={12} r={4} fill="currentColor" stroke="none" />,
 
+  // Fill rule (the Attributes panel, engine ADR 1006) — one
+  // five-pointed star drawn as ONE self-crossing contour, filled by the
+  // rule it names: under non-zero the middle stays filled, under
+  // even-odd it is a hole.
+  "ui-fill-rule-nonzero": (
+    <path
+      d="M12 3.5 L17.29 19.78 L3.44 9.72 L20.56 9.72 L6.71 19.78 Z"
+      fillRule="nonzero"
+      stroke="currentColor"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  ),
+  "ui-fill-rule-evenodd": (
+    <path
+      d="M12 3.5 L17.29 19.78 L3.44 9.72 L20.56 9.72 L6.71 19.78 Z"
+      fillRule="evenodd"
+      stroke="currentColor"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  ),
+
   // Swatch (fill) — a filled rounded square with a thin frame; the
   // paged.draw Fill schema panel's section glyph.
   "ui-swatch-fill": (
