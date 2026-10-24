@@ -144,6 +144,13 @@ export {
   type DataRecordDrag,
   type DataTableDrag,
 } from "./state/data-door";
+// Editor ADR 291 — the registered actions (actions@1) for the editor's own
+// surfaces (the Data panel's picture column picker).
+export {
+  setRegisteredActionsSource,
+  useRegisteredActions,
+  type RegisteredActionsSource,
+} from "./state/actions-door";
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
@@ -363,6 +370,12 @@ export {
   entryApplies,
   isEnabled,
   panelBelongsHere,
+  activeScopeContext,
+  type ControlBarGroupContribution,
+  type ControlBarGroupRegistry,
+  type DocumentContextStore,
+  type StatusItemContribution,
+  type StatusItemRegistry,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──
@@ -558,6 +571,12 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
+export {
+  ContributedControlBarGroups,
+  StatusBar,
+  useActiveScopeContext,
+  useHasControlBarGroups,
+} from "./chrome/ContributedBarItems";
 
 // ── Gestures ───────────────────────────────────────────────────
 export {

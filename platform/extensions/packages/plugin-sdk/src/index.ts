@@ -23,6 +23,11 @@
 // rule applies: helpers earn their place when a real bundle needs
 // them.
 
+export {
+  contentToChar,
+  paragraphTexts,
+  wordAroundCaret,
+} from "./text-selection.js";
 export { defineBundle } from "./define-bundle.js";
 export {
   createHeadlessHost,
@@ -87,6 +92,9 @@ export {
   type BindingProviderBackend,
   type RegisteredBindingProvider,
   HOST_FEATURES,
+  RESERVED_HOST_KEYS,
+  isReservedHostKey,
+  contextScopeActive,
   ASSET_BUDGETS,
   BLOB_BUDGETS,
   WORKER_BUDGETS,
@@ -107,6 +115,8 @@ export {
   type BlobStore,
   type ClipboardBackend,
   type TextCaretBackend,
+  type TextSelectionBackend,
+  type DocumentContextBackend,
   type WorkerBackend,
   type SpawnedWorker,
   type ModulesBackend,

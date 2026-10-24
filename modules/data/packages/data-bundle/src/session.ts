@@ -1144,6 +1144,9 @@ export function createSession(
   // both (it starts from "— / —" only when nothing has run).
   const recordCounts = new Map<string, number>();
   const previewAt = new Map<string, number>();
+  /** Data ADR 562 / editor ADR 291's pipeline: each transform's and query's
+   *  outcome at the last run (its rows, or why it gave none). */
+  const lastRuns = new Map<string, { rowCount?: number; error?: string }>();
   /** The data set last applied to the document (saved with the session). */
   let appliedSet: string | null = null;
   // ADR 560: template fields bound to the data, and the catalogues made.
@@ -2213,6 +2216,7 @@ export function createSession(
     diagnostics.length = 0;
     queries.clear();
     recordCounts.clear();
+    lastRuns.clear();
     previewAt.clear();
     appliedSet = null;
     catalogue.fields.length = 0;
@@ -2629,6 +2633,21 @@ export function createSession(
     sourceNames: () => sourceNames,
     queries: () => [...queries.values()],
     transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
+    transformDefs: () => engine?.transforms?.() ?? [],
+    lastRun: (id) => lastRuns.get(id),
+    // A transform defined through the door runs at once, so the pipeline
+    // shows its rows or its error without a refresh of the queries.
+    defineTransform: async (def) => {
+      const refused = await self.defineTransform(def);
+      if (refused) return refused;
+      await runTransforms();
+      return null;
+    },
+    removeTransform: async (id) => {
+      const removed = await self.removeTransform(id);
+      if (removed) lastRuns.delete(id);
+      return removed;
+    },
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
     syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
@@ -2646,6 +2665,9 @@ export function createSession(
     loadSample: () => self.loadSample(),
     recordOf: (id) => recordOf.get(id),
     placements: () => props.placements(),
+    assetColumns: () => self.assetColumns(),
+    setAssetColumn: (query, field, def) =>
+      self.setAssetColumn(query, field, def),
     refresh: async () => {
       await self.refreshData();
       await self.lowerAll();
@@ -2695,6 +2717,61 @@ export function createSession(
       const r = await assets.resolve(uri, def);
       return r.ok ? { uri: r.uri } : { reason: r.reason };
     };
+  }
+
+  /** Data ADR 562: run the transforms, in order (a refresh does before the
+   *  queries); each outcome is kept for the pipeline and a derived table
+   *  that came out is announced. */
+  async function runTransforms(): Promise<void> {
+    await ensureStore();
+    const e = await ensureEngine();
+    for (const run of e.run_transforms?.() ?? []) {
+      if ("Err" in run.outcome) {
+        lastRuns.set(run.transform, { error: run.outcome.Err });
+        report({
+          level: "error",
+          source: "query",
+          message: `transform "${run.transform}" gave no table: ${run.outcome.Err}`,
+        });
+      } else {
+        lastRuns.set(run.transform, { rowCount: run.outcome.Ok });
+        door.touched(run.transform);
+      }
+    }
+  }
+
+  /** Why a transform cannot be defined, or null: its id names a new table
+   *  (not a source's or a query's), and it reads sources and the transforms
+   *  that run before it. */
+  function transformRefusal(
+    def: TransformDefJson,
+    defined: readonly TransformDefJson[],
+  ): string | null {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(def.id ?? ""))
+      return `"${def.id ?? ""}" is not a table name (letters, digits and _, not starting with a digit)`;
+    if (sourceNames.includes(def.id))
+      return `"${def.id}" is a source table: a transform yields a table of its own`;
+    if (queries.has(def.id))
+      return `"${def.id}" is a query: a transform yields a table of its own`;
+    if (typeof def.source !== "string" || def.source.trim() === "")
+      return "a transform has a source: (tables, params) => rows";
+    const at = defined.findIndex((t) => t.id === def.id);
+    const before = new Set(
+      (at < 0 ? defined : defined.slice(0, at)).map((t) => t.id),
+    );
+    for (const input of def.inputs ?? []) {
+      if (input === def.id) return `a transform cannot read its own table`;
+      if (!sourceNames.includes(input) && !before.has(input))
+        return `no table "${input}" to read (a source, or a transform that runs before this one)`;
+    }
+    if (
+      def.params !== undefined &&
+      (def.params === null ||
+        typeof def.params !== "object" ||
+        Array.isArray(def.params))
+    )
+      return "a transform's params are an object";
+    return null;
   }
 
   let preObjectWrite: string | null = null;
@@ -2821,7 +2898,13 @@ export function createSession(
       const e = await ensureEngine();
       if (typeof e.define_transform !== "function")
         return "this data engine has no transforms (rebuild it)";
-      e.define_transform(def);
+      const refused = transformRefusal(def, e.transforms?.() ?? []);
+      if (refused) return refused;
+      try {
+        e.define_transform(def);
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err);
+      }
       markDirty();
       emit();
       return null;
@@ -3611,23 +3694,13 @@ export function createSession(
         const d = await ensureStore();
         // Data ADR 562: the transforms run first, in order; each derived
         // table is then a table the queries read.
-        const e = await ensureEngine();
-        for (const run of e.run_transforms?.() ?? []) {
-          if ("Err" in run.outcome) {
-            report({
-              level: "error",
-              source: "query",
-              message: `transform "${run.transform}" gave no table: ${run.outcome.Err}`,
-            });
-          } else {
-            door.touched(run.transform);
-          }
-        }
+        await runTransforms();
         for (const q of queries.values()) {
           // A document's queries are code (§11): only a SELECT over the
           // source tables runs (query/sql.ts).
           const refused = checkQuery(q.sql);
           if (refused) {
+            lastRuns.set(q.id, { error: refused.message });
             report({
               level: "error",
               source: "query",
@@ -3640,9 +3713,11 @@ export function createSession(
             // engine; a re-delivery of the same data changes nothing.
             const rows = await d.ingest(q.id, trimSql(q.sql));
             keepRecordCount(q.id, rows);
+            lastRuns.set(q.id, { rowCount: rows });
             door.touched(q.id);
           } catch (err) {
             const diag = diagnoseStoreError(err);
+            lastRuns.set(q.id, { error: `${diag.kind}: ${diag.message}` });
             report({
               level: "error",
               source: "query",

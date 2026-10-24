@@ -135,13 +135,17 @@ interface WasmDeckFonts {
 interface WasmExported {
   readonly bytes: Uint8Array;
   readonly diagnostics: string;
+  readonly notExported: string;
   free(): void;
 }
 
 /** A written deck and what it could not carry (slide-js `ExportedDeck`). */
 export interface ExportedDeck {
   bytes: Uint8Array;
+  /** What the package could not carry. */
   diagnostics: string[];
+  /** What is on the slides that could not round-trip, one line each. */
+  notExported: string[];
 }
 
 /** One page of the document, as export sees it (pptx-export `SlidePlan`). */
@@ -150,12 +154,20 @@ export interface SlidePlan {
   hidden: boolean;
   notes: string | null;
   contentEdited: boolean;
+  /** The page's id: its content in the document (ADR 711). */
+  pageId: string;
+  /** The layout (master spread) a slide made in the editor uses. */
+  layout: string | null;
 }
 
 interface SlideWasmModule extends WasmBindgenGlue {
   importPptx(bytes: Uint8Array, name: string): WasmImported;
   embeddedFonts(bytes: Uint8Array): WasmDeckFonts;
-  exportPptx(original: Uint8Array, plan: string): WasmExported;
+  exportPptx(
+    original: Uint8Array,
+    plan: string,
+    document: Uint8Array | undefined,
+  ): WasmExported;
 }
 
 /** The engine, booted once per realm (a failed boot is retried by the next
@@ -198,13 +210,24 @@ export class SlideEngine {
   }
 
   /** Write a `.pptx` from the deck the document was imported from and its
-   *  slides in page order. */
-  exportPptx(original: Uint8Array, slides: readonly SlidePlan[]): ExportedDeck {
-    const out = this.mod.exportPptx(original, JSON.stringify({ slides }));
+   *  slides in page order. With the document's `.paged` serialization,
+   *  what is on the slides is written from it (edited and new slides
+   *  regenerated, untouched ones kept byte for byte, ADR 711). */
+  exportPptx(
+    original: Uint8Array,
+    slides: readonly SlidePlan[],
+    document?: Uint8Array | null,
+  ): ExportedDeck {
+    const out = this.mod.exportPptx(
+      original,
+      JSON.stringify({ slides }),
+      document ?? undefined,
+    );
     try {
       return {
         bytes: out.bytes,
         diagnostics: JSON.parse(out.diagnostics) as string[],
+        notExported: JSON.parse(out.notExported) as string[],
       };
     } finally {
       out.free();

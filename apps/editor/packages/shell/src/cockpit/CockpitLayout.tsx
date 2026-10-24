@@ -59,6 +59,7 @@ import { Icon } from "../icons";
 import { PanelHost } from "./PanelHost";
 import { TouchZoomControls } from "./TouchZoom";
 import { RightDock } from "./RightDock";
+import { StatusBar } from "../chrome/ContributedBarItems";
 import { DocTitleBar } from "./canvas-frame/DocTitleBar";
 import { GuideDragController } from "./canvas-frame/GuideDragController";
 import { HRuler, VRulerStrip } from "./canvas-frame/Rulers";
@@ -236,6 +237,9 @@ export function CockpitLayout({
         </section>
       )}
       {!isOverride && thumbnails && !sheet && <ThumbnailRail />}
+      {/* Editor ADR 298 — the status items of the active context (a Word
+          document's page and word counts); absent when none apply. */}
+      {!isOverride && <StatusBar />}
     </main>
   );
 

@@ -11,6 +11,7 @@ description = "paged.slide: a resolved deck as a native document (the engine's m
 workspace = true
 
 [dependencies]
+pptx-core.workspace = true
 slide-resolve.workspace = true
 slide-geom.workspace = true
 paged-model.workspace = true
