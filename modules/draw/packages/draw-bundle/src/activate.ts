@@ -184,6 +184,7 @@ import {
 import {
   contributePathOptionsCommands,
   openPathOptions,
+  lastUsedPathOptions,
   lastUsedPayload,
   PATH_OPTIONS_COMMAND_IDS,
   PATH_OPTIONS_PANEL_ID,
@@ -193,6 +194,7 @@ import {
   REVERSE_PATH_COMMAND_IDS,
 } from "./commands/reverse-path";
 import { contributeCreateOutlinesCommands } from "./commands/create-outlines";
+import { contributeRasterizeCommand } from "./commands/rasterize";
 import {
   contributePathfinderCommands,
   PATHFINDER_COMMAND_IDS,
@@ -450,6 +452,13 @@ export function activate(host: BundleHost): BundleHandle {
   // Type ▸ Create outlines — a text frame's glyphs as compound paths, one
   // per colour, in one batch (commands/create-outlines.ts; protocol 66).
   const createOutlinesCommandsSub = contributeCreateOutlinesCommands(host);
+  // Object ▸ Rasterize — the selection as one image frame of its pixels
+  // (plugin-sdk `rasterizeElements`, `render.snapshot@2`). Run bare, it
+  // repeats the values last applied from the Path Options panel.
+  const rasterizeCommandSub = contributeRasterizeCommand(
+    host,
+    () => lastUsedPathOptions(host).rasterize,
+  );
   // Object ▸ Transform — REFLECT (horizontal / vertical / a typed angle,
   // about the selection's centre, composed onto each object's own
   // transform because `frameTransform` replaces) and TRANSFORM AGAIN,
@@ -774,6 +783,7 @@ export function activate(host: BundleHost): BundleHandle {
       transformCommandsSub.dispose();
       reversePathCommandsSub.dispose();
       createOutlinesCommandsSub.dispose();
+      rasterizeCommandSub.dispose();
       joinAverageCommandsSub.dispose();
       pathOptionsCommandsSub.dispose();
       pathOpsCommandsSub.dispose();

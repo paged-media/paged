@@ -120,6 +120,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
+      "media.paged.draw.command.rasterizeOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
@@ -127,6 +128,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.reversePathDirection",
       // Type ▸ Create outlines (protocol 66, RFI C-69).
       "media.paged.draw.command.createOutlines",
+      "media.paged.draw.command.rasterize",
       // Object ▸ Transform — Reflect ×2 and Transform again.
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
