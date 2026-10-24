@@ -513,8 +513,6 @@ export const CORE_PATHS: Record<
     type: { kind: "text" },
   },
   frameAutoFit: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  // Engine ADR 1006 — "NonZero" / "EvenOdd" (the catalog row's enum).
-  frameFillRule: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeType: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeJoin: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeMiterLimit: {
