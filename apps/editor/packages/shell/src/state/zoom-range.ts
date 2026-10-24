@@ -53,7 +53,7 @@ export function clampCamera(
   const cy = viewport[1] / 2;
   const docX = (cx - cam.tx) / cam.scale;
   const docY = (cy - cam.ty) / cam.scale;
-  return { scale, tx: cx - docX * scale, ty: cy - docY * scale };
+  return { ...cam, scale, tx: cx - docX * scale, ty: cy - docY * scale };
 }
 
 /** The zoom presets of the zoom drop-down (UX audit F-31, ADR 257), as
@@ -78,5 +78,5 @@ export function zoomCameraTo(
   const cy = viewport[1] / 2;
   const docX = (cx - cam.tx) / cam.scale;
   const docY = (cy - cam.ty) / cam.scale;
-  return { scale: next, tx: cx - docX * next, ty: cy - docY * next };
+  return { ...cam, scale: next, tx: cx - docX * next, ty: cy - docY * next };
 }

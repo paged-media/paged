@@ -182,6 +182,7 @@ import { ActionsBar } from "./chrome/RegionItems";
 import { useRegistryView } from "./state/live";
 import type { FeatureId } from "./state/features";
 import { SessionPolicyProvider } from "./state/session-role";
+import { ViewSettingsSync } from "./state/view-settings-sync";
 import type { SessionPolicy } from "@paged-media/client";
 
 const DEFAULT_SESSION: SessionPolicy = { role: "editor", overrides: [] };
@@ -395,6 +396,10 @@ export function PagedShell({
                                                         <SeedFeatures
                                                           features={features}
                                                         />
+                                                        {/* Editor ADR 287 — the View menu's
+                                        mode and snapping, handed to the
+                                        engine. */}
+                                                        <ViewSettingsSync />
                                                         <ShellChrome
                                                           panels={panels}
                                                           overlays={overlays}

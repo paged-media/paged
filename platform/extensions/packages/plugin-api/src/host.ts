@@ -1534,8 +1534,10 @@ export interface SelectionSurface {
 }
 
 export interface ViewportSurface {
-  /** Camera snapshot — scale + translation in CSS px. */
-  camera(): { scale: number; tx: number; ty: number };
+  /** Camera snapshot — scale + translation in CSS px, and since v77 the
+   *  view rotation (radians, clockwise on screen; absent = 0): the screen
+   *  shows `scale · R(rotation) · doc + (tx, ty)`. */
+  camera(): { scale: number; tx: number; ty: number; rotation?: number };
   /** Screen px → document pt at the current zoom (the constant-
    *  screen-tolerance idiom every tool needs). */
   pxToPt(px: number): number;

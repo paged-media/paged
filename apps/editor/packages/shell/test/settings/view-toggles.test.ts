@@ -29,6 +29,7 @@ import { covers } from "@paged-media/test-kit";
 
 import {
   getViewToggle,
+  viewModeOf,
   resetViewToggles,
   setViewToggle,
   subscribeViewToggles,
@@ -48,7 +49,27 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   snapToPoints: true,
   headingAnchors: false,
   dataMarkers: false,
+  // Editor ADR 287.
+  outline: false,
+  overprintPreview: false,
+  pixelPreview: false,
+  showGrid: false,
+  pixelGrid: true,
+  snapToGrid: false,
+  snapToPixel: false,
+  smartGuides: true,
 };
+
+const VIEW_SETTINGS = [
+  "setting:view.outline",
+  "setting:view.overprintPreview",
+  "setting:view.pixelPreview",
+  "setting:view.showGrid",
+  "setting:view.pixelGrid",
+  "setting:view.snapToGrid",
+  "setting:view.snapToPixel",
+  "setting:view.smartGuides",
+] as const;
 
 describe("view toggles", () => {
   test("defaults: threads off, snap to points on, heading anchors and data markers off", () => {
@@ -57,6 +78,7 @@ describe("view toggles", () => {
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
       "setting:view.dataMarkers",
+      ...VIEW_SETTINGS,
     );
     for (const [k, v] of Object.entries(DEFAULTS))
       expect({ k, v: getViewToggle(scope, k as ViewToggle) }).toEqual({ k, v });
@@ -117,7 +139,12 @@ describe("view toggles", () => {
       snapToPoints: getViewToggle(after, "snapToPoints"),
       headingAnchors: getViewToggle(after, "headingAnchors"),
       dataMarkers: getViewToggle(after, "dataMarkers"),
-    }).toEqual(DEFAULTS);
+    }).toEqual({
+      textThreads: DEFAULTS.textThreads,
+      snapToPoints: DEFAULTS.snapToPoints,
+      headingAnchors: DEFAULTS.headingAnchors,
+      dataMarkers: DEFAULTS.dataMarkers,
+    });
   });
 
   test("reset restores the defaults and tells subscribers once", () => {
@@ -132,5 +159,32 @@ describe("view toggles", () => {
     expect(heard).toBe(1);
     off();
     expect(getViewToggle(scope, "headingAnchors")).toBe(false);
+  });
+});
+
+describe("view modes (editor ADR 287)", () => {
+  test("the toggles add up to one engine mode, Outline first", () => {
+    covers(...VIEW_SETTINGS);
+    expect(viewModeOf(scope)).toBe("preview");
+    setViewToggle(scope, "overprintPreview", true);
+    expect(viewModeOf(scope)).toBe("overprintPreview");
+    setViewToggle(scope, "outline", true);
+    expect(viewModeOf(scope)).toBe("outline");
+    setViewToggle(scope, "outline", false);
+    expect(viewModeOf(scope)).toBe("overprintPreview");
+  });
+
+  test("Overprint Preview and Pixel Preview exclude each other", () => {
+    covers("setting:view.overprintPreview", "setting:view.pixelPreview");
+    setViewToggle(scope, "overprintPreview", true);
+    setViewToggle(scope, "pixelPreview", true);
+    expect(getViewToggle(scope, "overprintPreview")).toBe(false);
+    expect(viewModeOf(scope)).toBe("pixelPreview");
+    toggleViewToggle(scope, "overprintPreview");
+    expect(getViewToggle(scope, "pixelPreview")).toBe(false);
+    expect(viewModeOf(scope)).toBe("overprintPreview");
+    // Turning one OFF leaves the other alone.
+    setViewToggle(scope, "overprintPreview", false);
+    expect(viewModeOf(scope)).toBe("preview");
   });
 });

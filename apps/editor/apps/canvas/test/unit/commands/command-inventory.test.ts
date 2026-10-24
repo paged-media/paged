@@ -52,6 +52,7 @@ import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
 import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
+import { buildViewCommands } from "../../../src/view-commands";
 import { OPEN_AS_TEMPLATE_COMMANDS } from "../../../src/panels/template/open-as-template-dialog";
 import { buildBatchCommands } from "../../../src/panels/batch-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
@@ -165,6 +166,7 @@ function tableIds(): string[] {
     ...GLOBAL_LIGHT_COMMANDS,
     ...buildTransformEachDialogCommands(() => []),
     ...buildBatchCommands(),
+    ...buildViewCommands(noop),
     ...OPEN_AS_TEMPLATE_COMMANDS,
     SELECT_ALL_COMMAND,
     // Registered only when an embedding host supplies the action.
@@ -245,6 +247,7 @@ describe("the host command inventory", () => {
       "GLOBAL_LIGHT_COMMANDS",
       "transformEachDialogCommands",
       "buildBatchCommands()",
+      "viewCommands",
       "OPEN_AS_TEMPLATE_COMMANDS",
       "SELECT_ALL_COMMAND",
       "buildCoreCommandEntries()",

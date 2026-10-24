@@ -7,13 +7,22 @@
       "storage": "localStorage",
       "key": "paged.theme",
       "default": "dark",
-      "values": ["dark", "light"],
+      "values": [
+        "dark",
+        "light"
+      ],
       "effect": "the `dark` class on the editor's root element ([data-paged-editor])",
       "source": "apps/editor/packages/shell/src/state/theme-context.tsx",
       "marker": "\"paged.theme\"",
       "sites": [
-        ["getItem", "STORAGE_KEY"],
-        ["setItem", "STORAGE_KEY"]
+        [
+          "getItem",
+          "STORAGE_KEY"
+        ],
+        [
+          "setItem",
+          "STORAGE_KEY"
+        ]
       ]
     },
     {
@@ -22,13 +31,26 @@
       "storage": "localStorage",
       "key": "paged.units",
       "default": "pt",
-      "values": ["pt", "pc", "in", "mm", "cm", "px"],
+      "values": [
+        "pt",
+        "pc",
+        "in",
+        "mm",
+        "cm",
+        "px"
+      ],
       "effect": "the unit every geometry length is shown and read in (editor ADR 245); a typed unit converts",
       "source": "apps/editor/packages/ui/src/inputs/document-unit.ts",
       "marker": "\"paged.units\"",
       "sites": [
-        ["getItem", "STORAGE_KEY"],
-        ["setItem", "STORAGE_KEY"]
+        [
+          "getItem",
+          "STORAGE_KEY"
+        ],
+        [
+          "setItem",
+          "STORAGE_KEY"
+        ]
       ]
     },
     {
@@ -38,13 +60,26 @@
       "key": "paged.workflowMode",
       "scoped": true,
       "default": "design",
-      "values": ["design", "content", "prepress", "data", "review", "export"],
+      "values": [
+        "design",
+        "content",
+        "prepress",
+        "data",
+        "review",
+        "export"
+      ],
       "effect": "the active workflow mode (cockpit slots, context toolbar, panel sets); any id an editor profile registers, else the first registered mode",
       "source": "apps/editor/packages/shell/src/state/workflow-mode-context.tsx",
       "marker": "\"paged.workflowMode\"",
       "sites": [
-        ["getItem", "storageKey(scope)"],
-        ["setItem", "storageKey(scope)"]
+        [
+          "getItem",
+          "storageKey(scope)"
+        ],
+        [
+          "setItem",
+          "storageKey(scope)"
+        ]
       ]
     },
     {
@@ -59,9 +94,18 @@
       "source": "apps/editor/packages/shell/src/cockpit/cockpit-persistence.ts",
       "marker": "\"paged.cockpit.v1\"",
       "sites": [
-        ["removeItem", "k"],
-        ["getItem", "KEY(scope)"],
-        ["setItem", "KEY(scope)"]
+        [
+          "removeItem",
+          "k"
+        ],
+        [
+          "getItem",
+          "KEY(scope)"
+        ],
+        [
+          "setItem",
+          "KEY(scope)"
+        ]
       ]
     },
     {
@@ -74,8 +118,14 @@
       "source": "apps/editor/packages/shell/src/chrome/ToolRail.tsx",
       "marker": "\"paged.toolRail.lastUsed\"",
       "sites": [
-        ["getItem", "LAST_USED_STORAGE_KEY"],
-        ["setItem", "LAST_USED_STORAGE_KEY"]
+        [
+          "getItem",
+          "LAST_USED_STORAGE_KEY"
+        ],
+        [
+          "setItem",
+          "LAST_USED_STORAGE_KEY"
+        ]
       ]
     },
     {
@@ -88,8 +138,14 @@
       "source": "apps/editor/packages/shell/src/chrome/CommandPalette.tsx",
       "marker": "\"paged.palette.recents.v1\"",
       "sites": [
-        ["getItem", "RECENTS_KEY"],
-        ["setItem", "RECENTS_KEY"]
+        [
+          "getItem",
+          "RECENTS_KEY"
+        ],
+        [
+          "setItem",
+          "RECENTS_KEY"
+        ]
       ]
     },
     {
@@ -106,8 +162,14 @@
       "source": "apps/editor/apps/canvas/src/playground/guide-prefs.ts",
       "marker": "\"paged.demoGuide.v1\"",
       "sites": [
-        ["getItem", "GUIDE_PREFS_KEY"],
-        ["setItem", "GUIDE_PREFS_KEY"]
+        [
+          "getItem",
+          "GUIDE_PREFS_KEY"
+        ],
+        [
+          "setItem",
+          "GUIDE_PREFS_KEY"
+        ]
       ]
     },
     {
@@ -135,8 +197,14 @@
       "source": "apps/editor/packages/shell/src/chrome/ExportPdfDialog.tsx",
       "marker": "\"paged.exportPdf.options.v1\"",
       "sites": [
-        ["getItem", "OPTIONS_KEY"],
-        ["setItem", "OPTIONS_KEY"]
+        [
+          "getItem",
+          "OPTIONS_KEY"
+        ],
+        [
+          "setItem",
+          "OPTIONS_KEY"
+        ]
       ]
     },
     {
@@ -155,8 +223,14 @@
       "source": "apps/editor/apps/canvas/src/panels/cockpit/export-targets.ts",
       "marker": "\"paged.export.image.v1\"",
       "sites": [
-        ["getItem", "IMAGE_KEY"],
-        ["setItem", "IMAGE_KEY"]
+        [
+          "getItem",
+          "IMAGE_KEY"
+        ],
+        [
+          "setItem",
+          "IMAGE_KEY"
+        ]
       ]
     },
     {
@@ -173,8 +247,14 @@
       "source": "apps/editor/packages/shell/src/actions/store.ts",
       "marker": "\"paged.actions.v1\"",
       "sites": [
-        ["getItem", "ACTIONS_STORAGE_KEY"],
-        ["setItem", "ACTIONS_STORAGE_KEY"]
+        [
+          "getItem",
+          "ACTIONS_STORAGE_KEY"
+        ],
+        [
+          "setItem",
+          "ACTIONS_STORAGE_KEY"
+        ]
       ]
     },
     {
@@ -183,11 +263,18 @@
       "storage": "localStorage",
       "key": "paged.library",
       "default": "on (absent)",
-      "values": ["off"],
+      "values": [
+        "off"
+      ],
       "effect": "\"off\" keeps the local document library (origin-private file system) from starting",
       "source": "apps/editor/apps/canvas/src/app/mount.tsx",
       "marker": "\"paged.library\"",
-      "sites": [["getItem", "\"paged.library\""]]
+      "sites": [
+        [
+          "getItem",
+          "\"paged.library\""
+        ]
+      ]
     },
     {
       "id": "view.textThreads",
@@ -230,11 +317,97 @@
       "sites": []
     },
     {
+      "id": "view.outline",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Outline view (cmd+y): the engine draws hairline outlines (editor ADR 287)",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "outline: false",
+      "sites": []
+    },
+    {
+      "id": "view.overprintPreview",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Overprint Preview: overprinting inks mix as on press instead of knocking out",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "overprintPreview: false",
+      "sites": []
+    },
+    {
+      "id": "view.pixelPreview",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Pixel Preview: the page as a 72 ppi raster, enlarged unsmoothed",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "pixelPreview: false",
+      "sites": []
+    },
+    {
+      "id": "view.showGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Show grid: the document grid overlay",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "showGrid: false",
+      "sites": []
+    },
+    {
+      "id": "view.pixelGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Show pixel grid: one line per point in Pixel Preview at 600 % and above",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "pixelGrid: true",
+      "sites": []
+    },
+    {
+      "id": "view.snapToGrid",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Snap to grid: gestures and the point resolver snap to the grid",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "snapToGrid: false",
+      "sites": []
+    },
+    {
+      "id": "view.snapToPixel",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": false,
+      "effect": "View > Snap to pixel: edges and points nothing else holds land on whole points",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "snapToPixel: false",
+      "sites": []
+    },
+    {
+      "id": "view.smartGuides",
+      "kind": "view-option",
+      "storage": "memory",
+      "default": true,
+      "effect": "View > Smart guides (cmd+u): alignment, spacing, angle and intersection guides",
+      "source": "apps/editor/packages/shell/src/state/view-toggles.ts",
+      "marker": "smartGuides: true",
+      "sites": []
+    },
+    {
       "id": "view.screenMode",
       "kind": "view-option",
       "storage": "memory",
       "default": "normal",
-      "values": ["normal", "preview", "bleed", "slug", "presentation"],
+      "values": [
+        "normal",
+        "preview",
+        "bleed",
+        "slug",
+        "presentation"
+      ],
       "effect": "the screen mode the overlays render (W toggles Normal and Preview)",
       "source": "apps/editor/packages/shell/src/state/screen-mode-context.tsx",
       "marker": "useState<ScreenMode>(\"normal\")",
@@ -245,7 +418,10 @@
       "kind": "ui-state",
       "storage": "memory",
       "default": "container",
-      "values": ["container", "text"],
+      "values": [
+        "container",
+        "text"
+      ],
       "effect": "whether fill and stroke edits apply to the frame or to its text",
       "source": "apps/editor/packages/shell/src/state/formatting-affects-context.tsx",
       "marker": "useState<FormattingAffects>(\"container\")",
@@ -256,7 +432,10 @@
       "kind": "ui-state",
       "storage": "memory",
       "default": "fill",
-      "values": ["fill", "stroke"],
+      "values": [
+        "fill",
+        "stroke"
+      ],
       "effect": "which of the fill and stroke wells a swatch click colours",
       "source": "apps/editor/packages/shell/src/state/formatting-affects-context.tsx",
       "marker": "useState<FillStrokeWell>(\"fill\")",
@@ -335,6 +514,26 @@
       "source": "apps/editor/apps/canvas/src/playground/IframeScriptBridge.tsx",
       "marker": "params.get(\"embed\") !== \"script\"",
       "sites": []
+    },
+    {
+      "id": "paged.viewPreferences",
+      "kind": "preference",
+      "storage": "localStorage",
+      "key": "paged.viewPreferences",
+      "default": "{ gridEvery: 72, gridSubdivisions: 8, gridColor: #8fb8ff, gridsInBack: true, smart guides on, tolerancePx: 4 }",
+      "effect": "Guides & grid preferences: the grid's spacing, subdivisions, colour and stacking, the snap tolerance and the smart guides' options (editor ADR 287)",
+      "source": "apps/editor/packages/shell/src/state/view-preferences.ts",
+      "marker": "\"paged.viewPreferences\"",
+      "sites": [
+        [
+          "getItem",
+          "STORAGE_KEY"
+        ],
+        [
+          "setItem",
+          "STORAGE_KEY"
+        ]
+      ]
     }
   ],
   "excluded": [
@@ -345,12 +544,30 @@
       "source": "apps/editor/packages/repository/src/signin.ts",
       "marker": "`paged.server.${new URL(server).origin}.${what}`",
       "sites": [
-        ["getItem", "key(server, \"tokens\")"],
-        ["setItem", "key(server, \"tokens\")"],
-        ["removeItem", "key(server, \"tokens\")"],
-        ["getItem", "key(server, `client:${redirectUri}`)"],
-        ["setItem", "key(server, `client:${redirectUri}`)"],
-        ["getItem", "key(server, `client:${redirectUri}`)"]
+        [
+          "getItem",
+          "key(server, \"tokens\")"
+        ],
+        [
+          "setItem",
+          "key(server, \"tokens\")"
+        ],
+        [
+          "removeItem",
+          "key(server, \"tokens\")"
+        ],
+        [
+          "getItem",
+          "key(server, `client:${redirectUri}`)"
+        ],
+        [
+          "setItem",
+          "key(server, `client:${redirectUri}`)"
+        ],
+        [
+          "getItem",
+          "key(server, `client:${redirectUri}`)"
+        ]
       ]
     },
     {
@@ -359,7 +576,12 @@
       "reason": "the plugin credential store behind host.secrets (passphrase-wrapped secrets per plugin reference). User data a plugin asks for through a prompt, not an editor setting.",
       "source": "apps/editor/apps/canvas/src/plugin-secret-store.ts",
       "marker": "\"paged-secrets\"",
-      "sites": [["indexedDB.open", "DB_NAME"]]
+      "sites": [
+        [
+          "indexedDB.open",
+          "DB_NAME"
+        ]
+      ]
     },
     {
       "key": "OPFS plugin-blobs/<plugin id>",
@@ -367,7 +589,12 @@
       "reason": "host.storage blob tier: plugin content bytes in the origin-private file system, not configuration.",
       "source": "apps/editor/apps/canvas/src/plugin-blob-store.ts",
       "marker": "\"plugin-blobs\"",
-      "sites": [["getDirectory", ""]]
+      "sites": [
+        [
+          "getDirectory",
+          ""
+        ]
+      ]
     },
     {
       "key": "OPFS <library root>",
@@ -375,7 +602,12 @@
       "reason": "the local document library's repositories (documents and their versions), not configuration.",
       "source": "apps/editor/packages/repository/src/fs.ts",
       "marker": "storage.getDirectory()",
-      "sites": [["getDirectory", ""]]
+      "sites": [
+        [
+          "getDirectory",
+          ""
+        ]
+      ]
     },
     {
       "key": "paged.consent.grants.v1",
@@ -384,8 +616,14 @@
       "source": "apps/editor/apps/canvas/src/plugin-consent.ts",
       "marker": "\"paged.consent.grants.v1\"",
       "sites": [
-        ["getItem", "REMEMBERED_GRANTS_KEY"],
-        ["setItem", "REMEMBERED_GRANTS_KEY"]
+        [
+          "getItem",
+          "REMEMBERED_GRANTS_KEY"
+        ],
+        [
+          "setItem",
+          "REMEMBERED_GRANTS_KEY"
+        ]
       ]
     },
     {
@@ -394,7 +632,12 @@
       "reason": "the file handles the editor recognises a reopened document by (editor ADR 264): host-held identity for remembered grants, not configuration.",
       "source": "apps/editor/apps/canvas/src/document-identity.ts",
       "marker": "\"paged.documentIdentity\"",
-      "sites": [["indexedDB.open", "DB"]]
+      "sites": [
+        [
+          "indexedDB.open",
+          "DB"
+        ]
+      ]
     },
     {
       "key": "(any: the editor's settings adapter)",
@@ -403,9 +646,18 @@
       "source": "apps/editor/packages/shell/src/state/storage.ts",
       "marker": "export function pageStorage()",
       "sites": [
-        ["getItem", "key"],
-        ["setItem", "key"],
-        ["removeItem", "key"]
+        [
+          "getItem",
+          "key"
+        ],
+        [
+          "setItem",
+          "key"
+        ],
+        [
+          "removeItem",
+          "key"
+        ]
       ]
     }
   ]

@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 458,
-    "keybinding": 98,
-    "menu": 336,
+    "command": 509,
+    "keybinding": 112,
+    "menu": 387,
     "panel": 129,
     "tool": 81
   },
@@ -896,6 +896,36 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.alignBottom",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.alignHCenter",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.alignLeft",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.alignRight",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.alignTop",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.alignVCenter",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.applyAdjustment",
       "kind": "command",
       "owner": "media.paged.image"
@@ -917,6 +947,11 @@
     },
     {
       "id": "command:media.paged.image.command.bakeAdjustToLayer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.blendingOptions",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -967,6 +1002,16 @@
     },
     {
       "id": "command:media.paged.image.command.deselect",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.distributeHorizontal",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.distributeVertical",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1161,6 +1206,11 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.flattenImage",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.flipHorizontal",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1181,6 +1231,21 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.layerViaCopy",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.layerViaCut",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.linkLayers",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.loadBrushLibrary",
       "kind": "command",
       "owner": "media.paged.image"
@@ -1196,7 +1261,122 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.mergeDown",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.mergeGroup",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.mergeVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.minimum",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentBlackWhite",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentBrightnessContrast",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentChannelMixer",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentColorBalance",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentColorLookup",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentCurves",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentExposure",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentGradientMap",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentHueSaturation",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentInvert",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentLevels",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentPhotoFilter",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentPosterize",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentSelectiveColor",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentThreshold",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newAdjustmentVibrance",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newFillGradient",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newFillPattern",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newFillSolid",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.newLayerComp",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1207,6 +1387,11 @@
     },
     {
       "id": "command:media.paged.image.command.pathToSelection",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.rasterizeLayer",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -1266,12 +1451,22 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "command:media.paged.image.command.stampVisible",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "command:media.paged.image.command.trim",
       "kind": "command",
       "owner": "media.paged.image"
     },
     {
       "id": "command:media.paged.image.command.undo",
+      "kind": "command",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "command:media.paged.image.command.unlinkLayer",
       "kind": "command",
       "owner": "media.paged.image"
     },
@@ -2261,6 +2456,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.guidesAndGridPreferences",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.lastPage",
       "kind": "command",
       "owner": "editor"
@@ -2271,7 +2471,62 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.outline",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.overprintPreview",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.pixelGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.pixelPreview",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.previousPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.resetRotation",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.rotateClockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.rotateCounterclockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.showGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.smartGuides",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.snapToGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.snapToPixel",
       "kind": "command",
       "owner": "editor"
     },
@@ -2346,6 +2601,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+cmd+y→paged.view.pixelPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+ctrl+0→paged.view.fitSpread",
       "kind": "keybinding",
       "owner": "editor"
@@ -2366,6 +2626,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+ctrl+y→paged.view.pixelPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -2376,6 +2641,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+shift+cmd+y→paged.view.overprintPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -2384,6 +2654,11 @@
       "id": "keybinding:alt+shift+ctrl+n→media.paged.slide.command.duplicateSlide",
       "kind": "keybinding",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:alt+shift+ctrl+y→paged.view.overprintPreview",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:arrowdown→paged.object.nudgeDown",
@@ -2407,6 +2682,11 @@
     },
     {
       "id": "keybinding:backspace→paged.object.delete",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -2556,6 +2836,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+u→paged.view.smartGuides",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -2571,7 +2856,17 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+y→paged.view.outline",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:contextmenu→paged.edit.contextMenu",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -2716,6 +3011,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+u→paged.view.smartGuides",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -2727,6 +3027,11 @@
     },
     {
       "id": "keybinding:ctrl+x→paged.edit.cut",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+y→paged.view.outline",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -2782,6 +3087,26 @@
     },
     {
       "id": "keybinding:shift+arrowup→paged.object.nudgeUpLarge",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+'→paged.view.snapToGrid",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+1→paged.view.resetRotation",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+'→paged.view.snapToGrid",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+1→paged.view.resetRotation",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3826,7 +4151,202 @@
       "owner": "media.paged.image"
     },
     {
+      "id": "menu:Image/Layer/Align/Bottom edges",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Align/Horizontal centres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Align/Left edges",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Align/Right edges",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Align/Top edges",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Align/Vertical centres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
       "id": "menu:Image/Layer/Convert to smart object",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Distribute/Horizontal centres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Distribute/Vertical centres",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Flatten image",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Layer comps/New layer comp",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Layer style/Blending options…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Link with layer below",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Merge down",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Merge group",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Merge visible",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Black & white…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Brightness–contrast…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Channel mixer…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour balance…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Colour lookup…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Curves…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Exposure…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Gradient map…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Hue–saturation…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Invert",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Levels…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Photo filter…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Posterize…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Selective colour…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Threshold…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New adjustment layer/Vibrance…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New fill layer/Gradient…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New fill layer/Pattern…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New fill layer/Solid colour…",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New/Layer via copy",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/New/Layer via cut",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Rasterize",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Stamp visible",
+      "kind": "menu",
+      "owner": "media.paged.image"
+    },
+    {
+      "id": "menu:Image/Layer/Unlink",
       "kind": "menu",
       "owner": "media.paged.image"
     },
@@ -4421,7 +4941,47 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Guides & grid preferences…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Outline view",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Overprint Preview",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Pixel Preview",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/15° clockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/15° counterclockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/Reset rotation",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Show data markers",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show grid",
       "kind": "menu",
       "owner": "editor"
     },
@@ -4431,7 +4991,27 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Show pixel grid",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Show text threads",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Smart guides",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to grid",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to pixel",
       "kind": "menu",
       "owner": "editor"
     },

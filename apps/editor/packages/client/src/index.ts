@@ -49,12 +49,16 @@ export {
   OFFSET_SCALE,
   OFFSET_TX,
   OFFSET_TY,
+  OFFSET_ROTATION,
   OFFSET_GEN_LO,
   OFFSET_GEN_HI,
   IDENTITY_CAMERA,
   supportsSharedArrayBuffer,
   docToViewport,
   viewportToDoc,
+  cameraMatrix,
+  rotateCameraAbout,
+  normaliseRotation,
   type Camera,
 } from "./sab/camera";
 export {
