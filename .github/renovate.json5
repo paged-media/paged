@@ -144,7 +144,7 @@
       allowedVersions: "<25",
     },
     {
-      description: "Turso (paged.data's store, ADR 561) moves only with the SQLite oracle replayed and its gap pins reviewed (modules/data/conformance/sqlite-sql).",
+      description: "Turso (paged.data's store, ADR 561) moves only with the SQLite oracle replayed and its gap pins reviewed (engine/core/crates/paged-data-store/tests/sqlite-sql).",
       matchPackageNames: ["turso_core", "turso_parser"],
       dependencyDashboardApproval: true,
     },
@@ -184,7 +184,7 @@
     },
     {
       matchManagers: ["cargo"],
-      matchFileNames: ["modules/data/**"],
+      matchFileNames: ["modules/data/**", "engine/core/crates/paged-data-*/**"],
       groupName: "rust: data",
     },
     {
