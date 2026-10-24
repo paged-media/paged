@@ -81,7 +81,9 @@ canary added is under [Releases](#releases).
   runs in a host worker where the host offers one, and on the calling thread otherwise.
   The paths land where the image is displayed: the trace follows the image's own placement
   in its frame, and only the part the frame shows is traced.
-- **SVG.** An importer for `.svg` files and an exporter for the selection.
+- **SVG.** An importer for `.svg` files and an exporter for the selection. A file is one
+  undo step. A shape of several contours imports as one compound path, its holes wound
+  for its `fill-rule`, and exports as one `<path>` of several subpaths.
 - **Menu.** 90 commands have menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
@@ -308,7 +310,11 @@ panel of these rows. The fields:
   It reads only what the browser can decode.
 - **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
   images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only.
+  writes solid colours only. The engine fills non-zero, so `fill-rule="evenodd"` is
+  expressed by re-winding contours by nesting depth: contours that cross each other or
+  themselves (a star drawn as one path) paint their non-zero region. A shape stays one
+  path per contour when a contour after the first is open, or when the engine reports no
+  page origin.
 
 ## Not built
 
