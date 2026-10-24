@@ -38,6 +38,17 @@ fn report_image_resolution(
     frame_id: Option<&str>,
 ) {
     let (code, msg) = match resolution {
+        ImageResolution::Resolved(Placed::Raster(id), ..)
+            if page
+                .list
+                .image(*id)
+                .is_some_and(|d| super::image_decode::is_eps(&d.encoded)) =>
+        {
+            (
+                DiagnosticCode::ImageDrawnFromPreview,
+                "placed EPS drawn from its low-resolution preview (no PostScript interpreter)",
+            )
+        }
         ImageResolution::DecodeFailed if has_image_element => (
             DiagnosticCode::ImageDecodeFailed,
             "placed image could not be decoded; frame fill used instead",
@@ -800,7 +811,7 @@ fn emit_image_under_clip(
 /// referenced a link the asset resolver couldn't find (typical Envato
 /// template placeholder — InDesign stamps a grey-X placeholder over
 /// these). `DecodeFailed` means the resolver returned bytes our
-/// decoder can't handle (an EPS, a PSD whose merged composite is Lab,
+/// decoder can't handle (an EPS without a preview, a PSD whose merged composite is Lab,
 /// indexed or ZIP-compressed, damaged bytes); in that case InDesign would still
 /// rasterise the actual content, so falling back to the
 /// missing-image placeholder is worse than emitting the frame's
@@ -972,13 +983,26 @@ fn resolve_image_id(
         }
     };
     let (img_w, img_h) = match list.image(id) {
-        Some(d) => (d.width as f32, d.height as f32),
+        Some(d) => placed_size(d),
         None => return ImageResolution::DecodeFailed,
     };
     if img_w <= 0.0 || img_h <= 0.0 {
         return ImageResolution::DecodeFailed;
     }
     ImageResolution::Resolved(Placed::Raster(id), img_w, img_h)
+}
+
+/// The size a placed raster spans in its picture space: its pixels (one
+/// point each), except an EPS drawn from its preview, which spans the
+/// artwork's bounding box in points whatever the preview's resolution, as
+/// the PostScript would.
+fn placed_size(d: &paged_compose::DecodedImage) -> (f32, f32) {
+    if super::image_decode::is_eps(&d.encoded) {
+        if let Some([llx, lly, urx, ury]) = paged_raster::eps_bounding_box(&d.encoded) {
+            return ((urx - llx) as f32, (ury - lly) as f32);
+        }
+    }
+    (d.width as f32, d.height as f32)
 }
 
 /// The bytes a `data:<mime>;base64,<payload>` link carries, or `None` for
@@ -1060,7 +1084,7 @@ fn resolve_inline_image_bytes(
         }
     };
     let (img_w, img_h) = match list.image(id) {
-        Some(d) => (d.width as f32, d.height as f32),
+        Some(d) => placed_size(d),
         None => return ImageResolution::DecodeFailed,
     };
     if img_w <= 0.0 || img_h <= 0.0 {

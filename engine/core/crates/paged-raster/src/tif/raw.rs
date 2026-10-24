@@ -152,6 +152,65 @@ impl Header {
         b.get(start..start.checked_add(len)?)
     }
 
+    /// The values of a numeric entry as `f64`: BYTE, SHORT, LONG, LONG8
+    /// and IFD offsets as integers, RATIONAL and SRATIONAL divided out,
+    /// SBYTE, SSHORT, SLONG signed, FLOAT and DOUBLE as they are.
+    pub(crate) fn numbers(&self, b: &[u8], ifd: u64, tag: u16) -> Option<Vec<f64>> {
+        let at = self.entry(b, ifd, tag)?;
+        let ty = self.u16(b, at + 2)?;
+        let v = self.value(b, ifd, tag)?;
+        let n = |w: usize| v.len() / w;
+        Some(match ty {
+            1 | 7 => v.iter().map(|x| f64::from(*x)).collect(),
+            6 => v.iter().map(|x| f64::from(*x as i8)).collect(),
+            3 => (0..n(2))
+                .map(|i| f64::from(self.u16(v, i * 2).unwrap_or(0)))
+                .collect(),
+            8 => (0..n(2))
+                .map(|i| f64::from(self.u16(v, i * 2).unwrap_or(0) as i16))
+                .collect(),
+            4 | 13 => (0..n(4))
+                .map(|i| f64::from(self.u32(v, i * 4).unwrap_or(0)))
+                .collect(),
+            9 => (0..n(4))
+                .map(|i| f64::from(self.u32(v, i * 4).unwrap_or(0) as i32))
+                .collect(),
+            16 | 18 => (0..n(8))
+                .map(|i| self.u64(v, i * 8).unwrap_or(0) as f64)
+                .collect(),
+            5 | 10 => (0..n(8))
+                .map(|i| {
+                    let (num, den) = (
+                        self.u32(v, i * 8).unwrap_or(0),
+                        self.u32(v, i * 8 + 4).unwrap_or(0),
+                    );
+                    let (num, den) = if ty == 10 {
+                        (f64::from(num as i32), f64::from(den as i32))
+                    } else {
+                        (f64::from(num), f64::from(den))
+                    };
+                    if den == 0.0 {
+                        0.0
+                    } else {
+                        num / den
+                    }
+                })
+                .collect(),
+            11 => (0..n(4))
+                .map(|i| f64::from(f32::from_bits(self.u32(v, i * 4).unwrap_or(0))))
+                .collect(),
+            12 => (0..n(8))
+                .map(|i| f64::from_bits(self.u64(v, i * 8).unwrap_or(0)))
+                .collect(),
+            _ => return None,
+        })
+    }
+
+    /// The file is little-endian.
+    pub(crate) fn little_endian(&self) -> bool {
+        self.le
+    }
+
     /// The first value of a SHORT or LONG entry.
     pub(crate) fn short(&self, b: &[u8], ifd: u64, tag: u16) -> Option<u32> {
         let at = self.entry(b, ifd, tag)?;
