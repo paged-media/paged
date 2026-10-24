@@ -31,6 +31,8 @@ export function makeBucketGesture(
     onPointerDown(e: CanvasPointerEvent) {
       if (!fit || !e.pagePoint) return;
       const at = pageToImage(fit, e.pagePoint);
+      // An armed Curves eyedropper takes the click.
+      if (session.takeCurvesPick(at)) return;
       // Alt-click samples, as with every paint tool.
       if (e.modifiers.alt) session.sampleColor(at, 3);
       else void session.bucketFill(at);
