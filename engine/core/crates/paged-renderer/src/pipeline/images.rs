@@ -800,8 +800,8 @@ fn emit_image_under_clip(
 /// referenced a link the asset resolver couldn't find (typical Envato
 /// template placeholder — InDesign stamps a grey-X placeholder over
 /// these). `DecodeFailed` means the resolver returned bytes our
-/// decoder can't handle (oversized JPEG, unsupported PSD layers,
-/// streaming-only formats); in that case InDesign would still
+/// decoder can't handle (an EPS, a PSD whose merged composite is Lab,
+/// indexed or ZIP-compressed, damaged bytes); in that case InDesign would still
 /// rasterise the actual content, so falling back to the
 /// missing-image placeholder is worse than emitting the frame's
 /// intrinsic FillColor (Q-14).
