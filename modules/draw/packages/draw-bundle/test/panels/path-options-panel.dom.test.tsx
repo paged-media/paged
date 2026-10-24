@@ -443,9 +443,9 @@ describe("Path options panel — rendered against the engine", () => {
       panel.change(field("simplify.tolerance"), "20");
       await drive(() => Promise.resolve(), panel.work);
       await drive(() => Promise.resolve(), panel.work);
-      expect(panel.get("[data-draw-pathopts-simplify-preview]").textContent).toMatch(
-        /7 → 2/,
-      );
+      expect(
+        panel.get("[data-draw-pathopts-simplify-preview]").textContent,
+      ).toMatch(/7 → 2/);
       expect(h.overlayLayers().some((l) => l.shapes.length === 1)).toBe(true);
       expect(panel.work.mutations).toEqual([]);
       expect(panel.get("[data-draw-pathopts-simplify-note]").textContent).toBe(
@@ -887,12 +887,15 @@ describe("Path options panel — rendered against the engine", () => {
     afterAll(() => h?.dispose());
     afterEach(() => teardownPanels(h));
 
-    it("every “…” row of the menu RAISES a section — Image trace is the one that still does not", () => {
+    it("every “…” row of the menu RAISES a panel — Path Options at a section, or its own (Image Trace, Recolor Artwork)", () => {
       const raisers = new Set(
         Object.values(PATH_OPTIONS_COMMANDS).map((id) =>
           id.slice(MENU_COMMAND_PREFIX.length + 1),
         ),
       );
+      // The two "…" rows whose parameters live in a panel of their own
+      // (WP6.6 Image Trace, WP6.5 Recolor Artwork).
+      const ownPanel = new Set(["imageTraceOptions", "recolorArtworkOptions"]);
       const ellipsis = MENU_ENTRIES.filter(([path]) => path.endsWith("…"));
       expect(ellipsis.map(([path]) => path)).toEqual([
         "Draw/Path/Outline stroke options…",
@@ -909,16 +912,19 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Insert flare…",
         "Edit/Select same/Stroke weight within…",
         "Draw/Image trace…",
+        "Edit/Edit colors/Recolor artwork…",
       ]);
       expect(
         ellipsis
-          .filter(([, suffix]) => !raisers.has(suffix))
+          .filter(([, suffix]) => !raisers.has(suffix) && !ownPanel.has(suffix))
           .map(([path]) => path),
-      ).toEqual(["Draw/Image trace…"]);
+      ).toEqual([]);
       // And nothing WITHOUT an ellipsis raises a dialog.
       expect(
         MENU_ENTRIES.filter(
-          ([path, suffix]) => !path.endsWith("…") && raisers.has(suffix),
+          ([path, suffix]) =>
+            !path.endsWith("…") &&
+            (raisers.has(suffix) || ownPanel.has(suffix)),
         ),
       ).toEqual([]);
     });

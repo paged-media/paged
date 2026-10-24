@@ -16,21 +16,27 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// IMAGE TRACE v0 — a placed raster becomes real vector page items.
+// IMAGE TRACE — a placed raster becomes real vector page items.
 //
 // READ THIS BEFORE BELIEVING THE FEATURE NAME. Illustrator's Image Trace
 // is a LIVE object: presets, a tracing panel you scrub, a result that
 // re-traces when you change a knob, an Expand step, and a centreline mode
-// that finds STROKES. THIS IS NOT THAT, and the command title says so.
-// What this is:
-//   · a ONE-SHOT lowering — pixels in, ordinary filled Polygons out, in
-//     one place, once. Editing the source image afterwards does nothing;
-//     undo is the only "un-trace";
-//   · FILLS ONLY — every region is a filled shape. There is no
-//     centreline/stroke detection, so a line drawing comes back as thin
-//     filled outlines, not as strokes;
-//   · NO PRESETS — parameters are the documented v0 defaults below,
-//     overridable per invocation through the command payload;
+// that finds STROKES. Since WP6.6 this module has the presets, the
+// centreline mode and the re-trace; what it still is:
+//   · ORDINARY ARTWORK — pixels in, ordinary Polygons out. The trace keeps
+//     its options in the SOURCE's record (ADR 360 shape: the record names
+//     no minted id, every region names its source), so RE-TRACE with new
+//     options rebuilds the result in ONE undo step: the new regions are
+//     inserted and the old ones deleted in the same batch. A trace made
+//     LIVE (`live: true`) is re-traced by itself, inside the edit's undo
+//     step, when the source's link changes (`image-trace-live.ts`, over
+//     the recipe auto-update's step amend). Editing a region by hand is
+//     not tracked: a re-trace replaces it;
+//   · FILLS, or STROKES for the centreline presets (Line Art, Technical
+//     Drawing): the kernel thins the ink to its skeleton and every region
+//     is then an OPEN path stroked at the ink's mean width;
+//   · PRESETS are Illustrator's names mapped onto the kernel's options
+//     (`trace-presets.ts`); a payload overrides any single option;
 //   · NON-DESTRUCTIVE toward the source: the placed image is NOT deleted,
 //     hidden or replaced. The traced group is INSERTED, so it lands at
 //     the top of the page's z-order — over the image it came from (the
@@ -120,8 +126,10 @@ import type {
   ElementId,
   Mutation,
   PluginMetadataEnvelope,
+  SceneTreeNode,
 } from "@paged-media/plugin-api";
 import {
+  affineScale,
   applyAffine,
   composeAffine,
   invertAffine,
@@ -135,6 +143,11 @@ import {
 
 import manifest from "../../manifest.json";
 import {
+  isTracePreset,
+  tracePresetOptions,
+  type TracePresetId,
+} from "./trace-presets";
+import {
   openTraceSession,
   traceBudget,
   TRACE_DEFAULTS,
@@ -143,6 +156,7 @@ import {
   type TraceOptions,
   type TraceRegion,
   type TraceResult,
+  type TraceStroke,
 } from "../trace-engine";
 import { decodeRasterBytes, rasterDecoderAvailable } from "../io/raster-decode";
 
@@ -154,7 +168,7 @@ import {
   spreadTableOf,
   type PageOrigin,
 } from "../page-origin";
-import { groupMutationFor } from "./group";
+import { groupMutationFor, ungroupMutationFor } from "./group";
 import { bindMinted, mutateMinting } from "./minted";
 import {
   bindCreatedMutationFor,
@@ -162,6 +176,7 @@ import {
   oneBatchFor,
 } from "./batch-handles";
 import { insertPathMutationFor } from "../handlers/insert-path";
+import { groupHolding, leafIdsOf, linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
@@ -169,14 +184,29 @@ import { defineMessages } from "@paged-media/strings";
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.imageTrace", {
   title:
-    "Image: Trace placed image to vector paths (one-shot, fills only — not Illustrator's live Image Trace)",
+    "Image: Trace placed image to vector paths (a preset or options; Re-trace rebuilds it — the regions are ordinary artwork)",
+  retrace:
+    "Image: Re-trace with new options (replaces the traced regions in one undo step)",
+  options: "Image: Image Trace options…",
 });
 export const IMAGE_TRACE_COMMAND_CATEGORY = "Image";
 
 export const IMAGE_TRACE_COMMAND_ID = "media.paged.draw.command.imageTrace";
+export const RETRACE_IMAGE_COMMAND_ID = "media.paged.draw.command.retraceImage";
+/** Raises the Image Trace panel (the "…" menu row). */
+export const IMAGE_TRACE_OPTIONS_COMMAND_ID =
+  "media.paged.draw.command.imageTraceOptions";
 
 /** The contributed command ids, in registration order. */
-export const IMAGE_TRACE_COMMAND_IDS = [IMAGE_TRACE_COMMAND_ID];
+export const IMAGE_TRACE_COMMAND_IDS = [
+  IMAGE_TRACE_COMMAND_ID,
+  RETRACE_IMAGE_COMMAND_ID,
+  IMAGE_TRACE_OPTIONS_COMMAND_ID,
+];
+
+/** The Image Trace panel's id (the panel lives in `panels/`; the id is
+ *  here so the options command can raise it without importing React). */
+export const IMAGE_TRACE_PANEL_ID = "media.paged.draw.panel.imageTrace";
 
 /** The command title's message key (`registerCommand` reads it in the
  *  editor's locale). Long on purpose: `CommandContribution` has no
@@ -207,9 +237,15 @@ export interface ImageTraceRecord {
   /** Regions dropped by `maxRegions` — non-zero means the artwork is an
    *  INCOMPLETE trace, and the value says by how much. */
   truncated: number;
-  /** Always true, and always read as "these paths do NOT track the
-   *  image". Carried explicitly so the value says so on reopen. */
-  oneShot: true;
+  /** The preset the options started from, or null (custom / a record
+   *  written before presets). */
+  preset?: TracePresetId | null;
+  /** Re-trace by itself when the source's link changes. */
+  live?: boolean;
+  /** `!live`: the regions do not follow the image by themselves (a
+   *  Re-trace still rebuilds them). Carried explicitly so a reopened
+   *  document says which it is. */
+  oneShot: boolean;
 }
 
 /** Read the trace record out of an envelope, or null. Tolerant of
@@ -235,7 +271,9 @@ export function imageTraceOf(
       ? r.regions.filter((s): s is string => typeof s === "string")
       : [],
     truncated: typeof r.truncated === "number" ? r.truncated : 0,
-    oneShot: true,
+    preset: isTracePreset(r.preset) ? r.preset : null,
+    live: r.live === true,
+    oneShot: r.live !== true,
   };
 }
 
@@ -290,9 +328,15 @@ export interface TracePlanRegion {
   table: AnchorTable;
   /** How many contours the table carries (1 = no holes). */
   contours: number;
-  /** The swatch self-id this region's fill references. */
+  /** The swatch self-id this region's fill (or, for a stroke, its
+   *  stroke) references. */
   swatchId: string;
   color: Rgb;
+  /** A CENTRELINE stroke: the stroke weight in pt. Absent = a filled
+   *  region. */
+  strokeWeight?: number;
+  /** A centreline stroke that does not close (most of them). */
+  open?: boolean;
 }
 
 /** Everything the trace batch needs, resolved once. Pure data — the
@@ -313,6 +357,10 @@ export interface TracePlan {
   sourcePixels: [number, number];
   options: Required<TraceOptions>;
   truncated: number;
+  /** The preset the options came from (recorded). */
+  preset?: TracePresetId | null;
+  /** Re-trace when the link changes (recorded). */
+  live?: boolean;
 }
 
 /** A unique-enough swatch id nonce — the `io/svg.ts` convention (a
@@ -549,14 +597,13 @@ export function tracePlanFor(args: {
   scale: number;
   sourcePixels: [number, number];
   options: Required<TraceOptions>;
+  preset?: TracePresetId | null;
+  live?: boolean;
 }): TracePlan {
   const swatches: { id: string; color: Rgb }[] = [];
   const byHex = new Map<string, string>();
   const regions: TracePlanRegion[] = [];
-  for (const region of args.result.regions) {
-    const table = regionTableFor(region, args.pixelToPage);
-    if (!table) continue;
-    const color: Rgb = [region.color[0], region.color[1], region.color[2]];
+  const swatchFor = (color: Rgb): string => {
     const hex = rgbToHex(color);
     let swatchId = byHex.get(hex);
     if (!swatchId) {
@@ -564,11 +611,31 @@ export function tracePlanFor(args: {
       byHex.set(hex, swatchId);
       swatches.push({ id: swatchId, color });
     }
+    return swatchId;
+  };
+  for (const region of args.result.regions) {
+    const table = regionTableFor(region, args.pixelToPage);
+    if (!table) continue;
+    const color: Rgb = [region.color[0], region.color[1], region.color[2]];
     regions.push({
       table,
       contours: table.subpathStarts.length,
-      swatchId,
+      swatchId: swatchFor(color),
       color,
+    });
+  }
+  for (const stroke of args.result.strokes ?? []) {
+    const table = strokeTableFor(stroke, args.pixelToPage);
+    if (!table) continue;
+    const color: Rgb = [stroke.color[0], stroke.color[1], stroke.color[2]];
+    regions.push({
+      table,
+      contours: 1,
+      swatchId: swatchFor(color),
+      color,
+      // The ink's width in pixels, carried into page space.
+      strokeWeight: stroke.width * affineScale(args.pixelToPage),
+      open: !stroke.closed,
     });
   }
   return {
@@ -586,6 +653,28 @@ export function tracePlanFor(args: {
     sourcePixels: args.sourcePixels,
     options: args.options,
     truncated: args.result.truncated,
+    preset: args.preset ?? null,
+    live: args.live === true,
+  };
+}
+
+/** Lower ONE centreline stroke into a page-space single-contour table
+ *  (open unless the stroke is a drawn loop). Null below two anchors. */
+export function strokeTableFor(
+  stroke: TraceStroke,
+  m: Affine,
+): AnchorTable | null {
+  if (stroke.anchors.length < 2) return null;
+  return {
+    anchors: stroke.anchors.map((a) =>
+      mapAnchor(m, {
+        anchor: [a.anchor[0], a.anchor[1]],
+        left: [a.left[0], a.left[1]],
+        right: [a.right[0], a.right[1]],
+      }),
+    ),
+    subpathStarts: [0],
+    subpathOpen: [!stroke.closed],
   };
 }
 
@@ -637,7 +726,9 @@ export function traceInsertBatchFor(plan: TracePlan): Mutation {
   );
   plan.regions.forEach((region, r) => {
     contoursOf(region.table).forEach((contour, c) => {
-      ops.push(insertPathMutationFor(plan.pageId, contour, false));
+      ops.push(
+        insertPathMutationFor(plan.pageId, contour, region.open ?? false),
+      );
       ops.push(bindCreatedMutationFor(traceContourHandle(r, c)));
     });
   });
@@ -736,8 +827,26 @@ export function traceFinishBatchFor(args: {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
       }
     }
-    ops.push(colorRef(binding.keep, "frameFillColor", binding.region.swatchId));
-    ops.push(colorRef(binding.keep, "frameStrokeColor", null));
+    if (typeof binding.region.strokeWeight === "number") {
+      // A CENTRELINE: stroked, never filled.
+      ops.push(colorRef(binding.keep, "frameFillColor", null));
+      ops.push(
+        colorRef(binding.keep, "frameStrokeColor", binding.region.swatchId),
+      );
+      ops.push({
+        op: "setElementProperty",
+        args: {
+          elementId: binding.keep,
+          path: "frameStrokeWeight",
+          value: { type: "length", value: binding.region.strokeWeight },
+        },
+      });
+    } else {
+      ops.push(
+        colorRef(binding.keep, "frameFillColor", binding.region.swatchId),
+      );
+      ops.push(colorRef(binding.keep, "frameStrokeColor", null));
+    }
     ops.push(
       stamp(binding.keep, {
         v: 1,
@@ -756,14 +865,41 @@ export function traceFinishBatchFor(args: {
 
 // ------------------------------------------------------------ appliers
 
-/** The whole trace as ONE batch, one undo step (DRW-6, ADR 360). */
+/** The regions a re-trace replaces: the previous result's group (when
+ *  it had one) and every region traced from the same source. Read
+ *  BEFORE the batch is built. */
+export interface TraceGeneration {
+  group: ElementId | null;
+  regions: ElementId[];
+}
+
+/**
+ * The whole trace as ONE batch, one undo step (DRW-6, ADR 360). With a
+ * `previous` generation it is a RE-TRACE, still one batch, in the order
+ * the engine accepts for a rebuild: every insert first, then the old
+ * group dissolved, then the old regions deleted, then the new regions
+ * finished and grouped.
+ */
 export function traceBatchFor(args: {
   plan: TracePlan;
   record: ImageTraceRecord;
   sourceEnvelope: PluginMetadataEnvelope | null;
+  previous?: TraceGeneration | null;
 }): Mutation {
+  const replace: Mutation[] = [];
+  const previous = args.previous ?? null;
+  if (previous) {
+    if (previous.group && typeof previous.group.id === "string") {
+      replace.push(ungroupMutationFor(previous.group.id));
+    }
+    for (const id of previous.regions) {
+      if (typeof id.id !== "string") continue;
+      replace.push({ op: "deleteFrame", args: { frameId: id.id } });
+    }
+  }
   return oneBatchFor([
     traceInsertBatchFor(args.plan),
+    ...replace,
     traceFinishBatchFor({
       plan: args.plan,
       bindings: traceHandleBindings(args.plan),
@@ -785,8 +921,9 @@ export function traceBatchFor(args: {
 export async function applyImageTracePlan(
   host: BundleHost,
   plan: TracePlan,
+  previous: TraceGeneration | null = null,
+  label: string = IMAGE_TRACE_COMMAND_ID,
 ): Promise<ElementId[]> {
-  const label = IMAGE_TRACE_COMMAND_ID;
   if (plan.regions.length === 0) {
     host.log.debug(
       `${label}: the trace produced no regions — nothing inserted`,
@@ -804,9 +941,11 @@ export async function applyImageTracePlan(
     options: plan.options,
     regions: [],
     truncated: plan.truncated,
-    oneShot: true,
+    preset: plan.preset ?? null,
+    live: plan.live === true,
+    oneShot: plan.live !== true,
   };
-  const batch = traceBatchFor({ plan, record, sourceEnvelope });
+  const batch = traceBatchFor({ plan, record, sourceEnvelope, previous });
   const traced = await mutateMinting(host, batch);
   if (!traced.outcome.applied) {
     host.log.warn(
@@ -841,17 +980,30 @@ export async function applyImageTracePlan(
     `${label}: ${keeps.length} region(s) traced from ${plan.sourceUri} ` +
       `(${plan.raster.width}×${plan.raster.height} px` +
       `${plan.raster.scale < 1 ? `, downsampled ×${plan.raster.scale.toFixed(3)}` : ""}` +
-      `), ${plan.swatches.length} swatch(es)`,
+      `), ${plan.swatches.length} swatch(es)` +
+      (previous
+        ? ` — replacing ${previous.regions.length} region(s) of the ` +
+          "previous trace in the same undo step"
+        : ""),
   );
   return keeps;
 }
 
 /** Parse the command payload into a full option set over the documented
  *  v0 defaults. Unknown keys are ignored; the RUST side clamps ranges. */
-export function traceOptionsFrom(payload: unknown): Required<TraceOptions> {
-  const out: Required<TraceOptions> = { ...TRACE_DEFAULTS };
+export function traceOptionsFrom(
+  payload: unknown,
+  base: Required<TraceOptions> = TRACE_DEFAULTS,
+): Required<TraceOptions> {
+  const p = (payload && typeof payload === "object" ? payload : {}) as Record<
+    string,
+    unknown
+  >;
+  // A PRESET replaces the base; every other key then overrides it.
+  const out: Required<TraceOptions> = isTracePreset(p.preset)
+    ? tracePresetOptions(p.preset)
+    : { ...base };
   if (!payload || typeof payload !== "object") return out;
-  const p = payload as Record<string, unknown>;
   const num = (k: keyof TraceOptions) => {
     const v = p[k as string];
     if (typeof v === "number" && Number.isFinite(v)) {
@@ -863,7 +1015,9 @@ export function traceOptionsFrom(payload: unknown): Required<TraceOptions> {
     if (typeof v === "boolean")
       (out as Record<string, unknown>)[k as string] = v;
   };
-  if (p.mode === "color" || p.mode === "bw") out.mode = p.mode;
+  if (p.mode === "color" || p.mode === "bw" || p.mode === "centerline") {
+    out.mode = p.mode;
+  }
   if (p.pathMode === "spline" || p.pathMode === "polygon") {
     out.pathMode = p.pathMode;
   }
@@ -877,10 +1031,18 @@ export function traceOptionsFrom(payload: unknown): Required<TraceOptions> {
   num("maxIterations");
   num("maxRegions");
   num("maxTracePixels");
+  num("maxColors");
   bool("ignoreWhite");
   bool("stacked");
+  bool("grayscale");
   return out;
 }
+
+/** The preset a payload names, or null. */
+export const tracePresetFrom = (payload: unknown): TracePresetId | null => {
+  const v = (payload as { preset?: unknown } | null)?.preset;
+  return isTracePreset(v) ? v : null;
+};
 
 /** Above this many traced pixels the command warns BEFORE it starts when
  *  the trace is going to run on the calling thread — there is no way to
@@ -914,7 +1076,16 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
     );
     return null;
   }
-  const id = selection[0];
+  return traceSourceFor(host, selection[0], label);
+}
+
+/** Resolve the image frame `id` into everything a trace reads, or null
+ *  (each refusal logged under `label`). */
+async function traceSourceFor(
+  host: BundleHost,
+  id: ElementId,
+  label: string,
+): Promise<TraceSource | null> {
   const elementId = typeof id.id === "string" ? id.id : null;
   if (!elementId) {
     host.log.debug(`${label}: the selection carries no element id — no-op`);
@@ -981,10 +1152,27 @@ export async function applyImageTrace(
   host: BundleHost,
   payload?: unknown,
 ): Promise<ElementId[]> {
-  const label = IMAGE_TRACE_COMMAND_ID;
-  const options = traceOptionsFrom(payload);
   const source = await traceSourceOf(host);
   if (!source) return [];
+  const plan = await tracePlanOf(host, source, traceOptionsFrom(payload), {
+    label: IMAGE_TRACE_COMMAND_ID,
+    preset: tracePresetFrom(payload),
+    live: (payload as { live?: unknown } | null)?.live === true,
+  });
+  if (!plan) return [];
+  return applyImageTracePlan(host, plan);
+}
+
+/** Decode, crop and trace `source` with `options` and lower the result
+ *  into a plan — everything between "which image" and "the batch".
+ *  Null on a refusal (logged under `meta.label`). */
+async function tracePlanOf(
+  host: BundleHost,
+  source: TraceSource,
+  options: Required<TraceOptions>,
+  meta: { label: string; preset: TracePresetId | null; live: boolean },
+): Promise<TracePlan | null> {
+  const { label } = meta;
 
   // Before the session, not after: opening one may spawn a worker, and
   // there is nothing to trace in a realm that cannot decode the image.
@@ -993,7 +1181,7 @@ export async function applyImageTrace(
       `${label}: this realm cannot decode placed-image bytes ` +
         `(createImageBitmap / OffscreenCanvas absent) — no-op`,
     );
-    return [];
+    return null;
   }
 
   let session: TraceSession;
@@ -1005,7 +1193,7 @@ export async function applyImageTrace(
         err instanceof Error ? err.message : String(err)
       }`,
     );
-    return [];
+    return null;
   }
   // Everything the trace needs from the raster is read out here: on a
   // worker session the pixel buffer is TRANSFERRED and is gone afterwards.
@@ -1033,7 +1221,7 @@ export async function applyImageTrace(
       host.log.warn(
         `${label}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      return [];
+      return null;
     }
     if (raster.scale < 1) {
       host.log.info(
@@ -1078,7 +1266,7 @@ export async function applyImageTrace(
         `${label}: the frame shows none of the image (it is placed ` +
           `entirely outside the frame) — nothing to trace`,
       );
-      return [];
+      return null;
     }
     const pixels = cropRaster(raster.data, raster.width, visible);
     const [cropX, cropY, tracedWidth, tracedHeight] = visible;
@@ -1125,7 +1313,7 @@ export async function applyImageTrace(
           err instanceof Error ? err.message : String(err)
         }`,
       );
-      return [];
+      return null;
     }
   } finally {
     session.close();
@@ -1139,26 +1327,164 @@ export async function applyImageTrace(
   const pixelToPage = traced.pixelToPage;
   if (!pixelToPage) {
     host.log.warn(`${label}: the frame has no mappable bounds — no-op`);
-    return [];
+    return null;
   }
 
-  return applyImageTracePlan(
-    host,
-    tracePlanFor({
-      pageId: source.pageId,
-      pageOrigin: source.pageOrigin,
-      source: source.id,
-      sourceUri: source.uri,
-      result: traced.result,
-      pixelToPage,
-      scale: traced.scale,
-      sourcePixels: traced.sourcePixels,
-      options,
-    }),
-  );
+  return tracePlanFor({
+    pageId: source.pageId,
+    pageOrigin: source.pageOrigin,
+    source: source.id,
+    sourceUri: source.uri,
+    result: traced.result,
+    pixelToPage,
+    scale: traced.scale,
+    sourcePixels: traced.sourcePixels,
+    options,
+    preset: meta.preset,
+    live: meta.live,
+  });
 }
 
-/** Register the image-trace command. The title carries the honest scope
+// ------------------------------------------------------------- re-trace
+
+/** The tree node whose id is `id`, depth first. */
+function findNode(
+  nodes: readonly SceneTreeNode[],
+  id: ElementId,
+): SceneTreeNode | null {
+  for (const node of nodes) {
+    if (node.id?.kind === id.kind && node.id?.id === id.id) return node;
+    const inner = findNode(node.children ?? [], id);
+    if (inner) return inner;
+  }
+  return null;
+}
+
+const isElementIdLike = (v: unknown): v is ElementId =>
+  !!v &&
+  typeof v === "object" &&
+  typeof (v as ElementId).id === "string" &&
+  typeof (v as ElementId).kind === "string";
+
+/**
+ * The traced image a re-trace acts on: the payload's `sourceId`, else the
+ * selected element when it is a traced image (its record) or a traced
+ * region (its marker names the image), else the first traced region
+ * inside a selected group (the trace's own group). Null when none is.
+ */
+export async function retraceSourceOf(
+  host: BundleHost,
+  payload?: unknown,
+): Promise<ElementId | null> {
+  const p = (payload ?? {}) as { sourceId?: unknown };
+  if (isElementIdLike(p.sourceId)) return p.sourceId;
+  const index = linkIndex(host);
+  for (const id of host.selection.get()) {
+    const env = await index.envelopeOf(id).catch(() => null);
+    if (imageTraceOf(env)) return id;
+    const marker = tracedRegionOf(env);
+    if (marker) return marker.of;
+    if (id.kind === "group") {
+      const group = findNode(await index.tree(), id);
+      for (const leaf of group ? leafIdsOf(group.children ?? []) : []) {
+        const m = tracedRegionOf(
+          await index.envelopeOf(leaf).catch(() => null),
+        );
+        if (m) return m.of;
+      }
+    }
+  }
+  // One selected frame that is none of these: answer it, so the caller
+  // can say it has not been traced (rather than that nothing is selected).
+  const only = host.selection.get();
+  return only.length === 1 && only[0]!.kind !== "group" ? only[0]! : null;
+}
+
+/** The regions traced from `source` and the group holding them — what a
+ *  re-trace replaces. A record written before ADR 360 still lists its
+ *  region ids; those count too. */
+export async function traceGenerationOf(
+  host: BundleHost,
+  source: ElementId,
+  record: ImageTraceRecord | null,
+): Promise<TraceGeneration> {
+  const index = linkIndex(host);
+  const { linked } = await index.snapshot();
+  const regions: ElementId[] = [];
+  const seen = new Set<string>();
+  for (const { id, envelope } of linked) {
+    const marker = tracedRegionOf(envelope);
+    if (marker && String(marker.of.id) === String(source.id)) {
+      regions.push(id);
+      seen.add(String(id.id));
+    }
+  }
+  for (const legacy of record?.regions ?? []) {
+    if (seen.has(legacy)) continue;
+    regions.push({ kind: "polygon", id: legacy } as ElementId);
+    seen.add(legacy);
+  }
+  const group =
+    regions.length > 0 ? groupHolding(await index.tree(), regions[0]!) : null;
+  return { group, regions };
+}
+
+/** Option keys a payload may set; a payload naming any of them without
+ *  a preset is a CUSTOM option set. */
+const OPTION_KEYS = Object.keys(TRACE_DEFAULTS);
+
+/**
+ * **RE-TRACE** — trace the image again with new options (or a preset)
+ * and REPLACE the previous result: ONE batch, one undo step (the new
+ * regions are inserted and the old ones deleted in the same mutation).
+ *
+ * Payload: `{ sourceId?, preset?, live?, …options }`; options not named
+ * keep the record's values. Answers the new region ids.
+ */
+export async function applyRetraceImage(
+  host: BundleHost,
+  payload?: unknown,
+  label: string = RETRACE_IMAGE_COMMAND_ID,
+): Promise<ElementId[]> {
+  const p = (payload && typeof payload === "object" ? payload : {}) as Record<
+    string,
+    unknown
+  >;
+  const sourceId = await retraceSourceOf(host, p);
+  if (!sourceId) {
+    host.log.warn(
+      `${label}: select a traced image or its traced artwork (or pass ` +
+        "sourceId) — no-op",
+    );
+    return [];
+  }
+  const envelope = await host.document.getMetadata(sourceId).catch(() => null);
+  const record = imageTraceOf(envelope);
+  if (!record) {
+    host.log.warn(
+      `${label}: ${sourceId.kind} ${String(sourceId.id)} has not been ` +
+        "traced yet — run Image Trace first; no-op",
+    );
+    return [];
+  }
+  const options = traceOptionsFrom(p, record.options);
+  const preset =
+    tracePresetFrom(p) ??
+    (OPTION_KEYS.some((k) => k in p) ? null : (record.preset ?? null));
+  const live = typeof p.live === "boolean" ? p.live : record.live === true;
+  const source = await traceSourceFor(host, sourceId, label);
+  if (!source) return [];
+  const previous = await traceGenerationOf(host, sourceId, record);
+  const plan = await tracePlanOf(host, source, options, {
+    label,
+    preset,
+    live,
+  });
+  if (!plan) return [];
+  return applyImageTracePlan(host, plan, previous, label);
+}
+
+/** Register the image-trace commands. The titles carry the scope
  *  because `CommandContribution` has no description field — the pattern
  *  bake's recorded reason for the same choice. */
 export function contributeImageTraceCommand(host: BundleHost): Disposable {
@@ -1169,6 +1495,27 @@ export function contributeImageTraceCommand(host: BundleHost): Disposable {
       category: IMAGE_TRACE_COMMAND_CATEGORY,
       handler: (_paged, payload) =>
         applyImageTrace(host, payload).then(() => undefined),
+    }),
+    registerCommand(host, {
+      id: RETRACE_IMAGE_COMMAND_ID,
+      title: M.retrace,
+      category: IMAGE_TRACE_COMMAND_CATEGORY,
+      handler: (_paged, payload) =>
+        applyRetraceImage(host, payload).then(() => undefined),
+    }),
+    registerCommand(host, {
+      id: IMAGE_TRACE_OPTIONS_COMMAND_ID,
+      title: M.options,
+      category: IMAGE_TRACE_COMMAND_CATEGORY,
+      // A host with no panel door gets what the row ran before the panel
+      // existed: a trace with the default options.
+      handler: async (_paged, payload) => {
+        if (host.supports("shell.openPanel@1")) {
+          await host.shell.openPanel(IMAGE_TRACE_PANEL_ID);
+          return;
+        }
+        await applyImageTrace(host, payload);
+      },
     }),
   ];
   return {

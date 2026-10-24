@@ -11,12 +11,42 @@ project:
   title: "modules/image"
   description: "Raster image module: kernels, codecs, PSD, GPU pipeline."
 
-# manifest/'s typecheck and test scripts run the in-tree paged-plugin bin (plugin-sdk).
+# The Rust workspace path-depends on engine crates (paged-pixel, paged-psd;
+# image ADR 466), so it builds after the engine and an engine change runs
+# this module's gates. manifest/'s typecheck and test scripts run the
+# in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
     scope: "development"
+
+# The engine crates the Cargo workspace path-depends on (paged-pixel,
+# paged-psd) are inputs here too, so `moon ci` re-runs this project when one
+# of them changes. (Project file groups replace the workspace ones, so the
+# defaults are restated.)
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/paged-pixel/**/*.rs"
+    - "/engine/core/crates/paged-pixel/Cargo.toml"
+    - "/engine/core/crates/paged-psd/**/*.rs"
+    - "/engine/core/crates/paged-psd/Cargo.toml"
+  rust-tests:
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/paged-pixel/**/*"
+    - "/engine/core/crates/paged-psd/**/*"
 
 tasks:
   js-check:

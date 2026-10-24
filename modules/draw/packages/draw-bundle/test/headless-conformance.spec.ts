@@ -200,6 +200,11 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // The PATH OPTIONS panel (the parameters behind the menu's "…":
         // Offset / Simplify / Outline stroke / the four Insert shapes).
         "panel",
+        // WP6.6 — the IMAGE TRACE panel (presets, options, Trace /
+        // Re-trace); WP6.5 — RECOLOR ARTWORK and the COLOR GUIDE.
+        "panel",
+        "panel",
+        "panel",
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
         // WP6.1 part 2 — six gesture/insert commands and two "…" raisers
@@ -386,7 +391,14 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm
-        // lane: crates/trace-js over visioncortex).
+        // lane: crates/trace-js over visioncortex), and since WP6.6 its
+        // Re-trace and "…" raiser; then WP6.5's Recolor Artwork, its
+        // raiser and the Color Guide's apply.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
         "command",
         // W3.2 — the vectorGraphic edit context (B-02), recorded
         // through the harness's editContext registration hook.

@@ -125,6 +125,15 @@ export {
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
+export {
+  ALIGN_SCOPE,
+  ALIGN_TO,
+  clickKeyObject,
+  effectiveKeyObject,
+  isSameElement,
+  type AlignScopeState,
+  type AlignTo,
+} from "./state/align-scope";
 export type {
   PathEditAnchor,
   PathEditHit,

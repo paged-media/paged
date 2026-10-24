@@ -731,9 +731,9 @@ All **H**, all the same shape (§5.3 + §5.5). One template, five instances.
 #### `paged.attributes`
 
 **Disposition:** C · **Surface:** dock/popover · **Phase:** later
-**Reads/Writes:** `selectionProperty:{overprintFill,overprintStroke,nonprinting}`
-**Operations:** `SetProperty{OverprintFill | OverprintStroke | Nonprinting}`
-**Fields:** overprint fill, overprint stroke, nonprinting toggle.
+**Reads/Writes:** `selectionProperty:{overprintFill,overprintStroke,nonprinting,fillRule}`
+**Operations:** `SetProperty{OverprintFill | OverprintStroke | Nonprinting | FrameFillRule}`; the `media.paged.draw.command.reversePathDirection` command
+**Fields:** overprint fill, overprint stroke, nonprinting toggle; fill rule (Non-Zero / Even-Odd, engine ADR 1006) and Reverse Path Direction (enabled when paged.draw registered the command).
 
 #### `paged.info`
 

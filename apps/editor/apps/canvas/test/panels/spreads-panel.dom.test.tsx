@@ -17,8 +17,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Spreads (paged.spreads): one row per spread with its page count; an
-// unnamed spread is "Spread n", never its id or folio. Read-only.
+// Spreads (paged.spreads): one row per spread with its page count and the
+// objects on it (WP2.7: SpreadSummary's pageIds and members); an unnamed
+// spread is "Spread n", never its id or folio. Read-only.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
@@ -48,10 +49,8 @@ describe("Spreads panel", () => {
       id: "paged.spreads",
       scene: richScene,
     });
-    expect(rows(h.root)[0]).toMatchObject({
-      primary: "Spread 1",
-      secondary: "1 page",
-    });
+    expect(rows(h.root)[0]).toMatchObject({ primary: "Spread 1" });
+    expect(rows(h.root)[0]!.secondary).toMatch(/^1 page · \d+ objects$/);
     expect(rows(h.root)).toHaveLength(2);
   });
 
@@ -82,5 +81,19 @@ describe("Spreads panel", () => {
       "Spread 1",
       "Spread 2",
     ]);
+  });
+
+  test("WP2.7 [layout-model.page-margin-reads]: the secondary counts the spread's objects, following the model", async () => {
+    covers("panel:paged.spreads");
+    const h = await mountPanel(SpreadsPanel, {
+      id: "paged.spreads",
+      document: "blank",
+    });
+    expect(rows(h.root)[0]!.secondary).toBe("1 page · 0 objects");
+    await h.mutate({
+      op: "insertFrame",
+      args: { pageId: h.handle!.pageIds[0], bounds: [10, 10, 50, 50] },
+    } as never);
+    expect(rows(h.root)[0]!.secondary).toBe("1 page · 1 object");
   });
 });

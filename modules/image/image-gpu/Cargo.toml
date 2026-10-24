@@ -11,7 +11,7 @@ description = "paged.image GPU execution layer (spec §9) — wgpu device mgmt, 
 workspace = true
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 image-kernels = { path = "../image-kernels" }
 wgpu = { workspace = true }
 thiserror = { workspace = true }

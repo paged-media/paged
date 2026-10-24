@@ -82,6 +82,64 @@ export const UI_GLYPHS: Record<string, ReactNode> = {
       <rect x={14} y={4} width={4} height={13.5} rx={1} {...LINE} />
     </>
   ),
+  // ── Distribute objects (an edge or centre spaced evenly) and
+  //    distribute spacing (equal gaps) — the Align panel. ──
+  "ui-dist-left": (
+    <>
+      <path d="M4 3 V21 M12 3 V21" {...LINE} />
+      <rect x={4} y={6} width={5} height={4} rx={1} {...LINE} />
+      <rect x={12} y={14} width={8} height={4} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-dist-center-h": (
+    <>
+      <path d="M7 3 V21 M16 3 V21" {...LINE} />
+      <rect x={4.5} y={6} width={5} height={4} rx={1} {...LINE} />
+      <rect x={12} y={14} width={8} height={4} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-dist-right": (
+    <>
+      <path d="M10 3 V21 M20 3 V21" {...LINE} />
+      <rect x={5} y={6} width={5} height={4} rx={1} {...LINE} />
+      <rect x={12} y={14} width={8} height={4} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-dist-top": (
+    <>
+      <path d="M3 4 H21 M3 12 H21" {...LINE} />
+      <rect x={6} y={4} width={4} height={5} rx={1} {...LINE} />
+      <rect x={14} y={12} width={4} height={8} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-dist-center-v": (
+    <>
+      <path d="M3 7 H21 M3 16 H21" {...LINE} />
+      <rect x={6} y={4.5} width={4} height={5} rx={1} {...LINE} />
+      <rect x={14} y={12} width={4} height={8} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-dist-bottom": (
+    <>
+      <path d="M3 10 H21 M3 20 H21" {...LINE} />
+      <rect x={6} y={5} width={4} height={5} rx={1} {...LINE} />
+      <rect x={14} y={12} width={4} height={8} rx={1} {...LINE} />
+    </>
+  ),
+  "ui-space-h": (
+    <>
+      <rect x={3} y={6} width={5} height={12} rx={1} {...LINE} />
+      <rect x={16} y={6} width={5} height={12} rx={1} {...LINE} />
+      <path d="M10 12 H14 M10 10 V14 M14 10 V14" {...LINE} />
+    </>
+  ),
+  "ui-space-v": (
+    <>
+      <rect x={6} y={3} width={12} height={5} rx={1} {...LINE} />
+      <rect x={6} y={16} width={12} height={5} rx={1} {...LINE} />
+      <path d="M12 10 V14 M10 10 H14 M10 14 H14" {...LINE} />
+    </>
+  ),
   "ui-arrange-front": (
     <>
       <rect
@@ -495,6 +553,29 @@ export const UI_GLYPHS: Record<string, ReactNode> = {
   // Solid dot — the dropdown-menu radio indicator (replaces lucide's
   // Circle so the shadcn primitives stay on the in-house registry).
   "ui-dot": <circle cx={12} cy={12} r={4} fill="currentColor" stroke="none" />,
+
+  // Fill rule (the Attributes panel, engine ADR 1006) — one
+  // five-pointed star drawn as ONE self-crossing contour, filled by the
+  // rule it names: under non-zero the middle stays filled, under
+  // even-odd it is a hole.
+  "ui-fill-rule-nonzero": (
+    <path
+      d="M12 3.5 L17.29 19.78 L3.44 9.72 L20.56 9.72 L6.71 19.78 Z"
+      fillRule="nonzero"
+      stroke="currentColor"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  ),
+  "ui-fill-rule-evenodd": (
+    <path
+      d="M12 3.5 L17.29 19.78 L3.44 9.72 L20.56 9.72 L6.71 19.78 Z"
+      fillRule="evenodd"
+      stroke="currentColor"
+      strokeWidth={1.2}
+      strokeLinejoin="round"
+    />
+  ),
 
   // Swatch (fill) — a filled rounded square with a thin frame; the
   // paged.draw Fill schema panel's section glyph.
