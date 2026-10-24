@@ -526,9 +526,17 @@ export function fakeHost(
       elementGeometry: async (ids: ElementId[]) => engine.elementGeometry(ids),
       pathAnchors: async (id: ElementId) => engine.pathAnchors(id),
       elementProperties: async (id: ElementId) => engine.elementProperties(id),
+      // No active page: the importer falls back to the first page row.
+      meta: async () => ({}),
+      // A row carries its page's origin on an engine with core's page-space
+      // fix (0.71.13), and none on the published one.
       collection: async (name: string) =>
         name === "pages"
-          ? engine.pages.map((p) => ({ selfId: p.id, sizePt: [...p.size] }))
+          ? engine.pages.map((p) => ({
+              selfId: p.id,
+              sizePt: [...p.size],
+              ...(engine.shape === "page" ? { pageOrigin: [...p.origin] } : {}),
+            }))
           : [],
       planarRegions: async () =>
         engine.planarFaces
