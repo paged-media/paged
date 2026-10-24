@@ -37,8 +37,8 @@ pub use bindings::{build_bindings, BlockBinding, DocxBindings, RunBinding};
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 pub use overlay::{
-    overlay_cells, overlay_story_content, CellContentIn, ParagraphContentIn, RunContentIn,
-    StoryContentIn,
+    overlay_cells, overlay_story_content, overlay_tables, CellContentIn, ParagraphContentIn,
+    RunContentIn, StoryContentIn, TableContentIn,
 };
 
 use std::collections::BTreeMap;
@@ -122,6 +122,8 @@ pub fn apply_edits(
                 para,
                 before,
                 text,
+                base,
+                pieces,
             } => {
                 let Some(path) = bindings.cell_para_path(*block, *cell, *para) else {
                     skips.push(format!(
@@ -130,7 +132,9 @@ pub fn apply_edits(
                     continue;
                 };
                 let src = pkg.require(main_part)?;
-                let Some(frag) = splice::clone_cell_paragraph(src, path, text, !*before) else {
+                let Some(frag) =
+                    splice::clone_cell_paragraph(src, path, text, !*before, base.as_ref(), pieces)
+                else {
                     skips.push(format!(
                         "clone-cell-paragraph skipped: block {block} cell {cell} paragraph {para} is not in the document part"
                     ));
@@ -297,6 +301,7 @@ pub fn apply_edits(
                 block,
                 after_row,
                 cells,
+                before,
             } => {
                 let Some(t) = bindings.table_ord(*block) else {
                     skips.push(format!(
@@ -304,10 +309,13 @@ pub fn apply_edits(
                     ));
                     continue;
                 };
-                rows.entry((t, *after_row))
-                    .or_default()
-                    .insert_after
-                    .push(rpr::render_table_row(cells));
+                let row = rows.entry((t, *after_row)).or_default();
+                let frag = rpr::render_table_row(cells);
+                if *before {
+                    row.insert_before.push(frag);
+                } else {
+                    row.insert_after.push(frag);
+                }
             }
             StructuralEdit::DeleteParagraph { block } => {
                 let Some(p) = bindings.para_ord(*block) else {
@@ -383,7 +391,7 @@ pub fn apply_edits(
             ));
             continue;
         };
-        if c.new_text.is_none() && c.new_props.is_none() {
+        if c.new_text.is_none() && c.new_props.is_none() && !c.delete {
             continue;
         }
         let (new_rpr, rpr_merge) =
@@ -403,6 +411,7 @@ pub fn apply_edits(
             ),
             rpr_merge,
             split: Vec::new(),
+            delete: c.delete,
         });
     }
     for (block, cell, para, run, base, pieces) in &cell_splits {
@@ -427,6 +436,7 @@ pub fn apply_edits(
             ),
             rpr_merge: None,
             split: split_pieces(base, pieces),
+            delete: false,
         });
     }
 

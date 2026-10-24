@@ -263,6 +263,7 @@ fn blank_lines_with_different_styles_are_diagnosed() {
 /// The read-back the editor would hand save-back: the baseline, as poured.
 fn identity_content(ir: &LoweredDoc) -> StoryContentIn {
     StoryContentIn {
+        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs: paragraphs(ir)
             .iter()

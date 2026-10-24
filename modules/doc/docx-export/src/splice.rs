@@ -113,6 +113,8 @@ pub struct ResolvedCellTarget {
     pub rpr_merge: Option<(RunFormat, RunFormat)>,
     /// As [`ResolvedTarget::split`].
     pub split: Vec<SplitPiece>,
+    /// All the run's text is gone: as [`ResolvedTarget::delete`].
+    pub delete: bool,
 }
 
 /// A COLUMN-level structural action on one table. Applied to the `<w:tblGrid>`
@@ -135,6 +137,8 @@ pub struct ResolvedRowTarget {
     pub delete: bool,
     /// Pre-rendered `<w:tr>…</w:tr>` fragments to emit after this row's `</w:tr>`.
     pub insert_after: Vec<Vec<u8>>,
+    /// Pre-rendered `<w:tr>…</w:tr>` fragments to emit before this row's `<w:tr>`.
+    pub insert_before: Vec<Vec<u8>>,
 }
 
 /// A paragraph-level structural action, addressed by `<w:p>` ordinal.
@@ -344,10 +348,17 @@ pub fn patch_document_xml_cols(
                             && t.para_ord as i64 == p_ord
                             && t.run_ord as i64 == wrap_run_ord
                     }) {
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            t,
+                            &emptied(t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -386,6 +397,13 @@ pub fn patch_document_xml_cols(
                     tc_ord = -1;
                     open_row = rows.get(&(tbl_ord as u32, tr_ord as u32)).cloned();
                     if let Some(rt) = open_row.as_ref() {
+                        if !rt.insert_before.is_empty() {
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            for frag in &rt.insert_before {
+                                out.extend_from_slice(frag);
+                            }
+                            cursor = event_start;
+                        }
                         if rt.delete {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
@@ -495,17 +513,24 @@ pub fn patch_document_xml_cols(
                             run_ord: 0,
                             new_text: ct.new_text.clone(),
                             new_rpr: ct.new_rpr.clone(),
-                            delete: false,
+                            delete: ct.delete,
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
                         };
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            &t,
+                            &emptied(&t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -530,17 +555,24 @@ pub fn patch_document_xml_cols(
                             run_ord: 0,
                             new_text: ct.new_text.clone(),
                             new_rpr: ct.new_rpr.clone(),
-                            delete: false,
+                            delete: ct.delete,
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
                             rpr_merge: ct.rpr_merge.clone(),
                             split: ct.split.clone(),
                         };
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
+                            let _ = reader.read_to_end(QName(&name));
+                            out.extend_from_slice(&src[cursor..event_start]);
+                            cursor = reader.buffer_position() as usize;
+                            continue;
+                        }
                         patch_run(
                             &mut reader,
                             src,
-                            &t,
+                            &emptied(&t),
                             event_start,
                             &mut out,
                             &mut cursor,
@@ -574,7 +606,8 @@ pub fn patch_document_xml_cols(
                     }
                     if let Some(t) = find_target(targets, p_ord, r_ord) {
                         let run_start = event_start;
-                        if t.delete {
+                        if t.delete && !holds_more_than_text(src, reader.buffer_position() as usize)
+                        {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
                             out.extend_from_slice(&src[cursor..run_start]);
@@ -588,7 +621,7 @@ pub fn patch_document_xml_cols(
                         patch_run(
                             &mut reader,
                             src,
-                            t,
+                            &emptied(t),
                             run_start,
                             &mut out,
                             &mut cursor,
@@ -983,6 +1016,8 @@ pub fn clone_cell_paragraph(
     path: docx_core::CellPath,
     text: &str,
     last_run: bool,
+    base: Option<&RunFormat>,
+    pieces: &[crate::edit::RunPiece],
 ) -> Option<Vec<u8>> {
     let (start, end) = cell_paragraph_range(src, path)?;
     let (ppr, runs) = paragraph_parts(&src[start..end]);
@@ -991,7 +1026,22 @@ pub fn clone_cell_paragraph(
         .flatten();
     let mut out = b"<w:p>".to_vec();
     out.extend_from_slice(ppr.unwrap_or_default());
-    if !text.is_empty() {
+    if let (Some(base), false) = (base, pieces.is_empty()) {
+        // The paragraph's runs as the canvas made them, each the copied
+        // `<w:rPr>` with the piece's look merged in.
+        for piece in pieces.iter().filter(|p| !p.text.is_empty()) {
+            out.extend_from_slice(b"<w:r>");
+            let merged = piece.format.as_ref().and_then(|f| merge_rpr(rpr, base, f));
+            match merged {
+                // A look with nothing left to say needs no `<w:rPr>`.
+                Some(m) if m.as_slice() == b"<w:rPr></w:rPr>" => {}
+                Some(m) => out.extend_from_slice(&m),
+                None => out.extend_from_slice(rpr.unwrap_or_default()),
+            }
+            out.extend_from_slice(&crate::rpr::render_wt(&piece.text));
+            out.extend_from_slice(b"</w:r>");
+        }
+    } else if !text.is_empty() {
         out.extend_from_slice(b"<w:r>");
         out.extend_from_slice(rpr.unwrap_or_default());
         out.extend_from_slice(&crate::rpr::render_wt(text));
@@ -1258,10 +1308,13 @@ fn patch_run(
 /// Replace one `<w:r>` by its pieces ([`ResolvedTarget::split`]): each a
 /// copy of the run — its start tag, its `<w:rPr>`, its other children —
 /// with the piece's text spliced in as an edit of the run would be, and the
-/// piece's look merged into the copy's `<w:rPr>`. Only a run of text is
-/// split: one holding anything else (a drawing, a field character, a note
-/// reference) would have it copied into every piece, so it is left as it
-/// was and the refusal is recorded, as is any piece's own refusal.
+/// piece's look merged into the copy's `<w:rPr>`. A child that is not text
+/// (a drawing, a field character, a note reference) is kept once, in the
+/// piece at its place: one before the run's text goes with the first piece,
+/// one after it with the last ([`run_children`]). One inside the text has no
+/// place in an edited text, so the run is left as it was and the refusal
+/// recorded (as an edit of that run is refused, [`scan_run`]), as is any
+/// piece's own refusal.
 fn split_run(
     reader: &mut Reader<&[u8]>,
     src: &[u8],
@@ -1275,17 +1328,36 @@ fn split_run(
     skip_run(reader);
     let end = reader.buffer_position() as usize;
     let run = &src[run_start..end];
-    if let Some(other) = non_text_child(&src[run_open_end..end]) {
+    let open_len = run_open_end - run_start;
+    let children = run_children(&src[run_open_end..end]);
+    if let Some(c) = children.iter().find(|c| c.place == Place::Inside) {
         refusals.push(format!(
-            "{}: the run holds a <{other}>, which splitting it would copy into every part",
-            t.label
+            "{}: the run holds a <{}> inside its text, which no part of the split can keep \
+             in its place",
+            t.label, c.name
         ));
         return;
     }
+    let last = t.split.len().saturating_sub(1);
     let mut pieces: Vec<u8> = Vec::new();
     let mut refused: Vec<String> = Vec::new();
-    for piece in &t.split {
-        let mut r = Reader::from_reader(run);
+    for (i, piece) in t.split.iter().enumerate() {
+        // The run's bytes without the children another piece keeps.
+        let mut copy: Vec<u8> = Vec::with_capacity(run.len());
+        let mut at = 0usize;
+        for c in &children {
+            let drop = match c.place {
+                Place::Before => i != 0,
+                Place::After => i != last,
+                Place::Inside => false,
+            };
+            if drop {
+                copy.extend_from_slice(&run[at..open_len + c.start]);
+                at = open_len + c.end;
+            }
+        }
+        copy.extend_from_slice(&run[at..]);
+        let mut r = Reader::from_reader(copy.as_slice());
         r.config_mut().trim_text(false);
         // The `<w:r …>` start tag.
         if !matches!(r.read_event(), Ok(Event::Start(_))) {
@@ -1302,14 +1374,14 @@ fn split_run(
         let mut c = 0usize;
         splice_run(
             &mut r,
-            run,
+            &copy,
             &sub,
             open_end,
             &mut pieces,
             &mut c,
             &mut refused,
         );
-        pieces.extend_from_slice(&run[c..]);
+        pieces.extend_from_slice(&copy[c..]);
     }
     if !refused.is_empty() {
         refusals.extend(refused);
@@ -1320,17 +1392,62 @@ fn split_run(
     *cursor = end;
 }
 
-/// The first child of a run's content (`body`, after its start tag) that
-/// is neither its `<w:rPr>`, text, a character Word writes as an element,
-/// nor Word's layout cache — what a split would duplicate.
-fn non_text_child(body: &[u8]) -> Option<String> {
+/// Where a run child that is not text sits relative to the run's text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Place {
+    Before,
+    Inside,
+    After,
+}
+
+/// A run whose text is all gone ([`ResolvedTarget::delete`]) is removed
+/// when it holds nothing but text; one holding more (a drawing, a field
+/// character, a note reference) keeps it and is emptied instead, in body
+/// paragraphs and table cells alike: what the text edit did not touch
+/// stays. `t` as patched: emptied when it is a delete, else as it is.
+fn emptied(t: &ResolvedTarget) -> std::borrow::Cow<'_, ResolvedTarget> {
+    if !t.delete {
+        return std::borrow::Cow::Borrowed(t);
+    }
+    let mut e = t.clone();
+    e.delete = false;
+    e.new_text = Some(String::new());
+    std::borrow::Cow::Owned(e)
+}
+
+/// Whether the `<w:r>` whose start tag ends at `open_end` holds a child
+/// that is not text ([`run_children`]).
+fn holds_more_than_text(src: &[u8], open_end: usize) -> bool {
+    !run_children(&src[open_end..]).is_empty()
+}
+
+/// A run child that is not text ([`run_children`]): its byte range within
+/// the run's content and its place.
+struct OpaqueChild {
+    start: usize,
+    end: usize,
+    name: String,
+    place: Place,
+}
+
+/// The children of a run's content (`body`, after its start tag) that are
+/// neither its `<w:rPr>`, text, a character Word writes as an element, nor
+/// Word's layout cache — what a split must not duplicate — with their place
+/// relative to the run's text. A run with no text puts them all `Before`.
+fn run_children(body: &[u8]) -> Vec<OpaqueChild> {
     let mut reader = Reader::from_reader(body);
     reader.config_mut().trim_text(false);
+    let mut out: Vec<OpaqueChild> = Vec::new();
+    let mut seen_text = false;
+    // Opaque children after the last text seen so far (they become `Inside`
+    // when text follows them).
+    let mut since_text: Vec<usize> = Vec::new();
     loop {
+        let start = reader.buffer_position() as usize;
         let (e, empty) = match reader.read_event() {
             Ok(Event::Start(e)) => (e.into_owned(), false),
             Ok(Event::Empty(e)) => (e.into_owned(), true),
-            Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => return None,
+            Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => break,
             Ok(_) => continue,
         };
         let name = e.name().as_ref().to_vec();
@@ -1338,14 +1455,32 @@ fn non_text_child(body: &[u8]) -> Option<String> {
         if !empty {
             let _ = reader.read_to_end(QName(&name));
         }
-        let plain = ln == b"rPr"
-            || ln == b"t"
-            || ln == b"lastRenderedPageBreak"
-            || matches!(special(&e), Special::Char(_));
-        if !plain {
-            return Some(String::from_utf8_lossy(&name).into_owned());
+        let end = reader.buffer_position() as usize;
+        if ln == b"t" || matches!(special(&e), Special::Char(_)) {
+            if seen_text {
+                for k in since_text.drain(..) {
+                    out[k].place = Place::Inside;
+                }
+            }
+            since_text.clear();
+            seen_text = true;
+        } else if ln != b"rPr" && ln != b"lastRenderedPageBreak" {
+            if seen_text {
+                since_text.push(out.len());
+            }
+            out.push(OpaqueChild {
+                start,
+                end,
+                name: String::from_utf8_lossy(&name).into_owned(),
+                place: if seen_text {
+                    Place::After
+                } else {
+                    Place::Before
+                },
+            });
         }
     }
+    out
 }
 
 /// Walk one targeted `<w:r>`'s direct children, splicing its `<w:rPr>` and/or
@@ -1664,7 +1799,76 @@ mod tests {
     }
 
     #[test]
-    fn a_split_copies_the_run_per_piece_and_refuses_a_run_holding_more_than_text() {
+    fn an_emptied_run_is_removed_unless_it_holds_more_than_text_in_body_and_cell() {
+        let run_ops =
+            |src: &[u8], body: Option<ResolvedTarget>, cell: Option<ResolvedCellTarget>| {
+                let (out, refused) = patch_document_xml_cols(
+                    src,
+                    &body.into_iter().collect::<Vec<_>>(),
+                    &BTreeMap::new(),
+                    &cell.into_iter().collect::<Vec<_>>(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                    &BTreeMap::new(),
+                );
+                assert!(refused.is_empty(), "{refused:?}");
+                String::from_utf8(out).unwrap()
+            };
+        let delete_body = |run: u32| {
+            let mut t = ResolvedTarget::edit(0, run);
+            t.delete = true;
+            t
+        };
+        let delete_cell = |run: u32| ResolvedCellTarget {
+            table_ord: 0,
+            row: 0,
+            cell: 0,
+            para: 0,
+            run_ord: run,
+            wrapper: None,
+            new_text: None,
+            new_rpr: None,
+            label: "cell".into(),
+            rpr_merge: None,
+            split: Vec::new(),
+            delete: true,
+        };
+        // A run of text only: removed, in a body paragraph and in a cell.
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t><w:tab/></w:r></w:p></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(body, Some(delete_body(1)), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t></w:r></w:p></w:body></w:document>"#
+        );
+        let cell = br#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(cell, None, Some(delete_cell(1))),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#
+        );
+        // A run holding a note reference keeps it, its text emptied: the
+        // same in both.
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>a</w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(body, Some(delete_body(0)), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t xml:space="preserve"></w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:body></w:document>"#
+        );
+        let cell = br#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>a</w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#;
+        assert_eq!(
+            run_ops(cell, None, Some(delete_cell(0))),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t><w:footnoteReference w:id="2"/></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>"#
+        );
+        // A body run inside a hyperlink is removed too (it was left as it
+        // was before).
+        let body = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:hyperlink r:id="x"><w:r><w:t>a</w:t></w:r><w:r><w:t>b</w:t></w:r></w:hyperlink></w:p></w:body></w:document>"#;
+        let mut t = delete_body(1);
+        t.wrapper = Some(crate::bindings::Wrapper::Hyperlink(0));
+        assert_eq!(
+            run_ops(body, Some(t), None),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:hyperlink r:id="x"><w:r><w:t>a</w:t></w:r></w:hyperlink></w:p></w:body></w:document>"#
+        );
+    }
+
+    #[test]
+    fn a_split_copies_the_run_per_piece_and_keeps_other_content_once() {
         use crate::edit::RunFormat;
         let bold = RunFormat {
             props: docx_core::RunProps {
@@ -1702,7 +1906,17 @@ mod tests {
             String::from_utf8(out).unwrap(),
             r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r w:rsidR="7"><w:rPr><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">ab</w:t></w:r><w:r w:rsidR="7"><w:rPr><w:b/><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">cd</w:t></w:r></w:p></w:body></w:document>"#
         );
-        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>abcd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
+        // A note reference after the text stays once, with the last piece;
+        // a drawing before it with the first.
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:drawing>D</w:drawing><w:t>abcd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
+        let (out, refused) = split(src);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:drawing>D</w:drawing><w:t xml:space="preserve">ab</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">cd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#
+        );
+        // One inside the text has no place in either piece: refused, kept.
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>ab</w:t><w:footnoteReference w:id="1"/><w:t>cd</w:t></w:r></w:p></w:body></w:document>"#;
         let (out, refused) = split(src);
         assert_eq!(out, src.to_vec(), "left as it was");
         assert_eq!(refused.len(), 1);

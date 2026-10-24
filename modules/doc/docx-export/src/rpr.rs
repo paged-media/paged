@@ -163,6 +163,9 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
     if let Some(color) = &props.color {
         s.push_str(&format!("<w:color w:val=\"{}\"/>", escape(color)));
     }
+    if let Some(tw) = props.spacing_twips {
+        s.push_str(&format!("<w:spacing w:val=\"{tw}\"/>"));
+    }
     if let Some(pos) = props.baseline_half_pts {
         s.push_str(&format!("<w:position w:val=\"{pos}\"/>"));
     }
@@ -393,6 +396,7 @@ fn changed_elements(from: &RunFormat, to: &RunFormat) -> Vec<(&'static str, Opti
     field!(small_caps, "smallCaps");
     field!(strike, "strike");
     field!(color, "color");
+    field!(spacing_twips, "spacing");
     field!(baseline_half_pts, "position");
     field!(size_half_pts, "sz");
     field!(underline, "u");

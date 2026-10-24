@@ -221,6 +221,7 @@ fn a_body_edit_leaves_every_header_footer_and_settings_part_byte_identical__feat
     let session = DocSession::load(&original).unwrap();
     let base = session.lowered();
     let mut content = StoryContentIn {
+        colors: Default::default(),
         self_id: "Story/doc".into(),
         paragraphs: base
             .story

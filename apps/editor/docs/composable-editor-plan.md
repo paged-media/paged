@@ -1285,7 +1285,14 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   A changed run list is saved back too, in body paragraphs and cells: formatting given to part
   of a run splits that `w:r` (the parts keep its `w:rPr`, the changed one gets only what
   changed), direct formatting the engine can express is written, untouched runs stay byte for
-  byte (the engine reads a cell's styled `paragraphs`).
+  byte (the engine reads a cell's styled `paragraphs`). Since the leftovers round: tracking as
+  `w:spacing` (imported back as tracking), a canvas colour from the host's swatch display, a
+  run holding a drawing, field character or note reference split around it, a paragraph added
+  in a cell with its words' looks, a run whose text is gone removed (emptied where it holds
+  more than text) in body and cells alike, and rows added or removed on the canvas saved as
+  `w:tr` inserts and deletes. Reported, with the reason: columns added or removed on the
+  canvas, rows changed in a table with merged cells, and a non-text child between two texts of
+  one run (`modules/doc/docs/status.md`).
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,

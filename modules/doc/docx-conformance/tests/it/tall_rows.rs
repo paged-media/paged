@@ -88,6 +88,7 @@ fn save_back_steps_over_a_flowed_table__feat__plugin_doc_word_pagination() {
     let edited = overlay_story_content(
         &baseline,
         &StoryContentIn {
+            colors: Default::default(),
             self_id: "s".into(),
             paragraphs,
         },

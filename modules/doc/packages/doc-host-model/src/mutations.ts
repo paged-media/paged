@@ -1018,10 +1018,20 @@ export function pouredCellTexts(table: LoweredTable): Record<string, string> {
  * instead: with the first free live table of its shape between the live
  * tables its matched neighbours (in pour order) became. A table with no
  * pair is absent from the answer: it truly cannot be found.
+ *
+ * With `rowsMayChange` (the save-back, which writes rows added or removed
+ * on the canvas), a live table with the same columns and another row
+ * count pairs too, by how many of the poured non-empty cell texts it still
+ * holds anywhere (rows shift, so not by place); a table reshaped AND every
+ * cell of which was edited still pairs by its place between its matched
+ * neighbours, then the nearest in row count. Without it (the object
+ * model, which addresses a cell by its poured row and column) the shapes
+ * must agree.
  */
 export function matchTables(
   ir: LoweredDoc,
   live: readonly LiveTable[],
+  { rowsMayChange = false }: { rowsMayChange?: boolean } = {},
 ): Map<number, string> {
   const poured: Array<{
     block: number;
@@ -1043,10 +1053,26 @@ export function matchTables(
     });
   });
   const fits = (p: (typeof poured)[number], l: LiveTable) =>
-    p.table.rows === l.rows && p.table.cols === l.cols;
+    p.table.cols === l.cols && (rowsMayChange || p.table.rows === l.rows);
+  /** The poured non-empty texts a live table holds anywhere, each live
+   *  cell counted once. */
+  const anywhere = (p: (typeof poured)[number], l: LiveTable) => {
+    const left = new Map<string, number>();
+    for (const t of Object.values(l.cells)) left.set(t, (left.get(t) ?? 0) + 1);
+    let n = 0;
+    for (const t of Object.values(p.texts)) {
+      const k = left.get(t) ?? 0;
+      if (t === "" || k === 0) continue;
+      left.set(t, k - 1);
+      n += 1;
+    }
+    return n;
+  };
   const score = (p: (typeof poured)[number], l: LiveTable) =>
-    Object.entries(p.texts).filter(([k, t]) => t !== "" && l.cells[k] === t)
-      .length;
+    p.table.rows === l.rows
+      ? Object.entries(p.texts).filter(([k, t]) => t !== "" && l.cells[k] === t)
+          .length
+      : anywhere(p, l);
 
   const out = new Map<number, string>();
   const taken = new Set<string>();
@@ -1095,7 +1121,11 @@ export function matchTables(
           x.ordinal > lo &&
           x.ordinal < hi,
       )
-      .sort((a, b) => a.ordinal - b.ordinal)[0];
+      .sort(
+        (a, b) =>
+          Math.abs(a.rows - p.table.rows) - Math.abs(b.rows - p.table.rows) ||
+          a.ordinal - b.ordinal,
+      )[0];
     if (!l) return;
     pairOf.set(i, l);
     taken.add(l.id);

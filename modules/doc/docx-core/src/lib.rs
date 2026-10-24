@@ -781,6 +781,12 @@ pub struct RunProps {
     /// `w:position/@w:val` — baseline shift in half-points (signed; positive
     /// raises).
     pub baseline_half_pts: Option<i32>,
+    /// `w:spacing/@w:val` — character spacing (added after each character)
+    /// in twentieths of a point, signed. The engine's tracking is relative
+    /// (1/1000 em), so the lowering and the save-back convert it at the
+    /// run's effective size.
+    #[serde(default)]
+    pub spacing_twips: Option<i32>,
 }
 
 /// Paragraph alignment (`w:jc`).
