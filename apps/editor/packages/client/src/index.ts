@@ -28,6 +28,7 @@ export {
   CanvasClient,
   changesTheDocument,
   type CanvasClientOptions,
+  type UndoGroupResult,
   type DefaultFontFace,
   type HostObjectAnswerWire,
   type HostObjectCallWire,

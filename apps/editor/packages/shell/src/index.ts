@@ -481,6 +481,12 @@ export {
   setPendingImportSource,
   takePendingImportSource,
 } from "./state/import-source";
+export {
+  notifyImported,
+  onImported,
+  withImportHooksSuppressed,
+  type ImportedFile,
+} from "./state/import-hooks";
 
 // ── Shell root ─────────────────────────────────────────────────
 export { PagedShell, type PagedShellProps } from "./PagedShell";
