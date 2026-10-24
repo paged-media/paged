@@ -2461,6 +2461,124 @@ export interface DataService {
    *  panel's drag to place): into a text frame a variable, onto a graphic
    *  frame its picture. The service refuses a target it cannot place on. */
   place?(target: string, query: string, field: string): Promise<DataPlaced>;
+  /** Place a query's records as a table in a text frame (the Data panel's
+   *  table tab dropped on a frame); `fields` picks and orders the columns,
+   *  all of them when absent. */
+  placeTable?(
+    target: string,
+    query: string,
+    fields?: readonly string[],
+  ): Promise<DataPlaced>;
+  /** Fill a design with one record (a grid row dropped on a group or a
+   *  frame): every `<<field>>` written in its text frames, as Data Merge
+   *  reads them, becomes that record's field. */
+  placeRecord?(
+    target: string,
+    query: string,
+    record: number,
+  ): Promise<readonly DataPlaced[]>;
+  /** How the data is made: each source, query and transform with what it
+   *  reads, in the order a refresh runs them (the Data panel's pipeline). */
+  pipeline?(): Promise<readonly DataPipelineStep[]>;
+  /** Define or replace a transform; refused with the reason (a bad source,
+   *  an input that does not exist). */
+  defineTransform?(def: DataTransformDef): Promise<void>;
+  /** Remove a transform; false when there was none. */
+  removeTransform?(id: string): Promise<boolean>;
+  /** The asset columns: a query's field whose values name pictures, fetched
+   *  and run through an action chain before they are placed. */
+  assetColumns?(): Promise<readonly DataAssetColumn[]>;
+  /** Declare a field an asset column (with its chain), or stop (`null`). */
+  setAssetColumn?(
+    query: string,
+    field: string,
+    def: DataAssetColumnDef | null,
+  ): Promise<void>;
+  /** Each record's state since the content was last placed: new in the
+   *  data, changed, unchanged, and how many were removed; and which records
+   *  are placed. */
+  recordStatus?(query: string): Promise<DataRecordStatus>;
+  /** Put sample data in the document (the first run's "Try it with sample
+   *  data"): a source and a query over it; the query's name. */
+  loadSample?(): Promise<string>;
+  /** What may be wrong with the placed content: text that does not fit its
+   *  frame (overset), a picture missing or too coarse for its frame, a value
+   *  empty or failed, records a flow could not place. Each names where it
+   *  is, so the Data panel, the canvas markers and Problems can point there. */
+  issues?(): Promise<readonly DataIssue[]>;
+}
+
+/** A possible mistake in the content the data placed. */
+export interface DataIssue {
+  kind:
+    | "overset"
+    | "missingAsset"
+    | "lowResolution"
+    | "emptyValue"
+    | "error"
+    | "unplacedRecords";
+  severity: "error" | "warning" | "info";
+  /** Said for the user, with what to do about it. */
+  message: string;
+  /** The binding the content comes from. */
+  binding?: string;
+  /** The page item it is in (ADR 131 address). */
+  address?: string;
+  /** The record it shows. */
+  record?: number;
+}
+
+/** One step of the data's pipeline. */
+export interface DataPipelineStep {
+  /** The table the step yields. */
+  id: string;
+  kind: "source" | "query" | "transform";
+  /** The tables it reads (none for a source). */
+  inputs: readonly string[];
+  /** A query's SQL. */
+  sql?: string;
+  /** A transform's source: `(tables, params) => rows`. */
+  source?: string;
+  params?: Readonly<Record<string, unknown>>;
+  /** Its rows at the last refresh. */
+  rowCount?: number;
+  /** Why it did not run. */
+  error?: string;
+}
+
+/** A transform (data ADR 562): JavaScript over tables, giving a table. */
+export interface DataTransformDef {
+  id: string;
+  inputs: readonly string[];
+  source: string;
+  params?: Readonly<Record<string, unknown>>;
+}
+
+/** What an asset column does with its pictures. */
+export interface DataAssetColumnDef {
+  /** The actions each picture goes through (`actions@1` ids). */
+  chain?: readonly ActionStep[];
+  /** What a relative reference is resolved against. */
+  base?: string;
+}
+
+/** An asset column of a query. */
+export interface DataAssetColumn extends DataAssetColumnDef {
+  query: string;
+  field: string;
+}
+
+/** A query's records against what was last placed, by record index. */
+export interface DataRecordStatus {
+  query: string;
+  /** Records new in the data. */
+  added: readonly number[];
+  /** Records whose values changed. */
+  changed: readonly number[];
+  /** How many placed records are gone from the data. */
+  removed: number;
+  /** Records whose content is in the document. */
+  placed: readonly number[];
 }
 
 /** What a placed field became. */
@@ -2477,6 +2595,8 @@ export interface DataPlacement {
    *  `textFrame:u3`). */
   address: string;
   status: DataBindingStatus["status"];
+  /** The record it shows, for a binding placed once per record. */
+  record?: number;
 }
 
 /** A binding and its sync state: `linked` (placed and in step with the
@@ -2541,6 +2661,38 @@ export interface DataSurface {
   placements(): Promise<readonly DataPlacement[]>;
   /** Place a field on a page item (`bind`). */
   place(target: string, query: string, field: string): Promise<DataPlaced>;
+  /** Place a query's records as a table in a text frame (`bind`). */
+  placeTable(
+    target: string,
+    query: string,
+    fields?: readonly string[],
+  ): Promise<DataPlaced>;
+  /** Fill a design's `<<field>>`s with one record (`bind`). */
+  placeRecord(
+    target: string,
+    query: string,
+    record: number,
+  ): Promise<readonly DataPlaced[]>;
+  /** The sources, queries and transforms, in refresh order (`read`). */
+  pipeline(): Promise<readonly DataPipelineStep[]>;
+  /** Define or replace a transform (`write`). */
+  defineTransform(def: DataTransformDef): Promise<void>;
+  /** Remove a transform (`write`). */
+  removeTransform(id: string): Promise<boolean>;
+  /** The asset columns (`read`). */
+  assetColumns(): Promise<readonly DataAssetColumn[]>;
+  /** Declare or clear an asset column (`write`). */
+  setAssetColumn(
+    query: string,
+    field: string,
+    def: DataAssetColumnDef | null,
+  ): Promise<void>;
+  /** Each record's state against what was placed (`read`). */
+  recordStatus(query: string): Promise<DataRecordStatus>;
+  /** Put sample data in the document (`write`). */
+  loadSample(): Promise<string>;
+  /** Possible mistakes in the placed content (`read`). */
+  issues(): Promise<readonly DataIssue[]>;
   /** Fires when a table's rows change (`read`). */
   onDidChange(listener: (change: DataChange) => void): Disposable;
 }

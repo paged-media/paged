@@ -49,6 +49,8 @@ import {
   type SelectionState,
   type TableCellSelection,
   useEditorKeys,
+  useChromeRegions,
+  useSessionRole,
 } from "@paged-media/shell";
 
 import type {
@@ -98,7 +100,14 @@ export function CanvasPanel(_props: PanelProps) {
   // gesture branch commits and returns before the click branch ever runs.
   const tools = useRegistryView(useRegistries().tools);
   const legacyKeyForTool = tools.get(effectiveTool)?.legacyKey ?? null;
-  const forcePan = effectiveTool === "paged.tool.hand";
+  // A preview canvas (the `form` preset, editor ADR 294) only pans and
+  // zooms: every drag pans and a click selects nothing, as with the Hand.
+  const preview = useChromeRegions().canvas.preview;
+  const forcePan = effectiveTool === "paged.tool.hand" || preview;
+  // A filler or a viewer moves nothing by dragging, so one finger pans the
+  // page and a tap selects (editor ADR 294); a pen or a mouse is unchanged.
+  const role = useSessionRole();
+  const touchPans = role === "filler" || role === "viewer";
   // Direct Selection reaches the leaf: a click on a grouped item selects
   // that item, not its group (F-29), as in InDesign.
   const directSelect = effectiveTool === "paged.tool.directSelect";
@@ -568,6 +577,7 @@ export function CanvasPanel(_props: PanelProps) {
         legacyKeyForTool={legacyKeyForTool}
         cursor={toolCursor}
         forcePan={forcePan}
+        touchPans={touchPans}
         zoomClick={zoomClick}
         // Path-edit mode hands the canvas pointer to the session — but
         // only while the legacy select path is the one in charge: a tool
