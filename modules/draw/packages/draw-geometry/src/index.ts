@@ -212,3 +212,60 @@ export {
   SAME_SHAPE_SHIFT_LIMIT,
   type SameShapeOptions,
 } from "./shape-match";
+// WP6.1 part 2 — locations on a contour (the Path Eraser, the Join tool
+// and the Shaper share them), the corner-aware Simplify fit behind the
+// live preview, the Reshape falloff, Star / Flare geometry and the
+// Shaper's recogniser.
+export {
+  locatedSamples,
+  locationScalar,
+  locationAlongSamples,
+  pointAtLocation,
+  segmentCubic,
+  segmentCount,
+  subCubic,
+  subRun,
+  polylineDistance,
+  polylineIntersections,
+  polylineLength,
+  type PathLocation,
+  type LocatedSample,
+  type PolylineCrossing,
+} from "./path-locate";
+export {
+  simplifyAnchorTable,
+  simplifyContour,
+  interiorAngleAt,
+  fitCubics,
+  type SimplifyFitOptions,
+} from "./simplify-fit";
+export {
+  planPathErase,
+  planJoinScrub,
+  ERASE_MIN_PIECE_PT,
+  type ErasePlan,
+  type JoinCandidate,
+  type JoinPlan,
+} from "./path-erase";
+export { reshapeTable, reshapeWeight, pathDistancesFrom } from "./reshape";
+export {
+  starPath,
+  regularPolygonPath,
+  flareParts,
+  STAR_MIN_POINTS,
+  STAR_MAX_POINTS,
+  FLARE_MAX_RAYS,
+  FLARE_MAX_RINGS,
+  type StarSpec,
+  type FlareSpec,
+  type FlareParts,
+} from "./star";
+export {
+  recogniseShape,
+  SCRIBBLE_TURN_DEG,
+  SCRIBBLE_MIN_REVERSALS,
+  LINE_SNAP_DEG,
+  type ShaperKind,
+  type ShaperRecognition,
+  type ShaperOptions,
+} from "./shaper";
