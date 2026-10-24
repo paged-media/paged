@@ -185,7 +185,19 @@ test.describe("journey · fill presets on a phone (Pixel 7)", () => {
     // Panning moved nothing on the card: no field is open.
     await expect(page.locator('[data-field-input="name"]')).toHaveCount(0);
 
-    // The zoom buttons zoom.
+    // The zoom buttons zoom, once the pan's camera has settled (as the pinch
+    // below waits for the zoom): the pan's last camera update must not land
+    // after the zoom and take it back.
+    let settled = "";
+    await expect
+      .poll(async () => {
+        const o = await outline(page, "name");
+        const now = `${Math.round(o.x)},${Math.round(o.y)},${Math.round(o.width)}`;
+        const same = now === settled;
+        settled = now;
+        return same;
+      })
+      .toBe(true);
     const small = await outline(page, "name");
     await page.locator('[data-touch-zoom-command="paged.view.zoomIn"]').tap();
     await expect
