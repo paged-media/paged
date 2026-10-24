@@ -136,7 +136,6 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // group), so the stubs are gone rather than duplicated — the
   // MenuRegistry treats a path as its dedupe key and would throw on
   // the collision anyway.
-  soon("Object/Transform", 10),
   // Object ▸ Effects: the Effects panel, and Global light… (registered
   // with its dialog, panels/global-light-dialog.tsx).
   panel("Object/Effects/Effects…", "paged.effects", 30, "effects"),

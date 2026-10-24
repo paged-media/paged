@@ -145,6 +145,13 @@ draw B-02). The headless harness records both
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
   `elementGeometry(ids)`, `tree()`,
   `planarRegions(elementIds, point?)` (§4.3c).
+  Since 0.74.3-canary.16 (engine WP2.7, additive) the `spreads` collection
+  names each spread's pages (`pageIds`) and its top-level items with the
+  page each sits on (`members`, by `elementGeometry`'s centre rule; `null`
+  on the pasteboard), and a `pages` row carries its place in the spread
+  (`indexInSpread`, with `pageOrigin`), its spine side (`bindingEdge`) and
+  its inside / outside margins (`marginInsidePt`, `marginOutsidePt`) beside
+  the physical four. Older engines omit the fields.
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
 - `onDidChange(l)` — typed events for every committed change (every panel
   audit showed this exact subscribe pattern, hand-rolled 20+ times in
@@ -674,6 +681,16 @@ in the contract from day 1 or every plugin invents its own.
 Feature strings of the form `"area.member@major"` (e.g.
 `"contribute.tool@1"`, `"document.hitTest@1"`). The implemented set is
 exported as `HOST_FEATURES` so tests and docs can't drift from code.
+
+A flag may name a PROPERTY rather than a door when a bundle chooses a
+different lowering by it. `"document.fillRule@1"` (engine ADR 1006) says
+the vendored wire and catalog carry `frameFillRule` ("NonZero" /
+"EvenOdd") on every frame kind with an outline; it rides the ordinary
+property doors. The path is additive at protocol 76, so the handshake
+does not prove the engine has it: an older engine refuses the write as
+an unknown path (an outcome) and reads no row. paged.draw's SVG importer
+asks it before choosing between writing the rule and re-winding the
+contours for non-zero.
 
 ### 4.9 `host.editor` — the marked escape hatch
 

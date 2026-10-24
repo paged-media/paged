@@ -342,10 +342,6 @@ fn unsupported_files_name_what_is_missing() {
     expect(base(2, 2, &[8], 32844), "LogLuv");
     expect(base(2, 2, &[8], 10), "ITU Lab");
     assert!(matches!(
-        paged_raster::decode(b"8BPS\0\x01rest", DecodeOptions::default()),
-        Err(Error::Unsupported { .. })
-    ));
-    assert!(matches!(
         paged_raster::probe(b"not an image"),
         Err(Error::UnknownFormat)
     ));

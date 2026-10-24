@@ -8,6 +8,8 @@ members = [
     "crates/paged-scene",
     "crates/paged-text",
     "crates/paged-color",
+    "crates/paged-pixel",
+    "crates/paged-psd",
     "crates/paged-raster",
     "crates/paged-compose",
     "crates/paged-gpu",

@@ -3430,12 +3430,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-pixel"
+version = "0.0.0"
+
+[[package]]
+name = "paged-psd"
+version = "0.0.0"
+dependencies = [
+ "miniz_oxide 0.9.1",
+ "paged-pixel",
+ "thiserror",
+]
+
+[[package]]
 name = "paged-raster"
 version = "0.0.0"
 dependencies = [
  "flate2",
  "image",
  "paged-color",
+ "paged-psd",
  "paged-test-resources",
  "thiserror",
  "tiff",
@@ -3466,6 +3480,7 @@ dependencies = [
  "paged-gpu",
  "paged-model",
  "paged-mutate",
+ "paged-psd",
  "paged-raster",
  "paged-scene",
  "paged-store",
