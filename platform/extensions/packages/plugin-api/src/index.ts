@@ -152,6 +152,18 @@ export type {
   OverlaySurface,
   // W-20 — a retained, data-only overlay layer.
   OverlayLayer,
+  // Extensions ADR 339 — handle sets and the host-drawn transform box.
+  OverlayHandleSet,
+  OverlayHandleSpace,
+  OverlayHandleSpec,
+  ProjectiveMatrix,
+  TransformQuad,
+  TransformBoxMode,
+  TransformBoxOperation,
+  TransformBoxUpdate,
+  TransformBoxOptions,
+  TransformBoxSession,
+  TransformBoxSurface,
   ShellSurface,
   FilePickerOptions,
   PickedFile,

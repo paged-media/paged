@@ -162,6 +162,15 @@ export interface CanvasPointerEvent {
   /** Originating device class (Pointer Events `pointerType`). Lets a
    *  tool branch stylus-only behaviour. Defaults to `"mouse"`. */
   pointerType: "mouse" | "pen" | "touch";
+  /**
+   * Extensions ADR 339 — the handle this pointer is over, answered by the
+   * HOST from the bundle's live handle sets (`host.overlay.handles`): the
+   * set's id and the handle's id. Absent when the pointer is over none, on
+   * a host without the door (`supports("overlay.handles@1")` false), and
+   * on events of tools that are not the bundle's own. On a press it is the
+   * handle pressed; on a move or release, the one under the pointer now.
+   */
+  hitHandle?: { set: string; id: string };
 }
 
 /** Ephemeral overlay primitive published during a gesture. Kept
@@ -238,6 +247,13 @@ export interface ToolContribution {
   gesture?: () => GestureHandler;
   options?: ToolOptionsSpec;
   when?: VisibilityPredicate;
+  /**
+   * Extensions ADR 339 — the tool reads Cmd/Ctrl as a GESTURE modifier
+   * (a transform box's distort and shear), so holding Cmd while it is in
+   * hand does not spring-load Direct Selection, as it does for other
+   * tools. Absent = the host's spring-load applies.
+   */
+  cmdIsModifier?: boolean;
 }
 
 // --------------------------------------------------------------- panels
@@ -628,11 +644,41 @@ export interface ToolPreviewText {
   background?: boolean;
 }
 
+/**
+ * Extensions ADR 339 — a HANDLE: a small marker drawn at a constant
+ * SCREEN size wherever the camera is, the handle primitive the shapes
+ * above lacked (a square drawn in page pt grows and shrinks with the
+ * zoom). `x`/`y` are its centre in page-local pt, like every other
+ * variant. `shape`:
+ *   - `"square"` — a resize handle (white fill, selection stroke);
+ *   - `"round"` — a round handle (a path point, a rotate knob);
+ *   - `"centre"` — a reference point (a ring with a cross);
+ *   - `"rotateZone"` — nothing visible: the band outside a corner that
+ *     rotates, drawn only as a hit area (and in debug overlays).
+ * `sizePx` is the visible side / diameter in screen px (host default 8).
+ * `active` draws it filled with the selection colour (the handle being
+ * dragged). Probe `supports("overlay.handles@1")`; a host without it
+ * draws nothing for this variant.
+ */
+export interface ToolPreviewHandle {
+  kind: "handle";
+  pageId: PageId;
+  /** Centre, page-local pt. */
+  x: number;
+  y: number;
+  shape: "square" | "round" | "centre" | "rotateZone";
+  /** Visible size in screen px (constant under zoom). Host default 8. */
+  sizePx?: number;
+  /** Draw it as the handle being dragged. */
+  active?: boolean;
+}
+
 export type ToolPreviewShape =
   | MarqueeRectPageLocal
   | ToolPreviewPolyline
   | ToolPreviewPath
-  | ToolPreviewText;
+  | ToolPreviewText
+  | ToolPreviewHandle;
 
 // ------------------------------------------------------------- client
 // The NARROW engine-client contract — what the SDK and real bundles

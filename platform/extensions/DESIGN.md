@@ -549,6 +549,51 @@ bound) bundle.
   tool-preview slot, which would erase the active tool's preview.
 - Same `capabilities.rendering ∋ "overlay"` gate as `setToolPreview`.
 
+### 4.5e `host.overlay.handles` and `host.transformBox` — handles the host hits [ADR 339]
+
+Two doors that answer the POINTER for a bundle, so its handles behave like
+the host's chrome without each bundle re-deriving screen metrics from the
+camera (extensions ADR 339; the host tool is editor ADR 293).
+
+- **The primitive.** `ToolPreviewHandle` (`kind: "handle"`, `shape` square /
+  round / centre / rotateZone, `sizePx`, `active`) is a marker drawn at a
+  constant SCREEN size at a page-local point — in the tool-preview slot and
+  in layers. `rotateZone` draws nothing: it is a hit area.
+- **Handle sets.** `host.overlay.handles(id?)` → `{ set(space, handles),
+clear(), hitTest(pageId, pagePoint), dispose() }`. `space` is
+  `{ pageId }` (page-local pt) or `{ element }` (the frame's content space:
+  its box top-left, through its item transform, resolved at `set`). Radii are
+  screen px (6, a rotate zone 28); earlier handles win an overlap; sets stack
+  with the bundle's layers in creation order. Every pointer event of the
+  bundle's own tools carries `hitHandle: { set, id }` over a handle, and a
+  handle's `cursor` is the tool's cursor there unless the tool's `cursorAt`
+  answers.
+- **The transform box.** `host.transformBox.open({ pageId, quad, mode?,
+reference?, toolId?, onChange?, onCommit, onCancel? })` draws a box (eight
+  handles, the reference point; the rotate zones just outside the corners)
+  over a quad the bundle owns, takes the pointer and keys of the bundle's
+  tools while open (an open box makes the bundle's edit context dirty, so Esc and
+  Enter end the box, not the context), and reports `{ matrix, quad, reference, mode, operation }`:
+  `matrix` is a row-major 3×3 projective matrix from the box as opened to the
+  box now (affine until a distort or perspective drag). Enter commits, Escape
+  cancels; a press outside the box beyond the rotate zones reaches the tool;
+  opening a second box cancels the first; `toolId` makes one of the bundle's
+  tools the active one while the box is open. The modifiers and modes are the
+  host Free Transform tool's (`freeTransform`, `constrain`, `freeDistort`,
+  `perspective`). The host never touches the content: the bundle applies the
+  matrix (paged.image resamples a layer through `geom.warp_projective`).
+- **One geometry.** The box's hit order, metrics and drag arms are
+  `transform-box.ts`, exported from the SDK root (`hitTestBox`,
+  `operationFor`, `dragBox`, `homographyFromQuads`, `quadMap`, …); the host
+  tool runs the same code.
+- **Routing.** `contribute.tool` wraps each gesture handler the bundle's
+  factory makes: the box first, then `hitHandle` stamping. A handler that
+  never reads the field sees no change.
+- **Flags.** `overlay.handles@1` and `host.transformBox@1` are DYNAMIC: true
+  when the host renders overlay layers (the handle primitive ships with this
+  SDK's host). Without them both doors still hit, route and report, and draw
+  nothing. Gate: `capabilities.rendering ∋ "overlay"`.
+
 ### 4.5b `host.text` — measurement + the caret read door [S-13 · C-9]
 
 `measureString(family, style, text, sizePt)` (S-13 — real engine-shaper
