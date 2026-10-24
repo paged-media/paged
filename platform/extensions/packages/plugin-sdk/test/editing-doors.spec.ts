@@ -146,7 +146,9 @@ describe("contribute.controlBarGroup / statusItem (C1, C3)", () => {
     expect(host.supports("controlBar.groups@1")).toBe(false);
     expect(host.supports("statusBar.items@1")).toBe(false);
     contributeEditContext(host, wordContext);
-    expect(() => host.contribute.controlBarGroup(group).dispose()).not.toThrow();
+    expect(() =>
+      host.contribute.controlBarGroup(group).dispose(),
+    ).not.toThrow();
   });
 });
 
@@ -178,7 +180,10 @@ describe("keybinding scope (C2)", () => {
     }
     // An unscoped binding on a reserved key is the host's business.
     expect(() =>
-      host.contribute.keybinding({ key: "cmd+s", command: "media.paged.test.x" }),
+      host.contribute.keybinding({
+        key: "cmd+s",
+        command: "media.paged.test.x",
+      }),
     ).not.toThrow();
   });
 
@@ -280,7 +285,9 @@ describe("offsets: content → character (C4)", () => {
 });
 
 describe("host.text selection doors (C4)", () => {
-  function textHost(sel: { storyId: string; start: number; end: number } | null) {
+  function textHost(
+    sel: { storyId: string; start: number; end: number } | null,
+  ) {
     const fake = makeFakeEditor();
     fake.onSend("requestStoryContent", () => ({
       kind: "storyContentResult",

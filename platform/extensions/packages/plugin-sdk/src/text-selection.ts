@@ -70,7 +70,8 @@ export function contentToChar(paras: ParagraphTexts, offset: number): number {
     }
     const text = paras[i]!;
     const len = utf8.encode(text).length;
-    if (offset <= consumed + len) return chars + charsInBytes(text, offset - consumed);
+    if (offset <= consumed + len)
+      return chars + charsInBytes(text, offset - consumed);
     consumed += len;
     chars += charCount(text);
   }
@@ -90,7 +91,10 @@ export function paragraphSpans(paras: ParagraphTexts): Array<[number, number]> {
 }
 
 /** The paragraph a CONTENT offset stands in (the caret's paragraph). */
-export function paragraphAtContent(paras: ParagraphTexts, offset: number): number {
+export function paragraphAtContent(
+  paras: ParagraphTexts,
+  offset: number,
+): number {
   let consumed = 0;
   for (let i = 0; i < paras.length; i++) {
     const len = utf8.encode(paras[i]!).length;

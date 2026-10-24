@@ -57,7 +57,9 @@ function createScopedItemRegistry<T extends Scoped>(
   const sorted = () =>
     items
       .map((item, i) => ({ item, i }))
-      .sort((a, b) => (a.item.order ?? 100) - (b.item.order ?? 100) || a.i - b.i)
+      .sort(
+        (a, b) => (a.item.order ?? 100) - (b.item.order ?? 100) || a.i - b.i,
+      )
       .map((e) => e.item);
   return {
     register(contribution) {
@@ -103,9 +105,7 @@ export function createControlBarGroupRegistry(): ControlBarGroupRegistry {
 }
 
 export function createStatusItemRegistry(): StatusItemRegistry {
-  return createScopedItemRegistry<StatusItemContribution>(
-    "StatusItemRegistry",
-  );
+  return createScopedItemRegistry<StatusItemContribution>("StatusItemRegistry");
 }
 
 /**

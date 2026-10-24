@@ -1838,9 +1838,7 @@ export interface TextSurface {
    * nothing to format, and the engine stores no format on an empty range).
    * Gated on `capabilities.document.write`. Probe `supports("text.format@1")`.
    */
-  format(
-    properties: readonly TextPropertyWrite[],
-  ): Promise<TextFormatResult>;
+  format(properties: readonly TextPropertyWrite[]): Promise<TextFormatResult>;
   /**
    * Apply a paragraph or character STYLE (its `Self` id) to the selected
    * text: the paragraph style to every paragraph the selection touches,

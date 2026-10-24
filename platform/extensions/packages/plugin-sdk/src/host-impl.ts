@@ -255,7 +255,10 @@ export function isReservedHostKey(key: string): boolean {
         m === "meta" || m === "ctrl" || m === "control" ? "cmd" : m,
       ),
     );
-    return [...["cmd", "alt", "option", "shift"].filter((m) => mods.has(m)), last]
+    return [
+      ...["cmd", "alt", "option", "shift"].filter((m) => mods.has(m)),
+      last,
+    ]
       .join("+")
       .replace("option", "alt");
   };
