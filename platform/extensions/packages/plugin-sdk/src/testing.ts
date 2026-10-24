@@ -170,6 +170,18 @@ export function fakeDataService(
     async bindings() {
       return [...bindings.values()];
     },
+    async evaluate(query, expr, record) {
+      const t = table(query);
+      const field = expr.trim();
+      if (!t.fields.some((f) => f.name === field))
+        return {
+          display: "",
+          value: null,
+          error: "fakeDataService evaluates a bare field name only",
+        };
+      const value = t.rows[record]?.[field] ?? null;
+      return { display: value === null ? "" : String(value), value };
+    },
     rows: (name) => table(name).rows,
   };
 }

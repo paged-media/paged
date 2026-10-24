@@ -192,6 +192,12 @@ export interface DataEngineLike {
   store_preview?(sql: string, limit: number): unknown;
   /** A window of a source table in the provider shape (`limit` 0 = all). */
   store_records?(table: string, offset: number, limit: number): unknown;
+  /** An expression's value at a record (the bind popover's preview). */
+  evaluate_at?(
+    query: string,
+    expr: string,
+    record: number,
+  ): { display: string; value: unknown; error?: string };
   /** Transforms (data ADR 562). */
   define_transform?(def: TransformDefJson): void;
   remove_transform?(id: string): boolean;
