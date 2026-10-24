@@ -563,6 +563,71 @@ mod tests {
         assert!(s.use_chart_style_as_default(99).is_err());
     }
 
+    /// The text of every chart part in an xlsx.
+    fn chart_parts(bytes: &[u8]) -> String {
+        use std::io::Read;
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+        let mut out = String::new();
+        for i in 0..z.len() {
+            let mut f = z.by_index(i).unwrap();
+            let name = f.name().unwrap().to_string();
+            if name.starts_with("xl/charts/") && name.ends_with(".xml") {
+                f.read_to_string(&mut out).unwrap();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_saved_chart_keeps_its_swatch_models_and_palette_and_shows_the_default__feat__sheet_chart_style_roles(
+    ) {
+        let mut s = session();
+        let i = s.add_chart(0, "B2:C3", "A2:A3", "column", "", "").unwrap();
+        s.update_chart(
+            i,
+            json(serde_json::json!({
+                "roles": { "plotArea": { "swatch": { "id": "Color/Paper", "model": "spot", "fallbackRgb": "#F0EEE6" } } },
+                "seriesPalette": { "group": "ColorGroup/Brand", "swatches": [
+                    { "id": "Color/A", "model": "cmyk", "fallbackRgb": "#112233" }
+                ] }
+            })),
+        )
+        .unwrap();
+        // The workbook default colours the chart area, which the chart
+        // does not override.
+        s.set_chart_style(json(serde_json::json!({
+            "roles": { "chartArea": { "swatch": { "id": "Color/Bg", "model": "cmyk", "fallbackRgb": "#ABCDEF" } } }
+        })))
+        .unwrap();
+        let bytes = s.save_xlsx().unwrap();
+        // Another application sees the colours the chart draws, the
+        // default's included.
+        let xml = chart_parts(&bytes);
+        assert!(
+            xml.contains(r#"<a:srgbClr val="ABCDEF"/>"#),
+            "default colour written"
+        );
+        // The extension keeps the chart's OWN references: model and palette.
+        assert!(xml.contains(r#"model="spot""#), "swatch model written");
+        assert!(xml.contains(r#"<pg:palette group="ColorGroup/Brand">"#));
+        assert!(
+            !xml.contains(r#"swatch="Color/Bg""#),
+            "the default is not an override"
+        );
+        let back = SheetSession::load_xlsx(&bytes).unwrap();
+        let spec = &back.chart_specs()[i as usize];
+        let paper = spec.roles["plotArea"].swatch.as_ref().unwrap();
+        assert_eq!(paper.model, "spot");
+        assert_eq!(
+            spec.series_palette.as_ref().unwrap().group,
+            "ColorGroup/Brand"
+        );
+        assert_eq!(
+            spec.series_palette.as_ref().unwrap().swatches[0].model,
+            "cmyk"
+        );
+    }
+
     #[test]
     fn a_series_colour_names_its_swatch_model__feat__sheet_chart_style_roles() {
         let mut s = session();
