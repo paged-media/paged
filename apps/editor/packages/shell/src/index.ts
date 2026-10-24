@@ -139,6 +139,13 @@ export {
   type DataFieldDrag,
   type DataFieldDropHandler,
 } from "./state/data-door";
+// Editor ADR 291 — the registered actions (actions@1) for the editor's own
+// surfaces (the Data panel's picture column picker).
+export {
+  setRegisteredActionsSource,
+  useRegisteredActions,
+  type RegisteredActionsSource,
+} from "./state/actions-door";
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
