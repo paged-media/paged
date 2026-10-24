@@ -1472,14 +1472,34 @@ export interface ImageEngine {
     contiguous: boolean,
     color: Rgba01,
   ): Promise<DecodedInfo>;
-  /** IMAGE ▸ Rotate / Flip / Canvas Size over the whole layer stack.
-   *  Clears the undo history; returns the new extent. */
+  /** IMAGE ▸ Rotate / Flip / Canvas Size over the whole layer stack, in
+   *  place on the bound handle. One undo step; the history before it
+   *  stays. Returns the new extent. */
   layersCanvasOp(
     op: CanvasOpKind,
     width?: number,
     height?: number,
     anchorX?: number,
     anchorY?: number,
+  ): Promise<{ width: number; height: number }>;
+  /** The crop tool's commit over the whole layer stack, in place on the
+   *  bound handle: every layer and mask is cut to `rect` (clipped to the
+   *  canvas). A non-zero `degrees` straightens first (each buffer turned
+   *  by `−degrees` about the rect's centre through `geom.rotate_bilinear`
+   *  — GPU-only); at 0 it is the exact cut. One undo step that keeps the
+   *  history; drops the selection. Returns the new extent. */
+  layersCrop(
+    rect: CropRect,
+    degrees: number,
+  ): Promise<{ width: number; height: number }>;
+  /** IMAGE ▸ Image Size over the whole layer stack, in place on the bound
+   *  handle: every layer and mask resampled with `filter` (GPU-only), a
+   *  smart object re-rendered from its source. One undo step that keeps
+   *  the history; drops the selection. Returns the new extent. */
+  layersResample(
+    width: number,
+    height: number,
+    filter: ResampleFilter,
   ): Promise<{ width: number; height: number }>;
   /** BLUR — SHAPE. `shapeHandle` supplies the silhouette (read from RED). */
   applyShapeBlur(
@@ -2123,6 +2143,10 @@ export interface ImageWasmModule {
     height: number,
     anchor_x: number,
     anchor_y: number,
+    x: number,
+    y: number,
+    degrees: number,
+    filter: string,
   ): Promise<Uint32Array>;
   apply_shape_blur(
     handle: number,
@@ -2871,6 +2895,38 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         height,
         anchorX,
         anchorY,
+        0,
+        0,
+        0,
+        "",
+      );
+      return { width: wh[0], height: wh[1] };
+    },
+    async layersCrop(rect, degrees) {
+      const wh = await wasm.layers_canvas_op(
+        "crop",
+        rect.w,
+        rect.h,
+        0,
+        0,
+        rect.x,
+        rect.y,
+        degrees,
+        "",
+      );
+      return { width: wh[0], height: wh[1] };
+    },
+    async layersResample(width, height, filter) {
+      const wh = await wasm.layers_canvas_op(
+        "resample",
+        width,
+        height,
+        0,
+        0,
+        0,
+        0,
+        0,
+        filter,
       );
       return { width: wh[0], height: wh[1] };
     },

@@ -375,9 +375,10 @@ export interface ImageSession {
   colorPicker(): import("react").ComponentType<ColorPickerProps> | null;
   /** Ingest opened/dropped file bytes (the K-2 importer path). */
   importBytes(name: string, bytes: Uint8Array): Promise<boolean>;
-  /** RESAMPLE the engine-held source to a new pixel size (GPU-only —
-   *  rejects honestly without a device). Swaps the source like a crop
-   *  commit: document unchanged until Apply re-composites. */
+  /** IMAGE SIZE: resample every layer and mask of the engine-held source
+   *  to a new pixel size (GPU-only — rejects honestly without a device),
+   *  in place, as one undo step. Document unchanged until Apply
+   *  re-composites. */
   resizeTo(w: number, h: number, filter: ResampleFilter): Promise<boolean>;
   /** PSD layer-record edits (only when `state().psd` is set). Each
    *  applies to the retained parse and refreshes the layer list. */
@@ -918,10 +919,11 @@ export interface ImageSession {
   /** Walk FORWARD `n` journal steps. */
   redoSteps(n: number): Promise<boolean>;
   redo(): Promise<boolean>;
-  /** Commit the crop: cut the machine's rect out of the source image, swap
-   *  the engine-held source to the cropped result, recompute the
-   *  histogram, and re-composite in-frame. Returns false when there is
-   *  nothing to crop or the rect is empty. */
+  /** Commit the crop: cut every layer and mask of the source to the
+   *  machine's rect (straightened first at a non-zero angle), in place on
+   *  the same handle as one undo step that keeps the history; drop the
+   *  selection, recompute the histogram, and re-composite in-frame.
+   *  Returns false when there is nothing to crop or the rect is empty. */
   commitCrop(): Promise<boolean>;
   /** COMMITTED apply: adjust on the GPU + submit the in-frame layer. */
   apply(): Promise<boolean>;
@@ -2069,14 +2071,31 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
   };
 
+  /** A whole-canvas operation changed the bound image's extent IN PLACE
+   *  (same handle, layers kept): follow it. */
+  const adoptCanvasExtent = (
+    src: SourceImage,
+    wh: { width: number; height: number },
+  ) => {
+    // Same handle, new extent: the tile claim and every readout
+    // addressed the old one.
+    releaseTiles();
+    // A new source record, not the old one changed in place: a panel
+    // render memoised on `state.source` (the React Compiler's cache)
+    // sees the new extent only through a new reference.
+    state.source = { ...src, width: wh.width, height: wh.height };
+    markPixelsEdited();
+    refreshSourceReadout();
+  };
+
   const refreshSourceReadout = () => {
     if (!engine || !state.source) return;
     refreshHistogram();
     // THE LAYER GRAPH — bind a stack to the LIVE handle so painting
     // always lands in a layer. Re-opening on the same handle keeps the
-    // stack (and its undo history); a crop / resize / straighten
-    // registers a DIFFERENT handle, so those commits re-open over the
-    // result — i.e. they FLATTEN, which the panel says.
+    // stack (and its undo history); crop / resize / straighten run over
+    // the stack on the same handle (`adoptCanvasExtent`), so they keep
+    // it too. Only a new ingest opens a fresh one.
     try {
       engine.layersOpen(state.source.handle);
     } catch (err) {
@@ -2088,10 +2107,10 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.source.width,
       state.source.height,
     );
-    // Bind the engine selection to the LIVE handle (a crop/resize swap
-    // is a different handle, so the old selection drops engine-side —
-    // honest: a selection is meaningless across resolutions) and rebuild
-    // the machine + readout.
+    // Bind the engine selection to the LIVE handle (a new extent drops
+    // it engine-side — honest: a selection is meaningless across
+    // resolutions, and a crop deselects anyway) and rebuild the machine
+    // + readout.
     try {
       engine.selectionBind(state.source.handle);
     } catch (err) {
@@ -2697,15 +2716,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return false;
       }
-      // Same handle, new extent: the tile claim and every readout
-      // addressed the old one.
-      releaseTiles();
-      // A new source record, not the old one changed in place: a panel
-      // render memoised on `state.source` (the React Compiler's cache)
-      // sees the new extent only through a new reference.
-      state.source = { ...src, width: wh.width, height: wh.height };
-      markPixelsEdited();
-      refreshSourceReadout();
+      adoptCanvasExtent(src, wh);
       // Composite first: Apply writes its own status line, and this one
       // (what the operation did) is the one to keep.
       if (src.elementId) await api.apply();
@@ -3626,27 +3637,24 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.nothingToResizeIngestAnImage));
         return false;
       }
-      let resized: { handle: number; width: number; height: number };
+      discardStroke();
+      let wh: { width: number; height: number };
       try {
-        resized = await engine.resize(src.handle, w, h, filter);
+        // Image Size over the whole layer stack, in place on the same
+        // handle: every layer and mask resampled (GPU), smart objects
+        // re-rendered from their sources; one undo step.
+        engine.layersOpen(src.handle);
+        wh = await engine.layersResample(w, h, filter);
       } catch (err) {
         setStatus(t(S.resizeFailed, { error: errText(err) }));
         emit();
         return false;
       }
-      // Swap the engine-held source (the crop-commit pattern): release
-      // the tile claim on the old handle, free it, adopt the new.
-      releaseTiles();
-      engine.freeImage(src.handle);
-      markPixelsEdited();
-      src.handle = resized.handle;
-      src.width = resized.width;
-      src.height = resized.height;
-      refreshSourceReadout();
+      adoptCanvasExtent(src, wh);
       setStatus(
         t(S.resampled, {
-          width: resized.width,
-          height: resized.height,
+          width: wh.width,
+          height: wh.height,
           filter,
         }),
       );
@@ -4561,38 +4569,35 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.nothingToCropIngestAPlaced));
         return false;
       }
-      let cropped: { handle: number; width: number; height: number };
+      discardStroke();
+      // Read before the commit: adopting the new extent rebuilds the
+      // machine (angle 0).
+      const angle = cropMachineRef.state().angle;
+      let wh: { width: number; height: number };
       try {
-        // The commit carries the STRAIGHTEN angle: at 0° it is the pure
-        // axis-aligned cut, otherwise the engine rotates first
-        // (geom.rotate_bilinear) so the rotated frame lands upright.
-        cropped = await cropMachineRef.commit(engine, src.handle);
+        // Over the whole layer stack, in place on the same handle: every
+        // layer and mask is cut (and at a non-zero angle straightened
+        // first, geom.rotate_bilinear), as ONE undo step that keeps the
+        // history. The selection is dropped, as Photoshop's crop does.
+        engine.layersOpen(src.handle);
+        wh = await cropMachineRef.commit(engine);
       } catch (err) {
         setStatus(t(S.cropFailed, { error: errText(err) }));
+        emit();
         return false;
       }
-      // Swap the engine-held source to the cropped image (free the old
-      // pixels; a tile claim points at the old handle, so release it).
-      releaseTiles();
-      engine.freeImage(src.handle);
-      markPixelsEdited();
-      src.handle = cropped.handle;
-      src.width = cropped.width;
-      src.height = cropped.height;
-      refreshSourceReadout();
-      const straightened = cropMachineRef.state().angle !== 0;
-      setStatus(
-        straightened
-          ? t(S.croppedStraightened, {
-              width: cropped.width,
-              height: cropped.height,
-              angle: cropMachineRef.state().angle,
-            })
-          : t(S.cropped, { width: cropped.width, height: cropped.height }),
-      );
-      // Re-composite the cropped pixels in-frame when a frame is targeted.
+      adoptCanvasExtent(src, wh);
       if (src.elementId) await api.apply();
-      else emit();
+      setStatus(
+        angle !== 0
+          ? t(S.croppedStraightened, {
+              width: wh.width,
+              height: wh.height,
+              angle,
+            })
+          : t(S.cropped, { width: wh.width, height: wh.height }),
+      );
+      emit();
       return true;
     },
 
