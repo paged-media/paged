@@ -37,6 +37,10 @@ export const COCKPIT = defineMessages("shell.cockpit", {
   scrollPagesLeft: "Scroll pages left",
   scrollPagesRight: "Scroll pages right",
   noSpreads: "Open a document to navigate its spreads.",
+  fields: "Fields",
+  showPreview: "Show preview",
+  hidePreview: "Hide preview",
+  zoom: "Zoom",
 });
 
 export const PAGES = defineMessages("shell.pages", {

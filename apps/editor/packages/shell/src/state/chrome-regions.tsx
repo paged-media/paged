@@ -36,6 +36,7 @@ import {
 
 import type {
   CanvasFurniture,
+  CompactLayout,
   RegionId,
   ResolvedRegion,
 } from "../profile/types";
@@ -46,6 +47,9 @@ export interface ChromeRegions {
   /** The region's resolved contents; null when it does not exist. */
   region(id: RegionId): ResolvedRegion | null;
   readonly canvas: Required<CanvasFurniture>;
+  /** The layout below the compact breakpoint; null for a desktop editor
+   *  (editor ADR 294). `useCompactLayout` says whether it applies now. */
+  readonly compact: CompactLayout | null;
 }
 
 const EVERYTHING: ResolvedRegion = { kind: "all", exclude: [], append: [] };
@@ -56,7 +60,8 @@ const TEMPLATE_ONLY: ReadonlySet<RegionId> = new Set(["form", "actions-bar"]);
 const DEFAULT_REGIONS: ChromeRegions = {
   has: (id) => !TEMPLATE_ONLY.has(id),
   region: (id) => (TEMPLATE_ONLY.has(id) ? null : EVERYTHING),
-  canvas: { titleBar: true, rulers: true, thumbnails: true },
+  canvas: { titleBar: true, rulers: true, thumbnails: true, preview: false },
+  compact: null,
 };
 
 const ChromeRegionsContext = createContext<ChromeRegions>(DEFAULT_REGIONS);
@@ -65,12 +70,14 @@ const ChromeRegionsContext = createContext<ChromeRegions>(DEFAULT_REGIONS);
 export function chromeRegionsOf(
   regions: Readonly<Record<RegionId, ResolvedRegion | null>> | undefined,
   canvas: Partial<CanvasFurniture> | undefined,
+  compact: CompactLayout | null = null,
 ): ChromeRegions {
-  if (!regions && !canvas) return DEFAULT_REGIONS;
+  if (!regions && !canvas && !compact) return DEFAULT_REGIONS;
   return {
     has: (id) => (regions ? regions[id] !== null : DEFAULT_REGIONS.has(id)),
     region: (id) => (regions ? regions[id] : DEFAULT_REGIONS.region(id)),
     canvas: { ...DEFAULT_REGIONS.canvas, ...canvas },
+    compact,
   };
 }
 
@@ -98,7 +105,9 @@ function withOverride(base: ChromeRegions, o: ChromeOverride): ChromeRegions {
       titleBar: (o.canvas.titleBar ?? true) && base.canvas.titleBar,
       rulers: (o.canvas.rulers ?? true) && base.canvas.rulers,
       thumbnails: (o.canvas.thumbnails ?? true) && base.canvas.thumbnails,
+      preview: base.canvas.preview,
     },
+    compact: base.compact,
   };
 }
 

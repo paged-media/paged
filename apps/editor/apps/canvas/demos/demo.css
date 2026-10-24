@@ -143,3 +143,52 @@ body {
   color: #5c5a55;
   font-size: 13px;
 }
+
+/* On a phone (below the editor's compact breakpoint, 720 px) the host's
+   page stacks: the editor first, the host's aside under it, and every
+   control of the host a 44 px touch target (editor ADR 294). */
+@media (max-width: 719px) {
+  html,
+  body {
+    height: 100dvh;
+  }
+  .demo-header {
+    flex-wrap: wrap;
+    gap: 2px 12px;
+    padding: 8px 12px;
+  }
+  .demo-header p {
+    display: none;
+  }
+  .demo-header a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  .demo-status {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+  .demo-body {
+    flex-direction: column;
+  }
+  .demo-stage {
+    flex: 1;
+    min-height: 0;
+  }
+  .demo-aside {
+    width: auto;
+    max-height: 25dvh;
+    border-left: 0;
+    border-top: 1px solid #d9d6cf;
+  }
+  .demo-aside button,
+  .demo-aside input[type="text"],
+  .demo-aside textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .gallery {
+    padding: 16px 16px 48px;
+  }
+}

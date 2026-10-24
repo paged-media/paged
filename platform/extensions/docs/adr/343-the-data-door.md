@@ -46,6 +46,17 @@ built-in does.
   - `place(target, query, field)` (amended 2026-10-24, bind role): a query's field placed on
     one page item (editor ADR 291's drag to place); the service picks how (paged.data: a
     variable in a text frame's story, a graphic frame's picture) and refuses what it cannot;
+  - amended 2026-10-24 (plugin-sdk 0.74.3-canary.24), for the Data panel's pipeline, asset
+    columns, per-record status, table and record drops and its first run: `placeTable` and
+    `placeRecord` (bind role: a query as a table in a text frame; one record filling a
+    design's `<<field>>`s); `pipeline` (read: each source, query and transform with its inputs,
+    in refresh order), `defineTransform` and `removeTransform` (write, data ADR 562);
+    `assetColumns` (read) and `setAssetColumn` (write, data ADR 563); `recordStatus` (read: a
+    query's records new, changed or removed since placed, and which are placed; a placement
+    names its `record` for a binding placed once per record); `loadSample` (write: a source and
+    a query of sample data); `issues` (read: possible mistakes in the placed content, each
+    with where it is: text overset in its frame, a picture missing or too coarse, an empty or
+    failed value, records a flow could not place);
   - `onDidChange`: a table and its new revision.
 - **Routing only.** The host routes calls and fans out changes; no bundle names another.
 

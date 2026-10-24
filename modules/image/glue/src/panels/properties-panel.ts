@@ -93,6 +93,15 @@ export const IMAGE_PANEL_FIELDS: ReadonlyArray<ImagePanelField> = [
     "order",
     "pixelSource",
   ].map((path) => ({ kind: "layer" as const, path, group: "Layers" })),
+  // The blending options and locks Photoshop's Layers panel carries.
+  ...[
+    "fillOpacity",
+    "knockout",
+    "colorLabel",
+    "lockTransparency",
+    "lockPosition",
+    "lockAll",
+  ].map((path) => ({ kind: "layer" as const, path, group: "Blending" })),
   { kind: "mask", path: "enabled", group: "Mask" },
   { kind: "smartObject", path: "source", group: "Smart object" },
   ...[
@@ -289,6 +298,12 @@ const L = defineMessages("image.properties", {
   channelCurves: "Channel curves (red, green, blue)",
   order: "Stack position",
   pixelSource: "Replace pixels",
+  fillOpacity: "Fill opacity",
+  knockout: "Knockout",
+  colorLabel: "Colour label",
+  lockTransparency: "Lock transparent pixels",
+  lockPosition: "Lock position",
+  lockAll: "Lock all",
 });
 
 /** The section titles of the field groups (the group names stay the ids). */
@@ -391,6 +406,12 @@ function labels(): Readonly<Record<string, string>> {
     "curves.channels": t(L.channelCurves),
     order: t(L.order),
     pixelSource: t(L.pixelSource),
+    fillOpacity: t(L.fillOpacity),
+    knockout: t(L.knockout),
+    colorLabel: t(L.colorLabel),
+    lockTransparency: t(L.lockTransparency),
+    lockPosition: t(L.lockPosition),
+    lockAll: t(L.lockAll),
   };
 }
 
@@ -448,7 +469,12 @@ export function imagePropertiesPanel(): PanelSchema {
     sections: [
       {
         title: title("Layers"),
-        rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })],
+        // The blending options and locks sit with the layer's own rows.
+        rows: [
+          layerList,
+          ...rowsOf(LAYER, "Layers", { bind: BIND.layer }),
+          ...rowsOf(LAYER, "Blending", { bind: BIND.layer }),
+        ],
       },
       {
         title: title("Mask"),

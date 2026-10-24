@@ -1685,6 +1685,8 @@
   "app.problemsPanel.title": "Probleme",
   "app.profilesPresets.fillIn": "Ausfüllen",
   "app.profilesPresets.fillInBlurb": "Die Felder der Vorlage ausfüllen",
+  "app.profilesPresets.form": "Formular",
+  "app.profilesPresets.formBlurb": "Die Felder der Vorlage in einem Formular ausfüllen, mit Vorschau",
   "app.profilesPresets.view": "Ansicht",
   "app.propertiesPanel.askAssistant": "KI-Assistenten fragen…",
   "app.propertiesPanel.bleed": "Anschnitt",

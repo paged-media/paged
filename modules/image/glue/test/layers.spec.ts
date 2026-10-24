@@ -32,6 +32,7 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import {
   EMPTY_LAYER_STACK,
+  PLAIN_LAYER_PARITY,
   wrapEngine,
   type ImageWasmModule,
 } from "../src/engine";
@@ -328,6 +329,8 @@ describe("the panel's Layers section", () => {
     maskEnabled: true,
     clipped: false,
     group: null,
+    ...PLAIN_LAYER_PARITY,
+    locks: { ...PLAIN_LAYER_PARITY.locks },
     ...over,
   });
 
@@ -500,6 +503,8 @@ describe("the layer row's clip toggle", () => {
     maskEnabled: true,
     clipped: false,
     group: null,
+    ...PLAIN_LAYER_PARITY,
+    locks: { ...PLAIN_LAYER_PARITY.locks },
     ...over,
   });
   const history = () => ({
@@ -642,6 +647,8 @@ describe("the layers panel's groups", () => {
     maskEnabled: true,
     clipped: false,
     group: null,
+    ...PLAIN_LAYER_PARITY,
+    locks: { ...PLAIN_LAYER_PARITY.locks },
     ...over,
   });
   const history = () => ({

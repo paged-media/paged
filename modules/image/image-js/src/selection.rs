@@ -195,6 +195,18 @@ impl SessionSelection {
         Some(Arc::clone(cov))
     }
 
+    /// The explicit selection of `handle`, trivial or not — what a verb
+    /// that ACTS on the selected pixels takes (Layer via Copy of a
+    /// select-all is the whole layer), where `mask_for` is what a mask
+    /// binds.
+    pub fn explicit_for(&self, handle: u32) -> Option<Arc<SelectionCoverage>> {
+        let bound = self.bound?;
+        if bound.handle != handle {
+            return None;
+        }
+        self.coverage.clone()
+    }
+
     pub fn revision(&self) -> u64 {
         self.revision
     }
