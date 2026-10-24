@@ -152,7 +152,10 @@ function parseCombo(key: string): KeyCombo {
   if (parts.length === 0 || parts.some((p) => !p)) {
     throw new Error(`KeybindingRegistry: malformed key "${key}"`);
   }
-  const last = parts[parts.length - 1];
+  // `space` names the space bar (a `" "` key cannot be written in a combo:
+  // the string is trimmed). Editor ADR 299: Word's Cmd+Space.
+  const last =
+    parts[parts.length - 1] === "space" ? " " : parts[parts.length - 1];
   const mods = parts.slice(0, -1);
   const combo: KeyCombo = {
     key: last,

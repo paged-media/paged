@@ -219,9 +219,9 @@ describe("a plugin content type's keys and chrome (editor ADRs 298, 299)", () =>
     expect(document.querySelector("[data-status-bar]")).toBeNull();
     expect(document.querySelector('[data-testid="word-home"]')).toBeNull();
     expect(
-      document.querySelector("[data-control-bar]")?.getAttribute(
-        "data-control-bar",
-      ),
+      document
+        .querySelector("[data-control-bar]")
+        ?.getAttribute("data-control-bar"),
     ).toBe("text");
   });
 
@@ -252,15 +252,15 @@ describe("a plugin content type's keys and chrome (editor ADRs 298, 299)", () =>
     });
     await t.caretAt(0);
     expect(
-      document.querySelector("[data-control-bar]")?.getAttribute(
-        "data-control-bar",
-      ),
+      document
+        .querySelector("[data-control-bar]")
+        ?.getAttribute("data-control-bar"),
     ).toBe("contributed");
     expect(document.querySelector('[data-testid="word-home"]')).not.toBeNull();
     expect(
-      document.querySelector("[data-status-bar]")?.getAttribute(
-        "data-status-bar",
-      ),
+      document
+        .querySelector("[data-status-bar]")
+        ?.getAttribute("data-status-bar"),
     ).toBe("wordDocument");
     expect(document.querySelector('[data-testid="word-words"]')).not.toBeNull();
     // Dropping the document context takes both away.
