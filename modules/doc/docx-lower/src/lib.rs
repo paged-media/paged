@@ -63,10 +63,11 @@ const PARA_PREFIX: &str = "ParagraphStyle/docx-";
 const START_PARAGRAPH: &str = "paragraphStartParagraph";
 
 /// The paragraph composer's property path (settable from core protocol 65)
-/// and IDML's name for the Adobe Single-line Composer, the native analogue
-/// of Word's first-fit line breaking.
+/// and the engine's Word first-fit composer (engine ADR 1016, doc ADR 617):
+/// Word's own line breaking, not InDesign's Single-line Composer, which
+/// compresses justified lines Word would break.
 pub const PARAGRAPH_COMPOSER: &str = "paragraphComposer";
-pub const SINGLE_LINE_COMPOSER: &str = "HL Single";
+pub const WORD_FIRST_FIT_COMPOSER: &str = "Word First-fit";
 
 /// IDML's span/split columns (`SpanColumnType` and companions; settable from
 /// core protocol 64, ADR 028 addendum). A mid-page column change lowers to
@@ -1071,12 +1072,11 @@ impl Lowering {
         props.push(boolean("paragraphHyphenation", self.auto_hyphenation));
         // Word breaks a paragraph's lines first-fit, one line at a time; the
         // engine's default (InDesign's Paragraph Composer) weighs the whole
-        // paragraph and often breaks a word earlier. The Adobe Single-line
-        // Composer is the native first-fit. Every paragraph style lowered
-        // from Word roots here, so all of them inherit it (an engine before
-        // protocol 65 refuses the path; the style batch then applies op by
-        // op and says so).
-        props.push(text(PARAGRAPH_COMPOSER, SINGLE_LINE_COMPOSER));
+        // paragraph and often breaks a word earlier. The engine's Word
+        // first-fit composer breaks the way Word does (ADR 617). Every
+        // paragraph style lowered from Word roots here, so all of them
+        // inherit it.
+        props.push(text(PARAGRAPH_COMPOSER, WORD_FIRST_FIT_COMPOSER));
         // Word sets text without pair kerning and without ligatures unless
         // a document asks (`w:kern`, `w14:ligatures`, neither imported yet);
         // the engine's defaults are InDesign's, both on. Compared with Word
@@ -1346,9 +1346,8 @@ impl Lowering {
         // clips the picture). The engine (InDesign's rule, core `17d3d3d`)
         // grows a line for its object only under AUTO leading; under a fixed
         // one the object overlaps the lines above. So a body paragraph with
-        // a picture takes auto leading, which a leading of 0 asks for. Its
-        // text lines then step 1.2 x their size rather than Word's pitch:
-        // close, and nothing for a picture alone in its paragraph.
+        // a picture takes auto leading, which a leading of 0 asks for, at
+        // the percentage that makes its text lines step Word's pitch.
         let exact = {
             let style = self.style_of(p).map(str::to_owned);
             self.resolve_spacing(p.props.line_spacing, style.as_deref())
@@ -1358,6 +1357,19 @@ impl Lowering {
             can_carry.is_some() && !exact && p.runs.iter().any(|r| !r.images.is_empty());
         if grows_for_picture {
             props.push(len("characterLeading", 0.0));
+            // Auto leading scaled to Word's pitch, so the paragraph's text
+            // lines keep Word's step (13.8 pt for 12 pt Times New Roman, not
+            // 1.2 x 12) while the picture's line still grows to the picture
+            // (ADR 617).
+            let style = self.style_of(p).map(str::to_owned);
+            let first = p.runs.iter().find(|r| !r.text.is_empty());
+            let size_pt = self
+                .resolve_face(first, style.as_deref())
+                .1
+                .map_or(10.0, |h| h as f32 / 2.0);
+            if let Some(pitch) = self.paragraph_pitch(p).filter(|_| size_pt > 0.0) {
+                props.push(len("paragraphAutoLeading", pitch / size_pt * 100.0));
+            }
         } else if let Some(pt) = self.paragraph_pitch(p) {
             let inherited = self
                 .para_base(explicit.clone())
@@ -3479,13 +3491,14 @@ mod tests {
         );
     }
 
-    /// Word breaks lines first-fit; the native analogue is the Adobe
-    /// Single-line Composer. Every paragraph style lowered from Word roots
+    /// Word breaks lines first-fit; the engine's Word first-fit composer
+    /// does the same (ADR 617). Every paragraph style lowered from Word roots
     /// in the docDefaults base style, which selects it, so every Word
     /// paragraph (body, headings, list items, synthesized direct formatting)
     /// inherits it.
     #[test]
-    fn every_word_paragraph_style_inherits_the_single_line_composer__feat__plugin_doc_read_path() {
+    fn every_word_paragraph_style_inherits_the_word_first_fit_composer__feat__plugin_doc_read_path()
+    {
         let mut doc = DocxDocument::default();
         doc.styles.styles.push(Style {
             style_id: "Normal".into(),
@@ -3525,7 +3538,7 @@ mod tests {
         let root = by_id[format!("{PARA_PREFIX}Default").as_str()];
         assert_eq!(
             composer(root),
-            Some(PropValue::Text(SINGLE_LINE_COMPOSER.into()))
+            Some(PropValue::Text(WORD_FIRST_FIT_COMPOSER.into()))
         );
         // Every paragraph style chains to it, and none overrides it.
         for s in l
