@@ -143,6 +143,7 @@ const HOST_MENU = [
   "File/New from a brief…",
   "File/Open recent",
   "File/Close",
+  "File/Automate/Batch…",
   "File/Package…",
   "File/Print…",
   "Layout/Margins and columns…",

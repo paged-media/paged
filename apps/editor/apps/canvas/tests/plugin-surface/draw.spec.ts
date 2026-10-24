@@ -264,6 +264,8 @@ const COMMANDS = [
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
   "media.paged.draw.command.applyGuideColor",
+  "media.paged.draw.command.rasterizeOptions",
+  "media.paged.draw.command.rasterize",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
@@ -669,7 +671,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(27);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(132);
+    expect(COMMANDS).toHaveLength(134);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────

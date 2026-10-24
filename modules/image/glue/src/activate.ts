@@ -51,6 +51,7 @@ import de from "../locales/de.json" with { type: "json" };
 import manifest from "../manifest.json";
 
 import { createImageSession } from "./session";
+import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
@@ -1335,8 +1336,13 @@ export function activate(host: BundleHost): BundleHandle {
         publishPropertyLists(host))
       : null;
 
+  // PM-0015 — the CPU-lane steps over an encoded picture as actions
+  // (actions@1, extensions ADR 344), for data's asset columns and scripts.
+  const actionsSub = registerImageActions(host);
+
   return {
     dispose() {
+      actionsSub?.dispose();
       // Providers first, then the subscription that feeds them, then
       // the session they read. Reverse registration order: a handle
       // disposed after its session would be a live provider over a
