@@ -48,6 +48,9 @@ orientation only.
 | G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
 | H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
+| Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                     | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
+| Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                      | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
+| Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                            | ADR 293, `panels/template/template-notice.tsx`                                      |
 
 Corrections to the plan found while building:
 

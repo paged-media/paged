@@ -27,16 +27,20 @@
 // This entry is small: the editor itself loads on the first call, so a page
 // pays for it only when it mounts one. The page must be cross-origin
 // isolated (COOP `same-origin`, COEP `credentialless` or `require-corp`):
-// the engine shares memory with its worker.
+// the engine shares memory with its worker. On a page that is not, the call
+// loads nothing and rejects with an `EditorError` of code
+// `notCrossOriginIsolated`, whose message names the iframe path.
 
 import { assetBase, setAssetBase } from "./asset-base.js";
 import type {
   EditorConfig,
+  EditorError,
   EditorHandle,
   MountedEditor,
   MountOptions,
 } from "./types.js";
 import fonts from "virtual:paged-editor/fonts";
+import * as errors from "virtual:paged-editor/errors";
 
 export type * from "./types.js";
 
@@ -52,10 +56,7 @@ function engineWasm(config: { engineWasm?: string }): string {
 }
 
 async function runtime(config: { assetBase?: string }): Promise<Runtime> {
-  if (typeof crossOriginIsolated !== "undefined" && !crossOriginIsolated)
-    throw new Error(
-      "@paged-media/editor: the page is not cross-origin isolated; serve it with Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: credentialless (or use @paged-media/editor/iframe)",
-    );
+  errors.assertEmbeddable();
   setAssetBase(config.assetBase);
   const rt = await import("virtual:paged-editor/runtime");
   const base = assetBase();
@@ -68,6 +69,12 @@ async function runtime(config: { assetBase?: string }): Promise<Runtime> {
       : fonts,
   );
   return rt;
+}
+
+/** Whether `value` is an error the editor refused with (`EditorError`):
+ *  branch on its `code`. Structural, so it holds for an error from a frame. */
+export function isEditorError(value: unknown): value is EditorError {
+  return errors.isEditorError(value);
 }
 
 /**
