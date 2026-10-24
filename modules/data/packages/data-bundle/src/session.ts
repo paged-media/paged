@@ -24,6 +24,7 @@
 // here (CLAUDE.md hard rule) — it orchestrates the Rust engine.
 
 import { createDataDoor, type DataDoor } from "./data-door";
+import { createAssetPipeline, type AssetColumnDef } from "./assets";
 import type { TransformDefJson } from "./engine";
 import type {
   BundleHost,
@@ -540,6 +541,15 @@ export interface DataSourceSession
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Data ADR 563 — declare (or, with null, undeclare) `<query>.<field>` an
+   *  asset column: an image binding over it fetches (consented origins
+   *  only), keeps (by content hash) and runs the chain before placing. */
+  setAssetColumn(
+    query: string,
+    field: string,
+    def: AssetColumnDef | null,
+  ): void;
+  assetColumns(): Record<string, AssetColumnDef>;
   /** Define (or redefine) a transform (data ADR 562); it runs at the next
    *  refresh, before the queries. Null when the engine has no transforms. */
   defineTransform(def: TransformDefJson): Promise<string | null>;
@@ -1325,6 +1335,9 @@ export function createSession(
       refresh: Object.fromEntries(refreshPolicies),
       ...(previewAt.size > 0 ? { preview: Object.fromEntries(previewAt) } : {}),
       ...(appliedSet !== null ? { dataSet: appliedSet } : {}),
+      ...(assetColumns.size > 0
+        ? { assets: Object.fromEntries(assetColumns) }
+        : {}),
       ...(catalogue.fields.length > 0 || Object.keys(catalogue.runs).length > 0
         ? {
             catalogue: {
@@ -2342,6 +2355,9 @@ export function createSession(
     catalogue.fields.push(...(saved.catalogue?.fields ?? []));
     Object.assign(catalogue.runs, saved.catalogue?.runs ?? {});
 
+    assetColumns.clear();
+    for (const [k, d] of Object.entries(saved.assets ?? {}))
+      assetColumns.set(k, d);
     for (const [name, p] of Object.entries(saved.refresh ?? {})) {
       const policy = readPolicy(p);
       if (policy.policy !== "manual") refreshPolicies.set(name, policy);
@@ -2529,10 +2545,50 @@ export function createSession(
         []) as ReturnType<Parameters<typeof createDataDoor>[0]["bindings"]>,
   });
 
+  // Data ADR 563 — asset columns (`<query>.<field>` → its pipeline).
+  const assetColumns = new Map<string, AssetColumnDef>();
+  const assets = createAssetPipeline(host, {
+    consentedOrigins: () => consentedOriginsSafe(),
+  });
+  /** The asset resolver of an image binding over an asset column, if any. */
+  function assetResolverOf(bindingId: string) {
+    const b = (
+      (
+        engine?.payload() as
+          | {
+              bindings?: {
+                id: string;
+                kind: string;
+                query?: string;
+                expr?: string;
+              }[];
+            }
+          | undefined
+      )?.bindings ?? []
+    ).find((x) => x.id === bindingId);
+    const def =
+      b?.kind === "image" && b.query && b.expr
+        ? assetColumns.get(`${b.query}.${b.expr.trim()}`)
+        : undefined;
+    if (!def) return undefined;
+    return async (uri: string) => {
+      const r = await assets.resolve(uri, def);
+      return r.ok ? { uri: r.uri } : { reason: r.reason };
+    };
+  }
+
   let preObjectWrite: string | null = null;
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    setAssetColumn(query, field, def) {
+      const key = `${query}.${field}`;
+      if (def) assetColumns.set(key, { ...def });
+      else assetColumns.delete(key);
+      markDirty();
+      emit();
+    },
+    assetColumns: () => Object.fromEntries(assetColumns),
     async defineTransform(def) {
       const e = await ensureEngine();
       if (typeof e.define_transform !== "function")
@@ -3593,6 +3649,7 @@ export function createSession(
               lowered as never,
               tgt.elementId,
               tgt.fit,
+              assetResolverOf(id),
             );
           } else {
             host.log.info(
@@ -3869,6 +3926,7 @@ export function createSession(
               lowered as never,
               tgt.elementId,
               tgt.fit,
+              assetResolverOf(bindingId),
             );
           }
         }

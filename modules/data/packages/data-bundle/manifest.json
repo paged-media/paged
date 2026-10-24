@@ -32,6 +32,12 @@
     },
     "data": {
       "serve": true
+    },
+    "actions": {
+      "run": true
+    },
+    "storage": {
+      "blob": true
     }
   },
   "contributes": {
