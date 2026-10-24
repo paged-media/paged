@@ -538,21 +538,44 @@ families recorded so far (`sheet-conformance/oracle/excel/recorded/`). Evaluated
   the bars are drawn from the table's top, not from the first workbook row: no read reports the
   band's height.
 - **Rediscovery** finds tables placed by this version; a table placed before the binding
-  carried its table record is not found again. Charts are found by their binding; one placed
-  before its box was recorded keeps the box it is given on discovery in the session only (a
-  discovery writes nothing: it would be an undo step of its own) until its next redraw records
-  it, and a chart whose binding recorded its box but not its art (placed by the version just
-  before) is not followed for a move made before the document was reopened. A paginated chain is
-  found again from the record on its first frame, which is written only on a host that can amend
-  an undo step (engine ADR 1004) or, for a pass that refreshes its tables in place, in that pass's
-  own batch; a chain paginated before the record, or on a host without amend that added or
-  deleted tables, is not rediscovered. The chain's first frame stays a text frame (it is not a
-  sheet frame to enter).
+  carried its table record is not found again (it records neither its table nor what it shows).
+  Charts are found by their binding; one placed before its box was recorded keeps the box it is
+  given on discovery in the session only (a discovery writes nothing: it would be an undo step
+  of its own) until its next redraw records it. A chart whose binding recorded its box but not
+  its art (placed by the version just before ADR 522's amendment) is followed like a new one: its
+  art is where its first element stood when the chart was drawn at that box, which drawing the
+  chart again there gives (`chartArtAt`), so a move made before the document was reopened is
+  followed. Bindings name their sheet, and a sheet renamed (in the session or through the object
+  model) has its placed tables' bindings and its chains' records re-stamped with the new name by
+  the next refresh, so they are found again on reopen. A paginated chain is found again from the
+  record on its first frame. The record names the chain's tables by id, and those ids exist only
+  once the pagination's batch committed (a metadata value is never rewritten by in-batch
+  handles, and the contract has no read that lists a story's tables to resolve a record without
+  them), so a first pagination writes the record into its own undo step through
+  `mutate(…, { amend })` (engine ADR 1004); a pass that refreshes its tables in place carries it in its own
+  batch. On a host that cannot amend, a first pagination keeps no record until its first
+  in-place refresh: the only other way would be a second undo step after the user's placement,
+  which the one-step rule forbids. Every host in this repository amends (the bundle takes the
+  workspace's plugin-sdk, which reports `document.mutate.amend@1`); the fallback is for a host
+  built on another SDK. A chain paginated before the record is not rediscovered. The chain's
+  first frame stays a text frame (it is not a sheet frame to enter).
 - **Placement.** A view, print options and fixed sizing are for one frame: a chain paginates its
-  range, and a defined name is placed by name. On a host without in-batch handles each area of a
-  print area placed without a chain is its own undo step. A chartsheet's chart stays in the saved file when deleted (the tab is the
-  chart; the journal replays the delete). A version before this one does not read the deleted
-  chart slots: opening bytes saved after a delete, it sees the later charts one index lower.
+  range, and a defined name is placed by name. A print area of several ranges is one batch and
+  one undo step; only an engine before protocol 66, which cannot name a table inside a batch,
+  takes each area as its own step (the area's content is written through the table it has just
+  made). The in-tree engine has the handles.
+- **A chartsheet's chart** stays in the saved file when deleted (ADR 522, decision 3; the
+  delete replays from the journal when the workbook is opened again here). Excel has no chart
+  sheet without its chart, so taking the chart out of the file is deleting the sheet, and a
+  sheet is not deleted from a workbook that has charts: their series name cells by sheet
+  position, and re-pointing them, and the chart parts the deleted sheet's drawing held, is the
+  sheet-deletion work this round does not do.
+- **Chart indices across versions.** A version before ADR 522 does not read the deleted chart
+  slots: opening bytes saved after a delete, it sees the later charts one index lower. No
+  marker can fix that for it: an older version numbers the charts by the chart parts the package
+  carries, so the only thing it would count at the deleted index is a chart part, which is the
+  deleted chart kept in the file. The slots ride beside the bytes (`chartSlots`,
+  `workbook.chart-slots.json`) for every version from this one on.
 - **Colours.** `getStyle` and the page lowering resolve theme and indexed colours through the
   theme part and the workbook palette; conditional-format colour-scale stops still use the
   default Office theme.

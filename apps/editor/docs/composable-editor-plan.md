@@ -1272,6 +1272,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   chain's first pagination and every area of a print area are one batch on a host with in-batch
   handles); `apps/cli/test/cli-sheet.spec.ts` runs
   placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
+  The leftovers (2026-10-24, sheet ADR 522 amendment 2): a chart placed by the version that
+  recorded its box but not its art follows a move made before reopening; a renamed sheet's
+  placed tables and chains are re-stamped with the new name and found again on reopen. Left,
+  with the reason in `status.md`: a first pagination on a host that cannot amend (none in this
+  repository) keeps no record until its first refresh, a chartsheet's chart stays in the file
+  (deleting it is deleting the sheet), and an older version sees charts renumbered after a
+  delete (it counts chart parts).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
   `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
