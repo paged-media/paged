@@ -1232,7 +1232,12 @@ Per module:
   command stays for a host without it; `modules/draw/docs/status.md`). Since the ADRs'
   amendments a script's edits are followed too (a run is one step its reply names), a typed
   recipe parameter write rebuilds its artwork in the same step (`ObjectWrite.followUp`),
-  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox.
+  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox. The
+  leftovers are closed (2026-10-24): an Objects on a Path Update, which moves its own sources,
+  notes its step so the automatic update does not place the objects a second time in it, and
+  every recipe panel's note says what the automatic update does; what stays (a script run
+  that names no step, recipe records outside undo, the width profile as an outline) is
+  inherent and `status.md` says why.
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a

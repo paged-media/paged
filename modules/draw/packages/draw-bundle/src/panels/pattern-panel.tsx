@@ -66,7 +66,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.patternPanel", {
   summary:
     "Tile the selected artwork into rows and columns of copies you can re-plan later. The result is artwork, not a pattern swatch.",
-  note: "A pattern here makes real copies of the artwork, which you can re-plan, select, delete or release. It is not a fill you can apply to other objects: the document format has no pattern swatch. The copies always sit above the original; the overlap setting only decides how the copies cover each other, and the vertical choice wins. Dimming sets the copies' opacity and is saved with the document. Making, re-planning, releasing and deleting the copies are one undo step each; the saved settings are kept outside undo.",
+  note: "A pattern here makes real copies of the artwork, which you can re-plan, select, delete or release. It is not a fill you can apply to other objects: the document format has no pattern swatch. The copies always sit above the original; the overlap setting only decides how the copies cover each other, and the vertical choice wins. Dimming sets the copies' opacity and is saved with the document. While Update automatically is on, editing the original re-plans the copies in the same undo step; with it off, they change only when you choose Re-plan. Making, re-planning, releasing and deleting the copies are one undo step each; the saved settings are kept outside undo.",
   rowLabel:
     "{layout} · {columns} × {rows} ({requested, plural, one {# copy} other {# copies}} requested, {placed} placed)",
   heading: "Patterns",
