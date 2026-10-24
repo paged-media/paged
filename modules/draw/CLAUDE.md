@@ -279,10 +279,15 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
   (`shift+d`) stay where they are. Free now: `shift+o` only; paged.image
   has since taken `shift+z` for its raster type tool.
+  WP6.7's ten distortion tools (the Liquify flyout, Puppet Warp, the
+  Perspective Grid / Selection pair) are KEYLESS for that reason: their
+  Illustrator keys (`shift+r`, `shift+p`, `shift+v`) are all held.
 
-**`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
-symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-
-path (`objects-on-path.json`). The last one is the only feature whose
+**`.paged` CONTAINER PARTS: there are now EIGHT** — graphic styles,
+symbols, live paint, pattern, repeat, blend (`blend.json`), objects-on-
+path (`objects-on-path.json`) and, since WP6.7, the perspective grids
+(`perspective-grid.json`, one grid per page: a VIEW setting written off
+the undo stack, ADR 363 — the artwork on a plane carries its own link). The last one is the only feature whose
 recipe is NOT load-bearing: each object's HOME transform rides its own
 metadata link, so release and update work on a host with no container
 writer and only the distribution PARAMETERS are lost there.
