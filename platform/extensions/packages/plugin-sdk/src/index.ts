@@ -65,7 +65,47 @@ export {
   silentConsole,
   fakeDataService,
   type FakeDataTable,
+  fakeMlProvider,
+  type FakeMlProvider,
+  type FakeMlProviderOptions,
 } from "./testing.js";
+// Extensions ADR 345 — the ML doors' shared backend, the request checks,
+// and the client of the local generative host (Tier B) with its provider.
+export {
+  createMlRegistry,
+  checkMlRequest,
+  mlFeature,
+  mlUnavailable,
+  ML_CAPABILITIES,
+  ML_MAX_REFERENCES,
+  type MlBackend,
+  type MlProvider,
+  type MlProviderAnswer,
+  type MlProviderHandle,
+} from "./doors-ml.js";
+export {
+  createMlHostClient,
+  mlHostProvider,
+  maskToImage,
+  toBase64,
+  MlHostError,
+  ML_HOST_DEFAULT_URL,
+  type MlHostClient,
+  type MlHostClientOptions,
+  type MlHostConfig,
+  type MlHostHealth,
+  type MlHostJob,
+  type MlHostJobRequest,
+  type MlHostJobState,
+  type MlHostProvider,
+  type MlHostProviderOptions,
+  type MlPngCodec,
+} from "./ml-host-client.js";
+export {
+  mlObjectModel,
+  ML_EDIT_COMMAND,
+  ML_GENERATE_COMMAND,
+} from "./ml-commands.js";
 // Extensions ADRs 343, 344 — the data door's and the action registry's
 // shared backends (the editor builds one of each and injects it into every
 // bundle host), and the cache key of an action chain.

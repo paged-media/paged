@@ -123,6 +123,7 @@ import {
   type ActionBackend,
   type DataBackend,
 } from "./doors-data-actions.js";
+import { createMlRegistry, type MlBackend } from "./doors-ml.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -187,6 +188,7 @@ export interface HarnessOptions
       | "dataProviders"
       | "data"
       | "actions"
+      | "ml"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -462,6 +464,10 @@ export interface HeadlessHost {
   readonly data: DataBackend;
   /** The SHARED action registry (`actions@1`, ADR 344). */
   readonly actions: ActionBackend;
+  /** The SHARED ML backend (`ml.*@1`, extensions ADR 345): register a
+   *  provider (`fakeMlProvider`, `mlHostProvider`) and every bundle host
+   *  here reaches it. */
+  readonly ml: MlBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1082,6 +1088,8 @@ export async function createHeadlessHost(
   // the same way.
   const data = options.data ?? createDataRegistry();
   const actions = options.actions ?? createActionRegistry();
+  // Extensions ADR 345 — the ML backend, shared the same way.
+  const ml = options.ml ?? createMlRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1115,6 +1123,7 @@ export async function createHeadlessHost(
       dataProviders,
       data,
       actions,
+      ml,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1300,6 +1309,7 @@ export async function createHeadlessHost(
     dataProviders,
     data,
     actions,
+    ml,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {

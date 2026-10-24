@@ -71,6 +71,15 @@ const RENDERING = new Set([
   "resourceProvider",
 ]);
 const CLIPBOARD = new Set(["none", "vector", "full"]);
+const ML_CAPABILITIES = new Set([
+  "segment",
+  "matting",
+  "inpaint",
+  "superres",
+  "landmarks",
+  "generate",
+  "edit",
+]);
 const SCOPES = new Set(["broad", "scoped"]);
 // K-13 — `doubleClick` is the ONE entry gesture for canvas content.
 // See EditContextContribution.entry: a user learns "double-click to go
@@ -461,6 +470,7 @@ function validateManifest(manifest, manifestDir) {
             "dataProviders",
             "data",
             "actions",
+            "ml",
             "clipboard",
             "wasm",
             "workers",
@@ -507,6 +517,17 @@ function validateManifest(manifest, manifestDir) {
             err(`unknown role "capabilities.${cap}.${k}" (${roles.join("|")})`);
           else if (typeof c[k] !== "boolean")
             err(`"capabilities.${cap}.${k}" must be a boolean`);
+        }
+      }
+      // The ML doors (extensions ADR 345): the capabilities a bundle uses.
+      if (caps.ml !== undefined) {
+        if (
+          !Array.isArray(caps.ml) ||
+          !caps.ml.every((c) => ML_CAPABILITIES.has(c))
+        ) {
+          err(
+            `"capabilities.ml" entries must be ${[...ML_CAPABILITIES].join("|")}`,
+          );
         }
       }
       const doc = caps.document;

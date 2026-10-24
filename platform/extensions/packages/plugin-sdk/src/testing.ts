@@ -33,10 +33,21 @@ import type {
   DataRowEdit,
   DataService,
   DataTableInfo,
+  MlCallOptions,
+  MlCapability,
+  MlImage,
+  MlMask,
+  MlRequests,
+  MlTier,
   ProviderField,
   ProviderRecordSet,
 } from "@paged-media/plugin-api";
 
+import type {
+  MlProvider,
+  MlProviderAnswer,
+  MlProviderHandle,
+} from "./doors-ml.js";
 import type { StorageBacking } from "./host-impl.js";
 
 /** A `StorageBacking` over an in-memory map: what `host.storage` persists
@@ -183,5 +194,193 @@ export function fakeDataService(
       return { display: value === null ? "" : String(value), value };
     },
     rows: (name) => table(name).rows,
+  };
+}
+
+// ------------------------------------------------------------------ ml
+
+/** Options of a {@link fakeMlProvider}. */
+export interface FakeMlProviderOptions {
+  id?: string;
+  title?: string;
+  tier?: MlTier;
+  capabilities?: readonly MlCapability[];
+  healthy?: boolean;
+  model?: string;
+  /** Progress steps a call reports before it answers (default 2). */
+  steps?: number;
+}
+
+/** A fake ML provider with deterministic answers, for a bundle's tests and
+ *  the editor's e2e (extensions ADR 345). It computes, it does not imitate a
+ *  model:
+ *  - segment and matting: the pixels brighter than mid-grey;
+ *  - inpaint: the masked pixels set to the mean of the unmasked ones;
+ *  - superres: nearest-neighbour enlargement;
+ *  - landmarks: one face, the image's centre third, with five points;
+ *  - generate: a horizontal gradient of the asked size, its red channel
+ *    the prompt's length mod 256;
+ *  - edit: the masked pixels (all, without a mask) inverted.
+ *  `setHealthy` flips its status; it calls the registered `changed`. */
+export interface FakeMlProvider extends MlProvider {
+  setHealthy(healthy: boolean): void;
+  /** Bind to the registry handle so `setHealthy` announces itself. */
+  attach(handle: MlProviderHandle): void;
+  readonly calls: Array<{ capability: MlCapability; request: unknown }>;
+}
+
+export function fakeMlProvider(
+  options: FakeMlProviderOptions = {},
+): FakeMlProvider {
+  let healthy = options.healthy ?? true;
+  let handle: MlProviderHandle | null = null;
+  const calls: FakeMlProvider["calls"] = [];
+  const luminance = (img: MlImage): MlMask => {
+    const data = new Uint8Array(img.width * img.height);
+    for (let i = 0; i < data.length; i++) {
+      const y =
+        0.299 * img.data[i * 4]! +
+        0.587 * img.data[i * 4 + 1]! +
+        0.114 * img.data[i * 4 + 2]!;
+      data[i] = y > 127 ? 255 : 0;
+    }
+    return { width: img.width, height: img.height, data };
+  };
+  return {
+    id: options.id ?? "fake.ml",
+    title: options.title ?? "Fake ML provider",
+    tier: options.tier ?? "A",
+    capabilities: options.capabilities ?? [
+      "segment",
+      "matting",
+      "inpaint",
+      "superres",
+      "landmarks",
+      "generate",
+      "edit",
+    ],
+    calls,
+    status: () =>
+      healthy
+        ? { healthy, model: options.model ?? "fake-model" }
+        : { healthy, detail: "fake provider is down" },
+    setHealthy(next) {
+      healthy = next;
+      handle?.changed();
+    },
+    attach(h) {
+      handle = h;
+    },
+    async run<C extends MlCapability>(
+      capability: C,
+      request: MlRequests[C],
+      opts: MlCallOptions,
+    ): Promise<MlProviderAnswer<C>> {
+      calls.push({ capability, request });
+      const total = options.steps ?? 2;
+      for (let step = 1; step <= total; step++) {
+        opts.signal?.throwIfAborted();
+        opts.onProgress?.({ step, total });
+        await Promise.resolve();
+      }
+      opts.signal?.throwIfAborted();
+      const answer = (value: unknown) =>
+        value as unknown as MlProviderAnswer<C>;
+      switch (capability as MlCapability) {
+        case "segment":
+          return answer({
+            mask: luminance((request as MlRequests["segment"]).image),
+            score: 1,
+          });
+        case "matting":
+          return answer({
+            alpha: luminance((request as MlRequests["matting"]).image),
+          });
+        case "inpaint": {
+          const { image, mask } = request as MlRequests["inpaint"];
+          const data = new Uint8ClampedArray(image.data);
+          const sum = [0, 0, 0, 0];
+          let n = 0;
+          for (let i = 0; i < mask.data.length; i++)
+            if (mask.data[i]! < 128) {
+              for (let c = 0; c < 4; c++) sum[c]! += image.data[i * 4 + c]!;
+              n++;
+            }
+          for (let i = 0; i < mask.data.length; i++)
+            if (mask.data[i]! >= 128)
+              for (let c = 0; c < 4; c++)
+                data[i * 4 + c] = n ? Math.round(sum[c]! / n) : 0;
+          return answer({
+            image: { width: image.width, height: image.height, data },
+          });
+        }
+        case "superres": {
+          const { image, scale = 2 } = request as MlRequests["superres"];
+          const w = image.width * scale;
+          const h = image.height * scale;
+          const data = new Uint8ClampedArray(w * h * 4);
+          for (let y = 0; y < h; y++)
+            for (let x = 0; x < w; x++) {
+              const s =
+                (Math.floor(y / scale) * image.width + Math.floor(x / scale)) *
+                4;
+              data.set(image.data.subarray(s, s + 4), (y * w + x) * 4);
+            }
+          return answer({ image: { width: w, height: h, data } });
+        }
+        case "landmarks": {
+          const { image } = request as MlRequests["landmarks"];
+          const box = {
+            x: image.width / 3,
+            y: image.height / 3,
+            width: image.width / 3,
+            height: image.height / 3,
+          };
+          const at = (fx: number, fy: number) => ({
+            x: box.x + box.width * fx,
+            y: box.y + box.height * fy,
+          });
+          return answer({
+            faces: [
+              {
+                box,
+                points: [
+                  at(0.3, 0.35),
+                  at(0.7, 0.35),
+                  at(0.5, 0.55),
+                  at(0.35, 0.75),
+                  at(0.65, 0.75),
+                ],
+              },
+            ],
+          });
+        }
+        case "generate": {
+          const { width, height, prompt } = request as MlRequests["generate"];
+          const data = new Uint8ClampedArray(width * height * 4);
+          for (let y = 0; y < height; y++)
+            for (let x = 0; x < width; x++) {
+              const i = (y * width + x) * 4;
+              data[i] = prompt.length % 256;
+              data[i + 1] = Math.round((x / Math.max(1, width - 1)) * 255);
+              data[i + 2] = Math.round((y / Math.max(1, height - 1)) * 255);
+              data[i + 3] = 255;
+            }
+          return answer({ image: { width, height, data } });
+        }
+        case "edit": {
+          const { image, mask } = request as MlRequests["edit"];
+          const data = new Uint8ClampedArray(image.data);
+          for (let i = 0; i < image.width * image.height; i++)
+            if (!mask || mask.data[i]! >= 128)
+              for (let c = 0; c < 3; c++)
+                data[i * 4 + c] = 255 - image.data[i * 4 + c]!;
+          return answer({
+            image: { width: image.width, height: image.height, data },
+          });
+        }
+      }
+      throw new Error(`fakeMlProvider: unknown capability ${capability}`);
+    },
   };
 }

@@ -61,6 +61,7 @@ and each one names the plugins that follow it and those that do not.
 | [338](338-items-render-to-pixels.md) | Items render to pixels: a region, the named items alone, raw RGBA, a transparent ground | Accepted 2026-10-24 |
 | [343](343-the-data-door.md) | The data door: one bundle serves the document's data, any bundle reads, writes and binds it | Accepted 2026-10-24 |
 | [344](344-the-actions-door.md) | The actions door: named pure steps, registered by any bundle, run and cached by any | Accepted 2026-10-24 |
+| [345](345-the-ml-doors.md) | The ML doors: seven typed capabilities, two tiers, nothing off the machine | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).
