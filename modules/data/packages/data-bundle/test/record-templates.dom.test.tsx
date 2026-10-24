@@ -16,7 +16,7 @@ import {
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 
-import type { BundleHost, ElementId } from "@paged-media/plugin-api";
+import type { ElementId } from "@paged-media/plugin-api";
 import { covers, waitFor } from "@paged-media/test-kit";
 
 import { readiness, unitEnv, type DataEnv } from "./conformance/env";
@@ -63,10 +63,12 @@ function selectFrameWithText(
 ): void {
   const frame = { kind: "textFrame", id: "tf1" } as ElementId;
   env.fake.setSelection([frame]);
-  const doc = env.host.document as BundleHost["document"] & {
-    elementGeometry: unknown;
-    storyContent: unknown;
-  };
+  // The fake answers only what it was built with: these two reads are set
+  // on the surface itself (the session reads it through its proxies).
+  const doc = env.host.document as unknown as Record<
+    "elementGeometry" | "storyContent",
+    unknown
+  >;
   doc.elementGeometry = async (ids: ElementId[]) =>
     ids.map((id) => ({ id, storyId: "story1" }));
   doc.storyContent = async (storyId: string) =>
