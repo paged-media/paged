@@ -191,7 +191,7 @@ test.describe("journey · paged.data dataset panel", () => {
     await page.getByRole("button", { name: /publish provider/i }).click();
     await expect(
       page.getByText(
-        /provider ".*-dataset" \(revision .*\) is shared with other plugins/i,
+        /provider ".*-dataset", revision .*, is shared with other plugins/i,
       ),
     ).toBeVisible({
       timeout: 10_000,
