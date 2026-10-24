@@ -281,6 +281,32 @@ export const F7_PLACED_IMAGE: CorpusFixture & {
   },
 };
 
+/** F8 — the F7 frame with the ring placed by its OWN transform rather
+ *  than stretched over the frame: `transform` is the `<Image
+ *  ItemTransform>` (natural 48 px → frame inner pt). Image Trace must
+ *  land where these pixels are displayed. */
+export function placedImageWith(
+  id: string,
+  transform: string,
+): typeof F7_PLACED_IMAGE {
+  return {
+    ...F7_PLACED_IMAGE,
+    id,
+    about: `a placed-image rectangle whose ring is placed by ItemTransform="${transform}"`,
+    bytes() {
+      const image = imageItem(
+        "uimg",
+        "100 100 340 340",
+        "file:ring-48.png",
+        pngBytes(48, 48, ringPixels(48)),
+        { width: 48, height: 48 },
+        transform,
+      );
+      return packageWithSpread(image);
+    },
+  };
+}
+
 export const CORPUS: readonly CorpusFixture[] = [
   F1_MULTI_SHAPE,
   F2_CLOSED_QUAD,

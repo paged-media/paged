@@ -984,6 +984,12 @@ export {
   SELECT_SAME_FILL_COMMAND_ID,
   SELECT_SAME_STROKE_COMMAND_ID,
   SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
+  SELECT_SAME_OPACITY_COMMAND_ID,
+  SELECT_SAME_BLEND_MODE_COMMAND_ID,
+  SELECT_SAME_APPEARANCE_COMMAND_ID,
+  SELECT_SAME_GRAPHIC_STYLE_COMMAND_ID,
+  SELECT_SAME_SYMBOL_COMMAND_ID,
+  SELECT_SAME_SHAPE_KIND_COMMAND_ID,
   pathForCriterion,
   valueForCriterion,
   leafIdsOf,
@@ -993,8 +999,20 @@ export {
   STROKE_WEIGHT_EPSILON,
   MAX_STROKE_WEIGHT_TOLERANCE,
   contributeSelectSameCommands,
+  type PaintCriterion,
   type SelectSameCriterion,
 } from "./commands/select-same";
+// WP6.1 — Global Edit: select by geometry (draw-geometry's `sameShape`).
+export {
+  GLOBAL_EDIT_COMMAND_ID,
+  GLOBAL_EDIT_COMMAND_IDS,
+  MAX_GLOBAL_EDIT_TOLERANCE,
+  applyGlobalEdit,
+  contributeGlobalEditCommand,
+  globalEditMatches,
+  globalEditOptionsOf,
+  type GlobalEditOptions,
+} from "./commands/global-edit";
 // Phase 4c — the Line ends (arrowheads) panel section's binding +
 // curated vocabulary, exported for the conformance spec.
 export {
@@ -1356,6 +1374,9 @@ export {
   tracedRegionOf,
   withImageTrace,
   pixelToPageAffine,
+  imagePlacementOf,
+  visibleRasterRect,
+  cropRaster,
   regionTableFor,
   tracePlanFor,
   traceOptionsFrom,
@@ -1370,6 +1391,8 @@ export {
   applyImageTracePlan,
   contributeImageTraceCommand,
   type ImageTraceRecord,
+  type ImagePlacement,
+  type LinkRow,
   type TracedRegionMarker,
   type TracePlan,
   type TracePlanRegion,

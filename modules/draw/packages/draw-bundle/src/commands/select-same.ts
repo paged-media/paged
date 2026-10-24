@@ -23,8 +23,10 @@
 // enumerates the document's leaf elements (`host.document.tree`), reads
 // each candidate's same property, and `host.selection.set`s the matches.
 //
-// Three commands (one criterion each): same FILL color, same STROKE color,
-// same STROKE WEIGHT. The reference is the FIRST selected element; no
+// One command per criterion: same FILL color, same STROKE color, same
+// STROKE WEIGHT, and (WP6.1) same OPACITY, same BLENDING MODE, same
+// APPEARANCE, same GRAPHIC STYLE, same SYMBOL (instances of one symbol)
+// and same SHAPE KIND. The reference is the FIRST selected element; no
 // selection (or the reference exposes no such property) ⇒ no-op (a debug
 // log, never a throw). The reference itself is always included in the
 // result (it trivially matches itself).
@@ -44,6 +46,30 @@
 // "same fill" followed by "same stroke" on an unchanged document reads
 // nothing the second time. What is kept is the three values per leaf,
 // not the property tables they were read from.
+//
+// THE WP6.1 CRITERIA, and what each one reads:
+//   · OPACITY (`frameOpacity`, a length in percent; an unset one reads
+//     back null and is the default 100) and BLENDING MODE
+//     (`frameBlendMode`, text — `""` is the engine's unset, read as
+//     Normal, and names compare case-blind) ride the SAME property pass
+//     as the three above: no extra read.
+//   · APPEARANCE is the COMPLETE appearance Graphic Styles digests — the
+//     ADR 354 metadata stack (`data.appearance`) plus the base paint the
+//     frame's own slots carry — compared through the one canonical form
+//     (`canonicalGraphicAppearance`, numbers to 4 dp). So two plain
+//     shapes with the same paint and no stack are the same appearance,
+//     and a stack layer more or less is a different one. It costs the
+//     property pass plus the link index's envelopes (free off the tree
+//     on an engine with C-65).
+//   · GRAPHIC STYLE matches every leaf LINKED to the reference's style
+//     (`data.graphicStyle.id`), overridden or not — "linked" is what the
+//     style panel counts too. SYMBOL matches every leaf of every
+//     instance of the reference's symbol (`data.symbolInstance.symbol`).
+//     Both read envelopes only; an unlinked reference is a no-op.
+//   · SHAPE KIND is the element's own kind (`rectangle`, `oval`,
+//     `polygon`, `graphicLine`, `textFrame`) and reads nothing. IDML
+//     stores a pen path and a drawn polygon alike as a `Polygon`, and no
+//     read separates them, so "path" and "polygon" are one kind here.
 //
 // TOLERANCE — for STROKE WEIGHT ONLY, and why only there. A weight is a
 // number (`{ type: "length", value }`), so "within 0.5 pt" means
@@ -72,6 +98,7 @@ import type {
   BundleHost,
   Disposable,
   ElementId,
+  PluginMetadataEnvelope,
   PropertyPath,
 } from "@paged-media/plugin-api";
 
@@ -79,12 +106,25 @@ import { leafIdsOf, linkIndex } from "../link-index";
 
 import { registerCommand } from "../command-registry";
 import { defineMessages } from "@paged-media/strings";
+import { appearanceOf } from "./appearance";
+import {
+  canonicalGraphicAppearance,
+  graphicStyleRefOf,
+  type GraphicStyleBase,
+} from "./graphic-styles";
+import { symbolInstanceOf } from "./symbols";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.selectSame", {
   fill: "Select same: Fill",
   stroke: "Select same: Stroke",
   strokeWeight: "Select same: Stroke weight",
+  opacity: "Select same: Opacity",
+  blendMode: "Select same: Blending mode",
+  appearance: "Select same: Appearance",
+  graphicStyle: "Select same: Graphic style",
+  symbol: "Select same: Symbol instance",
+  shapeKind: "Select same: Shape kind",
 });
 // The leaf walk lives beside the index that walks it; every other module
 // keeps importing it from here.
@@ -98,19 +138,51 @@ export const SELECT_SAME_STROKE_COMMAND_ID =
   "media.paged.draw.command.selectSameStroke";
 export const SELECT_SAME_STROKE_WEIGHT_COMMAND_ID =
   "media.paged.draw.command.selectSameStrokeWeight";
-
-/** The contributed command ids, in registration order. */
-export const SELECT_SAME_COMMAND_IDS = [
-  SELECT_SAME_FILL_COMMAND_ID,
-  SELECT_SAME_STROKE_COMMAND_ID,
-  SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
-];
+export const SELECT_SAME_OPACITY_COMMAND_ID =
+  "media.paged.draw.command.selectSameOpacity";
+export const SELECT_SAME_BLEND_MODE_COMMAND_ID =
+  "media.paged.draw.command.selectSameBlendMode";
+export const SELECT_SAME_APPEARANCE_COMMAND_ID =
+  "media.paged.draw.command.selectSameAppearance";
+export const SELECT_SAME_GRAPHIC_STYLE_COMMAND_ID =
+  "media.paged.draw.command.selectSameGraphicStyle";
+export const SELECT_SAME_SYMBOL_COMMAND_ID =
+  "media.paged.draw.command.selectSameSymbolInstance";
+export const SELECT_SAME_SHAPE_KIND_COMMAND_ID =
+  "media.paged.draw.command.selectSameShapeKind";
 
 /** The criterion a Select-same command matches on. */
-export type SelectSameCriterion = "fill" | "stroke" | "strokeWeight";
+export type SelectSameCriterion =
+  PaintCriterion | "appearance" | "graphicStyle" | "symbol" | "shapeKind";
 
-/** The PropertyPath each criterion reads. */
-export function pathForCriterion(c: SelectSameCriterion): PropertyPath {
+/** The criteria read straight off one property row. */
+export type PaintCriterion =
+  "fill" | "stroke" | "strokeWeight" | "opacity" | "blendMode";
+
+/** Each command and the criterion it matches, in registration order. */
+const COMMANDS: readonly [id: string, c: SelectSameCriterion, title: string][] =
+  [
+    [SELECT_SAME_FILL_COMMAND_ID, "fill", M.fill],
+    [SELECT_SAME_STROKE_COMMAND_ID, "stroke", M.stroke],
+    // Run bare it is the EXACT match it always was; a payload
+    // `{ tolerance }` (pt) widens it. A remembered tolerance is NOT
+    // applied here — "same" from the menu must not quietly mean "within
+    // whatever was typed last week". The "within…" row is the Path
+    // Options panel's.
+    [SELECT_SAME_STROKE_WEIGHT_COMMAND_ID, "strokeWeight", M.strokeWeight],
+    [SELECT_SAME_OPACITY_COMMAND_ID, "opacity", M.opacity],
+    [SELECT_SAME_BLEND_MODE_COMMAND_ID, "blendMode", M.blendMode],
+    [SELECT_SAME_APPEARANCE_COMMAND_ID, "appearance", M.appearance],
+    [SELECT_SAME_GRAPHIC_STYLE_COMMAND_ID, "graphicStyle", M.graphicStyle],
+    [SELECT_SAME_SYMBOL_COMMAND_ID, "symbol", M.symbol],
+    [SELECT_SAME_SHAPE_KIND_COMMAND_ID, "shapeKind", M.shapeKind],
+  ];
+
+/** The contributed command ids, in registration order. */
+export const SELECT_SAME_COMMAND_IDS = COMMANDS.map(([id]) => id);
+
+/** The PropertyPath each property criterion reads. */
+export function pathForCriterion(c: PaintCriterion): PropertyPath {
   switch (c) {
     case "fill":
       return "frameFillColor";
@@ -118,16 +190,21 @@ export function pathForCriterion(c: SelectSameCriterion): PropertyPath {
       return "frameStrokeColor";
     case "strokeWeight":
       return "frameStrokeWeight";
+    case "opacity":
+      return "frameOpacity";
+    case "blendMode":
+      return "frameBlendMode";
   }
 }
 
 /** A criterion's comparable value read off a property snapshot — a
- *  colorRef string, a length number, or null when the element doesn't
- *  carry it. Exported so the conformance spec asserts the read shape. */
+ *  colorRef string, a length number, a blending mode, or null when the
+ *  element doesn't carry it. Exported so the conformance spec asserts
+ *  the read shape. */
 export async function valueForCriterion(
   host: BundleHost,
   id: ElementId,
-  c: SelectSameCriterion,
+  c: PaintCriterion,
 ): Promise<string | number | null> {
   try {
     return criterionValue(await host.document.elementProperties(id), c);
@@ -141,22 +218,44 @@ type PropertyTable = Awaited<
   ReturnType<BundleHost["document"]["elementProperties"]>
 >;
 
-/** One criterion's value off a property table that has been read. The
- *  one rule both the single read above and the document pass below use. */
-function criterionValue(
+/** A blending mode as compared: `""` (the engine's unset) is Normal, and
+ *  names compare case-blind. */
+const blendModeKey = (raw: string): string =>
+  raw === "" ? "normal" : raw.toLowerCase();
+
+/** One row's raw value off a property table that has been read. */
+function rowValue(
   props: PropertyTable,
-  c: SelectSameCriterion,
+  path: PropertyPath,
 ): string | number | null {
-  const path = pathForCriterion(c);
   for (const e of props?.entries ?? []) {
     if (e.path !== path) continue;
     const v = e.value;
     if (!v) return null;
     if (v.type === "colorRef") return v.value; // string | null
     if (v.type === "length") return v.value; // number | null
+    if (v.type === "text") return v.value;
     return null;
   }
   return null;
+}
+
+/** One criterion's value off a property table that has been read. The
+ *  one rule both the single read above and the document pass below use. */
+function criterionValue(
+  props: PropertyTable,
+  c: PaintCriterion,
+): string | number | null {
+  const path = pathForCriterion(c);
+  const v = rowValue(props, path);
+  // An opacity the element never set reads back as a null length: it is
+  // the default, 100 %. (A kind with no opacity row stays null.)
+  if (c === "opacity" && v === null) {
+    return props?.entries.some((e) => e.path === path) ? 100 : null;
+  }
+  if (c === "blendMode") return typeof v === "string" ? blendModeKey(v) : null;
+  if (c === "fill" || c === "stroke") return typeof v === "string" ? v : null;
+  return typeof v === "number" ? v : null;
 }
 
 /** The exact-match slack for a stroke weight (pt): a round-tripped 1.0
@@ -178,10 +277,11 @@ export function strokeWeightToleranceOf(payload: unknown): number {
   return Math.min(t, MAX_STROKE_WEIGHT_TOLERANCE);
 }
 
-/** Equality for a criterion's value. Numbers (stroke weight, pt) match
- *  within `tolerance` INCLUSIVE when one is given, else within the
- *  round-trip epsilon; colours (swatch refs) compare by identity — see
- *  the header for why a colour cannot take a tolerance. */
+/** Equality for a criterion's value. Numbers (stroke weight in pt,
+ *  opacity in percent) match within `tolerance` INCLUSIVE when one is
+ *  given, else within the round-trip epsilon; everything else (swatch
+ *  refs, blending modes, canonical appearances, ids, kinds) compares by
+ *  identity — see the header for why a colour cannot take a tolerance. */
 function sameValue(
   a: string | number | null,
   b: string | number | null,
@@ -196,19 +296,75 @@ function sameValue(
   return a === b;
 }
 
-/** What one leaf answers to all three criteria. */
-type PaintFacts = Record<SelectSameCriterion, string | number | null>;
+/** What one leaf's property table answers: every property criterion,
+ *  plus the fill tint the appearance criterion's base paint needs. */
+type PaintFacts = Record<PaintCriterion, string | number | null> & {
+  fillTint: number | null;
+};
 
-const NO_FACTS: PaintFacts = { fill: null, stroke: null, strokeWeight: null };
+const NO_FACTS: PaintFacts = {
+  fill: null,
+  stroke: null,
+  strokeWeight: null,
+  opacity: null,
+  blendMode: null,
+  fillTint: null,
+};
 
-const factsOf = (props: PropertyTable): PaintFacts => ({
-  fill: criterionValue(props, "fill"),
-  stroke: criterionValue(props, "stroke"),
-  strokeWeight: criterionValue(props, "strokeWeight"),
-});
+const factsOf = (props: PropertyTable): PaintFacts => {
+  const tint = rowValue(props, "frameFillTint");
+  return {
+    fill: criterionValue(props, "fill"),
+    stroke: criterionValue(props, "stroke"),
+    strokeWeight: criterionValue(props, "strokeWeight"),
+    opacity: criterionValue(props, "opacity"),
+    blendMode: criterionValue(props, "blendMode"),
+    fillTint: typeof tint === "number" ? tint : null,
+  };
+};
+
+async function readFacts(host: BundleHost, id: ElementId): Promise<PaintFacts> {
+  try {
+    return factsOf(await host.document.elementProperties(id));
+  } catch {
+    return NO_FACTS; /* unreadable ⇒ nothing to match on */
+  }
+}
+
+/** The appearance criterion's value: the canonical form of the complete
+ *  appearance (stack + base paint) Graphic Styles digests. A Normal blend
+ *  is no blend, as there. */
+function appearanceValue(
+  facts: PaintFacts,
+  envelope: PluginMetadataEnvelope | null,
+): string {
+  const blend = typeof facts.blendMode === "string" ? facts.blendMode : null;
+  const base: GraphicStyleBase = {
+    fill: typeof facts.fill === "string" ? facts.fill : null,
+    fillTint: facts.fillTint,
+    stroke: typeof facts.stroke === "string" ? facts.stroke : null,
+    strokeWeight:
+      typeof facts.strokeWeight === "number" ? facts.strokeWeight : null,
+    opacity: typeof facts.opacity === "number" ? facts.opacity : null,
+    blendMode: blend === null || blend === "normal" ? null : blend,
+  };
+  return canonicalGraphicAppearance({ stack: appearanceOf(envelope), base });
+}
+
+/** The value a LINK criterion reads off an envelope. */
+function linkValue(
+  envelope: PluginMetadataEnvelope | null,
+  c: "graphicStyle" | "symbol",
+): string | null {
+  return c === "graphicStyle"
+    ? (graphicStyleRefOf(envelope)?.id ?? null)
+    : (symbolInstanceOf(envelope)?.symbol ?? null);
+}
 
 const sameElement = (a: ElementId, b: ElementId): boolean =>
   a.kind === b.kind && a.id === b.id;
+
+const keyOf = (id: ElementId): string => `${id.kind}:${JSON.stringify(id.id)}`;
 
 /** Leaves read per parallel window — see `LEAF_READ_WINDOW` in
  *  `../link-index` for why a window and not all at once. */
@@ -219,8 +375,8 @@ const PAINT_FACTS_KEY = "select-same:paint";
 
 type LeafFacts = { id: ElementId; facts: PaintFacts }[];
 
-/** Every leaf's three criterion values, in tree order. ONE property read
- *  per leaf — the engine gap, as for the link walk: `elementProperties`
+/** Every leaf's property facts, in tree order. ONE property read per
+ *  leaf — the engine gap, as for the link walk: `elementProperties`
  *  takes one id (`elementGeometry` takes a list; this door does not) —
  *  kept for the document revision, so the next criterion costs nothing.
  *  `known` is a leaf the caller has already read. */
@@ -235,16 +391,10 @@ function paintFacts(
     for (let at = 0; at < leaves.length; at += PAINT_READ_WINDOW) {
       await Promise.all(
         leaves.slice(at, at + PAINT_READ_WINDOW).map(async (id, i) => {
-          let facts = NO_FACTS;
-          if (known && sameElement(known.id, id)) {
-            facts = known.facts;
-          } else {
-            try {
-              facts = factsOf(await host.document.elementProperties(id));
-            } catch {
-              /* unreadable ⇒ no match contribution */
-            }
-          }
+          const facts =
+            known && sameElement(known.id, id)
+              ? known.facts
+              : await readFacts(host, id);
           out[at + i] = { id, facts };
         }),
       );
@@ -253,40 +403,73 @@ function paintFacts(
   });
 }
 
+/** The reference's property facts and the document's: the reference
+ *  FIRST, on its own, so one with nothing to match on (`hasValue` false)
+ *  never costs a pass over the document. */
+async function paintPass(
+  host: BundleHost,
+  reference: ElementId,
+  hasValue: (facts: PaintFacts) => boolean,
+): Promise<{ facts: PaintFacts; leaves: LeafFacts | null }> {
+  let leaves = (await linkIndex(host).peek<LeafFacts>(PAINT_FACTS_KEY)) ?? null;
+  const own = leaves?.find((leaf) => sameElement(leaf.id, reference));
+  // The document was read at this revision and the reference is one of
+  // its leaves: nothing to ask the engine.
+  if (own) return { facts: own.facts, leaves };
+  const facts = await readFacts(host, reference);
+  if (hasValue(facts)) {
+    leaves ??= await paintFacts(host, { id: reference, facts });
+  }
+  return { facts, leaves };
+}
+
 /** Compute the matching set (the pure core, exported for the conformance
  *  spec): every leaf whose criterion value equals the reference's — for
  *  `strokeWeight`, within `tolerance` pt when one is given (ignored for
- *  the colour criteria). The reference is included. Returns `[]` when the
- *  reference value is null (nothing to match on). */
+ *  every other criterion). The reference is included when it is a leaf.
+ *  Returns `[]` when the reference value is null (nothing to match on). */
 export async function selectSameMatches(
   host: BundleHost,
   reference: ElementId,
   c: SelectSameCriterion,
   tolerance = 0,
 ): Promise<ElementId[]> {
-  const slack = c === "strokeWeight" ? tolerance : 0;
   const index = linkIndex(host);
-  let leaves = await index.peek<LeafFacts>(PAINT_FACTS_KEY);
-  let refValue: string | number | null;
-  const own = leaves?.find((leaf) => sameElement(leaf.id, reference));
-  if (own) {
-    // The document was read at this revision and the reference is one of
-    // its leaves: nothing to ask the engine.
-    refValue = own.facts[c];
-  } else {
-    // The reference FIRST, on its own: one with nothing to match on must
-    // not cost a pass over the document.
-    let facts = NO_FACTS;
-    try {
-      facts = factsOf(await host.document.elementProperties(reference));
-    } catch {
-      /* unreadable ⇒ nothing to match on */
-    }
-    refValue = facts[c];
-    if (refValue !== null) {
-      leaves ??= await paintFacts(host, { id: reference, facts });
-    }
+  if (c === "shapeKind") {
+    // The kind is in the id: nothing to read but the tree.
+    return leafIdsOf(await index.tree()).filter(
+      (id) => id.kind === reference.kind,
+    );
   }
+  if (c === "graphicStyle" || c === "symbol") {
+    const refValue = linkValue(await index.envelopeOf(reference), c);
+    if (refValue === null) return [];
+    const { leaves } = await index.snapshot();
+    return leaves
+      .filter((leaf) => linkValue(leaf.envelope, c) === refValue)
+      .map((leaf) => leaf.id);
+  }
+  if (c === "appearance") {
+    const { facts, leaves } = await paintPass(host, reference, () => true);
+    if (!leaves) return [];
+    const refValue = appearanceValue(facts, await index.envelopeOf(reference));
+    const { leaves: linked } = await index.snapshot();
+    const envelopes = new Map(linked.map((l) => [keyOf(l.id), l.envelope]));
+    const out: ElementId[] = [];
+    for (const leaf of leaves) {
+      const envelope =
+        envelopes.get(keyOf(leaf.id)) ?? (await index.envelopeOf(leaf.id));
+      if (appearanceValue(leaf.facts, envelope) === refValue) out.push(leaf.id);
+    }
+    return out;
+  }
+  const slack = c === "strokeWeight" ? tolerance : 0;
+  const { facts, leaves } = await paintPass(
+    host,
+    reference,
+    (f) => f[c] !== null,
+  );
+  const refValue = facts[c];
   if (refValue === null || !leaves) return [];
   return leaves
     .filter((leaf) => sameValue(leaf.facts[c], refValue, slack))
@@ -340,55 +523,19 @@ export function applySelectSameStrokeWeight(
   );
 }
 
-/** Register the three Select-same commands (same fill / stroke / stroke
- *  weight). Pure selection — no document mutation. */
+/** Register the Select-same commands, one per criterion. Pure selection —
+ *  no document mutation, so no undo step. */
 export function contributeSelectSameCommands(host: BundleHost): Disposable {
-  const disposers = [
+  const disposers = COMMANDS.map(([id, c, title]) =>
     registerCommand(host, {
-      id: SELECT_SAME_FILL_COMMAND_ID,
-      title: M.fill,
+      id,
+      title,
       category: SELECT_SAME_COMMAND_CATEGORY,
       handler: async (_paged, payload) => {
-        await applySelectSame(
-          host,
-          SELECT_SAME_FILL_COMMAND_ID,
-          "fill",
-          payload,
-        );
+        await applySelectSame(host, id, c, payload);
       },
     }),
-    registerCommand(host, {
-      id: SELECT_SAME_STROKE_COMMAND_ID,
-      title: M.stroke,
-      category: SELECT_SAME_COMMAND_CATEGORY,
-      handler: async (_paged, payload) => {
-        await applySelectSame(
-          host,
-          SELECT_SAME_STROKE_COMMAND_ID,
-          "stroke",
-          payload,
-        );
-      },
-    }),
-    registerCommand(host, {
-      id: SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
-      // Run bare it is the EXACT match it always was; a payload
-      // `{ tolerance }` (pt) widens it. A remembered tolerance is NOT
-      // applied here — "same" from the menu must not quietly mean
-      // "within whatever was typed last week". The "within…" row is the
-      // Path Options panel's.
-      title: M.strokeWeight,
-      category: SELECT_SAME_COMMAND_CATEGORY,
-      handler: async (_paged, payload) => {
-        await applySelectSame(
-          host,
-          SELECT_SAME_STROKE_WEIGHT_COMMAND_ID,
-          "strokeWeight",
-          payload,
-        );
-      },
-    }),
-  ];
+  );
   return {
     dispose() {
       for (const d of disposers) d.dispose();
