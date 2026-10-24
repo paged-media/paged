@@ -1568,16 +1568,52 @@ export interface TextRange {
 
 // ----------------------------------------------------------------- render
 
-/** v70 — what `host.render.snapshot` renders. */
+/** v70 — what `host.render.snapshot` renders. The fields after
+ *  `hideItems` are `render.snapshot@2` (extensions ADR 338): an engine
+ *  without them draws the whole page as a PNG, and the SDK then answers
+ *  `null` for a request whose reply it cannot honour (`clip`, `trim`,
+ *  `format: "rgba"`). */
 export interface RenderSnapshotOptions {
   /** Width of the image in device pixels, 1 to 8192; the height follows
-   *  the page's aspect. The engine renders at a resolution derived from
-   *  it, so the image can be a pixel off: `RenderedPage.widthPx` is exact. */
-  widthPx: number;
+   *  the page's aspect (the clip's, with `clip`). The engine renders at a
+   *  resolution derived from it, so the image can be a pixel off:
+   *  `RenderedPage.widthPx` is exact. Required unless `dpi` is given. */
+  widthPx?: number;
   /** Items to leave out of this image only (a build step whose shapes
    *  have not appeared yet). The document is not changed and no undo
    *  step is recorded. */
   hideItems?: ElementId[];
+  /** @2 — the resolution in pixels per inch (72 = one pixel per pt),
+   *  1 to 2400. Wins over `widthPx`. */
+  dpi?: number;
+  /** @2 — draw nothing but these items, in their stacking order, on a
+   *  page otherwise empty: a group draws its members, a container what
+   *  is pasted into it, a story (`{ kind: "storyRange" }`) every frame of
+   *  its thread. Layout is the page's own: a text wrap from an item left
+   *  out still shapes the text. */
+  only?: ElementId[];
+  /** @2 — draw this region of the page alone, in page pt (`(0, 0)` the
+   *  page's top-left; it may reach onto the pasteboard). Grown outward to
+   *  whole pixels: `RenderedPage.region` is the region drawn. */
+  clip?: RenderRect;
+  /** @2 — `"png"` (the default) or `"rgba"`: raw pixels in
+   *  `RenderedPage.rgba` instead of a PNG. */
+  format?: "png" | "rgba";
+  /** @2 — what lies under the content: `"paper"` (white, the default)
+   *  or `"transparent"`. */
+  background?: "paper" | "transparent";
+  /** @2 — with a transparent background, crop the image to the pixels
+   *  something was drawn on — an item's stroke and effects included,
+   *  which no geometry read reports. `null` when nothing is drawn. */
+  trim?: boolean;
+}
+
+/** @2 — a rectangle in page pt. */
+export interface RenderRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 /** v70 — one rendered page. */
@@ -1586,26 +1622,70 @@ export interface RenderedPage {
   /** The image's own size, within a pixel of the requested width. */
   widthPx: number;
   heightPx: number;
-  /** PNG bytes; `createImageBitmap(new Blob([png]))` draws them. */
+  /** PNG bytes; `createImageBitmap(new Blob([png]))` draws them. Empty
+   *  when the request asked for `format: "rgba"`. */
   png: Uint8Array;
   /** The engine's layout generation the image shows: an image with an
    *  older generation than a page's current one is stale. */
   layoutGeneration: number;
+  /** @2 — `"rgba"` when `rgba` holds the pixels, else `"png"`. */
+  format?: "png" | "rgba";
+  /** @2 — `format: "rgba"`: `widthPx × heightPx` pixels, four bytes each
+   *  (R, G, B, A), rows top to bottom, STRAIGHT alpha (not
+   *  premultiplied) — `new ImageData(new Uint8ClampedArray(rgba.buffer),
+   *  widthPx)` draws them. A PNG of a transparent image is straight
+   *  alpha too. */
+  rgba?: Uint8Array;
+  /** @2 — the page region the image covers, in page pt, when the request
+   *  had a `clip` or `trim`: the image maps onto it exactly. */
+  region?: RenderRect;
+}
+
+/** @2 — what `host.render.element` renders. */
+export interface RenderElementOptions {
+  /** Pixels per inch, 1 to 2400 (default 72: one pixel per pt). */
+  dpi?: number;
+  /** `"png"` (the default) or `"rgba"`. */
+  format?: "png" | "rgba";
+  /** `"transparent"` (the default) or `"paper"`. */
+  background?: "paper" | "transparent";
+  /** How far past the item's geometric bounds, in pt, the image may
+   *  reach for its stroke and effects (default 72). The image is trimmed
+   *  to what the item draws within that margin. */
+  marginPt?: number;
+}
+
+/** @2 — one rendered item: a page image of nothing but the item, cropped
+ *  to it, with the page region it covers. */
+export interface RenderedElement extends RenderedPage {
+  region: RenderRect;
 }
 
 /**
  * v70 — render a page to an image with the engine's own renderer (CPU),
  * the same pixels the canvas shows: slide thumbnails, a slideshow's
  * frames, a build step's frames. A READ: gated on
- * `capabilities.document.read`. `supports("render.snapshot@1")`.
+ * `capabilities.document.read`. `supports("render.snapshot@1")`;
+ * `supports("render.snapshot@2")` adds the region, item, raw-pixel and
+ * transparent options and `element` (extensions ADR 338).
  */
 export interface RenderSurface {
   /** The page as a PNG, or `null` when the page is unknown or the
-   *  engine refused (an invalid width). */
+   *  engine refused (an invalid width, a region too large, nothing
+   *  drawn with `trim`). */
   snapshot(
     pageId: PageId,
     options: RenderSnapshotOptions,
   ): Promise<RenderedPage | null>;
+  /** @2 — one item as it draws on its page, alone, cropped to what it
+   *  draws (stroke and effects included) at `dpi`: what a rasterize
+   *  command, an image layer of a story or a vector smart object needs.
+   *  `null` for an unknown item, one on the pasteboard (no page draws
+   *  it), one that draws nothing, or an engine without @2. */
+  element(
+    id: ElementId,
+    options?: RenderElementOptions,
+  ): Promise<RenderedElement | null>;
 }
 
 // ----------------------------------------------------------------- text

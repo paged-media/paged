@@ -5,7 +5,15 @@
 // foreground.
 
 import { GRADIENT_KINDS, type GradientKind, type Rgba01 } from "../../engine";
-import { fromHex, toHex, type ColorPair } from "../../color-state";
+import {
+  fromHex,
+  SAMPLE_SIZES,
+  toHex,
+  type ColorPair,
+  type ColorSamplerInfo,
+  type EyedropperOptions,
+  type SampleSize,
+} from "../../color-state";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
 import { color } from "@paged-media/panel-kit";
@@ -27,6 +35,22 @@ const M = defineMessages("image.color", {
     "The brush and pencil paint the foreground. Alt-click with either takes " +
     "the image's colour under the pointer (a 3×3 average) as the new " +
     "foreground.",
+  eyedropper: "Eyedropper",
+  sampleSize: "Sample size",
+  pointSample: "Point sample",
+  average: "{n} by {n} average",
+  sample: "Sample",
+  currentLayer: "Current layer",
+  allLayers: "All layers",
+  samplers: "Colour samplers",
+  noSamplers:
+    "None placed. The Color Sampler tool fixes up to four points; their colours show here.",
+  samplerAt: "#{id} at {x}, {y}",
+  offImage: "off the image",
+  removeSampler: "Remove sampler {id}",
+  clearSamplers: "Clear samplers",
+  samplersNote:
+    "Listed here because the host Info panel has no door for a plugin's readouts yet.",
 });
 
 const swatch = (c: Rgba01) => ({
@@ -47,11 +71,16 @@ export function ColorSection({
   session,
   colors,
   gradientKind,
+  eyedropper,
+  samplers,
 }: {
   session: ImageSession;
   colors: ColorPair;
   /** The gradient tool's shape. */
   gradientKind: GradientKind;
+  /** WP4.10 — the Eyedropper's options and the colour samplers. */
+  eyedropper?: EyedropperOptions;
+  samplers?: readonly ColorSamplerInfo[];
 }) {
   const pick = (which: "fg" | "bg") => (hex: string) => {
     const c = fromHex(hex);
@@ -136,6 +165,98 @@ export function ColorSection({
         </select>
       </div>
       <div style={note}>{t(M.note)}</div>
+      {eyedropper && (
+        <>
+          <div style={sectionTitle}>{t(M.eyedropper)}</div>
+          <div style={row}>
+            <label htmlFor="pg-image-sample-size">{t(M.sampleSize)}</label>
+            <select
+              id="pg-image-sample-size"
+              data-image-sample-size
+              value={String(eyedropper.size)}
+              onChange={(e) =>
+                session.setEyedropperOptions({
+                  size: Number(e.target.value) as SampleSize,
+                })
+              }
+            >
+              {SAMPLE_SIZES.map((n) => (
+                <option key={n} value={String(n)}>
+                  {n === 1 ? t(M.pointSample) : t(M.average, { n })}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={row}>
+            <label htmlFor="pg-image-sample-source">{t(M.sample)}</label>
+            <select
+              id="pg-image-sample-source"
+              data-image-sample-source
+              value={eyedropper.source}
+              onChange={(e) =>
+                session.setEyedropperOptions({
+                  source: e.target.value === "layer" ? "layer" : "all",
+                })
+              }
+            >
+              <option value="layer">{t(M.currentLayer)}</option>
+              <option value="all">{t(M.allLayers)}</option>
+            </select>
+          </div>
+        </>
+      )}
+      {samplers && (
+        <>
+          <div style={sectionTitle}>{t(M.samplers)}</div>
+          {samplers.length === 0 ? (
+            <div style={note} data-image-samplers-empty>
+              {t(M.noSamplers)}
+            </div>
+          ) : (
+            samplers.map((sm) => (
+              <div key={sm.id} style={row} data-image-sampler={sm.id}>
+                <span style={mono}>
+                  {t(M.samplerAt, { id: sm.id, x: sm.at[0], y: sm.at[1] })}
+                </span>
+                {sm.colour ? (
+                  <>
+                    <span style={swatch(sm.colour)} />
+                    <span style={mono} data-image-sampler-value>
+                      {toHex(sm.colour)}{" "}
+                      {sm.colour
+                        .slice(0, 3)
+                        .map((v) => Math.round(v * 255))
+                        .join(" ")}
+                    </span>
+                  </>
+                ) : (
+                  <span style={mono}>{t(M.offImage)}</span>
+                )}
+                <button
+                  type="button"
+                  aria-label={t(M.removeSampler, { id: sm.id })}
+                  data-image-sampler-remove={sm.id}
+                  onClick={() => session.removeColorSampler(sm.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
+          {samplers.length > 0 && (
+            <div style={row}>
+              <button
+                type="button"
+                data-image-samplers-clear
+                onClick={() => session.clearColorSamplers()}
+              >
+                {t(M.clearSamplers)}
+              </button>
+            </div>
+          )}
+          <div style={note}>{t(M.samplersNote)}</div>
+        </>
+      )}
     </>
   );
 }

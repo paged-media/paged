@@ -3303,6 +3303,62 @@ mod wasm {
         LAYERS.with(|l| l.borrow().as_ref().map_or(-1, |d| d.handle as i32))
     }
 
+    /// The eyedropper's "Current layer" sample: the window `(x, y, w, h)`
+    /// of layer `index`'s OWN pixels — not the composite, so the layer's
+    /// opacity, blend, mask and visibility do not enter it — as straight
+    /// RGBA8 (`w'*h'*4` bytes, clipped to the canvas, row-major). A 16-bit
+    /// layer narrows by its high byte, as `to_rgba8` does. An adjustment
+    /// layer has no pixels of its own: the answer is empty, and the caller
+    /// says so rather than sampling something else.
+    #[wasm_bindgen]
+    pub fn layers_window_rgba8(
+        index: usize,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        with_stack(|d| {
+            let (cw, ch) = (d.stack.width(), d.stack.height());
+            let layer = d
+                .stack
+                .layers()
+                .get(index)
+                .ok_or_else(|| JsValue::from_str(&format!("no layer {index}")))?;
+            if matches!(layer.kind, crate::layers::LayerKind::Adjustment(_)) {
+                return Ok(js_sys::Uint8Array::new_with_length(0));
+            }
+            let x1 = x.saturating_add(w).min(cw);
+            let y1 = y.saturating_add(h).min(ch);
+            if x >= x1 || y >= y1 {
+                return Ok(js_sys::Uint8Array::new_with_length(0));
+            }
+            let mut out = Vec::with_capacity(((x1 - x) * (y1 - y) * 4) as usize);
+            // Read the pixels where they live: a bounded layer from its
+            // rect (transparent outside), a canvas layer directly — never
+            // expanding a bounded layer for a 1×1 sample.
+            let (px, rx, ry, rw, rh) = match layer.rgba.bounded() {
+                Some(b) => (&b.px, b.rect.x as i64, b.rect.y as i64, b.rect.w, b.rect.h),
+                None => (layer.rgba.canvas(), 0, 0, cw, ch),
+            };
+            for py in y..y1 {
+                for pxx in x..x1 {
+                    let lx = i64::from(pxx) - rx;
+                    let ly = i64::from(py) - ry;
+                    if lx < 0 || ly < 0 || lx >= i64::from(rw) || ly >= i64::from(rh) {
+                        out.extend_from_slice(&[0, 0, 0, 0]);
+                        continue;
+                    }
+                    let i = (ly as usize) * rw as usize + lx as usize;
+                    for c in 0..4 {
+                        out.push((px.sample16(i, c) >> 8) as u8);
+                    }
+                }
+            }
+            Ok(js_sys::Uint8Array::from(&out[..]))
+        })
+    }
+
     /// The stack as JSON, BOTTOM-first:
     /// `{"active":i,"layers":[{index,id,name,visible,locked,opacity,blend}]}`.
     /// `opacity` is 0–1; `blend` is the `compose.*` wire name.

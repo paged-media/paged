@@ -52,6 +52,12 @@
 // existed: it applies the operation with the last-used values, and says
 // so in the log.
 //
+// RASTERIZE IS HERE (Object ▸ Rasterize…): two parameters — the
+// resolution and the ground — and an Apply on the selection, which is
+// exactly a section; Illustrator's dialog has no more that this engine
+// can honour (anti-aliasing is always on, and a clipping mask or an added
+// margin are other commands).
+//
 // IMAGE TRACE and RECOLOR ARTWORK are not here: their "…" rows raise
 // panels of their own (`panels/image-trace-panel.tsx`,
 // `panels/recolor-panel.tsx`), whose options are not path parameters.
@@ -123,6 +129,12 @@ import {
   type StarParams,
 } from "./star-flare";
 import { applyReflect } from "./transform";
+import {
+  RASTERIZE_DEFAULTS,
+  applyRasterize,
+  rasterizeParamsFrom,
+  type RasterizeParams,
+} from "./rasterize";
 import { applyWidthProfile, WIDTH_PROFILE_COMMAND_ID } from "./width-profile";
 import { supportsPathOps } from "./path-ops";
 
@@ -145,6 +157,7 @@ const M = defineMessages("draw.pathOptions", {
   flare: "Insert flare",
   selectSameWeight: "Select same stroke weight",
   widthProfile: "Width profile",
+  rasterize: "Rasterize",
   command: "Path options: {section}…",
   offsetJoinNote:
     "This engine bevels every outward corner whatever join is chosen — the join and the miter limit are sent with the offset and remembered, and take effect on engine 0.65 or later.",
@@ -167,6 +180,7 @@ export const PATH_OPTION_SECTIONS = [
   "flare",
   "selectSameWeight",
   "widthProfile",
+  "rasterize",
 ] as const;
 
 export type PathOptionSection = (typeof PATH_OPTION_SECTIONS)[number];
@@ -186,6 +200,7 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   flare: M.flare,
   selectSameWeight: M.selectSameWeight,
   widthProfile: M.widthProfile,
+  rasterize: M.rasterize,
 };
 
 /** The sections whose Apply acts on the SELECTION (the inserts need
@@ -198,6 +213,7 @@ export const SELECTION_SECTIONS: ReadonlySet<PathOptionSection> = new Set([
   "reflect",
   "selectSameWeight",
   "widthProfile",
+  "rasterize",
 ]);
 
 /** Select same stroke weight — the one SELECTION verb here. Its
@@ -330,6 +346,9 @@ export interface PathOptions {
   flare: FlareParams;
   selectSameWeight: SelectSameWeightOptions;
   widthProfile: WidthProfileOptions;
+  /** RASTERIZE — Object ▸ Rasterize…: the resolution and the ground
+   *  (`commands/rasterize.ts`). */
+  rasterize: RasterizeParams;
 }
 
 /** What every section holds before anything is typed — each value the
@@ -372,6 +391,7 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
   selectSameWeight: { tolerance: 0.5 },
   // A stroke that swells to 6 pt in the middle and tapers at both ends.
   widthProfile: { start: 1, middle: 6, end: 1 },
+  rasterize: RASTERIZE_DEFAULTS,
 };
 
 // --------------------------------------------------------- sanitising
@@ -465,6 +485,7 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       ),
     },
     widthProfile: widthProfileOptionsFrom(loose(r?.widthProfile)),
+    rasterize: rasterizeParamsFrom(loose(r?.rasterize)),
   };
 }
 
@@ -643,7 +664,12 @@ export function lastUsedPayload(
   host: BundleHost,
   section: Exclude<
     PathOptionSection,
-    "outlineStroke" | "selectSameWeight" | "dash" | "reflect" | "widthProfile"
+    | "outlineStroke"
+    | "selectSameWeight"
+    | "dash"
+    | "reflect"
+    | "widthProfile"
+    | "rasterize"
   >,
 ): Record<string, unknown> | undefined {
   if (!hasLastUsed(host, section)) return undefined;
@@ -726,6 +752,9 @@ export async function applyPathOptions<S extends PathOptionSection>(
     case "widthProfile":
       await applyWidthProfile(host, widthProfilePayloadOf(all.widthProfile));
       return;
+    case "rasterize":
+      await applyRasterize(host, all.rasterize);
+      return;
   }
 }
 
@@ -789,6 +818,9 @@ async function applyLastUsed(
         host,
         widthProfilePayloadOf(lastUsedPathOptions(host).widthProfile),
       );
+      return;
+    case "rasterize":
+      await applyRasterize(host, lastUsedPathOptions(host).rasterize);
       return;
   }
 }
@@ -866,6 +898,7 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   flare: `${C}.insertFlareOptions`,
   selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
   widthProfile: WIDTH_PROFILE_COMMAND_ID,
+  rasterize: `${C}.rasterizeOptions`,
 };
 
 /** The sections whose "…" command this module registers. */

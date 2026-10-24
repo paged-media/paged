@@ -332,6 +332,21 @@ export function makeFakeEditor() {
             },
           };
         }
+        if (msg.kind === "requestColorPreview") {
+          // WP4.10 — a swatch's display colour: `Color/<hex>` names its
+          // own colour in this fake document; anything else is unknown.
+          const id = (msg.payload as { swatchId?: string } | undefined)
+            ?.swatchId;
+          const hex = /^Color\/(#[0-9a-f]{6})$/i.exec(id ?? "")?.[1];
+          return {
+            kind: "colorPreviewReply",
+            payload: {
+              result: hex
+                ? { rgbHex: hex, model: "process", name: id, outOfGamut: false }
+                : null,
+            },
+          };
+        }
         throw new Error(`fake editor: unhandled ${msg.kind}`);
       },
     },
