@@ -134,6 +134,7 @@ defineMessages("menu", {
   "Re-trace image": "Re-trace image",
   "Edit colors": "Edit colors",
   "Recolor artwork…": "Recolor artwork…",
+  "Rasterize…": "Rasterize…",
 });
 
 const C = "media.paged.draw.command";
@@ -291,6 +292,12 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   //    menu as well (a click with either tool raises the same section).
   ["Object/Insert star…", "insertStarOptions", "plugin-insert"],
   ["Object/Insert flare…", "insertFlareOptions", "plugin-insert"],
+
+  // ── Rasterize — merges into Object, where Illustrator keeps it: the
+  //    selection becomes one image frame (extensions ADR 338). The "…"
+  //    raises the Path Options panel's Rasterize section (resolution,
+  //    background). ──
+  ["Object/Rasterize…", "rasterizeOptions", "plugin-rasterize"],
 
   // ── Select same — merges into Edit, where selection verbs live. ──
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],

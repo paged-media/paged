@@ -538,6 +538,11 @@ fn handle(live: &mut Live, req: Request) -> Result<Value> {
                 hide_items: Vec::new(),
                 // ADR 205 — a file the user keeps: drawn as the exports draw it.
                 markers: false,
+                only: Vec::new(),
+                clip: None,
+                format: Default::default(),
+                background: Default::default(),
+                trim: false,
             })?;
             let png = expect_reply!(reply, WorkerToMainKind::SnapshotReady(p) => p,
                 format!("render page {}", page_id.0))?;

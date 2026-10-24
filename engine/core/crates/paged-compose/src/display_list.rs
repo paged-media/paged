@@ -368,7 +368,7 @@ pub struct PathId(pub u32);
 /// Owns all path-segment data and hands out `PathId`s. Uses a caller-
 /// supplied cache key for interning, so (glyph_id, font_id, size)
 /// combinations share outlines across the command stream.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PathBuffer {
     paths: Vec<PathData>,
     /// Cache key → PathId. Callers are responsible for making the key
@@ -1723,6 +1723,47 @@ impl DisplayList {
         }
     }
 
+    /// Move everything the list draws by `(dx, dy)` page pt: every
+    /// command's transform (the stub ones too, harmlessly), the page-space
+    /// `bounds` of the group and layer commands, and the glyph-run
+    /// entries. A snapshot of a region (`requestSnapshot.clip`) shifts
+    /// the region's corner to the origin this way and rasterizes a
+    /// region-sized page.
+    pub fn translate(&mut self, dx: f32, dy: f32) {
+        let n = self.commands.len();
+        self.map_transforms(0..n, |t| {
+            t.0[4] += dx;
+            t.0[5] += dy;
+        });
+        for cmd in &mut self.commands {
+            if let DisplayCommand::BeginBlendGroup { bounds, .. }
+            | DisplayCommand::PushLayer { bounds, .. } = cmd
+            {
+                bounds.x += dx;
+                bounds.y += dy;
+            }
+        }
+    }
+
+    /// A copy of what the rasterizers read (the side channels for the PDF
+    /// exporter, `glyph_runs` and `link_regions`, are left out), moved by
+    /// `(dx, dy)` as [`Self::translate`] moves it.
+    pub fn translated_for_raster(&self, dx: f32, dy: f32) -> DisplayList {
+        let mut list = DisplayList {
+            paths: self.paths.clone(),
+            commands: self.commands.clone(),
+            gradients: self.gradients.clone(),
+            radial_gradients: self.radial_gradients.clone(),
+            sweep_gradients: self.sweep_gradients.clone(),
+            images: self.images.clone(),
+            spot_inks: self.spot_inks.clone(),
+            glyph_runs: None,
+            link_regions: None,
+        };
+        list.translate(dx, dy);
+        list
+    }
+
     /// Append a linear gradient and return its id.
     pub fn push_linear_gradient(&mut self, g: LinearGradient) -> GradientId {
         let id = GradientId(self.gradients.len() as u32);
@@ -1879,6 +1920,41 @@ mod tests {
         let t = Transform([2.0, 0.5, -0.5, 2.0, 7.0, 11.0]);
         assert_eq!(Transform::IDENTITY.compose(&t).0, t.0);
         assert_eq!(t.compose(&Transform::IDENTITY).0, t.0);
+    }
+
+    /// Extensions ADR 338 — a region snapshot moves the whole list: each
+    /// command's transform and the page-space bounds of a group.
+    #[test]
+    fn translate_moves_transforms_and_group_bounds() {
+        let mut list = DisplayList::new();
+        let path_id = list.paths.push_anon(PathData::default());
+        list.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 10.0,
+                y: 20.0,
+                w: 5.0,
+                h: 5.0,
+            },
+            blend_mode: BlendMode::Normal,
+            opacity: 0.5,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.push(DisplayCommand::FillPath {
+            path_id,
+            paint: Paint::Solid(Color::WHITE),
+            transform: Transform([2.0, 0.0, 0.0, 2.0, 30.0, 40.0]),
+        });
+        list.translate(-10.0, -20.0);
+        let DisplayCommand::BeginBlendGroup { bounds, .. } = &list.commands[0] else {
+            panic!("group first");
+        };
+        assert_eq!((bounds.x, bounds.y, bounds.w), (0.0, 0.0, 5.0));
+        assert_eq!(
+            list.commands[1].clone().transform_mut().0,
+            [2.0, 0.0, 0.0, 2.0, 20.0, 20.0]
+        );
     }
 
     #[test]
