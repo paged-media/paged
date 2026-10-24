@@ -13,6 +13,7 @@
     },
     "rendering": ["hitTest"],
     "editContext": ["wordDocument"],
+    "keybindings": true,
     "clipboard": "none",
     "wasm": [
       {
@@ -28,7 +29,40 @@
       "media.paged.doc.panel.outline",
       "media.paged.doc.panel.properties"
     ],
-    "commands": ["media.paged.doc.command.placeDoc"],
+    "commands": [
+      "media.paged.doc.command.placeDoc",
+      "media.paged.doc.command.word.bold",
+      "media.paged.doc.command.word.italic",
+      "media.paged.doc.command.word.underline",
+      "media.paged.doc.command.word.strikethrough",
+      "media.paged.doc.command.word.subscript",
+      "media.paged.doc.command.word.superscript",
+      "media.paged.doc.command.word.allCaps",
+      "media.paged.doc.command.word.smallCaps",
+      "media.paged.doc.command.word.clearCharacter",
+      "media.paged.doc.command.word.growFont",
+      "media.paged.doc.command.word.shrinkFont",
+      "media.paged.doc.command.word.alignLeft",
+      "media.paged.doc.command.word.alignCenter",
+      "media.paged.doc.command.word.alignRight",
+      "media.paged.doc.command.word.justify",
+      "media.paged.doc.command.word.spaceBefore",
+      "media.paged.doc.command.word.increaseIndent",
+      "media.paged.doc.command.word.decreaseIndent",
+      "media.paged.doc.command.word.heading1",
+      "media.paged.doc.command.word.heading2",
+      "media.paged.doc.command.word.heading3",
+      "media.paged.doc.command.word.normal",
+      "media.paged.doc.command.word.bullets",
+      "media.paged.doc.command.word.numbering",
+      "media.paged.doc.command.word.listLevelDown",
+      "media.paged.doc.command.word.listLevelUp",
+      "media.paged.doc.command.word.copyFormat",
+      "media.paged.doc.command.word.pasteFormat",
+      "media.paged.doc.command.word.lineSpacing1",
+      "media.paged.doc.command.word.lineSpacing15",
+      "media.paged.doc.command.word.lineSpacing2"
+    ],
     "importers": ["media.paged.doc.importer.docx"],
     "exporters": ["media.paged.doc.exporter.docx"],
     "editContexts": [
@@ -552,6 +586,378 @@
                 }
               }
             }
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.bold",
+          "title": "Bold",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.italic",
+          "title": "Italic",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.underline",
+          "title": "Underline",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.strikethrough",
+          "title": "Strikethrough",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.subscript",
+          "title": "Subscript",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.superscript",
+          "title": "Superscript",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.allCaps",
+          "title": "All caps",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.smallCaps",
+          "title": "Small caps",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.clearCharacter",
+          "title": "Clear character formatting",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.growFont",
+          "title": "Increase font size",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.shrinkFont",
+          "title": "Decrease font size",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.alignLeft",
+          "title": "Align left",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.alignCenter",
+          "title": "Center",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.alignRight",
+          "title": "Align right",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.justify",
+          "title": "Justify",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.spaceBefore",
+          "title": "Space before: 12 pt or none",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.increaseIndent",
+          "title": "Increase indent",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.decreaseIndent",
+          "title": "Decrease indent",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.heading1",
+          "title": "Heading 1",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.heading2",
+          "title": "Heading 2",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.heading3",
+          "title": "Heading 3",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.normal",
+          "title": "Normal style",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.bullets",
+          "title": "Bullets",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.numbering",
+          "title": "Numbering",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.listLevelDown",
+          "title": "Demote list level",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.listLevelUp",
+          "title": "Promote list level",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.copyFormat",
+          "title": "Copy formatting",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.pasteFormat",
+          "title": "Paste formatting",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.lineSpacing1",
+          "title": "Line spacing: Single",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.lineSpacing15",
+          "title": "Line spacing: 1.5 lines",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.lineSpacing2",
+          "title": "Line spacing: Double",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
           }
         }
       ],

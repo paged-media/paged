@@ -31,6 +31,8 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 
 - asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
   the column's action chain, placed as a data URI;
+  declared through the door too (`assetColumns`, `setAssetColumn`: an unknown query or field
+  is refused, a change re-reads the query), from the Data panel's picture column editor;
 - paged.sheet edits a table of the document's data in place through `data@1`.
 - data issues ([ADR 564](adr/564-data-issues.md)): overset text (the host's frame chain, or the
   engine's measured wrap where the host lays out without fonts), a missing or too coarse
@@ -183,6 +185,17 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   repeated/continued header options now reach the paginator (before, every caller paginated
   with both on). Not offered, because the engine has none: keep-together of a group, a break
   before a group, per-group footers other than one aggregate row, the header height (16 pt).
+- **The pipeline** (2026-10-24; the Data panel's Pipeline view, editor ADR 291, over
+  [ADR 562](adr/562-transforms-are-javascript-over-tables.md)). The data door serves
+  `pipeline()`: each source, transform and query in refresh order, with the tables it reads
+  (a query's FROM and JOIN tables, read by the guard's own walk, `tablesRead` in
+  `src/query/sql.ts`), a transform's source and parameters, a query's SQL, and the rows or the
+  error of its last run (a guard refusal included). `defineTransform` refuses with the reason
+  (a name that is not a table name, or is a source's or a query's; an empty source; an input
+  that is not a source or a transform running before it; parameters that are not an object),
+  and a transform defined through the door runs at once, so its step shows its rows or its
+  error before the queries are refreshed. A define or a remove is announced as a change of the
+  transform's table.
 - **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.

@@ -23,6 +23,7 @@ import type * as Api from "@paged-media/plugin-api";
 import {
   MENU_KEYS,
   WIDGET_KEYS,
+  canvasSurfaceOf,
   insideFrameSurface,
   insideKeyOwningContainer,
   isActivatable,
@@ -30,6 +31,7 @@ import {
   isComposingKey,
 } from "../focus/key-ownership";
 import type { CommandRegistry } from "./command";
+import { activeScopeContext } from "./context-bar";
 import { isEnabled } from "./types";
 import type { Disposable, Registrable } from "./types";
 
@@ -84,6 +86,44 @@ export interface KeybindingRegistry extends Api.KeybindingRegistry {
   /** Called after a binding is registered or removed (ADR 229: render-time
    *  readers go through `useRegistryView`). */
   onChange(handler: () => void): Disposable;
+  /** Editor ADR 299 — does a SCOPED binding of the active edit context
+   *  take this key press? The text input (`useTextEditing`) and the other
+   *  canvas key handlers ask before they act, and leave the key to the
+   *  registry when it does. */
+  claims(event: KeyEventLike & Partial<Pick<KeyboardEvent, "target">>): boolean;
+}
+
+/**
+ * Editor ADR 299 — the rank of a scoped binding while its context is
+ * active: above every host binding (guarded 1, unguarded 0, a tool's
+ * `precedence`), so inside a Word document Cmd+E is centre, not the host's
+ * chord on the key.
+ */
+export const SCOPED_BINDING_RANK = 100;
+
+/** Editor ADR 299 — the host keys no scoped binding may take (the
+ *  contract's reserved set, extensions ADR 348): save, print, the chrome
+ *  toggle, the command palette. */
+const RESERVED_COMBOS: readonly string[] = [
+  "cmd+s",
+  "cmd+p",
+  "cmd+\\",
+  "cmd+shift+p",
+];
+
+function sameCombo(a: KeyCombo, b: KeyCombo): boolean {
+  return (
+    a.key === b.key &&
+    (a.cmd || a.ctrl) === (b.cmd || b.ctrl) &&
+    a.alt === b.alt &&
+    a.shift === b.shift
+  );
+}
+
+/** Is `key` one of the reserved host combos? */
+export function isReservedCombo(key: string): boolean {
+  const combo = parseCombo(key);
+  return RESERVED_COMBOS.some((r) => sameCombo(parseCombo(r), combo));
 }
 
 /** Internal: parsed key combo + the command to invoke. */
@@ -112,7 +152,10 @@ function parseCombo(key: string): KeyCombo {
   if (parts.length === 0 || parts.some((p) => !p)) {
     throw new Error(`KeybindingRegistry: malformed key "${key}"`);
   }
-  const last = parts[parts.length - 1];
+  // `space` names the space bar (a `" "` key cannot be written in a combo:
+  // the string is trimmed). Editor ADR 299: Word's Cmd+Space.
+  const last =
+    parts[parts.length - 1] === "space" ? " " : parts[parts.length - 1];
   const mods = parts.slice(0, -1);
   const combo: KeyCombo = {
     key: last,
@@ -341,10 +384,17 @@ function resolveParsed(
     // A binding onto a command the editor does not offer is not a
     // candidate, so the key stays the page's (docs/composable-editor.md §6).
     if (offered && !offered(b.contribution)) continue;
-    const { when, precedence } = b.contribution;
+    const { when, precedence, scope } = b.contribution;
+    // Editor ADR 299 — a scoped binding exists only while its context is
+    // the active one (the frame context, else the document context), and
+    // then it outranks every host binding on the key.
+    if (scope && activeScopeContext(getState?.()) !== scope.editContext)
+      continue;
     if (!isEnabled(when, getState)) continue;
     let rank = when !== undefined ? 1 : 0;
-    if (precedence) {
+    if (scope) {
+      rank = SCOPED_BINDING_RANK;
+    } else if (precedence) {
       try {
         rank = precedence(getState?.());
       } catch {
@@ -410,12 +460,38 @@ export function createKeybindingRegistry(
     // Skip when the focused widget consumes this key itself, so typing
     // (and editing, and menu navigation) doesn't trigger commands. The
     // canvas's content-selection model lives on its own layer and isn't
-    // an editable element — bindings guard that through `when`.
-    if (targetOwnsKey(event)) return;
+    // an editable element — bindings guard that through `when`. The one
+    // exception is the canvas's own text input (editor ADR 299): a scoped
+    // binding of the active context takes its keys first, Tab and the
+    // arrows included, because inside a Word document they are Word's.
+    if (targetOwnsKey(event) && !scopedClaim(event)) return;
     const winner = resolveParsed(bindings, event, getState, offered);
     if (!winner) return;
     event.preventDefault();
     void commands.invoke(winner.command);
+  };
+
+  /** A scoped binding wins this key press, and the key arrived on a
+   *  surface that yields to one (the canvas text input, the canvas, the
+   *  page) — never mid-composition, never in a panel's field. */
+  const scopedClaim = (
+    event: KeyEventLike & Partial<Pick<KeyboardEvent, "target">>,
+  ): boolean => {
+    const e = event as Partial<KeyboardEvent> & KeyEventLike;
+    if (e.isComposing === true || e.keyCode === 229 || e.key === "Process")
+      return false;
+    const target = e.target as HTMLElement | null | undefined;
+    if (
+      target &&
+      target.tagName &&
+      canvasSurfaceOf(target) === null &&
+      target.tagName !== "BODY" &&
+      target.tagName !== "HTML"
+    ) {
+      return false;
+    }
+    const winner = resolveParsed(bindings, event, getState, offered);
+    return winner?.scope !== undefined;
   };
 
   let listening = false;
@@ -434,6 +510,12 @@ export function createKeybindingRegistry(
   return {
     register(contribution) {
       const combo = parseCombo(contribution.key);
+      if (contribution.scope && isReservedCombo(contribution.key)) {
+        throw new Error(
+          `KeybindingRegistry: "${contribution.key}" is reserved by the host; ` +
+            `a scoped binding may not take it`,
+        );
+      }
       const entry: ParsedBinding = { contribution, combo };
       bindings.push(entry);
       changed();
@@ -459,6 +541,9 @@ export function createKeybindingRegistry(
         state === undefined ? getState : () => state,
         offered,
       );
+    },
+    claims(event) {
+      return scopedClaim(event);
     },
     onChange(handler) {
       changeListeners.add(handler);

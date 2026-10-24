@@ -67,6 +67,13 @@ export type {
   // Commands + keybindings.
   CommandContribution,
   KeybindingContribution,
+  // Control bar + status bar (extensions ADR 348).
+  ControlBarGroupContribution,
+  ControlBarGroupProps,
+  ControlBarGroupRegistry,
+  StatusItemContribution,
+  StatusItemProps,
+  StatusItemRegistry,
   // Document IO — importers + exporters (K-2 / S-06).
   ImporterContribution,
   ImportRequest,

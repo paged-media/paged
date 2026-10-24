@@ -317,6 +317,7 @@ fn bounds(it: &slide_resolve::model::Item) -> [f64; 4] {
 pub struct ExportedDeck {
     bytes: Vec<u8>,
     diagnostics: Vec<String>,
+    not_exported: Vec<String>,
 }
 
 #[wasm_bindgen]
@@ -331,17 +332,32 @@ impl ExportedDeck {
     pub fn diagnostics(&self) -> String {
         serde_json::to_string(&self.diagnostics).unwrap_or_else(|_| "[]".into())
     }
+
+    /// What is on the slides that could not round-trip, one line each, as
+    /// JSON.
+    #[wasm_bindgen(getter, js_name = notExported)]
+    pub fn not_exported(&self) -> String {
+        serde_json::to_string(&self.not_exported).unwrap_or_else(|_| "[]".into())
+    }
 }
 
-/// Write a `.pptx` from the deck the document was imported from and the
-/// document's slide plan (`pptx_export::ExportPlan` as JSON).
+/// Write a `.pptx` from the deck the document was imported from, the
+/// document's slide plan (`pptx_export::ExportPlan` as JSON) and, when the
+/// host can serialize it, the document itself (`.paged` bytes): what is on
+/// the slides is then written from it (ADR 704, ADR 711).
 #[wasm_bindgen(js_name = exportPptx)]
-pub fn export_pptx(original: &[u8], plan: &str) -> Result<ExportedDeck, JsError> {
+pub fn export_pptx(
+    original: &[u8],
+    plan: &str,
+    document: Option<Vec<u8>>,
+) -> Result<ExportedDeck, JsError> {
     let plan: pptx_export::ExportPlan =
         serde_json::from_str(plan).map_err(|e| JsError::new(&format!("plan: {e}")))?;
-    let out = pptx_export::export(original, &plan).map_err(|e| JsError::new(&e))?;
+    let out = pptx_export::export_with(original, &plan, document.as_deref())
+        .map_err(|e| JsError::new(&e))?;
     Ok(ExportedDeck {
         bytes: out.bytes,
         diagnostics: out.diagnostics,
+        not_exported: out.not_exported,
     })
 }

@@ -111,6 +111,8 @@ const DATA_PANELS = [
   "media.paged.data.panel.dataset",
   "media.paged.data.panel.query",
   "media.paged.data.panel.objects",
+  "media.paged.data.panel.pagination",
+  "media.paged.data.panel.templates",
 ] as const;
 
 const DATA_COMMANDS = [

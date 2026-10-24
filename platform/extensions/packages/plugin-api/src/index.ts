@@ -142,6 +142,10 @@ export type {
   TextSurface,
   TextMetrics,
   TextCaret,
+  TextSelection,
+  TextPropertyRead,
+  TextPropertyWrite,
+  TextFormatResult,
   FrameChainLink,
   // B-22 (protocol v57) — the planar-region read door's result shapes.
   PlanarFace,
