@@ -111,6 +111,36 @@ The decision stands (one seam, moxcms for the print lane, CPU at decode). What c
 An RGB PSD's embedded profile is still not applied: doing so at `decode_psd` alone would make
 the flattened open and the layered open (whose plates are not transformed) disagree.
 
+## Amendment — 2026-10-24: one CMS, the engine's (WP1.3)
+
+The seam stands (`CmsEngine`, `QcmsEngine` for the display lane, `MoxcmsEngine` for the print
+lane, CPU at decode); the engines behind it are now the engine's. Under
+[ADR 466](466-core-raster-crates-are-shared.md) and PM-0014 ("`paged-color` gains the
+`image-cms` backends rather than a second colour crate"), `image-cms` is a thin adapter over
+`paged_color::cms` (engine [ADR 1016](../../../../engine/core/docs/adr/1016-one-cms-with-intents-and-bpc.md)):
+
+- **No backend code here.** `QcmsEngine` and `MoxcmsEngine` build a `paged_color::cms::Transform`
+  on `Backend::Qcms` / `Backend::Moxcms`; the trait, `CompiledTransform`,
+  `CompiledCmykTransform`, `GpuLut` and the interner are unchanged. `image-cms` depends on
+  `paged-color` (feature `moxcms`) and no longer on qcms or moxcms directly. "Agreement with the
+  page rests on the two qcms declarations staying equal" (Consequences above) is retired: it is
+  one declaration.
+- **Black-point compensation works on the print lane.** `paged_color::cms` implements Adobe's
+  published BPC algorithm for the backends that lack it; `bpc: true` on `MoxcmsEngine` now
+  compensates (`image-cms/tests/it/print_lane.rs`: within 0/255 of lcms2's BPC on a lifted-black
+  display profile; `cmyk_lane.rs`: within the lane's 20/255 bound). On `QcmsEngine` it is still
+  recorded and not honoured (qcms has no PCS endpoint to compute it with).
+- **The CMYK ingest uses Photoshop's own default.** `InkTransform` converts relative
+  colorimetric with BPC instead of approximating it with the perceptual table (amendment of
+  2026-10-05). On the Photoshop replay (`image-conformance/tests/it/psd_cmyk_photoshop.rs`) the
+  ink patches are now within max 1 / mean 0.06 levels of Photoshop's relcol + BPC view (were 4 /
+  0.44), and the saturated cyan-green of `blend-modes` within 4 (was 23). Blending the
+  converted layers in RGB stays as far from Photoshop's ink blending as before, a little further
+  in the shadows (normal tiles 56 → 63 levels); the import gate's verdicts are unchanged.
+- **The shipped wasm carries no C.** On wasm32 `paged-color` builds qcms and moxcms only; lcms2
+  is in the native graph (the engine's native backend), which this crate never selects and which
+  was already there as the oracle.
+
 ## Related
 
 - [ADR 003](https://github.com/paged-media/core/blob/main/docs/adr/003-lcms2-color.md) — core's engines: lcms2 native, qcms on wasm

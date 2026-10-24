@@ -30,7 +30,7 @@
 //! 1. INK STORAGE — `patches` fills known ink percentages; the decode must
 //!    read them back (the file stores ink INVERTED: 255 = no ink).
 //! 2. WHICH CONVERSION — our ink transform (`image_js::cmyk::InkTransform`,
-//!    moxcms Perceptual through the embedded profile) applied to the
+//!    moxcms relative colorimetric + BPC through the embedded profile) applied to the
 //!    merged CMYK numbers, against Photoshop's own conversion of the same
 //!    numbers. [`CONVERSION`] holds the distances.
 //! 3. COMPOSITING SPACE — our layered import converts each plate and
@@ -287,26 +287,26 @@ fn cmyk_layer_channels_decode_to_the_filled_ink__feat__image_psd_layer_import() 
 /// Our transform of Photoshop's merged CMYK numbers vs Photoshop's own
 /// conversion of them, per view: (max, mean) levels over R/G/B.
 ///
-/// Recorded 2026-10 against Photoshop 27.10 (Adobe ACE):
-/// * Photoshop's DEFAULT view (relcol + BPC) is what we match: max 4,
-///   mean 0.44 on the ink patches — the profile's perceptual table (the
-///   one we use) and ACE's relcol + BPC agree as closely as lcms2's own
-///   relcol + BPC does (max 4, mean 0.17, measured outside this suite).
+/// Recorded against Photoshop 27.10 (Adobe ACE):
+/// * Photoshop's DEFAULT view (relcol + BPC) is what we match, and since
+///   2026-10-24 by doing what it does: relative colorimetric with
+///   black-point compensation (the engine's implementation of Adobe's
+///   algorithm over moxcms). Max 1, mean 0.06 on the ink patches; the
+///   saturated cyan-green of `blend-modes` that ACE clips differently is
+///   4 levels off. With the perceptual table (before) the patches were
+///   max 4 / mean 0.44 and that outlier 23.
 /// * against relcol WITHOUT BPC we are 28 levels off on the patches —
 ///   the evidence that Photoshop's view compensates the black point.
-/// * the 23-level outlier in `blend-modes` is a saturated cyan-green
-///   outside sRGB that ACE clips differently from the ICC CMMs (lcms2
-///   gives the same 23).
 // Means carry a small margin: the CMS rounds differently on x86 Linux than on
-// Apple silicon (patches vs relcol: 5.302 there, under 5.3 here).
+// Apple silicon.
 const CONVERSION: &[(&str, &str, u8, f64)] = &[
-    ("patches", "relcol-bpc", 4, 0.47),
+    ("patches", "relcol-bpc", 2, 0.1),
     ("patches", "relcol", 28, 5.35),
-    ("transparent-soft", "relcol-bpc", 6, 0.9),
-    ("normal-stack", "relcol-bpc", 8, 0.55),
-    ("normal-stack-16", "relcol-bpc", 9, 0.6),
-    ("opaque-stack", "relcol-bpc", 8, 0.91),
-    ("blend-modes", "relcol-bpc", 23, 0.6),
+    ("transparent-soft", "relcol-bpc", 2, 0.2),
+    ("normal-stack", "relcol-bpc", 2, 0.15),
+    ("normal-stack-16", "relcol-bpc", 3, 0.3),
+    ("opaque-stack", "relcol-bpc", 2, 0.2),
+    ("blend-modes", "relcol-bpc", 5, 0.15),
 ];
 
 #[test]
@@ -435,8 +435,9 @@ type StackOutcome = Result<(u8, u8), &'static str>;
 /// Recorded 2026-10 against Photoshop 27.10:
 /// * `opaque-stack` (hard-edged opaque rectangles + an anti-aliased disc,
 ///   256 px) IMPORTS: exact everywhere but the disc's rim, where RGB and
-///   CMYK mixing differ by up to 25 levels on 0.42 % of the canvas (the
-///   gate allows 1 %); 24 levels from Photoshop's own sRGB view at worst;
+///   CMYK mixing differ by up to 25 levels on 0.44 % of the canvas (the
+///   gate allows 1 %); 25 levels from Photoshop's own sRGB view at worst
+///   (24 with the perceptual ink transform before 2026-10-24);
 /// * `transparent-soft` (one feathered layer over transparency — nothing
 ///   to mix with) IMPORTS within 2 levels;
 /// * `normal-stack` is DECLINED by the gate: its 60 % layer, 50 % group
@@ -447,7 +448,7 @@ type StackOutcome = Result<(u8, u8), &'static str>;
 ///   16-bit document's layers into the `Lr16` block, which the import
 ///   does not read yet (`no-layers`).
 const STACKS: &[(&str, StackOutcome)] = &[
-    ("opaque-stack", Ok((25, 24))),
+    ("opaque-stack", Ok((25, 25))),
     ("transparent-soft", Ok((2, 1))),
     ("normal-stack", Err("cmyk-composite")),
     ("normal-stack-16", Err("no-layers")),
@@ -537,27 +538,33 @@ const NORMAL_STACK_MAX: u8 = 61;
 /// tiles pass it and are then judged by the gate; every other mode was
 /// measured far off across its footprint, which is the `cmyk-blend`
 /// blocker (`image_psd::layer_pixels::CMYK_RGB_SAFE_BLENDS`).
+///
+/// Re-recorded 2026-10-24 when the ink transform became relative
+/// colorimetric with BPC (it was the perceptual table): the steeper
+/// shadows of the compensated transform widen the RGB-vs-ink mixing gap
+/// a little (normal-100 56 → 63 levels, p95 9.66 → 10.41); the verdicts
+/// are unchanged.
 const TILES: &[(&str, u8, f64, bool)] = &[
-    ("normal-100", 56, 9.66, true),
-    ("normal-50", 49, 13.76, true),
-    ("multiply", 74, 20.02, false),
-    ("screen", 95, 13.63, false),
-    ("overlay", 43, 12.47, false),
-    ("darken", 72, 22.65, false),
+    ("normal-100", 63, 10.41, true),
+    ("normal-50", 55, 15.56, true),
+    ("multiply", 83, 21.25, false),
+    ("screen", 103, 14.25, false),
+    ("overlay", 46, 12.84, false),
+    ("darken", 82, 23.98, false),
     ("lighten", 69, 26.77, false),
     ("color-burn", 225, 50.26, false),
     ("color-dodge", 153, 24.50, false),
-    ("soft-light", 36, 10.37, false),
-    ("hard-light", 104, 19.78, false),
-    ("difference", 181, 43.27, false),
-    ("exclusion", 183, 49.85, false),
-    ("linear-burn", 85, 22.98, false),
-    ("linear-dodge", 111, 19.50, false),
+    ("soft-light", 36, 10.55, false),
+    ("hard-light", 122, 21.70, false),
+    ("difference", 189, 44.55, false),
+    ("exclusion", 189, 50.83, false),
+    ("linear-burn", 85, 23.13, false),
+    ("linear-dodge", 120, 19.50, false),
     ("hue", 64, 20.12, false),
-    ("saturation", 75, 9.88, false),
-    ("color", 61, 16.66, false),
-    ("luminosity", 82, 18.71, false),
-    ("multiply-50", 44, 12.26, false),
+    ("saturation", 103, 11.52, false),
+    ("color", 68, 17.47, false),
+    ("luminosity", 84, 19.82, false),
+    ("multiply-50", 49, 14.16, false),
 ];
 
 #[test]
