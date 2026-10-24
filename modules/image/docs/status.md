@@ -209,8 +209,8 @@ the baked image), beside the module's own label on the frame.
   and says why (`glue/src/session.ts`, `psdExportBytes`; [ADR 460](adr/460-document-is-not-the-store.md)).
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
   until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
-  8192 on many others). A crop, resize or straighten replaces the stack with one layer and
-  drops the history. The undo list keeps 200 structure steps; its pixel steps live in a tile
+  8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
+  step that keeps the history, and drops the selection. The undo list keeps 200 structure steps; its pixel steps live in a tile
   journal of at most 32 entries and 256 MiB.
 - **Raster type** has no line wrapping. **Content-aware fill** searches a bounded window.
 - **Called only by tests:** Engine B's op-node evaluation and the residency manager's third
