@@ -26,6 +26,7 @@ verbs:
   plugins [doc]                                                                                the discovered bundles, their versions and object kinds
   describe [doc]                                                                               kinds × schemas × typed commands × verbs, as one JSON document (for agents and the docs)
   template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>   template fields: list them, fill them as a filler (writes .paged, .idml or .pdf), check that a filled document changed only its fields, ingest a document tagged for XML as a template
+  ml <health|generate|edit> [prompt]                                                           the local image model (paged-ml-host on this machine, extensions ADR 345): its health, text to image, and an image edited by a prompt (mask, references); nothing leaves the machine
   mcp                                                                                          serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)
 
 options (every verb):
@@ -35,6 +36,7 @@ options (every verb):
   --no-default-font                  no fallback face: text no font answers for is not set (to see what a document is missing)
   --cmyk-profile <file.icc>          CMYK working space and PDF/X output intent (an ICC file)
   --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
+  --ml-host <url>                    the local image model host (paged-ml-host; default PAGED_ML_HOST_URL or http://127.0.0.1:7861)
   --text                             human-readable output instead of JSON
   -h, --help                         show help
 

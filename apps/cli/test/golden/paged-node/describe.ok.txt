@@ -48,6 +48,7 @@ $ paged-node describe --no-plugins
     "plugins [doc]",
     "describe [doc]",
     "template fields <doc> | kinds | fill <template> | check <template> <filled> | ingest <doc>",
+    "ml <health|generate|edit> [prompt]",
     "mcp "
   ]
 }

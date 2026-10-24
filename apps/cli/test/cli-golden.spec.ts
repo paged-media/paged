@@ -46,6 +46,7 @@ import { afterAll, beforeAll, describe, expect, it, test } from "bun:test";
 
 import { CORE_COMMAND_OPS } from "@paged-media/plugin-sdk";
 
+import { decodePng, encodePng } from "../src/ml";
 import { VERBS } from "../src/verbs";
 import { cliVersion, engineVersionOnDisk, packageRoot } from "../src/session";
 import {
@@ -359,7 +360,119 @@ function noCredentialEnv(): Record<string, string> {
   return env;
 }
 
+/** A fake local image host (paged-ml-host's API v1) for the `ml` verb's
+ *  success path: ready, one job, a 4×2 PNG; PAGED_ML_HOST_URL points at it. */
+async function withFakeMlHost(run: () => Promise<Run>): Promise<Run> {
+  const png = await encodePng({
+    width: 4,
+    height: 2,
+    data: new Uint8ClampedArray(32).fill(255),
+  });
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch(req) {
+      const p = new URL(req.url).pathname;
+      if (p === "/api/ml/health")
+        return Response.json({
+          ok: true,
+          version: "0.1.0",
+          api: 1,
+          runtime: { binary: "/opt/sd", found: true },
+          model: {
+            id: "qwen-image-2.1",
+            configured: true,
+            licenceAcknowledged: true,
+          },
+          ready: true,
+          capabilities: ["generate", "edit"],
+          queue: { running: 0, queued: 0 },
+        });
+      if (p === "/api/ml/jobs")
+        return Response.json({ id: "j1", state: "queued" }, { status: 202 });
+      if (p === "/api/ml/jobs/j1/events")
+        return new Response(
+          'event: done\ndata: {"id":"j1","kind":"generate","state":"done","progress":{"step":1,"total":1}}\n\n',
+          { headers: { "content-type": "text/event-stream" } },
+        );
+      if (p === "/api/ml/jobs/j1/result")
+        return new Response(png as Uint8Array<ArrayBuffer>, {
+          headers: { "content-type": "image/png" },
+        });
+      return Response.json({ error: "no_job", message: "no" }, { status: 404 });
+    },
+  });
+  return withMlHostUrl(`http://127.0.0.1:${server.port}`, run).finally(() =>
+    server.stop(true),
+  );
+}
+
+async function withMlHostUrl(
+  url: string,
+  run: () => Promise<Run>,
+): Promise<Run> {
+  const saved = process.env["PAGED_ML_HOST_URL"];
+  process.env["PAGED_ML_HOST_URL"] = url;
+  try {
+    return await run();
+  } finally {
+    if (saved === undefined) delete process.env["PAGED_ML_HOST_URL"];
+    else process.env["PAGED_ML_HOST_URL"] = saved;
+  }
+}
+
 const CASES: Record<string, Case[]> = {
+  ml: [
+    { name: "help", argv: () => ["ml", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["ml"], exit: 2 },
+    { name: "usage-subcommand", argv: () => ["ml", "paint", "x"], exit: 2 },
+    {
+      name: "input-no-image-file",
+      argv: () => [
+        "ml",
+        "edit",
+        "make it night",
+        "--image",
+        T("absent.png"),
+        "-o",
+        T("ml-edit.png"),
+      ],
+      exit: 2,
+    },
+    {
+      name: "ok-generate",
+      argv: () => [
+        "ml",
+        "generate",
+        "a lighthouse",
+        "-o",
+        T("ml-gen.png"),
+        "--width",
+        "64",
+        "--height",
+        "64",
+      ],
+      exit: 0,
+      around: withFakeMlHost,
+      check: async () => {
+        const img = await decodePng(
+          new Uint8Array(readFileSync(T("ml-gen.png"))),
+        );
+        expect([img.width, img.height]).toEqual([4, 2]);
+      },
+    },
+    {
+      name: "refused-no-host",
+      argv: () => ["ml", "health"],
+      exit: 1,
+      around: (run) => withMlHostUrl("http://127.0.0.1:9", run),
+      project: (r) =>
+        json({
+          ok: r.json?.ok,
+          error: /local image model not running/.test(r.json?.error),
+        }),
+    },
+  ],
   // The bare binary: help, no verb, version, an unknown verb.
   root: [
     { name: "help", argv: () => ["--help"], exit: 0 },
@@ -1189,6 +1302,10 @@ describe("paged-node — the case table is the verb table", () => {
 });
 
 describe("paged-node golden transcripts", () => {
+  it("ml", async () => {
+    covers("cli:paged-node ml");
+    await runVerb("ml");
+  });
   it("the bare binary: help, no verb, an unknown verb or option, --version", async () => {
     covers("cli:paged-node");
     await runVerb("root");

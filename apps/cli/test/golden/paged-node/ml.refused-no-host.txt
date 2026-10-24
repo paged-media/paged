@@ -1,0 +1,10 @@
+$ paged-node ml health
+# exit 1
+# stdout
+(projected)
+{
+  "ok": false,
+  "error": true
+}
+# stderr
+(empty)

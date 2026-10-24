@@ -34,6 +34,7 @@ import {
   protocolFromVersion,
   resolveCanvasWasm,
   type HeadlessHost,
+  mlObjectModel,
 } from "@paged-media/plugin-sdk";
 
 import {
@@ -51,6 +52,7 @@ import {
   type DiscoveredBundle,
   type DiscoveryProblem,
 } from "./plugins";
+import { cliMlBackend, mlHostUrl, nodePngCodec } from "./ml";
 import { installNodeShims } from "./node-shims";
 import { findingLine, pdfCommand, typedPdf } from "./pdf";
 import { CliError, EXIT } from "./errors";
@@ -76,6 +78,9 @@ export interface SessionOptions {
   warn?: (text: string) => void;
   /** Where to resolve the engine from (else this package). */
   engineFrom?: string;
+  /** The local image model's host (`--ml-host`; else PAGED_ML_HOST_URL,
+   *  else the default loopback address). */
+  mlHost?: string;
   log?: {
     debug(...a: unknown[]): void;
     info(...a: unknown[]): void;
@@ -326,6 +331,9 @@ export async function openSession(
   const cmykProfile = options.cmykProfile
     ? readCmykProfile(resolve(cwd, options.cmykProfile))
     : undefined;
+  // Extensions ADR 345 — the ML doors answer from the local image model
+  // host; scripts and `invoke` reach it as paged.ml.generate / .edit.
+  const ml = cliMlBackend(mlHostUrl(options.mlHost));
   let h: HeadlessHost;
   try {
     const { protocol } = await engineProtocolOnDisk(resolveFrom);
@@ -333,6 +341,7 @@ export async function openSession(
       console: log,
       resolveFrom,
       expectedProtocol: protocol,
+      ml: ml.backend,
       ...(font ? { defaultFont: font, engineShaper: true } : {}),
       ...(cmykProfile ? { cmykProfile } : {}),
     });
@@ -352,6 +361,10 @@ export async function openSession(
   // answered with the caller's own credential. The client is built on the
   // first call, so a run that never asks needs no key.
   h.objects.register({ plugin: "paged.ai", model: aiObjectModel(cliComplete) });
+  h.objects.register({
+    plugin: "paged.ml",
+    model: mlObjectModel(ml.backend, nodePngCodec),
+  });
 
   if (docBytes && format !== "import") {
     try {
