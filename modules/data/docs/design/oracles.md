@@ -13,11 +13,11 @@ reference tool. Where we disagree with the reference today, the test pins the di
 a numbered defect. A pinned defect stays green while the defect exists and fails the day the
 behaviour changes, so the fix and the pin change land in the same commit.
 
-| Lane       | Reference                            | Recorded in                                    | Replayed by                                                                                      |
-| ---------- | ------------------------------------ | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| SQLite SQL | `sqlite3` CLI 3.51.0                 | `conformance/sqlite-sql/recorded/results.json` | `data-store/tests/sqlite_oracle.rs`                                                              |
-| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`   | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-store.spec.ts`  |
-| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                            | `data-conformance/tests/it/oracle_props.rs`                                                      |
+| Lane       | Reference                            | Recorded in                                    | Replayed by                                                                                     |
+| ---------- | ------------------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SQLite SQL | `sqlite3` CLI 3.51.0                 | `conformance/sqlite-sql/recorded/results.json` | `data-store/tests/sqlite_oracle.rs`                                                             |
+| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`   | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-store.spec.ts` |
+| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                            | `data-conformance/tests/it/oracle_props.rs`                                                     |
 
 ## 1. SQLite SQL lane
 

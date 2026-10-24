@@ -32,7 +32,11 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 import { stripContainerParts } from "./zip";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -51,9 +55,7 @@ const RECORD = process.env.PAGED_RECORD_INDESIGN_FIXTURES === "1";
  *  workspace engine is in; the earlier recordings carry no suffix. */
 const ERA = "71";
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 const recorded = (id: string) => join(LANE, "recorded", `${id}.json`);
 
 async function bundle() {

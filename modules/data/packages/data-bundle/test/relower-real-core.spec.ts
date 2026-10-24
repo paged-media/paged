@@ -58,8 +58,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h?.dispose();
       h = null;
     });
-    afterAll(async () => {
-    });
+    afterAll(async () => {});
 
     async function session(csv: string) {
       h = await openDataHost();

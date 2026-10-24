@@ -117,11 +117,11 @@ _Status note (2026-10-02): this section predates the implementation; "Export for
 
 The key insight for "where does the embedded content live" is that "embedded content" is three different things with different sizes, lifecycles, and owners. Storing them by role makes the layout self-evident and every plugin follow the same shape.
 
-| Role        | What it is                                                                                                           | Characteristics                                                     | Source of truth?                     |
-| ----------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| Role        | What it is                                                                                                        | Characteristics                                                     | Source of truth?                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
 | **Spec**    | The declarative definition: formula set, chart definition, SQL query + field-to-frame bindings, image layer stack | Small, JSON, human-readable, diffable, authored                     | **Yes** — canonical, must round-trip |
-| **Source**  | The bytes the spec operates on: cell inputs, dataset rows, pixel layers                                              | Potentially large, binary-friendly; may live _outside_ the document | Yes (but may be linked, see §6)      |
-| **Derived** | The computed output: evaluated values, rendered chart, composited image                                              | Regenerable; kept for viewers without a compute engine              | **No** — regenerable cache           |
+| **Source**  | The bytes the spec operates on: cell inputs, dataset rows, pixel layers                                           | Potentially large, binary-friendly; may live _outside_ the document | Yes (but may be linked, see §6)      |
+| **Derived** | The computed output: evaluated values, rendered chart, composited image                                           | Regenerable; kept for viewers without a compute engine              | **No** — regenerable cache           |
 
 **The traps this avoids:**
 

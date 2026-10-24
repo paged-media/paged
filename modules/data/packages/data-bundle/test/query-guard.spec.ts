@@ -7,7 +7,11 @@ import { loadIntoStore } from "../src/query/import";
 import { checkQuery } from "../src/query/sql";
 import { storeHandle, type QueryHandle } from "../src/query/store";
 import { ALLOWED, FIXTURE_CSV, REFUSED } from "./guard-matrix";
-import { bootRealEngine, HAVE_ENGINE, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  HAVE_ENGINE,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 describe.skipIf(!HAVE_ENGINE && !REQUIRE_REAL_ENGINE)(
   "the query guard over the real query store in Node [data.security.gates]",
@@ -55,9 +59,9 @@ describe.skipIf(!HAVE_ENGINE && !REQUIRE_REAL_ENGINE)(
       expect((await d.preview("SELECT * FROM late", 10)).rows).toEqual([
         ["1", "2"],
       ]);
-      expect((await d.preview("SELECT count(*) FROM people", 1)).rows).toEqual(
-        [["2"]],
-      );
+      expect((await d.preview("SELECT count(*) FROM people", 1)).rows).toEqual([
+        ["2"],
+      ]);
     });
   },
 );

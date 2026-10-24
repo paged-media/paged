@@ -86,7 +86,11 @@ describe.skipIf(!RUN_BUDGETS)(
       const calls1 = { ...engine.log.calls };
 
       engine.reset();
-      const again = ingestColumnBatch(engine.engine, "q", batchOf(productCsv(500)));
+      const again = ingestColumnBatch(
+        engine.engine,
+        "q",
+        batchOf(productCsv(500)),
+      );
       const c2 = engine.counters();
       const calls2 = { ...engine.log.calls };
 

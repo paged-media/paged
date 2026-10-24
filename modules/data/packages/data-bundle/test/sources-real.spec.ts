@@ -14,7 +14,11 @@ import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
 
 import type { DataSourceSession } from "../src/session";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -66,10 +70,7 @@ describe.skipIf(!ready && !REQUIRE_REAL_ENGINE)(
     let mod: Awaited<ReturnType<typeof loadSessionModule>>;
     let s: DataSourceSession;
     beforeAll(async () => {
-      expect(
-        ready,
-        "the data-js wasm must be available",
-      ).toBe(true);
+      expect(ready, "the data-js wasm must be available").toBe(true);
       mod = await loadSessionModule();
     });
     const fresh = () => (s = mod.createSession(stubHost, 0));
@@ -252,11 +253,7 @@ describe.skipIf(!ready && !REQUIRE_REAL_ENGINE)(
       // generate_series() reads nothing and is allowed.
       expect(
         (await s.previewQuery("SELECT value FROM generate_series(0, 2)")).rows,
-      ).toEqual([
-        ["0"],
-        ["1"],
-        ["2"],
-      ]);
+      ).toEqual([["0"], ["1"], ["2"]]);
     });
 
     it("store errors come back with their class and position in the query as written [data.query.seam]", async () => {
