@@ -94,7 +94,8 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   Vello on wgpu, sharing `vello_map.rs` (paths, paints, blends, strokes).
 - `crates/paged-renderer/` — top-level `pipeline::build` / `render`.
   `StoryEmitter` per-story state. `paged-inspect` CLI.
-- `crates/paged-color/` — lcms2 wrapper (native); naive fallback on wasm32.
+- `crates/paged-color/` — the CMS: lcms2 on native, qcms (pure Rust) on wasm32; the naive
+  CMYK conversion is the fallback on both when no CMYK profile is configured.
 - `crates/paged-fidelity/` — ΔE2000 + SSIM diff library + `paged-diff` CLI.
   Reference is positional arg #1, candidate #2.
 - `crates/paged-mutate/`, `paged-introspect/`, `paged-canvas/`,

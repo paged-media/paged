@@ -1,9 +1,9 @@
 # cargo-deny configuration for paged.image.
 # Run:  cargo deny check          (CI runs `check licenses bans sources`)
 #
-# This doubles as the SDK-only rule's Rust half (spec §4 dep rule 3):
-# [sources] denies unknown registries/git, so a path/git reach-around
-# into core/editor internals cannot land silently.
+# [sources] denies unknown registries and git sources. It does not check
+# path dependencies: since ADR 466 the Rust crates may path-depend on
+# engine/core crates for raster codecs, PSD, pixel types, colour and kernels.
 
 [advisories]
 version = 2
