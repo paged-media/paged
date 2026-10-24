@@ -1417,3 +1417,11 @@ Taken on 2026-10-21:
 5. **The `editor` role and the policy:** only `author` writes the template policy by default;
    a host may allow it for an editor session through an override (C7).
 6. **Strings:** the whole editor and its bundles, in this project (E10).
+
+Taken on 2026-10-24, with the concept's former open questions (concept §12, "Decided on
+2026-10-24"): the iframe is the path for hosts without cross-origin isolation; `feature-ids.json`
+is the public id list, with a deprecation window and aliases; the `template-fill` and `form`
+presets become usable on phones and tablets; roles stay per session; placeholder runs are the
+text-range mechanism; text fields take author-allowed character styles and breaks; choice fields
+can offer frame alternates; and the module leftovers each module's `status.md` lists are fixed in
+the same round, not tracked for later.
