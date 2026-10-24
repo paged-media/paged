@@ -124,13 +124,15 @@ export {
 // Illustrator Phase 2 — compound paths: the contour algebra (merge /
 // split) plus the two NON-ZERO winding re-orientations — by nesting
 // depth (Image Trace) and by paint order (Make Compound Path, the rule
-// Illustrator applies).
+// Illustrator applies) — and the choice a fill rule makes between the
+// depth rule and none (SVG import).
 export {
   contourRanges,
   contourSignedArea,
   reverseContour,
   contourDepths,
   orientForNonZeroHoles,
+  orientForFillRule,
   orientByPaintOrder,
   mergeCompound,
   makeCompoundTable,

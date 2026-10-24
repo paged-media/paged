@@ -29,8 +29,9 @@
 //      engine (leaf count grows, the created element's anchor table
 //      matches), then the inserted selection is exported back to SVG and
 //      re-imported — geometry stable within tolerance.
-//   4. What ONE BATCH has to keep: z-order = document order, a contour is
-//      an element, groups flatten, the paint does not depend on the
+//   4. What ONE BATCH has to keep: z-order = document order, a shape is
+//      an element (a compound one too — `svg-compound.spec.ts` proves its
+//      holes), groups flatten, the paint does not depend on the
 //      user's creation defaults (and leaves them alone), one undo takes
 //      the whole file back, and a refused contour costs that contour only.
 
@@ -72,6 +73,8 @@ import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
 
 const PAGE = F1_MULTI_SHAPE.pageId;
+/** The fixture page starts at its spread's origin. */
+const TARGET = { pageId: PAGE, pageOrigin: [0, 0] as const };
 const enc = (s: string) => new TextEncoder().encode(s);
 
 // A small, real, hand-authored SVG fixture: a filled+stroked rectangle,
@@ -183,7 +186,7 @@ function sample(t: AnchorTable, per = 8): [number, number][] {
   return out;
 }
 
-describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
+describe("draw conformance — SVG import/export (Phase 8, K-2) [plugin-draw.svg-io]", () => {
   let h: HeadlessHost;
 
   beforeAll(async () => {
@@ -264,7 +267,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   // right after its insert.
   it("svgImportOpsFor lays the file out as one batch: swatch, then insert → bind → three paint writes per contour", () => {
     const shapes = shapesFromSvgBytes(enc(FIXTURE_SVG));
-    const ops = svgImportOpsFor(svgImportUnitsFor(PAGE, shapes), new Map());
+    const ops = svgImportOpsFor(svgImportUnitsFor(TARGET, shapes), new Map());
     expect(ops.map((m) => m.op)).toEqual([
       // the rect: fill + stroke
       "createSwatch",
@@ -339,7 +342,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     ]);
   });
 
-  it("a compound shape is one unit: one swatch set, then every contour inserted and painted in contour order", () => {
+  it("a compound shape is one unit and ONE element: its first contour inserted, the whole table written onto its handle, then painted", () => {
     const shapes = shapesFromSvgBytes(
       enc(
         `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">` +
@@ -347,13 +350,89 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
           `</svg>`,
       ),
     );
-    const units = svgImportUnitsFor(PAGE, shapes);
+    const units = svgImportUnitsFor(TARGET, shapes);
     expect(units).toHaveLength(1);
-    expect(units[0].inserts).toHaveLength(3);
+    expect(units[0].contours).toHaveLength(3);
     const ops = svgImportOpsFor(units, new Map());
-    expect(ops.filter((m) => m.op === "createSwatch")).toHaveLength(1);
+    type Write = Extract<Mutation, { op: "setElementProperty" }>;
+    expect(
+      ops.map((m) =>
+        m.op === "setElementProperty" ? (m as Write).args.path : m.op,
+      ),
+    ).toEqual([
+      "createSwatch",
+      "insertPath",
+      "bindCreated",
+      "framePath",
+      "frameBounds",
+      "frameFillColor",
+      "frameStrokeColor",
+      "frameStrokeWeight",
+    ]);
+    const insert = ops[1] as Extract<Mutation, { op: "insertPath" }>;
+    expect(insert.args.anchors).toHaveLength(4);
+    const path = (ops[3] as Write).args.value as {
+      value: { anchors: unknown[]; subpathStarts: number[] };
+    };
+    expect(path.value.subpathStarts).toEqual([0, 4, 8]);
+    expect(path.value.anchors).toHaveLength(12);
+    expect((ops[4] as Write).args.value).toEqual({
+      type: "bounds",
+      value: [10, 10, 30, 90],
+    });
+  });
+
+  it("a compound's table is written in SPREAD space: the page origin is added, as insertPath adds it to the first contour", () => {
+    const shapes = shapesFromSvgBytes(
+      enc(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">` +
+          `<path d="M10 10h20v20h-20Z M40 10h20v20h-20Z" fill="#aa00aa"/>` +
+          `</svg>`,
+      ),
+    );
+    const ops = svgImportOpsFor(
+      svgImportUnitsFor({ pageId: PAGE, pageOrigin: [-612, -396] }, shapes),
+      new Map(),
+    );
+    type Write = Extract<Mutation, { op: "setElementProperty" }>;
+    const insert = ops.find((m) => m.op === "insertPath") as Extract<
+      Mutation,
+      { op: "insertPath" }
+    >;
+    // The insert stays in PAGE space — the engine adds the origin.
+    expect(insert.args.anchors[0]!.anchor).toEqual([10, 10]);
+    const writes = ops.filter((m) => m.op === "setElementProperty") as Write[];
+    const path = writes[0]!.args.value as {
+      value: { anchors: { anchor: number[] }[] };
+    };
+    expect(path.value.anchors[0]!.anchor).toEqual([10 - 612, 10 - 396]);
+    expect(path.value.anchors[4]!.anchor).toEqual([40 - 612, 10 - 396]);
+    expect(writes[1]!.args.value).toEqual({
+      type: "bounds",
+      value: [10 - 396, 10 - 612, 30 - 396, 60 - 612],
+    });
+  });
+
+  it("without a page origin, or with an OPEN contour past the first, a shape stays one element per contour", () => {
+    const shapes = shapesFromSvgBytes(
+      enc(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">` +
+          `<path d="M10 10h20v20h-20Z M40 10h20v20h-20Z" fill="#aa00aa"/>` +
+          `<path d="M10 100 L60 100 M10 120 L60 120" fill="none" stroke="#00aa00"/>` +
+          `</svg>`,
+      ),
+    );
+    // No origin reported: nothing can be written in spread space.
+    const blind = svgImportUnitsFor({ pageId: PAGE, pageOrigin: null }, shapes);
+    expect(blind.map((u) => u.pageOrigin)).toEqual([null, null]);
+    const blindOps = svgImportOpsFor(blind, new Map());
+    expect(blindOps.filter((m) => m.op === "insertPath")).toHaveLength(4);
+    // With one, the closed pair is a compound and the open pair is not:
+    // `framePath` carries no `subpathOpen`, so its second line would close.
+    const units = svgImportUnitsFor(TARGET, shapes);
+    expect(units.map((u) => u.pageOrigin)).toEqual([[0, 0], null]);
+    const ops = svgImportOpsFor(units, new Map());
     expect(ops.filter((m) => m.op === "insertPath")).toHaveLength(3);
-    expect(ops.filter((m) => m.op === "setElementProperty")).toHaveLength(9);
     // A bind always directly follows the insert it names.
     ops.forEach((m, i) => {
       if (m.op === "bindCreated") expect(ops[i - 1].op).toBe("insertPath");
@@ -466,10 +545,10 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     expect(await leafCount(h)).toBe(leaves);
   });
 
-  it("z-order is document order, a contour is an element, and groups flatten with their transform and paint", async () => {
+  it("z-order is document order, a shape is an element, and groups flatten with their transform and paint", async () => {
     // Document order: a square, a three-contour compound path, then a
     // group (translated, with inherited paint) holding a square and a
-    // nested rotated group.
+    // nested translated group.
     const svg =
       `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
       `<rect x="10" y="10" width="20" height="20" fill="#111111"/>` +
@@ -480,31 +559,31 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
       `</g>` +
       `</svg>`;
     const ids = await importSvg(h.host, file("order.svg", svg));
-    // 1 + 3 + 1 + 1: every contour its own element, no group node.
-    expect(ids).toHaveLength(6);
+    // 1 + 1 + 1 + 1: every shape one element — the three-contour path
+    // a compound — and no group node.
+    expect(ids).toHaveLength(4);
     expect(ids.every((id) => id.kind === "polygon")).toBe(true);
     // The ids come back in insertion order, and that IS the tree's
     // (= paint) order: later in the file paints on top.
-    expect((await leafList(h)).slice(-6)).toEqual(ids);
+    expect((await leafList(h)).slice(-4)).toEqual(ids);
 
-    // WHICH contour landed where: the group's transforms are applied.
+    // WHICH shape landed where: the group's transforms are applied.
     expect(await firstAnchors(h, ids)).toEqual([
       [10, 10],
       [40, 10],
-      [70, 10],
-      [100, 10],
       [100, 100],
       [150, 100],
     ]);
-    // …and each carries its own shape's paint: the compound path's three
-    // contours share one, the group's children inherit the group's.
+    // The compound holds all three of its contours.
+    const compound = await h.host.document.pathAnchors(ids[1]!);
+    expect(compound!.subpathStarts).toEqual([0, 4, 8]);
+    // …and each carries its own shape's paint; the group's children
+    // inherit the group's.
     const paints = [];
     for (const id of ids) paints.push(await paintOf(h, id));
     const black = { stroke: "Black", weight: 1 }; // SVG_IMPORT_UNSTROKED
     expect(paints).toEqual([
       { fill: "#111111", ...black },
-      { fill: "#222222", ...black },
-      { fill: "#222222", ...black },
       { fill: "#222222", ...black },
       { fill: "#333333", stroke: "#444444", weight: 2 },
       { fill: "#555555", stroke: "#444444", weight: 2 },
@@ -577,7 +656,9 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     const before = new Set((await leafList(h)).map((id) => String(id.id)));
 
     const done = await commitSvgImport(h.host, file("refused.svg", svg));
-    // Five shapes, seven contours, two of them unreadable.
+    // Five shapes, seven contours, two of them unreadable. The compound
+    // whose middle contour is refused is narrowed to its contours, and
+    // the two the engine takes land as one element each.
     expect(done.shapes).toBe(5);
     expect(done.refused).toBe(2);
     expect(done.elements).toBe(5);
