@@ -31,7 +31,7 @@ use docx_core::{RunProps, VertAlign};
 use docx_lower::ir::{LoweredBlock, LoweredDoc, PropValue, StyleProp};
 
 use crate::bindings::{BlockBinding, DocxBindings};
-use crate::edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, StructuralEdit};
+use crate::edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 
 /// Diff two lowerings into the edits needed to turn `base` into `edited`.
 pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> EditSet {
@@ -149,33 +149,43 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
                             });
                             continue;
                         }
-                        if bpara.runs.len() != epara.runs.len() {
-                            continue; // run structure changed — deferred
-                        }
-                        for (run_idx, (br, er)) in bpara.runs.iter().zip(&epara.runs).enumerate() {
-                            let mut edit = CellRunEdit {
+                        // The runs, mapped character by character
+                        // (`plan_runs`): an edit in place, a run emptied,
+                        // or a run split where its text took another look.
+                        let plans = plan_runs(&bpara.runs, &epara.runs, base, edited, bindings);
+                        for (run_idx, (plan, look)) in plans.into_iter().enumerate() {
+                            let at = |edit: CellRunEdit| CellRunEdit {
                                 block: block_idx,
                                 cell: cell_idx,
                                 para: para_idx,
                                 run: run_idx,
-                                ..Default::default()
+                                ..edit
                             };
-                            let mut changed = false;
-                            if br.text != er.text {
-                                edit.new_text = Some(er.text.clone());
-                                changed = true;
-                            }
-                            let (bprops, brs) =
-                                effective_props(br.char_style_id.as_deref(), base, bindings);
-                            let (eprops, ers) =
-                                effective_props(er.char_style_id.as_deref(), edited, bindings);
-                            if bprops != eprops || brs != ers {
-                                edit.new_props = Some(eprops);
-                                edit.rstyle = Some(ers);
-                                changed = true;
-                            }
-                            if changed {
-                                cells.push(edit);
+                            match plan {
+                                RunPlan::Keep => {}
+                                // A cell run is emptied, not removed, as the
+                                // text patch always did.
+                                RunPlan::Delete => cells.push(at(CellRunEdit {
+                                    new_text: Some(String::new()),
+                                    ..Default::default()
+                                })),
+                                RunPlan::Edit { text, format } => cells.push(at(CellRunEdit {
+                                    new_text: text,
+                                    rstyle: format.as_ref().map(|f| f.rstyle.clone()),
+                                    new_props: format.map(|f| f.props),
+                                    base: Some(look),
+                                    ..Default::default()
+                                })),
+                                RunPlan::Split(pieces) => {
+                                    structural.push(StructuralEdit::SplitCellRun {
+                                        block: block_idx,
+                                        cell: cell_idx,
+                                        para: para_idx,
+                                        run: run_idx,
+                                        base: look,
+                                        pieces,
+                                    })
+                                }
                             }
                         }
                     }
@@ -186,37 +196,39 @@ pub fn diff(base: &LoweredDoc, edited: &LoweredDoc, bindings: &DocxBindings) -> 
         let (LoweredBlock::Paragraph(bp), LoweredBlock::Paragraph(ep)) = (bb, eb) else {
             continue; // a paragraph↔table swap — structural, deferred
         };
-        if bp.runs.len() != ep.runs.len() {
-            // Increment 2 — a run was inserted or removed. Align the two run
-            // lists by their (text, style) identity and emit structural ops.
+        if bp.runs.is_empty() {
+            // Increment 2 — text in a paragraph that had no run: the new
+            // runs are inserted at its start.
             structural.extend(align_runs(block_idx, bp, ep, edited, bindings));
-            continue;
-        }
-        for (run_idx, (br, er)) in bp.runs.iter().zip(&ep.runs).enumerate() {
-            let mut edit = RunEdit {
-                block: block_idx,
-                run: run_idx,
-                ..Default::default()
-            };
-            let mut changed = false;
-
-            if br.text != er.text {
-                edit.new_text = Some(er.text.clone());
-                changed = true;
-            }
-
-            let (bp_props, bp_rstyle) =
-                effective_props(br.char_style_id.as_deref(), base, bindings);
-            let (ep_props, ep_rstyle) =
-                effective_props(er.char_style_id.as_deref(), edited, bindings);
-            if bp_props != ep_props || bp_rstyle != ep_rstyle {
-                edit.new_props = Some(ep_props);
-                edit.rstyle = Some(ep_rstyle);
-                changed = true;
-            }
-
-            if changed {
-                runs.push(edit);
+        } else {
+            // The runs, mapped character by character (`plan_runs`): an edit
+            // in place (text, look), a run removed, or a run split where part
+            // of its text took another look (a word made bold, a character
+            // style applied to part of it). Runs the engine joined map back
+            // onto their Word runs; untouched runs are not addressed at all.
+            let plans = plan_runs(&bp.runs, &ep.runs, base, edited, bindings);
+            for (run_idx, (plan, look)) in plans.into_iter().enumerate() {
+                match plan {
+                    RunPlan::Keep => {}
+                    RunPlan::Delete => structural.push(StructuralEdit::DeleteRun {
+                        block: block_idx,
+                        run: run_idx,
+                    }),
+                    RunPlan::Edit { text, format } => runs.push(RunEdit {
+                        block: block_idx,
+                        run: run_idx,
+                        new_text: text,
+                        rstyle: format.as_ref().map(|f| f.rstyle.clone()),
+                        new_props: format.map(|f| f.props),
+                        base: Some(look),
+                    }),
+                    RunPlan::Split(pieces) => structural.push(StructuralEdit::SplitRun {
+                        block: block_idx,
+                        run: run_idx,
+                        base: look,
+                        pieces,
+                    }),
+                }
             }
         }
 
@@ -652,6 +664,12 @@ fn effective_props(
         return (RunProps::default(), Some(style_id.clone()));
     }
     if let Some(style) = doc.styles.iter().find(|s| s.id == token) {
+        if token.starts_with(EDIT_STYLE_PREFIX) {
+            // A canvas edit's direct formatting over the run's style.
+            let (mut props, rstyle) = effective_props(style.based_on.as_deref(), doc, bindings);
+            apply_overrides(&mut props, &style.props, doc);
+            return (props, rstyle);
+        }
         let props = invert_props(&style.props, doc);
         let rstyle = style
             .based_on
@@ -660,6 +678,280 @@ fn effective_props(
         return (props, rstyle);
     }
     (RunProps::default(), None)
+}
+
+/// The token prefix of the character styles the overlay makes for a run
+/// the canvas formatted directly (`overlay::run_token`): based on the run's
+/// own style token, holding only the direct overrides the engine read back.
+pub(crate) const EDIT_STYLE_PREFIX: &str = "CharacterStyle/docx-edit-";
+
+/// Apply a canvas edit's direct overrides (engine `StyleProp`s) over a
+/// run's effective properties. A toggle the run does not set stays unset
+/// when the override only says "off" (the engine reads a plain run as
+/// `Regular`, not underlined, …), so turning nothing on writes nothing.
+fn apply_overrides(r: &mut RunProps, overrides: &[StyleProp], doc: &LoweredDoc) {
+    fn set(field: &mut Option<bool>, on: bool) {
+        if on || field.is_some() {
+            *field = Some(on);
+        }
+    }
+    for p in overrides {
+        match (p.path.as_str(), &p.value) {
+            ("characterFontFamily", PropValue::Text(f)) => r.font = Some(f.clone()),
+            ("characterFontStyle", PropValue::Text(s)) => {
+                set(&mut r.bold, s.contains("Bold"));
+                set(&mut r.italic, s.contains("Italic") || s.contains("Oblique"));
+            }
+            ("characterFontSize", PropValue::Length(pt)) => {
+                r.size_half_pts = Some((pt * 2.0).round() as u32);
+            }
+            ("characterFillColor", PropValue::ColorRef(id)) => {
+                if let Some(hex) = swatch_hex(id, doc) {
+                    r.color = Some(hex);
+                }
+            }
+            ("characterUnderline", PropValue::Bool(u)) => set(&mut r.underline, *u),
+            ("characterStrikethru", PropValue::Bool(s)) => set(&mut r.strike, *s),
+            ("characterCase", PropValue::Text(c)) => {
+                set(&mut r.caps, c == "AllCaps");
+                set(&mut r.small_caps, c == "SmallCaps");
+            }
+            ("characterPosition", PropValue::Text(pos)) => {
+                r.vert_align = match pos.as_str() {
+                    "Superscript" | "OTSuperscript" => Some(VertAlign::Superscript),
+                    "Subscript" | "OTSubscript" => Some(VertAlign::Subscript),
+                    _ => r.vert_align.map(|_| VertAlign::Baseline),
+                };
+            }
+            ("characterBaselineShift", PropValue::Length(pt)) => {
+                let half = (pt * 2.0).round() as i32;
+                if half != 0 || r.baseline_half_pts.is_some() {
+                    r.baseline_half_pts = Some(half);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// What becomes of one baseline run ([`plan_runs`]).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum RunPlan {
+    /// Untouched: not addressed, its bytes stay.
+    Keep,
+    /// All its text is gone.
+    Delete,
+    /// One piece: a new text and/or a new look (`None` = unchanged).
+    Edit {
+        text: Option<String>,
+        format: Option<RunFormat>,
+    },
+    /// Several pieces, in order (a piece's `format` is `None` in the
+    /// run's own look).
+    Split(Vec<RunPiece>),
+}
+
+/// Map an edited paragraph's runs back onto its baseline runs, character by
+/// character, and say per baseline run what becomes of it, with the run's
+/// own look. The two texts are aligned (common start and end, then a
+/// longest common subsequence of what lies between): a kept character
+/// stays in its baseline run, taking the look of the edited run it is in
+/// now; new text goes to the run of the first character it replaces, or —
+/// typed between two runs — to the run before (or after) whose look it
+/// has, else the run before it, as typing at the end of a word extends that
+/// run. A baseline run whose characters all kept its look is untouched; one
+/// whose characters now have one other look is edited in place; one whose
+/// characters have several looks is split. Runs the engine joined (one
+/// style) map back onto their Word runs this way; nothing is ever merged.
+pub(crate) fn plan_runs(
+    base_runs: &[docx_lower::ir::LoweredRun],
+    edited_runs: &[docx_lower::ir::LoweredRun],
+    base: &LoweredDoc,
+    edited: &LoweredDoc,
+    bindings: &DocxBindings,
+) -> Vec<(RunPlan, RunFormat)> {
+    let look = |r: &docx_lower::ir::LoweredRun, doc: &LoweredDoc| {
+        let (props, rstyle) = effective_props(r.char_style_id.as_deref(), doc, bindings);
+        RunFormat { props, rstyle }
+    };
+    let base_looks: Vec<RunFormat> = base_runs.iter().map(|r| look(r, base)).collect();
+    let edited_looks: Vec<RunFormat> = edited_runs.iter().map(|r| look(r, edited)).collect();
+    let old: Vec<(char, usize)> = base_runs
+        .iter()
+        .enumerate()
+        .flat_map(|(k, r)| r.text.chars().map(move |c| (c, k)))
+        .collect();
+    let new: Vec<(char, usize)> = edited_runs
+        .iter()
+        .enumerate()
+        .flat_map(|(j, r)| r.text.chars().map(move |c| (c, j)))
+        .collect();
+    let a: Vec<char> = old.iter().map(|(c, _)| *c).collect();
+    let b: Vec<char> = new.iter().map(|(c, _)| *c).collect();
+
+    // Each baseline run's characters as they are now: (char, edited run).
+    let mut assigned: Vec<Vec<(char, usize)>> = vec![Vec::new(); base_runs.len()];
+    let mut gap_dels: Vec<usize> = Vec::new();
+    let mut gap_ins: Vec<usize> = Vec::new();
+    // The baseline character before the open gap (its index in `old`).
+    let mut prev: Option<usize> = None;
+    let flush = |assigned: &mut Vec<Vec<(char, usize)>>,
+                 dels: &mut Vec<usize>,
+                 ins: &mut Vec<usize>,
+                 prev: Option<usize>,
+                 next: Option<usize>| {
+        if !ins.is_empty() {
+            if let Some(&d) = dels.first() {
+                let k = old[d].1;
+                assigned[k].extend(ins.iter().map(|&e| new[e]));
+            } else {
+                let before = prev.map(|i| old[i].1);
+                let after = next.map(|i| old[i].1);
+                let mut to_after = false;
+                let mut tail: Vec<(char, usize)> = Vec::new();
+                for &e in ins.iter() {
+                    let l = &edited_looks[new[e].1];
+                    if !to_after {
+                        let fits_before = before.is_some_and(|k| base_looks[k] == *l);
+                        let fits_after = after.is_some_and(|k| base_looks[k] == *l);
+                        to_after = before.is_none() || (!fits_before && fits_after);
+                    }
+                    match (to_after, before, after) {
+                        (false, Some(k), _) => assigned[k].push(new[e]),
+                        (_, _, Some(_)) => tail.push(new[e]),
+                        (_, Some(k), None) => assigned[k].push(new[e]),
+                        (_, None, None) => {
+                            if let Some(first) = assigned.first_mut() {
+                                first.push(new[e]);
+                            }
+                        }
+                    }
+                }
+                if let Some(k) = after {
+                    // The run after: the new text goes before its characters.
+                    let rest = std::mem::take(&mut assigned[k]);
+                    assigned[k] = tail;
+                    assigned[k].extend(rest);
+                }
+            }
+        }
+        dels.clear();
+        ins.clear();
+    };
+    for step in align_chars(&a, &b) {
+        match step {
+            Align::Match(i, e) => {
+                flush(&mut assigned, &mut gap_dels, &mut gap_ins, prev, Some(i));
+                assigned[old[i].1].push((old[i].0, new[e].1));
+                prev = Some(i);
+            }
+            Align::Del(i) => gap_dels.push(i),
+            Align::Ins(e) => gap_ins.push(e),
+        }
+    }
+    // The gap at the end: nothing follows it.
+    flush(&mut assigned, &mut gap_dels, &mut gap_ins, prev, None);
+
+    base_runs
+        .iter()
+        .zip(assigned)
+        .zip(base_looks)
+        .map(|((run, chars), own)| {
+            // Group the run's characters by look.
+            let mut pieces: Vec<(String, RunFormat)> = Vec::new();
+            for (c, j) in chars {
+                let l = &edited_looks[j];
+                match pieces.last_mut() {
+                    Some((t, pl)) if pl == l => t.push(c),
+                    _ => pieces.push((c.to_string(), l.clone())),
+                }
+            }
+            let plan = match pieces.len() {
+                0 if run.text.is_empty() => RunPlan::Keep,
+                0 => RunPlan::Delete,
+                1 => {
+                    let (text, l) = pieces.pop().unwrap_or_default();
+                    let text = (text != run.text).then_some(text);
+                    let format = (l != own).then_some(l);
+                    if text.is_none() && format.is_none() {
+                        RunPlan::Keep
+                    } else {
+                        RunPlan::Edit { text, format }
+                    }
+                }
+                _ => RunPlan::Split(
+                    pieces
+                        .into_iter()
+                        .map(|(text, l)| RunPiece {
+                            text,
+                            format: (l != own).then_some(l),
+                        })
+                        .collect(),
+                ),
+            };
+            (plan, own)
+        })
+        .collect()
+}
+
+/// Align two texts character by character: the common start and end
+/// match; what lies between is aligned by a longest common subsequence
+/// (deletions before insertions in a gap, matches as late as they can be),
+/// or, past a size where the table
+/// would grow too large, replaced whole.
+fn align_chars(a: &[char], b: &[char]) -> Vec<Align> {
+    let prefix = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let max_suffix = a.len().min(b.len()) - prefix;
+    let suffix = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(max_suffix)
+        .take_while(|(x, y)| x == y)
+        .count();
+    let (am, bm) = (&a[prefix..a.len() - suffix], &b[prefix..b.len() - suffix]);
+    let mut out: Vec<Align> = (0..prefix).map(|i| Align::Match(i, i)).collect();
+    let (n, m) = (am.len(), bm.len());
+    if n.saturating_mul(m) <= 4_000_000 {
+        let mut lcs = vec![0u32; (n + 1) * (m + 1)];
+        let at = |i: usize, j: usize| i * (m + 1) + j;
+        for i in (0..n).rev() {
+            for j in (0..m).rev() {
+                lcs[at(i, j)] = if am[i] == bm[j] {
+                    lcs[at(i + 1, j + 1)] + 1
+                } else {
+                    lcs[at(i + 1, j)].max(lcs[at(i, j + 1)])
+                };
+            }
+        }
+        // Matches as late as the subsequence allows: a character is
+        // deleted, else inserted, while that keeps the longest match, so
+        // the kept text stays together (deleting " bold red" before " text."
+        // keeps " text." whole rather than matching its space to the one
+        // inside the deleted words).
+        let (mut i, mut j) = (0usize, 0usize);
+        while i < n && j < m {
+            let here = lcs[at(i, j)];
+            if lcs[at(i + 1, j)] == here {
+                out.push(Align::Del(prefix + i));
+                i += 1;
+            } else if lcs[at(i, j + 1)] == here {
+                out.push(Align::Ins(prefix + j));
+                j += 1;
+            } else {
+                out.push(Align::Match(prefix + i, prefix + j));
+                i += 1;
+                j += 1;
+            }
+        }
+        out.extend((i..n).map(|i| Align::Del(prefix + i)));
+        out.extend((j..m).map(|j| Align::Ins(prefix + j)));
+    } else {
+        out.extend((0..n).map(|i| Align::Del(prefix + i)));
+        out.extend((0..m).map(|j| Align::Ins(prefix + j)));
+    }
+    out.extend((0..suffix).map(|k| Align::Match(a.len() - suffix + k, b.len() - suffix + k)));
+    out
 }
 
 /// Invert a synthesized character style's `StyleProp`s back to `RunProps` — the

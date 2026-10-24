@@ -92,6 +92,7 @@ import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
 import { claimImageTiles } from "./tile-provider";
 import { gradientKindLabel, warpKindLabel } from "./words";
 import { readPgil } from "./object-model/pgil";
+import { coverageAt } from "./object-model/image-objects";
 import { collectGarbage } from "./session-store";
 import { createDecodePool, type DecodePool } from "./decode-pool";
 import { createCropMachine, type CropMachine } from "./crop-machine";
@@ -1885,6 +1886,30 @@ export function createImageSession(host: BundleHost): ImageSession {
     }
   };
 
+  // A frame's image opens again: the selection it kept becomes the live
+  // selection, as if it had never closed — at the image's size, or
+  // resampled when the frame now holds the same image at another size
+  // (`coverageAt`). Another crop of the image cannot say where it lies:
+  // that one is dropped, as a crop drops a live selection.
+  const restoreSelection = (kept: {
+    width: number;
+    height: number;
+    coverage: Uint8Array;
+  }) => {
+    const src = state.source;
+    if (!engine || !src) return;
+    try {
+      engine.selectionSetCoverage(
+        coverageAt(kept, src.width, src.height),
+        "replace",
+      );
+    } catch (err) {
+      host.log.debug("the kept selection was not restored", err);
+      return;
+    }
+    state.selection = engine.selectionStats();
+  };
+
   const freeSource = () => {
     keepSelection();
     // A stroke holds the OLD handle's base snapshot — a re-ingest under
@@ -2338,7 +2363,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         display: info.display,
         depthReduced: info.depthReduced,
       };
-      // The open frame's selection is its live one now.
+      // The open frame's selection is its live one now: the one it kept
+      // when it closed is set again once the image is bound (below).
+      const kept = elementId ? keptSelections.get(elementId) : undefined;
       if (elementId) keptSelections.delete(elementId);
       sourceFormat = sniffFormat(bytes);
       state.saveBack = null;
@@ -2354,6 +2381,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Compute the levels/curves histogram, bind the stack + selection,
       // and build the crop machine.
       refreshSourceReadout();
+      if (kept) restoreSelection(kept);
       setStatus(
         t(decodePool ? S.decodedOffThread : S.decoded, {
           name,
