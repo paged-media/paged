@@ -909,66 +909,71 @@ fn frame_to_tree_node(
     spread: &paged_model::Spread,
     fr: paged_model::FrameRef,
 ) -> Option<crate::channel::SceneTreeNode> {
+    frame_to_tree_node_at(spread, fr, 0)
+}
+
+/// Engine ADR 1010 — a container's pasted-in children are listed under
+/// it, as a group's members are under the group, so a reader of the
+/// tree sees every page item the document holds. `depth` bounds a
+/// malformed cycle.
+fn frame_to_tree_node_at(
+    spread: &paged_model::Spread,
+    fr: paged_model::FrameRef,
+    depth: usize,
+) -> Option<crate::channel::SceneTreeNode> {
     use crate::channel::SceneTreeNode;
     use crate::element_selection::ElementId;
     use paged_model::FrameRef;
+    if depth > 64 {
+        return None;
+    }
+    let pasted_in = |id: &str| -> Vec<SceneTreeNode> {
+        spread
+            .nested_children
+            .get(id)
+            .map(|children| {
+                children
+                    .iter()
+                    .filter_map(|c| frame_to_tree_node_at(spread, *c, depth + 1))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let leaf = |id: String, kind: &str, element: ElementId| SceneTreeNode {
+        id: Some(element),
+        kind: kind.to_string(),
+        label: format!("{kind} {id}"),
+        children: pasted_in(&id),
+        plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+        clip: None,
+    };
     match fr {
         FrameRef::TextFrame(i) => spread.text_frames.get(i).and_then(|f| {
             let id = f.self_id.clone()?;
-            Some(SceneTreeNode {
-                id: Some(ElementId::TextFrame(id.clone())),
-                kind: "TextFrame".to_string(),
-                label: format!("TextFrame {id}"),
-                children: Vec::new(),
-                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
-            })
+            Some(leaf(id.clone(), "TextFrame", ElementId::TextFrame(id)))
         }),
         FrameRef::Rectangle(i) => spread.rectangles.get(i).and_then(|f| {
             let id = f.self_id.clone()?;
-            Some(SceneTreeNode {
-                id: Some(ElementId::Rectangle(id.clone())),
-                kind: "Rectangle".to_string(),
-                label: format!("Rectangle {id}"),
-                children: Vec::new(),
-                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
-            })
+            Some(leaf(id.clone(), "Rectangle", ElementId::Rectangle(id)))
         }),
         FrameRef::Oval(i) => spread.ovals.get(i).and_then(|f| {
             let id = f.self_id.clone()?;
-            Some(SceneTreeNode {
-                id: Some(ElementId::Oval(id.clone())),
-                kind: "Oval".to_string(),
-                label: format!("Oval {id}"),
-                children: Vec::new(),
-                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
-            })
+            Some(leaf(id.clone(), "Oval", ElementId::Oval(id)))
         }),
         FrameRef::Polygon(i) => spread.polygons.get(i).and_then(|f| {
             let id = f.self_id.clone()?;
-            Some(SceneTreeNode {
-                id: Some(ElementId::Polygon(id.clone())),
-                kind: "Polygon".to_string(),
-                label: format!("Polygon {id}"),
-                children: Vec::new(),
-                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
-            })
+            Some(leaf(id.clone(), "Polygon", ElementId::Polygon(id)))
         }),
         FrameRef::GraphicLine(i) => spread.graphic_lines.get(i).and_then(|f| {
             let id = f.self_id.clone()?;
-            Some(SceneTreeNode {
-                id: Some(ElementId::GraphicLine(id.clone())),
-                kind: "GraphicLine".to_string(),
-                label: format!("GraphicLine {id}"),
-                children: Vec::new(),
-                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
-            })
+            Some(leaf(id.clone(), "GraphicLine", ElementId::GraphicLine(id)))
         }),
         FrameRef::Group(i) => spread.groups.get(i).map(|g| {
             let id = g.self_id.clone().unwrap_or_else(|| format!("group#{i}"));
             let children = g
                 .members
                 .iter()
-                .filter_map(|m| frame_to_tree_node(spread, *m))
+                .filter_map(|m| frame_to_tree_node_at(spread, *m, depth + 1))
                 .collect();
             SceneTreeNode {
                 id: Some(ElementId::Group(id.clone())),
@@ -976,6 +981,7 @@ fn frame_to_tree_node(
                 label: format!("Group {id}"),
                 plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
                 children,
+                clip: g.clip_member().is_some().then_some(true),
             }
         }),
     }
@@ -1015,7 +1021,14 @@ fn group_union_aabb(spread: &paged_model::Spread, group_idx: usize) -> Option<pa
         let Some(group) = spread.groups.get(gi) else {
             return;
         };
-        for m in &group.members {
+        // Engine ADR 1010: a clip group shows only what lies inside its
+        // clipping path, so the path is its extent (Illustrator's too).
+        let clip = group.clip_member();
+        let members: &[FrameRef] = match &clip {
+            Some(c) => std::slice::from_ref(c),
+            None => &group.members,
+        };
+        for m in members {
             match *m {
                 FrameRef::Group(child) => walk(spread, child, acc),
                 leaf => {
@@ -4277,11 +4290,12 @@ impl CanvasModel {
                 child_id,
             } => Some(Operation::PasteInto {
                 container: element_to_leaf_node_id(container_id)?,
-                child: element_to_leaf_node_id(child_id)?,
+                // Engine ADR 1010: a group pastes in too.
+                child: element_to_member_node_id(child_id)?,
                 child_index: None,
             }),
             Mutation::ReleaseFrom { child_id } => Some(Operation::ReleaseFrom {
-                child: element_to_leaf_node_id(child_id)?,
+                child: element_to_member_node_id(child_id)?,
                 restore_slot: None,
             }),
             // v59 (Arrange) — z-order. `element_to_member_node_id`
@@ -4366,7 +4380,7 @@ impl CanvasModel {
             // reach after the batch's earlier inserts had landed. The applier still validates it
             // (a duplicate is `DuplicateNodeId`), so nothing is trusted
             // blindly — the id is merely known one step sooner.
-            Mutation::CreateGroup { member_ids } => Some(Operation::CreateGroup {
+            Mutation::CreateGroup { member_ids, clip } => Some(Operation::CreateGroup {
                 spec: paged_mutate::GroupSpec {
                     self_id: Some(self.mint_page_item_id_with_offset(mint_offset)),
                     members: member_ids
@@ -4377,6 +4391,7 @@ impl CanvasModel {
                     item_transform: None,
                     opacity: None,
                     blend_mode: None,
+                    clip: *clip,
                 },
             }),
             Mutation::SetGroupTransform {
@@ -8020,6 +8035,11 @@ impl CanvasModel {
                                 path: PropertyPath::GroupKnockout,
                                 value: Some(Value::Bool(g.transparency.knockout_group)),
                             },
+                            // Engine ADR 1010 — a clip group.
+                            PropertyEntry {
+                                path: PropertyPath::GroupClip,
+                                value: Some(Value::Bool(g.clip)),
+                            },
                         ];
                         // C-18 / E-1 — a `<Group>` carries the corner
                         // vocabulary on disk (37 corpus groups do, 11
@@ -11369,6 +11389,7 @@ impl CanvasModel {
                 label,
                 children: frame_nodes,
                 plugin_metadata: None,
+                clip: None,
             });
             spread_nodes.push(SceneTreeNode {
                 id: None,
@@ -11376,6 +11397,7 @@ impl CanvasModel {
                 label: spread_label,
                 children: page_nodes,
                 plugin_metadata: None,
+                clip: None,
             });
         }
         spread_nodes

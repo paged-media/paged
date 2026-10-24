@@ -7295,6 +7295,11 @@
           "const": "groupKnockout"
         },
         {
+          "description": "Engine ADR 1010 — the group is a clip group: its top-most member\nclips the others (`paged_model::Group::clip`), `Value::Bool`.\nSetting it refuses a group whose top-most member is not a\nRectangle, Oval or Polygon, or hosts pasted-in content. No IDML\nattribute: the writer lowers a clip group to paste-into.",
+          "type": "string",
+          "const": "groupClip"
+        },
+        {
           "description": "`<DropShadowSetting BlendMode>`; `\"\"` is InDesign's `Multiply`.",
           "type": "string",
           "const": "frameDropShadowBlendMode"

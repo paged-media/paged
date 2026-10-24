@@ -88,7 +88,12 @@ pub(super) fn apply_remove_node(
                 child: child.clone(),
                 restore_slot: None,
             });
-            ops.push(Operation::RemoveNode { node: child });
+            // Engine ADR 1010: a pasted-in group goes the way a group
+            // is deleted, leaf by leaf (it leaves with its last one, and
+            // the undo re-creates it whole).
+            for leaf in removal_leaves(doc, &child).into_iter().rev() {
+                ops.push(Operation::RemoveNode { node: leaf });
+            }
         }
         ops.push(Operation::RemoveNode { node: node.clone() });
         let applied = super::apply_inner(doc, &Operation::Batch { ops })?;
@@ -111,6 +116,42 @@ pub(super) fn apply_remove_node(
             ..Default::default()
         },
     })
+}
+
+/// What removing `node` removes, leaf by leaf, in paint order: the
+/// node itself, or for a group every leaf under it.
+fn removal_leaves(doc: &Document, node: &NodeId) -> Vec<NodeId> {
+    let NodeId::Group(id) = node else {
+        return vec![node.clone()];
+    };
+    fn walk(spread: &paged_model::Spread, gi: usize, out: &mut Vec<NodeId>, depth: usize) {
+        if depth > 64 {
+            return;
+        }
+        for &m in &spread.groups[gi].members {
+            match m {
+                FrameRef::Group(c) if c < spread.groups.len() => walk(spread, c, out, depth + 1),
+                other => {
+                    if let Some(n) = super::layer::node_for_frame_ref(spread, other) {
+                        out.push(n);
+                    }
+                }
+            }
+        }
+    }
+    for parsed in &doc.spreads {
+        let spread = &parsed.spread;
+        if let Some(gi) = spread
+            .groups
+            .iter()
+            .position(|g| g.self_id.as_deref() == Some(id.as_str()))
+        {
+            let mut out = Vec::new();
+            walk(spread, gi, &mut out, 0);
+            return out;
+        }
+    }
+    vec![node.clone()]
 }
 
 /// The items pasted into `node` (B-18), in their stored order; empty
@@ -197,6 +238,13 @@ pub(super) fn take_emptied_groups(
         };
         let r = FrameRef::Group(gi);
         let home = ref_home(spread, r);
+        // Engine ADR 1010: a group pasted into a container stays, empty,
+        // when its last member goes — the restore below puts a group back
+        // only in the z-order or a parent group, and the undo must put it
+        // back inside its container. (Deleting the container takes it.)
+        if matches!(home, Some(RefHome::Nested(..))) {
+            break;
+        }
         let parent_group = match home {
             Some(RefHome::Group(pgi, slot)) => match spread.groups[pgi].self_id.clone() {
                 Some(pid) => Some((pgi, pid, slot)),
