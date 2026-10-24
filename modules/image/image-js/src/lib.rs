@@ -1231,6 +1231,19 @@ mod wasm {
         })
     }
 
+    /// SET THE SELECTION FROM COVERAGE BYTES (`width·height` of the bound
+    /// image, row-major, 0 … 255), folded under `mode` (0 replace makes it
+    /// exactly these bytes). The glue gives back a selection it kept as
+    /// data — the one a frame had when its image closed — when that image
+    /// opens again. A length other than the bound image's pixel count is
+    /// an error, not a resample: where a selection lies on another size
+    /// is the caller's decision.
+    #[wasm_bindgen]
+    pub fn selection_set_coverage(bytes: &[u8], mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        with_selection(|s| s.apply_coverage(bytes, mode))
+    }
+
     /// Select ALL explicitly (a full-extent selection in the readouts;
     /// the adjust chain still takes the trivial-mask fast path).
     #[wasm_bindgen]

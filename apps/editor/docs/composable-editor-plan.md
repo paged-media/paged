@@ -1244,7 +1244,8 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   both paths alike. In the editor `selection: true` filters within the frame's selection: the
   live one, or the one the session kept when that frame's image closed, resampled when the
   canvas is the same image at another size; another crop or no selection is refused with the
-  reason, as it is headless. A Playwright spec makes a marquee selection and checks that only
+  reason, as it is headless. A kept selection is set back into the engine when its frame's
+  image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
   its pixels change and one undo restores them (`modules/image/docs/status.md`).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
