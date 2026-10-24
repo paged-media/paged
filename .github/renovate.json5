@@ -404,6 +404,14 @@
       dependencyDashboardApproval: true,
     },
     {
+      description: "The ML worker's runtime (editor ADR 290): every update is reviewed against the ML tests and the app's wasm budget; never automerged.",
+      matchManagers: ["bun"],
+      matchPackageNames: ["onnxruntime-web", "onnxruntime-common"],
+      labels: ["dependencies", "ml-runtime"],
+      dependencyDashboardApproval: true,
+      automerge: false,
+    },
+    {
       description: "The extension contract's own dependencies ship to extension authors (plugin-api, plugin-sdk).",
       matchFileNames: [
         "platform/extensions/packages/plugin-api/**",

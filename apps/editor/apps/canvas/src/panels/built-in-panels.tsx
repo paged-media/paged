@@ -104,6 +104,7 @@ import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
 import { DataPanel } from "./data-panel";
+import { ModelsPanel } from "./models-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -206,6 +207,7 @@ const M = defineMessages("app.builtInPanels", {
   scriptEditor: "Script",
   actions: "Actions",
   keyboardShortcuts: "Keyboard shortcuts",
+  models: "Models",
   problems: "Problems",
   journal: "Journal",
   data: "Data",
@@ -1126,6 +1128,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.keyboardShortcuts);
     },
     component: KeyboardShortcutsPanel,
+    defaultDock: "right",
+    defaultGroup: "workspace",
+  },
+  {
+    // Editor ADR 290 — Settings ▸ Models: the ML service's models (install
+    // with consent, licence acknowledgement, quantisation, disk use, GPU
+    // detection, the local image model's host and files).
+    id: "paged.models",
+    get title() {
+      return t(M.models);
+    },
+    component: ModelsPanel,
     defaultDock: "right",
     defaultGroup: "workspace",
   },

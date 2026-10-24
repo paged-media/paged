@@ -43,6 +43,7 @@ import {
   TRUSTED_TYPES_POLICY,
 } from "./src/boot/trusted-types";
 import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
+import { handleMlProxy, mlHostTarget } from "./src/ml/host-proxy";
 
 // The monorepo root: apps/editor/apps/canvas → four levels up.
 const MONOREPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
@@ -337,6 +338,66 @@ function aiProxyDev(): import("vite").Plugin {
           next(err);
         }
       });
+    },
+  };
+}
+
+/**
+ * The same-origin route to the local image model (editor ADR 290):
+ * `/api/ml/*` forwarded to paged-ml-host on the loopback
+ * (`PAGED_ML_HOST_URL`, default http://127.0.0.1:7861), in the dev server
+ * and in `vite preview`. Responses stream, so the job events (SSE) arrive
+ * as the host sends them. Without a running host the route answers 503
+ * `unreachable`, and Settings ▸ Models says the local model is not running.
+ */
+function mlHostProxy(): import("vite").Plugin {
+  const target = mlHostTarget(process.env.PAGED_ML_HOST_URL);
+  type Middleware = (
+    req: import("node:http").IncomingMessage,
+    res: import("node:http").ServerResponse,
+    next: (err?: unknown) => void,
+  ) => void;
+  const middleware: Middleware = (req, res, next) => {
+    if (!req.url || !req.url.startsWith("/api/ml/")) return next();
+    void (async () => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(req.headers))
+        if (typeof v === "string") headers.set(k, v);
+      const abort = new AbortController();
+      res.on("close", () => abort.abort());
+      const request = new Request(
+        new URL(req.url!, `http://${req.headers.host ?? "127.0.0.1"}`),
+        {
+          method: req.method,
+          headers,
+          signal: abort.signal,
+          ...(req.method === "POST" || req.method === "PUT"
+            ? { body: Buffer.concat(chunks) }
+            : {}),
+        },
+      );
+      const response = await handleMlProxy(request, { target });
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => res.setHeader(key, value));
+      if (!response.body) return res.end();
+      try {
+        for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>)
+          res.write(chunk);
+      } catch {
+        // the browser went away mid-stream
+      }
+      res.end();
+    })().catch(next);
+  };
+  return {
+    name: "paged-ml-host-proxy",
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
     },
   };
 }
@@ -653,6 +714,7 @@ export default defineConfig({
     networkConnectSrcPolicy,
     embedFrameAncestors,
     aiProxyDev(),
+    mlHostProxy(),
     fontsRoute(),
     corpusIdmlRoute(),
     dataBundleBin(),

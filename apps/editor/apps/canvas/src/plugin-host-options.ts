@@ -54,6 +54,7 @@ import {
   createActionRegistry,
   createDataProviderRegistry,
   createDataRegistry,
+  createMlRegistry,
 } from "@paged-media/plugin-sdk";
 import type { CanvasClient } from "@paged-media/client";
 import {
@@ -238,6 +239,10 @@ export function createEditorHostOptions(
   // action registry every bundle registers into and runs from.
   const data = createDataRegistry();
   const actions = createActionRegistry();
+  // Extensions ADR 345, editor ADR 290: the ONE ML backend; the editor's ML
+  // service registers its providers (Tier-A models, the local image host)
+  // into it.
+  const ml = createMlRegistry();
 
   const shared: Omit<CreateBundleHostOptions, "console"> = {
     shell,
@@ -259,6 +264,8 @@ export function createEditorHostOptions(
     // Flip supports("data@1") and supports("actions@1").
     data,
     actions,
+    // Flips supports("ml.<capability>@1") while a provider is healthy.
+    ml,
     // ADR 023 phase A/C — the app's ONE binding-provider registry (host
     // panels read the same instance).
     bindingProviders: deps.bindingProviders,

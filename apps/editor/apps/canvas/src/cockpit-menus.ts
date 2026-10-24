@@ -53,6 +53,8 @@ defineMessages("menu", {
   Transform: "Transform",
   Effects: "Effects",
   "Effects…": "Effects…",
+  Settings: "Settings",
+  "Models…": "Models…",
 });
 
 const soon = (
@@ -139,6 +141,8 @@ export const COCKPIT_MENU_SEAMS: MenuItemContribution[] = [
   // Object ▸ Effects: the Effects panel, and Global light… (registered
   // with its dialog, panels/global-light-dialog.tsx).
   panel("Object/Effects/Effects…", "paged.effects", 30, "effects"),
+  // ── Edit ▸ Settings ── editor ADR 290: the ML service's models.
+  panel("Edit/Settings/Models…", "paged.models", 90, "settings"),
   // ── Data (the data-publishing surface) ──
   //
   // D1 — these three were `soon(...)` seams whose labels duplicated
