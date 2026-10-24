@@ -69,3 +69,6 @@ Whoever runs it later, it cannot reach `paged`: `paged.pages()` there is a refer
 taken id is refused. `run` and `runChain` answer `{ output, key, cached }` with the SDK's key.
 paged.data's build scripts (`data-script`) evaluate in the same sandbox (`js::eval`), so the
 module no longer embeds an interpreter of its own.
+
+The same bridge carries `paged.data.*`, the data an embedder attaches to one run (core
+[ADR 1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md), amendment of 2026-10-24).

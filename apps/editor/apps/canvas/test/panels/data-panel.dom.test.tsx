@@ -24,19 +24,25 @@
 // a binding reads marked in their headers.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { covers } from "@paged-media/test-kit";
 
 import type {
-  DataBindingInfo,
+  DataBindingStatus,
+  DataPlacement,
   DataService,
   DataTableInfo,
   ProviderRecordSet,
 } from "@paged-media/plugin-api";
 import { createDataRegistry } from "@paged-media/plugin-sdk";
-import { createEditorScope, setDataDoorSource } from "@paged-media/shell";
+import {
+  createEditorScope,
+  DATA_FIELD_DRAG_TYPE,
+  setDataDoorSource,
+} from "@paged-media/shell";
 
 import { DataPanel } from "../../src/panels/data-panel";
+import { shapesScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 
 afterEach(unmountAll);
@@ -131,11 +137,16 @@ const TABLE: DataTableInfo = {
   writable: true,
 };
 
-function serve(tables: DataTableInfo[], bindings: DataBindingInfo[] = []) {
+function serve(
+  tables: DataTableInfo[],
+  statuses: DataBindingStatus[] = [],
+  placements?: () => DataPlacement[],
+) {
   const backend = createDataRegistry();
   const scope = createEditorScope();
   setDataDoorSource(scope, backend);
   const queries: string[] = [];
+  let refreshed = 0;
   const service: DataService = {
     tables: () => tables,
     records: async () => recordSet(ROWS),
@@ -143,10 +154,14 @@ function serve(tables: DataTableInfo[], bindings: DataBindingInfo[] = []) {
       queries.push(sql);
       return recordSet(run(sql));
     },
-    bindings: async () => bindings,
+    status: async () => statuses,
+    async refresh() {
+      refreshed++;
+    },
+    ...(placements ? { placements: async () => placements() } : {}),
   };
   const handle = act(() => void backend.serve("media.paged.data", service));
-  return { scope, backend, queries, handle };
+  return { scope, backend, queries, handle, refreshes: () => refreshed };
 }
 
 const settle = () =>
@@ -181,15 +196,22 @@ describe("Data panel", () => {
 
   test("a table: its tab, count, rows; sort, filter and group run in the service", async () => {
     covers("panel:paged.data");
-    const { scope, queries } = serve(
+    const { scope, queries, refreshes } = serve(
       [TABLE],
       [
         {
           id: "b1",
-          target: "rectangle:u1",
-          path: "frameOpacity",
+          kind: "property",
           query: "products",
-          expr: "price * 2",
+          fields: ["price"],
+          status: "linked",
+        },
+        {
+          id: "b2",
+          kind: "variable",
+          query: "products",
+          fields: ["cat"],
+          status: "stale",
         },
       ],
     );
@@ -208,17 +230,20 @@ describe("Data panel", () => {
         (r) => r.querySelector("[role='gridcell']")?.textContent,
       );
     expect(firstColumn()).toEqual(["A-1", "B-2", "C-3"]);
-    // The field a binding reads is marked.
+    // The fields bindings read carry their state; the bar counts them.
+    const header = (f: string) =>
+      h.root.querySelector(`[data-data-header='${f}']`);
+    expect(header("price")?.getAttribute("data-bound")).toBe("ok");
+    expect(header("cat")?.getAttribute("data-bound")).toBe("warn");
+    expect(header("sku")?.hasAttribute("data-bound")).toBe(false);
     expect(
-      h.root
-        .querySelector("[data-data-header='price']")
-        ?.hasAttribute("data-bound"),
-    ).toBe(true);
-    expect(
-      h.root
-        .querySelector("[data-data-header='sku']")
-        ?.hasAttribute("data-bound"),
-    ).toBe(false);
+      h.root.querySelector("[data-data-status='stale']")?.textContent,
+    ).toContain("1 changed in the data");
+    await act(async () =>
+      (h.root.querySelector("[data-data-update]") as HTMLElement).click(),
+    );
+    await settle();
+    expect(refreshes()).toBe(1);
 
     // Sort by price, descending on a second click.
     await act(async () =>
@@ -262,5 +287,128 @@ describe("Data panel", () => {
       (g) => g.getAttribute("data-data-group-row"),
     );
     expect(groups).toEqual(["New", "Sale"]);
+  });
+
+  test("double-click a bound field's header: its bindings' placed frames are selected [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    let placed: DataPlacement[] = [];
+    const { scope, queries } = serve(
+      [TABLE],
+      [
+        {
+          id: "b1",
+          kind: "property",
+          query: "products",
+          fields: ["price"],
+          status: "linked",
+        },
+        {
+          id: "b2",
+          kind: "image",
+          query: "products",
+          fields: ["price", "sku"],
+          status: "stale",
+        },
+        {
+          id: "b3",
+          kind: "variable",
+          query: "products",
+          fields: ["cat"],
+          status: "linked",
+        },
+      ],
+      () => placed,
+    );
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      scene: shapesScene,
+      scope,
+    });
+    const address = (id: { kind: string; id: unknown }) =>
+      `${id.kind}:${String(id.id)}`;
+    placed = [
+      { binding: "b1", address: address(h.scene.rect), status: "linked" },
+      { binding: "b2", address: address(h.scene.oval), status: "stale" },
+      { binding: "b2", address: address(h.scene.rect), status: "stale" },
+      { binding: "b3", address: address(h.scene.locked), status: "linked" },
+    ];
+    await settle();
+    const header = h.root.querySelector(
+      "[data-data-header='price']",
+    ) as HTMLElement;
+    expect(header.title).toContain("double-click to select");
+    const from = h.mark();
+    await h.user.dblClick(header);
+    await h.settle();
+    await settle();
+    const sent = h.sent("setElementSelection", from);
+    expect(sent.length).toBe(1);
+    const payload = sent[0]!.payload as {
+      ids: { kind: string; id: unknown }[];
+      mode: string;
+    };
+    expect(payload.mode).toBe("replace");
+    // b1 and b2 read price; b3 (cat) is not selected; the rect once.
+    expect(payload.ids.map(address)).toEqual([
+      address(h.scene.rect),
+      address(h.scene.oval),
+    ]);
+    // The double-click's second click did not reverse the sort.
+    expect(queries.at(-1)).toContain('ORDER BY "price" LIMIT');
+
+    // Another field: only the frames of the bindings reading it.
+    const mark = h.mark();
+    await h.user.dblClick(
+      h.root.querySelector("[data-data-header='cat']") as HTMLElement,
+    );
+    await h.settle();
+    await settle();
+    const again = h.sent("setElementSelection", mark);
+    expect(again.length).toBe(1);
+    expect(
+      (again[0]!.payload as { ids: { kind: string; id: unknown }[] }).ids.map(
+        address,
+      ),
+    ).toEqual([address(h.scene.locked)]);
+  });
+
+  test("a query's field header drags out as a field to place [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    const { scope } = serve([{ ...TABLE, kind: "query", writable: false }]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    const header = h.root.querySelector(
+      "[data-data-header='sku']",
+    ) as HTMLElement;
+    expect(header.getAttribute("draggable")).toBe("true");
+    expect(header.title).toContain("drag onto a text or graphic frame");
+    const data: Record<string, string> = {};
+    const dataTransfer = {
+      setData: (type: string, value: string) => void (data[type] = value),
+    };
+    fireEvent.dragStart(header, { dataTransfer });
+    expect(JSON.parse(data[DATA_FIELD_DRAG_TYPE]!)).toEqual({
+      query: "products",
+      field: "sku",
+    });
+  });
+
+  test("a source table's headers do not drag", async () => {
+    const { scope } = serve([TABLE]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    expect(
+      h.root
+        .querySelector("[data-data-header='sku']")
+        ?.getAttribute("draggable"),
+    ).toBe("false");
   });
 });

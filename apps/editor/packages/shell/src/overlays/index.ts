@@ -39,6 +39,12 @@ export { guideOverlayContribution } from "./guide-overlay";
 export { selectionChromeContribution } from "./selection-chrome";
 export { threadingPortsContribution } from "./threading-ports";
 export { threadLinesContribution } from "./thread-lines";
+export {
+  dataMarkersContribution,
+  elementOfPlacement,
+  markersOf,
+  type DataMarkerTone,
+} from "./data-markers";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
 export { snapLinesContribution } from "./snap-lines";
 

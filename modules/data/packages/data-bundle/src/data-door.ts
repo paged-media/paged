@@ -11,9 +11,11 @@
 
 import type {
   DataBindingInfo,
+  DataBindingStatus,
   DataBindingSpec,
   DataChange,
   DataEvaluation,
+  DataPlacement,
   DataRowEdit,
   DataService,
   DataTableInfo,
@@ -41,10 +43,23 @@ export interface DataDoorDeps {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** A binding's sync state as the engine names it, or null. */
+  syncStatusOf(id: string): string | null;
+  /** The page items each binding is placed in, by ADR 131 address. */
+  placements(): Promise<readonly { binding: string; address: string }[]>;
+  /** Place a field on a page item (`kind:id`), the panel's drag to place. */
+  place(
+    target: string,
+    query: string,
+    field: string,
+  ): Promise<{ binding: string; kind: string }>;
+  /** Read the data again and lower every binding (the panel's Update). */
+  refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
   bindings(): readonly {
     id: string;
     kind: string;
+    [k: string]: unknown;
     target?: unknown;
     path?: unknown;
     query?: unknown;
@@ -59,6 +74,25 @@ export interface DataDoor {
   touched(table: string): void;
   /** Hear the changes (the serving handle's `changed`). */
   onChange(listener: (change: DataChange) => void): void;
+}
+
+const STATUSES = new Set(["linked", "stale", "pinned", "overridden", "error"]);
+
+/** The fields a binding's expressions read: the bare names in them, not a
+ *  function's name (followed by "(") and not inside a string. */
+export function fieldsRead(b: Record<string, unknown>): string[] {
+  const texts: string[] = [];
+  for (const k of ["expr", "when"])
+    if (typeof b[k] === "string") texts.push(b[k] as string);
+  const out = new Set<string>();
+  for (const text of texts) {
+    const bare = text.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, " ");
+    for (const m of bare.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b(?!\s*\()/g)) {
+      const w = m[0];
+      if (!/^(TRUE|FALSE|AND|OR|NOT)$/i.test(w)) out.add(w);
+    }
+  }
+  return [...out];
 }
 
 const NO_RECORDS =
@@ -90,6 +124,13 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     return trimSql(sql);
   };
   const queryOf = (name: string) => deps.queries().find((q) => q.id === name);
+
+  const statusOf = (id: string): DataBindingStatus["status"] => {
+    const raw = deps.syncStatusOf(id);
+    return STATUSES.has(raw ?? "")
+      ? (raw as DataBindingStatus["status"])
+      : "unresolved";
+  };
 
   const service: DataService = {
     async tables() {
@@ -183,6 +224,36 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
           `no query "${query}" (an expression reads a query's fields)`,
         );
       return deps.evaluate(query, expr, record);
+    },
+    async status() {
+      const out: DataBindingStatus[] = [];
+      for (const b of deps.bindings()) {
+        const status = statusOf(b.id);
+        out.push({
+          id: b.id,
+          kind: b.kind,
+          ...(typeof b.query === "string" ? { query: b.query } : {}),
+          fields: fieldsRead(b),
+          status,
+        });
+      }
+      return out;
+    },
+    async refresh() {
+      await deps.refresh();
+    },
+    async place(target, query, field) {
+      if (!queryOf(query))
+        throw new Error(
+          `no query "${query}" (a placed field reads a query's records)`,
+        );
+      return deps.place(target, query, field);
+    },
+    async placements() {
+      const out: DataPlacement[] = [];
+      for (const p of await deps.placements())
+        out.push({ ...p, status: statusOf(p.binding) });
+      return out;
     },
     async bindings() {
       const out: DataBindingInfo[] = [];

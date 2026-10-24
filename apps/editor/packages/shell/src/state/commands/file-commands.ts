@@ -181,6 +181,14 @@ export async function openFile(
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
     const outcome = await runImporter(editor.scope, importer, file, sinks);
+    // UX audit F-08: an importer that opened a document builds it with
+    // mutations after the open (paged.doc applies its styles, grow rules
+    // and the pour), so the engine's flag, which counts every mutation
+    // since the load, read "Edited" before the user did anything. The
+    // document the importer finished building IS the file the user
+    // opened: mark it saved here, once the import has settled. The first
+    // real edit after this reads dirty again (`CanvasClient.markSaved`).
+    if (outcome === "opened") editor.client.markSaved();
     if (outcome === "opened" || outcome === "added") {
       await notifyImported(editor.scope, {
         name: file.name,
@@ -197,9 +205,12 @@ export async function openFile(
       const handle = await mintBlankDocument(editor, LETTER_PT, sinks);
       if (!handle) return;
       await liveEditorWith(editor, handle);
-      await runImporter(editor.scope, importer, file, sinks, {
+      const placed = await runImporter(editor.scope, importer, file, sinks, {
         newDocument: true,
       });
+      // The blank document was minted for this file and holds nothing
+      // else: what the importer placed in it is the file, not an edit.
+      if (placed === "added" || placed === "opened") editor.client.markSaved();
     }
     return;
   }

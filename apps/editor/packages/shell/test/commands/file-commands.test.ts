@@ -50,6 +50,7 @@ import {
   takePendingImportSource,
 } from "../../src/state/import-source";
 import { createEditorScope } from "../../src/state/editor-scope";
+import { replaceDeclinedError } from "../../src/state/replace-guard";
 
 const SFNT = new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9]);
 
@@ -92,6 +93,9 @@ function harness(opts: {
       log("loadDocument")(Array.from(bytes), font ?? null);
       if (opts.loadFails) throw new Error("not an IDML package");
       return handle;
+    },
+    markSaved() {
+      log("markSaved")();
     },
     async requestSnapshot(pageId: string, width: number) {
       log("requestSnapshot")(pageId, width);
@@ -573,6 +577,58 @@ describe("a file opened with no document (F-03)", () => {
     await h.registry.invoke("paged.file.openIdml");
     expect(runs).toEqual(["d1"]);
     expect(h.calls.newBlankDocument).toBeUndefined();
+  });
+
+  test("F-08: a document an importer opened reads clean once the import settled", async () => {
+    covers("command:paged.file.openIdml");
+    const h = harness({ noDocument: true });
+    // The importer builds the opened document with mutations after the
+    // open (paged.doc's styles and pour); the open itself is no edit.
+    const marks: number[] = [];
+    h.editor.registries.importers.register({
+      id: "t.docx",
+      title: "Word",
+      extensions: [".docx"],
+      async import() {
+        allowImportReplace(h.editor.scope);
+        marks.push(h.calls.markSaved?.length ?? 0);
+      },
+    } as never);
+    h.pick(new File([new Uint8Array([7])], "Letter.docx"));
+    await h.registry.invoke("paged.file.openIdml");
+    // Marked after the importer finished, not before.
+    expect(marks).toEqual([0]);
+    expect(h.calls.markSaved).toHaveLength(1);
+  });
+
+  test("F-08: a workbook's minted document reads clean; one added to an open document does not", async () => {
+    const fresh = harness({ noDocument: true });
+    importerInto(fresh, ".xlsx", false);
+    fresh.pick(new File([new Uint8Array([7])], "Budget.xlsx"));
+    await fresh.registry.invoke("paged.file.openIdml");
+    expect(fresh.calls.markSaved).toHaveLength(1);
+
+    // Into the user's own document the range IS an edit.
+    const open = harness({});
+    importerInto(open, ".xlsx", false);
+    open.pick(new File([new Uint8Array([7])], "Budget.xlsx"));
+    await open.registry.invoke("paged.file.openIdml");
+    expect(open.calls.markSaved).toBeUndefined();
+  });
+
+  test("F-08: an import the user declined or that failed marks nothing", async () => {
+    const h = harness({ dirty: true });
+    h.editor.registries.importers.register({
+      id: "t.docx",
+      title: "Word",
+      extensions: [".docx"],
+      async import() {
+        throw replaceDeclinedError();
+      },
+    } as never);
+    h.pick(new File([new Uint8Array([7])], "Letter.docx"));
+    await h.registry.invoke("paged.file.openIdml");
+    expect(h.calls.markSaved).toBeUndefined();
   });
 
   test("a file that is no picture after all opens the ordinary way", async () => {

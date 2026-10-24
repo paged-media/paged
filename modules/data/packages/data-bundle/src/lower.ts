@@ -419,7 +419,7 @@ async function variableInsertionPoint(
 
 /** Resolve an EXISTING frame's story via the hitTest read door (the frame's
  *  center, on the frame's own page). */
-async function frameStory(
+export async function frameStory(
   host: BundleHost,
   frameId: string,
 ): Promise<string | null> {

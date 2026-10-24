@@ -130,9 +130,14 @@ export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
 // surfaces; the app points it at the shared backend.
 export {
   setDataDoorSource,
+  setDataDropHandler,
   useDataService,
   useDataRevision,
+  useDataFieldDrop,
+  DATA_FIELD_DRAG_TYPE,
   type DataDoorSource,
+  type DataFieldDrag,
+  type DataFieldDropHandler,
 } from "./state/data-door";
 export {
   ALIGN_SCOPE,
@@ -595,6 +600,10 @@ export {
   selectionChromeContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  dataMarkersContribution,
+  elementOfPlacement,
+  markersOf,
+  type DataMarkerTone,
   tableCellOverlayContribution,
   snapLinesContribution,
   applyAffine,
@@ -977,6 +986,11 @@ export {
   filterByRegion,
   resolveProfile,
   validateProfile,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdAliases,
+  type IdDeprecation,
   applyRegionEdit,
   excludedBy,
   globMatches,

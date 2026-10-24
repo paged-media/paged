@@ -259,9 +259,11 @@ describe.skipIf(!RUN_BUDGETS)(
     // are gone (the host's Data menu raises those panels by name).
     // The data door (extensions ADR 343): +2 — supports("data@1") and
     // data.serve; the service answers only when another bundle asks.
+    // Record templates and pagination (PM-0015 L4): +2 — contribute.panel
+    // twice; both panels read the engine only once it runs.
     const W7: Measured = onLabelled(
       {
-        hostCalls: 41,
+        hostCalls: 43,
         hostReads: 2,
         mutates: 0,
         mutationOps: 0,
@@ -275,7 +277,7 @@ describe.skipIf(!RUN_BUDGETS)(
         fingerprints: 0,
         storeQueries: 0,
       },
-      { hostCalls: 42, hostReads: 4 },
+      { hostCalls: 44, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();
@@ -309,9 +311,9 @@ describe.skipIf(!RUN_BUDGETS)(
       await settle();
       const snap = work!.snapshot();
       const m = measure(snap, null, null, null);
-      // Behaviour: four React panels and the "Data objects" schema panel, the
+      // Behaviour: six React panels and the "Data objects" schema panel, the
       // commands and the importer registered, no engine booted.
-      expect(h.panelsContributed().length).toBe(5);
+      expect(h.panelsContributed().length).toBe(7);
       expect(h.schemaPanelsContributed().map((p) => p.id)).toEqual([
         "media.paged.data.panel.objects",
       ]);

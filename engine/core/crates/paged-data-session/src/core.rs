@@ -34,8 +34,9 @@ use data_bind::{
     ResolvedRecordFlow, RuleEvaluation,
 };
 use data_core::{
-    BarcodeSymbology, Binding, BindingDef, BindingId, DataSource, Locale, Placeholder, Query,
-    QueryId, RecordSet, Schema, Status, StyleAction, SyncState, Template, Value,
+    BarcodeSymbology, Binding, BindingDef, BindingId, DataSource, FlowOpts, FrameChainRef, Locale,
+    Placeholder, Query, QueryId, RecordSet, Schema, Status, StyleAction, SyncState, Template,
+    TemplateField, TemplateRef, Value,
 };
 use data_dataset::{
     trait_for_binding_kind, DataSet, DataSetValue, VarTrait, VariableDecl, VariableSet,
@@ -211,6 +212,42 @@ pub struct ProviderPublication {
     /// The resolved data, **stabilized** to a deterministic order (the snapshot
     /// half — Arrow-shaped, the same interchange used internally, §7.1).
     pub records: RecordSet,
+}
+
+/// One template of the library ([`DataSession::template_library`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateEntry {
+    pub template: Template,
+    /// The record flows rendering through it.
+    pub used_by: Vec<BindingId>,
+}
+
+/// A template made from frame text ([`DataSession::template_from_text`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateDraft {
+    pub template: Template,
+    /// The `<<name>>`s that are not field references, kept as text.
+    pub unreferenced: Vec<String>,
+}
+
+/// One line of a template filled with a record ([`DataSession::preview_template`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateLinePreview {
+    pub text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// A record flow's recipe ([`DataSession::record_flow`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordFlowDef {
+    pub chain: FrameChainRef,
+    pub query: QueryId,
+    pub template: TemplateRef,
+    pub options: FlowOpts,
 }
 
 /// The document-scoped payload (spec §5.1): the binding *recipe* (sources +
@@ -686,6 +723,233 @@ impl DataSession {
     pub fn define_template(&mut self, template: Template) {
         self.engine.add_template(template.clone());
         upsert(&mut self.templates, template, |a, b| a.id == b.id);
+    }
+
+    /// The record templates, in the order they were defined.
+    pub fn templates(&self) -> &[Template] {
+        &self.templates
+    }
+
+    /// The record flows that render through template `id`.
+    pub fn template_users(&self, id: &TemplateRef) -> Vec<BindingId> {
+        self.bindings
+            .iter()
+            .filter(
+                |b| matches!(&b.binding, Binding::RecordFlow { template, .. } if template == id),
+            )
+            .map(|b| b.id.clone())
+            .collect()
+    }
+
+    /// The template library: each template with the record flows using it.
+    pub fn template_library(&self) -> Vec<TemplateEntry> {
+        self.templates
+            .iter()
+            .map(|t| TemplateEntry {
+                template: t.clone(),
+                used_by: self.template_users(&t.id),
+            })
+            .collect()
+    }
+
+    /// Define template `id` from frame text written as for Data Merge
+    /// (`data_lower::merge::template_lines`: one line per text line, a
+    /// `<<field>>` reads the record's field). Refused when `id` is taken or
+    /// the text has no line.
+    pub fn template_from_text(
+        &mut self,
+        id: &TemplateRef,
+        text: &str,
+        line_height_pt: f64,
+    ) -> Result<TemplateDraft, SessionError> {
+        if id.as_str().trim().is_empty() {
+            return Err(SessionError::Decode("a template needs a name".into()));
+        }
+        if self.templates.iter().any(|t| &t.id == id) {
+            return Err(SessionError::Decode(format!(
+                "a template named \"{}\" exists",
+                id.as_str()
+            )));
+        }
+        let read = data_lower::merge::template_lines(text);
+        if read.lines.is_empty() {
+            return Err(SessionError::Decode(
+                "the text has no line to make a template of".into(),
+            ));
+        }
+        let template = Template {
+            id: id.clone(),
+            fields: read
+                .lines
+                .into_iter()
+                .map(|l| TemplateField {
+                    label: l.label,
+                    expr: l.expr,
+                })
+                .collect(),
+            line_height_pt: if line_height_pt > 0.0 {
+                line_height_pt
+            } else {
+                12.0
+            },
+        };
+        self.define_template(template.clone());
+        Ok(TemplateDraft {
+            template,
+            unreferenced: read.unreferenced,
+        })
+    }
+
+    /// Template `id` filled with record `record` (0-based, in the order
+    /// [`DataSession::evaluate_at`] numbers them) of `query`: one line per
+    /// field, its label then its value, as a record flow renders it.
+    pub fn preview_template(
+        &self,
+        id: &TemplateRef,
+        query: &QueryId,
+        record: usize,
+    ) -> Result<Vec<TemplateLinePreview>, SessionError> {
+        let Some(template) = self.templates.iter().find(|t| &t.id == id) else {
+            return Err(SessionError::Decode(format!(
+                "no template \"{}\"",
+                id.as_str()
+            )));
+        };
+        Ok(template
+            .fields
+            .iter()
+            .map(|f| {
+                let v = self.evaluate_at(query, &f.expr, record);
+                TemplateLinePreview {
+                    text: format!("{}{}", f.label, v.display),
+                    error: v.error,
+                }
+            })
+            .collect())
+    }
+
+    /// Rename template `from` to `to`, and point every record flow using it
+    /// at the new name. Answers the flows that moved.
+    pub fn rename_template(
+        &mut self,
+        from: &TemplateRef,
+        to: &TemplateRef,
+    ) -> Result<Vec<BindingId>, SessionError> {
+        if to.as_str().trim().is_empty() {
+            return Err(SessionError::Decode("a template needs a name".into()));
+        }
+        if from == to {
+            return Ok(Vec::new());
+        }
+        if self.templates.iter().any(|t| &t.id == to) {
+            return Err(SessionError::Decode(format!(
+                "a template named \"{}\" exists",
+                to.as_str()
+            )));
+        }
+        let Some(at) = self.templates.iter().position(|t| &t.id == from) else {
+            return Err(SessionError::Decode(format!(
+                "no template \"{}\"",
+                from.as_str()
+            )));
+        };
+        let mut template = self.templates[at].clone();
+        template.id = to.clone();
+        self.engine.remove_template(from);
+        self.engine.add_template(template.clone());
+        self.templates[at] = template;
+        let users = self.template_users(from);
+        for id in &users {
+            if let Some(def) = self.bindings.iter_mut().find(|b| &b.id == id) {
+                if let Binding::RecordFlow { template, .. } = &mut def.binding {
+                    *template = to.clone();
+                }
+                let def = def.clone();
+                self.engine.add_binding(def.id, def.binding);
+            }
+        }
+        Ok(users)
+    }
+
+    /// Remove template `id`; `false` when there was none. Refused while a
+    /// record flow renders through it (the flow would no longer resolve).
+    pub fn remove_template(&mut self, id: &TemplateRef) -> Result<bool, SessionError> {
+        let users = self.template_users(id);
+        if !users.is_empty() {
+            let names: Vec<&str> = users.iter().map(|b| b.as_str()).collect();
+            return Err(SessionError::Decode(format!(
+                "template \"{}\" is used by {}",
+                id.as_str(),
+                names.join(", ")
+            )));
+        }
+        let before = self.templates.len();
+        self.templates.retain(|t| &t.id != id);
+        self.engine.remove_template(id);
+        Ok(self.templates.len() != before)
+    }
+
+    /// A record flow's recipe: its chain, query, template and options.
+    pub fn record_flow(&self, id: &BindingId) -> Option<RecordFlowDef> {
+        self.bindings
+            .iter()
+            .find(|b| &b.id == id)
+            .and_then(|b| match &b.binding {
+                Binding::RecordFlow {
+                    chain,
+                    query,
+                    template,
+                    options,
+                } => Some(RecordFlowDef {
+                    chain: chain.clone(),
+                    query: query.clone(),
+                    template: template.clone(),
+                    options: options.clone(),
+                }),
+                _ => None,
+            })
+    }
+
+    /// Set the template and the pagination options of record flow `id`
+    /// (its chain and query stay). The template must exist.
+    pub fn set_record_flow(
+        &mut self,
+        id: &BindingId,
+        template: &TemplateRef,
+        options: FlowOpts,
+    ) -> Result<(), SessionError> {
+        if !self.templates.iter().any(|t| &t.id == template) {
+            return Err(SessionError::Decode(format!(
+                "no template \"{}\"",
+                template.as_str()
+            )));
+        }
+        let Some(flow) = self.record_flow(id) else {
+            return Err(SessionError::Decode(format!(
+                "\"{}\" is not a record flow",
+                id.as_str()
+            )));
+        };
+        self.define_binding(BindingDef {
+            id: id.clone(),
+            binding: Binding::RecordFlow {
+                chain: flow.chain,
+                query: flow.query,
+                template: template.clone(),
+                options,
+            },
+        });
+        Ok(())
+    }
+
+    /// The pagination knobs record flow `id` asks for: its own repeated and
+    /// continued headers, at the paginator's header height.
+    pub fn flow_layout(&self, id: &BindingId) -> Option<FlowLayoutOpts> {
+        self.record_flow(id).map(|f| FlowLayoutOpts {
+            repeat_header: f.options.repeat_header,
+            continued_marker: f.options.continued_marker,
+            ..FlowLayoutOpts::default()
+        })
     }
 
     /// Register a placeholder anchor.

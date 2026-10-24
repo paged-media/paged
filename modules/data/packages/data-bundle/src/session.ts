@@ -58,6 +58,10 @@ import { t as tr } from "@paged-media/strings";
 import { BINDINGS, SOURCES, STATUS } from "./messages";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
+  recordTemplateMethods,
+  type RecordTemplateMethods,
+} from "./record-templates";
+import {
   DATA_PART_DIR,
   SESSION_PART,
   contentHash,
@@ -134,6 +138,7 @@ import {
   commitLoweredVisibility,
   commitRule,
   failedBatchChild,
+  frameStory,
   resolveElementId,
   type LowerContext,
 } from "./lower";
@@ -537,10 +542,22 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 
 /** The session API the panels + commands drive. */
 export interface DataSourceSession
-  extends ReviewSession, PropertyMethods, CatalogueMethods {
+  extends
+    ReviewSession,
+    PropertyMethods,
+    CatalogueMethods,
+    RecordTemplateMethods {
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Editor ADR 291's drag to place: a field dropped on a page item. Into a
+   *  text frame it is a variable at the start of the frame's story, onto a
+   *  graphic frame its picture (an image binding). */
+  placeField(
+    query: string,
+    field: string,
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }>;
   /** Data ADR 563 — declare (or, with null, undeclare) `<query>.<field>` an
    *  asset column: an image binding over it fetches (consented origins
    *  only), keeps (by content hash) and runs the chain before placing. */
@@ -2540,6 +2557,19 @@ export function createSession(
     transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
+    syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
+    place: async (target, query, field) => {
+      const [kind, ...rest] = target.split(":");
+      return self.placeField(query, field, {
+        kind,
+        id: rest.join(":"),
+      } as ElementId);
+    },
+    placements: () => props.placements(),
+    refresh: async () => {
+      await self.refreshData();
+      await self.lowerAll();
+    },
     evaluate: async (query, expr, record) => {
       const e = await ensureEngine();
       if (typeof e.evaluate_at !== "function")
@@ -2591,6 +2621,42 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    async placeField(query, field, target) {
+      const id = `${field.replace(/[^A-Za-z0-9_]/g, "_")}-${Date.now().toString(36)}`;
+      if (target.kind === "textFrame") {
+        const story = await frameStory(host, String(target.id));
+        if (!story)
+          throw new Error(
+            `the text frame ${String(target.id)} has no story to place a field into`,
+          );
+        self.addVariableBinding(id, id, query, field);
+        const e = await ensureEngine();
+        const lowered = e.resolve_lowered(id) as { kind?: string } | null;
+        if (lowered?.kind !== "variable")
+          throw new Error(
+            `the field ${field} does not resolve (refresh the data first)`,
+          );
+        const placed = await commitLoweredVariable(
+          host,
+          lowered as never,
+          id,
+          story,
+        );
+        if (!placed) throw new Error(`the field ${field} could not be placed`);
+        placedVariables.add(id);
+        emit();
+        return { binding: id, kind: "variable" };
+      }
+      if (["rectangle", "oval", "polygon"].includes(String(target.kind))) {
+        self.addImageBinding(id, String(target.id), query, field);
+        await self.lowerBinding(id);
+        emit();
+        return { binding: id, kind: "image" };
+      }
+      throw new Error(
+        `a field is placed into a text frame or onto a graphic frame, not on a ${String(target.kind)}`,
+      );
+    },
     setAssetColumn(query, field, def) {
       const key = `${query}.${field}`;
       if (def) assetColumns.set(key, { ...def });
@@ -2659,6 +2725,15 @@ export function createSession(
       setMessage: (message) => {
         state.message = message;
       },
+    }),
+    ...recordTemplateMethods({
+      host,
+      ensureEngine,
+      engineNow: () => engine,
+      startPage,
+      markDirty,
+      emit,
+      report,
     }),
     ...reviewMethods({
       host,

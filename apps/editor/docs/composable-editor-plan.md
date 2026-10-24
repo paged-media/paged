@@ -45,9 +45,12 @@ orientation only.
 | F3 preflight, F4 author overlay                  | Done: the `templateFindings` collection, the Template panel's Problems, markers on the author's field outlines                          | `paged-template/src/preflight.rs`                                                   |
 | G1, G2 module field kinds, routing               | Done                                                                                                                                    | extensions ADR 335, engine ADR 1000 amendment                                       |
 | G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
-| G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
-| H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
+| G4 coverage gaps                                 | Done: CLI imports and bytes, typed commands per module, headless module content; what stays by design is listed in G4                   |                                                                                     |
+| H demos                                          | Done: a gallery of thirteen pages (module fields and PDF/X-4 included), journeys                                                        | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
+| Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                     | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
+| Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                      | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
+| Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                            | ADR 293, `panels/template/template-notice.tsx`                                      |
 
 Corrections to the plan found while building:
 
@@ -1218,7 +1221,11 @@ first, since they unblock several modules at once:
 4. **Headless rendering of module content.** Image composites with adjustments need a GPU and
    web frames are not stored as rendered content, so a headless PDF shows stale pixels or a
    fallback. Fail loudly (`pending` reported by `template check`), and bake web frames before
-   export.
+   export. **Done:** every PDF `paged-node` writes bakes each web frame to native items through
+   paged.web's typed `bakeWebFrame` first and takes the bake's undo steps back afterwards; any
+   module object whose `pending` row reads true is listed in the export's diagnostics and by
+   `template check`, and `template fill -o x.pdf` refuses to write it
+   (`apps/cli/src/module-content.ts`, `cli-module-content.spec.ts`).
 5. **The Rust CLI** has no plugin host; the module surface is `paged-node` only, and its docs say
    so.
 
@@ -1232,7 +1239,12 @@ Per module:
   command stays for a host without it; `modules/draw/docs/status.md`). Since the ADRs'
   amendments a script's edits are followed too (a run is one step its reply names), a typed
   recipe parameter write rebuilds its artwork in the same step (`ObjectWrite.followUp`),
-  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox.
+  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox. The
+  leftovers are closed (2026-10-24): an Objects on a Path Update, which moves its own sources,
+  notes its step so the automatic update does not place the objects a second time in it, and
+  every recipe panel's note says what the automatic update does; what stays (a script run
+  that names no step, recipe records outside undo, the width profile as an outline) is
+  inherent and `status.md` says why.
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
@@ -1249,7 +1261,12 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   canvas is the same image at another size; another crop or no selection is refused with the
   reason, as it is headless. A kept selection is set back into the engine when its frame's
   image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
-  its pixels change and one undo restores them (`modules/image/docs/status.md`).
+  its pixels change and one undo restores them (`modules/image/docs/status.md`). The leftovers
+  (2026-10-24, image ADR 465 amendment of that day): a kept selection belongs to the stored
+  revision it was made on, follows a quarter turn or flip committed on its frame (the editor's
+  own turns and flips now carry the live selection too) and is refused, with the reason, on a
+  revision it was not carried to. What stays is by rule: another crop's offset is unknown, and
+  a selection is session state, never written to the document (ADR 460).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a defined name
@@ -1267,6 +1284,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   chain's first pagination and every area of a print area are one batch on a host with in-batch
   handles); `apps/cli/test/cli-sheet.spec.ts` runs
   placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
+  The leftovers (2026-10-24, sheet ADR 522 amendment 2): a chart placed by the version that
+  recorded its box but not its art follows a move made before reopening; a renamed sheet's
+  placed tables and chains are re-stamped with the new name and found again on reopen. Left,
+  with the reason in `status.md`: a first pagination on a host that cannot amend (none in this
+  repository) keeps no record until its first refresh, a chartsheet's chart stays in the file
+  (deleting it is deleting the sheet), and an older version sees charts renumbered after a
+  delete (it counts chart parts).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
   `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an
@@ -1290,8 +1314,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
   and New, Duplicate, Delete, Move up and Move down of the active slide under Plugins ▸ Slide,
-  each offered only where it applies (`modules/slide/docs/status.md`).
-- **web:** `importHtml`; turn an existing frame into a web frame; diagnostics as a row.
+  each offered only where it applies, each slide verb with a key that the editor leaves free
+  (Option+Cmd+N, Option+Shift+Cmd+N, Option+Cmd+Backspace, Cmd+Up, Cmd+Down; silent with a text
+  caret) (`modules/slide/docs/status.md`).
+- **web:** done. The typed `importHtml` (a whole file split into its lanes, sanitised) and
+  `makeWebFrame` (an existing frame made a web frame, from a starter template), the
+  `webFrame.diagnostics` row (what the source panel lints) and `webFrame.page` (the page number
+  `{{frame.page}}` renders as); a headless PDF bakes the frames first (shared gap 4).
 - **publish / pdf:** done. Bookmarks and tagged PDF are options of the typed `exportPdf`; every
   PDF `paged-node` writes (`template fill -o x.pdf`, `merge`, `generate`, `-o x.pdf`) goes
   through it when paged.publish is loaded. The typed `preflight` and `paged-node preflight`
@@ -1302,6 +1331,9 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   `--no-paged` leaves it out; the Rust `paged package` the same). Fonts are collected only
   from faces the engine holds and the files `--fonts` names (an IDML carries none); a face
   whose licence restricts embedding is reported, not copied (`modules/publish/docs/status.md`).
+  Both stay by design: a package can hold only the font files it is given, and a licence that
+  forbids copying a face is the font vendor's rule. A PDF import that leaves pages out past
+  its cap says so (`sourcePageCount`, a log line).
 
 ## 9b. Workstream H — Demos
 
@@ -1417,3 +1449,11 @@ Taken on 2026-10-21:
 5. **The `editor` role and the policy:** only `author` writes the template policy by default;
    a host may allow it for an editor session through an override (C7).
 6. **Strings:** the whole editor and its bundles, in this project (E10).
+
+Taken on 2026-10-24, with the concept's former open questions (concept §12, "Decided on
+2026-10-24"): the iframe is the path for hosts without cross-origin isolation; `feature-ids.json`
+is the public id list, with a deprecation window and aliases; the `template-fill` and `form`
+presets become usable on phones and tablets; roles stay per session; placeholder runs are the
+text-range mechanism; text fields take author-allowed character styles and breaks; choice fields
+can offer frame alternates; and the module leftovers each module's `status.md` lists are fixed in
+the same round, not tracked for later.

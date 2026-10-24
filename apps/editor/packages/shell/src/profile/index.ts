@@ -30,4 +30,11 @@ export {
   matchIndices,
 } from "./adjust";
 export { validateProfile } from "./validate";
+export {
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdAliases,
+  type IdDeprecation,
+} from "./deprecations";
 export { BUNDLES_ENTRY, filterByRegion } from "./region-filter";

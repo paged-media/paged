@@ -104,7 +104,7 @@ describe("media.paged.pdf.importPdf (unit)", () => {
     const out = await b.host.objects.invoke(IMPORT_PDF_COMMAND, {
       bytes: PDF,
     });
-    expect(out).toEqual({ mode: "editable", pageCount: 2 });
+    expect(out).toEqual({ mode: "editable", pageCount: 2, sourcePageCount: 2 });
     expect(opened).toHaveLength(1);
     // A `.paged` container (a ZIP), not the PDF passed through.
     expect(isPackage(opened[0]!)).toBe(true);
@@ -122,7 +122,13 @@ describe("media.paged.pdf.importPdf (unit)", () => {
         bytes: PDF,
         maxPages: 1,
       }),
-    ).toEqual({ mode: "editable", pageCount: 1 });
+    ).toEqual({ mode: "editable", pageCount: 1, sourcePageCount: 2 });
+    // The page left out is said, never silent.
+    expect(
+      b.logs.some(
+        (l) => l.startsWith("warn") && l.includes("read 1 of 2 pages"),
+      ),
+    ).toBe(true);
     b.dispose();
   }, 60_000);
 

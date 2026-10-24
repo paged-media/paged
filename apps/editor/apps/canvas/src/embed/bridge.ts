@@ -23,6 +23,7 @@
 // init fixes the origin every later message must come from.
 
 import type { EditorHandle } from "./create-editor";
+import { isEditorError, notCrossOriginIsolated } from "./errors";
 import {
   BRIDGED_METHODS,
   SCRIPT_METHOD,
@@ -90,10 +91,11 @@ export function serveBridge(
           (self as { crossOriginIsolated?: boolean }).crossOriginIsolated ===
           false
         ) {
+          const refusal = notCrossOriginIsolated("frame");
           post({
             type: "paged:failed",
-            error:
-              'the editor\'s frame is not cross-origin isolated: the host page needs Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: credentialless, and the iframe allow="cross-origin-isolated"',
+            error: refusal.message,
+            code: refusal.code,
           });
           resolveReady(null);
           return;
@@ -121,7 +123,12 @@ export function serveBridge(
               resolveReady(h);
             },
             (err: unknown) => {
-              post({ type: "paged:failed", error: String(err) });
+              post({
+                type: "paged:failed",
+                ...(isEditorError(err)
+                  ? { error: err.message, code: err.code }
+                  : { error: String(err) }),
+              });
               resolveReady(null);
             },
           );

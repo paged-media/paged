@@ -2680,3 +2680,142 @@ pub fn keeps_docx() -> Vec<u8> {
         ("word/styles.xml", STYLES.as_bytes()),
     ])
 }
+
+/// A `.docx` of one main document part (and an optional styles part), the
+/// W0 builders' package.
+fn w0_package(document: &str, styles: Option<&str>) -> Vec<u8> {
+    let mut parts: Vec<(&str, &[u8])> = vec![
+        ("[Content_Types].xml", CONTENT_TYPES.as_bytes()),
+        ("_rels/.rels", ROOT_RELS.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+        ("unknown/note.txt", b"carried through untouched"),
+    ];
+    if let Some(styles) = styles {
+        parts.push(("word/_rels/document.xml.rels", DOC_RELS.as_bytes()));
+        parts.push(("word/styles.xml", styles.as_bytes()));
+    }
+    zip_parts(&parts)
+}
+
+/// W0 — tracked changes, which the import shows as accepted:
+///
+/// - p0 `Plain paragraph.` — nothing tracked.
+/// - p1 `Before ` + `w:ins` `inserted` + `w:del` `deleted` + ` after.` →
+///   `Before inserted after.`
+/// - p2 `w:moveFrom` `moved ` + `Stay ` + `w:moveTo` `moved` → `Stay moved`.
+/// - p3 a `w:hyperlink` (internal anchor) holding `Link `, a `w:ins` `new`
+///   and ` end` → `Link new end`: the insertion sits INSIDE the wrapper, so
+///   ` end` is the wrapper's second `<w:r>` child, not its third run.
+/// - p4 a whole paragraph deleted (its mark and its only run): not shown.
+/// - p5 `Bold now` whose bold is a tracked format change (`w:rPrChange`) in
+///   a paragraph whose centring is one too (`w:pPrChange`).
+///
+/// Nine tracked changes: ins, del, moveFrom, moveTo, ins, the mark's del
+/// and its run's del, pPrChange, rPrChange.
+pub fn tracked_changes_docx() -> Vec<u8> {
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t>Plain paragraph.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Before </w:t></w:r><w:ins w:id="1" w:author="Reviewer" w:date="2026-10-01T10:00:00Z"><w:r><w:t>inserted</w:t></w:r></w:ins><w:del w:id="2" w:author="Reviewer" w:date="2026-10-01T10:00:00Z"><w:r><w:delText>deleted</w:delText></w:r></w:del><w:r><w:t xml:space="preserve"> after.</w:t></w:r></w:p>
+    <w:p><w:moveFrom w:id="3" w:author="Reviewer"><w:r><w:delText xml:space="preserve">moved </w:delText></w:r></w:moveFrom><w:r><w:t xml:space="preserve">Stay </w:t></w:r><w:moveTo w:id="4" w:author="Reviewer"><w:r><w:t>moved</w:t></w:r></w:moveTo></w:p>
+    <w:p><w:hyperlink w:anchor="target"><w:r><w:t xml:space="preserve">Link </w:t></w:r><w:ins w:id="5" w:author="Reviewer"><w:r><w:t>new</w:t></w:r></w:ins><w:r><w:t xml:space="preserve"> end</w:t></w:r></w:hyperlink></w:p>
+    <w:p><w:pPr><w:rPr><w:del w:id="6" w:author="Reviewer"/></w:rPr></w:pPr><w:del w:id="7" w:author="Reviewer"><w:r><w:delText>Gone paragraph</w:delText></w:r></w:del></w:p>
+    <w:p><w:pPr><w:jc w:val="center"/><w:pPrChange w:id="8" w:author="Reviewer"><w:pPr/></w:pPrChange></w:pPr><w:r><w:rPr><w:b/><w:rPrChange w:id="9" w:author="Reviewer"><w:rPr/></w:rPrChange></w:rPr><w:t>Bold now</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, None)
+}
+
+/// W0 — content controls, whose content the import keeps:
+///
+/// - block 0 `Intro.`
+/// - block 1 `Name: ` + a run content control `Jane` + ` signed.`
+/// - blocks 2–5 a Word table of contents: a block content control
+///   (`docPartGallery` "Table of Contents") holding a heading paragraph and
+///   three entries — a `TOC` field begun in the first entry and ended in the
+///   last, each entry a `w:hyperlink` with a `PAGEREF` field — whose cached
+///   text is what shows.
+/// - block 6 `Body after TOC.` — the next direct `<w:p>` of the body.
+/// - block 7 a table: cell 0 `A1`; cell 1 a block content control holding
+///   `In control`, then the cell's own paragraph `After control`.
+/// - block 8 a table inside a block content control (`Boxed`).
+/// - block 9 a table after it (`Second table`) — the patcher's third table.
+/// - block 10 a table with a ROW content control: `R0`, `R1 in control`, `R2`.
+/// - block 11 `End.`
+pub fn content_controls_docx() -> Vec<u8> {
+    let entry = |text: &str, page: &str, begin: &str, end: &str| {
+        format!(
+            r#"<w:p><w:pPr><w:pStyle w:val="TOC1"/><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9350"/></w:tabs></w:pPr>{begin}<w:hyperlink w:anchor="_Toc{page}" w:history="1"><w:r><w:t>{text}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF _Toc{page} \h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>{page}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink>{end}</w:p>"#
+        )
+    };
+    let toc_begin = r#"<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>"#;
+    let toc_end = r#"<w:r><w:fldChar w:fldCharType="end"/></w:r>"#;
+    let cell = |text: &str| {
+        format!(
+            r#"<w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:tc>"#
+        )
+    };
+    let row = |text: &str| format!("<w:tr>{}</w:tr>", cell(text));
+    let grid1 = r#"<w:tblPr><w:tblW w:w="4000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>"#;
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t>Intro.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Name: </w:t></w:r><w:sdt><w:sdtPr><w:alias w:val="Name"/><w:tag w:val="name"/><w:id w:val="101"/></w:sdtPr><w:sdtContent><w:r><w:t>Jane</w:t></w:r></w:sdtContent></w:sdt><w:r><w:t xml:space="preserve"> signed.</w:t></w:r></w:p>
+    <w:sdt><w:sdtPr><w:id w:val="102"/><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent><w:p><w:pPr><w:pStyle w:val="TOCHeading"/></w:pPr><w:r><w:t>Contents</w:t></w:r></w:p>{e1}{e2}{e3}</w:sdtContent></w:sdt>
+    <w:p><w:r><w:t>Body after TOC.</w:t></w:r></w:p>
+    <w:tbl><w:tblPr><w:tblW w:w="8000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr>{a1}<w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:sdt><w:sdtPr><w:id w:val="103"/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>In control</w:t></w:r></w:p></w:sdtContent></w:sdt><w:p><w:r><w:t>After control</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+    <w:sdt><w:sdtPr><w:id w:val="104"/></w:sdtPr><w:sdtContent><w:tbl>{grid1}{boxed}</w:tbl></w:sdtContent></w:sdt>
+    <w:tbl>{grid1}{second}</w:tbl>
+    <w:tbl>{grid1}{r0}<w:sdt><w:sdtPr><w:id w:val="105"/></w:sdtPr><w:sdtContent>{r1}</w:sdtContent></w:sdt>{r2}</w:tbl>
+    <w:p><w:r><w:t>End.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#,
+        e1 = entry("Heading one", "1", toc_begin, ""),
+        e2 = entry("Heading two", "2", "", ""),
+        e3 = entry("Heading three", "3", "", toc_end),
+        a1 = cell("A1"),
+        boxed = row("Boxed"),
+        second = row("Second table"),
+        r0 = row("R0"),
+        r1 = row("R1 in control"),
+        r2 = row("R2"),
+    );
+    w0_package(&document, None)
+}
+
+/// W0 — hidden text (`w:vanish`), which the import does not show:
+///
+/// - p0 `Visible ` + hidden `secret ` + `text.` → `Visible text.`
+/// - p1 `styled secret` hidden through its character style (`w:vanish` on
+///   `HiddenChar`, inherited by `HiddenChild`) + `Shown` → `Shown`.
+/// - p2 `Unhidden`: the hidden style turned off on the run (`w:vanish
+///   w:val="0"`) — shown.
+/// - p3 `Other paragraph.`
+pub fn hidden_text_docx() -> Vec<u8> {
+    let styles = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+  <w:style w:type="character" w:styleId="HiddenChar"><w:name w:val="Hidden Char"/><w:rPr><w:vanish/></w:rPr></w:style>
+  <w:style w:type="character" w:styleId="HiddenChild"><w:name w:val="Hidden Child"/><w:basedOn w:val="HiddenChar"/><w:rPr><w:i/></w:rPr></w:style>
+</w:styles>"#;
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document {W_NS}>
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Visible </w:t></w:r><w:r><w:rPr><w:vanish/></w:rPr><w:t xml:space="preserve">secret </w:t></w:r><w:r><w:t>text.</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:rStyle w:val="HiddenChild"/></w:rPr><w:t>styled secret</w:t></w:r><w:r><w:t>Shown</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:rStyle w:val="HiddenChar"/><w:vanish w:val="0"/></w:rPr><w:t>Unhidden</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Other paragraph.</w:t></w:r></w:p>
+    <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>"#
+    );
+    w0_package(&document, Some(styles))
+}
