@@ -212,9 +212,14 @@ export function makePaginationPanel(
 
     async function write(
       next: Partial<FlowOptions>,
-      tmpl = recipe.template,
+      tmpl?: string,
     ): Promise<void> {
-      setError(await session.setRecordFlow(flowId, tmpl, { ...opts, ...next }));
+      setError(
+        await session.setRecordFlow(flowId, tmpl ?? recipe.template, {
+          ...opts,
+          ...next,
+        }),
+      );
     }
 
     function footerFrom(
