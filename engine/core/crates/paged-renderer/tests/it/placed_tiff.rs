@@ -93,6 +93,7 @@ fn flat(model: ColorModel, colour: &[u8], icc: Option<Vec<u8>>) -> RasterImage {
             iptc: None,
             photoshop_irb: None,
             has_layers: false,
+            layer_count: Some(0),
             resolution: Some((72.0, 72.0)),
             orientation: 1,
             page_count: 1,

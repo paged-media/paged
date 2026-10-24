@@ -333,6 +333,17 @@ export const HOST_FEATURES: readonly string[] = [
   // handshake refuses a protocol older than the pin — so a running bundle is
   // always talking to an engine that answers RequestStoryContent.
   "document.readStory@1",
+  // Engine ADR 1006 — the fill rule is a native frame property:
+  // `frameFillRule` ("NonZero" / "EvenOdd") reads and writes through the
+  // ordinary property doors (`elementProperties`, `setElementProperty`,
+  // `host.objects`) on every frame kind with an outline. STATIC: the flag
+  // says this SDK's vendored wire and catalog carry the path. It is an
+  // additive path at protocol 76, so the worker handshake does not prove
+  // the engine has it: an engine before ADR 1006 refuses the write as an
+  // unknown path (an outcome, never a throw) and reads no row. A bundle
+  // that would otherwise say even-odd with winding (paged.draw's SVG
+  // importer) asks this flag first.
+  "document.fillRule@1",
 ];
 
 /** Thrown by reserved surface members — a visible seam, never

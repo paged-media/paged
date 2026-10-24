@@ -96,6 +96,38 @@ async function findCell(page: Page, pageId: string, w: number, h: number) {
   );
 }
 
+/** The box an object shows: its frameBounds through its stored
+ *  frameTransform (align moves through the transform, WP4.4). */
+async function shownBox(
+  page: Parameters<typeof objGet>[0],
+  ref: Parameters<typeof addr>[0],
+): Promise<number[]> {
+  const [t, l, b, r] = (await objGet(
+    page,
+    addr(ref),
+    "frameBounds",
+  )) as number[];
+  const m = ((await objGet(page, addr(ref), "frameTransform")) as
+    number[] | null) ?? [1, 0, 0, 1, 0, 0];
+  const pts = [
+    [l!, t!],
+    [r!, t!],
+    [r!, b!],
+    [l!, b!],
+  ].map(([x, y]) => [
+    m[0]! * x! + m[2]! * y! + m[4]!,
+    m[1]! * x! + m[3]! * y! + m[5]!,
+  ]);
+  const xs = pts.map((p) => p[0]!);
+  const ys = pts.map((p) => p[1]!);
+  return [
+    Math.min(...ys),
+    Math.min(...xs),
+    Math.max(...ys),
+    Math.max(...xs),
+  ].map((v) => Math.round(v * 1000) / 1000);
+}
+
 test.describe("ADR 323 — structure panels over host.objects", () => {
   test("OM-STRUCT-1 — Inspector rows are schema fields: set → host.objects → one undo; Bind to data… @feat:editor-shell.panels.inspector @feat:scripting.property-readwrite @feat:round-tripping.undo-redo @level:happy", async ({
     page,
@@ -135,9 +167,7 @@ test.describe("ADR 323 — structure panels over host.objects", () => {
       .map((f) => f.ref)
       .slice(0, 2);
     expect(two.length).toBe(2);
-    const before = await Promise.all(
-      two.map((r) => objGet(page, addr(r), "frameBounds") as Promise<number[]>),
-    );
+    const before = await Promise.all(two.map((r) => shownBox(page, r)));
     const edges = [
       { kind: "left", i: 1, pick: Math.min },
       { kind: "top", i: 0, pick: Math.min },
@@ -178,17 +208,12 @@ test.describe("ADR 323 — structure panels over host.objects", () => {
     const target = edge!.pick(before[0][edge!.i], before[1][edge!.i]);
     for (const r of two) {
       await expect
-        .poll(
-          async () =>
-            ((await objGet(page, addr(r), "frameBounds")) as number[])[edge!.i],
-        )
+        .poll(async () => (await shownBox(page, r))[edge!.i])
         .toBeCloseTo(target, 3);
     }
     await undoOnce(page);
     for (const [i, r] of two.entries()) {
-      await expect
-        .poll(() => objGet(page, addr(r), "frameBounds"))
-        .toEqual(before[i]);
+      await expect.poll(() => shownBox(page, r)).toEqual(before[i]);
     }
   });
 

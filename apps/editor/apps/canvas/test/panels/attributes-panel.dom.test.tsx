@@ -27,7 +27,8 @@ import { covers } from "@paged-media/test-kit";
 import { AttributesPanel } from "../../src/panels/attributes-panel";
 import { richScene, type RichScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
-import { addr, batch, bool, set, state } from "./support/frames";
+import { REVERSE_PATH_COMMAND_ID } from "../../src/panels/attributes-panel";
+import { addr, batch, bool, set, state, text } from "./support/frames";
 
 afterEach(unmountAll);
 
@@ -208,5 +209,112 @@ describe("Attributes panel: findings", () => {
     expect(
       h.root.querySelector('[data-property-field="frameStrokeGapColor"]'),
     ).not.toBeNull();
+  });
+});
+
+// Engine ADR 1006 — the fill rule (Illustrator's Attributes ▸ Non-Zero /
+// Even-Odd) and Reverse Path Direction beside it.
+const rule = (h: H, value: "NonZero" | "EvenOdd") =>
+  h.root.querySelector<HTMLButtonElement>(`[data-fill-rule="${value}"]`)!;
+const reverse = (h: H) =>
+  h.root.querySelector<HTMLButtonElement>("[data-reverse-path]")!;
+
+describe("Attributes panel: fill rule [frames-paths.fill-rule-even-odd]", () => {
+  test("nothing selected: both rules disabled, neither pressed", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    expect(state(h, "frameFillRule")).toBe("none");
+    for (const v of ["NonZero", "EvenOdd"] as const) {
+      expect(rule(h, v).disabled).toBe(true);
+      expect(rule(h, v).getAttribute("aria-pressed")).toBe("false");
+    }
+  });
+
+  test("a rectangle reads non-zero; Even-Odd writes the rule, reads back, one undo restores it", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(rule(h, "NonZero").getAttribute("aria-pressed")).toBe("true");
+    expect(rule(h, "EvenOdd").getAttribute("aria-pressed")).toBe("false");
+    expect(rule(h, "EvenOdd").getAttribute("aria-label")).toBe(
+      "Use even-odd fill rule",
+    );
+    const from = h.mark();
+    await h.click(rule(h, "EvenOdd"));
+    expect(h.mutations(from)).toEqual([
+      set(addr(h.scene.rect), "frameFillRule", text("EvenOdd")),
+    ] as never);
+    expect(await h.get(addr(h.scene.rect), "frameFillRule")).toEqual(
+      text("EvenOdd"),
+    );
+    expect(rule(h, "EvenOdd").getAttribute("aria-pressed")).toBe("true");
+    expect(rule(h, "NonZero").getAttribute("aria-pressed")).toBe("false");
+    await h.act(() => h.client.undo());
+    await h.settle();
+    expect(await h.get(addr(h.scene.rect), "frameFillRule")).toEqual(
+      text("NonZero"),
+    );
+    expect(rule(h, "NonZero").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("pressing the rule already in force sends nothing", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    const from = h.mark();
+    await h.click(rule(h, "NonZero"));
+    expect(h.mutations(from)).toEqual([]);
+  });
+
+  test("two frames: one batch sets both; frames that differ read mixed", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.rect, h.scene.groupA]);
+    const from = h.mark();
+    await h.click(rule(h, "EvenOdd"));
+    expect(h.mutations(from)).toEqual([
+      batch(
+        set(addr(h.scene.rect), "frameFillRule", text("EvenOdd")),
+        set(addr(h.scene.groupA), "frameFillRule", text("EvenOdd")),
+      ),
+    ] as never);
+    await h.act(() => h.client.undo());
+    await h.select([h.scene.rect]);
+    await h.click(rule(h, "EvenOdd"));
+    await h.select([h.scene.rect, h.scene.groupA]);
+    expect(state(h, "frameFillRule")).toBe("mixed");
+    expect(rule(h, "NonZero").getAttribute("aria-pressed")).toBe("false");
+    expect(rule(h, "EvenOdd").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("an oval carries the rule too", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.oval]);
+    expect(state(h, "frameFillRule")).toBe("value");
+    expect(rule(h, "EvenOdd").disabled).toBe(false);
+  });
+});
+
+describe("Attributes panel: Reverse path direction", () => {
+  test("disabled when no bundle registered the command", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    await h.select([h.scene.rect]);
+    expect(reverse(h).disabled).toBe(true);
+    expect(reverse(h).textContent).toBe("Reverse path direction");
+  });
+
+  test("with paged.draw's command registered: disabled until something is selected, then invokes it", async () => {
+    covers("panel:paged.attributes");
+    const h = await mount();
+    const calls = h.spyCommand(REVERSE_PATH_COMMAND_ID);
+    await h.settle();
+    expect(reverse(h).disabled).toBe(true);
+    await h.select([h.scene.rect]);
+    expect(reverse(h).disabled).toBe(false);
+    await h.click(reverse(h));
+    expect(calls).toHaveLength(1);
+    expect(h.invoked(REVERSE_PATH_COMMAND_ID)).toHaveLength(1);
   });
 });

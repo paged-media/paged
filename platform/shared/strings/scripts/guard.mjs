@@ -6,6 +6,7 @@
  * TypeScript sources and every German catalogue (this package's
  * `locales/de.json` and each package's own `locales/de.json`), and fails
  * when a message has no German text, when a German key names no message,
+ * when two catalogues translate one key differently,
  * or when the two disagree on their {parameters}. Static: no bundle needs
  * to load for the check.
  *
@@ -170,8 +171,14 @@ for (const file of files) {
   if (!/\/locales\/de\.json$/.test(file)) continue;
   for (const [key, value] of Object.entries(
     JSON.parse(readFileSync(file, "utf8")),
-  ))
+  )) {
+    const known = german.get(key);
+    if (known && known.value !== value)
+      problems.push(
+        `${key} is translated twice differently (${known.file}, ${relative(ROOT, file)}): the bundle that loads second fails to activate`,
+      );
     german.set(key, { value, file: relative(ROOT, file) });
+  }
 }
 
 // A parameter is `{name}` or a plural's `{name, plural, …}`; a plural

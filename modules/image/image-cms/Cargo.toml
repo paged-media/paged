@@ -11,7 +11,7 @@ description = "paged.image color management (spec §10.1): swappable CmsEngine, 
 workspace = true
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 thiserror = { workspace = true }
 # The display-consistency engine: the EXACT build core uses (qcms 0.3,
 # cmyk + iccv4-enabled) on BOTH targets — cross-engine consistency with
