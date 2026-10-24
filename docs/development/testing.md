@@ -222,7 +222,7 @@ writes the job summary and fails the lane when fewer than `--min-executed`
 ## Not yet converted
 
 - **TypeScript tests** keep their own switches (`REQUIRE_REAL_ENGINE`,
-  `REQUIRE_REAL_DUCKDB`, `REQUIRE_REAL_WASM`, …) rather than the Rust helper. The nine
+  `REQUIRE_REAL_BROWSER`, `REQUIRE_REAL_WASM`, …) rather than the Rust helper. The nine
   that passed without running when a resource was missing (the T0 scan) no longer do:
   `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts` (2) builds the
   bundle it asserts on (the bundling step of the package's own `build` script, into a

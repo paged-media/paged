@@ -182,3 +182,10 @@ the embeddable editor, with every private package it uses bundled, the engine ta
 unchanged: a public package depends on no private one. The release workflow, `stage.mjs`,
 `verify-tarballs.mjs`, `assert-dist-tags.mjs` and `consumer-test.sh` handle four packages, one
 version; the editor's first publish goes through the token path, as `paged` and `viewer` did.
+
+## Amendment 5 (2026-10-24): paged.data has one engine
+
+[PM-0015](PM-0015-data-and-actions-are-platform-layers.md) and data ADR 561 replace DuckDB-WASM
+with Turso compiled into paged.data's own engine wasm (about 11 MiB). The reason given above for
+leaving paged.data out of `paged` (the 34 MiB of DuckDB) is gone; whether `paged` carries it is
+decided with the `data@1` door (extensions record 343).

@@ -164,11 +164,35 @@ Properties ▸ Frame.
 
 ### Align — `paged.align` ✓ (gallery card)
 
-Align-to scope select (Selection live; Page/Margins/Spread disabled pending
-gap 7) · six align buttons + two distribute writing a `batch` of
-`setElementProperty(frameBounds)` (one undo entry) · Use-spacing seam.
-Enabled at ≥2 (align) / ≥3 (distribute) frames. Hooks: `data-align-kind`.
-**End state** — page/margins/spread scopes, equal-spacing inputs, key object.
+Align to: Selection · Key object · Margins · Page · Spread (WP4.4, the
+page scopes read engine WP2.7's page placement and margins) · six align
+buttons · Distribute Objects by left / centre / right / top / middle /
+bottom edge · Distribute Spacing H / V · Use spacing with a typed value
+(the step or the gap). Each button invokes the typed command
+`paged.align.objects` `{ kind, targets, to?, key?, spacing? }`, which plans
+in SPREAD space on each object's transformed box (a rotated frame aligns
+by the box it shows) and writes one `frameTransform` translation per page
+item, `core.setGroupTransform` per group — ONE batch, one undo step.
+Enabled at ≥2 objects (≥3 to distribute without a spacing; one object in
+a page scope aligns to its own page, a pasteboard one to its spread's first
+page). Key object: the selection's first object, or the selected object
+the user clicks (the canvas click keeps the selection); the selection
+chrome draws it with a 4 px outline (`data-key-object`). The scope and
+the key are per editor (`ALIGN_SCOPE`, shell). Hooks: `data-align-kind`,
+`data-align-scope`, `data-use-spacing`, `data-spacing-value`.
+
+### Transform each — Object ▸ Transform ▸ Transform each… (dialog)
+
+Scale H / V (%), Move H / V (document unit), Rotate (°, counter-clockwise),
+Reflect X / Y, a 9-point reference point, Random (each object draws its
+own amounts between the neutral value and the one typed, from a seed the
+dialog draws on opening), Preview. Every object transforms about its OWN
+reference point (scale → rotate → move). OK runs
+`paged.object.transformEach` over the selection the dialog opened with:
+one batch, one undo step. Preview applies the command and undoes it before
+each change; OK keeps a preview of the current values, Cancel and Escape
+undo it. Hooks: `data-transform-each-dialog`, `-ok`, `-cancel`,
+`data-transform-each-check="preview|reflect-x|reflect-y|random"`.
 
 ### Pathfinder — `paged.pathfinder` ✓ (gallery buttons grid)
 
@@ -429,9 +453,10 @@ insert/delete/duplicate actions (ops exist).
 Gallery ListRows. Pages list gains the **live toolbar**: New rides
 `insertPage` (after the selected page or document end), Delete rides
 `deletePage` against the selected row; Duplicate = seam. Spreads/Masters
-rows (label + page count); per-master Apply = seam.
-**End state** — pages-list absorbed by Document Map; spreads gain page
-membership (gap 7) and become the true grouping source; masters gain
+rows (label + page count; a spread also counts its objects, "2 pages · 5
+objects", from `SpreadSummary.members`, WP2.7); per-master Apply = seam.
+**End state** — pages-list absorbed by Document Map; spreads become the
+true grouping source (their `pageIds` and `members` are on the wire); masters gain
 "apply to page" (`ApplyMasterToPage`) + master editing entry.
 
 ### Links — `paged.links` ✓ (gallery ListRows) — W2.12 2026-06-06
@@ -829,7 +854,11 @@ EPUB/HTML + tagged PDF.
 5. **`characterFontFamily/Style/Kerning` property paths** — text inspector
    font selects.
 6. **Rotation/scale decompose primitive** — typed transform dials.
-7. **`SpreadSummary` page membership** — true spread grouping.
+7. **`SpreadSummary` page membership** — true spread grouping. _(WP2.7:
+   LIVE — `pageIds` and `members` (each top-level item with its page, by
+   `elementGeometry`'s centre rule) on `SpreadSummary`; `indexInSpread`,
+   `bindingEdge` and inside / outside margins on `PageSummary`. Align's
+   page scopes and the Spreads panel's object count read them.)_
 8. **Table selection + table/cell ops** — table toolbar, Table Composer,
    cell/table style apply. _(W3.A2/W2.11: LIVE — table-cell selection +
    the v30 line ops + the v35 header/footer/span ops + per-cell edge

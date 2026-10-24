@@ -18,7 +18,7 @@
 //
 //   1. the editor, by vite.config.lib.ts (the engine wasm and every module
 //      wasm built first: `moon run core:wasm-pkg`, each module's `wasm`
-//      task, `data:duckdb`);
+//      task);
 //   2. the declarations of the three entries, by TypeScript (src/types.ts
 //      is the whole public contract, so they name no private package);
 //   3. the data a host's tooling reads: feature-ids.json and

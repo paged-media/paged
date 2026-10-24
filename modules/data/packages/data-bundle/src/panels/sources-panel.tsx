@@ -23,7 +23,7 @@
 // source's refresh policy (src/refresh.ts),
 // the source list, the remote-source lane (M1, D-03: per-source consent state,
 // request-consent + edit-time load — inert until granted), and the HONEST
-// status (engine/DuckDB availability, and whether the session is saved with
+// status (engine availability, and whether the session is saved with
 // the document — rendered honestly, never faked).
 //
 // Built from host surfaces + React ONLY (no @paged-media/shell). Token-layer
@@ -413,15 +413,13 @@ export function makeSourcesPanel(
             refresh();
           }}
         />
-        {/* Developer knowledge (was user-facing copy): the query engine is
-            the vendored DuckDB-WASM (run scripts/vendor-duckdb.sh); the
-            engine wasm is scripts/build-wasm.sh. Remote sources (M1) are
+        {/* Developer knowledge (was user-facing copy): the engine wasm, the
+            query store inside it, is scripts/build-wasm.sh. Remote sources (M1) are
             inert until per-origin consent (D-03) and fetch at edit time
             only — never on document open. Sources, queries, bindings and the
             imported data are saved with the document (the `session`
             container part, persist.ts) on a host with container parts. */}
-        {(snapshot.status === "duckdb-missing" ||
-          snapshot.status === "engine-missing") && (
+        {snapshot.status === "engine-missing" && (
           <p style={note}>{t(M.engineMissing)}</p>
         )}
         <p style={note} data-data-persistence={snapshot.persistence.status}>

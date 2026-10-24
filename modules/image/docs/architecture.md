@@ -9,9 +9,14 @@ applies. Paths are relative to the repository root.
 ## Layout and crates
 
 Two workspaces sit side by side at the root; there is no `crates/` or `packages/` folder.
-The Cargo workspace has ten crates (toolchain 1.99.1); the pnpm workspace has two packages,
-`glue/` and `manifest/`. `registry/` holds five YAML files that record sources, tolerances
-and tests per kernel, PSD block, codec, colour lane and brush-file block;
+The Cargo workspace has eight crates (toolchain 1.99.1) and uses two more from the engine:
+`image-core` and `image-psd` moved to `engine/core/crates/paged-pixel` and
+`engine/core/crates/paged-psd` with their history and tests (WP1.2,
+[ADR 466](adr/466-core-raster-crates-are-shared.md)); `Cargo.toml` still names them
+`image-core` and `image-psd` through `package` aliases, and the table below keeps those
+names. The engine's renderer draws a placed PSD's merged composite through the same
+`paged-psd`. The pnpm workspace has two packages, `glue/` and `manifest/`. `registry/`
+holds five YAML files that record sources, tolerances and tests per kernel, PSD block, codec, colour lane and brush-file block;
 `registry/kernels.yaml` is also build input. `references/` is gitignored (third-party
 source trees, see [ADR 461](adr/461-clean-room-protocol.md)).
 
@@ -174,6 +179,17 @@ standing in for the mask, and commits through `LayerStack::edit_active_mask`. Th
 is journaled one byte per texel under the scope `layer id | MASK_SCOPE_BIT`, so it is one
 step on the same undo list and replays into the mask of the right layer. The fold itself is
 unchanged: a painted mask is an ordinary mask.
+
+A layer's kind is pixels, smart object, fill or adjustment (`layers/kinds.rs`). A fill layer's
+pixels are a render of its source by the `gen.*` kernels (a gradient is the style's generator
+from black to white, then `adjust.gradient_map` with the stops' ramp), kept like a smart
+object's render and redrawn when stale. A typed adjustment lowers onto the adjust chain
+(`Adjustment::to_chain`) or, for Gradient Map, Selective Color and Color Lookup, onto point
+kernels the fold runs on the resident accumulator (`Step::Direct`). The blending options are
+extras of a pixel step (`fold::PixelExtra`): Blend If's coverage (`band.blend_if`, times the
+mask), fill opacity on a special mode (`band.fade_neutral`), knockout through a saved backdrop
+(`Step::Save`, `band.take`). The Layer menu's verbs (`layers/verbs.rs`) are structure steps;
+a merge composites a stack of just its layers (`LayerStack::sub_stack`) through the same fold.
 
 The selection is an 8-bit coverage field at image resolution (`image-gpu/src/coverage.rs`),
 rasterised on the CPU and passed to the kernels as the group-2 mask. A brush stroke keeps a

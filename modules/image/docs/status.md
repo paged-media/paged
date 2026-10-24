@@ -16,6 +16,8 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   only previews the file.
   Each image starts with the panel at identity; values set on one image do not carry over
   to the next.
+  The PSD reader is the engine's `paged-psd` (WP1.2), so the canvas draws a placed PSD or
+  PSB's merged composite before this module opens it, decoded the same way.
 - **Adjustments.** The "Image" panel has a histogram and a re-runnable chain: exposure,
   brightness, contrast, saturation, temperature and tint, levels (composite and per
   channel), tone curves (composite and per channel), Hue/Saturation (master, six colour
@@ -69,6 +71,23 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   reaches it and the host's Layers panel shows this stack. The Image panel's history list
   shows every step, oldest first, with the current position marked; a click walks the journal
   to that step.
+- **Photoshop layer parity** (`image-js/src/layers/{kinds,verbs,fill_render}.rs`). Fill layers
+  (solid colour, a gradient of any number of stops in five styles, a pattern), rendered by the
+  `gen.*` kernels and re-rendered on edit or a canvas operation. Adjustment layers hold one
+  adjustment each, in Photoshop's units, sixteen kinds with their own Properties (Brightness/
+  Contrast, Levels, Curves, Exposure, Vibrance, Hue/Saturation, Color Balance, Black & White,
+  Photo Filter, Channel Mixer, Color Lookup, Invert, Posterize, Threshold, Gradient Map,
+  Selective Color); Gradient Map, Selective Color and Color Lookup run on the resident
+  accumulator. A stored chain with one stage opens as its typed layer; a chain of several stays
+  a chain. Blending Options: fill opacity (a multiplier outside the eight special modes; on them
+  it moves the source toward the mode's neutral colour, a model no Photoshop recording has
+  checked yet), knockout shallow and deep, Blend If per gray/red/green/blue with split sliders.
+  Locks: transparent pixels, image pixels, position, all. Merge Down, Merge Visible, Merge
+  Group, Stamp Visible, Flatten Image (over white), Layer via Copy and Cut, layer comps
+  (visibility, position — the pixels as placed — and appearance), links (moved together),
+  colour labels, search and filter of the list, align and distribute (to the canvas, the
+  selection or the linked layers). Each verb is one undo step; the merges composite their
+  layers on the GPU.
 - **Commit and reopen.** "Commit image edits to the document" stores the layers in the
   document's parts and puts their composite in the frame, as one document undo step;
   reopening the frame restores the layers ([ADR 462](adr/462-sessions-persist-in-parts.md)).
@@ -86,7 +105,7 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   with an image tool and sets the channel curves from the sampled colour.
 - **PSD.** A PSD whose layers the model reproduces opens as layers. Layers of the retained
   file can be renamed, removed and given another opacity before export. With no edit the
-  writer reproduces the input bytes (`image-psd/tests/it/roundtrip.rs`). A session with more
+  writer reproduces the input bytes (`engine/core/crates/paged-psd/tests/it/roundtrip.rs`). A session with more
   than one layer exports as a layered PSD (pixel layers, masks, groups, opacity, blend,
   visibility, clipping); with adjustment layers it is flattened, and says so.
 - **Panels, menu, shortcuts, language.** Beside the "Image" panel, an "Image properties"
@@ -224,26 +243,35 @@ the baked image), beside the module's own label on the frame.
   clipping, user masks, vector masks (drawn from their paths the way Photoshop draws them — a
   17×15 sample grid per pixel, per-component combine / subtract / intersect / exclude, even-odd
   or non-zero, invert — and multiplied with the user mask; on a fill/shape layer the stored
-  pixels already are the shape; `image-psd/src/vector_mask.rs`), mask density and feather (a
+  pixels already are the shape; `engine/core/crates/paged-psd/src/vector_mask.rs`), mask density and feather (a
   Gaussian of that sigma), fill opacity; smart objects as their stored render, accepted only
   where the file's merged composite agrees inside each one's footprint (a stale render, as on a
   corpus mock-up, opens flattened); text layers blended in a gamma space as Photoshop's are
   (`compose.normal_gamma`, 1.55: anti-aliased edges within 1–7 levels, where a plain blend was
   19–40 off; RGB documents, Normal mode); Curves, Levels, Exposure, Invert and Hue/Saturation
-  adjustment layers (curves exact, the others within 1–4 levels of Photoshop-written layers);
+  adjustment layers (curves exact, the others within 1–4 levels of Photoshop-written layers),
+  each opened as an editable typed adjustment layer; a layer's fill opacity, Blend If (the
+  record's blending ranges), knockout, locks and colour label; solid-colour and gradient fill
+  layers that are not shapes, as editable fill layers keeping Photoshop's render until edited
+  (a pattern fill, whose pixels sit in the document's pattern block, stays pixels, and so does
+  a gradient with transparency or noise);
   effects blocks that draw nothing; and Color Overlay, as a solid layer clipped to its base
   above the base's clipped layers (within 1 level). A file with other drawn effects, other
   adjustment layers (Photo Filter and Brightness/Contrast differ from Photoshop's), a group vector
   mask or a feathered shape mask opens flattened; artboards import (members cut to the
   artboard, its background beneath them), and says which (`PsdFile::layer_import_blockers` lists
-  every reason; `image-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
+  every reason; `engine/core/crates/paged-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
   one by one and blended in RGB, which Photoshop does not do (it blends the inks), so a CMYK
   file opens flattened when a layer, group or overlay uses a mode other than Normal or Multiply
   (measured 9.9–50 ΔE00 p95 off on synthetic tiles), when it has no real merged data, or when
   its RGB flatten is more than 8 levels off the converted composite on over 1 % of the pixels or
-  more than 2 levels off on over 5 % (a tint: Multiply over pale stock).
-  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not read, so such a file
-  opens flattened. Across the 157-file private corpus, 76 files open as layers and are measured
+  more than 2 levels off on over 5 % (a tint: Multiply over pale stock). Photo Filter and
+  Brightness/Contrast still open flattened: each fixture records one parameter set, which does
+  not determine Photoshop's formula; fill opacity on a special mode still declines (the in-app
+  model is unverified).
+  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not imported, so such a
+  file opens flattened (paged-psd reads their records, `PsdFile::layer_list`, which the import
+  does not use yet). Across the 157-file private corpus, 76 files open as layers and are measured
   against Photoshop's composite (3 did on 2026-10-04), all but one within 1.5 % of pixels more
   than 2 levels off; the rest open flattened, the commonest reasons being smart objects the
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which
@@ -253,6 +281,14 @@ the baked image), beside the module's own label on the frame.
   byte for byte only when the parameters are the identity and the pixels have not been edited since ingest; otherwise it
   runs the save-back, and when the save-back declines (a size change, a non-RGB or non-8-bit file) it exports nothing
   and says why (`glue/src/session.ts`, `psdExportBytes`; [ADR 460](adr/460-document-is-not-the-store.md)).
+- **Layer parity limits.** Blend If is not offered on adjustment layers; knockout on a clipped
+  layer is ignored; a clipping base's blending options apply only to the base; a gradient fill
+  is aligned with the canvas (Photoshop's "Align with layer") and has no transparency stops; a
+  layer comp's position is the layer's pixels, so applying it puts back the pixels as recorded,
+  and a canvas operation drops the recorded positions; moving a smart object by whole pixels is
+  refused. The layered PSD save writes colour and gradient fills, Curves, Levels, Exposure,
+  Invert and Hue/Saturation adjustment layers and the blending properties; a pattern fill is
+  written as its render, and any other adjustment kind makes the save flatten, naming the layer.
 - **Layers and undo.** A layer is canvas-sized once edited (an imported layer keeps its bounds
   until then); the layer fold keeps whole-canvas accumulator textures, so the largest image is the device's texture limit (16384 px on Apple silicon,
   8192 on many others). A crop, resize or straighten keeps every layer and mask, is one undo
@@ -286,4 +322,5 @@ the baked image), beside the module's own label on the frame.
 - A writer for PSD descriptors, which are parsed read-only (`registry/psd-blocks.yaml`).
 - A runner for the GEGL oracle the registry names for some rows.
 - Rendering a smart object from its embedded source, layer effects other than Color Overlay, and reading PSD
-  adjustment layers back as adjustment layers.
+  adjustment layers other than Curves, Levels, Exposure, Invert and Hue/Saturation back as adjustment
+  layers.

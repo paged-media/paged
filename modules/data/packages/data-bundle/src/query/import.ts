@@ -1,29 +1,23 @@
-// Local file import into DuckDB (wave 6): which formats there are, how each
-// becomes a DuckDB table, and the SQL quoting that keeps a file name from
-// becoming SQL. Transport only — no binding or expression semantics here.
-//
-// How each format becomes the table `<source>`:
-//   csv / tsv  DuckDB's CSV sniffer (`insertCSVFromPath`, the path CSV always
-//              took — the same types as before).
-//   json       the bytes registered as a virtual file, then
-//              `CREATE TABLE … AS SELECT * FROM read_json_auto(file)`.
-//              An array of objects and newline-delimited JSON both read.
-//   parquet    the bytes registered, then `read_parquet(file)`.
-//   xlsx       DuckDB-WASM 1.29.0 has no offline XLSX reader, so the data
-//              engine (data-xlsx, calamine) reads the worksheet and decides
-//              one type per column; DuckDB reads its JSON records with that
-//              column list (`read_json(…, columns = {…})`), guessing nothing.
+// Local file import into the query store (wave 6; ADR 561): which formats
+// there are, and the SQL quoting that keeps a name from becoming SQL.
+// Transport only — the engine reads every format (data-store):
+//   csv / tsv  the `csv` crate; a CSV's delimiter is sniffed, each column
+//              typed from its fields, and the file also kept as written.
+//   json       an array of objects or one object per line; nested values
+//              are kept as their JSON text.
+//   parquet    the row reader (snappy, gzip, brotli, lz4; not zstd).
+//   xlsx       one worksheet, typed per column by data-xlsx (calamine).
 //
 // Every source is materialised as a table, so a query names it the same way
 // whatever it was imported from (`SELECT * FROM products`).
 
-import type { DuckDBHandle } from "./duckdb";
+import type { QueryHandle } from "./store";
 
 /** The formats a local file can be imported as. */
 export type ImportFormat = "csv" | "tsv" | "json" | "parquet" | "xlsx";
 
-/** File extension → format. `.ndjson` / `.jsonl` are JSON (DuckDB detects
- *  the newline-delimited layout itself). */
+/** File extension → format. `.ndjson` / `.jsonl` are JSON (the reader
+ *  takes an array of objects or one object per line). */
 export const IMPORT_EXTENSIONS: Readonly<Record<string, ImportFormat>> = {
   ".csv": "csv",
   ".tsv": "tsv",
@@ -62,16 +56,6 @@ export function quoteLiteral(text: string): string {
   return `'${text.replace(/'/g, "''")}'`;
 }
 
-/** One worksheet as the data engine reads it (`DataEngine.xlsx_import`). */
-export interface XlsxImport {
-  sheet: string;
-  sheets: string[];
-  columns: { name: string; type: string }[];
-  rows: number;
-  errorCells: number;
-  json: string;
-}
-
 /** What an import loaded. */
 export interface LoadOutcome {
   /** The worksheet read (xlsx only). */
@@ -82,60 +66,24 @@ export interface LoadOutcome {
   errorCells?: number;
 }
 
-/** The virtual file name a source's bytes are registered under. */
-export function virtualFileName(source: string, format: ImportFormat): string {
-  return `paged_src_${source}.${format === "xlsx" ? "xlsx.json" : format}`;
-}
-
-/** Load one imported file into DuckDB as the table `source`. `readXlsx` is
- *  the data engine's worksheet reader (only called for xlsx). Throws DuckDB's
- *  own error text when the file does not read. */
-export async function loadIntoDuckDB(
-  duck: DuckDBHandle,
+/** Load one imported file into the store as the table `source`, replacing
+ *  it. Every format is read by the engine (data-store): CSV and TSV through
+ *  the `csv` crate (a CSV's delimiter sniffed), JSON as an array of objects
+ *  or one object per line, Parquet through the row reader, XLSX one
+ *  worksheet (`sheet`, else the first). Throws the engine's reason when the
+ *  file does not read. */
+export async function loadIntoStore(
+  store: QueryHandle,
   source: string,
   format: ImportFormat,
   bytes: Uint8Array,
-  readXlsx: (bytes: Uint8Array, sheet?: string) => XlsxImport,
   sheet?: string,
 ): Promise<LoadOutcome> {
-  const table = quoteIdent(source);
-  switch (format) {
-    case "csv":
-    case "tsv":
-      await duck.exec(`DROP TABLE IF EXISTS ${table}`);
-      await duck.registerCsv(source, new TextDecoder().decode(bytes));
-      return {};
-    case "json":
-    case "parquet": {
-      const file = virtualFileName(source, format);
-      await duck.dropFile(file);
-      await duck.registerFileBuffer(file, bytes);
-      const reader = format === "json" ? "read_json_auto" : "read_parquet";
-      await duck.exec(
-        `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM ${reader}(${quoteLiteral(file)})`,
-      );
-      return {};
-    }
-    case "xlsx": {
-      const x = readXlsx(bytes, sheet);
-      if (x.rows === 0) {
-        const cols = x.columns
-          .map((c) => `${quoteIdent(c.name)} ${c.type}`)
-          .join(", ");
-        await duck.exec(`CREATE OR REPLACE TABLE ${table} (${cols})`);
-      } else {
-        const file = virtualFileName(source, format);
-        await duck.dropFile(file);
-        await duck.registerFileBuffer(file, new TextEncoder().encode(x.json));
-        const columns = x.columns
-          .map((c) => `${quoteLiteral(c.name)}: ${quoteLiteral(c.type)}`)
-          .join(", ");
-        await duck.exec(
-          `CREATE OR REPLACE TABLE ${table} AS SELECT * FROM read_json(${quoteLiteral(file)}, ` +
-            `format = 'array', columns = {${columns}})`,
-        );
-      }
-      return { sheet: x.sheet, sheets: x.sheets, errorCells: x.errorCells };
-    }
-  }
+  const r = await store.importFile(source, format, bytes, sheet);
+  if (format !== "xlsx") return {};
+  return {
+    ...(r.sheet !== undefined ? { sheet: r.sheet } : {}),
+    ...(r.sheets !== undefined ? { sheets: r.sheets } : {}),
+    errorCells: r.errorCells,
+  };
 }

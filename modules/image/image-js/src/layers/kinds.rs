@@ -65,6 +65,9 @@ use crate::ingest::{
 // ───────────────────────── typed adjustments ─────────────────────────
 
 /// One adjustment layer's adjustment, in Photoshop's units.
+// The chain variant is large; the whole enum is boxed inside
+// `LayerKind::Adjustment`, so no layer pays for it.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Adjustment {
     /// A stored adjust chain of several stages (the shape every
@@ -592,7 +595,9 @@ impl Adjustment {
                         .ok_or_else(|| bad(kind, "a curve's points run past the block"))?;
                     at += n * 2;
                     let mut p: Vec<(u8, u8)> = pts
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|q| (byte(q[0]), byte(q[1])))
                         .collect();
                     p.sort_by_key(|q| q.0);
@@ -697,7 +702,9 @@ impl Adjustment {
                     return Err(bad(kind, "a gradient needs at least two stops"));
                 }
                 let stops = values[2..]
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|s| ColorStop {
                         at: c(s[0], 0.0, 1.0),
                         rgb: [byte(s[1]), byte(s[2]), byte(s[3])],
@@ -1148,7 +1155,9 @@ impl FillSource {
                     reverse: values[3] >= 0.5,
                     offset: (c(values[4], -100.0, 100.0), c(values[5], -100.0, 100.0)),
                     stops: values[7..]
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .map(|s| ColorStop {
                             at: c(s[0], 0.0, 1.0),
                             rgb: [byte(s[1]), byte(s[2]), byte(s[3])],

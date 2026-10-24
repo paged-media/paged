@@ -71,6 +71,8 @@ modules/sheet/sheet-chart/tests/snapshots/
 apps/editor/apps/canvas/tests/showcase/indesign-render-thresholds.json
 # the conformance suites' case lists and fixture specs
 modules/*/conformance/**/*.json
+# …and the SQLite oracle's, which moved with the store (PM-0015)
+engine/core/crates/paged-data-store/tests/sqlite-sql/*.json
 # InDesign probe answers, written by the probes (tools/indesign-export)
 engine/core/tools/indesign-export/*.json
 # showcase inputs (HTML/CSS rendered by the web module) and recorded batches
@@ -88,9 +90,9 @@ apps/editor/apps/canvas/tests/e2e/harness/data-merge/
 # line; the sheet/data build scripts deserialize functions/*.yaml; all of
 # them feed the wasm SOURCE_HASH.
 modules/*/registry/
+engine/core/crates/paged-data-core/functions/
 
 # --- Third-party code and data, lockfiles ---------------------------------
-modules/data/vendor/
 modules/slide/vendor/
 engine/core/vendor/
 modules/publish/packages/pdf-bundle/bin/

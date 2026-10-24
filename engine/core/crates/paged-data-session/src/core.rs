@@ -1,0 +1,2056 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The plain-Rust [`DataSession`] — the full engine join (define → ingest →
+//! resolve → lower → sync → round-trip), native-typed so `data-conformance`
+//! exercises it WITHOUT a wasm runtime. The `#[wasm_bindgen]` `DataEngine`
+//! (`modules/data/data-js`) is a forwarding shim over this; nothing computes there.
+
+use std::collections::{BTreeMap, HashMap};
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use data_automation::{plan_batch_ordered, BatchMode, BatchPlan};
+use data_barcode::{encode, with_quiet_zone, Symbology};
+use data_bind::{
+    diff_resolved, suggest_mappings, BarcodeResolveStatus, ChangeKind, ColumnMapping,
+    FingerprintSnapshot, ResolutionEngine, ResolveError, Resolved, ResolvedBarcode,
+    ResolvedRecordFlow, RuleEvaluation,
+};
+use data_core::{
+    BarcodeSymbology, Binding, BindingDef, BindingId, DataSource, Locale, Placeholder, Query,
+    QueryId, RecordSet, Schema, Status, StyleAction, SyncState, Template, Value,
+};
+use data_dataset::{
+    trait_for_binding_kind, DataSet, DataSetValue, VarTrait, VariableDecl, VariableSet,
+};
+use data_lower::{
+    lower_barcode, lower_image, lower_table, lower_variable, lower_visibility, paginate_flow,
+    FlowGroup, FlowLayoutOpts, FlowRecord, FrameCapacity, LowerOpts, LoweredBarcode, LoweredImage,
+    LoweredProperty, LoweredTable, LoweredVariable, LoweredVisibility, PaginatedFlow,
+};
+use data_query::{content_hash, stabilize};
+
+use crate::columns::{ColumnBuf, ColumnIngest, IngestOutcome};
+use data_sources::{
+    authorize, build_manifest, enrich_schema, DatasetMetadata, GovernedCatalog,
+    GrantedCapabilities, SourceManifest,
+};
+
+/// A session-level failure (resolution or a malformed boundary value).
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum SessionError {
+    #[error("resolve error: {0}")]
+    Resolve(#[from] ResolveError),
+    #[error("decode error: {0}")]
+    Decode(String),
+}
+
+/// What an expression gives at a record ([`DataSession::evaluate_at`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvalPreview {
+    pub display: String,
+    pub value: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// One query of a [`DataSession::refresh_queries`]: its row count, or why
+/// it did not run.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueryRun {
+    pub query: QueryId,
+    pub outcome: Result<usize, String>,
+}
+
+/// The lowered output of resolving a binding — the IR `data-host-model` turns
+/// into host mutations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LoweredOutput {
+    Variable(LoweredVariable),
+    Table(LoweredTable),
+    Image(LoweredImage),
+    Barcode(LoweredBarcode),
+    Visibility(LoweredVisibility),
+    /// ADR 558 — a property write (or the reason there is none).
+    Property(LoweredProperty),
+}
+
+/// The default square content box (pt) a barcode lowers into when the bound
+/// frame's geometry is not supplied (mirrors the table's `defaultPlacement` —
+/// the bundle re-lowers with the real frame box via `lower_barcode`). 1-inch.
+const DEFAULT_BARCODE_BOX_PT: f64 = 72.0;
+
+/// Bridge the frozen `data-core` symbology to the `data-barcode` encoder enum.
+fn to_encoder_symbology(s: BarcodeSymbology) -> Symbology {
+    match s {
+        BarcodeSymbology::Ean13 => Symbology::Ean13,
+        BarcodeSymbology::UpcA => Symbology::UpcA,
+        BarcodeSymbology::Code128 => Symbology::Code128,
+        BarcodeSymbology::Qr => Symbology::Qr,
+    }
+}
+
+/// Encode a resolved barcode + scale it into a content box (spec §9.7). The
+/// missing policy already ran in `data-bind`: a `Skipped`/`Flagged` resolution
+/// (empty value) yields an empty-module lowering (nothing drawn), never an
+/// encoder error. A `Present` value that fails to encode (e.g. a non-numeric
+/// EAN) is a typed `SessionError` the panel surfaces.
+fn encode_barcode(
+    rb: &ResolvedBarcode,
+    box_w_pt: f64,
+    box_h_pt: f64,
+) -> Result<LoweredBarcode, SessionError> {
+    if rb.status != BarcodeResolveStatus::Present {
+        // Empty/absent value → an empty symbol (no modules), never an error.
+        return Ok(LoweredBarcode {
+            target: rb.target.clone(),
+            symbology: to_encoder_symbology(rb.symbology).id().to_string(),
+            modules: Vec::new(),
+            modules_x: 0,
+            modules_y: 0,
+            bounds: data_lower::ContentBox {
+                width_pt: box_w_pt,
+                height_pt: box_h_pt,
+            },
+            text: String::new(),
+            paint: data_lower::barcode_paint(),
+        });
+    }
+    let geometry = encode(to_encoder_symbology(rb.symbology), &rb.value)
+        .map_err(|e| SessionError::Decode(e.to_string()))?;
+    // The binding's extra quiet zone, beyond the symbology default (§9.7).
+    let geometry = with_quiet_zone(geometry, rb.quiet_zone);
+    Ok(lower_barcode(
+        rb.target.clone(),
+        &geometry,
+        box_w_pt,
+        box_h_pt,
+    ))
+}
+
+/// The evaluation of a data-driven formatting rule (spec §9.5) crossed to the
+/// host: which records fired + the document-style action to apply. The host
+/// applies `apply` to the fired content through document styles (the per-cell
+/// application is gated on D-13; the evaluation is the data-driven decision).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleResult {
+    pub scope: String,
+    /// Stabilized record indices where the rule fired.
+    pub fires: Vec<usize>,
+    pub apply: StyleAction,
+    pub total: usize,
+}
+
+/// Which records a condition fires on (the rules editor's preview).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConditionPreview {
+    pub fires: Vec<usize>,
+    pub total: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// One executed batch unit (spec §10): a deterministic label + the paginated
+/// flow for that output document. The batch runner partitions a resolved record
+/// flow by [`BatchMode`] (per-record / per-group / one-catalog) and paginates
+/// each unit through the SAME `data-lower` path the live document uses — so a
+/// headless batch and an interactive lower agree. Nothing renders here; the
+/// `PaginatedFlow` is the IR `data-host-model` turns into mutations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchRun {
+    pub label: String,
+    pub flow: PaginatedFlow,
+}
+
+/// A §7.1 data-provider publication: a query's resolved result exposed as a
+/// named, discoverable dataset for **other** consumers (most importantly the
+/// sheets plugin — a sheet sourced from a governed query) through the core SDK
+/// data-provider registry. `paged.data` declares the provider and never knows
+/// who consumes it; consumers discover by `category`, never by plugin identity
+/// (§7.1). The publication carries *data*, never the ability to drive
+/// `paged.data`'s queries/sources (§7.1 security note). Registration with the
+/// core registry is gated on the data-provider contract RFC (D-09); this is the
+/// engine-side payload ready to hand to `host.dataProviders.register` the moment
+/// that door lands — a wiring change, like D-02/D-03.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderPublication {
+    /// The provider's stable, discoverable id (the neutral rendezvous key).
+    pub id: String,
+    /// Discovery category/capability (e.g. `"dataset"`) — consumers find
+    /// providers by category, never by plugin identity (§7.1).
+    pub category: String,
+    /// An opaque content revision (an etag over the stabilized data): it changes
+    /// iff the published rows change. Consumers re-pull when it differs from the
+    /// revision they last saw — the §7.1 "sync flows through the contract".
+    pub revision: String,
+    /// The published schema (the descriptor half — what `discover` surfaces
+    /// without shipping the rows).
+    pub schema: Schema,
+    pub row_count: usize,
+    /// The resolved data, **stabilized** to a deterministic order (the snapshot
+    /// half — Arrow-shaped, the same interchange used internally, §7.1).
+    pub records: RecordSet,
+}
+
+/// The document-scoped payload (spec §5.1): the binding *recipe* (sources +
+/// queries + binding defs). Credentials are redacted before this is built
+/// (§11 — never serialized into the saved file, BREAKAGE D-11).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct DocumentPayload {
+    #[serde(default)]
+    pub sources: Vec<DataSource>,
+    #[serde(default)]
+    pub queries: Vec<Query>,
+    #[serde(default)]
+    pub templates: Vec<Template>,
+    #[serde(default)]
+    pub bindings: Vec<BindingDef>,
+    /// The §9.9 variable set — declarations + captured data sets. `default` so a
+    /// payload written before this amendment still round-trips (the additive
+    /// rule: old files load, new files load in old builds minus the variables).
+    ///
+    /// SIZE NOTE (D-08, the 64 KiB `setPluginMetadata` cap): captured data sets
+    /// are the only part of the payload that grows with the RECORD COUNT, so
+    /// this is the first field that can push a document past the cap. Callers
+    /// that capture per-record en masse must check
+    /// [`DataSession::data_set_payload_bytes`] — the honest measurement, not a
+    /// guess. `payload-budget.test.ts` pins the arithmetic.
+    #[serde(default)]
+    pub variables: VariableSet,
+    /// Per-binding locale overrides (§9.1): a field formatted for another
+    /// market than the session's. Omitted when empty, so a payload without
+    /// overrides is byte-identical to one written before the field existed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub locales: BTreeMap<String, Locale>,
+    /// Transforms (data ADR 562): JavaScript over tables, run in order after
+    /// the sources are imported and before the queries, each giving a
+    /// derived table in the store. Omitted when empty (the additive rule).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transforms: Vec<TransformDef>,
+}
+
+/// A transform (data ADR 562): `source` is a function expression
+/// `(tables, params) => rows`, where `tables[name]` is the rows of each named
+/// input (a source table or an earlier transform) as objects, and `rows` an
+/// array of objects (keys in column order, types inferred as an import infers
+/// them). It runs in a bare, sandboxed interpreter (`paged-action`'s JS
+/// actions): it can compute and nothing else.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TransformDef {
+    /// The derived table's name.
+    pub id: String,
+    pub inputs: Vec<String>,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub params: serde_json::Map<String, serde_json::Value>,
+}
+
+/// One transform of a [`DataSession::run_transforms`]: its row count, or why
+/// it gave no table.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransformRun {
+    pub transform: String,
+    pub outcome: Result<usize, String>,
+}
+
+/// One source's authorization verdict (§11 data-source manifest review).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SourceAuth {
+    pub source: String,
+    pub allowed: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// Session-level metadata (the panel reads it).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMeta {
+    pub source_count: usize,
+    pub query_count: usize,
+    pub binding_count: usize,
+    pub today: i32,
+}
+
+/// A binding's sync entry (`{binding, status}`) for the sync panel.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SyncEntry {
+    pub binding: String,
+    pub status: Status,
+}
+
+/// One binding's field-refresh decision ([`DataSession::refresh_field_values`]),
+/// tagged by `outcome`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "outcome", rename_all = "camelCase")]
+pub enum FieldRefresh {
+    /// Pinned or Overridden: the field keeps its value (never resolved).
+    Kept { binding: String, status: Status },
+    /// The resolved display; `None` when the missing policy hides it (the
+    /// field then shows its `<key>` token).
+    Value {
+        binding: String,
+        value: Option<String>,
+    },
+    /// The binding lowers to something other than a variable: a field bound
+    /// to it keeps its value.
+    #[serde(rename = "notVariable")]
+    NotVariable { binding: String },
+    /// The resolve failed; the field keeps its value.
+    Failed { binding: String, error: String },
+}
+
+/// One binding's entry in the §8 refresh change report crossed to the host
+/// (`{binding, kind, before, after}`). `kind` is `"changed"`/`"unchanged"`/
+/// `"added"`/`"removed"`; `before`/`after` are the opaque resolved-content
+/// fingerprints (present on the side the binding resolved on) — the panel keys
+/// off `kind` and may show the fingerprints as an audit trail.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeEntry {
+    pub binding: String,
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
+}
+
+/// The §8 refresh change report ("what changed since last sync"): per-binding
+/// entries + rolled-up counts the panel headlines. Diffed from the resolved
+/// content of every binding before vs after a refresh — pure, deterministic.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeReportOut {
+    pub entries: Vec<ChangeEntry>,
+    pub changed: usize,
+    pub unchanged: usize,
+    pub added: usize,
+    pub removed: usize,
+}
+
+/// The engine's work counters (the perf budgets): how many
+/// resolves, sorts, sort-key allocations, fingerprints, diff rows and ingested
+/// cells the engine has spent since the last reset. `enabled` is false in a
+/// build without the `perf-counters` feature, where every count reads 0.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct PerfCountersOut {
+    pub enabled: bool,
+    pub resolves: u64,
+    pub stabilize_calls: u64,
+    pub key_allocs: u64,
+    pub fingerprints: u64,
+    pub diff_rows: u64,
+    pub ingest_cells: u64,
+    pub content_hashes: u64,
+    pub group_key_compares: u64,
+}
+
+/// The counters as they stand (this thread; the wasm engine has one).
+pub fn perf_counters() -> PerfCountersOut {
+    let c = data_query::perf::snapshot();
+    PerfCountersOut {
+        enabled: data_query::perf::ENABLED,
+        resolves: c.resolves,
+        stabilize_calls: c.stabilize_calls,
+        key_allocs: c.key_allocs,
+        fingerprints: c.fingerprints,
+        diff_rows: c.diff_rows,
+        ingest_cells: c.ingest_cells,
+        content_hashes: c.content_hashes,
+        group_key_compares: c.group_key_compares,
+    }
+}
+
+/// Zero the work counters.
+pub fn reset_perf_counters() {
+    data_query::perf::reset();
+}
+
+/// The full engine session.
+pub struct DataSession {
+    engine: ResolutionEngine,
+    sources: Vec<DataSource>,
+    queries: Vec<Query>,
+    templates: Vec<Template>,
+    bindings: Vec<BindingDef>,
+    today: i32,
+    /// The last per-binding resolved-content fingerprint snapshot (§8 change
+    /// report). `refresh_change_report` diffs the current resolution against this
+    /// then updates it; `None` until the first report (where every binding shows
+    /// as `added` — the baseline).
+    last_fingerprints: Option<FingerprintSnapshot>,
+    /// The transport hash of the last COLUMN ingest per query: a re-delivery
+    /// of identical buffers is recognised before anything is decoded.
+    column_hashes: HashMap<QueryId, u64>,
+    /// A column ingest in progress (`begin_columns` … `finish_columns`).
+    pending_columns: Option<ColumnIngest>,
+    /// The §9.9 variable set: declarations (derived from the bindable bindings,
+    /// plus any imported from a library) + the captured data sets.
+    variables: VariableSet,
+    /// Per-binding locale overrides (saved in the payload).
+    binding_locales: BTreeMap<String, Locale>,
+    /// Each query's result as of the last time the document was written from
+    /// it (`mark_rows_applied`): the "before" of the row diff.
+    applied_rows: HashMap<QueryId, RecordSet>,
+    /// The store the imported sources live in (ADR 561), made on first use.
+    store: Option<data_store::Store>,
+    /// Transforms (data ADR 562), in run order.
+    transforms: Vec<TransformDef>,
+}
+
+impl DataSession {
+    /// A fresh session with an injected `today` serial (days since 1970-01-01).
+    pub fn new(today: i32) -> Self {
+        DataSession {
+            engine: ResolutionEngine::new(today),
+            sources: Vec::new(),
+            queries: Vec::new(),
+            templates: Vec::new(),
+            bindings: Vec::new(),
+            today,
+            last_fingerprints: None,
+            column_hashes: HashMap::new(),
+            pending_columns: None,
+            // Illustrator names a document's one variable set `binding1`; match
+            // it so an exported library drops into that workflow unremarkably.
+            variables: VariableSet::new("binding1"),
+            binding_locales: BTreeMap::new(),
+            applied_rows: HashMap::new(),
+            store: None,
+            transforms: Vec::new(),
+        }
+    }
+
+    /// The store (ADR 561), made on first use.
+    pub fn store(&mut self) -> Result<&data_store::Store, data_store::StoreError> {
+        if self.store.is_none() {
+            self.store = Some(data_store::Store::new()?);
+        }
+        Ok(self.store.as_ref().expect("made above"))
+    }
+
+    /// Read a file into the store as the source table `name`, replacing it.
+    pub fn store_import(
+        &mut self,
+        name: &str,
+        format: data_store::Format,
+        bytes: &[u8],
+        sheet: Option<&str>,
+    ) -> Result<data_store::ImportReport, data_store::StoreError> {
+        self.store()?.import(name, format, bytes, sheet)
+    }
+
+    /// Drop a source's table (and its as-written twin) from the store.
+    pub fn store_drop(&mut self, name: &str) -> Result<(), data_store::StoreError> {
+        self.store()?.drop_source(name)
+    }
+
+    /// The store's source tables.
+    pub fn store_tables(&mut self) -> Result<Vec<String>, data_store::StoreError> {
+        self.store()?.tables()
+    }
+
+    /// Run `sql` in the store and deliver its rows as `query`'s result, like
+    /// [`ingest_result`](Self::ingest_result): no rows cross a boundary, and
+    /// a result equal to the one delivered before changes nothing. Returns
+    /// the row count.
+    pub fn store_ingest(
+        &mut self,
+        query: QueryId,
+        sql: &str,
+    ) -> Result<usize, data_store::StoreError> {
+        let records = self.store()?.query(sql)?;
+        let rows = records.row_count;
+        self.ingest_result(query, records);
+        Ok(rows)
+    }
+
+    /// Run `sql` over the CSV `sources` as written (every column text, the way
+    /// Data Merge reads a CSV) and deliver the rows as `query`'s result.
+    /// `None` when no source is kept as written.
+    pub fn store_ingest_as_written(
+        &mut self,
+        query: QueryId,
+        sql: &str,
+        sources: &[String],
+    ) -> Result<Option<usize>, data_store::StoreError> {
+        let Some(records) = self.store()?.query_as_written(sql, sources)? else {
+            return Ok(None);
+        };
+        let rows = records.row_count;
+        self.ingest_result(query, records);
+        Ok(Some(rows))
+    }
+
+    /// Run every query of the session in the store, as the bundle's refresh
+    /// does: a document's queries are code it carries (§11), so each passes
+    /// the query guard ([`data_store::guard`]) before it runs, and one that
+    /// is refused or fails is reported and leaves the others running.
+    pub fn refresh_queries(&mut self) -> Vec<QueryRun> {
+        let queries: Vec<(QueryId, String)> = self
+            .queries
+            .iter()
+            .map(|q| (q.id.clone(), q.sql.clone()))
+            .collect();
+        queries
+            .into_iter()
+            .map(|(query, sql)| {
+                let outcome = match data_store::guard::check_query(&sql) {
+                    Err(e) => Err(format!("not run: {e}")),
+                    Ok(()) => self
+                        .store_ingest(query.clone(), data_store::guard::trim_sql(&sql))
+                        .map_err(|e| format!("failed: {e}")),
+                };
+                QueryRun { query, outcome }
+            })
+            .collect()
+    }
+
+    /// A window of a source table as the data door's record set (the
+    /// provider shape: `{ schema: { fields }, columns, rowCount }`, one JSON
+    /// array per field). Dates and timestamps are ISO text, bytes and error
+    /// values `null`.
+    pub fn store_records(
+        &mut self,
+        table: &str,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> Result<serde_json::Value, data_store::StoreError> {
+        let rs = self.store()?.records(table, offset, limit)?;
+        Ok(record_set_json(&rs))
+    }
+
+    /// A query's rows in the provider shape (the data door's `query`). The
+    /// caller has run the query guard: this runs on the store's
+    /// `query_only` connection like every user query.
+    pub fn store_query_records(
+        &mut self,
+        sql: &str,
+    ) -> Result<serde_json::Value, data_store::StoreError> {
+        let rs = self.store()?.query(sql)?;
+        Ok(record_set_json(&rs))
+    }
+
+    /// Apply row edits to a source table (the data door's `write`): one
+    /// transaction, the as-written twin kept in step. Returns the row count.
+    /// The bindings over it see the new rows at the next refresh.
+    pub fn store_edit(
+        &mut self,
+        table: &str,
+        edits: &[data_store::RowEdit],
+    ) -> Result<usize, data_store::StoreError> {
+        self.store()?.edit(table, edits)
+    }
+
+    /// Define (or redefine, by id) a transform (data ADR 562).
+    pub fn define_transform(&mut self, def: TransformDef) {
+        match self.transforms.iter_mut().find(|t| t.id == def.id) {
+            Some(t) => *t = def,
+            None => self.transforms.push(def),
+        }
+    }
+
+    /// Remove a transform; its derived table is dropped from the store.
+    pub fn remove_transform(&mut self, id: &str) -> bool {
+        let before = self.transforms.len();
+        self.transforms.retain(|t| t.id != id);
+        if let Some(store) = self.store.as_ref() {
+            let _ = store.drop_source(id);
+        }
+        self.transforms.len() != before
+    }
+
+    /// The transforms, in run order.
+    pub fn transforms(&self) -> &[TransformDef] {
+        &self.transforms
+    }
+
+    /// Run every transform in order (after the sources are imported, before
+    /// the queries refresh): its inputs' rows go in as objects, its rows come
+    /// back as the derived table `id`. One that fails is reported and leaves
+    /// its table out; a later transform reading it fails in turn.
+    pub fn run_transforms(&mut self) -> Vec<TransformRun> {
+        let defs = self.transforms.clone();
+        defs.into_iter()
+            .map(|t| TransformRun {
+                outcome: self.run_transform(&t),
+                transform: t.id,
+            })
+            .collect()
+    }
+
+    fn run_transform(&mut self, t: &TransformDef) -> Result<usize, String> {
+        let store = self.store().map_err(|e| e.to_string())?;
+        let mut tables = serde_json::Map::new();
+        for input in &t.inputs {
+            let rs = store
+                .records(input, 0, None)
+                .map_err(|e| format!("input {input}: {e}"))?;
+            tables.insert(input.clone(), rows_json(&rs));
+        }
+        // The rows come back as JSON text: `JSON.stringify` keeps the keys in
+        // the order the transform wrote them, and the store's JSON reader
+        // types the columns as an import does.
+        let wrapped = format!(
+            "(tables, params) => JSON.stringify(({}\n)(tables, params))",
+            t.source
+        );
+        let out = paged_action::js::call(
+            &wrapped,
+            &[
+                serde_json::Value::Object(tables),
+                serde_json::Value::Object(t.params.clone()),
+            ],
+            paged_action::js::JsBudget::default(),
+        )?;
+        let text = out
+            .as_str()
+            .ok_or("the transform gave nothing (return an array of rows)")?;
+        if !text.trim_start().starts_with('[') {
+            return Err("a transform returns an array of rows (objects)".into());
+        }
+        let report = store
+            .import(&t.id, data_store::Format::Json, text.as_bytes(), None)
+            .map_err(|e| e.to_string())?;
+        Ok(report.rows)
+    }
+
+    /// The columns a query produces, with their types.
+    pub fn store_describe(
+        &mut self,
+        sql: &str,
+    ) -> Result<Vec<data_store::ColumnInfo>, data_store::StoreError> {
+        self.store()?.describe(sql)
+    }
+
+    /// The first `limit` rows of a query as text, and its row count.
+    pub fn store_preview(
+        &mut self,
+        sql: &str,
+        limit: usize,
+    ) -> Result<data_store::Preview, data_store::StoreError> {
+        self.store()?.preview(sql, limit)
+    }
+
+    /// Register a data source (recipe; used for the §11 manifest + gate).
+    pub fn define_source(&mut self, source: DataSource) {
+        upsert(&mut self.sources, source, |a, b| a.id == b.id);
+    }
+
+    /// Register a query.
+    pub fn define_query(&mut self, query: Query) {
+        self.engine.add_query(query.clone());
+        upsert(&mut self.queries, query, |a, b| a.id == b.id);
+    }
+
+    /// Register a binding definition.
+    pub fn define_binding(&mut self, def: BindingDef) {
+        self.engine.add_binding(def.id.clone(), def.binding.clone());
+        upsert(&mut self.bindings, def, |a, b| a.id == b.id);
+    }
+
+    /// Remove a binding from the recipe (and its locale override); `true`
+    /// when it existed. The data sets keep their captured values — a
+    /// re-defined binding of the same id picks them up again.
+    pub fn remove_binding(&mut self, id: &BindingId) -> bool {
+        self.binding_locales.remove(id.as_str());
+        let before = self.bindings.len();
+        self.bindings.retain(|b| &b.id != id);
+        self.variables.variables.retain(|v| v.name != id.as_str());
+        self.engine.remove_binding(id) | (self.bindings.len() != before)
+    }
+
+    /// Register a per-record template (the "catalog cell", §9.4).
+    pub fn define_template(&mut self, template: Template) {
+        self.engine.add_template(template.clone());
+        upsert(&mut self.templates, template, |a, b| a.id == b.id);
+    }
+
+    /// Register a placeholder anchor.
+    pub fn define_placeholder(&mut self, placeholder: Placeholder) {
+        self.engine.add_placeholder(placeholder);
+    }
+
+    /// Bind a query parameter value.
+    pub fn set_param(&mut self, name: &str, value: Value) {
+        self.engine.set_param(name, value);
+    }
+
+    /// Set the formatting locale for the display kernels (§9.1; en/de). Affects
+    /// `NUMBER`/`CURRENCY`/`PERCENT`/`DATEFMT` output only — the canonical value
+    /// form (and content hashing) stays locale-free.
+    pub fn set_locale(&mut self, locale: Locale) {
+        self.engine.set_locale(locale);
+    }
+
+    /// Deliver a query's result (a RecordSet from the store, or one a host
+    /// materialised itself).
+    pub fn ingest_result(&mut self, query: QueryId, records: RecordSet) {
+        // A RecordSet ingest replaces whatever the column door last delivered.
+        self.column_hashes.remove(&query);
+        self.engine.set_result(query, records);
+    }
+
+    /// Start a typed-column ingest of `rows` rows (the column door — see
+    /// [`crate::columns`]). Push one column per schema field with
+    /// [`push_column`](Self::push_column), then
+    /// [`finish_columns`](Self::finish_columns). Replaces any ingest in
+    /// progress.
+    pub fn begin_columns(&mut self, query: QueryId, schema: Schema, rows: usize) {
+        self.pending_columns = Some(ColumnIngest::begin(query, schema, rows));
+    }
+
+    /// Push the next column of the ingest in progress.
+    pub fn push_column(&mut self, col: ColumnBuf) -> Result<(), SessionError> {
+        let pending = self
+            .pending_columns
+            .as_mut()
+            .ok_or_else(|| SessionError::Decode("push_column without begin_columns".into()))?;
+        let pushed = pending.push(col);
+        if pushed.is_err() {
+            self.pending_columns = None;
+        }
+        pushed
+    }
+
+    /// Finish the column ingest. When the buffers are identical to the last
+    /// column ingest for this query (and its result is still the engine's),
+    /// nothing is decoded or delivered: `Unchanged`. Otherwise the buffers
+    /// become a RecordSet and are delivered like
+    /// [`ingest_result`](Self::ingest_result): `Changed`.
+    pub fn finish_columns(&mut self) -> Result<IngestOutcome, SessionError> {
+        let pending = self
+            .pending_columns
+            .take()
+            .ok_or_else(|| SessionError::Decode("finish_columns without begin_columns".into()))?;
+        let hash = pending.transport_hash()?;
+        let query = pending.query().clone();
+        if self.column_hashes.get(&query) == Some(&hash) && self.engine.result(&query).is_some() {
+            return Ok(IngestOutcome::Unchanged);
+        }
+        let records = pending.into_record_set()?;
+        self.engine.set_result(query.clone(), records);
+        self.column_hashes.insert(query, hash);
+        Ok(IngestOutcome::Changed)
+    }
+
+    /// One-call column ingest (`begin_columns` + every `push_column` +
+    /// `finish_columns`) — the native form of the column door.
+    pub fn ingest_columns(
+        &mut self,
+        query: QueryId,
+        schema: Schema,
+        rows: usize,
+        columns: Vec<ColumnBuf>,
+    ) -> Result<IngestOutcome, SessionError> {
+        self.begin_columns(query, schema, rows);
+        for c in columns {
+            self.push_column(c)?;
+        }
+        self.finish_columns()
+    }
+
+    /// The content token of a query's ingested result (the engine's content
+    /// hash, hex), or `None` before an ingest. Equal tokens = equal data.
+    pub fn result_token(&self, query: &QueryId) -> Option<String> {
+        self.engine.result_hash(query).map(|h| format!("{h:016x}"))
+    }
+
+    /// Resolve a binding and lower it to the host IR.
+    pub fn resolve_lowered(&mut self, id: &BindingId) -> Result<LoweredOutput, SessionError> {
+        self.resolve_lowered_at(id, 0)
+    }
+
+    /// The number of records ingested for a query — the record-preview stepper's
+    /// "of N" upper bound (§9). `0` when no result is ingested yet (refresh
+    /// first).
+    pub fn query_record_count(&self, query: &QueryId) -> usize {
+        self.engine.record_count(query)
+    }
+
+    /// The field-mapping wizard's column suggestions for a query's ingested
+    /// result (spec §9): one [`ColumnMapping`] per result column — a humanised
+    /// header, the bare-field-reference expression (when the name is a valid DSL
+    /// identifier), the logical type, and a `mappable` flag. The bundle renders
+    /// these as a header → variable-binding mapping UI and, on confirm, generates
+    /// each binding from the engine-computed `expr` (never deciding the mapping
+    /// itself — the data semantics stay in Rust). Errors if the query has no
+    /// ingested result yet (the wizard maps a real schema; `refreshData` first).
+    pub fn query_mappings(&self, query_id: &QueryId) -> Result<Vec<ColumnMapping>, SessionError> {
+        let records = self.engine.result(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        Ok(suggest_mappings(&records.schema))
+    }
+
+    /// The §8 refresh change report — "what changed since last sync". Fingerprints
+    /// every binding's CURRENT resolved content and diffs it against the snapshot
+    /// taken at the previous report, then stores the new snapshot. The bundle
+    /// calls this AFTER re-ingesting the queries (so "current" reflects the fresh
+    /// data): the result is a per-binding changed / unchanged / added / removed
+    /// summary the panel renders. Read-only over the resolution graph — it does
+    /// NOT mutate sync states (the sync-state machine is driven by `set_result` /
+    /// `resolve`; the change report only describes the delta). The FIRST call (no
+    /// prior snapshot) reports every binding as `added` — the baseline; a caller
+    /// that wants the baseline silent can prime it with one discarded call after
+    /// the first lower.
+    pub fn refresh_change_report(&mut self) -> ChangeReportOut {
+        // Only the bindings whose dependency stamp moved re-resolve; the rest
+        // keep their previous fingerprint (data-bind fingerprint_incremental).
+        let prev = self.last_fingerprints.take();
+        let current = self
+            .engine
+            .fingerprint_incremental(prev.as_ref().unwrap_or(&HashMap::new()));
+        let fingerprints = |snap: &FingerprintSnapshot| -> HashMap<String, String> {
+            snap.iter()
+                .filter_map(|(id, (_, fp))| fp.clone().map(|fp| (id.clone(), fp)))
+                .collect()
+        };
+        let before = prev.as_ref().map(fingerprints).unwrap_or_default();
+        let report = diff_resolved(&before, &fingerprints(&current));
+        self.last_fingerprints = Some(current);
+        ChangeReportOut {
+            entries: report
+                .entries
+                .into_iter()
+                .map(|e| ChangeEntry {
+                    binding: e.binding,
+                    kind: match e.kind {
+                        ChangeKind::Changed => "changed",
+                        ChangeKind::Unchanged => "unchanged",
+                        ChangeKind::Added => "added",
+                        ChangeKind::Removed => "removed",
+                    }
+                    .to_string(),
+                    before: e.before,
+                    after: e.after,
+                })
+                .collect(),
+            changed: report.changed,
+            unchanged: report.unchanged,
+            added: report.added,
+            removed: report.removed,
+        }
+    }
+
+    /// Resolve a binding against a chosen RECORD INDEX and lower it — the §9
+    /// record-preview stepper ("show the document resolved against record N").
+    /// Per-record kinds (variable / image) evaluate over `records[record]`;
+    /// whole-result kinds (table) render in full (the index is irrelevant). A
+    /// record-flow still needs a frame chain (call `lower_record_flow`); a
+    /// barcode still needs the frame box (`lower_barcode_at`). The preview re-runs
+    /// the SAME resolve + lower lanes the batch will use, so the preview and the
+    /// generated output agree.
+    pub fn resolve_lowered_at(
+        &mut self,
+        id: &BindingId,
+        record: usize,
+    ) -> Result<LoweredOutput, SessionError> {
+        match self.engine.resolve_at(id, record)? {
+            Resolved::Variable(v) => Ok(LoweredOutput::Variable(lower_variable(
+                v.target, &v.display, v.hidden,
+            ))),
+            Resolved::Table(t) => {
+                let opts = self.lower_opts_for(&t.region);
+                Ok(LoweredOutput::Table(lower_table(
+                    t.region, &t.headers, &t.rows, &opts,
+                )))
+            }
+            Resolved::Image(img) => Ok(LoweredOutput::Image(lower_image(
+                img.target,
+                img.reference,
+                img.fit,
+                img.status,
+            ))),
+            // A barcode encodes + scales into a default 1-inch square box; the
+            // bundle re-lowers with the bound frame's real geometry via
+            // `lower_barcode_sized` (like the table's defaultPlacement → frame).
+            Resolved::Barcode(rb) => Ok(LoweredOutput::Barcode(encode_barcode(
+                &rb,
+                DEFAULT_BARCODE_BOX_PT,
+                DEFAULT_BARCODE_BOX_PT,
+            )?)),
+            // A record flow needs a frame chain to paginate against — use
+            // `lower_record_flow`. (The host frame-chain read is SDK-blocked,
+            // D-12; the chain is caller-supplied until it lands.)
+            Resolved::RecordFlow(_) => Err(SessionError::Decode(
+                "record flow: call lower_record_flow(id, chain)".to_string(),
+            )),
+            Resolved::Visibility(v) => Ok(LoweredOutput::Visibility(lower_visibility(
+                v.target, v.visible,
+            ))),
+            Resolved::Property(p) => Ok(LoweredOutput::Property(data_lower::lower_property(
+                p.target, &p.path, p.outcome,
+            ))),
+        }
+    }
+
+    /// Resolve a barcode binding and lower it scaled to the bound frame's actual
+    /// content box (spec §9.7). The bundle reads the frame's content-box size
+    /// (`elementGeometry`) and passes it here so the symbol fills the frame; the
+    /// modules are content-space (§9.6 — frame transforms honored for free).
+    pub fn lower_barcode_sized(
+        &mut self,
+        id: &BindingId,
+        box_w_pt: f64,
+        box_h_pt: f64,
+    ) -> Result<LoweredBarcode, SessionError> {
+        self.lower_barcode_at(id, 0, box_w_pt, box_h_pt)
+    }
+
+    /// Resolve a barcode binding against a chosen RECORD INDEX (the §9 preview
+    /// stepper) and lower it scaled to the bound frame's content box. Identical
+    /// to [`lower_barcode_sized`](Self::lower_barcode_sized) but evaluates the
+    /// expression over `records[record]` so the preview shows the symbol for the
+    /// stepped-to record.
+    pub fn lower_barcode_at(
+        &mut self,
+        id: &BindingId,
+        record: usize,
+        box_w_pt: f64,
+        box_h_pt: f64,
+    ) -> Result<LoweredBarcode, SessionError> {
+        match self.engine.resolve_at(id, record)? {
+            Resolved::Barcode(rb) => encode_barcode(&rb, box_w_pt, box_h_pt),
+            _ => Err(SessionError::Decode("binding is not a barcode".to_string())),
+        }
+    }
+
+    /// Resolve a record-flow binding and paginate it over a caller-supplied
+    /// frame chain (spec §9.4; the host chain is SDK-blocked — D-12).
+    pub fn lower_record_flow(
+        &mut self,
+        id: &BindingId,
+        chain: Vec<FrameCapacity>,
+        opts: FlowLayoutOpts,
+    ) -> Result<PaginatedFlow, SessionError> {
+        match self.engine.resolve(id)? {
+            Resolved::RecordFlow(rf) => Ok(paginate_flow(&to_flow_groups(&rf), &chain, &opts)),
+            _ => Err(SessionError::Decode(
+                "binding is not a record flow".to_string(),
+            )),
+        }
+    }
+
+    /// Evaluate a data-driven formatting rule (spec §9.5) over a query's records
+    /// — which records fired the `when` condition + the document-style action to
+    /// apply. A rule carries no query of its own (it styles content within a
+    /// scope), so the caller names the records to evaluate against.
+    pub fn evaluate_rule(
+        &self,
+        rule_id: &BindingId,
+        query_id: &QueryId,
+    ) -> Result<RuleResult, SessionError> {
+        let RuleEvaluation {
+            scope,
+            fires,
+            apply,
+            total,
+        } = self.engine.evaluate_rule(rule_id, query_id)?;
+        Ok(RuleResult {
+            scope: scope.to_string(),
+            fires,
+            apply,
+            total,
+        })
+    }
+
+    /// Publish a query's resolved result as a §7.1 data-provider snapshot — a
+    /// schema + the **stabilized** RecordSet + an opaque content-revision token,
+    /// ready to register with the core data-provider registry once that SDK
+    /// contract lands (D-09). The data is stabilized to a deterministic order so
+    /// the snapshot — and its revision etag — is identity-stable across
+    /// refreshes regardless of a query's unordered iteration (§6.1), the
+    /// precondition for a meaningful refresh signal. Errors if the query has no
+    /// ingested result yet.
+    pub fn publish_provider(
+        &self,
+        query_id: &QueryId,
+        provider_id: &str,
+        category: &str,
+    ) -> Result<ProviderPublication, SessionError> {
+        let records = self.engine.result(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        let stable = stabilize(records, &[]);
+        let revision = format!("{:016x}", content_hash(&stable));
+        Ok(ProviderPublication {
+            id: provider_id.to_string(),
+            category: category.to_string(),
+            revision,
+            row_count: stable.row_count,
+            schema: stable.schema.clone(),
+            records: stable,
+        })
+    }
+
+    /// **Run** a batch over a record-flow binding (spec §10): resolve the flow,
+    /// partition it by `mode` into per-document units (one document per record /
+    /// per group / one catalog), and paginate each unit over the supplied frame
+    /// chain — the headless-generation executor. Partitioning the **resolved**
+    /// flow (already stabilized by the binding's grouping) keeps each unit's
+    /// record order identical to the live document; the napi-rs native binding
+    /// (server/CI) is a thin wrapper over this (D — `data.automation.native`).
+    pub fn run_record_flow_batch(
+        &mut self,
+        id: &BindingId,
+        mode: BatchMode,
+        chain: Vec<FrameCapacity>,
+        opts: FlowLayoutOpts,
+    ) -> Result<Vec<BatchRun>, SessionError> {
+        let rf = match self.engine.resolve(id)? {
+            Resolved::RecordFlow(rf) => rf,
+            _ => {
+                return Err(SessionError::Decode(
+                    "binding is not a record flow".to_string(),
+                ))
+            }
+        };
+        let groups = to_flow_groups(&rf);
+        let units: Vec<(String, Vec<FlowGroup>)> = match mode {
+            BatchMode::OneCatalog => vec![("catalog".to_string(), groups)],
+            BatchMode::PerGroup { .. } => groups
+                .into_iter()
+                .enumerate()
+                .map(|(i, g)| {
+                    let label = g.header.clone().unwrap_or_else(|| format!("group-{i}"));
+                    (label, vec![g])
+                })
+                .collect(),
+            BatchMode::PerRecord { .. } => {
+                let mut out = Vec::new();
+                for g in &groups {
+                    for (i, rec) in g.records.iter().enumerate() {
+                        // Keep the group header so a per-record document retains
+                        // its section context; the label is the record's first
+                        // rendered field (its name), else the row position.
+                        let label = rec
+                            .cells
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| format!("row-{i}"));
+                        out.push((
+                            label,
+                            // A per-record document is one record — no section
+                            // subtotal (a footer over a single record is noise).
+                            vec![FlowGroup {
+                                header: g.header.clone(),
+                                level: g.level,
+                                records: vec![rec.clone()],
+                                footer: None,
+                            }],
+                        ));
+                    }
+                }
+                out
+            }
+        };
+        Ok(units
+            .into_iter()
+            .map(|(label, gs)| BatchRun {
+                label,
+                flow: paginate_flow(&gs, &chain, &opts),
+            })
+            .collect())
+    }
+
+    /// Plan a **batch run** over a query's result (spec §10): partition it into
+    /// the deterministic sequence of generation units — one document per record
+    /// (per-store flyers), per group (per-category catalogs), or one paginated
+    /// catalog. Returns the plan (which records feed which document); the executor
+    /// (in-app, or the napi-rs native binding) resolves + lowers + paginates each
+    /// unit through the normal pipeline — nothing renders here. Errors if the
+    /// query has no ingested result yet.
+    pub fn plan_batch(
+        &self,
+        query_id: &QueryId,
+        mode: BatchMode,
+    ) -> Result<BatchPlan, SessionError> {
+        let records = self.engine.result(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        // The session's record numbering (the delivered order for a query
+        // that defines it), so a unit's records are the stepper's records.
+        let order = self.engine.record_order(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        Ok(plan_batch_ordered(records, &order, &mode))
+    }
+
+    /// Build the **governed catalog** for a query's result (spec §7): enrich the
+    /// live result schema with a column-metadata sidecar (labels, descriptions,
+    /// types, provenance) and surface governance drift (undocumented / stale /
+    /// type-mismatched columns). The author binds to *documented* datasets, not
+    /// raw anonymous tables. The bundle reads the sidecar JSON from the source's
+    /// `metadata_sidecar` location and passes the parsed structure here — like a
+    /// RecordSet, it is data, never engine code (§3). Errors if the query has no
+    /// ingested result yet (the catalog enriches a real schema).
+    pub fn governed_catalog(
+        &self,
+        query_id: &QueryId,
+        metadata: DatasetMetadata,
+    ) -> Result<GovernedCatalog, SessionError> {
+        let records = self.engine.result(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        Ok(enrich_schema(&records.schema, &metadata))
+    }
+
+    /// Lowering options for a table binding (honors the binding's `header_row`).
+    fn lower_opts_for(&self, region: &data_core::FrameRef) -> LowerOpts {
+        let header_row = self
+            .bindings
+            .iter()
+            .find_map(|d| match &d.binding {
+                Binding::Table {
+                    region: r, options, ..
+                } if r == region => Some(options.header_row),
+                _ => None,
+            })
+            .unwrap_or(true);
+        LowerOpts {
+            header_row,
+            ..LowerOpts::default()
+        }
+    }
+
+    /// Override the formatting locale of one binding (`None` clears it).
+    pub fn set_binding_locale(&mut self, id: &BindingId, locale: Option<Locale>) {
+        self.engine.set_binding_locale(id, locale);
+        match locale {
+            Some(l) => {
+                self.binding_locales.insert(id.to_string(), l);
+            }
+            None => {
+                self.binding_locales.remove(id.as_str());
+            }
+        }
+    }
+
+    /// The per-binding locale overrides.
+    pub fn binding_locales(&self) -> &BTreeMap<String, Locale> {
+        &self.binding_locales
+    }
+
+    /// Record every query's current result as the one the document was written
+    /// from: the "before" of the next [`row_diff`](Self::row_diff). The host
+    /// calls it after it wrote the document from the data (a lower, a field
+    /// refresh), never after a refresh alone.
+    pub fn mark_rows_applied(&mut self) {
+        for q in &self.queries {
+            if let Some(r) = self.engine.result(&q.id) {
+                self.applied_rows.insert(q.id.clone(), r.clone());
+            }
+        }
+    }
+
+    /// The §8 row diff: for every query with a result, the rows added, removed
+    /// and changed since [`mark_rows_applied`](Self::mark_rows_applied), and
+    /// which bindings read what changed. Read-only: it neither moves the applied
+    /// snapshot nor touches a sync state. A separate entry point from
+    /// [`refresh_change_report`](Self::refresh_change_report), which reports per
+    /// binding.
+    pub fn row_diff(
+        &self,
+        opts: &crate::review::RowDiffOptions,
+    ) -> Vec<crate::review::QueryRowDiff> {
+        let current: Vec<(QueryId, &RecordSet)> = self
+            .queries
+            .iter()
+            .filter_map(|q| self.engine.result(&q.id).map(|r| (q.id.clone(), r)))
+            .collect();
+        let templates: HashMap<String, Vec<String>> = self
+            .templates
+            .iter()
+            .map(|t| {
+                let reads = t
+                    .fields
+                    .iter()
+                    .flat_map(|f| data_expr::field_refs(&f.expr))
+                    .collect();
+                (t.id.to_string(), reads)
+            })
+            .collect();
+        crate::review::row_diffs(
+            &self.applied_rows,
+            &current,
+            &self.bindings,
+            &templates,
+            opts,
+        )
+    }
+
+    /// Check an expression: does it parse, which fields does it read, and —
+    /// given a query with a result — which of those the result lacks.
+    pub fn check_expression(&self, src: &str, query: Option<&QueryId>) -> crate::review::ExprCheck {
+        crate::review::check_expression(src, query.and_then(|q| self.engine.result(q)))
+    }
+
+    /// Which records a condition fires on, without defining a rule — the
+    /// rules editor's preview. Same evaluation as [`evaluate_rule`](Self::evaluate_rule).
+    pub fn preview_condition(
+        &self,
+        query: &QueryId,
+        when: &str,
+    ) -> Result<ConditionPreview, SessionError> {
+        let check = self.check_expression(when, Some(query));
+        if let Some(error) = check.error.filter(|_| !check.ok) {
+            return Ok(ConditionPreview {
+                fires: vec![],
+                total: self.engine.record_count(query),
+                error: Some(error),
+            });
+        }
+        let (fires, total) = self.engine.evaluate_condition(query, when)?;
+        Ok(ConditionPreview {
+            fires,
+            total,
+            error: None,
+        })
+    }
+
+    /// An expression's value at a record of `query`, as the bind popover
+    /// previews it (no binding is defined): the display text, the value as
+    /// JSON, and the parse or evaluation error if there is one.
+    pub fn evaluate_at(&self, query: &QueryId, expr: &str, record: usize) -> EvalPreview {
+        let check = self.check_expression(expr, Some(query));
+        if let Some(error) = check.error.filter(|_| !check.ok) {
+            return EvalPreview {
+                display: String::new(),
+                value: serde_json::Value::Null,
+                error: Some(error),
+            };
+        }
+        match self.engine.evaluate_at(query, expr, record) {
+            Err(e) => EvalPreview {
+                display: String::new(),
+                value: serde_json::Value::Null,
+                error: Some(e.to_string()),
+            },
+            Ok(Value::Error(e)) => EvalPreview {
+                display: Value::Error(e.clone()).as_display(),
+                value: serde_json::Value::Null,
+                error: Some(Value::Error(e).as_display()),
+            },
+            Ok(v) => EvalPreview {
+                display: v.as_display(),
+                value: match &v {
+                    Value::Null => serde_json::Value::Null,
+                    Value::Bool(b) => serde_json::Value::Bool(*b),
+                    Value::Number(n) => serde_json::Number::from_f64(*n)
+                        .map_or(serde_json::Value::Null, serde_json::Value::Number),
+                    other => serde_json::Value::String(other.as_display()),
+                },
+                error: None,
+            },
+        }
+    }
+
+    /// A per-record binding's display text for record `record`, WITHOUT
+    /// re-linking it (a preview must not change a sync decision). `None` for a
+    /// kind with no single display text.
+    pub fn preview_display(
+        &self,
+        id: &BindingId,
+        record: usize,
+    ) -> Result<Option<String>, SessionError> {
+        Ok(match self.engine.resolve_content(id, record)? {
+            Resolved::Variable(v) => Some(if v.hidden { String::new() } else { v.display }),
+            _ => None,
+        })
+    }
+
+    /// The sync state of a binding.
+    pub fn sync_state(&self, id: &BindingId) -> Option<SyncState> {
+        self.engine.sync_state(id)
+    }
+
+    /// Pin a binding to its current snapshot.
+    pub fn pin(&mut self, id: &BindingId) {
+        self.engine.pin(id);
+    }
+
+    /// Mark a binding overridden (a manual edit replaced the value).
+    pub fn mark_overridden(&mut self, id: &BindingId) {
+        self.engine.mark_overridden(id);
+    }
+
+    /// Re-link a pinned/overridden binding (the explicit user action).
+    pub fn relink(&mut self, id: &BindingId) {
+        self.engine.relink(id);
+    }
+
+    /// The sync report (bindings whose content diverges from the live source).
+    pub fn sync_report(&self) -> Vec<SyncEntry> {
+        self.engine
+            .sync_report()
+            .into_iter()
+            .map(|(id, status)| SyncEntry {
+                binding: id.to_string(),
+                status,
+            })
+            .collect()
+    }
+
+    /// The field-refresh decision for every binding named, in ONE call (the
+    /// bundle's `refreshFields`; it used to cost two boundary calls per field,
+    /// `sync_state` + `resolve_lowered`). The §8 conflict policy is applied
+    /// here, before anything resolves: a `Pinned` or `Overridden` binding is
+    /// [`FieldRefresh::Kept`] and is NOT resolved, because a resolve re-links.
+    /// Each binding is decided once, in the order given (duplicates are
+    /// answered once, at their first position).
+    pub fn refresh_field_values(&mut self, ids: &[BindingId]) -> Vec<FieldRefresh> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            let binding = id.to_string();
+            if let Some(st) = self.engine.sync_state(id) {
+                if matches!(st.status, Status::Pinned | Status::Overridden) {
+                    out.push(FieldRefresh::Kept {
+                        binding,
+                        status: st.status,
+                    });
+                    continue;
+                }
+            }
+            out.push(match self.resolve_lowered(id) {
+                Ok(LoweredOutput::Variable(v)) => FieldRefresh::Value {
+                    binding,
+                    value: if v.hidden { None } else { Some(v.text) },
+                },
+                Ok(_) => FieldRefresh::NotVariable { binding },
+                Err(e) => FieldRefresh::Failed {
+                    binding,
+                    error: e.to_string(),
+                },
+            });
+        }
+        out
+    }
+
+    /// ADR 558 — resolve every PROPERTY binding (and, with `with_visibility`,
+    /// every visibility binding re-expressed as its `elementVisible` triple)
+    /// over stabilized record `record`, for ONE apply. `ids` narrows it to
+    /// those bindings (`None` = all). A pinned or overridden binding is not
+    /// resolved: it answers `keep` (the non-destructive policy, §8). The
+    /// host turns every `write` into ONE `host.objects.batch`.
+    pub fn resolve_properties_at(
+        &mut self,
+        record: usize,
+        with_visibility: bool,
+        ids: Option<&[BindingId]>,
+    ) -> Vec<PropertyApply> {
+        let wanted: Vec<BindingId> = self
+            .bindings
+            .iter()
+            .filter(|d| match &d.binding {
+                Binding::Property { .. } => true,
+                Binding::Visibility { .. } => with_visibility,
+                _ => false,
+            })
+            .filter(|d| ids.is_none_or(|ids| ids.contains(&d.id)))
+            .map(|d| d.id.clone())
+            .collect();
+        let mut out = Vec::with_capacity(wanted.len());
+        for id in wanted {
+            let binding = id.to_string();
+            let kept = self
+                .engine
+                .sync_state(&id)
+                .filter(|st| !st.accepts_refresh())
+                .map(|st| st.status);
+            let def = self
+                .bindings
+                .iter()
+                .find(|d| d.id == id)
+                .map(|d| d.binding.clone());
+            if let Some(status) = kept {
+                let (target, path) = match &def {
+                    Some(Binding::Property { target, path, .. }) => (target.clone(), path.clone()),
+                    Some(Binding::Visibility { target, .. }) => (
+                        data_core::TargetRef::Selector(format!("frame:{target}")),
+                        "elementVisible".to_string(),
+                    ),
+                    _ => continue,
+                };
+                out.push(PropertyApply {
+                    binding,
+                    property: data_lower::lower_property(
+                        target,
+                        &path,
+                        data_core::PropertyOutcome::Keep {
+                            reason: format!("the binding is {status:?}").to_lowercase(),
+                        },
+                    ),
+                });
+                continue;
+            }
+            let lowered = match self.resolve_lowered_at(&id, record) {
+                Ok(LoweredOutput::Property(p)) => p,
+                Ok(LoweredOutput::Visibility(v)) => data_lower::visibility_as_property(&v),
+                Ok(_) => continue,
+                Err(e) => {
+                    let (target, path) = match &def {
+                        Some(Binding::Property { target, path, .. }) => {
+                            (target.clone(), path.clone())
+                        }
+                        _ => continue,
+                    };
+                    data_lower::lower_property(
+                        target,
+                        &path,
+                        data_core::PropertyOutcome::Fail {
+                            message: e.to_string(),
+                        },
+                    )
+                }
+            };
+            out.push(PropertyApply {
+                binding,
+                property: lowered,
+            });
+        }
+        out
+    }
+
+    /// The **remote invalidation key** (§6.2/§8, the M1 remote slice): the
+    /// content-addressed key for a defined remote source over caller-supplied
+    /// bytes. The bundle fetches the bytes (edit-time, post-consent, D-03) and
+    /// hands them here — the engine validates the descriptor (no embedded
+    /// credentials, http(s) only) and computes the deterministic key; it never
+    /// fetches. Returned as a hex string (the stamp the bundle records).
+    pub fn remote_invalidation_key(
+        &self,
+        id: &data_core::SourceId,
+        bytes: &[u8],
+    ) -> Result<String, SessionError> {
+        let src = self
+            .sources
+            .iter()
+            .find(|s| &s.id == id)
+            .ok_or_else(|| SessionError::Decode(format!("no source '{id}' defined")))?;
+        let key = data_sources::remote_invalidation_key(&src.kind, bytes)
+            .map_err(|e| SessionError::Decode(e.to_string()))?;
+        Ok(format!("{key:016x}"))
+    }
+
+    /// The visible data-source manifest (§11).
+    pub fn source_manifest(&self) -> SourceManifest {
+        build_manifest(&self.sources)
+    }
+
+    /// Authorize every source against the granted capabilities (§11). M0 uses
+    /// the file-only / no-network default grant.
+    pub fn authorize_report(&self) -> Vec<SourceAuth> {
+        let granted = GrantedCapabilities::m0_default();
+        self.sources
+            .iter()
+            .map(|s| match authorize(s, &granted) {
+                Ok(()) => SourceAuth {
+                    source: s.id.to_string(),
+                    allowed: true,
+                    reason: None,
+                },
+                Err(e) => SourceAuth {
+                    source: s.id.to_string(),
+                    allowed: false,
+                    reason: Some(e.to_string()),
+                },
+            })
+            .collect()
+    }
+
+    /// The document payload (recipe), with credentials redacted (§11/D-11).
+    pub fn payload(&self) -> DocumentPayload {
+        let sources = self
+            .sources
+            .iter()
+            .map(|s| DataSource {
+                kind: data_sources::redact_credentials(&s.kind),
+                ..s.clone()
+            })
+            .collect();
+        DocumentPayload {
+            sources,
+            queries: self.queries.clone(),
+            templates: self.templates.clone(),
+            bindings: self.bindings.clone(),
+            variables: self.variables.clone(),
+            locales: self.binding_locales.clone(),
+            transforms: self.transforms.clone(),
+        }
+    }
+
+    /// Reconstruct a session from a saved payload (recipe round-trip).
+    pub fn from_payload(payload: DocumentPayload, today: i32) -> Self {
+        let mut s = DataSession::new(today);
+        for src in payload.sources {
+            s.define_source(src);
+        }
+        for q in payload.queries {
+            s.define_query(q);
+        }
+        for tmpl in payload.templates {
+            s.define_template(tmpl);
+        }
+        for b in payload.bindings {
+            s.define_binding(b);
+        }
+        // Variables restore verbatim. Do NOT derive declarations here: derivation
+        // is a READ-time concern (`variables()` / capture / apply all sync), and
+        // deriving on load would make `from_payload(payload(s))` differ from `s`
+        // — the recipe round-trip must be exact (`roundtrip.rs` pins it).
+        s.variables = payload.variables;
+        for (id, l) in payload.locales {
+            s.set_binding_locale(&BindingId::from(id.as_str()), Some(l));
+        }
+        s.transforms = payload.transforms;
+        s
+    }
+
+    /// Replace this session's recipe with a saved payload — the in-place twin
+    /// of [`DataSession::from_payload`], for a host that already holds a session
+    /// (the bundle restoring a document's `paged.data/session` part). The
+    /// injected `today` and the formatting locale are kept: neither is part of
+    /// the recipe. Everything derived from the old recipe goes with it: ingested
+    /// results, sync states and the change-report baseline start fresh, exactly
+    /// as they do for a session built by `from_payload`.
+    pub fn load_payload(&mut self, payload: DocumentPayload) {
+        let locale = self.engine.locale();
+        // The store is the data, not the recipe: its tables stay (an undo
+        // that reloads a session version must not drop the imported sources).
+        let store = self.store.take();
+        *self = DataSession::from_payload(payload, self.today);
+        self.engine.set_locale(locale);
+        self.store = store;
+    }
+
+    /// Session metadata.
+    pub fn metadata(&self) -> SessionMeta {
+        SessionMeta {
+            source_count: self.sources.len(),
+            query_count: self.queries.len(),
+            binding_count: self.bindings.len(),
+            today: self.today,
+        }
+    }
+
+    // ── §9.9 variables + data sets ──────────────────────────────────────────
+    //
+    // A "variable" here is a PROJECTION of a binding, not a second data model:
+    // the binding id is the variable name and the binding kind is the trait
+    // (`variable`→textContent, `image`→fileReference, `visibility`→visibility).
+    // The table/recordFlow/rule/barcode kinds have no Illustrator variable
+    // counterpart and are deliberately NOT projected — a palette row you cannot
+    // capture is worse than an absent one.
+
+    /// Upsert a declaration for every bindable binding. Idempotent; never
+    /// removes an imported declaration whose binding does not exist yet (that is
+    /// the "library first, artwork second" workflow, and dropping it would lose
+    /// the author's import).
+    pub fn sync_variable_declarations(&mut self) {
+        for def in &self.bindings {
+            let kind = binding_kind_tag(&def.binding);
+            if let Some(var_trait) = trait_for_binding_kind(kind) {
+                self.variables.upsert_variable(VariableDecl {
+                    name: def.id.to_string(),
+                    var_trait,
+                });
+            }
+        }
+    }
+
+    /// The declared variables (§9.9), declarations refreshed from the bindings.
+    pub fn variables(&mut self) -> &VariableSet {
+        self.sync_variable_declarations();
+        &self.variables
+    }
+
+    /// Capture the CURRENT resolved values as a named data set (§9.9 — "capture
+    /// current data set"). `record` selects which record the capture resolves
+    /// against, so the natural authoring flow is "step the preview to record N,
+    /// capture" — and [`capture_every_record`](Self::capture_every_record)
+    /// automates the whole result.
+    ///
+    /// Only BINDABLE traits are captured. A declared `graphdata` variable is
+    /// skipped (it has no binding to resolve — [`VarTrait::GraphData`]); a
+    /// declared variable whose binding does not exist, or does not resolve right
+    /// now, is skipped rather than captured as empty — a data set must never
+    /// claim a value the engine did not produce.
+    ///
+    /// Capturing over an existing name REPLACES it (Illustrator's behavior).
+    pub fn capture_data_set(&mut self, name: &str, record: usize) -> DataSet {
+        self.sync_variable_declarations();
+        let decls: Vec<VariableDecl> = self.variables.variables.clone();
+        let mut set = DataSet {
+            name: name.to_string(),
+            values: Default::default(),
+        };
+        for decl in decls {
+            if !decl.var_trait.is_bindable() {
+                continue;
+            }
+            let id = BindingId::from(decl.name.as_str());
+            let Ok(lowered) = self.resolve_lowered_at(&id, record) else {
+                continue;
+            };
+            if let Some(value) = capture_value(decl.var_trait, &lowered) {
+                set.values.insert(decl.name.clone(), value);
+            }
+        }
+        self.variables.upsert_data_set(set.clone());
+        set
+    }
+
+    /// Capture ONE data set per record of `query` (§9.9). This is the join that
+    /// makes variables worth having here rather than in a drawing plugin: an
+    /// Illustrator author builds data sets by hand, one artboard state at a
+    /// time; a data source already HAS the rows, so the whole palette generates.
+    ///
+    /// `name_expr_column`, when given, names a result column whose value titles
+    /// each set (a SKU, a product name); otherwise sets are `"{prefix} {n}"`,
+    /// 1-based, matching Illustrator's "Data Set 1" convention.
+    ///
+    /// Returns the captured set names in record order.
+    pub fn capture_every_record(
+        &mut self,
+        query: &QueryId,
+        prefix: &str,
+        name_column: Option<&str>,
+    ) -> Vec<String> {
+        let count = self.query_record_count(query);
+        let mut names = Vec::with_capacity(count);
+        for record in 0..count {
+            let name = name_column
+                .and_then(|col| self.record_field_display(query, record, col))
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| format!("{prefix} {}", record + 1));
+            // Two records with the same name would silently collapse (upsert by
+            // name) — disambiguate with the record index instead of losing one.
+            let name = if names.contains(&name) {
+                format!("{name} ({})", record + 1)
+            } else {
+                name
+            };
+            self.capture_data_set(&name, record);
+            names.push(name);
+        }
+        names
+    }
+
+    /// The display string of one field of one record — the naming input for
+    /// [`capture_every_record`](Self::capture_every_record). `None` when the
+    /// query has no result, the record is out of range, or the column is absent.
+    fn record_field_display(&self, query: &QueryId, record: usize, column: &str) -> Option<String> {
+        let records = self.engine.result(query)?;
+        // Record N as the engine numbers every record index (record_row).
+        let row = self.engine.record_row(query, record)?;
+        records.field(row, column).map(|v| v.as_display())
+    }
+
+    /// The named data sets, in palette order (§9.9).
+    pub fn list_data_sets(&self) -> Vec<String> {
+        self.variables
+            .data_sets
+            .iter()
+            .map(|d| d.name.clone())
+            .collect()
+    }
+
+    /// Delete a data set by name; `true` when one was removed.
+    pub fn delete_data_set(&mut self, name: &str) -> bool {
+        self.variables.remove_data_set(name)
+    }
+
+    /// Plan the application of a named data set (§9.9 — "switch between data
+    /// sets"). Returns ONE [`DataSetApply`] per declared variable: the typed
+    /// value the host must write, or an `applicable: false` row carrying the
+    /// reason it cannot be written. **The engine does not decide undo shape** —
+    /// the bundle commits the applicable rows as a single batch, so switching a
+    /// data set is ONE undo step regardless of how many variables it moves.
+    ///
+    /// SYNC SEMANTICS, stated once: an applied data set is a CAPTURED value
+    /// standing in front of the live resolution, so every applied binding is
+    /// marked `Overridden` — the shipped sync state for exactly this. It is
+    /// therefore protected from the next `refreshData`, and `relink(binding)`
+    /// puts it back on live data. A data set is not a pin and not a fork.
+    pub fn apply_data_set(&mut self, name: &str) -> Result<Vec<DataSetApply>, SessionError> {
+        self.sync_variable_declarations();
+        let set = self
+            .variables
+            .data_set(name)
+            .ok_or_else(|| SessionError::Decode(format!("no data set named '{name}'")))?
+            .clone();
+        let known: Vec<VariableDecl> = self.variables.variables.clone();
+        let defined: Vec<String> = self.bindings.iter().map(|b| b.id.to_string()).collect();
+
+        let mut out = Vec::with_capacity(known.len());
+        let mut to_override: Vec<BindingId> = Vec::new();
+        for decl in known {
+            let Some(value) = set.values.get(&decl.name) else {
+                continue;
+            };
+            let mut apply = DataSetApply::from_value(&decl.name, value);
+            if let DataSetValue::Property { value, color } = value {
+                let def = self.bindings.iter().find(|b| b.id.as_str() == decl.name);
+                if let Some(Binding::Property { target, path, .. }) = def.map(|d| &d.binding) {
+                    apply.property = Some(data_lower::lower_property(
+                        target.clone(),
+                        path,
+                        data_core::PropertyOutcome::Write {
+                            value: value.clone(),
+                            color: color.clone(),
+                        },
+                    ));
+                }
+            }
+            if !decl.var_trait.is_bindable() {
+                apply.applicable = false;
+                apply.note = Some(
+                    "graph-data variables are kept in the library but cannot be applied: \
+                     paged.data does not fill charts"
+                        .to_string(),
+                );
+            } else if !defined.contains(&decl.name) {
+                apply.applicable = false;
+                apply.note = Some(format!(
+                    "no binding '{}' is defined in this document — the library \
+                     declares the variable but nothing is bound to it yet",
+                    decl.name
+                ));
+            } else {
+                to_override.push(BindingId::from(decl.name.as_str()));
+            }
+            out.push(apply);
+        }
+        for id in to_override {
+            self.mark_overridden(&id);
+        }
+        Ok(out)
+    }
+
+    /// Export the variable set as an Illustrator-compatible variable library
+    /// (§9.9). See `data_dataset::xml` for the two declared deviations.
+    pub fn export_variable_library(&mut self) -> String {
+        self.sync_variable_declarations();
+        data_dataset::to_xml(&self.variables)
+    }
+
+    /// Import a variable library, REPLACING the current variable set (§9.9).
+    /// Declarations derived from the defined bindings are re-applied afterwards,
+    /// so importing never orphans a binding that already exists.
+    ///
+    /// Returns the honest report: what came in, and which variables will NOT
+    /// apply (no binding defined, or graph data). Import does NOT write to the
+    /// document — the caller applies a set explicitly.
+    pub fn import_variable_library(&mut self, xml: &str) -> Result<ImportReport, SessionError> {
+        let imported =
+            data_dataset::from_xml(xml).map_err(|e| SessionError::Decode(e.to_string()))?;
+        let inconsistencies = imported.inconsistencies();
+        if !inconsistencies.is_empty() {
+            return Err(SessionError::Decode(inconsistencies.join("; ")));
+        }
+        self.variables = imported;
+        self.sync_variable_declarations();
+
+        let defined: Vec<String> = self.bindings.iter().map(|b| b.id.to_string()).collect();
+        let unbound: Vec<String> = self
+            .variables
+            .variables
+            .iter()
+            .filter(|v| v.var_trait.is_bindable() && !defined.contains(&v.name))
+            .map(|v| v.name.clone())
+            .collect();
+        let graph_only: Vec<String> = self
+            .variables
+            .variables
+            .iter()
+            .filter(|v| !v.var_trait.is_bindable())
+            .map(|v| v.name.clone())
+            .collect();
+        Ok(ImportReport {
+            set_name: self.variables.name.clone(),
+            variables: self.variables.variables.len(),
+            data_sets: self.variables.data_sets.len(),
+            unbound,
+            graph_only,
+        })
+    }
+
+    /// The serialized byte size of the variable half of the document payload —
+    /// the D-08 budget check for per-record capture. Measured, never estimated:
+    /// this is the exact JSON the payload carries.
+    pub fn data_set_payload_bytes(&self) -> usize {
+        serde_json::to_string(&self.variables)
+            .map(|s| s.len())
+            .unwrap_or(0)
+    }
+}
+
+/// Replace the item `same` as `item` in place, or append it. Definitions are
+/// keyed by id: re-defining one replaces it in the saved recipe and keeps its
+/// position, so a recipe does not grow each time a panel re-defines its query.
+fn upsert<T>(items: &mut Vec<T>, item: T, same: impl Fn(&T, &T) -> bool) {
+    match items.iter().position(|x| same(x, &item)) {
+        Some(i) => items[i] = item,
+        None => items.push(item),
+    }
+}
+
+/// The `kind` serde tag of a binding — the join key between a binding and its
+/// §9.9 variable trait. Kept next to the projection so adding a binding kind
+/// without deciding its variable story is a visible omission, not a silent one.
+fn binding_kind_tag(binding: &Binding) -> &'static str {
+    binding.kind_name()
+}
+
+/// Capture one lowered output as a data-set value, when its shape matches the
+/// declared trait. `None` when the lowering produced nothing capturable — an
+/// image that resolved to no placeable reference, or a lowering of the wrong
+/// kind for the declaration (which means the binding changed kind under the
+/// declaration; the next `sync_variable_declarations` re-types it).
+fn capture_value(var_trait: VarTrait, lowered: &LoweredOutput) -> Option<DataSetValue> {
+    match (var_trait, lowered) {
+        (VarTrait::TextContent, LoweredOutput::Variable(v)) => Some(DataSetValue::Text {
+            text: v.text.clone(),
+        }),
+        (VarTrait::FileReference, LoweredOutput::Image(img)) => {
+            image_href(&img.reference).map(|href| DataSetValue::FileRef { href })
+        }
+        (VarTrait::Visibility, LoweredOutput::Visibility(v)) => {
+            // `visible: None` is the `Leave` policy — "write nothing". There is
+            // no XML spelling for it and inventing one would turn a deliberate
+            // no-op into a hidden frame, so it is not captured.
+            v.visible.map(|visible| DataSetValue::Visible { visible })
+        }
+        // ADR 558: a property binding captures the value it would write. A
+        // `keep` or a failure captures nothing (no value is not a value).
+        (VarTrait::Property, LoweredOutput::Property(p)) => match &p.outcome {
+            data_core::PropertyOutcome::Write { value, color } => Some(DataSetValue::Property {
+                value: value.clone(),
+                color: color.clone(),
+            }),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The URI/path a resolved image reference captures as. Inline bytes and asset
+/// ids have no library-portable spelling (a variable library is a text file
+/// naming external artwork), so they capture as `None` rather than as a fake
+/// path.
+fn image_href(reference: &data_core::ImageReference) -> Option<String> {
+    match reference {
+        data_core::ImageReference::Uri { uri } => Some(uri.clone()),
+        data_core::ImageReference::Path { path } => Some(path.clone()),
+        data_core::ImageReference::AssetId { .. }
+        | data_core::ImageReference::Bytes { .. }
+        | data_core::ImageReference::None => None,
+    }
+}
+
+/// One variable's contribution to applying a data set (§9.9): the typed value
+/// the host writes, or an honest `applicable: false` with the reason.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataSetApply {
+    /// The variable name — which is the binding id.
+    pub variable: String,
+    /// `"text"` | `"image"` | `"visibility"` | `"graphData"`.
+    pub kind: String,
+    /// The captured display string (`text` rows).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// The captured file reference (`image` rows).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    /// The captured visibility (`visibility` rows).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    /// The captured property write (`property` rows, ADR 558): the binding's
+    /// target and path with the captured value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub property: Option<LoweredProperty>,
+    /// Whether the host can write this row.
+    pub applicable: bool,
+    /// Why it cannot be written, when `applicable` is false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl DataSetApply {
+    fn from_value(variable: &str, value: &DataSetValue) -> DataSetApply {
+        let mut a = DataSetApply {
+            variable: variable.to_string(),
+            kind: match value {
+                DataSetValue::Text { .. } => "text",
+                DataSetValue::FileRef { .. } => "image",
+                DataSetValue::Visible { .. } => "visibility",
+                DataSetValue::GraphData { .. } => "graphData",
+                DataSetValue::Property { .. } => "property",
+            }
+            .to_string(),
+            text: None,
+            href: None,
+            visible: None,
+            property: None,
+            applicable: true,
+            note: None,
+        };
+        match value {
+            DataSetValue::Text { text } => a.text = Some(text.clone()),
+            DataSetValue::FileRef { href } => a.href = Some(href.clone()),
+            DataSetValue::Visible { visible } => a.visible = Some(*visible),
+            DataSetValue::GraphData { .. } => {}
+            // The target and path come from the binding (`apply_data_set`).
+            DataSetValue::Property { .. } => {}
+        }
+        a
+    }
+}
+
+/// One property binding's lowering for an apply (ADR 558).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertyApply {
+    pub binding: String,
+    pub property: LoweredProperty,
+}
+
+/// What a variable-library import brought in, and what will NOT apply (§9.9).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportReport {
+    pub set_name: String,
+    pub variables: usize,
+    pub data_sets: usize,
+    /// Bindable variables with no binding defined in this document — they will
+    /// be skipped on apply until something is bound to them.
+    pub unbound: Vec<String>,
+    /// `graphdata` variables — carried and re-exported, never applied.
+    pub graph_only: Vec<String>,
+}
+
+/// Bridge a resolved record flow (data-bind) into the paginator's plain input
+/// (data-lower) — the data-js join, keeping data-lower decoupled from data-bind.
+fn to_flow_groups(rf: &ResolvedRecordFlow) -> Vec<FlowGroup> {
+    rf.groups
+        .iter()
+        .map(|g| FlowGroup {
+            header: g.header.clone(),
+            level: g.level,
+            records: g
+                .records
+                .iter()
+                .map(|r| FlowRecord {
+                    cells: r.cells.clone(),
+                    height_pt: r.height_pt,
+                })
+                .collect(),
+            footer: g.footer.as_ref().map(|f| FlowRecord {
+                cells: f.cells.clone(),
+                height_pt: f.height_pt,
+            }),
+        })
+        .collect()
+}
+
+// ── Data Merge (campaign Wave 5) ────────────────────────────────────────────
+//
+// Kept in its own `impl` block at the foot of the file: the merge reads a
+// query's result exactly as delivered (source order, DM-2) and never goes
+// through a binding's resolve, so it shares nothing with the refresh path.
+
+impl DataSession {
+    /// Plan an InDesign-style Data Merge of a query's result through a record
+    /// template (`data_lower::merge`): records in the order the query
+    /// delivered them, laid out Single Record or Multiple Records, field text
+    /// verbatim. Errors when the query has no ingested result.
+    pub fn plan_merge(
+        &self,
+        query_id: &QueryId,
+        spec: &data_lower::merge::MergeSpec,
+    ) -> Result<data_lower::merge::MergePlan, SessionError> {
+        let records = self.engine.result(query_id).ok_or_else(|| {
+            SessionError::Decode(format!("no result ingested for query '{query_id}'"))
+        })?;
+        Ok(data_lower::merge::plan_merge(spec, records))
+    }
+}
+
+impl DataSession {
+    /// Plan a catalogue (ADR 560): the template's fields, each with its
+    /// bound expression, filled once per record (or per group) of a query's
+    /// result. The bundle duplicates the template's pages and writes the
+    /// values. Errors when the query has no ingested result.
+    pub fn plan_catalogue(
+        &self,
+        query_id: &QueryId,
+        spec: &data_bind::catalogue::CatalogueSpec,
+    ) -> Result<data_bind::catalogue::CataloguePlan, SessionError> {
+        Ok(self.engine.resolve_catalogue(query_id, spec)?)
+    }
+}
+
+/// A record set in the provider shape (`ProviderRecordSet` of the contract):
+/// the schema's fields, then one JSON array per field.
+pub fn record_set_json(rs: &RecordSet) -> serde_json::Value {
+    use serde_json::{json, Value as J};
+    let cell = |v: &data_core::Value| match v {
+        data_core::Value::Null | data_core::Value::Bytes(_) | data_core::Value::Error(_) => J::Null,
+        data_core::Value::Bool(b) => J::Bool(*b),
+        data_core::Value::Number(n) => serde_json::Number::from_f64(*n).map_or(J::Null, J::Number),
+        other => J::String(other.as_display()),
+    };
+    json!({
+        "schema": { "fields": rs.schema.fields },
+        "columns": rs.columns.iter().map(|c| c.iter().map(cell).collect::<Vec<_>>()).collect::<Vec<_>>(),
+        "rowCount": rs.row_count,
+    })
+}
+
+/// A record set's rows as JSON objects (a transform's input).
+fn rows_json(rs: &RecordSet) -> serde_json::Value {
+    let set = record_set_json(rs);
+    let names: Vec<String> = rs.schema.fields.iter().map(|f| f.name.clone()).collect();
+    let columns = set["columns"].as_array().cloned().unwrap_or_default();
+    serde_json::Value::Array(
+        (0..rs.row_count)
+            .map(|r| {
+                serde_json::Value::Object(
+                    names
+                        .iter()
+                        .zip(&columns)
+                        .map(|(n, c)| (n.clone(), c[r].clone()))
+                        .collect(),
+                )
+            })
+            .collect(),
+    )
+}

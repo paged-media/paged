@@ -41,6 +41,7 @@ import {
   pluginOverlayLayersContribution,
   guideOverlayContribution,
   pageDecorationsContribution,
+  isolationDimContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -120,12 +121,7 @@ import {
   notePluginLoaded,
 } from "../journal-sink";
 import { createGuardedLoader } from "../plugin-load-guard";
-import {
-  ALIGN_ARGS,
-  ALIGN_COMMAND,
-  runAlign,
-  type AlignKind,
-} from "../align-plan";
+import { buildTransformCommands } from "../transform-commands";
 import { cameraCentredOn, cameraForPage } from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
 import { profileFromSearch } from "../profiles/from-url";
@@ -159,6 +155,16 @@ import {
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
+import {
+  buildTransformEachDialogCommands,
+  TRANSFORM_EACH_MENU_ITEMS,
+  TransformEachDialog,
+} from "../panels/transform-each-dialog";
+import {
+  BATCH_MENU_ITEMS,
+  BatchDialog,
+  buildBatchCommands,
+} from "../panels/batch-dialog";
 import {
   OPEN_AS_TEMPLATE_COMMANDS,
   OPEN_AS_TEMPLATE_MENU_ITEMS,
@@ -194,7 +200,11 @@ const _schemaRendererCompat: _AssertSchemaRenderer = true;
 void _schemaRendererCompat;
 import { CodeEditor } from "@paged-media/ui";
 import { HostColorPicker } from "../plugin-color-picker";
-import { ObjectPropertyField, ObjectPropertyFrame } from "@paged-media/shell";
+import {
+  ObjectPropertyField,
+  ObjectPropertyFrame,
+  setDataDoorSource,
+} from "@paged-media/shell";
 import {
   cockpitActionsOf,
   createEditorScope,
@@ -300,6 +310,8 @@ import { PRESETS } from "../profiles/presets";
 // contributions' `z` values inside OverlayHost.
 const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
+  // WP4.6 — the isolation veil outside an entered edit context or group.
+  isolationDimContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,
@@ -541,6 +553,10 @@ function PluginBundles() {
       diagnosticsSink: problemsSink,
       pages,
     });
+    // Editor ADRs 291, 292: the Data panel and the bind popover read the
+    // document's data from the same shared backend the bundles meet at.
+    const dataBackend = hostOptions.shared.data;
+    if (dataBackend) setDataDoorSource(scope, dataBackend);
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.
@@ -704,7 +720,6 @@ const M = defineMessages("app.main", {
   saveAsIdml: "Save As IDML",
   savePaged: "Save (.paged)",
   fileFailed: "{what} failed — {message}",
-  alignObjects: "Align objects",
   askClaude: "Ask Claude",
   defaultFontUnavailable:
     "The default font is unavailable — text in documents with missing " +
@@ -1349,21 +1364,21 @@ function CanvasAppIntegration() {
       },
       newPage: freshInsert((p) => addPage(p, insertReport)),
     });
-    // ADR 323 — Align / Distribute as a TYPED command over
-    // `host.objects` (align-plan.ts): declared args, one batch = one undo.
-    const alignCommands = [
-      {
-        id: ALIGN_COMMAND,
-        title: t(M.alignObjects),
-        category: "Object",
-        args: ALIGN_ARGS,
-        handler: (_paged: unknown, payload?: unknown) =>
-          runAlign(
-            instance.services.objects.registry,
-            payload as { kind: AlignKind; targets: string[] },
-          ),
-      },
-    ];
+    // ADR 323 — Align / Distribute and Transform Each as TYPED commands
+    // (transform-commands.ts): declared args, one batch = one undo.
+    // WP4.4 — Object ▸ Transform ▸ Transform each… opens its dialog over
+    // the selection's addresses.
+    const transformEachDialogCommands = buildTransformEachDialogCommands(
+      (paged) =>
+        ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+          (id) => instance.services.objects.addressOfElement(id),
+        ),
+    );
+    const alignCommands = buildTransformCommands(
+      instance.services.objects.registry,
+      (address) =>
+        instance.services.objects.model.elementIdOf?.(address) ?? null,
+    );
     // ADR 221 — every Claude entry point opens the AI Assistant panel;
     // the palette's "Ask Claude" row also runs the request there.
     setAssistantOpener(
@@ -1405,6 +1420,8 @@ function CanvasAppIntegration() {
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      ...transformEachDialogCommands,
+      ...buildBatchCommands(),
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1418,6 +1435,8 @@ function CanvasAppIntegration() {
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...TRANSFORM_EACH_MENU_ITEMS,
+      ...BATCH_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1630,6 +1649,8 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <TransformEachDialog />
+      <BatchDialog />
       <OpenAsTemplateDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in

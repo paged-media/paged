@@ -36,15 +36,21 @@
 // `framePath` stores verbatim (`../page-origin.ts`) — so the origin comes
 // from the target page's row in the `pages` collection.
 //
-// WINDING. The engine fills NON-ZERO, and the shape's `fill-rule` says
-// which region it means; draw-geometry's `orientForFillRule` decides
-// (winding is decided there and nowhere else): `nonzero`, SVG's default,
-// keeps the contours as authored — they already describe a non-zero
-// region; `evenodd` re-winds them by NESTING DEPTH, which paints the
-// even-odd region for contours that do not cross. Even-odd over CROSSING
-// contours (a self-intersecting star) cannot be said with direction and
-// paints its non-zero region until the engine carries an even-odd fill
-// rule.
+// THE FILL RULE. The shape's `fill-rule` says which region it means.
+// An engine that carries the rule as a property (`frameFillRule`, engine
+// ADR 1006; `host.supports("document.fillRule@1")`) is TOLD: an `evenodd`
+// shape keeps its contours as authored and its element is written
+// `frameFillRule: "EvenOdd"` — exact for every shape, a self-intersecting
+// star (its middle empty) included, single contour or compound. `nonzero`,
+// SVG's default, writes nothing: it is the engine's default.
+//
+// On an OLDER engine, which fills non-zero only, the rule is said with
+// WINDING, and draw-geometry's `orientForFillRule` decides (winding is
+// decided there and nowhere else): `nonzero` keeps the contours as
+// authored — they already describe a non-zero region; `evenodd` re-winds
+// them by NESTING DEPTH, which paints the even-odd region for contours
+// that do not cross. Even-odd over CROSSING contours (the star) cannot be
+// said with direction there and paints its non-zero region.
 //
 // THREE CASES STAY ONE ELEMENT PER CONTOUR, as every shape used to:
 //   · an OPEN contour after the first — `framePath` carries no
@@ -72,7 +78,9 @@
 //                       `commands/batch-handles.ts`);
 //   setElementProperty  ×2 on `"$h:<handle>"`, a compound only — the whole
 //                       table (`framePath`), then its box (`frameBounds`);
-//   setElementProperty  ×3 on `"$h:<handle>"` — fill, stroke, weight.
+//   setElementProperty  ×3 on `"$h:<handle>"` — fill, stroke, weight;
+//   setElementProperty  ×1 more, `frameFillRule`, for an `evenodd` shape
+//                       on an engine that carries the rule.
 //
 // WHY THE PAINT IS WRITTEN ON THE HANDLE and not, as before, inherited
 // from the document's creation defaults. `setDocumentDefaults` IS
@@ -410,6 +418,18 @@ function paintMutationsFor(
   ];
 }
 
+/** The write that fills `target` by `rule` (engine ADR 1006). */
+function fillRuleMutationFor(target: ElementId, rule: "EvenOdd"): Mutation {
+  return {
+    op: "setElementProperty",
+    args: {
+      elementId: target,
+      path: "frameFillRule",
+      value: { type: "text", value: rule },
+    },
+  };
+}
+
 /** Resolve the page to insert onto: the document's active page when the
  *  host reports one, else the first page in the `pages` collection (the
  *  headless / no-focus fallback). Returns null when the document has no
@@ -437,7 +457,14 @@ export async function resolveTargetPage(
 export interface SvgImportTarget {
   pageId: string;
   pageOrigin: PageOrigin | null;
+  /** The engine fills by the element's own `frameFillRule`
+   *  (`document.fillRule@1`): an `evenodd` shape is written that rule
+   *  instead of being re-wound. Absent = it does not (fills non-zero). */
+  nativeFillRule?: boolean;
 }
+
+/** The host feature that says the engine carries `frameFillRule`. */
+export const FILL_RULE_FEATURE = "document.fillRule@1";
 
 /** A `pages` row, as far as the importer reads it. */
 interface PageRow {
@@ -453,8 +480,9 @@ async function resolveImportTarget(
   withOrigin: boolean,
 ): Promise<SvgImportTarget | null> {
   const meta = await host.document.meta();
+  const nativeFillRule = host.supports(FILL_RULE_FEATURE);
   if (meta.activePage && !withOrigin) {
-    return { pageId: meta.activePage, pageOrigin: null };
+    return { pageId: meta.activePage, pageOrigin: null, nativeFillRule };
   }
   let rows: readonly PageRow[] = [];
   try {
@@ -474,6 +502,7 @@ async function resolveImportTarget(
       withOrigin && row && Array.isArray(row.pageOrigin)
         ? pageOriginOf(row)
         : null,
+    nativeFillRule,
   };
 }
 
@@ -496,6 +525,11 @@ export interface SvgImportUnit {
   /** The page's origin in its spread when the contours are ONE element;
    *  null = one element per contour. */
   pageOrigin: PageOrigin | null;
+  /** `"EvenOdd"`: every element of the unit is written that
+   *  `frameFillRule` (an `evenodd` shape on an engine that carries the
+   *  rule; its contours are as authored). Absent: the engine's default,
+   *  non-zero, and the contours are wound for it. */
+  fillRule?: "EvenOdd";
 }
 
 /** Elements a unit puts into the document. */
@@ -537,9 +571,12 @@ const compoundable = (table: AnchorTable): boolean => {
 /** The shapes of a file as commit units, in DOCUMENT order — which is the
  *  order they are inserted in, and insertion order is paint order. A shape
  *  with no contour to insert contributes nothing (no swatch either). A
- *  shape of several contours is ONE compound unit, its contours oriented
- *  for its `fill-rule` by draw-geometry's `orientForFillRule`, when
+ *  shape of several contours is ONE compound unit when
  *  `target.pageOrigin` is known and no contour past the first is open.
+ *  An `evenodd` shape on an engine that carries the fill rule
+ *  (`target.nativeFillRule`) keeps its contours as authored and is marked
+ *  `fillRule: "EvenOdd"`; otherwise a compound's contours are oriented
+ *  for its `fill-rule` by draw-geometry's `orientForFillRule`.
  *  Pure — exported for the conformance spec. */
 export function svgImportUnitsFor(
   target: SvgImportTarget,
@@ -548,9 +585,12 @@ export function svgImportUnitsFor(
   const units: SvgImportUnit[] = [];
   for (const shape of shapes) {
     const compound = target.pageOrigin !== null && compoundable(shape.anchors);
-    const table = compound
-      ? orientForFillRule(shape.anchors, shape.style.fillRule)
-      : shape.anchors;
+    const evenOdd =
+      target.nativeFillRule === true && shape.style.fillRule === "evenodd";
+    const table =
+      compound && !evenOdd
+        ? orientForFillRule(shape.anchors, shape.style.fillRule)
+        : shape.anchors;
     const contours = contoursOfTable(table);
     if (contours.length === 0) continue;
     units.push({
@@ -558,6 +598,7 @@ export function svgImportUnitsFor(
       pageId: target.pageId,
       contours,
       pageOrigin: compound ? target.pageOrigin : null,
+      ...(evenOdd ? { fillRule: "EvenOdd" as const } : {}),
     });
   }
   return units;
@@ -650,6 +691,7 @@ export function svgImportOpsFor(
         ops.push(...compoundWritesFor(target, unit, unit.pageOrigin));
       }
       ops.push(...paintMutationsFor(target, defaults));
+      if (unit.fillRule) ops.push(fillRuleMutationFor(target, unit.fillRule));
     }
   }
   return ops;
@@ -865,9 +907,10 @@ async function shapeFromElement(
 
   const style: SvgStyle = {};
   // A compound is ONE `<path>` of several subpaths, and the engine fills
-  // it NON-ZERO over the windings it stores — the importer wound an
-  // even-odd source for exactly that — so the file says which rule its
-  // geometry is meant for.
+  // it by the element's rule over the windings it stores — the importer
+  // wound an even-odd source for non-zero on an engine without the rule —
+  // so the file says which rule its geometry is meant for: the element's
+  // `frameFillRule` (engine ADR 1006), non-zero when it has none.
   if (contourRanges(table.anchors.length, table.subpathStarts).length > 1) {
     style.fillRule = "nonzero";
   }
@@ -876,7 +919,14 @@ async function shapeFromElement(
     for (const entry of props.entries) {
       const v = entry.value;
       if (!v) continue;
-      if (entry.path === "frameFillColor" && v.type === "colorRef") {
+      if (
+        entry.path === "frameFillRule" &&
+        v.type === "text" &&
+        v.value === "EvenOdd"
+      ) {
+        // One contour too: a self-crossing star is even-odd on its own.
+        style.fillRule = "evenodd";
+      } else if (entry.path === "frameFillColor" && v.type === "colorRef") {
         const c = resolve(v.value);
         style.fill = c === undefined ? "#000000" : c;
       } else if (entry.path === "frameStrokeColor" && v.type === "colorRef") {

@@ -86,8 +86,8 @@ const SINGLE_RECORD_CSV = join(
 );
 
 /** Whether every wasm artifact the workspace's paged.data bundle declares is
- *  built: its own engine (modules/data/scripts/build-wasm.sh) and DuckDB
- *  (modules/data/scripts/vendor-duckdb.sh). */
+ *  built: its engine, the query store inside it
+ *  (modules/data/scripts/build-wasm.sh). */
 function dataEngineBuilt(): boolean {
   try {
     const manifestPath = createRequire(join(CLI_ROOT, "package.json")).resolve(
@@ -109,7 +109,7 @@ const withDataEngine = needs(
   dataEngineBuilt(),
   "paged.data engine",
   "DATA_ENGINE",
-  "the paged.data bundle's wasm is not built (modules/data: scripts/build-wasm.sh and scripts/vendor-duckdb.sh, or `moon run data:wasm data:duckdb`)",
+  "the paged.data bundle's wasm is not built (modules/data: scripts/build-wasm.sh, or `moon run data:wasm`)",
 );
 
 // ------------------------------------------------------------ the fixture

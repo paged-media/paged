@@ -24,7 +24,13 @@
 import { fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { CockpitPanelHeader, RightDock } from "@paged-media/shell";
+import {
+  CockpitPanelHeader,
+  RightDock,
+  createEditorScope,
+  memoryStorage,
+  setEditorStorage,
+} from "@paged-media/shell";
 
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
@@ -35,9 +41,19 @@ const Titled = (title: string) =>
     return <CockpitPanelHeader title={title} />;
   };
 
+// Each mount keeps its layout in its own memory: the dock saves its tabs
+// 300 ms after a change, so a shared localStorage would let one test's
+// late save (the Delete test closes Alpha) reach the next test's mount.
+const isolatedScope = () => {
+  const scope = createEditorScope();
+  setEditorStorage(scope, memoryStorage());
+  return scope;
+};
+
 const mount = () =>
   mountPanel(() => <RightDock />, {
     id: "test.dock",
+    scope: isolatedScope(),
     registries: (r) => {
       for (const [id, title] of [
         ["t.a", "Alpha"],

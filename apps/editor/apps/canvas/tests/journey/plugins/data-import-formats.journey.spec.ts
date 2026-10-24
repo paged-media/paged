@@ -20,15 +20,12 @@
 // Journey: JSON, NDJSON, Parquet and XLSX imports run in the editor, under its
 // CSP, without leaving the origin.
 //
-// DuckDB-WASM's eh build has no json or parquet extension built in; DuckDB
-// loads them on first use. It used to fetch them from extensions.duckdb.org,
-// which the editor's CSP (connect-src 'self') refuses, and the worker trapped
-// ("unreachable") on the first such import. @paged-media/data now ships both
-// in bin/duckdb-ext/ and points DuckDB's extension repository there; this
-// editor serves that directory (vite.config.ts: the dev route and the
-// dist/bin copy). The journey imports one file of each format through the
-// Sources panel and checks each became a source, no import failed, and no
-// request left the editor's origin.
+// Every format is read by the data engine itself (the data-js wasm, its query
+// store and readers inside it, ADR 561): nothing is fetched to read a file.
+// (The engine before it fetched its JSON and Parquet readers at first use,
+// which the editor's CSP refused.) The journey imports one file of each
+// format through the Sources panel and checks each became a source, no
+// import failed, and no request left the editor's origin.
 import { readFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +34,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 
 const HARNESS = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -109,13 +106,10 @@ test.describe("journey · paged.data import formats", () => {
   }) => {
     test.setTimeout(180_000);
     const offOrigin: string[] = [];
-    const extensionLoads: string[] = [];
     const traps: string[] = [];
     page.on("request", (r) => {
       const u = r.url();
       if (/^(data|blob):/.test(u)) return;
-      if (u.includes("duckdb_extension"))
-        extensionLoads.push(new URL(u).pathname);
       if (
         !u.startsWith("http://127.0.0.1") &&
         !u.startsWith("http://localhost")
@@ -125,7 +119,7 @@ test.describe("journey · paged.data import formats", () => {
     page.on("console", (m) => {
       if (
         m.type() === "error" &&
-        /unreachable|RuntimeError|Content Security Policy|extensions\.duckdb\.org/.test(
+        /unreachable|RuntimeError|Content Security Policy|panicked/.test(
           m.text(),
         )
       )
@@ -144,7 +138,7 @@ test.describe("journey · paged.data import formats", () => {
       timeout: 10_000,
     });
 
-    // The first import boots DuckDB; skip (or fail under REQUIRE_REAL_DUCKDB=1)
+    // The first import boots the engine; skip (or fail under REQUIRE_REAL_ENGINE=1)
     // when it cannot, as every data journey does.
     const status = page.locator("[data-status]").last();
     for (const f of FILES) {
@@ -155,9 +149,9 @@ test.describe("journey · paged.data import formats", () => {
           (await status.getAttribute("data-status").catch(() => null)) ??
           "unknown";
         if (got !== "ready")
-          skipWithoutDuckDB(
+          skipWithoutEngine(
             got,
-            `the import-formats journey needs DuckDB-WASM (engine status "${got}")`,
+            `the import-formats journey needs the data engine (engine status "${got}")`,
           );
         throw err;
       }
@@ -169,14 +163,5 @@ test.describe("journey · paged.data import formats", () => {
     ).toHaveCount(0);
     expect(traps).toEqual([]);
     expect(offOrigin).toEqual([]);
-    // Both extensions came from the bundle's bin/duckdb-ext, nowhere else.
-    expect(
-      extensionLoads
-        .map((p) => p.replace(/^.*\/duckdb-ext\//, "duckdb-ext/"))
-        .sort(),
-    ).toEqual([
-      "duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
-      "duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
-    ]);
   });
 });

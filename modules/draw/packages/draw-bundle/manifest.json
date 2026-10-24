@@ -9,16 +9,9 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "overlay",
-      "hitTest"
-    ],
-    "editContext": [
-      "vectorGraphic"
-    ],
-    "assets": [
-      "images"
-    ],
+    "rendering": ["overlay", "hitTest"],
+    "editContext": ["vectorGraphic"],
+    "assets": ["images"],
     "network": false,
     "workers": {
       "max": 2
@@ -72,6 +65,9 @@
       "media.paged.draw.panel.blend",
       "media.paged.draw.panel.objectsOnPath",
       "media.paged.draw.panel.pathOptions",
+      "media.paged.draw.panel.imageTrace",
+      "media.paged.draw.panel.recolorArtwork",
+      "media.paged.draw.panel.colorGuide",
       "media.paged.draw.panel.properties"
     ],
     "commands": [
@@ -96,11 +92,13 @@
       "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
+      "media.paged.draw.command.rasterizeOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
       "media.paged.draw.command.reversePathDirection",
       "media.paged.draw.command.createOutlines",
+      "media.paged.draw.command.rasterize",
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
       "media.paged.draw.command.transformAgain",
@@ -201,14 +199,15 @@
       "media.paged.draw.command.selectObjectsOnPath",
       "media.paged.draw.command.expandObjectsOnPath",
       "media.paged.draw.command.releaseObjectsOnPath",
-      "media.paged.draw.command.imageTrace"
+      "media.paged.draw.command.imageTrace",
+      "media.paged.draw.command.retraceImage",
+      "media.paged.draw.command.imageTraceOptions",
+      "media.paged.draw.command.recolorArtwork",
+      "media.paged.draw.command.recolorArtworkOptions",
+      "media.paged.draw.command.applyGuideColor"
     ],
-    "importers": [
-      "media.paged.draw.importer.svg"
-    ],
-    "exporters": [
-      "media.paged.draw.exporter.svg"
-    ],
+    "importers": ["media.paged.draw.importer.svg"],
+    "exporters": ["media.paged.draw.exporter.svg"],
     "partTypes": [
       {
         "type": "graphicStyleLibrary",
@@ -812,11 +811,7 @@
               "path": "layout",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "grid",
-                  "brick",
-                  "hex"
-                ]
+                "members": ["grid", "brick", "hex"]
               },
               "default": "grid",
               "summary": "Tile lattice."
@@ -835,10 +830,7 @@
               "type": {
                 "kind": "point"
               },
-              "default": [
-                6,
-                6
-              ],
+              "default": [6, 6],
               "summary": "[horizontal, vertical] spacing in pt; negative overlaps."
             },
             {
@@ -897,17 +889,11 @@
                 "fields": {
                   "horizontal": {
                     "kind": "enum",
-                    "members": [
-                      "leftInFront",
-                      "rightInFront"
-                    ]
+                    "members": ["leftInFront", "rightInFront"]
                   },
                   "vertical": {
                     "kind": "enum",
-                    "members": [
-                      "topInFront",
-                      "bottomInFront"
-                    ]
+                    "members": ["topInFront", "bottomInFront"]
                   }
                 }
               },
@@ -955,11 +941,7 @@
               "path": "kind",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "radial",
-                  "grid",
-                  "mirror"
-                ]
+                "members": ["radial", "grid", "mirror"]
               },
               "default": "radial",
               "summary": "Which repeat: around a ring, on a grid, or mirrored."
@@ -1047,10 +1029,7 @@
               "type": {
                 "kind": "point"
               },
-              "default": [
-                12,
-                12
-              ],
+              "default": [12, 12],
               "summary": "Grid: [horizontal, vertical] gap in pt."
             },
             {
@@ -1164,11 +1143,7 @@
               "path": "spacing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "smoothColor",
-                  "steps",
-                  "distance"
-                ]
+                "members": ["smoothColor", "steps", "distance"]
               },
               "default": "steps",
               "summary": "Spacing mode: smooth colour, specified steps, specified distance."
@@ -1201,10 +1176,7 @@
               "path": "orientation",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "page",
-                  "path"
-                ]
+                "members": ["page", "path"]
               },
               "default": "page",
               "summary": "Align intermediates to the page, or turn them with the spine."
@@ -1213,12 +1185,7 @@
               "path": "easing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "linear",
-                  "easeIn",
-                  "easeOut",
-                  "easeInOut"
-                ]
+                "members": ["linear", "easeIn", "easeOut", "easeInOut"]
               },
               "default": "linear",
               "summary": "Position easing curve."
@@ -1239,12 +1206,7 @@
               "path": "colorEasing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "linear",
-                  "easeIn",
-                  "easeOut",
-                  "easeInOut"
-                ]
+                "members": ["linear", "easeIn", "easeOut", "easeInOut"]
               },
               "nullable": true,
               "default": null,
@@ -1392,10 +1354,7 @@
               "path": "distribute",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "count",
-                  "spacing"
-                ]
+                "members": ["count", "spacing"]
               },
               "default": "count",
               "summary": "Spread the objects evenly, or at a fixed spacing."
@@ -1695,19 +1654,11 @@
               },
               "cap": {
                 "kind": "enum",
-                "members": [
-                  "butt",
-                  "round",
-                  "square"
-                ]
+                "members": ["butt", "round", "square"]
               },
               "join": {
                 "kind": "enum",
-                "members": [
-                  "miter",
-                  "round",
-                  "bevel"
-                ]
+                "members": ["miter", "round", "bevel"]
               },
               "miterLimit": {
                 "kind": "number"
@@ -1733,11 +1684,7 @@
               },
               "join": {
                 "kind": "enum",
-                "members": [
-                  "miter",
-                  "round",
-                  "bevel"
-                ]
+                "members": ["miter", "round", "bevel"]
               },
               "miterLimit": {
                 "kind": "number"
@@ -2203,10 +2150,7 @@
               },
               "kind": {
                 "kind": "enum",
-                "members": [
-                  "fill",
-                  "stroke"
-                ]
+                "members": ["fill", "stroke"]
               },
               "index": {
                 "kind": "number",
@@ -2230,10 +2174,7 @@
               },
               "kind": {
                 "kind": "enum",
-                "members": [
-                  "fill",
-                  "stroke"
-                ]
+                "members": ["fill", "stroke"]
               },
               "index": {
                 "kind": "number",
@@ -2597,10 +2538,7 @@
               },
               "maskType": {
                 "kind": "enum",
-                "members": [
-                  "luminosity",
-                  "alpha"
-                ]
+                "members": ["luminosity", "alpha"]
               },
               "invert": {
                 "kind": "bool"
@@ -2651,10 +2589,7 @@
               },
               "flipPathEffect": {
                 "kind": "enum",
-                "members": [
-                  "NotFlipped",
-                  "Flipped"
-                ]
+                "members": ["NotFlipped", "Flipped"]
               }
             }
           }
@@ -3306,12 +3241,7 @@
               },
               "which": {
                 "kind": "enum",
-                "members": [
-                  "keys",
-                  "steps",
-                  "spine",
-                  "all"
-                ]
+                "members": ["keys", "steps", "spine", "all"]
               }
             }
           },
@@ -3389,11 +3319,7 @@
               },
               "which": {
                 "kind": "enum",
-                "members": [
-                  "objects",
-                  "path",
-                  "all"
-                ]
+                "members": ["objects", "path", "all"]
               }
             }
           },
@@ -3497,10 +3423,7 @@
               },
               "mode": {
                 "kind": "enum",
-                "members": [
-                  "keep",
-                  "remove"
-                ]
+                "members": ["keep", "remove"]
               }
             }
           }
@@ -3707,6 +3630,37 @@
           }
         },
         {
+          "id": "media.paged.draw.command.rasterize",
+          "title": "Rasterize",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "ppi": {
+                "kind": "number"
+              },
+              "background": {
+                "kind": "enum",
+                "members": ["transparent", "paper"]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.rasterizeOptions",
+          "title": "Rasterize options",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
           "id": "media.paged.draw.command.widthProfile",
           "title": "Width profile",
           "args": {
@@ -3768,17 +3722,11 @@
               },
               "mode": {
                 "kind": "enum",
-                "members": [
-                  "color",
-                  "bw"
-                ]
+                "members": ["color", "bw", "centerline"]
               },
               "pathMode": {
                 "kind": "enum",
-                "members": [
-                  "spline",
-                  "polygon"
-                ]
+                "members": ["spline", "polygon"]
               },
               "colorPrecision": {
                 "kind": "number",
@@ -3823,6 +3771,231 @@
                 "integer": true
               },
               "stacked": {
+                "kind": "bool"
+              },
+              "maxColors": {
+                "kind": "number",
+                "integer": true
+              },
+              "grayscale": {
+                "kind": "bool"
+              },
+              "preset": {
+                "kind": "enum",
+                "members": [
+                  "default",
+                  "highFidelityPhoto",
+                  "lowFidelityPhoto",
+                  "colors3",
+                  "colors6",
+                  "colors16",
+                  "shadesOfGray",
+                  "blackAndWhiteLogo",
+                  "sketchedArt",
+                  "silhouettes",
+                  "lineArt",
+                  "technicalDrawing"
+                ]
+              },
+              "live": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.retraceImage",
+          "title": "Retrace image",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["color", "bw", "centerline"]
+              },
+              "pathMode": {
+                "kind": "enum",
+                "members": ["spline", "polygon"]
+              },
+              "colorPrecision": {
+                "kind": "number",
+                "integer": true
+              },
+              "filterSpeckle": {
+                "kind": "number",
+                "integer": true
+              },
+              "layerDifference": {
+                "kind": "number",
+                "integer": true
+              },
+              "bwThreshold": {
+                "kind": "number",
+                "integer": true
+              },
+              "ignoreWhite": {
+                "kind": "bool"
+              },
+              "cornerThresholdDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "segmentLength": {
+                "kind": "number"
+              },
+              "spliceThresholdDeg": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "maxIterations": {
+                "kind": "number",
+                "integer": true
+              },
+              "maxRegions": {
+                "kind": "number",
+                "integer": true
+              },
+              "maxTracePixels": {
+                "kind": "number",
+                "integer": true
+              },
+              "stacked": {
+                "kind": "bool"
+              },
+              "maxColors": {
+                "kind": "number",
+                "integer": true
+              },
+              "grayscale": {
+                "kind": "bool"
+              },
+              "preset": {
+                "kind": "enum",
+                "members": [
+                  "default",
+                  "highFidelityPhoto",
+                  "lowFidelityPhoto",
+                  "colors3",
+                  "colors6",
+                  "colors16",
+                  "shadesOfGray",
+                  "blackAndWhiteLogo",
+                  "sketchedArt",
+                  "silhouettes",
+                  "lineArt",
+                  "technicalDrawing"
+                ]
+              },
+              "live": {
+                "kind": "bool"
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.imageTraceOptions",
+          "title": "Image trace options",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.recolorArtwork",
+          "title": "Recolor artwork",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "mode": {
+                "kind": "enum",
+                "members": ["harmony", "reduce", "library", "map"]
+              },
+              "rule": {
+                "kind": "enum",
+                "members": [
+                  "complementary",
+                  "analogous",
+                  "triadic",
+                  "splitComplementary",
+                  "tetradic",
+                  "monochromatic",
+                  "shades",
+                  "tints"
+                ]
+              },
+              "base": {
+                "kind": "text"
+              },
+              "rotate": {
+                "kind": "number",
+                "unit": "deg"
+              },
+              "recolorNeutrals": {
+                "kind": "bool"
+              },
+              "count": {
+                "kind": "number",
+                "integer": true
+              },
+              "colorGroup": {
+                "kind": "text"
+              },
+              "map": {
+                "kind": "list",
+                "of": {
+                  "kind": "struct",
+                  "fields": {
+                    "from": {
+                      "kind": "text"
+                    },
+                    "to": {
+                      "kind": "text"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.recolorArtworkOptions",
+          "title": "Recolor artwork options",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.applyGuideColor",
+          "title": "Apply guide color",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "hex": {
+                "kind": "text"
+              },
+              "stroke": {
                 "kind": "bool"
               }
             }

@@ -138,7 +138,7 @@ export function planPathErase(
     const exits = switches.filter((s) => !s.entering).map((s) => s.at);
     const entries = switches.filter((s) => s.entering).map((s) => s.at);
     for (const x of exits) {
-      const next = entries.find((e) => e > x) ?? (entries[0]! + segs);
+      const next = entries.find((e) => e > x) ?? entries[0]! + segs;
       kept.push([x, next]);
     }
   }
@@ -198,7 +198,10 @@ function alongScrub(p: Vec2, scrub: readonly Vec2[]): number {
     const l2 = dx * dx + dy * dy;
     const u =
       l2 > 0
-        ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+        ? Math.max(
+            0,
+            Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2),
+          )
         : 0;
     const d = Math.hypot(p[0] - (a[0] + u * dx), p[1] - (a[1] + u * dy));
     if (d < best) {

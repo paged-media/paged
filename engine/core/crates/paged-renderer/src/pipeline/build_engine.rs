@@ -114,7 +114,32 @@ fn record_text_block(
     start: usize,
     end: usize,
 ) {
+    record_text_block_of(pending, slots, frame_id, false, page_idx, start, end);
+}
+
+/// [`record_text_block`] for a frame that may be hidden: a hidden frame's
+/// block is queued to be dropped (its text is laid out, so the thread
+/// flows through it, but it does not paint).
+fn record_text_block_of(
+    pending: &mut [Vec<text_slots::TextBlock>],
+    slots: &HashMap<(usize, String), crate::module::TextSlot>,
+    frame_id: Option<&str>,
+    hidden: bool,
+    page_idx: usize,
+    start: usize,
+    end: usize,
+) {
     if start >= end || page_idx >= pending.len() {
+        return;
+    }
+    if hidden {
+        pending[page_idx].push(text_slots::TextBlock {
+            start,
+            end,
+            slot: start,
+            z_seq: 0,
+            drop: true,
+        });
         return;
     }
     let Some(id) = frame_id else { return };
@@ -131,6 +156,7 @@ fn record_text_block(
         end,
         slot: slot.slot,
         z_seq: slot.z_seq,
+        drop: false,
     });
 }
 
@@ -140,6 +166,7 @@ fn record_text_block(
 fn record_story_blocks(
     pending: &mut [Vec<text_slots::TextBlock>],
     slots: &HashMap<(usize, String), crate::module::TextSlot>,
+    document: &Document,
     chain: &[&TextFrame],
     page_idx: usize,
     segments: &[(usize, usize)],
@@ -147,8 +174,13 @@ fn record_story_blocks(
 ) {
     for (n, (chain_idx, start)) in segments.iter().enumerate() {
         let end = segments.get(n + 1).map(|(_, s)| *s).unwrap_or(block_end);
-        let frame_id = chain.get(*chain_idx).and_then(|f| f.self_id.as_deref());
-        record_text_block(pending, slots, frame_id, page_idx, *start, end);
+        let frame = chain.get(*chain_idx);
+        let frame_id = frame.and_then(|f| f.self_id.as_deref());
+        // W2.5 — a hidden frame (`Visible="false"`, or on a hidden layer)
+        // keeps its part of the thread but paints none of it.
+        let hidden = frame
+            .is_some_and(|f| !f.visible || !is_layer_visible(document, f.item_layer.as_deref()));
+        record_text_block_of(pending, slots, frame_id, hidden, page_idx, *start, end);
     }
 }
 
@@ -1693,6 +1725,16 @@ pub(super) fn build_document_inner(
                     // gate (locked items still paint); selection-gating
                     // lives in the canvas hit-tester.
                     if !is_layer_visible(document, frame.item_layer.as_deref()) || !frame.visible {
+                        // A hidden frame still holds its part of a thread:
+                        // route it, so that text is laid out on the frame's
+                        // own page (and dropped there, see
+                        // `record_story_blocks`) instead of on page 0.
+                        if let Some(self_id) = frame.self_id.clone() {
+                            let spread_bounds =
+                                transform_bounds(frame.bounds, frame.item_transform);
+                            let local = page_for_frame(&spread_bounds, local_geoms).unwrap_or(0);
+                            frame_to_page.insert(self_id, range.start + local);
+                        }
                         return;
                     }
                     total_stats.frames += 1;
@@ -3069,6 +3111,7 @@ pub(super) fn build_document_inner(
                         record_story_blocks(
                             &mut pending_text,
                             &text_slots,
+                            document,
                             &chain,
                             *page_idx,
                             &page_delta
@@ -3667,6 +3710,7 @@ pub(super) fn build_document_inner(
             record_story_blocks(
                 &mut pending_text,
                 &text_slots,
+                document,
                 &chain_for_post,
                 page_idx,
                 &segs,
@@ -3877,13 +3921,19 @@ pub(super) fn build_document_inner(
     // Runs after the footnote pools and the anchored images (both of
     // which append to the page tail, so their indices are settled) and
     // before the transparency fit below, which must see the final list.
-    if options.text_at_frame_z {
-        for (page_idx, blocks) in pending_text.iter_mut().enumerate() {
-            if blocks.is_empty() || page_idx >= pages.len() || adopted[page_idx] {
-                continue;
-            }
-            text_slots::relocate_text_blocks(&mut pages[page_idx].list, blocks);
+    // A hidden frame's text is dropped either way (W2.5).
+    if !options.text_at_frame_z {
+        for blocks in pending_text.iter_mut() {
+            blocks.retain(|b| b.drop);
         }
+    }
+    for (page_idx, blocks) in pending_text.iter_mut().enumerate() {
+        if blocks.is_empty() || page_idx >= pages.len() || adopted[page_idx] {
+            continue;
+        }
+        text_slots::relocate_text_blocks(&mut pages[page_idx].list, blocks);
+    }
+    if options.text_at_frame_z {
         // With the text in its frame's run, an unfilled, unstroked text
         // frame's feather can take the text's shape (ADR 204).
         for (page, adopted) in pages.iter_mut().zip(&adopted) {

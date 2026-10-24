@@ -19,8 +19,11 @@
 
 export {
   ActionsProvider,
+  playerDeps,
   useActions,
   type ActionsApi,
+  type PlaybackState,
+  type PlayOptions,
   type RecordingState,
   type ReplayReport,
   type ReplayStepResult,
@@ -31,6 +34,11 @@ export {
   EMPTY_LIBRARY,
   EMPTY_TALLY,
   NON_RECORDABLE_COMMANDS,
+  STOP_STEP_COMMAND,
+  importRuleMatches,
+  isStopStep,
+  parseExtensions,
+  stopStep,
   classifyPayload,
   isRecordable,
   looksLikeDocumentId,
@@ -44,6 +52,7 @@ export {
   verdictTitle,
   type ActionLibrary,
   type ActionStep,
+  type ImportRule,
   type PagedAction,
   type PlannedStep,
   type ReplayPlan,
@@ -60,3 +69,25 @@ export {
   saveLibrary,
   serializeForExport,
 } from "./store";
+
+export {
+  ActionPlayer,
+  type PlayedStep,
+  type PlayerDeps,
+  type PlayerOptions,
+  type PlayerState,
+  type PlayerStatus,
+} from "./player";
+
+export {
+  BATCH_FORMATS,
+  batchOutputName,
+  runBatch,
+  type BatchDeps,
+  type BatchFile,
+  type BatchFormat,
+  type BatchLogEntry,
+  type BatchProgress,
+  type BatchResult,
+  type BatchStage,
+} from "./batch";

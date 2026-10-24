@@ -18,7 +18,7 @@
 
 // paged.data's inspection commands (plan G4), the UNIT layer: the real
 // bundle on the SDK's in-process host over the recording fake editor, with
-// the real data-js engine and a real DuckDB. Each reads, or changes the
+// the real data-js engine with its query store. Each reads, or changes the
 // session's variable set; none writes to the document.
 
 import {
@@ -51,7 +51,7 @@ describe.skipIf(!gate.ready && !gate.required)(
     });
     afterEach(() => env.dispose());
 
-    it("previewQuery — the first rows as DuckDB renders them; a guarded statement says why", async () => {
+    it("previewQuery — the first rows as the store renders them; a guarded statement says why", async () => {
       covers("command:media.paged.data.previewQuery");
       const m = env.mark();
       expect(

@@ -1,0 +1,29 @@
+[package]
+name = "paged-data-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data frozen core types (spec §5): Value, DataSource, Query, RecordSet, Binding, Placeholder, SyncState, and the Expr AST. Leaf crate — depends on nothing in the workspace. Registry codegen (name->FnId table) via build.rs."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_core is a later mechanical pass).
+name = "data_core"
+
+[lints]
+workspace = true
+
+[dependencies]
+# The calendar, the locale table and digit grouping (platform/shared/fmt).
+paged-fmt = { path = "../../../../platform/shared/fmt" }
+thiserror = "2"
+smallvec = { version = "1", features = ["serde"] }
+compact_str = { version = "0.10", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+[dev-dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_norway = "0.9"

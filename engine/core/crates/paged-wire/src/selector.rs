@@ -34,6 +34,7 @@
 //! key        = "name" / "label" / "label." labelKey / "kind" / "layer" / "style"
 //! op         = "=" / "!=" / "^=" / "*="
 //! value      = '"' chars '"' / "'" chars "'" / bare  ; bare stops at "]"
+//!                                                   ; in quotes, "\\" escapes the next char
 //! ```
 //!
 //! - A **kind** is any address prefix (`textFrame`, `page`, `style`, …,
@@ -220,17 +221,28 @@ impl<'a> Parser<'a> {
         Ok(Chain { steps })
     }
 
+    /// A quoted value. A backslash takes the next character as it is, so a
+    /// value can hold its own quote (`"\"oid\":\"pd-1\""`), as the
+    /// SDK's selector parser reads it.
     fn quoted(&mut self) -> Result<String, GrammarError> {
         let q = self.peek().expect("caller saw a quote");
         let start = self.pos;
-        self.pos += 1;
-        let Some(end) = self.rest().find(q) else {
-            self.pos = start;
-            return self.err("unterminated quote");
-        };
-        let out = self.rest()[..end].to_string();
-        self.pos += end + 1;
-        Ok(out)
+        let mut out = String::new();
+        let mut chars = self.rest()[q.len_utf8()..].char_indices();
+        while let Some((i, c)) = chars.next() {
+            if c == q {
+                self.pos = start + q.len_utf8() + i + c.len_utf8();
+                return Ok(out);
+            }
+            if c == '\\' {
+                if let Some((_, next)) = chars.next() {
+                    out.push(next);
+                    continue;
+                }
+            }
+            out.push(c);
+        }
+        self.err("unterminated quote")
     }
 
     fn step(&mut self) -> Result<Step, GrammarError> {
@@ -492,6 +504,24 @@ mod tests {
                 op: Op::Eq,
                 value: Some("acme".into())
             }]
+        );
+    }
+
+    #[test]
+    fn a_quoted_value_escapes_its_own_quote() {
+        // paged.data's durable selector of a labelled page item (ADR 559).
+        let sel = r#"frame[label.x-paged:media.paged.data*="\"oid\":\"pd-1\""]"#;
+        assert_eq!(
+            p(sel).chains[0].steps[0].1.filters,
+            vec![Filter::Label {
+                key: "x-paged:media.paged.data".into(),
+                op: Op::Contains,
+                value: Some(r#""oid":"pd-1""#.into())
+            }]
+        );
+        assert!(
+            Selector::parse(r#"frame[name="a\"]"#).is_err(),
+            "an escaped quote does not close"
         );
     }
 

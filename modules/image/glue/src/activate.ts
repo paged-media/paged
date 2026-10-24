@@ -60,12 +60,17 @@ import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
 import { makeGradientGesture } from "./gradient-tool";
 import { makeRedEyeGesture } from "./red-eye-tool";
+import {
+  makeColorSamplerGesture,
+  makeEyedropperGesture,
+} from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
+import { makeColorBindingProvider } from "./binding-provider/color-provider";
 import {
   contributeImageObjectModel,
   type UntypedCommand,
@@ -150,6 +155,8 @@ const TOOL = defineMessages("image.tool", {
   paintBucket: "Paint bucket",
   gradient: "Gradient",
   redEye: "Red eye",
+  eyedropper: "Eyedropper",
+  colorSampler: "Color sampler",
   marqueeRectangle: "Marquee (rectangle)",
   marqueeEllipse: "Marquee (ellipse)",
   lasso: "Lasso",
@@ -192,6 +199,8 @@ const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
 const RED_EYE_TOOL_ID = "media.paged.image.tool.redEye";
+const EYEDROPPER_TOOL_ID = "media.paged.image.tool.eyedropper";
+const COLOR_SAMPLER_TOOL_ID = "media.paged.image.tool.colorSampler";
 const DODGE_TOOL_ID = "media.paged.image.tool.dodge";
 const BURN_TOOL_ID = "media.paged.image.tool.burn";
 const SPONGE_TOOL_ID = "media.paged.image.tool.sponge";
@@ -313,6 +322,8 @@ export function activate(host: BundleHost): BundleHandle {
         wand: MAGIC_WAND_TOOL_ID,
         bucket: BUCKET_TOOL_ID,
         gradient: GRADIENT_TOOL_ID,
+        eyedropper: EYEDROPPER_TOOL_ID,
+        colorSampler: COLOR_SAMPLER_TOOL_ID,
       })
     : null;
   const optionsFor = (toolId: string) =>
@@ -377,6 +388,30 @@ export function activate(host: BundleHost): BundleHandle {
     group: HEAL_TOOL_ID,
     section: "drawType",
     gesture: () => makeRedEyeGesture(host, session),
+  });
+
+  // EYEDROPPER (WP4.10) — the colour under the pointer into the
+  // foreground (Alt: background); its own slot, with the Color Sampler in
+  // its flyout (Photoshop's pairing). No key: the shortcut register is full
+  // and `i` is the host's own Eyedropper.
+  contributeTool(host, {
+    id: EYEDROPPER_TOOL_ID,
+    ...optionsFor(EYEDROPPER_TOOL_ID),
+    title: t(TOOL.eyedropper),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeEyedropperGesture(host, session),
+  });
+  // COLOR SAMPLER — up to four fixed sampling points, read live.
+  contributeTool(host, {
+    id: COLOR_SAMPLER_TOOL_ID,
+    ...optionsFor(COLOR_SAMPLER_TOOL_ID),
+    title: t(TOOL.colorSampler),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeColorSamplerGesture(host, session),
   });
 
   // The crop commit command (also surfaced as the panel's "Apply crop"
@@ -1237,6 +1272,8 @@ export function activate(host: BundleHost): BundleHandle {
     [MAGIC_WAND_TOOL_ID]: "wand",
     [BUCKET_TOOL_ID]: "wand",
     [GRADIENT_TOOL_ID]: "gradient",
+    [EYEDROPPER_TOOL_ID]: "eyedropper",
+    [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
   });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
@@ -1286,6 +1323,8 @@ export function activate(host: BundleHost): BundleHandle {
         BUCKET_TOOL_ID,
         GRADIENT_TOOL_ID,
         RED_EYE_TOOL_ID,
+        EYEDROPPER_TOOL_ID,
+        COLOR_SAMPLER_TOOL_ID,
         DODGE_TOOL_ID,
         BURN_TOOL_ID,
         SPONGE_TOOL_ID,
@@ -1361,6 +1400,14 @@ export function activate(host: BundleHost): BundleHandle {
           makeTextBindingProvider(session, () =>
             typeToolActive ? TYPE_TOOL_ID : null,
           ).provider,
+        ),
+      );
+      // COLOUR (WP4.10) — the host Color panel's fill / stroke wells are
+      // the foreground / background, and a host swatch picks one.
+      providerHandles.push(
+        host.contribute.bindingProvider(
+          "rasterImage",
+          makeColorBindingProvider(host, session).provider,
         ),
       );
       // A provider's values change without an ENGINE mutation — a layer

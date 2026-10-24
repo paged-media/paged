@@ -189,6 +189,7 @@ export type {
   SnapLine,
   SnapshotError,
   SnapshotPng,
+  SwatchColorSpec,
   SwatchSpec,
   GradientSpec,
   GradientStopSpec,

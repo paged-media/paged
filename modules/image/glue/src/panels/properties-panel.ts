@@ -298,7 +298,6 @@ const L = defineMessages("image.properties", {
   channelCurves: "Channel curves (red, green, blue)",
   order: "Stack position",
   pixelSource: "Replace pixels",
-  blending: "Blending options",
   fillOpacity: "Fill opacity",
   knockout: "Knockout",
   colorLabel: "Colour label",
@@ -310,7 +309,6 @@ const L = defineMessages("image.properties", {
 /** The section titles of the field groups (the group names stay the ids). */
 const GROUP_TITLES: Readonly<Record<string, string>> = {
   Layers: L.layers,
-  Blending: L.blending,
   Mask: L.mask,
   "Smart object": L.smartObject,
   Tone: L.adjustment,
@@ -471,12 +469,12 @@ export function imagePropertiesPanel(): PanelSchema {
     sections: [
       {
         title: title("Layers"),
-        rows: [layerList, ...rowsOf(LAYER, "Layers", { bind: BIND.layer })],
-      },
-      {
-        title: title("Blending"),
-        collapsible: true,
-        rows: rowsOf(LAYER, "Blending", { bind: BIND.layer }),
+        // The blending options and locks sit with the layer's own rows.
+        rows: [
+          layerList,
+          ...rowsOf(LAYER, "Layers", { bind: BIND.layer }),
+          ...rowsOf(LAYER, "Blending", { bind: BIND.layer }),
+        ],
       },
       {
         title: title("Mask"),

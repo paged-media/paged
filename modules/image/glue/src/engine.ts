@@ -1958,6 +1958,16 @@ export interface ImageEngine {
   layersTranslate(dx: number, dy: number): void;
   layersAlign(edge: AlignEdge, to: AlignTo): void;
   layersDistribute(axis: "horizontal" | "vertical"): void;
+  /** WP4.10 — the window `(x, y, w, h)` of layer `index`'s OWN pixels
+   *  (not the composite) as straight RGBA8, clipped to the canvas; empty
+   *  for an adjustment layer (`layers_window_rgba8`). */
+  layersWindow(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   /** BAKE the adjustment chain destructively into the ACTIVE layer
    *  (journaled, so undoable). The panel's chain is otherwise a
    *  re-runnable preview that mutates nothing. Throws at identity, on a
@@ -2655,6 +2665,13 @@ export interface ImageWasmModule {
   layers_translate(dx: number, dy: number): void;
   layers_align(edge: string, to: string): void;
   layers_distribute(axis: string): void;
+  layers_window_rgba8(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   layers_bake_adjust(
     exposure_ev: number,
     brightness: number,
@@ -3628,6 +3645,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layersTranslate: (dx, dy) => wasm.layers_translate(dx, dy),
     layersAlign: (edge, to) => wasm.layers_align(edge, to),
     layersDistribute: (axis) => wasm.layers_distribute(axis),
+    layersWindow: (index, x, y, w, h) =>
+      wasm.layers_window_rgba8(index, x, y, w, h),
     layersAddAdjustment: (name, p) =>
       // The SAME wire block the bake and the preview use — one decode,
       // one meaning. The only difference is where the chain LIVES.

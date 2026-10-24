@@ -26,6 +26,7 @@ import { COMMANDS, LOAD, REPLACE } from "../messages";
 import { getAiAvailability } from "../../ai/availability";
 import { createBlankDocument, loadDocumentFile } from "../document-loader";
 import { importReplaceAllowed, setPendingImportSource } from "../import-source";
+import { notifyImported } from "../import-hooks";
 import { pageForPicture, pictureSize } from "../picture-size";
 import { confirmDiscard, isReplaceDeclined } from "../replace-guard";
 
@@ -174,11 +175,19 @@ export async function openFile(
   // document, one page the picture's size with the picture placed on it,
   // rather than a panel beside an empty canvas.
   if (nothingOpen && (await openPictureAsDocument(editor, file, sinks))) {
+    await notifyImported(editor.scope, { name: file.name, via: "picture" });
     return;
   }
   const importer = editor.registries.importers.resolve(file.name, file.type);
   if (importer) {
     const outcome = await runImporter(editor.scope, importer, file, sinks);
+    if (outcome === "opened" || outcome === "added") {
+      await notifyImported(editor.scope, {
+        name: file.name,
+        via: "importer",
+        importer: importer.title,
+      });
+    }
     // An importer that only ADDS content (a workbook's range, …) and found
     // nothing open left the canvas empty: give it a document and run it
     // again, told the document is new so it places its content there
@@ -201,7 +210,12 @@ export async function openFile(
   // a frame. This branch is the one that always replaces.
   if (!(await confirmDiscard(editor, t(REPLACE.opening, { name: file.name }))))
     return;
+  const before = editor.client.openDocument;
   await openDocumentFile(editor, file, sinks);
+  // Only a load that landed is an import (a failed one said why already).
+  if (editor.client.openDocument !== before) {
+    await notifyImported(editor.scope, { name: file.name, via: "document" });
+  }
 }
 
 /**

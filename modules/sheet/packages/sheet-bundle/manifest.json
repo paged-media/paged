@@ -16,6 +16,10 @@
       "consume": ["dataset"],
       "publish": ["dataset"]
     },
+    "data": {
+      "read": true,
+      "write": true
+    },
     "clipboard": "full",
     "keybindings": true,
     "storage": {

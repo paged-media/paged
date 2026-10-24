@@ -25,7 +25,7 @@
 // justified; the story threaded onto page two and reflowed; then a frame
 // each for a photograph (paged.image), a pen drawing (paged.draw), a chart
 // from an Excel workbook (paged.sheet), HTML (paged.web) and a barcode
-// drawn from a product list in DuckDB (paged.data); preflight, a PDF and
+// drawn from a product list in the data engine (paged.data); preflight, a PDF and
 // the saved .paged file. Every step goes through the editor's own controls
 // and is asserted against the engine or the written bytes.
 //
@@ -776,7 +776,7 @@ film("home", async (k) => {
     await k.hold(1200);
   });
 
-  // ── Data: the product list, into DuckDB, in the Data layout. ──
+  // ── Data: the product list, into the data engine, in the Data layout. ──
   await k.scene("data", async () => {
     k.unfocus();
     await press(
@@ -799,7 +799,7 @@ film("home", async (k) => {
         () => false,
       );
     if (!quick)
-      await k.cut("duckdb", () =>
+      await k.cut("data-store", () =>
         expect.poll(ready, { timeout: 60_000 }).toBe("ready"),
       );
     await expect(

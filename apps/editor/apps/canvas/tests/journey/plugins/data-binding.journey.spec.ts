@@ -28,7 +28,7 @@
 //     sync states (Linked/Stale). The panel's authoring row ("Add binding")
 //     defines a variable + a table binding against the records picked under
 //     "Records from" (all rows of the imported source); "Lower to document"
-//     refreshes the data through DuckDB and commits the resolved content.
+//     refreshes the data through the store and commits the resolved content.
 //   • data.expr.engine — the binding-expression DSL. The field-mapping wizard
 //     ("Map fields…") asks the Rust engine for column → variable-binding
 //     suggestions, each carrying an engine-COMPUTED DSL expression (a bare
@@ -38,13 +38,11 @@
 //   • data.lower.content / data.lower.v43-consumers — the lowered variable is
 //     placed as a tagged FIELD (D-01) and the table region lowers to native
 //     content (D-02); both are the §9 lowering lanes reaching the page.
-//   • data.query.seam — the CSV → DuckDB → Arrow → RecordSet seam the import
-//     gateway drives (the source reaches "ready" only when the seam ran).
+//   • data.query.seam — the CSV → store → RecordSet seam the import gateway
+//     drives (the source reaches "ready" only when the seam ran).
 //
-// DuckDB-WASM headless boot is UNBLOCKED (the Vite duckdbDistRoute middleware +
-// the COOP/COEP isolation; see data-render.journey.spec.ts). The render
-// assertion is HARD; it SKIPS-with-status only if the package shipped no bin/duckdb-engine.wasm
-// or the context is not cross-origin isolated.
+// The render assertion is HARD; it SKIPS-with-status only if the package
+// shipped no bin/data_js_bg.wasm.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -53,7 +51,7 @@ import { Designer } from "../driver/designer";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { addBindingThroughPanel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -80,7 +78,7 @@ const invoke = (page: Page, id: string) =>
     id,
   );
 
-/** Import the CSV through the sources panel + wait for the DuckDB query engine
+/** Import the CSV through the sources panel + wait for the store query engine
  *  to reach "ready" (the data.query.seam ran). Returns true when ready; false
  *  → the caller skips honestly (the heavy engine did not boot). */
 async function importCsv(page: Page): Promise<boolean> {
@@ -125,7 +123,7 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     const blankB = await designer.renderBytes();
     await designer.expectRenderStable(blankA, blankB);
 
-    // ── 1. IMPORT GATEWAY — feed the CSV; the session boots DuckDB-WASM, runs
+    // ── 1. IMPORT GATEWAY — feed the CSV; the session boots the data engine, runs
     //    the CSV→Arrow→RecordSet seam (data.query.seam), and registers the
     //    source. Reaching "ready" means the seam ran. ──
     const ready = await importCsv(page);
@@ -136,11 +134,11 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
           .last()
           .getAttribute("data-status")
           .catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
-        `paged.data binding render needs DuckDB-WASM to boot (engine status "${got}"). On the ` +
-          "standard editor dev server it boots on both lanes (Vite duckdbDistRoute + the " +
-          "COOP/COEP isolation); this skip only fires if the shipped DuckDB (bin/duckdb-engine.wasm) is absent or the " +
+        `paged.data binding render needs the data engine to boot (engine status "${got}"). On the ` +
+          "standard editor dev server it boots on both lanes; " +
+          "this skip only fires if the package shipped no bin/data_js_bg.wasm or the " +
           "context is not cross-origin isolated.",
       );
     }
@@ -192,7 +190,7 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     await page.waitForTimeout(300);
 
     // ── 4. RESOLVE + LOWER (render) — "Lower to document" refreshes the data
-    //    through DuckDB (resolving every expression binding against the live
+    //    through the store (resolving every expression binding against the live
     //    records) and commits the resolved content as native Paged Mutations.
     //    The blank page now carries the data-driven content. ──
     const beforeLower = await designer.renderBytes();
@@ -200,7 +198,7 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
 
     // ── 5. RENDER ASSERTION (HARD) — the resolved/computed value visibly
     //    reached the page (the §9 lowering lanes lowered real content). The
-    //    lower lane runs a DuckDB query and then commits Mutations, so the
+    //    lower lane runs a store query and then commits Mutations, so the
     //    render is polled until the commit lands (ADR 228), not sampled once
     //    after a sleep tuned on a fast machine. ──
     await designer.expectRenderChangesFrom(beforeLower);

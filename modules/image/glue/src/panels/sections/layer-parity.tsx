@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { defineMessages, t } from "@paged-media/strings";
 import { About, color, font, space } from "@paged-media/panel-kit";
+import { hexToRgb, rgbToHex } from "@paged-media/helpers";
 
 import {
   ADJUSTMENT_KINDS,
@@ -750,21 +751,9 @@ function Toggle({
   );
 }
 
-const hex = (r: number, g: number, b: number) =>
-  "#" +
-  [r, g, b]
-    .map((v) =>
-      Math.round(Math.min(255, Math.max(0, v)))
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("");
+const hex = (r: number, g: number, b: number) => rgbToHex([r, g, b]);
 
-const rgbOf = (h: string): [number, number, number] => [
-  parseInt(h.slice(1, 3), 16),
-  parseInt(h.slice(3, 5), 16),
-  parseInt(h.slice(5, 7), 16),
-];
+const rgbOf = (h: string): [number, number, number] => hexToRgb(h) ?? [0, 0, 0];
 
 /** A colour well over `values[at..at+3]` (0–255). */
 function ColorWell({

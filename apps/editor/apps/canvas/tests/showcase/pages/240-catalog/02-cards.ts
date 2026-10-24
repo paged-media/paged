@@ -21,7 +21,7 @@
 //
 // THE FLOW THIS PAGE DRIVES, end to end through the real editor host:
 // annual-orders.csv registers through the sources panel's host
-// file-picker door; the session boots the vendored DuckDB-WASM engine
+// file-picker door; the session boots the data engine
 // and registers the table; the field-mapping wizard asks the RUST
 // engine for each column's binding expression (the bundle never decides
 // the mapping); and each confirmed binding lowers as a tagged
@@ -39,7 +39,7 @@
 //
 // RECIPE FROM: the retired 09-database spread (import gateway + wizard
 // testids), tests/journey/plugins/data-fieldmap.journey.spec.ts (the
-// wizard contract) and data-render.journey.spec.ts (the honest DuckDB
+// wizard contract) and data-render.journey.spec.ts (the honest engine
 // degrade).
 
 import { marginNote, proseFrame, plate, specLabel } from "../../annual-support";
@@ -86,7 +86,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       {
         text:
           "The order book from the opener, published. The CSV registers " +
-          "through the plugin's DuckDB query engine; the field-mapping wizard " +
+          "through the plugin's query store; the field-mapping wizard " +
           "asks the Rust engine for each column's binding expression; and " +
           "three of those bindings resolve into the card below as tagged " +
           "placeholder fields, each placed at the text caret. Nothing in the " +
@@ -265,7 +265,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await specLabel(ctx, pg, [
       "Specimen No. 177",
-      "importData · shell.pickFile · DuckDB-WASM",
+      "importData · shell.pickFile · query store",
       "Map fields… ×3",
       "lowerAll → insertField at the caret",
       "read back via document.placeholders",

@@ -147,6 +147,8 @@ is not written yet.
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
 | [1005](1005-a-raster-is-read-by-paged-raster.md) | A raster is read by `paged-raster`, and a TIFF through `tiff` | Accepted 2026-10-24 |
 | [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
+| [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
+| [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

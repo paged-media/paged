@@ -1,0 +1,16 @@
+$ paged data
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+The bindings a document carries (paged.data), read and applied by the engine (core ADR 1014)
+
+Usage: paged data <COMMAND>
+
+Commands:
+  bindings  The bindings the document's labels carry, with the object each writes and the source files the recipe asks for
+  apply     Resolve the bindings at one record and write their values
+  help      Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

@@ -19,7 +19,7 @@
 
 // PLUGIN MENUS — paged.image (modules/image/glue/src/menu.ts).
 //
-// Sixty-nine entries: sixty-seven under the Image menu (folded into
+// A hundred and eight entries: a hundred and six under the Image menu (folded into
 // Plugins ▸ Image; shown as a context menu inside a raster frame) and two
 // under the host's Edit menu (Edit ▸ Selection to path, Edit ▸ Path to
 // selection).
@@ -270,6 +270,684 @@ test.describe.serial("plugin menus — paged.image", () => {
       { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
     ]);
     expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New/Layer via copy — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New/Layer via copy");
+    await expectGreyedAndInert(bare, "Image/Layer/New/Layer via copy");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New/Layer via copy",
+      "media.paged.image.command.layerViaCopy",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New/Layer via cut — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New/Layer via cut");
+    await expectGreyedAndInert(bare, "Image/Layer/New/Layer via cut");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New/Layer via cut",
+      "media.paged.image.command.layerViaCut",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New fill layer/Solid colour… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New fill layer/Solid colour…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New fill layer/Solid colour…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New fill layer/Solid colour…",
+      "media.paged.image.command.newFillSolid",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New fill layer/Gradient… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New fill layer/Gradient…");
+    await expectGreyedAndInert(bare, "Image/Layer/New fill layer/Gradient…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New fill layer/Gradient…",
+      "media.paged.image.command.newFillGradient",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New fill layer/Pattern… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New fill layer/Pattern…");
+    await expectGreyedAndInert(bare, "Image/Layer/New fill layer/Pattern…");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New fill layer/Pattern…",
+      "media.paged.image.command.newFillPattern",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Brightness–contrast… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Brightness–contrast…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Brightness–contrast…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Brightness–contrast…",
+      "media.paged.image.command.newAdjustmentBrightnessContrast",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Levels… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Levels…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Levels…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Levels…",
+      "media.paged.image.command.newAdjustmentLevels",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Curves… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Curves…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Curves…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Curves…",
+      "media.paged.image.command.newAdjustmentCurves",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Exposure… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Exposure…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Exposure…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Exposure…",
+      "media.paged.image.command.newAdjustmentExposure",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Vibrance… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Vibrance…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Vibrance…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Vibrance…",
+      "media.paged.image.command.newAdjustmentVibrance",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Hue–saturation… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Hue–saturation…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Hue–saturation…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Hue–saturation…",
+      "media.paged.image.command.newAdjustmentHueSaturation",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Colour balance… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Colour balance…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Colour balance…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Colour balance…",
+      "media.paged.image.command.newAdjustmentColorBalance",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Black & white… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Black & white…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Black & white…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Black & white…",
+      "media.paged.image.command.newAdjustmentBlackWhite",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Photo filter… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Photo filter…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Photo filter…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Photo filter…",
+      "media.paged.image.command.newAdjustmentPhotoFilter",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Channel mixer… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Channel mixer…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Channel mixer…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Channel mixer…",
+      "media.paged.image.command.newAdjustmentChannelMixer",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Colour lookup… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Colour lookup…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Colour lookup…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Colour lookup…",
+      "media.paged.image.command.newAdjustmentColorLookup",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Invert — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Invert");
+    await expectGreyedAndInert(bare, "Image/Layer/New adjustment layer/Invert");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Invert",
+      "media.paged.image.command.newAdjustmentInvert",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Posterize… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Posterize…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Posterize…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Posterize…",
+      "media.paged.image.command.newAdjustmentPosterize",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Threshold… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Threshold…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Threshold…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Threshold…",
+      "media.paged.image.command.newAdjustmentThreshold",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Gradient map… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Gradient map…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Gradient map…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Gradient map…",
+      "media.paged.image.command.newAdjustmentGradientMap",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/New adjustment layer/Selective colour… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/New adjustment layer/Selective colour…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/New adjustment layer/Selective colour…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/New adjustment layer/Selective colour…",
+      "media.paged.image.command.newAdjustmentSelectiveColor",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer style/Blending options… — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer style/Blending options…");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Layer style/Blending options…",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer style/Blending options…",
+      "media.paged.image.command.blendingOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Rasterize — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Rasterize");
+    await expectGreyedAndInert(bare, "Image/Layer/Rasterize");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Rasterize",
+      "media.paged.image.command.rasterizeLayer",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Link with layer below — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Link with layer below");
+    await expectGreyedAndInert(bare, "Image/Layer/Link with layer below");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Link with layer below",
+      "media.paged.image.command.linkLayers",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Unlink — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Unlink");
+    await expectGreyedAndInert(bare, "Image/Layer/Unlink");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Unlink",
+      "media.paged.image.command.unlinkLayer",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Left edges — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Left edges");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Left edges");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Left edges",
+      "media.paged.image.command.alignLeft",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Horizontal centres — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Horizontal centres");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Horizontal centres");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Horizontal centres",
+      "media.paged.image.command.alignHCenter",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Right edges — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Right edges");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Right edges");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Right edges",
+      "media.paged.image.command.alignRight",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Top edges — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Top edges");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Top edges");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Top edges",
+      "media.paged.image.command.alignTop",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Vertical centres — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Vertical centres");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Vertical centres");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Vertical centres",
+      "media.paged.image.command.alignVCenter",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Align/Bottom edges — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Align/Bottom edges");
+    await expectGreyedAndInert(bare, "Image/Layer/Align/Bottom edges");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Align/Bottom edges",
+      "media.paged.image.command.alignBottom",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Distribute/Horizontal centres — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Distribute/Horizontal centres");
+    await expectGreyedAndInert(
+      bare,
+      "Image/Layer/Distribute/Horizontal centres",
+    );
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Distribute/Horizontal centres",
+      "media.paged.image.command.distributeHorizontal",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Distribute/Vertical centres — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Distribute/Vertical centres");
+    await expectGreyedAndInert(bare, "Image/Layer/Distribute/Vertical centres");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Distribute/Vertical centres",
+      "media.paged.image.command.distributeVertical",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Layer comps/New layer comp — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Layer comps/New layer comp");
+    await expectGreyedAndInert(bare, "Image/Layer/Layer comps/New layer comp");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Layer comps/New layer comp",
+      "media.paged.image.command.newLayerComp",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Merge down — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Merge down");
+    await expectGreyedAndInert(bare, "Image/Layer/Merge down");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Merge down",
+      "media.paged.image.command.mergeDown",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Merge group — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Merge group");
+    await expectGreyedAndInert(bare, "Image/Layer/Merge group");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Merge group",
+      "media.paged.image.command.mergeGroup",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Merge visible — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Merge visible");
+    await expectGreyedAndInert(bare, "Image/Layer/Merge visible");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Merge visible",
+      "media.paged.image.command.mergeVisible",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Stamp visible — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Stamp visible");
+    await expectGreyedAndInert(bare, "Image/Layer/Stamp visible");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Stamp visible",
+      "media.paged.image.command.stampVisible",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
+      out.before,
+    );
+  });
+
+  test("Image/Layer/Flatten image — with no image open, raises the Image panel", async () => {
+    covers("menu:Image/Layer/Flatten image");
+    await expectGreyedAndInert(bare, "Image/Layer/Flatten image");
+    const out = await clickEntry(
+      live,
+      "Image/Layer/Flatten image",
+      "media.paged.image.command.flattenImage",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "with no image the layer stack is untouched").toBe(
       out.before,
     );
   });

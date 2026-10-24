@@ -19,15 +19,13 @@ description: >-
 # Replaces the plugin-doc-from-source and plugin-slide-from-source stopgaps.
 #
 # Prerequisites: the repository checked out at the workspace root, Node on
-# PATH, and for `data` the root `bun install` first (scripts/vendor-duckdb.sh
-# bundles the DuckDB JS API with the installed apache-arrow).
+# PATH.
 #
 # The cache key hashes the module's tracked files except its JS packages and docs
 # (git's blob ids, so it costs no reads) plus web's Rust crate under
 # packages/web-render, the engine crates publish's pdf-import builds against,
 # .cargo/config.toml, the shared build script and source hash under
-# tooling/, the wasm-bindgen/binaryen pins and, for data, the apache-arrow
-# resolution in bun.lock.
+# tooling/ and the wasm-bindgen/binaryen pins.
 
 inputs:
   module:
@@ -54,7 +52,7 @@ runs:
           doc)   GLUE=docx_js.js ;;
           slide) GLUE=slide_js.js ;;
           sheet) GLUE=sheet_js.js ;;
-          data)  GLUE=data_js.js; PATHS="$PATHS"$'\n'"modules/data/vendor/duckdb-wasm" ;;
+          data)  GLUE=data_js.js ;;
           # The Blitz engine build, as web-vitest and web-publish build it.
           web)   GLUE=blitz_web.js; BUILD_ARGS=--engine ;;
           draw)  OUT=modules/draw/packages/draw-bundle/wasm; PATHS="$OUT"; GLUE=trace_js.js ;;
@@ -83,7 +81,6 @@ runs:
           # The shared build script and the source hash it stamps (tooling/).
           git ls-files -s -- tooling/rust/build-wasm.sh tooling/js/source-hash.mjs
           grep -E '^(WASM_BINDGEN|BINARYEN)=' tooling/bootstrap.sh
-          if [ "$M" = data ]; then grep -E '"apache-arrow"' bun.lock; fi
           echo "$BUILD_ARGS $TOOLCHAIN"
         }
         # Bun, not sha256sum: the showcase nightly runs on macOS.
@@ -147,9 +144,6 @@ runs:
         set -euo pipefail
         # shellcheck disable=SC2086 # ARGS is empty or one flag
         bash scripts/build-wasm.sh $ARGS
-        if [ "${{ inputs.module }}" = data ]; then
-          bash scripts/vendor-duckdb.sh
-        fi
 
     - name: module wasm (${{ inputs.module }}) — save
       if: steps.restore.outputs.cache-hit != 'true'

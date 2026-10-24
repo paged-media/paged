@@ -18,7 +18,7 @@
 
 // A bundle whose module finishes loading on a timer that holds no reference
 // on the event loop: the shape of an await on work no handle stands for (a
-// large WebAssembly module compiling, as paged.data's DuckDB does on boot).
+// large WebAssembly module compiling, as a bundle's engine does on boot).
 // A CLI that let its verb's promise alone keep the process alive ended here
 // with exit 0, having written nothing.
 await new Promise((resolve) => setTimeout(resolve, 300).unref());

@@ -46,8 +46,13 @@ export const MODULES = {
     walk: true,
     crateDirs: ["src"],
     crateFiles: ["build.rs", "Cargo.toml"],
-    // data-core + data-expr build.rs read them.
-    extra: [{ dir: "registry/functions", ext: ".yaml" }],
+    // paged-data-core + paged-data-expr build.rs read them (PM-0015).
+    extra: [
+      {
+        dir: "../../engine/core/crates/paged-data-core/functions",
+        ext: ".yaml",
+      },
+    ],
     rootFiles: CARGO_WORKSPACE,
   },
   image: {
@@ -93,13 +98,43 @@ function specOf(module) {
 }
 
 /**
+ * The `path = "…"` entries of the module workspace's
+ * `[workspace.dependencies]`, by dependency name, relative to the module's
+ * directory (image names the engine's paged-pixel / paged-psd there, under
+ * their old names, image ADR 466).
+ */
+function workspacePathDeps(root) {
+  const file = join(root, "Cargo.toml");
+  const out = new Map();
+  if (!existsSync(file)) return out;
+  let section = "";
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    const header = line.match(/^\s*\[([^\]]+)\]/);
+    if (header) {
+      section = header[1];
+      continue;
+    }
+    if (section !== "workspace.dependencies") continue;
+    const m = line.match(
+      /^\s*([A-Za-z0-9_-]+)\s*=\s*\{.*\bpath\s*=\s*"([^"]+)"/,
+    );
+    if (m)
+      out.set(m[1], relative(root, join(root, m[2])).split("\\").join("/"));
+  }
+  return out;
+}
+
+/**
  * The normal (and build) `path = "../…"` dependencies of a crate, relative to
  * the module's directory: a path is resolved from the crate's own directory,
  * so a shared crate outside the module (platform/shared/*) that depends on
- * another one by `../x` is followed too.
+ * another one by `../x` is followed too. A `workspace = true` dependency of a
+ * crate inside the module resolves through the module workspace's
+ * `[workspace.dependencies]` paths.
  */
-function pathDeps(root, crate) {
+function pathDeps(root, crate, workspace) {
   const toml = readFileSync(join(root, crate, "Cargo.toml"), "utf8");
+  const inModule = !crate.startsWith("..");
   const deps = [];
   let section = "";
   for (const line of toml.split("\n")) {
@@ -111,12 +146,18 @@ function pathDeps(root, crate) {
     if (/dev-dependencies/.test(section)) continue;
     if (!/dependencies/.test(section)) continue;
     const m = line.match(/path\s*=\s*"(\.\.\/[^"]+)"/);
-    if (m)
+    if (m) {
       deps.push(
         relative(root, join(root, crate, m[1]))
           .split("\\")
           .join("/"),
       );
+      continue;
+    }
+    const w = line.match(
+      /^\s*([A-Za-z0-9_-]+)(?:\.workspace\s*=\s*true|\s*=\s*\{.*\bworkspace\s*=\s*true)/,
+    );
+    if (inModule && w && workspace.has(w[1])) deps.push(workspace.get(w[1]));
   }
   return deps;
 }
@@ -124,10 +165,11 @@ function pathDeps(root, crate) {
 function crates(root, spec) {
   if (!spec.walk) return [spec.crate];
   const seen = new Set();
+  const workspace = workspacePathDeps(root);
   const walk = (c) => {
     if (seen.has(c)) return;
     seen.add(c);
-    for (const d of pathDeps(root, c)) walk(d);
+    for (const d of pathDeps(root, c, workspace)) walk(d);
   };
   walk(spec.crate);
   return [...seen].sort();

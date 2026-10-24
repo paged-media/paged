@@ -3488,6 +3488,8 @@ export function makeImagePanel(session: ImageSession) {
           session={session}
           colors={s.colors}
           gradientKind={s.gradientKind}
+          eyedropper={s.eyedropper}
+          samplers={s.samplers}
         />
 
         {/* BRUSH — the paint tools' frozen-at-pointer-down parameters

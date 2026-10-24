@@ -1,0 +1,27 @@
+[package]
+name = "paged-data-expr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data binding-expression DSL (spec §9.1, D-9): lexer + Pratt parser + evaluator + pure fn(&[Value],&EvalCtx)->Value kernels. Registry-driven dispatch (build.rs, FnId parity with data-core). Depends ONLY on data-core (spec §4 rule 1)."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_expr is a later mechanical pass).
+name = "data_expr"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+# Digit grouping and the weekday (platform/shared/fmt).
+paged-fmt = { path = "../../../../platform/shared/fmt" }
+smallvec = { version = "1", features = ["serde"] }
+compact_str = { version = "0.10", features = ["serde"] }
+thiserror = "2"
+[build-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_norway = "0.9"

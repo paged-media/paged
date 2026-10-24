@@ -6,6 +6,7 @@
 
 import { describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
+import { storeDouble } from "./store-double";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
@@ -17,7 +18,7 @@ import { silentConsole as silent } from "@paged-media/plugin-sdk";
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../engine"));
-const actualDuckdb = await importActual(() => import("../query/duckdb"));
+const actualStore = await importActual(() => import("../query/store"));
 
 type Field = {
   storyId: string;
@@ -97,14 +98,21 @@ async function sessionWith(
     ...actualEngine,
     bootEngine: typeof engine === "function" ? engine : async () => engine,
   }));
-  mock.module("../query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => ({
-      registerCsv: duck?.registerCsv ?? (async () => {}),
-      registerFileBuffer: async () => {},
-      query: async () => ({}),
-      close: async () => {},
-    }),
+  mock.module("../query/store", () => ({
+    ...actualStore,
+    storeHandle: (e: DataEngineLike) =>
+      storeDouble(e, {
+        importCsv: async (name, text) => {
+          await duck?.registerCsv?.(name, text);
+          return {
+            table: name,
+            columns: [],
+            rows: 0,
+            errorCells: 0,
+            asWritten: true,
+          };
+        },
+      }),
   }));
   const { createSession } = await import("../session");
   return createSession(host, 20613);

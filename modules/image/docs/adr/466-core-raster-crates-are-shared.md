@@ -44,6 +44,18 @@ modules already path-depend on the engine's model crates (doc ADR 606, slide ADR
 
 ## Consequences
 
+- **Done in WP1.2 (2026-10-24).** `image-core` and `image-psd` moved by `git mv` to
+  `engine/core/crates/paged-pixel` and `engine/core/crates/paged-psd`, members of the
+  engine's workspace, their tests and the `annual-layers.psd` fixture with them (the fixtures
+  `image-conformance` reads stay in that crate). `Cargo.toml` names them `image-core` and
+  `image-psd` through `package` aliases in `[workspace.dependencies]`; no source line of the
+  module changed. `moon.yml` depends on `core`, and its Rust inputs include the two crates.
+  The leaf rule both crates had here (plain data, no engine or module crate) is a
+  `cargo tree` guard in `core-ci.yml`, beside one that keeps `image-conformance` and
+  `proptest` out of the canvas wasm; image-ci's guards on `image-kernels` and `image-js` stay
+  where they are. The engine draws a placed PSD's merged composite through `paged-psd`
+  (core ADR 1005, amendment of 2026-10-24).
+
 - `moon.yml` gains a dependency on the `core` project when the first engine crate is used, and a
   change to a shared engine crate runs this module's gates.
 - The codec rules of ADR 456 (pure Rust, no vendored C, licences on the allow list, I/O-free

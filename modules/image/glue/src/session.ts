@@ -54,11 +54,19 @@ import {
 } from "./session-store";
 import {
   averageRgba8,
+  DEFAULT_EYEDROPPER,
   freshColors,
+  isSampleSize,
+  MAX_SAMPLERS,
+  nextSamplerId,
+  sampleWindow,
   swapped,
   toHex,
   type ColorPair,
+  type ColorSamplerInfo,
+  type EyedropperOptions,
   type SampleSize,
+  type SampleSource,
 } from "./color-state";
 import {
   bootEngine,
@@ -291,6 +299,11 @@ export interface ImageSessionState {
   /** Foreground / background colour (`color-state.ts`). The brush paints
    *  the foreground; gradients run foreground → background. */
   colors: ColorPair;
+  /** WP4.10 — the Eyedropper's sample size and what it reads. */
+  eyedropper: EyedropperOptions;
+  /** WP4.10 — the fixed colour samplers (up to four), each with what it
+   *  reads now; re-read whenever the session reports a change. */
+  samplers: ColorSamplerInfo[];
   /** Adjustment sliders update the frame as they move (on by default). */
   livePreview: boolean;
   /** Magic wand + paint bucket tolerance / contiguity. */
@@ -706,7 +719,25 @@ export interface ImageSession {
     at: [number, number],
     size?: SampleSize,
     target?: "fg" | "bg",
+    source?: SampleSource,
   ): Rgba01 | null;
+  /** What `sampleColor` would read at `at`, without setting a colour
+   *  (the samplers' read). `source` "layer" reads the active layer's own
+   *  pixels; null for an adjustment layer, off-image, or nothing open. */
+  readColor(
+    at: [number, number],
+    size?: SampleSize,
+    source?: SampleSource,
+  ): Rgba01 | null;
+  /** The Eyedropper tool's options. Unknown sizes are ignored. */
+  setEyedropperOptions(o: Partial<EyedropperOptions>): void;
+  /** Place a colour sampler at image px `at`; its number, or null when
+   *  four are placed already (or `at` is off the image). */
+  addColorSampler(at: [number, number]): number | null;
+  /** Move sampler `id` to `at`. */
+  moveColorSampler(id: number, at: [number, number]): boolean;
+  removeColorSampler(id: number): boolean;
+  clearColorSamplers(): void;
   /** Fill the selection with the defined pattern (Edit ▸ Fill ▸ Pattern). */
   fillWithPattern(scale?: number, opacity?: number): Promise<boolean>;
   /** Shape blur with the defined pattern as the blur's shape. */
@@ -1352,6 +1383,10 @@ const S = defineMessages("image.status", {
   applied: "{label} applied.",
   sampledAverage: "Sampled {colour} at {x}, {y} ({size}×{size} average).",
   sampled: "Sampled {colour} at {x}, {y}.",
+  sampledNothing:
+    "The current layer has no pixels there (an adjustment layer, or transparent) — nothing sampled.",
+  samplersFull:
+    "{max} colour samplers are placed already — Alt-click one to remove it.",
   bakedTooLarge:
     "The baked image is {size} MB; the host takes at most 8 MB per image until it accepts binary transfers. Nothing was committed.",
   committed:
@@ -1639,6 +1674,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     selection: null,
     pattern: null,
     colors: freshColors(),
+    eyedropper: { ...DEFAULT_EYEDROPPER },
+    samplers: [],
     livePreview: true,
     wand: {
       tolerance: WAND_TOLERANCE_DEFAULT,
@@ -1843,7 +1880,18 @@ export function createImageSession(host: BundleHost): ImageSession {
   /** The engine handle of the defined pattern (`definePattern`). */
   let patternHandle: number | null = null;
 
+  /** Re-read every colour sampler (cheap: at most four small windows). */
+  const refreshSamplers = () => {
+    if (state.samplers.length === 0) return;
+    state.samplers = state.samplers.map((s) => ({
+      ...s,
+      colour: api.readColor(s.at, state.eyedropper.size, "all"),
+    }));
+  };
   const emit = () => {
+    // A sampler shows what the image holds NOW: every change the session
+    // reports may have moved pixels under it.
+    refreshSamplers();
     for (const l of [...listeners]) l();
   };
   const setStatus = (s: string) => {
@@ -3951,24 +3999,93 @@ export function createImageSession(host: BundleHost): ImageSession {
       api.setBackground(c.bg);
     },
 
-    sampleColor(at, size = 1, target = "fg") {
+    readColor(at, size = 1, source = "all") {
       const src = state.source;
       if (!src || !engine) return null;
-      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
-      if (px < 0 || py < 0 || px >= src.width || py >= src.height) return null;
-      const r = (size - 1) / 2;
-      const x0 = Math.max(0, px - r);
-      const y0 = Math.max(0, py - r);
-      const x1 = Math.min(src.width, px + r + 1);
-      const y1 = Math.min(src.height, py + r + 1);
-      let c: Rgba01 | null;
+      const win = sampleWindow(at, size, src.width, src.height);
+      if (!win) return null;
+      const active = state.layers.active;
       try {
-        c = averageRgba8(engine.tile(src.handle, x0, y0, x1 - x0, y1 - y0));
+        // "Current layer" with a stack open reads the active layer's own
+        // pixels; without a stack the image IS its one layer.
+        const px =
+          source === "layer" && active >= 0
+            ? engine.layersWindow(active, win.x, win.y, win.w, win.h)
+            : engine.tile(src.handle, win.x, win.y, win.w, win.h);
+        return averageRgba8(px);
       } catch (err) {
         host.log.debug("colour sample failed", err);
         return null;
       }
-      if (!c) return null;
+    },
+
+    setEyedropperOptions(o) {
+      const next = { ...state.eyedropper };
+      if (isSampleSize(o.size)) next.size = o.size;
+      if (o.source === "layer" || o.source === "all") next.source = o.source;
+      state.eyedropper = next;
+      emit();
+    },
+
+    addColorSampler(at) {
+      const src = state.source;
+      if (!src) return null;
+      if (state.samplers.length >= MAX_SAMPLERS) {
+        setStatus(t(S.samplersFull, { max: MAX_SAMPLERS }));
+        return null;
+      }
+      if (!sampleWindow(at, 1, src.width, src.height)) return null;
+      const id = nextSamplerId(state.samplers);
+      if (id === null) return null;
+      const point: [number, number] = [Math.floor(at[0]), Math.floor(at[1])];
+      state.samplers = [
+        ...state.samplers,
+        { id, at: point, colour: null },
+      ].sort((a, b) => a.id - b.id);
+      emit();
+      return id;
+    },
+
+    moveColorSampler(id, at) {
+      const src = state.source;
+      if (!src || !sampleWindow(at, 1, src.width, src.height)) return false;
+      if (!state.samplers.some((s) => s.id === id)) return false;
+      const point: [number, number] = [Math.floor(at[0]), Math.floor(at[1])];
+      state.samplers = state.samplers.map((s) =>
+        s.id === id ? { ...s, at: point } : s,
+      );
+      emit();
+      return true;
+    },
+
+    removeColorSampler(id) {
+      if (!state.samplers.some((s) => s.id === id)) return false;
+      state.samplers = state.samplers.filter((s) => s.id !== id);
+      emit();
+      return true;
+    },
+
+    clearColorSamplers() {
+      if (state.samplers.length === 0) return;
+      state.samplers = [];
+      emit();
+    },
+
+    sampleColor(at, size = 1, target = "fg", source = "all") {
+      const src = state.source;
+      if (!src || !engine) return null;
+      const [px, py] = [Math.floor(at[0]), Math.floor(at[1])];
+      const read = api.readColor(at, size, source);
+      // A transparent read of the current layer is "nothing there", not
+      // a colour (the composite's transparency is still a colour: what
+      // the frame shows through it is the document, not the image).
+      const c = read && source === "layer" && read[3] === 0 ? null : read;
+      if (!c) {
+        if (source === "layer" && state.layers.active >= 0) {
+          setStatus(t(S.sampledNothing));
+        }
+        return null;
+      }
       if (target === "fg") api.setForeground(c);
       else api.setBackground(c);
       setStatus(

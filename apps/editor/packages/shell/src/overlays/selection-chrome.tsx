@@ -17,12 +17,18 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import type { ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 
 import type { ElementGeometryItem } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useSelection } from "../state/selection-context";
+import {
+  ALIGN_SCOPE,
+  effectiveKeyObject,
+  isSameElement,
+} from "../state/align-scope";
+import { useScoped } from "../state/editor-scope";
 
 import { applyAffine } from "./affine";
 
@@ -40,7 +46,15 @@ import { applyAffine } from "./affine";
 function SelectionChromeRender(props: OverlayProps) {
   // Placed: a pasteboard item is drawn against the nearest page of its
   // spread, in that page's space (see `spread-pages`).
-  const { placedGeometry: elementGeometry } = useSelection();
+  const { placedGeometry: elementGeometry, elementSelection } = useSelection();
+  // WP4.4 — Align to key object: the key is drawn with a thicker outline.
+  const alignStore = useScoped(ALIGN_SCOPE);
+  const alignScope = useSyncExternalStore(
+    alignStore.subscribe,
+    alignStore.get,
+    alignStore.get,
+  );
+  const keyObject = effectiveKeyObject(alignScope, elementSelection);
   if (elementGeometry.length === 0) return null;
 
   const out: ReactNode[] = [];
@@ -59,13 +73,15 @@ function SelectionChromeRender(props: OverlayProps) {
       .map(([x, y]) => `${pr.x + x},${pr.y + y}`)
       .join(" ");
     const key = `${g.id.kind}:${g.id.id}`;
+    const isKey = keyObject !== null && isSameElement(g.id, keyObject);
     out.push(
       <polygon
         key={key}
         points={points}
         fill="none"
         stroke="var(--overlay-selection)"
-        strokeWidth={2}
+        strokeWidth={isKey ? 4 : 2}
+        data-key-object={isKey ? "" : undefined}
         vectorEffect="non-scaling-stroke"
         pointerEvents="none"
       />,

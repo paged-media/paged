@@ -1,0 +1,36 @@
+{
+  "$comment": "SQLite SQL oracle (docs/design/oracles.md). `setup` runs first, as the store's own statements; each case's `sql` is a query the store answers. record.mjs runs setup and every case through the native sqlite3 CLI (-json) into recorded/results.json; data-store/tests/sqlite_oracle.rs replays them through the store (Turso) and compares the values. A case whose `gap` is set is one Turso answers differently or not at all: the replay pins that it still does, so a Turso release that closes it fails here and the pin is removed.",
+  "setup": [
+    "CREATE TABLE utf8 (id INTEGER, name TEXT, city TEXT)",
+    "INSERT INTO utf8 VALUES (1,'Größe','München'),(2,'Ærø','København'),(3,'日本語','東京'),(4,'emoji 🎉👍🏽','Zürich'),(5,'é combining','Paris'),(6,'עברית','תל אביב'),(7,'apple','Wien'),(8,'Apple','Wien'),(9,'Äpfel','Graz')",
+    "CREATE TABLE prices (sku TEXT, price REAL, qty INTEGER, day TEXT)",
+    "INSERT INTO prices VALUES ('A-1',9.99,3,'2026-01-15'),('B-2',19.5,10,'2026-02-01'),('C-3',7.0,NULL,NULL),('D-4',0.01,5,'2026-04-01')"
+  ],
+  "cases": [
+    { "id": "types-integers", "sql": "SELECT 1 AS i, -5 AS s, 9007199254740991 AS big_safe, 42 / 5 AS idiv, 42 % 5 AS imod" },
+    { "id": "types-floats", "sql": "SELECT 0.1 AS d, 1.5 AS f, 1e300 AS big, 7 / 2.0 AS fdiv, round(2.675, 2) AS r" },
+    { "id": "types-text", "sql": "SELECT 'grüße' AS v, '' AS empty, ' padded ' AS padded, 'tab\there' AS tab, length('grüße') AS chars" },
+    { "id": "types-typeof", "sql": "SELECT typeof(1), typeof(1.5), typeof('x'), typeof(NULL), typeof(x'00')" },
+    { "id": "casts", "sql": "SELECT CAST('12abc' AS INTEGER) AS lead_digits, CAST('3.5' AS REAL) AS r, CAST(7 AS TEXT) AS t, CAST(2.9 AS INTEGER) AS trunc" },
+    { "id": "nulls", "sql": "SELECT NULL AS n, CAST(NULL AS INTEGER) AS ni, coalesce(NULL, 'x') AS c, nullif(1, 1) AS ni2, ifnull(NULL, 0) AS z" },
+    { "id": "order-nulls-default", "sql": "SELECT qty FROM prices ORDER BY qty" },
+    { "id": "order-nulls-last", "sql": "SELECT qty FROM prices ORDER BY qty NULLS LAST" },
+    { "id": "order-nulls-first-desc", "sql": "SELECT qty FROM prices ORDER BY qty DESC NULLS FIRST" },
+    { "id": "order-text-binary", "sql": "SELECT name FROM utf8 ORDER BY name" },
+    { "id": "order-ties-secondary-key", "sql": "SELECT city, id FROM utf8 ORDER BY city DESC, id" },
+    { "id": "utf8-roundtrip", "sql": "SELECT id, name, length(name) AS chars, upper(name) AS up, lower(name) AS low FROM utf8 ORDER BY id" },
+    { "id": "like-ascii-case", "sql": "SELECT name FROM utf8 WHERE name LIKE 'a%' ORDER BY id" },
+    { "id": "aggregates", "sql": "SELECT count(*) AS n, count(qty) AS nq, sum(price) AS s, total(qty) AS t, avg(price) AS a, min(day) AS lo, max(day) AS hi FROM prices" },
+    { "id": "group-by", "sql": "SELECT city, count(*) AS n, group_concat(id, '|') AS ids FROM (SELECT * FROM utf8 ORDER BY id) GROUP BY city ORDER BY n DESC, city" },
+    { "id": "cte", "sql": "WITH cheap AS (SELECT sku, price FROM prices WHERE price < 10) SELECT sku FROM cheap ORDER BY price" },
+    { "id": "window-row-number", "sql": "SELECT city, id, row_number() OVER (PARTITION BY city ORDER BY id) AS rn FROM utf8 ORDER BY city, id" },
+    { "id": "case-iif", "sql": "SELECT sku, CASE WHEN price >= 10 THEN 'high' ELSE 'low' END AS band, iif(qty IS NULL, 'n/a', qty) AS q FROM prices ORDER BY sku" },
+    { "id": "json", "sql": "SELECT json_extract('{\"a\":{\"b\":[1,2,3]}}', '$.a.b[1]') AS b, '{\"x\":\"y\"}' ->> '$.x' AS x, json_array_length('[1,2,3]') AS n, json_object('k', 1) AS o" },
+    { "id": "dates", "sql": "SELECT date('2024-02-29', '+1 day') AS next, date('2024-01-31', '+1 month') AS overflow, strftime('%Y-%m', '2024-02-29') AS ym, julianday('2024-03-01') - julianday('2024-02-28') AS days" },
+    { "id": "strings", "sql": "SELECT substr('Größe', 2, 3) AS sub, instr('hello', 'l') AS at, replace('a-b-c', '-', '+') AS rep, trim('  x  ') AS t, printf('%05.1f', 3.14159) AS p" },
+    { "id": "generate-series", "sql": "SELECT value FROM generate_series(1, 5, 2)" },
+    { "id": "ordered-aggregate", "sql": "SELECT group_concat(name, '|' ORDER BY id DESC) AS names FROM utf8 WHERE city = 'Wien'", "gap": "Turso 0.8.3: ORDER BY inside an aggregate is not supported yet" },
+    { "id": "recursive-cte", "sql": "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT i FROM n" },
+    { "id": "window-lag", "sql": "SELECT id, lag(id) OVER (ORDER BY id) AS prev FROM utf8 WHERE id < 4 ORDER BY id" }
+  ]
+}

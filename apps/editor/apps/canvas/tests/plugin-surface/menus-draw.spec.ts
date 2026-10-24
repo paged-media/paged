@@ -19,10 +19,11 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// Ninety-two entries: seventy-five under the Draw menu (folded into Plugins ▸
-// Draw, and shown as a context menu while artwork is selected), six
-// insert verbs filed under Insert (Arc…, Spiral…, Rectangular grid…, Polar
-// grid…, Star…, Flare…) and eleven under the host's Edit ▸ Select same.
+// Ninety-five entries: most under the Draw menu (folded into Plugins ▸
+// Draw, and shown as a context menu while artwork is selected), the
+// insert verbs filed under Object (Arc…, Spiral…, Rectangular grid…, Polar
+// grid…, Star…, Flare…) beside Rasterize…, the Select same verbs under the host's Edit ▸
+// Select same and Recolor artwork… under Edit ▸ Edit colors.
 //
 // Every test starts from the same artwork, two overlapping filled
 // rectangles with both selected (reloaded before each test), so each verb
@@ -62,6 +63,7 @@ import { Designer } from "../journey/driver/designer";
 import {
   clickEntry,
   contextRouteOf,
+  documentDigest,
   expectGreyedAndInert,
   expectOneUndoRestores,
   openMenuPages,
@@ -1444,6 +1446,38 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
+  test("Object/Rasterize… — raises Path Options, where the resolution and background are set [plugin-platform.render-snapshot-v2]", async () => {
+    covers("menu:Object/Rasterize…");
+    await expectGreyedAndInert(bare, "Object/Rasterize…");
+    const out = await clickEntry(
+      live,
+      "Object/Rasterize…",
+      "media.paged.draw.command.rasterizeOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Rasterize, run with its parameters, replaces the two rectangles with one image in the editor, and one Undo takes it back [plugin-platform.render-snapshot-v2]", async () => {
+    covers("command:media.paged.draw.command.rasterize");
+    const before = await documentDigest(live);
+    await runCommand(live, "media.paged.draw.command.rasterize", {
+      ppi: 72,
+      background: "transparent",
+    });
+    await expect
+      .poll(() => documentDigest(live), {
+        message: "Rasterize changes the document",
+        timeout: 10_000,
+      })
+      .not.toBe(before);
+    await expectOneUndoRestores(live, "Rasterize", before);
+  });
+
   // ── Select same past paint, and Global Edit. Each starts from the back
   //    rectangle alone; the front one is made to match the criterion, so
   //    the click must GROW the selection to both — and, being selection
@@ -1618,16 +1652,46 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
-  test("Draw/Image trace… — runs imageTrace; the selection holds no placed image to trace, so it changes nothing", async () => {
+  test("Draw/Image trace… — raises the Image Trace panel, where the preset and options are set", async () => {
     covers("menu:Draw/Image trace…");
     await expectGreyedAndInert(bare, "Draw/Image trace…");
     const out = await clickEntry(
       live,
       "Draw/Image trace…",
-      "media.paged.draw.command.imageTrace",
+      "media.paged.draw.command.imageTraceOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.imageTrace" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Draw/Re-trace image — runs retraceImage; nothing selected was traced, so it changes nothing", async () => {
+    covers("menu:Draw/Re-trace image");
+    await expectGreyedAndInert(bare, "Draw/Re-trace image");
+    const out = await clickEntry(
+      live,
+      "Draw/Re-trace image",
+      "media.paged.draw.command.retraceImage",
     );
     expect(out.shell).toEqual([]);
-    expect(out.after, "the selection holds no placed image to trace").toBe(
+    expect(out.after, "the selection holds no traced image").toBe(out.before);
+  });
+
+  test("Edit/Edit colors/Recolor artwork… — raises the Recolor Artwork panel", async () => {
+    covers("menu:Edit/Edit colors/Recolor artwork…");
+    await expectGreyedAndInert(bare, "Edit/Edit colors/Recolor artwork…");
+    const out = await clickEntry(
+      live,
+      "Edit/Edit colors/Recolor artwork…",
+      "media.paged.draw.command.recolorArtworkOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.recolorArtwork" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
       out.before,
     );
   });

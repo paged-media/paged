@@ -120,6 +120,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
+      "media.paged.draw.command.rasterizeOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
@@ -127,6 +128,7 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.reversePathDirection",
       // Type ▸ Create outlines (protocol 66, RFI C-69).
       "media.paged.draw.command.createOutlines",
+      "media.paged.draw.command.rasterize",
       // Object ▸ Transform — Reflect ×2 and Transform again.
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
@@ -263,6 +265,14 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.releaseObjectsOnPath",
       // Illustrator Phase 2 (last row) — Image Trace v0 (the wasm lane).
       "media.paged.draw.command.imageTrace",
+      // WP6.6 — Re-trace and the Image Trace panel's "…" raiser.
+      "media.paged.draw.command.retraceImage",
+      "media.paged.draw.command.imageTraceOptions",
+      // WP6.5 — Recolor Artwork, its "…" raiser and the Color Guide's
+      // apply.
+      "media.paged.draw.command.recolorArtwork",
+      "media.paged.draw.command.recolorArtworkOptions",
+      "media.paged.draw.command.applyGuideColor",
     ]);
     expect(fake.ids("keybindings").length).toBe(0);
   });
@@ -307,6 +317,10 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.panel.blend",
       "media.paged.draw.panel.objectsOnPath",
       "media.paged.draw.panel.pathOptions",
+      // WP6.6 / WP6.5 — Image Trace options, Recolor Artwork, Color Guide.
+      "media.paged.draw.panel.imageTrace",
+      "media.paged.draw.panel.recolorArtwork",
+      "media.paged.draw.panel.colorGuide",
       // ADR 323 — the Draw properties schema panel (property rows).
       "media.paged.draw.panel.properties",
     ]);

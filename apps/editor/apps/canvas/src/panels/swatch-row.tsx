@@ -64,6 +64,8 @@ const M = defineMessages("app.swatchRow", {
   editColour: "Edit colour",
   noEdits: "The active content type does not serve swatch edits",
   doubleClickRename: "Double-click to rename",
+  clickApplies:
+    "Click sets the fill colour (in an image: the foreground); Alt-click the stroke (the background)",
   noRenames: "The active content type does not serve swatch renames",
   outOfGamut: "Out of gamut",
   colorGroup: "Color group",
@@ -99,6 +101,7 @@ export function SwatchRow({
   canEdit = true,
   canDelete = true,
   canAssignGroup = true,
+  onApply,
 }: {
   swatch: SwatchSummary;
   groups: ColorGroupSummary[];
@@ -116,6 +119,9 @@ export function SwatchRow({
    *  `editColorGroup`? (A separate collection, so a separate question —
    *  a provider may own the swatch list without owning the groups.) */
   canAssignGroup?: boolean;
+  /** WP4.10 — apply this swatch to the active edit context's colour
+   *  (`alt`: the stroke well). Absent over core. */
+  onApply?: (swatchId: string, alt: boolean) => void;
 }) {
   const portalContainer = usePortalContainer();
   const strings = useStrings();
@@ -278,14 +284,21 @@ export function SwatchRow({
         <span
           className="flex-1 select-none truncate"
           data-swatch-name
+          data-swatch-apply={onApply ? "" : undefined}
+          onClick={
+            onApply ? (e) => onApply(swatch.selfId, e.altKey) : undefined
+          }
           onDoubleClick={() => !reserved && canEdit && setRenaming(true)}
           title={
-            reserved
-              ? undefined
-              : canEdit
-                ? strings.t(M.doubleClickRename)
-                : strings.t(M.noRenames)
+            onApply
+              ? strings.t(M.clickApplies)
+              : reserved
+                ? undefined
+                : canEdit
+                  ? strings.t(M.doubleClickRename)
+                  : strings.t(M.noRenames)
           }
+          style={onApply ? { cursor: "pointer" } : undefined}
         >
           {swatch.name}
         </span>

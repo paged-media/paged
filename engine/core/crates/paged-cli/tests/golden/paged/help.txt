@@ -20,6 +20,7 @@ Commands:
   get           Read one property of any object, as its wire value JSON (`RequestGet`, the read twin of `set`)
   invoke        Apply one wire operation to a document (`Mutation`, by its tag)
   ops           List every wire operation and whether `paged invoke` sends it
+  data          The bindings a document carries (paged.data), read and applied by the engine (core ADR 1014)
   parts         List, read and write a `.paged` container's content parts
   query         List the objects a selector names, one canonical address per line
   describe      Print the capability catalog — what this engine can be asked to do

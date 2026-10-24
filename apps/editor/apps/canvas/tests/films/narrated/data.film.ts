@@ -18,11 +18,11 @@
  */
 
 // paged.data, the plugin film (ADR 224): the website's `films/data.yaml`.
-// A catalogue card template, the product list imported into DuckDB in the
+// A catalogue card template, the product list imported into the data engine in the
 // Data layout, a Data Merge that replaces the template page with the records,
 // and a barcode bound to the data. Everything goes through the editor's own controls, every step is
-// asserted against the engine, and DuckDB is the real engine
-// (REQUIRE_REAL_DUCKDB=1), never a mock.
+// asserted against the engine, and the data engine is the real one
+// (REQUIRE_REAL_ENGINE=1), never a mock.
 //
 // The template keeps one paragraph style per frame on purpose: a merge copies
 // story-level formatting, not formatting that varies inside a story (plugin-data
@@ -452,7 +452,7 @@ film("data", async (k) => {
     await pointer.moveTo(await pt(k, 120, 153), { targetWidth: 40 });
   });
 
-  // ── The product list, into DuckDB, in the Data layout. ──
+  // ── The product list, into the data engine, in the Data layout. ──
   await k.scene("import", async () => {
     k.unfocus();
     await press(
