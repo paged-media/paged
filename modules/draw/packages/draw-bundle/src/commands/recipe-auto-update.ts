@@ -50,6 +50,15 @@
 // `gestureCommitted`, not its updates. A burst of commits (a command that
 // writes twice) is handled once, against the last of them.
 //
+// SCRIPTS. A script run is one undo step, and its reply names it
+// (`appliedSeq` on the `scriptResult` change, `document.mutate.amend@2`):
+// the rebuild joins it as it joins an edit. A plugin write the script made
+// through the host is a change of its own while the script still runs; a
+// rebuild that joins it stays the script's (the engine knows the amended
+// step by both numbers), and one that loses the race to the script's next
+// write is retried on the script's reply. A run that names no step (it
+// called `paged.undo()`, or an edit split it) is only fingerprinted.
+//
 // The update needs `supports("document.mutate.amend@1")`; without it
 // nothing is automatic and `updateLinkedRecipes` stays the way to rebuild.
 // It is on by default; the bundle's storage key `recipes.autoUpdate` set
@@ -61,6 +70,7 @@ import type {
   Disposable,
   ElementId,
   MutateOptions,
+  MutateWithBytesOptions,
   MutationInput,
   MutationOutcome,
 } from "@paged-media/plugin-api";
@@ -78,6 +88,10 @@ import { addressOf } from "../object-model/shared";
 /** The host feature the automatic update rides on (engine ADR 1004). */
 export const RECIPE_AUTO_UPDATE_FEATURE = "document.mutate.amend@1";
 
+/** The host feature that adds a script run's step to the change event and
+ *  `amend` to `mutateWithBytes` (engine ADR 1004, amendment). */
+export const RECIPE_SCRIPT_FEATURE = "document.mutate.amend@2";
+
 /** The bundle storage key that turns the automatic update off (`false`). */
 export const RECIPE_AUTO_UPDATE_KEY = "recipes.autoUpdate";
 
@@ -90,10 +104,45 @@ export function recipeAutoUpdateEnabled(host: BundleHost): boolean {
   }
 }
 
+/** Who hears the setting change (the panels' checkboxes). */
+const settingListeners = new Set<() => void>();
+
+/** The setting as last read or written, per host: a panel reads it on
+ *  every render without touching the storage door. */
+const settingSnapshot = new WeakMap<
+  BundleHost,
+  { generation: number; on: boolean }
+>();
+/** Bumped by every {@link setRecipeAutoUpdate}: a write through any view
+ *  of the host makes every view read the storage again. */
+let settingGeneration = 0;
+
+/** {@link recipeAutoUpdateEnabled}, read once per host and setting change
+ *  (a `useSyncExternalStore` snapshot). */
+export function recipeAutoUpdateSnapshot(host: BundleHost): boolean {
+  const kept = settingSnapshot.get(host);
+  if (kept && kept.generation === settingGeneration) return kept.on;
+  const on = recipeAutoUpdateEnabled(host);
+  settingSnapshot.set(host, { generation: settingGeneration, on });
+  return on;
+}
+
 /** Turn the automatic update on or off (kept in the bundle's storage). */
 export function setRecipeAutoUpdate(host: BundleHost, on: boolean): void {
   if (on) host.storage.delete(RECIPE_AUTO_UPDATE_KEY);
   else host.storage.set(RECIPE_AUTO_UPDATE_KEY, false);
+  settingGeneration++;
+  for (const l of [...settingListeners]) l();
+}
+
+/** Hear {@link setRecipeAutoUpdate} (storage reports no change itself). */
+export function onRecipeAutoUpdateChange(listener: () => void): Disposable {
+  settingListeners.add(listener);
+  return {
+    dispose() {
+      settingListeners.delete(listener);
+    },
+  };
 }
 
 /** What `contributeRecipeAutoUpdate` hands back. */
@@ -171,29 +220,21 @@ async function fingerprintOf(
 }
 
 /**
- * A view of `host` whose `document.mutate` amends the step `seq` names
- * (and follows the seq each amend answers), whose `mutateWithBytes` is
- * refused (no recipe update sends bytes, and a write that could not amend
- * must not land as a step of its own), and whose `selection.set` leaves
- * the user's selection alone. Everything else is `host`'s own.
+ * A view of `host` whose `document.mutate` and `mutateWithBytes` amend the
+ * step `seq` names (and follow the seq each amend answers), and whose
+ * `selection.set` leaves the user's selection alone. Everything else is
+ * `host`'s own. On a host whose `mutateWithBytes` cannot amend
+ * (`document.mutate.amend@2` absent) that door is refused: a write that
+ * could not amend must not land as a step of its own.
  */
 function amendingHost(
   host: BundleHost,
   start: number,
   own: Set<number>,
-): { host: BundleHost; refused: () => unknown } {
+): { host: BundleHost; refused: () => unknown; seq: () => number } {
   let seq = start;
   let refusal: unknown = null;
-  const document = Object.create(host.document) as BundleHost["document"];
-  document.mutate = async (
-    mutation: MutationInput,
-    options?: MutateOptions,
-  ): Promise<MutationOutcome> => {
-    if (refusal !== null) return { applied: false, error: refusal };
-    const out = await host.document.mutate(mutation, {
-      ...options,
-      amend: seq,
-    });
+  const follow = (out: MutationOutcome): MutationOutcome => {
     if (out.applied && typeof out.appliedSeq === "number") {
       seq = out.appliedSeq;
       own.add(seq);
@@ -202,17 +243,82 @@ function amendingHost(
     }
     return out;
   };
-  document.mutateWithBytes = async () => ({
-    applied: false,
-    error: "the automatic recipe update sends no bytes",
-  });
+  const document = Object.create(host.document) as BundleHost["document"];
+  document.mutate = async (
+    mutation: MutationInput,
+    options?: MutateOptions,
+  ): Promise<MutationOutcome> => {
+    if (refusal !== null) return { applied: false, error: refusal };
+    return follow(
+      await host.document.mutate(mutation, { ...options, amend: seq }),
+    );
+  };
+  const bytesAmend = host.supports(RECIPE_SCRIPT_FEATURE);
+  document.mutateWithBytes = async (
+    mutation: MutationInput,
+    bytes: Uint8Array,
+    options?: MutateWithBytesOptions,
+  ): Promise<MutationOutcome> => {
+    if (refusal !== null) return { applied: false, error: refusal };
+    if (!bytesAmend)
+      return {
+        applied: false,
+        error: "this host cannot join image bytes to an undo step",
+      };
+    return follow(
+      await host.document.mutateWithBytes(mutation, bytes, {
+        ...options,
+        amend: seq,
+      }),
+    );
+  };
   const selection = Object.create(host.selection) as BundleHost["selection"];
   selection.set = async () => [...host.selection.get()];
   const view = Object.create(host) as BundleHost;
   Object.defineProperty(view, "document", { value: document });
   Object.defineProperty(view, "selection", { value: selection });
   shareLinkIndex(view, host);
-  return { host: view, refused: () => refusal };
+  return { host: view, refused: () => refusal, seq: () => seq };
+}
+
+/** What {@link rebuildInStep} did. */
+export interface StepRebuild {
+  /** The step's number after the rebuild (the last amend's answer). */
+  appliedSeq: number;
+  /** The recipes rebuilt (addresses). */
+  rebuilt: string[];
+  /** The engine's `notAmendable` when the step could no longer be joined
+   *  (nothing more was written from then on), else `null`. */
+  refused: unknown;
+}
+
+/**
+ * Rebuild `recipes` INSIDE the undo step `appliedSeq` names (engine ADR
+ * 1004): every write of every update amends it. The automatic update runs
+ * this for an edit's changed sources; a typed recipe parameter write runs
+ * it as its follow-up (`object-model/recipe-kinds.ts`), so the write and
+ * its artwork are one step. `own` collects the seqs the amends answered.
+ */
+export async function rebuildInStep(
+  host: BundleHost,
+  recipes: readonly RecipeRef[],
+  appliedSeq: number,
+  own: Set<number> = new Set(),
+): Promise<StepRebuild> {
+  const view = amendingHost(host, appliedSeq, own);
+  const rebuilt: string[] = [];
+  for (const recipe of recipes) {
+    if (view.refused() !== null) break;
+    try {
+      if (await updateRecipe(view.host, recipe))
+        rebuilt.push(addressOf(recipe.kind, recipe.id));
+    } catch (e) {
+      host.log.warn(
+        `recipes: the update of ${addressOf(recipe.kind, recipe.id)} in the step failed (${String(e)})`,
+      );
+    }
+  }
+  return { appliedSeq: view.seq(), rebuilt, refused: view.refused() };
 }
 
 export function contributeRecipeAutoUpdate(host: BundleHost): RecipeAutoUpdate {
@@ -251,6 +357,9 @@ function contributeRunning(
   const seen = new Map<string, string>();
   /** The seqs the rebuild's own amends answered. */
   const own = new Set<number>();
+  /** The prints of recipes whose rebuild lost the race to a script's next
+   *  write, owed to that script's reply (key → the print before the edit). */
+  const owed = new Map<string, string>();
   /** The changes not handled yet, in the order they were reported. */
   let queue: Pending[] = [];
   let running: Promise<void> = Promise.resolve();
@@ -269,8 +378,8 @@ function contributeRunning(
   };
 
   const handleChange = async (change: Pending): Promise<void> => {
-    // Off: nothing is read. Turned on again, the next change only takes
-    // the fingerprints.
+    // Off: nothing is read. Turned on again, the fingerprints are taken
+    // afresh (the setting's change schedules an `open`).
     if (!recipeAutoUpdateEnabled(host)) {
       seen.clear();
       return;
@@ -282,6 +391,7 @@ function contributeRunning(
     }
     const recipes = await sourcesByRecipe(host);
     if (change === "open") {
+      owed.clear();
       await refingerprint(recipes);
       return;
     }
@@ -295,18 +405,27 @@ function contributeRunning(
       change.kind === "undoApplied" || change.kind === "redoApplied"
         ? null
         : (change.appliedSeq ?? null);
+    // The prints a lost race owes a script's reply (see below): only that
+    // reply uses them, and an undo, a redo, a gesture or the reply itself
+    // ends the debt.
+    const owedNow = new Map(owed);
+    if (change.kind !== "mutationApplied") owed.clear();
+    const retry = change.kind === "scriptResult" && seq !== null;
     if (seq === null) {
       // An undo or redo restored the sources and their instances
-      // together; a script run carries no step to amend. Look again.
+      // together; a script run that names no step (it moved the history,
+      // or an edit split it) has nothing to amend. Look again.
       await refingerprint(recipes);
       return;
     }
     const changed: RecipeRef[] = [];
     const now = new Map<string, string>();
+    const previous = new Map(seen);
+    if (retry) for (const [key, was] of owedNow) previous.set(key, was);
     for (const [key, { recipe, sources }] of recipes) {
       const print = await fingerprintOf(host, sources);
       now.set(key, print);
-      const was = seen.get(key);
+      const was = previous.get(key);
       if (was !== undefined && was !== print) changed.push(recipe);
     }
     seen.clear();
@@ -315,21 +434,20 @@ function contributeRunning(
     changed.sort(
       (a, b) => RECIPE_KINDS.indexOf(a.kind) - RECIPE_KINDS.indexOf(b.kind),
     );
-    const view = amendingHost(host, seq, own);
-    const done: string[] = [];
-    for (const recipe of changed) {
-      if (view.refused() !== null) break;
-      try {
-        if (await updateRecipe(view.host, recipe))
-          done.push(addressOf(recipe.kind, recipe.id));
-      } catch (e) {
-        host.log.warn(
-          `recipes: the automatic update of ${addressOf(recipe.kind, recipe.id)} failed (${String(e)})`,
-        );
+    const step = await rebuildInStep(host, changed, seq, own);
+    out.setRebuilt(step.rebuilt);
+    if (step.refused !== null) {
+      // Lost the race. A script's own host write is the usual case: the
+      // script went on writing before the rebuild could join its commit,
+      // and its reply will name the step the whole run ended in — keep the
+      // prints the rebuild was owed, so that reply retries them. An undo,
+      // a redo or a gesture drops them: a rebuild is never attached to a
+      // step the user made.
+      for (const r of changed) {
+        if (step.rebuilt.includes(addressOf(r.kind, r.id))) continue;
+        const was = owed.get(keyOf(r)) ?? previous.get(keyOf(r));
+        if (was !== undefined) owed.set(keyOf(r), was);
       }
-    }
-    out.setRebuilt(done);
-    if (view.refused() !== null) {
       host.log.info(
         "recipes: the edit is no longer the last step, so its recipes were " +
           "not updated with it — run Update linked recipes",
@@ -401,6 +519,13 @@ function contributeRunning(
   subs.push(
     linkIndex(host).onDidChange(() => {
       if (!disposed) schedule("baseline");
+    }),
+  );
+  // Turned on again: take the fingerprints now, so the very next edit is
+  // compared against the document as it is (off, nothing was tracked).
+  subs.push(
+    onRecipeAutoUpdateChange(() => {
+      if (!disposed) schedule("open");
     }),
   );
   try {

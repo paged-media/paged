@@ -1229,7 +1229,10 @@ Per module:
   a section of the Path Options panel; `updateLinkedRecipes { targets, all }` rebuilds every
   recipe an edited source feeds, and an edit of a source rebuilds those recipes on its own, in
   the edit's undo step (`mutate(…, { amend })`, engine ADR 1004, extensions ADR 337; the
-  command stays for a host without it; `modules/draw/docs/status.md`).
+  command stays for a host without it; `modules/draw/docs/status.md`). Since the ADRs'
+  amendments a script's edits are followed too (a run is one step its reply names), a typed
+  recipe parameter write rebuilds its artwork in the same step (`ObjectWrite.followUp`),
+  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox.
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
