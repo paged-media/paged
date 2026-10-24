@@ -189,6 +189,19 @@ impl SessionSelection {
         self.apply_shape(shape, mode)
     }
 
+    /// Put back a selection the undo list restored (`None` = no
+    /// selection). The bound image is unchanged.
+    pub fn restore(&mut self, coverage: Option<Arc<SelectionCoverage>>) {
+        // A selection of another extent than the bound image has no
+        // meaning here (the bind rule): it is dropped, not stretched.
+        let fits = |c: &SelectionCoverage| {
+            self.bound
+                .is_some_and(|b| b.width == c.width() && b.height == c.height())
+        };
+        self.coverage = coverage.filter(|c| fits(c));
+        self.revision += 1;
+    }
+
     /// Select everything explicitly (an all-one coverage — shows as a
     /// full-extent selection in the panel; the adjust chain still takes
     /// the trivial-mask fast path).
@@ -305,7 +318,7 @@ impl ModifyOp {
 
 /// Chamfer distance from every pixel to the nearest pixel where
 /// `inside(coverage)` holds (0 on such pixels).
-fn distance_to(cov: &SelectionCoverage, inside: impl Fn(u8) -> bool) -> Vec<f32> {
+pub(crate) fn distance_to(cov: &SelectionCoverage, inside: impl Fn(u8) -> bool) -> Vec<f32> {
     use image_gpu::{distance_transform, DistanceParams, MaskChannel};
     let one = half::f16::from_f32(1.0).to_bits().to_le_bytes();
     let zero = half::f16::from_f32(0.0).to_bits().to_le_bytes();
@@ -365,6 +378,91 @@ pub fn modify_coverage(cov: &SelectionCoverage, op: ModifyOp, radius: f32) -> Se
                 .unwrap_or_else(|| SelectionCoverage::empty(w, h))
         }
     }
+}
+
+/// Select ▸ GROW (`contiguous`) and Select ▸ SIMILAR: the colour RANGE
+/// of the selected pixels (coverage ≥ 128), widened by the Magic Wand's
+/// `tolerance` on every channel, decides membership; Grow adds the
+/// member pixels CONNECTED (4-neighbour) to the selection, Similar adds
+/// every member pixel anywhere. The original selection is kept (soft
+/// edges included); what is added is hard.
+///
+/// Photoshop's recording (`selection.jsx`, `grow-*` / `similar-*`)
+/// agrees exactly on neutral colours and selects LESS along saturated
+/// hue ramps — its range is tighter than a per-channel box there; the
+/// difference is recorded as a convention in the oracle ledger. `None`
+/// when nothing is selected (there is no colour range to grow from).
+pub fn grow_coverage(
+    cov: &SelectionCoverage,
+    rgba: &[u8],
+    tolerance: u8,
+    contiguous: bool,
+) -> Option<SelectionCoverage> {
+    let (w, h) = (cov.width() as usize, cov.height() as usize);
+    if rgba.len() < w * h * 4 {
+        return None;
+    }
+    let data = cov.data();
+    let mut lo = [255i32; 3];
+    let mut hi = [0i32; 3];
+    let mut any = false;
+    for (i, &c) in data.iter().enumerate() {
+        if c >= 128 {
+            any = true;
+            for k in 0..3 {
+                let v = i32::from(rgba[i * 4 + k]);
+                lo[k] = lo[k].min(v);
+                hi[k] = hi[k].max(v);
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    let t = i32::from(tolerance);
+    let member = |i: usize| {
+        (0..3).all(|k| {
+            let v = i32::from(rgba[i * 4 + k]);
+            v >= lo[k] - t && v <= hi[k] + t
+        })
+    };
+    let mut out = data.to_vec();
+    if contiguous {
+        let mut queue: std::collections::VecDeque<usize> =
+            (0..w * h).filter(|&i| data[i] >= 128).collect();
+        let mut seen: Vec<bool> = data.iter().map(|&c| c >= 128).collect();
+        while let Some(i) = queue.pop_front() {
+            let (x, y) = (i % w, i / w);
+            let mut visit = |j: usize| {
+                if !seen[j] {
+                    seen[j] = true;
+                    if member(j) {
+                        out[j] = 255;
+                        queue.push_back(j);
+                    }
+                }
+            };
+            if x > 0 {
+                visit(i - 1);
+            }
+            if x + 1 < w {
+                visit(i + 1);
+            }
+            if y > 0 {
+                visit(i - w);
+            }
+            if y + 1 < h {
+                visit(i + w);
+            }
+        }
+    } else {
+        for (i, v) in out.iter_mut().enumerate() {
+            if member(i) {
+                *v = 255;
+            }
+        }
+    }
+    SelectionCoverage::from_data(cov.width(), cov.height(), out)
 }
 
 #[cfg(test)]
@@ -592,5 +690,28 @@ mod tests {
         let cov = s.coverage().unwrap();
         let edge = cov.coverage_at(1, 4);
         assert!(edge > 0 && edge < 255, "feathered edge is soft ({edge})");
+    }
+    #[test]
+    #[allow(non_snake_case)]
+    fn grow_adds_connected_members_similar_adds_all__feat__image_selection_select_and_mask() {
+        // 5×1: grey 100 | grey 110 | red | grey 105 | grey 200
+        let px = [
+            [100u8, 100, 100],
+            [110, 110, 110],
+            [250, 0, 0],
+            [105, 105, 105],
+            [200, 200, 200],
+        ];
+        let rgba: Vec<u8> = px.iter().flat_map(|c| [c[0], c[1], c[2], 255]).collect();
+        let sel = SelectionCoverage::from_data(5, 1, vec![255, 0, 0, 0, 0]).unwrap();
+        let g = grow_coverage(&sel, &rgba, 16, true).unwrap();
+        assert_eq!(
+            g.data(),
+            &[255, 255, 0, 0, 0],
+            "the red pixel stops the growth"
+        );
+        let s = grow_coverage(&sel, &rgba, 16, false).unwrap();
+        assert_eq!(s.data(), &[255, 255, 0, 255, 0], "similar reaches past it");
+        assert!(grow_coverage(&SelectionCoverage::empty(5, 1), &rgba, 16, true).is_none());
     }
 }

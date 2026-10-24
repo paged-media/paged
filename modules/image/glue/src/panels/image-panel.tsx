@@ -75,6 +75,7 @@ import {
 import type { AspectPreset } from "../crop-machine";
 import { COLOR_NAMES, gradientKindLabel, toneRangeLabel } from "../words";
 
+import { MaskingSections } from "./sections/masking-section";
 import { CanvasSection, type CanvasSize } from "./sections/canvas-section";
 import { HueSatSection } from "./sections/hue-sat-section";
 import { ToneSection } from "./sections/tone-section";
@@ -1032,9 +1033,9 @@ const CHANNELS = defineMessages("image.channels", {
     "a mid-grey channel selects at 50%. Luma is the Rec.709 luminance, the " +
     "usual luminosity mask.",
   noView:
-    "Viewing one channel on its own is not offered: the frame shows the " +
-    "composited image, and faking a channel view would mean writing a " +
-    "greyscale image into the document.",
+    "To view one channel on its own, use the eye beside it in the channel " +
+    "list below: the frame then shows that channel as grey, without " +
+    "changing the document.",
 });
 
 /** The CHANNELS list — per-channel statistics and the one operation a
@@ -3425,6 +3426,10 @@ export function makeImagePanel(session: ImageSession) {
           disabled={disabled}
           onLoadSelection={(c) => session.selectionFromChannel(c)}
         />
+
+        {/* SELECTION AND MASKING — Color Range, Select and Mask, Quick
+            Mask, alpha / spot channels and paths (WP5.5, ADR 470). */}
+        <MaskingSections session={session} disabled={disabled} />
 
         {/* BRUSH PRESETS — the `.abr` reader, finally reachable. Until
             this section existed the parser was dead-code-eliminated from

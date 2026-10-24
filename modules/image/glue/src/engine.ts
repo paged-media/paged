@@ -35,6 +35,11 @@
 // import REJECTS — bootEngine surfaces that honestly so the panel can
 // say "engine wasm not built".
 
+import {
+  maskingEngine,
+  type MaskingEngine,
+  type MaskingWasm,
+} from "./masking-engine";
 import { isNodeRealm, wasmBindgenModule } from "@paged-media/wasm-boot";
 import { defineMessages, t } from "@paged-media/strings";
 
@@ -996,7 +1001,7 @@ export interface FilterMask {
   feather?: number;
 }
 
-export interface ImageEngine {
+export interface ImageEngine extends MaskingEngine {
   abiVersion(): number;
   kernelCount(): number;
   /** Work counters since the last `perfCountersReset` (budgets only). */
@@ -1809,7 +1814,7 @@ interface DecodedHandleWasm {
 
 /** The snake_case wasm-bindgen surface (image-js) — a structural subset
  *  of manifest/wasm/image_js.d.ts, only the members the bundle drives. */
-export interface ImageWasmModule {
+export interface ImageWasmModule extends MaskingWasm {
   default(input?: unknown): Promise<unknown>;
   initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
   abi_version(): number;
@@ -2449,6 +2454,7 @@ export interface ImageWasmModule {
  *  mapping is unit-testable over a fake wasm object (no real wasm). */
 export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
   return {
+    ...maskingEngine(wasm),
     abiVersion: () => wasm.abi_version(),
     kernelCount: () => wasm.kernel_count(),
     perfCounters: () => JSON.parse(wasm.perf_counters()) as PerfCounters,

@@ -141,6 +141,16 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.deselect",
       "media.paged.image.command.invertSelection",
       "media.paged.image.command.featherSelection",
+      // Selection and masking (WP5.5, ADR 470).
+      "media.paged.image.command.colorRange",
+      "media.paged.image.command.selectAndMask",
+      "media.paged.image.command.quickMask",
+      "media.paged.image.command.grow",
+      "media.paged.image.command.similar",
+      "media.paged.image.command.focusArea",
+      "media.paged.image.command.saveSelection",
+      "media.paged.image.command.loadSelection",
+      "media.paged.image.command.makeWorkPath",
     ]);
     expect(fake.tools.ids()).toEqual([
       "media.paged.image.tool.crop",
@@ -178,6 +188,10 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
       "media.paged.image.tool.type",
+      // The Magnetic Lasso (lasso slot) and the Refine Edge brush (quick
+      // selection slot), WP5.5.
+      "media.paged.image.tool.magneticLasso",
+      "media.paged.image.tool.refineEdge",
     ]);
     expect(fake.importers.ids()).toEqual(["media.paged.image.importer.raster"]);
   });

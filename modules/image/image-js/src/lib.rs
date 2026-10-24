@@ -51,15 +51,19 @@ pub mod cmyk;
 pub mod counters;
 pub mod display;
 pub mod fill;
+pub mod focus;
 pub mod heal;
 pub mod ingest;
 pub mod inpaint;
 pub mod layers;
+pub mod magnetic;
+pub mod masking;
 pub mod mip;
 pub mod paths;
 pub mod pixels;
 pub mod psd_vector_mask;
 pub mod readouts;
+pub mod refine;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
@@ -1007,6 +1011,7 @@ mod wasm {
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
         SELECTION.with(|s| s.borrow_mut().bind(handle, img.width, img.height));
+        note_selection(None, None);
         Ok(())
     }
 
@@ -1021,7 +1026,9 @@ mod wasm {
         let img = IMAGES
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
-        Ok(SELECTION.with(|s| s.borrow_mut().transfer(handle, img.width, img.height)))
+        let kept = SELECTION.with(|s| s.borrow_mut().transfer(handle, img.width, img.height));
+        note_selection(None, None);
+        Ok(kept)
     }
 
     /// Marquee RECT: fold the anti-aliased rectangle `[x, x+w) × [y, y+h)`
@@ -1034,7 +1041,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_rect(b.width, b.height, x, y, w, h);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Rectangular Marquee"), None);
+        Ok(())
     }
 
     /// Marquee ELLIPSE: center `(cx, cy)`, radii `(rx, ry)` (image px),
@@ -1052,7 +1061,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_ellipse(b.width, b.height, cx, cy, rx, ry);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Elliptical Marquee"), None);
+        Ok(())
     }
 
     /// LASSO polygon: `points_flat` is `[x0, y0, x1, y1, …]` image-px
@@ -1072,7 +1083,9 @@ mod wasm {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape = SelectionCoverage::rasterize_polygon(b.width, b.height, &pts);
             s.apply_shape(shape, mode)
-        })
+        })?;
+        note_selection(Some("Lasso"), None);
+        Ok(())
     }
 
     /// MAGIC WAND at `(x, y)`: color-distance flood over the BOUND
@@ -1112,7 +1125,7 @@ mod wasm {
             tolerance,
             contiguous,
         );
-        with_selection(|s| s.apply_shape(shape, mode))
+        selection_step("Magic Wand", |s| s.apply_shape(shape, mode))
     }
 
     /// Feather the selection: a Gaussian of `sigma` px on the COVERAGE
@@ -1121,7 +1134,7 @@ mod wasm {
     /// explicit selection exists.
     #[wasm_bindgen]
     pub fn selection_feather(sigma: f32) -> Result<(), JsValue> {
-        with_selection(|s| s.feather(sigma))
+        selection_step("Feather", |s| s.feather(sigma))
     }
 
     /// Select ▸ Modify: `op` ∈ expand | contract | border | smooth, by
@@ -1133,7 +1146,13 @@ mod wasm {
                 "unknown selection modification \"{op}\" (expand | contract | border | smooth)"
             ))
         })?;
-        with_selection(|s| s.modify(op, radius))
+        let label = match op {
+            crate::selection::ModifyOp::Expand => "Expand",
+            crate::selection::ModifyOp::Contract => "Contract",
+            crate::selection::ModifyOp::Border => "Border",
+            crate::selection::ModifyOp::Smooth => "Smooth",
+        };
+        selection_step(label, |s| s.modify(op, radius))
     }
 
     /// SELECTION → PATH: trace the live selection's coverage into closed
@@ -1219,7 +1238,7 @@ mod wasm {
             .with(|m| m.borrow().get(&handle).cloned())
             .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
         let bytes = crate::channels::channel_bytes(&img.rgba.to_rgba8(), ch);
-        with_selection(|s| {
+        selection_step("Load Selection", |s| {
             let b = s.bound().ok_or("no image bound (selection_bind first)")?;
             let shape =
                 SelectionCoverage::from_data(b.width, b.height, bytes).ok_or_else(|| {
@@ -1242,27 +1261,39 @@ mod wasm {
     #[wasm_bindgen]
     pub fn selection_set_coverage(bytes: &[u8], mode: u32) -> Result<(), JsValue> {
         let mode = decode_mode(mode)?;
-        with_selection(|s| s.apply_coverage(bytes, mode))
+        with_selection(|s| s.apply_coverage(bytes, mode))?;
+        // A selection given back (a frame's kept selection) is not a
+        // step: the stack's mirror only follows it.
+        note_selection(None, None);
+        Ok(())
     }
 
     /// Select ALL explicitly (a full-extent selection in the readouts;
     /// the adjust chain still takes the trivial-mask fast path).
     #[wasm_bindgen]
     pub fn selection_select_all() -> Result<(), JsValue> {
-        with_selection(|s| s.select_all())
+        selection_step("Select All", |s| s.select_all())
     }
 
     /// Deselect: back to "no selection" (adjustments run unmasked).
     #[wasm_bindgen]
     pub fn selection_clear() {
-        SELECTION.with(|s| s.borrow_mut().clear());
+        let had = SELECTION.with(|s| {
+            let mut s = s.borrow_mut();
+            let had = s.coverage().is_some();
+            s.clear();
+            had
+        });
+        if had {
+            note_selection(Some("Deselect"), None);
+        }
     }
 
     /// Invert the selection ("everything" inverts to the explicit EMPTY
     /// selection — adjust applies nowhere until reselected).
     #[wasm_bindgen]
     pub fn selection_invert() -> Result<(), JsValue> {
-        with_selection(|s| s.invert())
+        selection_step("Inverse", |s| s.invert())
     }
 
     /// The bounding box of the selection's non-zero coverage as
@@ -1307,6 +1338,1021 @@ mod wasm {
             Some(c) => js_sys::Uint8Array::from(c.data()),
             None => js_sys::Uint8Array::new_with_length(0),
         })
+    }
+
+    // ───────────── SELECTION & MASKING doors (ADR 470, WP5.5) ─────────────
+    //
+    // Every selection change made by a person is ONE undo step on the
+    // layer stack's list (`note_selection(Some(label))`); a change that is
+    // not a step (a kept selection restored, a rebind) only syncs the
+    // stack's mirror (`note_selection(None)`), so the mirror always equals
+    // the session selection. Undo and redo copy a restored selection back
+    // (`history_step`).
+
+    /// After a selection mutation: record it as a step (`label`) or sync
+    /// the stack's mirror — only when the stack is bound to the image the
+    /// selection is bound to.
+    fn note_selection(label: Option<&str>, merge: Option<&str>) {
+        let (handle, cov) = SELECTION.with(|s| {
+            let s = s.borrow();
+            (s.bound().map(|b| b.handle), s.coverage().cloned())
+        });
+        LAYERS.with(|l| {
+            if let Some(d) = l.borrow_mut().as_mut() {
+                if Some(d.handle) == handle {
+                    match label {
+                        Some(lb) => d.stack.record_selection(lb, merge, cov),
+                        None => d.stack.sync_selection(cov),
+                    }
+                }
+            }
+        });
+    }
+
+    /// A selection mutation recorded as one undo step.
+    fn selection_step<T>(
+        label: &str,
+        f: impl FnOnce(&mut SessionSelection) -> Result<T, String>,
+    ) -> Result<T, JsValue> {
+        let out = with_selection(f)?;
+        note_selection(Some(label), None);
+        Ok(out)
+    }
+
+    /// The bound image's straight RGBA8 pixels and extent.
+    fn bound_pixels() -> Result<(u32, u32, Vec<u8>), JsValue> {
+        let bound = SELECTION
+            .with(|s| s.borrow().bound())
+            .ok_or_else(|| JsValue::from_str("no image bound (selection_bind first)"))?;
+        IMAGES.with(|m| {
+            let m = m.borrow();
+            let img = m.get(&bound.handle).ok_or_else(|| {
+                JsValue::from_str(&format!("bound image handle {} is gone", bound.handle))
+            })?;
+            Ok((img.width, img.height, img.rgba.to_rgba8().into_owned()))
+        })
+    }
+
+    fn coverage_of(w: u32, h: u32, data: Vec<u8>) -> Result<SelectionCoverage, JsValue> {
+        SelectionCoverage::from_data(w, h, data)
+            .ok_or_else(|| JsValue::from_str("internal: coverage is mis-sized"))
+    }
+
+    /// The Color Range param block from the dialog's flat values:
+    /// `kind` 0 sampled | 1 hue | 2 tonal | 3 skin; `samples` = per
+    /// sample `L, a, b, x, y`; `range` > 0 with `localized`; `hue` the
+    /// preset's centre; `lower`/`upper` the tonal limits on 0…255 and
+    /// `midtones` their two-sided width.
+    #[allow(clippy::too_many_arguments)]
+    fn color_range_params(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: &[f32],
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+    ) -> Result<image_kernels::families::select::ColorRangeParams, JsValue> {
+        use image_kernels::families::select::{ColorRangeMode, ColorRangeParams};
+        let mode = ColorRangeMode::from_u32(kind).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown Color Range kind {kind} (0 sampled | 1 hue | 2 tonal | 3 skin)"
+            ))
+        })?;
+        Ok(match mode {
+            ColorRangeMode::Sampled => {
+                if !samples.len().is_multiple_of(5) {
+                    return Err(JsValue::from_str("samples are L, a, b, x, y each"));
+                }
+                let s: Vec<([f32; 3], [f32; 2])> = samples
+                    .as_chunks::<5>()
+                    .0
+                    .iter()
+                    .map(|c| ([c[0], c[1], c[2]], [c[3], c[4]]))
+                    .collect();
+                ColorRangeParams::sampled(&s, fuzziness, invert, localized.then_some(range))
+            }
+            ColorRangeMode::Hue => ColorRangeParams::hue(hue, invert),
+            ColorRangeMode::Tonal => {
+                ColorRangeParams::tonal(lower, upper, fuzziness, midtones, invert)
+            }
+            ColorRangeMode::Skin => ColorRangeParams::skin(fuzziness, invert),
+        })
+    }
+
+    /// Color Range's coverage over straight RGBA8: the `select.color_range`
+    /// kernel on the GPU, its CPU twin where there is no device or the
+    /// image exceeds the texture limit (ADR 470).
+    async fn color_range_coverage(
+        rgba: &[u8],
+        w: u32,
+        h: u32,
+        p: &image_kernels::families::select::ColorRangeParams,
+    ) -> Vec<u8> {
+        use image_kernels::families::select::{color_range_rgba8, SELECT_COLOR_RANGE};
+        if let Some(ctx) = GPU.with(|g| g.borrow().clone()) {
+            let one = half::f16::ONE.to_le_bytes();
+            let mut f16 = Vec::with_capacity(rgba.len() * 2);
+            for px in rgba.as_chunks::<4>().0 {
+                for &c in &px[..3] {
+                    f16.extend_from_slice(&half::f16::from_f32(f32::from(c) / 255.0).to_le_bytes());
+                }
+                f16.extend_from_slice(&one);
+            }
+            if let Ok(out) = image_gpu::execute_tile_once_async(
+                &ctx,
+                &SELECT_COLOR_RANGE,
+                &[image_gpu::TileInput { f16_bytes: &f16 }],
+                p.as_bytes(),
+                None,
+                w,
+                h,
+            )
+            .await
+            {
+                return out
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .map(|t| {
+                        let m = half::f16::from_le_bytes([t[0], t[1]]).to_f32();
+                        (m.clamp(0.0, 1.0) * 255.0).round() as u8
+                    })
+                    .collect();
+            }
+        }
+        color_range_rgba8(rgba, w, p)
+    }
+
+    /// The Lab (D50) of the bound image's pixel at `(x, y)` — what a
+    /// Color Range eyedropper click samples.
+    #[wasm_bindgen]
+    pub fn color_range_sample(x: u32, y: u32) -> Result<Vec<f32>, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        if x >= w || y >= h {
+            return Err(JsValue::from_str(&format!("({x}, {y}) is outside {w}×{h}")));
+        }
+        let i = ((y * w + x) * 4) as usize;
+        let lab = image_kernels::families::select::to_lab([
+            f32::from(px[i]) / 255.0,
+            f32::from(px[i + 1]) / 255.0,
+            f32::from(px[i + 2]) / 255.0,
+        ]);
+        Ok(lab.to_vec())
+    }
+
+    /// Color Range's coverage WITHOUT applying it — the dialog preview.
+    /// It also becomes the coverage of the `matte` view.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn color_range_preview(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: Vec<f32>,
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+    ) -> Result<js_sys::Uint8Array, JsValue> {
+        let p = color_range_params(
+            kind, fuzziness, invert, &samples, localized, range, hue, lower, upper, midtones,
+        )?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = color_range_coverage(&px, w, h, &p).await;
+        let out = js_sys::Uint8Array::from(&cov[..]);
+        let cov = Arc::new(coverage_of(w, h, cov)?);
+        VIEW.with(|v| v.borrow_mut().matte = Some(cov));
+        Ok(out)
+    }
+
+    /// Select ▸ Color Range: fold the coverage into the selection under
+    /// `mode`; one undo step.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn selection_color_range(
+        kind: u32,
+        fuzziness: f32,
+        invert: bool,
+        samples: Vec<f32>,
+        localized: bool,
+        range: f32,
+        hue: f32,
+        lower: f32,
+        upper: f32,
+        midtones: bool,
+        mode: u32,
+    ) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let p = color_range_params(
+            kind, fuzziness, invert, &samples, localized, range, hue, lower, upper, midtones,
+        )?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = coverage_of(w, h, color_range_coverage(&px, w, h, &p).await)?;
+        selection_step("Color Range", |s| s.apply_shape(cov, mode))
+    }
+
+    /// Select ▸ Grow (`contiguous`) / Similar, by the wand's tolerance.
+    #[wasm_bindgen]
+    pub fn selection_grow(tolerance: u8, contiguous: bool) -> Result<(), JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        let label = if contiguous { "Grow" } else { "Similar" };
+        selection_step(label, |s| {
+            let cov = s.coverage().ok_or("no selection to grow from")?;
+            let grown = crate::selection::grow_coverage(cov, &px, tolerance, contiguous)
+                .ok_or("nothing is selected — there is no colour range to grow from")?;
+            s.apply_shape(grown, CombineMode::Replace)
+        })
+    }
+
+    /// Select ▸ Focus Area: the in-focus regions (sharpness map, ADR 470),
+    /// folded under `mode`; one undo step.
+    #[wasm_bindgen]
+    pub fn selection_focus_area(range: f32, noise: f32, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let (w, h, px) = bound_pixels()?;
+        let cov = crate::focus::focus_area(&px, w, h, crate::focus::FocusParams { range, noise });
+        selection_step("Focus Area", |s| s.apply_shape(cov, mode))
+    }
+
+    /// Focus Area's coverage without applying it (the dialog preview; it
+    /// becomes the `matte` view's coverage).
+    #[wasm_bindgen]
+    pub fn focus_area_preview(range: f32, noise: f32) -> Result<js_sys::Uint8Array, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        let cov = crate::focus::focus_area(&px, w, h, crate::focus::FocusParams { range, noise });
+        let out = js_sys::Uint8Array::from(cov.data());
+        VIEW.with(|v| v.borrow_mut().matte = Some(Arc::new(cov)));
+        Ok(out)
+    }
+
+    // ── the display view ────────────────────────────────────────────
+
+    struct ViewState {
+        view: crate::masking::View,
+        /// The coverage a `Matte` view shows (Color Range / Focus Area
+        /// previews, Select and Mask).
+        matte: Option<Arc<SelectionCoverage>>,
+        /// Show the spot channels over the composite (the Channels
+        /// panel's eye on a spot channel).
+        spots: bool,
+    }
+
+    thread_local! {
+        static VIEW: RefCell<ViewState> = const {
+            RefCell::new(ViewState {
+                view: crate::masking::View::Composite,
+                matte: None,
+                spots: false,
+            })
+        };
+    }
+
+    /// What the frame shows: `composite` | `component` (arg: red, green,
+    /// blue, alpha, luma) | `channel` (arg: a channel id) | `quickMask` |
+    /// `matte` (arg: overlay, onBlack, onWhite, blackWhite, onLayers;
+    /// `opacity` for the overlay); `spots` shows spot channels over the
+    /// composite. A display transform only — the document is untouched.
+    #[wasm_bindgen]
+    pub fn view_set(kind: &str, arg: &str, opacity: f32, spots: bool) -> Result<(), JsValue> {
+        use crate::masking::{MatteMode, View};
+        let view = match kind {
+            "composite" => View::Composite,
+            "component" => View::Component(
+                crate::channels::Channel::from_name(arg)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown channel {arg:?}")))?,
+            ),
+            "channel" => View::Channel(
+                arg.parse()
+                    .map_err(|_| JsValue::from_str(&format!("not a channel id: {arg:?}")))?,
+            ),
+            "quickMask" => View::QuickMask,
+            "matte" => View::Matte(
+                MatteMode::from_wire(arg, opacity)
+                    .ok_or_else(|| JsValue::from_str(&format!("unknown matte {arg:?}")))?,
+            ),
+            k => return Err(JsValue::from_str(&format!("unknown view {k:?}"))),
+        };
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            v.view = view;
+            v.spots = spots;
+        });
+        Ok(())
+    }
+
+    /// Does the display differ from the composite (so the glue must pass
+    /// it through `view_apply`)?
+    #[wasm_bindgen]
+    pub fn view_active() -> bool {
+        let has_spots = LAYERS.with(|l| {
+            l.borrow().as_ref().is_some_and(|d| {
+                d.stack
+                    .masking()
+                    .channels
+                    .iter()
+                    .any(|c| matches!(c.kind, crate::masking::ChannelKind::Spot { .. }))
+            })
+        });
+        VIEW.with(|v| {
+            let v = v.borrow();
+            v.view != crate::masking::View::Composite || (v.spots && has_spots)
+        })
+    }
+
+    /// Transform a `w`×`h` composite (straight RGBA8, possibly a preview
+    /// proxy) into what the current view shows.
+    #[wasm_bindgen]
+    pub fn view_apply(rgba: &[u8], w: u32, h: u32) -> Result<Vec<u8>, JsValue> {
+        use crate::masking::{matte, MatteMode, View, QUICK_MASK_OPACITY};
+        if rgba.len() != (w as usize) * (h as usize) * 4 {
+            return Err(JsValue::from_str("view_apply: rgba is not w·h·4 bytes"));
+        }
+        let (view, matte_cov, spots) = VIEW.with(|v| {
+            let v = v.borrow();
+            (v.view.clone(), v.matte.clone(), v.spots)
+        });
+        LAYERS.with(|l| {
+            let b = l.borrow();
+            let doc = b.as_ref().map(|d| &d.stack);
+            let channel_data = |id: u32| -> Option<crate::masking::DocChannel> {
+                let st = doc?;
+                let mut ch = st.masking().channel(id)?.clone();
+                if st.edit_channel().map(|c| c.id) == Some(id) {
+                    if let Some(p) = st.channel_preview() {
+                        ch.data = Arc::clone(p);
+                    }
+                }
+                Some(ch)
+            };
+            let base = match (&view, doc) {
+                (View::Composite, Some(st)) if spots => {
+                    let s: Vec<&crate::masking::DocChannel> = st
+                        .masking()
+                        .channels
+                        .iter()
+                        .filter(|c| matches!(c.kind, crate::masking::ChannelKind::Spot { .. }))
+                        .collect();
+                    crate::masking::with_spots(rgba, w, h, &s)
+                }
+                (View::Composite, _) => rgba.to_vec(),
+                (View::Component(c), _) => crate::channels::channel_bytes(rgba, *c)
+                    .iter()
+                    .flat_map(|&v| [v, v, v, 255])
+                    .collect(),
+                (View::Channel(id), _) => match channel_data(*id) {
+                    Some(ch) => crate::masking::channel_view(w, h, &ch),
+                    None => rgba.to_vec(),
+                },
+                (View::QuickMask, Some(st)) => match st.quick_mask().and_then(channel_data) {
+                    Some(ch) => matte(rgba, w, h, &ch.data, MatteMode::Overlay(QUICK_MASK_OPACITY)),
+                    None => rgba.to_vec(),
+                },
+                (View::QuickMask, None) => rgba.to_vec(),
+                (View::Matte(m), _) => match &matte_cov {
+                    Some(c) => matte(rgba, w, h, c, *m),
+                    None => rgba.to_vec(),
+                },
+            };
+            Ok(base)
+        })
+    }
+
+    // ── Quick Mask ──────────────────────────────────────────────────
+
+    /// Enter Quick Mask: the selection becomes a temporary channel the
+    /// brushes paint, shown as a red overlay. One undo step.
+    #[wasm_bindgen]
+    pub fn quick_mask_enter() -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        let id = with_stack(|d| {
+            d.stack.sync_selection(cov.clone());
+            d.stack.enter_quick_mask(cov.as_deref()).map_err(ingest_err)
+        })?;
+        VIEW.with(|v| v.borrow_mut().view = crate::masking::View::QuickMask);
+        Ok(id)
+    }
+
+    /// Leave Quick Mask: the painted channel becomes the selection. One
+    /// undo step (it brings the channel and the old selection back).
+    #[wasm_bindgen]
+    pub fn quick_mask_exit() -> Result<(), JsValue> {
+        let sel = with_stack(|d| d.stack.exit_quick_mask().map_err(ingest_err))?;
+        SELECTION.with(|s| s.borrow_mut().restore(Some(sel)));
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            if v.view == crate::masking::View::QuickMask {
+                v.view = crate::masking::View::Composite;
+            }
+        });
+        Ok(())
+    }
+
+    /// Is Quick Mask on?
+    #[wasm_bindgen]
+    pub fn quick_mask_active() -> bool {
+        LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .is_some_and(|d| d.stack.quick_mask().is_some())
+        })
+    }
+
+    // ── channels ────────────────────────────────────────────────────
+
+    /// The Channels / Paths panels' readout (`MaskingDoc::list_json`, plus
+    /// the channel being painted as `editChannel`).
+    #[wasm_bindgen]
+    pub fn masking_list() -> String {
+        LAYERS.with(|l| match l.borrow().as_ref() {
+            Some(d) => {
+                let j = d.stack.masking().list_json();
+                let edit = d
+                    .stack
+                    .edit_channel()
+                    .map_or_else(|| "null".to_string(), |c| c.id.to_string());
+                format!("{},\"editChannel\":{edit}}}", &j[..j.len() - 1])
+            }
+            None => {
+                "{\"channels\":[],\"paths\":[],\"quickMask\":null,\"editChannel\":null}".to_string()
+            }
+        })
+    }
+
+    /// Select ▸ Save Selection: a new alpha channel (everything without a
+    /// selection). One undo step; answers its id.
+    #[wasm_bindgen]
+    pub fn channel_save_selection(name: &str) -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        with_stack(|d| {
+            d.stack
+                .save_selection(name, cov.as_deref())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Select ▸ Load Selection: a channel folded into the selection under
+    /// `mode` (replace, add, subtract, intersect). One undo step.
+    #[wasm_bindgen]
+    pub fn channel_load_selection(id: u32, invert: bool, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let data = with_stack(|d| {
+            d.stack
+                .masking()
+                .channel(id)
+                .map(|c| Arc::clone(&c.data))
+                .ok_or_else(|| JsValue::from_str(&format!("no channel {id}")))
+        })?;
+        let mut shape = (*data).clone();
+        if invert {
+            shape.invert();
+        }
+        selection_step("Load Selection", |s| s.apply_shape(shape, mode))
+    }
+
+    /// Delete / rename / duplicate a channel; one undo step each.
+    #[wasm_bindgen]
+    pub fn channel_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            if d.stack.quick_mask() == Some(id) {
+                return Err(JsValue::from_str(
+                    "Quick Mask's channel goes away by leaving Quick Mask",
+                ));
+            }
+            if d.stack.edit_channel().map(|c| c.id) == Some(id) {
+                d.stack.set_edit_channel(None).map_err(ingest_err)?;
+            }
+            d.stack
+                .masking_edit("Delete channel", |m, _, _| m.remove_channel(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn channel_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Rename channel", |m, _, _| m.rename_channel(id, name))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn channel_duplicate(id: u32) -> Result<u32, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Duplicate channel", |m, _, _| m.duplicate_channel(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    /// New Spot Channel: the selection (nothing without one) as the
+    /// coverage of an ink of `r, g, b` at `solidity` (0…1). One step.
+    #[wasm_bindgen]
+    pub fn channel_new_spot(
+        name: &str,
+        r: u8,
+        g: u8,
+        b: u8,
+        solidity: f32,
+    ) -> Result<u32, JsValue> {
+        let cov = SELECTION.with(|s| s.borrow().coverage().cloned());
+        with_stack(|d| {
+            let (w, h) = (d.stack.width(), d.stack.height());
+            let data = match cov {
+                Some(c) if c.width() == w && c.height() == h => (*c).clone(),
+                _ => SelectionCoverage::empty(w, h),
+            };
+            d.stack
+                .masking_edit("New spot channel", |m, _, _| {
+                    Ok(m.add_channel(
+                        name,
+                        crate::masking::ChannelKind::Spot {
+                            colour: [r, g, b],
+                            solidity: solidity.clamp(0.0, 1.0),
+                        },
+                        data,
+                    ))
+                })
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Change a channel's spot ink (an alpha channel becomes a spot one).
+    #[wasm_bindgen]
+    pub fn channel_set_spot(id: u32, r: u8, g: u8, b: u8, solidity: f32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Channel options", |m, _, _| {
+                    m.set_spot(id, [r, g, b], solidity)
+                })
+                .map_err(ingest_err)
+        })
+    }
+
+    /// Paint channel `id` with the pixel tools (`-1`: back to the layers).
+    #[wasm_bindgen]
+    pub fn channel_set_edit(id: i32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .set_edit_channel(u32::try_from(id).ok())
+                .map_err(ingest_err)
+        })
+    }
+
+    /// The channel stroke in flight was cancelled: drop its preview.
+    #[wasm_bindgen]
+    pub fn channel_clear_preview() {
+        LAYERS.with(|l| {
+            if let Some(d) = l.borrow_mut().as_mut() {
+                d.stack.clear_channel_preview();
+            }
+        });
+    }
+
+    // ── paths ───────────────────────────────────────────────────────
+
+    /// Make Work Path: trace the selection (at `threshold`, simplified by
+    /// `tolerance` px) into a path stored in the image session. One undo
+    /// step; answers the path id.
+    #[wasm_bindgen]
+    pub fn path_from_selection(name: &str, threshold: u8, tolerance: f32) -> Result<u32, JsValue> {
+        let (cov, bound) = SELECTION.with(|s| {
+            let s = s.borrow();
+            (s.coverage().cloned(), s.bound())
+        });
+        let cov = cov.ok_or_else(|| JsValue::from_str("no selection to make a path from"))?;
+        let b = bound.ok_or_else(|| JsValue::from_str("no image bound"))?;
+        let contours = crate::paths::trace(
+            cov.data(),
+            b.width as usize,
+            b.height as usize,
+            threshold,
+            tolerance,
+        );
+        if contours.is_empty() {
+            return Err(JsValue::from_str(&format!(
+                "nothing is selected at coverage ≥ {threshold}"
+            )));
+        }
+        let subpaths = crate::masking::subpaths_from_contours(&contours);
+        with_stack(|d| d.stack.add_path(name, subpaths).map_err(ingest_err))
+    }
+
+    /// Store a path drawn elsewhere (a host shape's anchors): `closed`
+    /// per subpath, `lens` anchors per subpath, `anchors` 6 floats each
+    /// (point, in handle, out handle; image px). One step; answers its id.
+    #[wasm_bindgen]
+    pub fn path_add(
+        name: &str,
+        closed: Vec<u8>,
+        lens: Vec<u32>,
+        anchors: Vec<f32>,
+    ) -> Result<u32, JsValue> {
+        let mut at = 0usize;
+        let mut flat = Vec::new();
+        for &n in &lens {
+            let end = at + n as usize * 6;
+            let part = anchors
+                .get(at..end)
+                .ok_or_else(|| JsValue::from_str("anchors are shorter than the lengths say"))?;
+            flat.push(part.to_vec());
+            at = end;
+        }
+        let closed: Vec<bool> = closed.iter().map(|&c| c != 0).collect();
+        let subpaths = crate::masking::subpaths_from_flat(&closed, &flat)
+            .map_err(|e| JsValue::from_str(&e))?;
+        with_stack(|d| d.stack.add_path(name, subpaths).map_err(ingest_err))
+    }
+
+    /// One stored path as JSON (`masking::path_json`).
+    #[wasm_bindgen]
+    pub fn path_get(id: u32) -> Result<String, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking()
+                .path(id)
+                .map(crate::masking::path_json)
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))
+        })
+    }
+
+    /// Make Selection from a stored path (nonzero winding, anti-aliased,
+    /// feathered by `feather` px), folded under `mode`. One undo step.
+    #[wasm_bindgen]
+    pub fn path_make_selection(id: u32, feather: f32, mode: u32) -> Result<(), JsValue> {
+        let mode = decode_mode(mode)?;
+        let mut cov = with_stack(|d| {
+            let (w, h) = (d.stack.width(), d.stack.height());
+            d.stack
+                .masking()
+                .path(id)
+                .map(|p| crate::masking::path_coverage(p, w, h))
+                .ok_or_else(|| JsValue::from_str(&format!("no path {id}")))
+        })?;
+        if feather > 0.0 {
+            cov.feather(feather);
+        }
+        selection_step("Make Selection", |s| s.apply_shape(cov, mode))
+    }
+
+    #[wasm_bindgen]
+    pub fn path_delete(id: u32) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Delete path", |m, _, _| m.remove_path(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn path_rename(id: u32, name: &str) -> Result<(), JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Rename path", |m, _, _| m.rename_path(id, name))
+                .map_err(ingest_err)
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn path_duplicate(id: u32) -> Result<u32, JsValue> {
+        with_stack(|d| {
+            d.stack
+                .masking_edit("Duplicate path", |m, _, _| m.duplicate_path(id))
+                .map_err(ingest_err)
+        })
+    }
+
+    // ── Select and Mask ─────────────────────────────────────────────
+
+    struct SamState {
+        base: Arc<SelectionCoverage>,
+        params: crate::refine::RefineParams,
+        band: Vec<u8>,
+        /// An alpha a matting provider answered (the ML hook, WP8.2).
+        matte: Option<Vec<u8>>,
+        last: Option<crate::refine::Refined>,
+    }
+
+    thread_local! {
+        static SAM: RefCell<Option<SamState>> = const { RefCell::new(None) };
+    }
+
+    /// The external matte as a hook.
+    struct ProvidedMatte<'a>(Option<&'a [u8]>);
+
+    impl crate::refine::MattingHook for ProvidedMatte<'_> {
+        fn solve(&self, _: &[u8], _: u32, _: u32, _: &[u8]) -> Option<Vec<u8>> {
+            self.0.map(<[u8]>::to_vec)
+        }
+    }
+
+    /// Open the Select and Mask workspace over the current selection
+    /// (everything without one is refused: there is no edge to refine).
+    #[wasm_bindgen]
+    pub fn sam_begin() -> Result<(), JsValue> {
+        let cov = SELECTION
+            .with(|s| s.borrow().coverage().cloned())
+            .ok_or_else(|| JsValue::from_str("Select and Mask needs a selection to refine"))?;
+        let n = cov.data().len();
+        SAM.with(|s| {
+            *s.borrow_mut() = Some(SamState {
+                base: cov,
+                params: crate::refine::RefineParams::default(),
+                band: vec![0; n],
+                matte: None,
+                last: None,
+            })
+        });
+        Ok(())
+    }
+
+    fn with_sam<T>(f: impl FnOnce(&mut SamState) -> Result<T, JsValue>) -> Result<T, JsValue> {
+        SAM.with(|s| {
+            let mut b = s.borrow_mut();
+            let st = b
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("Select and Mask is not open (sam_begin)"))?;
+            f(st)
+        })
+    }
+
+    /// The workspace's sliders.
+    #[wasm_bindgen]
+    #[allow(clippy::too_many_arguments)]
+    pub fn sam_set_params(
+        radius: f32,
+        smart_radius: bool,
+        smooth: f32,
+        feather: f32,
+        contrast: f32,
+        shift_edge: f32,
+        decontaminate: bool,
+        amount: f32,
+    ) -> Result<(), JsValue> {
+        with_sam(|s| {
+            s.params = crate::refine::RefineParams {
+                radius,
+                smart_radius,
+                smooth,
+                feather,
+                contrast,
+                shift_edge,
+                decontaminate,
+                amount,
+            };
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    /// The Refine Edge brush: mark (or with `erase`, unmark) a disc of
+    /// `radius` px at `(x, y)` as part of the band to re-solve.
+    #[wasm_bindgen]
+    pub fn sam_paint_band(x: f32, y: f32, radius: f32, erase: bool) -> Result<(), JsValue> {
+        with_sam(|s| {
+            let (w, h) = (s.base.width() as i64, s.base.height() as i64);
+            let r = radius.max(0.5);
+            let (x0, x1) = ((x - r).floor() as i64, (x + r).ceil() as i64);
+            let (y0, y1) = ((y - r).floor() as i64, (y + r).ceil() as i64);
+            for py in y0.max(0)..y1.min(h) {
+                for px in x0.max(0)..x1.min(w) {
+                    let (dx, dy) = (px as f32 + 0.5 - x, py as f32 + 0.5 - y);
+                    if dx * dx + dy * dy <= r * r {
+                        s.band[(py * w + px) as usize] = if erase { 0 } else { 255 };
+                    }
+                }
+            }
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    /// The trimap the solve sees (0 / 128 / 255 per pixel) — what a
+    /// matting provider is handed.
+    #[wasm_bindgen]
+    pub fn sam_trimap() -> Result<js_sys::Uint8Array, JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        with_sam(|s| {
+            let t = crate::refine::trimap(&px, &s.base, Some(&s.band), &s.params);
+            Ok(js_sys::Uint8Array::from(&t[..]))
+        })
+    }
+
+    /// A matting provider's alpha (WP8.2); an EMPTY array clears it and
+    /// the classical solve runs again.
+    #[wasm_bindgen]
+    pub fn sam_set_matte(alpha: &[u8]) -> Result<(), JsValue> {
+        with_sam(|s| {
+            if alpha.is_empty() {
+                s.matte = None;
+            } else if alpha.len() == s.band.len() {
+                s.matte = Some(alpha.to_vec());
+            } else {
+                return Err(JsValue::from_str("the matte must be one byte per pixel"));
+            }
+            s.last = None;
+            Ok(())
+        })
+    }
+
+    fn sam_refined() -> Result<crate::refine::Refined, JsValue> {
+        let (_, _, px) = bound_pixels()?;
+        with_sam(|s| {
+            if s.last.is_none() {
+                let hook = ProvidedMatte(s.matte.as_deref());
+                s.last = Some(crate::refine::refine(
+                    &px,
+                    &s.base,
+                    Some(&s.band),
+                    &s.params,
+                    &hook,
+                ));
+            }
+            Ok(s.last.clone().expect("computed above"))
+        })
+    }
+
+    /// The refined alpha (one byte per pixel); it becomes the coverage of
+    /// the `matte` view.
+    #[wasm_bindgen]
+    pub fn sam_preview() -> Result<js_sys::Uint8Array, JsValue> {
+        let r = sam_refined()?;
+        let out = js_sys::Uint8Array::from(r.alpha.data());
+        VIEW.with(|v| v.borrow_mut().matte = Some(Arc::new(r.alpha)));
+        Ok(out)
+    }
+
+    /// OK: the refined edge to `output` — `selection`, `layerMask` (the
+    /// active layer's mask) or `newLayerWithMask` (a masked copy, with the
+    /// decontaminated colours when asked for). One undo step; the
+    /// workspace closes.
+    #[wasm_bindgen]
+    pub fn sam_commit(output: &str) -> Result<(), JsValue> {
+        let r = sam_refined()?;
+        let alpha = Arc::new(r.alpha);
+        match output {
+            "selection" => {
+                let a = (*alpha).clone();
+                selection_step("Select and Mask", |s| {
+                    s.apply_shape(a, CombineMode::Replace)
+                })?;
+            }
+            "layerMask" => {
+                recorded_edit("Select and Mask", None, |st| {
+                    let i = st.active_index();
+                    st.set_mask(i, Arc::clone(&alpha))
+                })?;
+            }
+            "newLayerWithMask" => {
+                let px = r
+                    .decontaminated
+                    .map(|d| Arc::<[u8]>::from(d.into_boxed_slice()));
+                with_stack(|d| d.stack.add_masked_copy(px, alpha).map_err(ingest_err))?;
+            }
+            o => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown output {o:?} (selection | layerMask | newLayerWithMask)"
+                )))
+            }
+        }
+        sam_cancel();
+        Ok(())
+    }
+
+    /// Close the workspace without changing anything.
+    #[wasm_bindgen]
+    pub fn sam_cancel() {
+        SAM.with(|s| *s.borrow_mut() = None);
+        VIEW.with(|v| {
+            let mut v = v.borrow_mut();
+            v.matte = None;
+            if matches!(v.view, crate::masking::View::Matte(_)) {
+                v.view = crate::masking::View::Composite;
+            }
+        });
+    }
+
+    // ── the Magnetic Lasso ──────────────────────────────────────────
+
+    thread_local! {
+        static MAGNETIC: RefCell<Option<crate::magnetic::MagneticSession>> =
+            const { RefCell::new(None) };
+    }
+
+    fn magnetic_outline_flat() -> Vec<f32> {
+        MAGNETIC.with(|m| {
+            m.borrow()
+                .as_ref()
+                .map(|s| s.outline().into_iter().flatten().collect())
+                .unwrap_or_default()
+        })
+    }
+
+    /// Start a magnetic gesture at `(x, y)` with the tool's options;
+    /// answers the outline so far (flat x, y).
+    #[wasm_bindgen]
+    pub fn magnetic_begin(
+        x: f32,
+        y: f32,
+        width: f32,
+        contrast: f32,
+        frequency: f32,
+    ) -> Result<Vec<f32>, JsValue> {
+        let (w, h, px) = bound_pixels()?;
+        let s = crate::magnetic::MagneticSession::begin(
+            &px,
+            w,
+            h,
+            x,
+            y,
+            crate::magnetic::MagneticOptions {
+                width,
+                contrast,
+                frequency,
+            },
+        )
+        .ok_or_else(|| JsValue::from_str("no pixels to trace"))?;
+        MAGNETIC.with(|m| *m.borrow_mut() = Some(s));
+        Ok(magnetic_outline_flat())
+    }
+
+    fn with_magnetic(
+        f: impl FnOnce(&mut crate::magnetic::MagneticSession),
+    ) -> Result<Vec<f32>, JsValue> {
+        MAGNETIC.with(|m| {
+            let mut b = m.borrow_mut();
+            let s = b
+                .as_mut()
+                .ok_or_else(|| JsValue::from_str("no magnetic gesture (magnetic_begin)"))?;
+            f(s);
+            Ok::<(), JsValue>(())
+        })?;
+        Ok(magnetic_outline_flat())
+    }
+
+    /// The pointer moved: the live wire follows (anchors auto-placed).
+    #[wasm_bindgen]
+    pub fn magnetic_move(x: f32, y: f32) -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.move_to(x, y))
+    }
+
+    /// A click: fix an anchor at the (snapped) point.
+    #[wasm_bindgen]
+    pub fn magnetic_anchor(x: f32, y: f32) -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.anchor_at(x, y))
+    }
+
+    /// Backspace: drop the newest anchor.
+    #[wasm_bindgen]
+    pub fn magnetic_undo_anchor() -> Result<Vec<f32>, JsValue> {
+        with_magnetic(|s| s.undo_anchor())
+    }
+
+    /// The anchors placed so far (flat x, y pixel centres).
+    #[wasm_bindgen]
+    pub fn magnetic_anchors() -> Vec<f32> {
+        MAGNETIC.with(|m| {
+            m.borrow()
+                .as_ref()
+                .map(|s| {
+                    s.anchors()
+                        .iter()
+                        .flat_map(|&(x, y)| [x as f32 + 0.5, y as f32 + 0.5])
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+    }
+
+    /// Close the outline back to the first anchor and fold it into the
+    /// selection under `mode`; one undo step. False (nothing selected)
+    /// when the outline is too short.
+    #[wasm_bindgen]
+    pub fn magnetic_close(mode: u32) -> Result<bool, JsValue> {
+        let mode = decode_mode(mode)?;
+        let poly = MAGNETIC.with(|m| m.borrow_mut().take().and_then(|mut s| s.close()));
+        let Some(poly) = poly else {
+            return Ok(false);
+        };
+        let pts: Vec<(f32, f32)> = poly.iter().map(|p| (p[0], p[1])).collect();
+        selection_step("Magnetic Lasso", |s| {
+            let b = s.bound().ok_or("no image bound (selection_bind first)")?;
+            let shape = SelectionCoverage::rasterize_polygon(b.width, b.height, &pts);
+            s.apply_shape(shape, mode)
+        })?;
+        Ok(true)
+    }
+
+    /// Escape: abandon the gesture.
+    #[wasm_bindgen]
+    pub fn magnetic_cancel() {
+        MAGNETIC.with(|m| *m.borrow_mut() = None);
     }
 
     /// RESAMPLE an engine-held image to `out_w`×`out_h` and register the
@@ -3188,6 +4234,7 @@ mod wasm {
         let stack = LayerStack::from_image(img.width, img.height, img.rgba.raw_arc())
             .map_err(ingest_err)?;
         LAYERS.with(|l| *l.borrow_mut() = Some(LayerDoc { handle, stack }));
+        note_selection(None, None);
         Ok(())
     }
 
@@ -3811,6 +4858,10 @@ mod wasm {
                     }
                     sel.bind(doc.handle, w, h);
                 });
+                // The op's step keeps the selection it was taken with (undo
+                // brings it back); the mirror follows the deselect now.
+                doc.stack
+                    .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned()));
                 Ok(vec![w, h])
             }
             .await;
@@ -3847,7 +4898,7 @@ mod wasm {
             .collect();
         let stack = LayerStack::import(manifest, &bufs).map_err(ingest_err)?;
         let ctx = GPU.with(|g| g.borrow().clone());
-        with_stack_async(|mut doc| async move {
+        let out = with_stack_async(|mut doc| async move {
             let result = async {
                 if (stack.width(), stack.height()) != (doc.stack.width(), doc.stack.height()) {
                     return Err(JsValue::from_str(&format!(
@@ -3875,7 +4926,9 @@ mod wasm {
             .await;
             (doc, result)
         })
-        .await
+        .await;
+        note_selection(None, None);
+        out
     }
 
     /// CONVERT a pixel layer into a smart object, preserving its pixels
@@ -4174,6 +5227,9 @@ mod wasm {
             let Some(label) = label else {
                 return (doc, Ok(String::new()));
             };
+            // A step taken with another selection puts it back (ADR 470)
+            // — after the extent is followed below, which rebinds.
+            let sel_change = doc.stack.take_selection_change();
             // Finding IMG-1: a step across a canvas operation (rotate,
             // canvas size) changes the stack's EXTENT, so the bound image
             // takes the extent with the pixels — the 4x2 image came back
@@ -4183,6 +5239,13 @@ mod wasm {
                 Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
                 Err(e) => Err(ingest_err(e)),
             };
+            match sel_change {
+                Some(sel) => SELECTION.with(|s| s.borrow_mut().restore(sel)),
+                // A rebind may have dropped the selection: the mirror follows.
+                None => doc
+                    .stack
+                    .sync_selection(SELECTION.with(|s| s.borrow().coverage().cloned())),
+            }
             (doc, result)
         })
         .await
@@ -4624,6 +5687,7 @@ mod wasm {
     #[wasm_bindgen]
     pub fn brush_stroke_cancel() {
         STROKE.with(|s| *s.borrow_mut() = None);
+        channel_clear_preview();
         STROKE_ON_MASK.with(|m| m.set(false));
     }
 
