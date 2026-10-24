@@ -53,6 +53,23 @@ export interface DataDoorDeps {
     query: string,
     field: string,
   ): Promise<{ binding: string; kind: string }>;
+  /** Place a query as a table in a text frame (`kind:id`), its `fields` in
+   *  order (editor ADR 291, the table tab dropped). */
+  placeTable(
+    target: string,
+    query: string,
+    fields: readonly string[],
+  ): Promise<{ binding: string; kind: string }>;
+  /** Fill a design (`kind:id`) with one record (a grid row dropped). */
+  placeRecord(
+    target: string,
+    query: string,
+    record: number,
+  ): Promise<readonly { binding: string; kind: string }[]>;
+  /** Load the first run's sample data; the sample query's name. */
+  loadSample(): Promise<string>;
+  /** The record a binding placed once for one record shows, if any. */
+  recordOf?(binding: string): number | undefined;
   /** Read the data again and lower every binding (the panel's Update). */
   refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
@@ -249,10 +266,48 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
         );
       return deps.place(target, query, field);
     },
+    async placeTable(target, query, fields) {
+      const q = queryOf(query);
+      if (!q)
+        throw new Error(
+          `no query "${query}" (a placed table reads a query's records)`,
+        );
+      const all = (await (await store()).queryRecords(guarded(q.sql))).schema
+        .fields;
+      const names = all.map((f) => f.name);
+      const unknown = (fields ?? []).filter((f) => !names.includes(f));
+      if (unknown.length > 0)
+        throw new Error(
+          `the query "${query}" has no field ${unknown.map((f) => `"${f}"`).join(", ")}`,
+        );
+      return deps.placeTable(
+        target,
+        query,
+        fields && fields.length > 0 ? fields : names,
+      );
+    },
+    async placeRecord(target, query, record) {
+      if (!queryOf(query))
+        throw new Error(
+          `no query "${query}" (a placed record is one of a query's records)`,
+        );
+      if (!Number.isInteger(record) || record < 0)
+        throw new Error(`no record ${String(record)} (records count from 0)`);
+      return deps.placeRecord(target, query, record);
+    },
+    async loadSample() {
+      return deps.loadSample();
+    },
     async placements() {
       const out: DataPlacement[] = [];
-      for (const p of await deps.placements())
-        out.push({ ...p, status: statusOf(p.binding) });
+      for (const p of await deps.placements()) {
+        const record = deps.recordOf?.(p.binding);
+        out.push({
+          ...p,
+          status: statusOf(p.binding),
+          ...(record !== undefined ? { record } : {}),
+        });
+      }
       return out;
     },
     async bindings() {

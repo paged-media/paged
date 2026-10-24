@@ -133,11 +133,16 @@ export {
   setDataDropHandler,
   useDataService,
   useDataRevision,
-  useDataFieldDrop,
+  useDataDrop,
   DATA_FIELD_DRAG_TYPE,
+  DATA_TABLE_DRAG_TYPE,
+  DATA_RECORD_DRAG_TYPE,
   type DataDoorSource,
+  type DataDrop,
+  type DataDropHandler,
   type DataFieldDrag,
-  type DataFieldDropHandler,
+  type DataRecordDrag,
+  type DataTableDrag,
 } from "./state/data-door";
 export {
   ALIGN_SCOPE,

@@ -32,6 +32,13 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 - asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
   the column's action chain, placed as a data URI;
 - paged.sheet edits a table of the document's data in place through `data@1`.
+- the Data panel's drops (editor ADR 291) through `data@1`: a field onto a frame (`place`), a
+  query as a table into a text frame's own story (`placeTable`; an update swaps it there and
+  keeps the frame), a record onto a group or a frame (`placeRecord`: each `<<field>>` of its
+  text frames becomes a variable at that record, found by the engine's `placeholder_spans`,
+  and a graphic frame named `<<@field>>` that record's picture; the record is saved, so a
+  refresh keeps it), and the first run's sample data (`loadSample`: a made-up product list
+  as `sample_products` and the query `sample`; `src/drop-place.ts`).
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
 binding kinds headless. The record templates library and the pagination inspector that
