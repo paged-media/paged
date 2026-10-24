@@ -21,6 +21,8 @@
 
 import { describe, expect, it } from "bun:test";
 
+import { covers } from "@paged-media/test-kit";
+
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
@@ -167,6 +169,9 @@ describe("the eyedropper and colour samplers [editor-shell.raster-color-binding]
   });
 
   it("the tool options feed the session; unknown sizes are ignored", () => {
+    covers("setting:media.paged.image.tool.eyedropper.sampleSize");
+    covers("setting:media.paged.image.tool.eyedropper.sampleSource");
+    covers("setting:media.paged.image.tool.colorSampler.sampleSize");
     const { handle, session } = open();
     const fields = toolOptionFields({
       brush: "b",
