@@ -172,6 +172,12 @@ describe.skipIf(!ready && !required)(
       expect(
         (await consumer.data.status()).find((x) => x.id === b.id)?.status,
       ).toBe("linked");
+      // Editor ADR 291's field markers: the frame the binding is placed in.
+      expect(
+        (await consumer.data.placements()).filter((p) => p.binding === b.id),
+      ).toEqual([
+        { binding: b.id, address: "rectangle:urect", status: "linked" },
+      ]);
       await consumer.data.unbind(b.id);
       expect(await consumer.data.bindings()).toEqual([]);
 
