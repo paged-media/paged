@@ -33,7 +33,7 @@
 //! `IrGl` glows, `ebbl` Bevel & Emboss, `ChFX` Satin, `patternFill`), each
 //! effect's `enab` switch, the `*Multi` list form and `masterFXSwitch`
 //! checked against effects Photoshop 27.10 wrote itself
-//! (`image-conformance/fixtures/photoshop/layer-effects/`) [OBS].
+//! (`modules/image/image-conformance/fixtures/photoshop/layer-effects/`) [OBS].
 
 use crate::descriptor::{read_versioned_descriptor, Descriptor, DescriptorValue};
 use crate::reader::ByteReader;

@@ -21,12 +21,12 @@
 //! RLE composites in RGB/Grayscale at 8 bit decode to the exact RGBA8
 //! planes; the unsupported set answers `PsdError::Unsupported` cleanly.
 
-use image_psd::compression::packbits;
-use image_psd::model::{
+use paged_psd::compression::packbits;
+use paged_psd::model::{
     ColorMode, ColorModeData, FileHeader, GlobalImageData, ImageResources, LayerAndMaskInfo,
     PsdFile,
 };
-use image_psd::{Container, PsdError};
+use paged_psd::{Container, PsdError};
 
 /// Hand-assemble minimal PSD bytes: 26-byte header + three empty
 /// sections + the composite (compression tag + payload). Goes through
@@ -255,7 +255,7 @@ fn image_psd_global_merged_composite_sixteen_bit_rle_is_still_refused() {
 // `composite_cmyk8` (the conversion to RGB needs the file's profile and a
 // CMS, which this crate does not have). The polarity and the matte were
 // measured on Photoshop-written files
-// (`image-conformance/fixtures/photoshop/cmyk-stacks`, replayed in
+// (`modules/image/image-conformance/fixtures/photoshop/cmyk-stacks`, replayed in
 // `image-conformance/tests/it/psd_cmyk_photoshop.rs`); these pin the decode
 // on hand-built bytes.
 

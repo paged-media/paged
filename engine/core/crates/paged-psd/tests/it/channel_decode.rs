@@ -22,9 +22,9 @@
 //! horizontal delta, and the error paths. Feature id:
 //! `image.psd.layer.channel-data.zip` (and `…raw-rle`).
 
-use image_psd::compression::packbits;
-use image_psd::model::{ChannelData, Compression};
-use image_psd::{Container, PsdError};
+use paged_psd::compression::packbits;
+use paged_psd::model::{ChannelData, Compression};
+use paged_psd::{Container, PsdError};
 
 // ---- RAW -----------------------------------------------------------------
 

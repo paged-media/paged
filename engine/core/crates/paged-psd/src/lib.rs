@@ -62,6 +62,7 @@ pub mod container;
 pub mod descriptor;
 pub mod edit;
 pub mod effects;
+pub mod layer_list;
 pub mod layer_pixels;
 pub mod model;
 pub mod reader;
@@ -76,6 +77,10 @@ pub use abr::AbrFile;
 pub use composite::{CompositeCmyk8, CompositeRgba8};
 pub use container::Container;
 pub use descriptor::{Descriptor, DescriptorValue, RefItem};
+pub use layer_list::{
+    image_source_data_layers, image_source_data_records, summary, LayerList, PsdSummary,
+    IMAGE_SOURCE_DATA_SIGNATURE,
+};
 pub use layer_pixels::{
     GroupPlate, ImportBlocker, InkToRgba8, LayerImport, LayerMasks, LayerPlate, MaskPlate,
     MAX_IMPORT_BYTES,

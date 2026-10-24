@@ -30,7 +30,7 @@
 //! Provenance: Adobe Photoshop File Formats specification — Adjustment
 //! Layers (Levels, Curves, Exposure, Invert, Hue/Saturation 2) [PUB];
 //! the layouts checked byte for byte against adjustment layers Photoshop
-//! 27.10 wrote itself (`image-conformance/fixtures/photoshop/
+//! 27.10 wrote itself (`modules/image/image-conformance/fixtures/photoshop/
 //! adjustment-layers/`) [OBS].
 
 use crate::reader::ByteReader;

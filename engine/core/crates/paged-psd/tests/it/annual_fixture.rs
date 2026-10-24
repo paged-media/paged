@@ -47,8 +47,8 @@
 
 use std::path::PathBuf;
 
-use image_psd::container::Container;
-use image_psd::model::{ChannelData, PsdFile};
+use paged_psd::container::Container;
+use paged_psd::model::{ChannelData, PsdFile};
 
 // ---------------------------------------------------------------------------
 // Byte-vector builders (big-endian, spec §10.4) — the round-trip suite's
@@ -348,7 +348,7 @@ fn build_annual_layers_psd() -> Vec<u8> {
     for plane in [&comp_r, &comp_g, &comp_b] {
         for r in 0..H as usize {
             let row = &plane[r * W as usize..(r + 1) * W as usize];
-            let packed = image_psd::compression::packbits::encode(row);
+            let packed = paged_psd::compression::packbits::encode(row);
             table.extend_from_slice(&be16(packed.len() as u16));
             rows_packed.extend_from_slice(&packed);
         }

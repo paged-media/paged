@@ -23,8 +23,8 @@
 //! (`Layr`, `Lr16`, …). Narrow keys (`lyid`, `luni`) keep their 4-byte
 //! length even in PSB. A hand-built PSB vector pins all four.
 
-use image_psd::container::Container;
-use image_psd::model::PsdFile;
+use paged_psd::container::Container;
+use paged_psd::model::PsdFile;
 
 fn be16(v: u16) -> [u8; 2] {
     v.to_be_bytes()
