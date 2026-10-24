@@ -429,7 +429,7 @@ an author can tell a field that is still tag-driven from one that paged edited.
 | Kind         | Target                                          | Value                        | Written by                                                                                                     |
 | ------------ | ----------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `text`       | a whole text frame's story                      | plain or lightly styled text | the existing text mutations, scoped to the story                                                               |
-| `alternates` | several items (variant frames), by name          | the member shown             | `ElementVisible` on every member, the chosen one shown and the rest hidden, in one step                         |
+| `alternates` | several items (variant frames), by name         | the member shown             | `ElementVisible` on every member, the chosen one shown and the rest hidden, in one step                        |
 | `text-run`   | a placeholder run inside a story                | plain text                   | `Operation::SetFieldValue` on a `PlaceholderField` (`paged-model`, `FieldKind::Placeholder`)                   |
 | `variable`   | a custom text variable, wherever it is inserted | plain text                   | the text-variable operations (`TextVariable`, `CreateTextVariable`, `InsertField`)                             |
 | `image`      | a graphic frame                                 | an image (bytes or URI)      | `Operation::ReplaceImageBytes` / `PlaceImage`, then a fit ([ADR 257](adr/257-indesigns-fits-and-page-keys.md)) |

@@ -16,6 +16,7 @@
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
+
 // A text field written in styles (engine ADR 1016; docs/composable-editor.md
 // §12, decision 6): the author lists the character styles the field allows
 // and whether it takes line and paragraph breaks, and this control offers
@@ -33,8 +34,7 @@ import { FORM } from "./messages";
 
 /** One part of a styled value, as the engine's `StyledRun`. */
 export type StyledRun =
-  | { text: string; style?: string | null }
-  | { break: "line" | "paragraph" };
+  { text: string; style?: string | null } | { break: "line" | "paragraph" };
 
 export type Breaks = "none" | "line" | "paragraph";
 
@@ -161,9 +161,10 @@ function applyStyle(el: HTMLElement, style: string): boolean {
   }
   // Inside a span of another style, the new run splits it.
   const host = range.startContainer;
-  const outer = host.nodeType === 1 && (host as Element).getAttribute?.("data-style")
-    ? (host as Element)
-    : host.parentElement?.closest?.("[data-style]");
+  const outer =
+    host.nodeType === 1 && (host as Element).getAttribute?.("data-style")
+      ? (host as Element)
+      : host.parentElement?.closest?.("[data-style]");
   if (outer && outer !== el && el.contains(outer)) {
     const after = doc.createRange();
     after.setStart(range.startContainer, range.startOffset);
@@ -222,8 +223,7 @@ export function StyledTextControl({
   // The document's value shows whenever the control is not being edited.
   useEffect(() => {
     const el = ref.current;
-    if (!el || (dirty.current && el.ownerDocument.activeElement === el))
-      return;
+    if (!el || (dirty.current && el.ownerDocument.activeElement === el)) return;
     render(el, JSON.parse(key) as StyledRun[]);
     setCount(runsLength(JSON.parse(key) as StyledRun[]));
   }, [key]);
@@ -310,7 +310,8 @@ export function StyledTextControl({
           range.deleteContents();
           const parts = text.split("\n");
           parts.forEach((part, i) => {
-            if (i > 0) insertBreak(el, takes === "paragraph" ? "paragraph" : "line");
+            if (i > 0)
+              insertBreak(el, takes === "paragraph" ? "paragraph" : "line");
             const node = el.ownerDocument.createTextNode(part);
             const r = rangeIn(el) ?? range;
             r.insertNode(node);

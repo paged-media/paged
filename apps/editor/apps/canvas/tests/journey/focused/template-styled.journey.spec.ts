@@ -15,6 +15,7 @@
  *
  *  @copyright  Copyright (c) And The Next GmbH
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
 
 // Engine ADR 1016 end to end, in the template-fill preset: a filler writes a
 // text field in a character style its author allows, and picks an alternate
@@ -78,7 +79,10 @@ async function makeTemplate(page: Page): Promise<void> {
             field: {
               name: "headline",
               kind: "text",
-              constraints: { allowedStyles: ["Bold", "Italic"], breaks: "line" },
+              constraints: {
+                allowedStyles: ["Bold", "Italic"],
+                breaks: "line",
+              },
             },
           },
         }),
@@ -179,9 +183,10 @@ test.describe("journey · template styled values and alternates", () => {
       .toEqual({ kind: "runs", runs: [{ text: "Old" }] });
 
     // The alternates picker shows the right frame and hides the left.
-    await expect(
-      page.locator('[data-field-alternate="left"]'),
-    ).toHaveAttribute("aria-checked", "true");
+    await expect(page.locator('[data-field-alternate="left"]')).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     await page.locator('[data-field-alternate="right"]').click();
     await expect
       .poll(() => value(page, "layout"), { timeout: 10_000 })

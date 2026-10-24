@@ -681,7 +681,7 @@ paged.setPluginMetadata(String(frame), "x-paged:template",
 const left = paged.insertFrame(pages[0].selfId, [300, 72, 360, 200]);
 const right = paged.insertFrame(pages[0].selfId, [300, 220, 360, 340]);
 const prop = (id, path, value) => ({ op: "setElementProperty",
-  args: { elementId: { kind: "rectangle", id: String(id) }, path, value } });
+  args: { elementId: { kind: "rectangle", id: String(id).split(":").pop() }, path, value } });
 paged.batch([
   prop(left, "itemName", { type: "text", value: "left" }),
   prop(right, "itemName", { type: "text", value: "right" }),

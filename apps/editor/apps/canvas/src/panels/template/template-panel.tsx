@@ -705,9 +705,7 @@ function AlternatesMaker({
       data-template-alternates-maker
       style={{ display: "grid", gap: space[2] }}
     >
-      <h3 style={{ margin: 0, fontSize: 12 }}>
-        {strings.t(PANEL.alternates)}
-      </h3>
+      <h3 style={{ margin: 0, fontSize: 12 }}>{strings.t(PANEL.alternates)}</h3>
       <label style={{ display: "grid", gap: space[1], fontSize: 11.5 }}>
         <span style={{ fontWeight: 600 }}>
           {strings.t(PANEL.alternatesName)}

@@ -233,7 +233,10 @@ describe("Template form", () => {
             field: {
               name: "headline",
               kind: "text",
-              constraints: { allowedStyles: ["Bold", "Italic"], breaks: "none" },
+              constraints: {
+                allowedStyles: ["Bold", "Italic"],
+                breaks: "none",
+              },
             },
           },
         }),
@@ -250,8 +253,8 @@ describe("Template form", () => {
       '[data-field-styled="headline"]',
     )!;
     expect(box.textContent).toBe("Ada Lovelace");
-    const styles = [...h.root.querySelectorAll("[data-field-style]")].map(
-      (b) => b.getAttribute("data-field-style"),
+    const styles = [...h.root.querySelectorAll("[data-field-style]")].map((b) =>
+      b.getAttribute("data-field-style"),
     );
     expect(styles).toEqual(["Bold", "Italic"]);
 

@@ -11,7 +11,7 @@ Arguments:
 
 Options:
       --values <VALUES>
-          A JSON list of {name, value}, an object of name → text, or a file holding either
+          A JSON list of {name, value}, an object of name → text, styled runs ([{text, style?} | {break}]), an alternate's name or a value, or a file holding either
 
   -o, --out <OUT>
           Where to write; the extension names the format

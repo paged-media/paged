@@ -226,7 +226,8 @@ describe("Template panel", () => {
   test("an author allows styles and breaks, and makes alternates", async () => {
     covers("panel:paged.template");
     const h = await mount();
-    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    await h.click(q(h, '[data-template-role="author"]')!);
+    await h.settle();
     await h.mutate({
       op: "createCharacterStyle",
       args: { selfId: "CharacterStyle/Bold", name: "Bold" },
