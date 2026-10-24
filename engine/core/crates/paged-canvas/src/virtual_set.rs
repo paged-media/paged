@@ -1594,6 +1594,21 @@ impl CanvasModel {
                                 .join("\n"),
                         ))
                     }
+                    // The cell's paragraphs as the story-content read gives
+                    // a story's (`StoryContent.paragraphs`: each paragraph's
+                    // style and runs, a run's text, character style and
+                    // direct overrides), read-only, as JSON text: what a
+                    // content module diffs to save a cell's formatting back.
+                    "paragraphs" => {
+                        let paras: Vec<_> = c
+                            .paragraphs
+                            .iter()
+                            .map(crate::model::paragraph_content)
+                            .collect();
+                        return Ok(Value::Text(
+                            serde_json::to_string(&paras).unwrap_or_else(|_| "[]".into()),
+                        ));
+                    }
                     _ => {}
                 }
                 let id = ElementId::TableCell {

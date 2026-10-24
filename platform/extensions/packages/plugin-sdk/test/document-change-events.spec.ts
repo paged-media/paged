@@ -371,7 +371,15 @@ describe("document.onDidChange on the real engine (headless harness)", () => {
     expect(run.error).toBeNull();
     // Engine 0.71.13 names the pages the script's writes changed (a frame
     // write: every page), so the event is no longer `pagesUnknown`.
-    expect(seen).toEqual([{ kind: "scriptResult", pageIds: [pageId] }]);
+    // A run is one undo step, and the reply names it (engine ADR 1004
+    // amendment), so a write it provokes can join it.
+    expect(seen).toEqual([
+      {
+        kind: "scriptResult",
+        pageIds: [pageId],
+        appliedSeq: expect.any(Number),
+      },
+    ]);
     expect(objectChanges).toBe(1);
     expect((await h.objects.query("frame")).length).toBe(framesBefore + 1);
   });

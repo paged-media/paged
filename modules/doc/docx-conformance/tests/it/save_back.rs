@@ -243,6 +243,7 @@ fn doc03_read_overlay_diff_save_round_trips() {
                         .map(|r| RunContentIn {
                             text: r.text.clone(),
                             character_style: r.char_style_id.clone(),
+                            ..Default::default()
                         })
                         .collect(),
                 }),
@@ -296,6 +297,7 @@ fn doc03_identity_content_is_a_no_op() {
                         .map(|r| RunContentIn {
                             text: r.text.clone(),
                             character_style: r.char_style_id.clone(),
+                            ..Default::default()
                         })
                         .collect(),
                 }),
@@ -338,6 +340,7 @@ fn structural_edits_insert_and_delete_runs_and_paragraphs() {
                         .map(|r| RunContentIn {
                             text: r.text.clone(),
                             character_style: r.char_style_id.clone(),
+                            ..Default::default()
                         })
                         .collect(),
                 }),
@@ -351,16 +354,19 @@ fn structural_edits_insert_and_delete_runs_and_paragraphs() {
     content.paragraphs[2].runs.push(RunContentIn {
         text: " (appended)".into(),
         character_style: None,
+        ..Default::default()
     });
 
     let (saved, _skips) = session.save_edited_from_content(&content).unwrap();
     let re = import_docx(&saved).unwrap();
     let p2 = body_para(&re, 2);
     let texts: Vec<&str> = p2.runs.iter().map(|r| r.text.as_str()).collect();
+    // Text typed after a run in its look extends that run, as typing at
+    // the end of a word does (the runs are mapped character by character).
     assert_eq!(
         texts,
-        ["Mix of normal and ", " text.", " (appended)"],
-        "middle run deleted, new run appended"
+        ["Mix of normal and ", " text. (appended)"],
+        "middle run deleted, the text appended to the run it follows"
     );
     // Other paragraphs untouched; other parts byte-identical.
     assert_eq!(body_para(&re, 0).runs[0].text, "Plain body text.");
@@ -1134,6 +1140,7 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
                     runs: vec![RunContentIn {
                         text: p.runs.iter().map(|r| r.text.as_str()).collect(),
                         character_style: None,
+                        ..Default::default()
                     }],
                 }),
                 LoweredBlock::Table(_) => None,
@@ -1144,6 +1151,7 @@ fn canvas_edits_in_table_cells_are_saved_back__feat__plugin_doc_object_model() {
         block: 1,
         cell,
         text: text.into(),
+        ..Default::default()
     };
     let cells_of = |d: &LoweredDoc| -> Vec<String> {
         let LoweredBlock::Table(t) = &d.story.blocks[1] else {
@@ -1226,6 +1234,7 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
                     runs: vec![RunContentIn {
                         text: p.runs.iter().map(|r| r.text.as_str()).collect(),
                         character_style: None,
+                        ..Default::default()
                     }],
                 }),
                 LoweredBlock::Table(_) => None,
@@ -1236,6 +1245,7 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
         block: 1,
         cell,
         text: text.into(),
+        ..Default::default()
     };
     let doc_xml = |bytes: &[u8]| {
         let pkg = OpcPackage::read(bytes).unwrap();
@@ -1325,4 +1335,178 @@ fn paragraphs_added_and_removed_in_cells_are_saved_back__feat__plugin_doc_object
         cell(2, ""),
     ]);
     assert_eq!(xml, src_xml);
+}
+
+/// Formatting made on the canvas is saved back: a word made bold inside a
+/// body run splits that run into three `<w:r>`s (the outer two keep the
+/// run's `<w:rPr>` bytes, the bold one gets `<w:b/>` added), a run made
+/// italic as a whole has `<w:i/>` added to its own `<w:rPr>`, and in a
+/// table cell read with its styled paragraphs a split and an un-bolded run
+/// are written the same way. Untouched runs and parts stay byte-identical.
+#[test]
+#[allow(non_snake_case)] // `…__feat__<id>` links the cockpit feature
+fn canvas_formatting_in_runs_is_saved_back__feat__plugin_doc_object_model() {
+    use docx_conformance::cell_fields_docx;
+    use docx_export::{CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn};
+    use docx_lower::ir::LoweredBlock;
+
+    let run = |text: &str, style: Option<&String>| RunContentIn {
+        text: text.into(),
+        character_style: style.cloned(),
+        ..Default::default()
+    };
+    let doc_xml = |bytes: &[u8]| {
+        let pkg = OpcPackage::read(bytes).unwrap();
+        String::from_utf8(pkg.part("word/document.xml").unwrap().to_vec()).unwrap()
+    };
+
+    // The body: "Plain body text." with "body" made bold, and the bold red
+    // run made italic too.
+    let original = memo_docx();
+    let session = DocSession::load(&original).unwrap();
+    let base = session.lowered();
+    let mut paragraphs: Vec<ParagraphContentIn> = base
+        .story
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                paragraph_style: p.para_style_id.clone(),
+                runs: p
+                    .runs
+                    .iter()
+                    .map(|r| run(&r.text, r.char_style_id.as_ref()))
+                    .collect(),
+            }),
+            LoweredBlock::Table(_) => None,
+        })
+        .collect();
+    let plain_style = paragraphs[0].runs[0].character_style.clone();
+    paragraphs[0].runs = vec![
+        run("Plain ", plain_style.as_ref()),
+        RunContentIn {
+            font_style: Some("Bold".into()),
+            ..run("body", plain_style.as_ref())
+        },
+        run(" text.", plain_style.as_ref()),
+    ];
+    paragraphs[2].runs[1].font_style = Some("Bold Italic".into());
+    let content = StoryContentIn {
+        self_id: "Story/doc".into(),
+        paragraphs,
+    };
+    let (saved, skips) = session.save_edited_from_content(&content).unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    assert!(
+        xml.contains(
+            r#"<w:r><w:t xml:space="preserve">Plain </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">body</w:t></w:r><w:r><w:t xml:space="preserve"> text.</w:t></w:r>"#
+        ),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<w:rPr><w:b/><w:i/><w:color w:val="FF0000"/></w:rPr>"#),
+        "{xml}"
+    );
+    // The heading and the runs around the italic one are untouched.
+    assert!(
+        xml.contains("<w:r><w:t>A Centered Heading</w:t></w:r>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<w:r><w:t xml:space="preserve">Mix of normal and </w:t></w:r>"#),
+        "{xml}"
+    );
+    let re = import_docx(&saved).unwrap();
+    let p0 = body_para(&re, 0);
+    let bolds: Vec<Option<bool>> = p0.runs.iter().map(|r| r.props.bold).collect();
+    assert_eq!(bolds, [None, Some(true), None]);
+    assert_eq!(body_para(&re, 2).runs[1].props.italic, Some(true));
+    let (orig_pkg, saved_pkg) = (
+        OpcPackage::read(&original).unwrap(),
+        OpcPackage::read(&saved).unwrap(),
+    );
+    for name in orig_pkg.file_names() {
+        if name != "word/document.xml" {
+            assert_eq!(orig_pkg.part(name), saved_pkg.part(name), "part {name}");
+        }
+    }
+
+    // A table cell: "1.20" with "20" made bold; "Apples" with its bold
+    // "les" made regular.
+    let source = cell_fields_docx();
+    let session = DocSession::load(&source).unwrap();
+    let base = session.lowered();
+    let story = StoryContentIn {
+        self_id: "s".into(),
+        paragraphs: base
+            .story
+            .blocks
+            .iter()
+            .filter_map(|b| match b {
+                LoweredBlock::Paragraph(p) => Some(ParagraphContentIn {
+                    paragraph_style: p.para_style_id.clone(),
+                    runs: vec![run(
+                        &p.runs.iter().map(|r| r.text.as_str()).collect::<String>(),
+                        None,
+                    )],
+                }),
+                LoweredBlock::Table(_) => None,
+            })
+            .collect(),
+    };
+    let LoweredBlock::Table(t) = &base.story.blocks[1] else {
+        panic!("block 1 is the table")
+    };
+    let token = |cell: usize, r: usize| t.cells[cell].paragraphs[0].runs[r].char_style_id.clone();
+    let styled = |cell: usize, runs: Vec<RunContentIn>| CellContentIn {
+        block: 1,
+        cell,
+        text: runs.iter().map(|r| r.text.as_str()).collect(),
+        paragraphs: Some(vec![ParagraphContentIn {
+            paragraph_style: None,
+            runs,
+        }]),
+    };
+    let cells = vec![
+        styled(
+            3,
+            vec![
+                run("1.", token(3, 0).as_ref()),
+                RunContentIn {
+                    font_style: Some("Bold".into()),
+                    ..run("20", token(3, 0).as_ref())
+                },
+            ],
+        ),
+        styled(
+            2,
+            vec![
+                run("App", token(2, 0).as_ref()),
+                RunContentIn {
+                    font_style: Some("Regular".into()),
+                    ..run("les", token(2, 1).as_ref())
+                },
+            ],
+        ),
+    ];
+    let (saved, skips) = session
+        .save_edited_from_content_and_cells(&story, &cells)
+        .unwrap();
+    assert!(skips.is_empty(), "{skips:?}");
+    let xml = doc_xml(&saved);
+    assert!(
+        xml.contains(
+            r#"<w:tc><w:p><w:r><w:t xml:space="preserve">1.</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">20</w:t></w:r></w:p></w:tc>"#
+        ),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<w:r><w:t>App</w:t></w:r><w:r><w:rPr><w:b w:val="false"/></w:rPr><w:t>les</w:t></w:r>"#),
+        "{xml}"
+    );
+    // The bookmark, the merge field and the other cells stay.
+    assert!(xml.contains(r#"<w:bookmarkStart w:id="0" w:name="first-item"/>"#));
+    assert_eq!(xml.matches("MERGEFIELD Name").count(), 2, "{xml}");
+    assert!(xml.contains("<w:tc><w:p><w:r><w:t>Line one</w:t></w:r></w:p><w:p><w:r><w:t>Line two</w:t></w:r></w:p></w:tc>"));
 }

@@ -38,6 +38,7 @@ it stood, for decisions made earlier; their status says so.
 | [522](522-placement-views-print-areas-and-chart-delete.md) | Placement kinds: a frame's view and sizing, print areas of several ranges, a deleted chart leaves the file | Accepted 2026-10-23; extends 510, 503 |
 | [523](523-conditional-formatting-evaluated-in-the-engine.md) | Conditional formatting: one model, evaluated in the calc engine, drawn the same on both surfaces | Accepted 2026-10-23; amends the frozen types |
 | [524](524-excel-named-styles-map-to-document-styles.md) | Excel named styles map to the document's styles: the switch, the mapping table, one fold in the engine | Accepted 2026-10-23 |
+| [525](525-document-chart-styles.md) | Document chart styles: roles, a colour-group palette, a workbook default | Accepted 2026-10-23; extends 503, 518, 519, 520 |
 
 The measured comparison behind ADR 501 is [`DECIMAL-SPIKE.md`](../../DECIMAL-SPIKE.md) at the
 repo root. Decisions made in other repositories that this plugin's code rests on are listed

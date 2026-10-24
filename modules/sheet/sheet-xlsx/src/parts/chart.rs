@@ -822,6 +822,9 @@ pub struct RoleRef {
     pub role: String,
     pub rgb: Option<u32>,
     pub swatch: Option<String>,
+    /// The swatch's colour model (`rgb`, `cmyk`, `spot`, `lab`; sheet ADR
+    /// 525) — `rgb` when the record names none.
+    pub model: Option<String>,
     pub paragraph: Option<String>,
     pub character: Option<String>,
 }
@@ -846,6 +849,7 @@ pub fn read_paged_refs(root: &El) -> Vec<RoleRef> {
                 role: el.attr("role").unwrap_or("").to_string(),
                 rgb: el.attr("rgb").and_then(|v| u32::from_str_radix(v, 16).ok()),
                 swatch: el.attr("swatch").map(str::to_string),
+                model: el.attr("model").map(str::to_string),
                 paragraph: el.attr("paragraph").map(str::to_string),
                 character: el.attr("character").map(str::to_string),
             });
@@ -928,8 +932,39 @@ pub fn concrete_rgb(c: &ColorRef) -> Option<u32> {
     }
 }
 
+/// The chart's own series palette recorded in the paged extension
+/// (`<pg:palette group="…"><pg:swatch ref="id|model|RRGGBB"/>…`, sheet ADR
+/// 525), if any.
+pub fn read_paged_palette(root: &El) -> Option<sheet_chart::style::SeriesPalette> {
+    let ext = root
+        .child(Ns::C, "extLst")
+        .or_else(|| root.child(Ns::Cx, "extLst"))
+        .and_then(|l| {
+            l.children
+                .iter()
+                .find(|e| e.local == "ext" && e.attr("uri") == Some(PAGED_EXT_URI))
+        })?;
+    fn find(el: &El) -> Option<&El> {
+        if el.local == "palette" {
+            return Some(el);
+        }
+        el.children.iter().find_map(find)
+    }
+    let p = find(ext)?;
+    Some(sheet_chart::style::SeriesPalette {
+        group: p.attr("group")?.to_string(),
+        swatches: p
+            .children
+            .iter()
+            .filter(|s| s.local == "swatch")
+            .filter_map(|s| s.attr("ref").and_then(super::chart_style::decode_swatch))
+            .collect(),
+    })
+}
+
 /// Restore the recorded references whose concrete value is unchanged.
 fn apply_paged_refs(root: &El, model: &mut ChartModel) {
+    model.palette = read_paged_palette(root);
     let refs = read_paged_refs(root);
     if refs.is_empty() {
         return;
@@ -942,7 +977,11 @@ fn apply_paged_refs(root: &El, model: &mut ChartModel) {
         let Some(sw) = &r.swatch else { continue };
         if let Some(c) = slot.as_mut() {
             if let Some(rgb) = concrete_rgb(c).filter(|v| Some(*v) == r.rgb) {
-                c.doc = Some(doc_swatch(sw, rgb));
+                let mut d = doc_swatch(sw, rgb);
+                if let Some(m) = r.model.as_deref().and_then(DocColorModel::parse) {
+                    d.model = m;
+                }
+                c.doc = Some(d);
             }
         }
     }

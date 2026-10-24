@@ -64,7 +64,11 @@ a cell edited on the canvas since is refused. Text typed into a cell on the canv
 export: each native cell's `text` is read next to the story and patched into the cell's runs;
 a paragraph added in a cell becomes a copy of its neighbour's paragraph (properties and the
 formatting of the run it continues), a removed one is dropped (the cell's last paragraph is
-kept, as Word requires). The native tables are found by their content, so a placed document
+kept, as Word requires). Formatting given on the canvas to part of a run — a word made
+bold, a character style applied — splits that Word run, the parts in the run's own look
+keeping its `<w:rPr>` and the others getting only what changed added to it; a run formatted
+as a whole has only what changed rewritten; untouched runs stay byte for byte. This holds in
+body paragraphs and table cells (the cells read with the engine's cell `paragraphs`). The native tables are found by their content, so a placed document
 whose story gained, lost or reordered tables still saves its cells; only a table that is gone
 from the canvas is reported. Headers and footers, pictures, paragraphs a
 page or column break splits and tables poured as text (a row taller than its page) cannot be

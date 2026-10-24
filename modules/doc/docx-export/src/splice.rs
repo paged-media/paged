@@ -32,7 +32,8 @@ use quick_xml::Reader;
 // The attribute is read as written (no unescaping), as before the helpers moved.
 use paged_ooxml::xml::{attr_raw as attr, local_name};
 
-use crate::rpr::{render_text, RunSpecials, SpecialSource};
+use crate::edit::RunFormat;
+use crate::rpr::{merge_rpr, render_text, RunSpecials, SpecialSource};
 use docx_core::{LINE_BREAK, SOFT_HYPHEN};
 
 /// A run to patch, addressed by source ordinals + the pre-rendered replacements.
@@ -57,6 +58,21 @@ pub struct ResolvedTarget {
     pub wrapper: Option<crate::bindings::Wrapper>,
     /// How a refusal names this run (`"run edit skipped: block 3 run 1"`).
     pub label: String,
+    /// The run's look before and after: its `<w:rPr>` gets only what
+    /// differs rewritten (`merge_rpr`), every other child kept. Takes the
+    /// place of `new_rpr`.
+    pub rpr_merge: Option<(RunFormat, RunFormat)>,
+    /// Split the run into these pieces, each a copy of it carrying its
+    /// text (and its look, merged into the copy's `<w:rPr>`).
+    pub split: Vec<SplitPiece>,
+}
+
+/// One piece of a split run ([`ResolvedTarget::split`]): its text and, when
+/// its look is not the run's, the run's look and its own.
+#[derive(Debug, Clone)]
+pub struct SplitPiece {
+    pub text: String,
+    pub rpr_merge: Option<(RunFormat, RunFormat)>,
 }
 
 impl ResolvedTarget {
@@ -71,6 +87,8 @@ impl ResolvedTarget {
             insert_after: Vec::new(),
             wrapper: None,
             label: format!("run edit skipped: paragraph {para_ord} run {run_ord}"),
+            rpr_merge: None,
+            split: Vec::new(),
         }
     }
 }
@@ -91,6 +109,10 @@ pub struct ResolvedCellTarget {
     pub new_rpr: Option<Vec<u8>>,
     /// How a refusal names this run.
     pub label: String,
+    /// As [`ResolvedTarget::rpr_merge`].
+    pub rpr_merge: Option<(RunFormat, RunFormat)>,
+    /// As [`ResolvedTarget::split`].
+    pub split: Vec<SplitPiece>,
 }
 
 /// A COLUMN-level structural action on one table. Applied to the `<w:tblGrid>`
@@ -322,12 +344,11 @@ pub fn patch_document_xml_cols(
                             && t.para_ord as i64 == p_ord
                             && t.run_ord as i64 == wrap_run_ord
                     }) {
-                        let run_open_end = reader.buffer_position() as usize;
-                        splice_run(
+                        patch_run(
                             &mut reader,
                             src,
                             t,
-                            run_open_end,
+                            event_start,
                             &mut out,
                             &mut cursor,
                             &mut refusals,
@@ -478,13 +499,14 @@ pub fn patch_document_xml_cols(
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
+                            rpr_merge: ct.rpr_merge.clone(),
+                            split: ct.split.clone(),
                         };
-                        let run_open_end = reader.buffer_position() as usize;
-                        splice_run(
+                        patch_run(
                             &mut reader,
                             src,
                             &t,
-                            run_open_end,
+                            event_start,
                             &mut out,
                             &mut cursor,
                             &mut refusals,
@@ -512,13 +534,14 @@ pub fn patch_document_xml_cols(
                             insert_after: Vec::new(),
                             wrapper: None,
                             label: ct.label.clone(),
+                            rpr_merge: ct.rpr_merge.clone(),
+                            split: ct.split.clone(),
                         };
-                        let run_open_end = reader.buffer_position() as usize;
-                        splice_run(
+                        patch_run(
                             &mut reader,
                             src,
                             &t,
-                            run_open_end,
+                            event_start,
                             &mut out,
                             &mut cursor,
                             &mut refusals,
@@ -562,12 +585,11 @@ pub fn patch_document_xml_cols(
                             continue;
                         }
                         // reader is positioned just after the `<w:r …>` start tag.
-                        let run_open_end = reader.buffer_position() as usize;
-                        splice_run(
+                        patch_run(
                             &mut reader,
                             src,
                             t,
-                            run_open_end,
+                            run_start,
                             &mut out,
                             &mut cursor,
                             &mut refusals,
@@ -1187,6 +1209,145 @@ fn place_rpr_first(
     }
 }
 
+/// The run's `<w:rPr>` element (its first child), if it has one.
+fn run_rpr(src: &[u8], run_open_end: usize) -> Option<&[u8]> {
+    let body = &src[run_open_end..];
+    let mut reader = Reader::from_reader(body);
+    reader.config_mut().trim_text(false);
+    loop {
+        let start = reader.buffer_position() as usize;
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                let name = e.name().as_ref().to_vec();
+                if local_name(&name) != b"rPr" {
+                    return None;
+                }
+                let _ = reader.read_to_end(QName(&name));
+                return Some(&body[start..reader.buffer_position() as usize]);
+            }
+            Ok(Event::Empty(e)) => {
+                return (local_name(e.name().as_ref()) == b"rPr")
+                    .then(|| &body[start..reader.buffer_position() as usize]);
+            }
+            Ok(Event::Text(_)) => continue,
+            _ => return None,
+        }
+    }
+}
+
+/// Patch one targeted run whose `<w:r>` start tag began at `run_start`
+/// (the reader just past it): split it ([`split_run`]) or splice it
+/// ([`splice_run`]).
+fn patch_run(
+    reader: &mut Reader<&[u8]>,
+    src: &[u8],
+    t: &ResolvedTarget,
+    run_start: usize,
+    out: &mut Vec<u8>,
+    cursor: &mut usize,
+    refusals: &mut Vec<String>,
+) {
+    let run_open_end = reader.buffer_position() as usize;
+    if t.split.is_empty() {
+        splice_run(reader, src, t, run_open_end, out, cursor, refusals);
+    } else {
+        split_run(reader, src, t, run_start, out, cursor, refusals);
+    }
+}
+
+/// Replace one `<w:r>` by its pieces ([`ResolvedTarget::split`]): each a
+/// copy of the run — its start tag, its `<w:rPr>`, its other children —
+/// with the piece's text spliced in as an edit of the run would be, and the
+/// piece's look merged into the copy's `<w:rPr>`. Only a run of text is
+/// split: one holding anything else (a drawing, a field character, a note
+/// reference) would have it copied into every piece, so it is left as it
+/// was and the refusal is recorded, as is any piece's own refusal.
+fn split_run(
+    reader: &mut Reader<&[u8]>,
+    src: &[u8],
+    t: &ResolvedTarget,
+    run_start: usize,
+    out: &mut Vec<u8>,
+    cursor: &mut usize,
+    refusals: &mut Vec<String>,
+) {
+    let run_open_end = reader.buffer_position() as usize;
+    skip_run(reader);
+    let end = reader.buffer_position() as usize;
+    let run = &src[run_start..end];
+    if let Some(other) = non_text_child(&src[run_open_end..end]) {
+        refusals.push(format!(
+            "{}: the run holds a <{other}>, which splitting it would copy into every part",
+            t.label
+        ));
+        return;
+    }
+    let mut pieces: Vec<u8> = Vec::new();
+    let mut refused: Vec<String> = Vec::new();
+    for piece in &t.split {
+        let mut r = Reader::from_reader(run);
+        r.config_mut().trim_text(false);
+        // The `<w:r …>` start tag.
+        if !matches!(r.read_event(), Ok(Event::Start(_))) {
+            refused.push(format!("{}: the run cannot be read", t.label));
+            break;
+        }
+        let open_end = r.buffer_position() as usize;
+        let sub = ResolvedTarget {
+            new_text: Some(piece.text.clone()),
+            rpr_merge: piece.rpr_merge.clone(),
+            split: Vec::new(),
+            ..t.clone()
+        };
+        let mut c = 0usize;
+        splice_run(
+            &mut r,
+            run,
+            &sub,
+            open_end,
+            &mut pieces,
+            &mut c,
+            &mut refused,
+        );
+        pieces.extend_from_slice(&run[c..]);
+    }
+    if !refused.is_empty() {
+        refusals.extend(refused);
+        return;
+    }
+    out.extend_from_slice(&src[*cursor..run_start]);
+    out.extend_from_slice(&pieces);
+    *cursor = end;
+}
+
+/// The first child of a run's content (`body`, after its start tag) that
+/// is neither its `<w:rPr>`, text, a character Word writes as an element,
+/// nor Word's layout cache — what a split would duplicate.
+fn non_text_child(body: &[u8]) -> Option<String> {
+    let mut reader = Reader::from_reader(body);
+    reader.config_mut().trim_text(false);
+    loop {
+        let (e, empty) = match reader.read_event() {
+            Ok(Event::Start(e)) => (e.into_owned(), false),
+            Ok(Event::Empty(e)) => (e.into_owned(), true),
+            Ok(Event::End(_)) | Ok(Event::Eof) | Err(_) => return None,
+            Ok(_) => continue,
+        };
+        let name = e.name().as_ref().to_vec();
+        let ln = local_name(&name).to_vec();
+        if !empty {
+            let _ = reader.read_to_end(QName(&name));
+        }
+        let plain = ln == b"rPr"
+            || ln == b"t"
+            || ln == b"lastRenderedPageBreak"
+            || matches!(special(&e), Special::Char(_));
+        if !plain {
+            return Some(String::from_utf8_lossy(&name).into_owned());
+        }
+    }
+}
+
 /// Walk one targeted `<w:r>`'s direct children, splicing its `<w:rPr>` and/or
 /// `<w:t>` and copying the rest verbatim. On return the reader is positioned just
 /// after `</w:r>`, and `cursor` is advanced past every spliced hole.
@@ -1210,7 +1371,12 @@ fn splice_run(
     // `Some` while an rPr replacement/insertion is still owed. It is placed at
     // the existing `<w:rPr>` if present, else just before the text, else
     // right after the `<w:r>` open tag (schema: rPr is the run's first child).
-    let mut rpr_pending: Option<&[u8]> = t.new_rpr.as_deref();
+    let merged: Option<Vec<u8>> = t
+        .rpr_merge
+        .as_ref()
+        .and_then(|(from, to)| merge_rpr(run_rpr(src, run_open_end), from, to));
+    let new_rpr: Option<&[u8]> = merged.as_deref().or(t.new_rpr.as_deref());
+    let mut rpr_pending: Option<&[u8]> = new_rpr;
     let mut text_done = false;
     let originals = if t.new_text.is_some() {
         match scan_run(src, run_open_end) {
@@ -1234,11 +1400,11 @@ fn splice_run(
                 let name = e.name().as_ref().to_vec();
                 let ln = local_name(&name).to_vec();
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
-                if ln == b"rPr" && t.new_rpr.is_some() {
+                if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     let _ = reader.read_to_end(QName(&name));
                     let end = reader.buffer_position() as usize;
                     out.extend_from_slice(&src[*cursor..child_start]);
-                    out.extend_from_slice(t.new_rpr.as_deref().unwrap());
+                    out.extend_from_slice(rpr);
                     *cursor = end;
                     rpr_pending = None;
                     continue;
@@ -1267,9 +1433,9 @@ fn splice_run(
                 let ln = local_name(e.name().as_ref()).to_vec();
                 let end = reader.buffer_position() as usize;
                 place_rpr_first(&ln, src, child_start, out, cursor, &mut rpr_pending);
-                if ln == b"rPr" && t.new_rpr.is_some() {
+                if let (b"rPr", Some(rpr)) = (ln.as_slice(), new_rpr) {
                     out.extend_from_slice(&src[*cursor..child_start]);
-                    out.extend_from_slice(t.new_rpr.as_deref().unwrap());
+                    out.extend_from_slice(rpr);
                     *cursor = end;
                     rpr_pending = None;
                 } else if t.new_text.is_some() && (ln == b"t" || is_special_char(&e)) {
@@ -1495,6 +1661,52 @@ mod tests {
         assert!(!out.contains(">lo<"), "stale fragment gone");
         assert!(!out.contains("> there<"), "stale fragment gone");
         assert_eq!(out.matches("<w:t").count(), 1, "exactly one <w:t> remains");
+    }
+
+    #[test]
+    fn a_split_copies_the_run_per_piece_and_refuses_a_run_holding_more_than_text() {
+        use crate::edit::RunFormat;
+        let bold = RunFormat {
+            props: docx_core::RunProps {
+                bold: Some(true),
+                ..Default::default()
+            },
+            rstyle: None,
+        };
+        let split = |src: &[u8]| {
+            let mut t = ResolvedTarget::edit(0, 0);
+            t.split = vec![
+                SplitPiece {
+                    text: "ab".into(),
+                    rpr_merge: None,
+                },
+                SplitPiece {
+                    text: "cd".into(),
+                    rpr_merge: Some((RunFormat::default(), bold.clone())),
+                },
+            ];
+            patch_document_xml_cols(
+                src,
+                &[t],
+                &BTreeMap::new(),
+                &[],
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+            )
+        };
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r w:rsidR="7"><w:rPr><w:lang w:val="de"/></w:rPr><w:t>abcd</w:t></w:r></w:p></w:body></w:document>"#;
+        let (out, refused) = split(src);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            r#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r w:rsidR="7"><w:rPr><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">ab</w:t></w:r><w:r w:rsidR="7"><w:rPr><w:b/><w:lang w:val="de"/></w:rPr><w:t xml:space="preserve">cd</w:t></w:r></w:p></w:body></w:document>"#
+        );
+        let src = br#"<w:document xmlns:w="urn:w"><w:body><w:p><w:r><w:t>abcd</w:t><w:footnoteReference w:id="1"/></w:r></w:p></w:body></w:document>"#;
+        let (out, refused) = split(src);
+        assert_eq!(out, src.to_vec(), "left as it was");
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].contains("footnoteReference"), "{refused:?}");
     }
 
     #[test]

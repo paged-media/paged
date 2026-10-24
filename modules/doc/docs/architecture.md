@@ -172,11 +172,18 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
   under `media.paged.doc/save-back`. If the save throws, the original bytes are exported.
 - The overlay starts from a copy of the baseline lowering and walks its blocks in order:
   each paragraph block takes the next read-back paragraphs by position (one, plus one for
-  each break that split it) and receives only their run text and character style; table
-  blocks are stepped over; the read-back paragraph style is not applied. It never adds or
+  each break that split it) and takes their runs: text, character style, and for a run the
+  canvas formatted directly an edit style (`CharacterStyle/docx-edit-N`, based on its
+  character style, holding the overrides); table blocks are stepped over; the read-back paragraph style is not applied. It never adds or
   removes a block and does not read read-back paragraphs beyond those the baseline's blocks
   take (`docx-export/src/overlay.rs:96-140`). The differ and the patcher also handle
-  paragraph insert and delete, paragraph properties, table-cell runs, rows and columns; the
+  paragraph insert and delete, paragraph properties, table-cell runs, rows and columns. A
+  paragraph's runs, body or cell, are diffed character by character (`plan_runs` in
+  `diff.rs`): each Word run is left alone, edited in place (text, and its look merged into its
+  own `<w:rPr>` by `rpr::merge_rpr`), removed, or split into copies of itself
+  (`SplitRun` / `SplitCellRun`, `splice::split_run`; a run holding more than text is not
+  split). Cells are overlaid from their `text` and, where the engine has it, their styled
+  `paragraphs` read (`overlay_cells`); the
   tests in `docx-conformance/tests/it/save_back.rs` reach those through lowerings or edit sets
   built in the test, and no test of the read-back path adds or removes a paragraph.
 

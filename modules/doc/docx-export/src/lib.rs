@@ -35,7 +35,7 @@ mod splice;
 
 pub use bindings::{build_bindings, BlockBinding, DocxBindings, RunBinding};
 pub use diff::diff;
-pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, StructuralEdit};
+pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 pub use overlay::{
     overlay_cells, overlay_story_content, CellContentIn, ParagraphContentIn, RunContentIn,
     StoryContentIn,
@@ -75,13 +75,8 @@ pub fn apply_edits(
         if e.new_text.is_none() && e.new_props.is_none() {
             continue;
         }
-        let new_rpr = e.new_props.as_ref().map(|props| {
-            // `Some(Some(id))` sets a real Word rStyle; anything else omits it
-            // (a whole-`rPr` replacement can't preserve an old rStyle, so the
-            // differ passes it explicitly).
-            let rstyle = e.rstyle.as_ref().and_then(|o| o.as_deref());
-            rpr::render_rpr(props, rstyle)
-        });
+        let (new_rpr, rpr_merge) =
+            resolve_look(e.new_props.as_ref(), e.rstyle.as_ref(), e.base.as_ref());
         targets.push(ResolvedTarget {
             para_ord: addr.para_ord,
             run_ord: addr.run_ord,
@@ -91,6 +86,8 @@ pub fn apply_edits(
             delete: false,
             insert_after: Vec::new(),
             label: format!("run edit skipped: block {} run {}", e.block, e.run),
+            rpr_merge,
+            split: Vec::new(),
         });
     }
 
@@ -105,6 +102,9 @@ pub fn apply_edits(
     // Cell paragraph actions, keyed by `(table_ord, row, cell, para)`.
     let mut cell_paras: BTreeMap<(u32, u32, u32, u32), CellParaAction> = BTreeMap::new();
     let cell_key = |p: docx_core::CellPath| (p.table_ord, p.row, p.cell, p.para);
+    // Cell runs to split, resolved with the cell run edits below.
+    #[allow(clippy::type_complexity)]
+    let mut cell_splits: Vec<(usize, usize, usize, usize, RunFormat, Vec<RunPiece>)> = Vec::new();
     for s in &edits.structural {
         match s {
             StructuralEdit::DeleteCellParagraph { block, cell, para } => {
@@ -160,6 +160,34 @@ pub fn apply_edits(
                     .or_default()
                     .append_runs
                     .push(rpr::render_run(text, &docx_core::RunProps::default(), None));
+            }
+            StructuralEdit::SplitRun {
+                block,
+                run,
+                base,
+                pieces,
+            } => {
+                let Some(a) = bindings.resolve(*block, *run) else {
+                    skips.push(format!(
+                        "run split skipped: block {block} run {run} is not patchable"
+                    ));
+                    continue;
+                };
+                let mut t = ResolvedTarget::edit(a.para_ord, a.run_ord);
+                t.wrapper = a.wrapper;
+                t.label = format!("run split skipped: block {block} run {run}");
+                t.split = split_pieces(base, pieces);
+                targets.push(t);
+            }
+            StructuralEdit::SplitCellRun {
+                block,
+                cell,
+                para,
+                run,
+                base,
+                pieces,
+            } => {
+                cell_splits.push((*block, *cell, *para, *run, base.clone(), pieces.clone()));
             }
             StructuralEdit::DeleteRun { block, run } => {
                 let Some(a) = bindings.resolve(*block, *run) else {
@@ -358,10 +386,8 @@ pub fn apply_edits(
         if c.new_text.is_none() && c.new_props.is_none() {
             continue;
         }
-        let new_rpr = c.new_props.as_ref().map(|props| {
-            let rstyle = c.rstyle.as_ref().and_then(|o| o.as_deref());
-            rpr::render_rpr(props, rstyle)
-        });
+        let (new_rpr, rpr_merge) =
+            resolve_look(c.new_props.as_ref(), c.rstyle.as_ref(), c.base.as_ref());
         cell_targets.push(ResolvedCellTarget {
             table_ord: path.table_ord,
             row: path.row,
@@ -375,6 +401,32 @@ pub fn apply_edits(
                 "cell edit skipped: block {} cell {} para {} run {}",
                 c.block, c.cell, c.para, c.run
             ),
+            rpr_merge,
+            split: Vec::new(),
+        });
+    }
+    for (block, cell, para, run, base, pieces) in &cell_splits {
+        let Some((path, run_ord, wrapper)) = bindings.resolve_cell(*block, *cell, *para, *run)
+        else {
+            skips.push(format!(
+                "cell run split skipped: block {block} cell {cell} para {para} run {run} is not patchable"
+            ));
+            continue;
+        };
+        cell_targets.push(ResolvedCellTarget {
+            table_ord: path.table_ord,
+            row: path.row,
+            cell: path.cell,
+            para: path.para,
+            run_ord,
+            wrapper,
+            new_text: None,
+            new_rpr: None,
+            label: format!(
+                "cell run split skipped: block {block} cell {cell} para {para} run {run}"
+            ),
+            rpr_merge: None,
+            split: split_pieces(base, pieces),
         });
     }
 
@@ -406,4 +458,50 @@ pub fn apply_edits(
         pkg.set_part(main_part, patched);
     }
     Ok(skips)
+}
+
+/// How a run edit's new look is written: merged into the run's own
+/// `<w:rPr>` when its old look is known (`base`), else as a whole new
+/// `<w:rPr>` (`Some(Some(id))` sets a real Word rStyle; anything else
+/// omits it — a whole-`rPr` replacement cannot keep an old rStyle, so the
+/// differ passes it explicitly).
+#[allow(clippy::type_complexity)]
+fn resolve_look(
+    props: Option<&docx_core::RunProps>,
+    rstyle: Option<&Option<String>>,
+    base: Option<&RunFormat>,
+) -> (Option<Vec<u8>>, Option<(RunFormat, RunFormat)>) {
+    let Some(props) = props else {
+        return (None, None);
+    };
+    let rstyle = rstyle.and_then(|o| o.as_deref());
+    match base {
+        Some(base) => (
+            None,
+            Some((
+                base.clone(),
+                RunFormat {
+                    props: props.clone(),
+                    rstyle: rstyle.map(str::to_string),
+                },
+            )),
+        ),
+        None => (Some(rpr::render_rpr(props, rstyle)), None),
+    }
+}
+
+/// A split's pieces for the patcher: a piece in the run's own look keeps
+/// its `<w:rPr>`; another has what differs from `base` merged into it.
+fn split_pieces(base: &RunFormat, pieces: &[RunPiece]) -> Vec<splice::SplitPiece> {
+    pieces
+        .iter()
+        .map(|p| splice::SplitPiece {
+            text: p.text.clone(),
+            rpr_merge: p
+                .format
+                .as_ref()
+                .filter(|f| *f != base)
+                .map(|f| (base.clone(), f.clone())),
+        })
+        .collect()
 }
