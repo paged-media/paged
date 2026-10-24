@@ -79,9 +79,9 @@ pub use notify::Notifier;
 pub use operation::{
     AppliedOperation, ColorGroupSpec, FaceSelectMode, FieldKind, GradientSpec, GradientStopSpec,
     GroupSpec, GuideOrientationSpec, InvalidationHint, NestedParent, NodeId, NodeSpec,
-    NumberingListSpec, OpacityMaskMode, Operation, PathPointAddress, PathPointRole, PathfinderKind,
-    PathfinderRegionVerb, PropertyPath, StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec,
-    TextPathSpec, Value, ZOrderTarget,
+    NumberingLevelSpec, NumberingListSpec, OpacityMaskMode, Operation, ParagraphListState,
+    PathPointAddress, PathPointRole, PathfinderKind, PathfinderRegionVerb, PropertyPath,
+    StyleCollection, StyleScope, SwatchColorSpec, SwatchSpec, TextPathSpec, Value, ZOrderTarget,
 };
 pub use path_math::fit_polyline_to_anchors;
 
@@ -1143,6 +1143,7 @@ mod tests {
         project
             .apply(Operation::CreateNumberingList {
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/Steps".to_string()),
                     name: Some("Steps".to_string()),
                     continue_across_stories: Some(true),
@@ -1160,6 +1161,7 @@ mod tests {
             .apply(Operation::EditNumberingList {
                 list_id: "NumberingList/Steps".to_string(),
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/Steps".to_string()),
                     name: Some("Steps (local)".to_string()),
                     continue_across_stories: Some(false),

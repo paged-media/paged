@@ -4716,6 +4716,10 @@ pub(super) struct StoryEmitter<'a> {
     /// (snapshot/restore around re-emits; cross-story lists disable
     /// the cache), so a given source always yields the same numbers.
     pub(super) cross_story_numbering: Option<&'a std::cell::RefCell<HashMap<String, u32>>>,
+    /// Engine ADR 1018 — hidden text (`CharacterDecorations::hidden`)
+    /// takes no room: true when the document does not show hidden text
+    /// and something in it (a style, or any run) can be hidden.
+    pub(super) hide_hidden_text: bool,
     /// `<StoryPreference OpticalMarginAlignment>` flag. When true,
     /// the per-line emit pass nudges the leftmost / rightmost glyph
     /// of each line outward per `paged_text::optical_margin_offset`.
@@ -5049,6 +5053,7 @@ impl<'a> StoryEmitter<'a> {
             prev_was_numbered: false,
             list_levels: Default::default(),
             cross_story_numbering: None,
+            hide_hidden_text: super::conditions::document_hides_text(document),
             optical_margin_alignment: false,
             vertical: false,
             optical_margin_size_pt: 0.0,
@@ -6472,11 +6477,20 @@ pub(super) fn emit_paragraph_into_chain(
     // counts placeholders or reads an anchor's offset (`conditions`).
     // Undeclared conditions hide nothing, so a document declaring none
     // skips the pass.
+    // Hidden text (engine ADR 1018) leaves the same way, through the
+    // same pass, when the document does not show it.
     let declared = &em.document.styles.conditions;
-    let shown = if declared.is_empty() {
+    let hidden_text = em.hide_hidden_text.then_some(em.document);
+    let shown = if declared.is_empty() && hidden_text.is_none() {
         None
     } else {
-        super::conditions::without_hidden_runs(paragraph, declared)
+        super::conditions::without_hidden_runs_by(
+            paragraph,
+            &super::conditions::HideRule {
+                declared,
+                hidden_text,
+            },
+        )
     };
     let paragraph = shown.as_ref().unwrap_or(paragraph);
     // An anchored object takes the options it leaves out from its object
@@ -7165,8 +7179,8 @@ fn emit_paragraph_lines(
                 point_size,
                 tracking: resolved_runs[i].tracking,
                 font_id: font_ids[i],
-                underline: resolved_runs[i].underline.unwrap_or(false),
-                strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+                underline: resolved_runs[i].draws_underline(),
+                strikethru: resolved_runs[i].draws_strike(),
                 substituted: substituted_flags[i],
                 baseline_shift_pt,
                 horizontal_scale_pct: resolved_runs[i].horizontal_scale.unwrap_or(100.0)
@@ -7196,8 +7210,8 @@ fn emit_paragraph_lines(
                 point_size,
                 tracking: m.tracking,
                 font_id: font_ids[marker_slot],
-                underline: m.underline.unwrap_or(false),
-                strikethru: m.strikethru.unwrap_or(false),
+                underline: m.draws_underline(),
+                strikethru: m.draws_strike(),
                 substituted: substituted_flags[marker_slot],
                 baseline_shift_pt,
                 horizontal_scale_pct: m.horizontal_scale.unwrap_or(100.0) * glyph_scale,
@@ -8285,6 +8299,14 @@ fn emit_paragraph_lines(
     // by the cap's bytes — or a run starting right after the cap (a
     // nested style's) paints one character late.
     let cap_bytes = drop_cap_spec_emit.as_ref().map_or(0, |cap| cap.0 as u32);
+    let decor_picker = super::color_paint::build_run_decor_picker(
+        paragraph,
+        &resolved_runs,
+        em.palette,
+        em.color_ctx,
+        bullet_paint_override.map(|(len, _)| len).unwrap_or(0),
+    )
+    .without_leading(cap_bytes);
     let picker = picker.without_leading(cap_bytes);
     let stroke_picker = stroke_picker.without_leading(cap_bytes);
     let any_text_stroke = stroke_picker.any_visible();
@@ -9083,6 +9105,22 @@ fn emit_paragraph_lines(
         // origin as `emit_glyph_slice`). Glyph font_ids mix the wght
         // bits in (`fnv ^ wght`); map back to the plain byte-hash key
         // `FontTable::metrics_for` uses.
+        // Engine ADR 1018 — a run's highlight, behind its glyphs.
+        if decor_picker.any_highlight() {
+            super::decorations::emit_highlight_for_line(
+                &line,
+                &decor_picker,
+                &|fid| {
+                    font_ids
+                        .iter()
+                        .position(|f| *f == fid)
+                        .and_then(|i| em.font_table.metrics_for(bytes_font_ids[i]))
+                        .copied()
+                },
+                text_origin_pt,
+                &mut pages[target_page].list,
+            );
+        }
         if em.options.degraded_asset_markers {
             emit_substituted_highlight_for_line(
                 &line,
@@ -9186,6 +9224,7 @@ fn emit_paragraph_lines(
         emit_line_decorations(
             &line,
             &picker,
+            &decor_picker,
             (sx - ox, sy - oy),
             &mut pages[target_page].list,
         );

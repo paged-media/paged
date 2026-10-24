@@ -35,4 +35,5 @@ mod table_v2;
 mod template_policy;
 mod text_frame_story_mint;
 mod transparency_target_paths;
+mod word_model;
 mod xml_structure;

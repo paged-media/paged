@@ -956,6 +956,92 @@ pub(super) fn build_run_paint_picker_resolved(
     RunPaintPicker { bands, default }
 }
 
+/// Engine ADR 1018 — what a run adds to its glyphs beyond fill and
+/// stroke: the underline's kind and colour, double strikethrough and a
+/// highlight band.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DecorBand {
+    /// The kind of underline drawn (the glyph's `underline` flag says
+    /// whether one is).
+    pub underline: Option<paged_model::UnderlineKind>,
+    /// The underline's own colour; `None` draws in the text's.
+    pub underline_paint: Option<Paint>,
+    pub double_strike: bool,
+    /// The highlight behind the glyphs.
+    pub highlight: Option<Paint>,
+}
+
+/// Per-cluster lookup of a paragraph's [`DecorBand`]s, built beside
+/// [`RunPaintPicker`] over the same clusters.
+#[derive(Debug, Default)]
+pub struct RunDecorPicker {
+    bands: Vec<(u32, DecorBand)>,
+}
+
+impl RunDecorPicker {
+    /// See [`RunPaintPicker::without_leading`].
+    pub fn without_leading(mut self, bytes: u32) -> Self {
+        for (start, _) in &mut self.bands {
+            *start = start.saturating_sub(bytes);
+        }
+        self
+    }
+
+    pub fn pick(&self, cluster: u32) -> DecorBand {
+        let mut chosen = DecorBand::default();
+        for (start, band) in &self.bands {
+            if *start <= cluster {
+                chosen = *band;
+            } else {
+                break;
+            }
+        }
+        chosen
+    }
+
+    /// True when no run highlights.
+    pub fn any_highlight(&self) -> bool {
+        self.bands.iter().any(|(_, b)| b.highlight.is_some())
+    }
+}
+
+/// The [`RunDecorPicker`] for a paragraph's resolved runs; `marker_len`
+/// is the byte length of a list marker shaped ahead of run 0 with a
+/// paint of its own (the marker takes no decorations).
+pub(super) fn build_run_decor_picker(
+    paragraph: &paged_model::Paragraph,
+    resolved_runs: &[paged_scene::ResolvedRunAttrs],
+    palette: &Graphic,
+    color_ctx: ColorCtx<'_>,
+    marker_len: u32,
+) -> RunDecorPicker {
+    let mut bands = Vec::with_capacity(paragraph.runs.len() + 1);
+    let mut cursor = 0u32;
+    if marker_len > 0 {
+        bands.push((0, DecorBand::default()));
+        cursor = marker_len;
+    }
+    for (i, run) in paragraph.runs.iter().enumerate() {
+        let attrs = &resolved_runs[i];
+        let paint_of = |id: &str| color_id_to_paint(id, palette, color_ctx);
+        bands.push((
+            cursor,
+            DecorBand {
+                underline: attrs.drawn_underline(),
+                underline_paint: attrs
+                    .decorations
+                    .underline_color
+                    .as_deref()
+                    .and_then(paint_of),
+                double_strike: attrs.decorations.double_strikethrough == Some(true),
+                highlight: attrs.decorations.effective_highlight().and_then(paint_of),
+            },
+        ));
+        cursor += run.text.len() as u32;
+    }
+    RunDecorPicker { bands }
+}
+
 /// W1.8 — build a cluster→paint picker for ONE footnote paragraph's
 /// runs. `run_text_lens[i]` is the byte length of run `i`'s SHAPED text
 /// (i.e. including the synthesised `"N." + separator` marker folded onto

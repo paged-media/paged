@@ -8486,7 +8486,8 @@ pub(crate) fn paragraph_attr_patch(
                 grid_alignment_patch(key, raw, p.grid_alignment, p.grid_align_first_line_only)
             })
             .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_ABOVE, &p.rule_above))
-            .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below)),
+            .or_else(|| paragraph_rule_patch(key, raw, &crate::emit::RULE_BELOW, &p.rule_below))
+            .or_else(|| crate::emit::shading_border_patch(key, raw, &p.shading, &p.border)),
     }
 }
 
@@ -8579,7 +8580,7 @@ fn character_attr_patch(key: &[u8], raw: &[u8], r: &CharacterRun) -> Option<Patc
         b"StrikeThru" => Some(opt_bool_patch(r.strikethru)),
         b"Ligatures" => Some(opt_bool_patch(r.ligatures_on)),
         b"NoBreak" => Some(opt_bool_patch(r.no_break)),
-        _ => None,
+        _ => crate::emit::decoration_patch(key, raw, &r.decorations, r.underline),
     }
 }
 
@@ -8606,6 +8607,14 @@ fn character_extras(r: &CharacterRun) -> Vec<(&'static str, String)> {
     if let Some(b) = r.no_break {
         out.push(("NoBreak", b.to_string()));
     }
+    // Engine ADR 1018 — appended only where the source has none.
+    crate::emit::decoration_attrs(
+        &mut out,
+        &r.decorations,
+        r.underline,
+        r.strikethru,
+        r.point_size,
+    );
     out
 }
 

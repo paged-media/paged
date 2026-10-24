@@ -4435,6 +4435,12 @@ pub struct DocumentPreference {
     /// it: which side of a spread the first page binds on.
     #[serde(default)]
     pub page_binding: Option<String>,
+    /// Word's "show hidden text" (engine ADR 1018): when true, runs marked
+    /// hidden ([`CharacterDecorations::hidden`]) are set and drawn like any
+    /// other; when false or `None` (the default) they take no room. Not an
+    /// IDML attribute: the `.paged` model part carries it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_hidden_text: Option<bool>,
 }
 
 /// `<GridPreference>` — the document's baseline-grid + document-grid
@@ -5126,6 +5132,13 @@ pub struct NumberingListDef {
     /// `ContinueNumbersAcrossDocuments="true|false"`. Round-trip only;
     /// see the struct doc. Default: false.
     pub continue_across_documents: Option<bool>,
+    /// Word's per-level list definitions (`w:abstractNum/w:lvl`, engine
+    /// ADR 1018), level 1 first. Empty for an InDesign list, whose levels
+    /// live on the paragraph styles (ADR 158). When a paragraph applies a
+    /// list with levels, the level matching its `NumberingLevel` supplies
+    /// the marker, format, start, restart and indents.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<NumberingLevelDef>,
 }
 /// Custom stroke-style definition. The renderer consumes the
 /// `Dashed`/`Dotted` patterns directly, the `Striped` stripe table as
@@ -5690,6 +5703,12 @@ pub struct CharacterStyleDef {
     /// Cascades through `BasedOn` per-field. See
     /// [`OtfFeatures`].
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
 }
 /// Q-09: `ParagraphShading*` attributes parsed off a
 /// `<ParagraphStyle>` or `<ParagraphStyleRange>`. The renderer emits
@@ -5824,6 +5843,12 @@ pub struct ParagraphStyleDef {
     /// they reach every run whose character style leaves them unset.
     #[serde(default, skip_serializing_if = "OtfFeatures::is_unset")]
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
     /// `<TabList>` parsed from the style. Empty means "no
     /// declaration" — the cascade may inherit from `BasedOn`.
     pub tab_list: Vec<TabStop>,
@@ -6246,6 +6271,8 @@ pub struct ResolvedCharacter {
     /// Cascaded discrete OpenType feature toggles. See
     /// [`CharacterStyleDef::otf`].
     pub otf: OtfFeatures,
+    /// Cascaded Word character additions (engine ADR 1018).
+    pub decorations: CharacterDecorations,
 }
 /// Effective paragraph-level attributes after walking BasedOn.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -6284,6 +6311,8 @@ pub struct ResolvedParagraph {
     /// Cascaded `OTF*` toggles of the paragraph style chain. See
     /// [`ParagraphStyleDef::otf`].
     pub otf: OtfFeatures,
+    /// Cascaded Word character additions (engine ADR 1018).
+    pub decorations: CharacterDecorations,
     /// `<TabList>` from the cascade. Empty means inherited / none.
     pub tab_list: Vec<TabStop>,
     pub bullets_list_type: Option<String>,
@@ -6644,6 +6673,7 @@ impl ResolvedCharacter {
             self.kerning_method = def.kerning_method.clone();
         }
         self.otf.merge_below(&def.otf);
+        self.decorations.fill_from(&def.decorations);
     }
 }
 impl ResolvedParagraph {
@@ -6691,6 +6721,7 @@ impl ResolvedParagraph {
             self.kerning_method = def.kerning_method.clone();
         }
         self.otf.merge_below(&def.otf);
+        self.decorations.fill_from(&def.decorations);
         if self.tab_list.is_empty() && !def.tab_list.is_empty() {
             self.tab_list = def.tab_list.clone();
         }
@@ -7114,6 +7145,15 @@ pub struct Paragraph {
     /// `RuleBelow*` — the horizontal rule stroked below the last
     /// line. W0.2: see [`Paragraph::rule_above`].
     pub rule_below: ParagraphRule,
+    /// Paragraph shading set on the paragraph itself (Word's direct
+    /// `w:shd`, engine ADR 1018), over the style's per field. All-`None`
+    /// inherits; skipped when unset.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub shading: ParagraphShading,
+    /// Paragraph border set on the paragraph itself (Word's direct
+    /// `w:pBdr`), over the style's per field. All-`None` inherits.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub border: ParagraphBorder,
     /// A LOCAL nested-style list: `<Properties><AllNestedStyles>` on the
     /// `<ParagraphStyleRange>` itself (InDesign writes one when a
     /// paragraph's list differs from its style's). Non-empty replaces
@@ -7979,6 +8019,314 @@ impl MarkSettings {
     }
 }
 
+/// True when `v` is its type's default — the `skip_serializing_if` of
+/// the Word additions (engine ADR 1018), so a document without them
+/// serialises exactly as before.
+pub fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
+/// Word's underline kinds (`w:u/@w:val`), engine ADR 1018. InDesign has
+/// one underline whose look is a stroke style; Word names the look, so the
+/// model keeps Word's name and the IDML writer maps it onto a stroke style
+/// (`UnderlineType`). `Single` is what a plain `Underline="true"` draws.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnderlineKind {
+    /// Explicitly no underline (Word's `none`), over a style that has one.
+    None,
+    Single,
+    /// Under the words only: the spaces between them stay bare.
+    Words,
+    Double,
+    Thick,
+    Dotted,
+    Dashed,
+    DotDash,
+    DotDotDash,
+    Wave,
+    DoubleWave,
+}
+
+impl UnderlineKind {
+    /// Every kind, in declaration order.
+    pub const ALL: [UnderlineKind; 11] = [
+        Self::None,
+        Self::Single,
+        Self::Words,
+        Self::Double,
+        Self::Thick,
+        Self::Dotted,
+        Self::Dashed,
+        Self::DotDash,
+        Self::DotDotDash,
+        Self::Wave,
+        Self::DoubleWave,
+    ];
+
+    /// The wire / property-path spelling (camelCase, Word's own where
+    /// Word has one).
+    pub fn as_name(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Single => "single",
+            Self::Words => "words",
+            Self::Double => "double",
+            Self::Thick => "thick",
+            Self::Dotted => "dotted",
+            Self::Dashed => "dashed",
+            Self::DotDash => "dotDash",
+            Self::DotDotDash => "dotDotDash",
+            Self::Wave => "wave",
+            Self::DoubleWave => "doubleWave",
+        }
+    }
+
+    /// Parse [`Self::as_name`], and Word's own `w:u` spellings that map onto
+    /// one of these (`dash` → dashed, `wavyDouble` → doubleWave, the heavy
+    /// variants → their plain kind).
+    pub fn from_name(s: &str) -> Option<Self> {
+        Some(match s {
+            "none" => Self::None,
+            "single" => Self::Single,
+            "words" => Self::Words,
+            "double" => Self::Double,
+            "thick" => Self::Thick,
+            "dotted" | "dottedHeavy" => Self::Dotted,
+            "dashed" | "dash" | "dashedHeavy" | "dashLong" | "dashLongHeavy" => Self::Dashed,
+            "dotDash" | "dashDotHeavy" => Self::DotDash,
+            "dotDotDash" | "dashDotDotHeavy" => Self::DotDotDash,
+            "wave" | "wavyHeavy" => Self::Wave,
+            "doubleWave" | "wavyDouble" => Self::DoubleWave,
+            _ => return None,
+        })
+    }
+
+    /// The InDesign stroke style that draws this kind (`UnderlineType`),
+    /// by the names InDesign's Graphic.xml declares. `None` for the plain
+    /// solid line (no `UnderlineType` needed) and for no underline.
+    pub fn idml_stroke_type(self) -> Option<&'static str> {
+        match self {
+            Self::None | Self::Single | Self::Words | Self::Thick => None,
+            Self::Double => Some("StrokeStyle/$ID/ThinThin"),
+            Self::Dotted => Some("StrokeStyle/$ID/Canned Dotted"),
+            Self::Dashed => Some("StrokeStyle/$ID/Canned Dashed 3x2"),
+            Self::DotDash | Self::DotDotDash => Some("StrokeStyle/$ID/Canned Dashed 4x4"),
+            Self::Wave | Self::DoubleWave => Some("StrokeStyle/$ID/Wavy"),
+        }
+    }
+
+    /// The kind an InDesign `UnderlineType` draws as, when it is one this
+    /// enum names (the reverse of [`Self::idml_stroke_type`]; `Solid` is
+    /// `Single`). `None` for a stroke style with no Word counterpart.
+    pub fn from_idml_stroke_type(s: &str) -> Option<Self> {
+        let suffix = s.strip_prefix("StrokeStyle/$ID/").unwrap_or(s);
+        Some(match suffix {
+            "Solid" => Self::Single,
+            "ThinThin" => Self::Double,
+            "Canned Dotted" | "Dotted" | "Japanese Dots" => Self::Dotted,
+            "Canned Dashed 3x2" | "Dashed" => Self::Dashed,
+            "Canned Dashed 4x4" => Self::DotDash,
+            "Wavy" => Self::Wave,
+            _ => return None,
+        })
+    }
+}
+
+/// The swatch reference that says "no highlight" over a style that sets
+/// one ([`CharacterDecorations::highlight_color`]).
+pub const NO_HIGHLIGHT: &str = "Swatch/None";
+
+/// Word's character additions the IDML model had no slot for (engine
+/// ADR 1018): highlight, hidden text, the underline's kind and colour,
+/// and double strikethrough. Carried on runs, character styles and
+/// paragraph styles; every field `None` inherits through the cascade.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CharacterDecorations {
+    /// Highlight (Word's `w:highlight` / run `w:shd`): a swatch reference
+    /// painted as a band behind the glyphs, ascent to descent. `Some`
+    /// of [`NO_HIGHLIGHT`] switches a style's highlight off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight_color: Option<String>,
+    /// Hidden text (`w:vanish`). A hidden run takes no room and draws
+    /// nothing unless the document shows hidden text
+    /// ([`DocumentPreference::show_hidden_text`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    /// How the underline looks when the run is underlined. Setting a kind
+    /// through the property path also turns `underline` on (off for
+    /// [`UnderlineKind::None`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline_kind: Option<UnderlineKind>,
+    /// The underline's colour (`w:u/@w:color`); `None` is the text's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline_color: Option<String>,
+    /// Double strikethrough (`w:dstrike`): two lines through the text,
+    /// drawn instead of the single strike.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub double_strikethrough: Option<bool>,
+}
+
+impl CharacterDecorations {
+    /// True when no field is set.
+    pub fn is_unset(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Fill every unset field from the level below.
+    pub fn fill_from(&mut self, below: &CharacterDecorations) {
+        if self.highlight_color.is_none() {
+            self.highlight_color.clone_from(&below.highlight_color);
+        }
+        self.hidden = self.hidden.or(below.hidden);
+        self.underline_kind = self.underline_kind.or(below.underline_kind);
+        if self.underline_color.is_none() {
+            self.underline_color.clone_from(&below.underline_color);
+        }
+        self.double_strikethrough = self.double_strikethrough.or(below.double_strikethrough);
+    }
+
+    /// The highlight's swatch, `None` when there is none (unset or
+    /// [`NO_HIGHLIGHT`]).
+    pub fn effective_highlight(&self) -> Option<&str> {
+        self.highlight_color
+            .as_deref()
+            .filter(|c| !c.is_empty() && *c != NO_HIGHLIGHT)
+    }
+}
+
+/// What follows a list level's number (Word's `w:suff`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ListSuffix {
+    Tab,
+    Space,
+    Nothing,
+}
+
+impl ListSuffix {
+    pub fn as_name(self) -> &'static str {
+        match self {
+            Self::Tab => "tab",
+            Self::Space => "space",
+            Self::Nothing => "nothing",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<Self> {
+        Some(match s {
+            "tab" => Self::Tab,
+            "space" => Self::Space,
+            "nothing" => Self::Nothing,
+            _ => return None,
+        })
+    }
+}
+
+/// One level of a Word list definition (`w:lvl`, engine ADR 1018). Every
+/// field `None` leaves the paragraph's own cascade in place.
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NumberingLevelDef {
+    /// 1 to 9.
+    pub level: u32,
+    /// `NumberedList`, `BulletList` or `NoList` (the
+    /// `BulletsAndNumberingListType` vocabulary).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list_type: Option<String>,
+    /// The counter's format: an InDesign sample string (`"1, 2, 3, 4..."`)
+    /// or Word's `w:numFmt` name (`decimal`, `lowerRoman`, …), which
+    /// [`Self::idml_format`] translates.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    /// The marker text: InDesign's `^1`…`^9` / `^#` or Word's `%1`…`%9`
+    /// (`"%1.%2."`), translated by [`Self::idml_expression`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+    /// What follows the marker; appended to the expression.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suffix: Option<ListSuffix>,
+    /// The level's first number (`w:start`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_at: Option<i32>,
+    /// Word's `w:lvlRestart`: the level restarts after a paragraph at
+    /// level `1..=k`; `0` never restarts. `None` restarts after any
+    /// higher level (Word's default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart_after: Option<u32>,
+    /// The text's left indent in pt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub left_indent: Option<f32>,
+    /// The first line's indent in pt; negative hangs the marker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_line_indent: Option<f32>,
+    /// A tab stop after the marker, in pt from the frame's left edge.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_position: Option<f32>,
+    /// The bullet's code point, for a bullet level.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bullet_character: Option<u32>,
+    /// The face the bullet (or number) is set in (Word's `w:lvl/w:rPr`
+    /// font), over the marker's character style.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bullet_font: Option<String>,
+    /// The marker's character style (`CharacterStyle/<id>`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker_character_style: Option<String>,
+}
+
+impl NumberingLevelDef {
+    /// The level's format as an InDesign `NumberingFormat` sample string.
+    pub fn idml_format(&self) -> Option<String> {
+        let f = self.format.as_deref()?;
+        Some(
+            match f {
+                "decimal" => "1, 2, 3, 4...",
+                "decimalZero" => "01, 02, 03...",
+                "upperRoman" => "I, II, III, IV...",
+                "lowerRoman" => "i, ii, iii, iv...",
+                "upperLetter" => "A, B, C, D...",
+                "lowerLetter" => "a, b, c, d...",
+                other => other,
+            }
+            .to_string(),
+        )
+    }
+
+    /// The level's marker as an InDesign `NumberingExpression`: Word's
+    /// `%k` become `^k`, a literal `^` is escaped as `^^` when the source
+    /// is Word's spelling, and the suffix is appended (`^t` for a tab).
+    pub fn idml_expression(&self) -> Option<String> {
+        let suffix = match self.suffix {
+            Some(ListSuffix::Tab) => "^t",
+            Some(ListSuffix::Space) => " ",
+            Some(ListSuffix::Nothing) | None => "",
+        };
+        let base = self.expression.as_deref()?;
+        Some(format!("{}{suffix}", word_level_text_to_expression(base)))
+    }
+}
+
+/// Word's level text (`%1.%2.`) as an InDesign numbering expression
+/// (`^1.^2.`). A string without `%` is taken as InDesign's own spelling
+/// and returned unchanged.
+pub fn word_level_text_to_expression(text: &str) -> String {
+    if !text.contains('%') {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len() + 2);
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '%' if matches!(chars.peek(), Some('1'..='9')) => {
+                out.push('^');
+                out.push(chars.next().expect("peeked"));
+            }
+            '^' => out.push_str("^^"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct CharacterRun {
     pub character_style: Option<String>,
@@ -8109,6 +8457,12 @@ pub struct CharacterRun {
     /// `OTFStylisticSets`, …) parsed off the `<CharacterStyleRange>`.
     /// Each field `None` ⇒ inherit from the cascade. See [`OtfFeatures`].
     pub otf: OtfFeatures,
+    /// Word's character additions (engine ADR 1018): highlight, hidden,
+    /// underline kind and colour, double strikethrough. Each field `None`
+    /// inherits; skipped when unset so documents without them serialise
+    /// as before.
+    #[serde(default, skip_serializing_if = "CharacterDecorations::is_unset")]
+    pub decorations: CharacterDecorations,
     /// Phase 5 — `AppliedConditions="Condition/A Condition/B"`.
     /// Space-separated list of `<Condition>` references. Empty
     /// means "no condition gating" (always visible). A run with
@@ -9485,5 +9839,67 @@ mod numbering_style_tests {
             }
         }
         assert!(misses.is_empty(), "{misses:#?}");
+    }
+}
+
+#[cfg(test)]
+mod word_model_tests {
+    use super::*;
+
+    #[test]
+    fn underline_kinds_name_and_map_to_indesign_stroke_styles() {
+        for k in UnderlineKind::ALL {
+            assert_eq!(UnderlineKind::from_name(k.as_name()), Some(k));
+            if let Some(t) = k.idml_stroke_type() {
+                let back = UnderlineKind::from_idml_stroke_type(t).unwrap();
+                // Two Word kinds share InDesign's one wavy and one canned dash.
+                assert_eq!(back.idml_stroke_type(), Some(t));
+            }
+        }
+        assert_eq!(
+            UnderlineKind::from_name("wavyDouble"),
+            Some(UnderlineKind::DoubleWave)
+        );
+        assert_eq!(UnderlineKind::from_name("zigzag"), None);
+    }
+
+    #[test]
+    fn word_level_text_becomes_an_indesign_expression() {
+        assert_eq!(word_level_text_to_expression("%1.%2."), "^1.^2.");
+        assert_eq!(word_level_text_to_expression("(%3)^"), "(^3)^^");
+        assert_eq!(word_level_text_to_expression("^#.^t"), "^#.^t");
+        let level = NumberingLevelDef {
+            level: 2,
+            format: Some("upperLetter".into()),
+            expression: Some("%1.%2".into()),
+            suffix: Some(ListSuffix::Space),
+            ..Default::default()
+        };
+        assert_eq!(level.idml_expression().as_deref(), Some("^1.^2 "));
+        assert_eq!(level.idml_format().as_deref(), Some("A, B, C, D..."));
+    }
+
+    #[test]
+    fn decorations_cascade_and_skip_when_unset() {
+        let mut run = CharacterDecorations {
+            hidden: Some(false),
+            ..Default::default()
+        };
+        run.fill_from(&CharacterDecorations {
+            hidden: Some(true),
+            highlight_color: Some(NO_HIGHLIGHT.into()),
+            ..Default::default()
+        });
+        assert_eq!(run.hidden, Some(false), "the run's own value wins");
+        assert_eq!(
+            run.effective_highlight(),
+            None,
+            "Swatch/None is no highlight"
+        );
+        let json = serde_json::to_string(&CharacterRun::default()).unwrap();
+        assert!(
+            !json.contains("decorations"),
+            "unset decorations are not serialised"
+        );
     }
 }

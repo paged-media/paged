@@ -1319,6 +1319,7 @@ mod tests {
         styles.numbering_lists.insert(
             "NumberingList/Annual Steps".into(),
             idml_import::styles::NumberingListDef {
+                levels: Default::default(),
                 self_id: "NumberingList/Annual Steps".into(),
                 name: Some("Annual Steps".into()),
                 continue_across_stories: Some(true),

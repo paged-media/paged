@@ -289,6 +289,7 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
         | O::EditNumberingList { .. }
         | O::DeleteNumberingList { .. }
         | O::SetStyleProperty { .. }
+        | O::SetStyleBasedOn { .. }
         | O::CreateTextVariable { .. }
         | O::DeleteTextVariable { .. }
         // Tag definitions are the document's vocabulary, like its styles
@@ -338,7 +339,11 @@ pub fn required(op: &Operation) -> Vec<Requirement> {
             req(P::TextEdit, Target::Item(to.clone())),
         ],
         O::UnlinkFrames { frame, .. } => vec![req(P::TextEdit, Target::Item(frame.clone()))],
-        O::ApplyStyle { story_id, .. } | O::SetFlowGrowRule { story_id, .. } => {
+        O::ApplyStyle { story_id, .. }
+        | O::SetFlowGrowRule { story_id, .. }
+        | O::SetListLevel { story_id, .. }
+        | O::RestartNumbering { story_id, .. }
+        | O::SetParagraphListState { story_id, .. } => {
             vec![story(P::TextStyle, story_id)]
         }
         O::InsertField { story_id, .. }

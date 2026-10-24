@@ -305,8 +305,8 @@ pub(super) fn compose_footnote_paragraphs(
                         point_size,
                         tracking: resolved_runs[i].tracking,
                         font_id: font_ids[i],
-                        underline: resolved_runs[i].underline.unwrap_or(false),
-                        strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+                        underline: resolved_runs[i].draws_underline(),
+                        strikethru: resolved_runs[i].draws_strike(),
                         substituted: substituted_flags[i],
                         baseline_shift_pt,
                         horizontal_scale_pct: resolved_runs[i].horizontal_scale.unwrap_or(100.0)

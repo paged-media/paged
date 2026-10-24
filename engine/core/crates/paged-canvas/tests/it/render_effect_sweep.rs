@@ -3471,6 +3471,7 @@ fn style_cases(c: &mut Vec<Case>) {
          bullet renders",
         |_| Mutation::CreateNumberingList {
             spec: NumberingListSpec {
+                levels: Default::default(),
                 self_id: Some("NumberingList/sweep".into()),
                 name: Some("Sweep list".into()),
                 continue_across_stories: Some(true),
@@ -3486,6 +3487,7 @@ fn style_cases(c: &mut Vec<Case>) {
         |m| {
             m.apply_mutation(&Mutation::CreateNumberingList {
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list".into()),
                     continue_across_stories: Some(false),
@@ -3496,6 +3498,7 @@ fn style_cases(c: &mut Vec<Case>) {
             Mutation::EditNumberingList {
                 list_id: "NumberingList/sweep".into(),
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list, edited".into()),
                     continue_across_stories: Some(true),
@@ -3512,6 +3515,7 @@ fn style_cases(c: &mut Vec<Case>) {
         |m| {
             m.apply_mutation(&Mutation::CreateNumberingList {
                 spec: NumberingListSpec {
+                    levels: Default::default(),
                     self_id: Some("NumberingList/sweep".into()),
                     name: Some("Sweep list".into()),
                     continue_across_stories: Some(true),

@@ -2075,7 +2075,7 @@
           ]
         },
         {
-          "description": "v56 (B-18) — InDesign paste-into: nest an existing TOP-LEVEL\npage item inside a container Rectangle / Oval / Polygon. The\nchild keeps its document-space geometry (nothing moves on\ncanvas) and renders clipped by the container's outline. Rides\n`Operation::PasteInto`; one undo pops the child back to its\nexact stacking slot. Grouped / already-nested children and\nnon-container hosts are rejected with an honest error.",
+          "description": "v56 (B-18) — InDesign paste-into: nest an existing TOP-LEVEL\npage item inside a container Rectangle / Oval / Polygon. The\nchild keeps its document-space geometry (nothing moves on\ncanvas) and renders clipped by the container's outline. Rides\n`Operation::PasteInto`; one undo pops the child back to its\nexact stacking slot. Already-nested children and non-container\nhosts are rejected with an honest error. Engine ADR 1010: the\nchild may be a group, and a grouped item pastes its outermost\ngroup in (the reply's op names that group).",
           "type": "object",
           "properties": {
             "op": {
@@ -2310,7 +2310,7 @@
           ]
         },
         {
-          "description": "B-04 (protocol v32) — group page items on one spread.\nReference-based and z-order-neutral (the group takes the\nearliest member's paint slot). Reply carries the minted group\nid as `createdId` so the editor can select it. W1.20 (groups\nv2): `member_ids` may include existing `Group`s, producing a\nnested group-of-groups.",
+          "description": "B-04 (protocol v32) — group page items on one spread.\nReference-based and z-order-neutral (the group takes the\nearliest member's paint slot). Reply carries the minted group\nid as `createdId` so the editor can select it. W1.20 (groups\nv2): `member_ids` may include existing `Group`s, producing a\nnested group-of-groups.\n\nEngine ADR 1010 (additive, rides v76): `clip: true` makes a CLIP\nGROUP — Illustrator's Make Clipping Mask: the top-most member is\nthe clipping path, the rest paint inside its outline, and the\npath itself paints nothing. Refused unless the top-most member is\na Rectangle, Oval or Polygon hosting no pasted-in content.\nRelease is `dissolveGroup` (or `groupClip` false to keep the\ngroup).",
           "type": "object",
           "properties": {
             "op": {
@@ -2325,6 +2325,9 @@
                   "items": {
                     "$ref": "#/$defs/ElementId"
                   }
+                },
+                "clip": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -4050,6 +4053,192 @@
                 "styleId",
                 "path",
                 "value"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1018 — re-parent style `style_id` of `collection` onto\n`based_on` (`None`: no parent). Refused when that would make the\nstyle inherit from itself. Undoable in one step.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setStyleBasedOn"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "collection": {
+                  "$ref": "#/$defs/StyleCollection"
+                },
+                "styleId": {
+                  "type": "string"
+                },
+                "basedOn": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "collection",
+                "styleId"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1018 — the list level of the paragraphs touching story\nchars `[start, end)` (the caret's paragraph when equal): `level`\n1–9, or `delta` levels from where each stands (Tab / Shift+Tab).",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "setListLevel"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "level": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint32",
+                  "minimum": 0,
+                  "default": null
+                },
+                "delta": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32",
+                  "default": null
+                }
+              },
+              "required": [
+                "storyId",
+                "start",
+                "end"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1018 — Word's Restart Numbering (or, with\n`continueNumbering`, Continue Numbering) on the paragraphs touching\n`[start, end)`, at `startAt` when given.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "restartNumbering"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "storyId": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "startAt": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32",
+                  "default": null
+                },
+                "continueNumbering": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "required": [
+                "storyId",
+                "start",
+                "end"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ]
+        },
+        {
+          "description": "Engine ADR 1021 — find `spec` and replace each hit (the first only\nunless `replaceAll`) with `replace` (Word's `^p` `^t` `^l` `^&` `^^`,\n`$1`… in regex mode, `\\1`… with wildcards), styled with\n`paragraphStyle` / `characterStyle` when given. Replace All is ONE\nundo step. Refused when nothing matches.",
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "const": "findReplace"
+            },
+            "args": {
+              "type": "object",
+              "properties": {
+                "spec": {
+                  "$ref": "#/$defs/FindSpec"
+                },
+                "replace": {
+                  "type": "string"
+                },
+                "replaceAll": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "paragraphStyle": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                },
+                "characterStyle": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "spec",
+                "replace"
               ]
             }
           },
@@ -7403,6 +7592,66 @@
           "description": "The rule the frame's outline fills and clips by: `Value::Text`\n`\"NonZero\"` (IDML's rule, the default) or `\"EvenOdd\"`; `\"\"` clears\nto `\"NonZero\"`. On a TextFrame, Rectangle, Oval, Polygon or\nGraphicLine. No IDML attribute carries it: the IDML export re-winds\nan even-odd outline whose contours do not cross and reports the\nrest as lost. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameFillRule"
+        },
+        {
+          "description": "A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a\nswatch. `ColorRef(None)` clears the run's own value (inherit);\n`ColorRef(Some(\"Swatch/None\"))` says \"no highlight\" over a style\nthat sets one. On a `StoryRange`, or a character / paragraph style\nthrough `SetStyleProperty`. Paint-only.",
+          "type": "string",
+          "const": "characterHighlightColor"
+        },
+        {
+          "description": "Hidden text (`w:vanish`): `Value::Bool`. A hidden run takes no room\nunless `documentShowHiddenText` is on. Reflows.",
+          "type": "string",
+          "const": "characterHidden"
+        },
+        {
+          "description": "The underline's kind: `Value::Text` of `none`, `single`, `words`,\n`double`, `thick`, `dotted`, `dashed`, `dotDash`, `dotDotDash`,\n`wave` or `doubleWave` (Word's `w:u` names; its heavy and long\nvariants are accepted as their plain kind). Setting a kind turns\nthe underline on (`none` turns it off); `\"\"` clears the kind and\nleaves the switch. A suffix `@on`, `@off` or `@inherit` sets the\nswitch explicitly instead — the form an undo carries.",
+          "type": "string",
+          "const": "characterUnderlineType"
+        },
+        {
+          "description": "The underline's colour: `Value::ColorRef`; `None` draws in the\ntext's colour. Paint-only.",
+          "type": "string",
+          "const": "characterUnderlineColor"
+        },
+        {
+          "description": "Double strikethrough (`w:dstrike`): `Value::Bool`. Paint-only.",
+          "type": "string",
+          "const": "characterDoubleStrikethrough"
+        },
+        {
+          "description": "Paragraph shading on or off, set on the paragraph itself (Word's\ndirect `w:shd`) or on a paragraph style: `Value::Bool`.",
+          "type": "string",
+          "const": "paragraphShadingOn"
+        },
+        {
+          "description": "The shading's swatch: `Value::ColorRef` (`None` inherits).",
+          "type": "string",
+          "const": "paragraphShadingColor"
+        },
+        {
+          "description": "The shading's tint in percent: `Value::Length` (`None` inherits).",
+          "type": "string",
+          "const": "paragraphShadingTint"
+        },
+        {
+          "description": "Paragraph border on or off (Word's direct `w:pBdr`): `Value::Bool`.",
+          "type": "string",
+          "const": "paragraphBorderOn"
+        },
+        {
+          "description": "The border's swatch: `Value::ColorRef` (`None` inherits).",
+          "type": "string",
+          "const": "paragraphBorderColor"
+        },
+        {
+          "description": "The border's stroke weight in pt: `Value::Length` (`None` inherits).",
+          "type": "string",
+          "const": "paragraphBorderWeight"
+        },
+        {
+          "description": "Word's \"show hidden text\", on `NodeId::Document`: `Value::Bool`,\ndefault false. A whole-document reflow.",
+          "type": "string",
+          "const": "documentShowHiddenText"
         }
       ]
     },
@@ -8811,8 +9060,126 @@
             "null"
           ],
           "default": null
+        },
+        "levels": {
+          "description": "Engine ADR 1018 — Word's per-level definitions, level 1 first.\nAdditive: absent reads as none (an InDesign list).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NumberingLevelSpec"
+          }
         }
       }
+    },
+    "NumberingLevelSpec": {
+      "description": "Engine ADR 1018 — one level of a Word list on the wire, mirroring\n`paged_model::NumberingLevelDef`. Every field but `level` optional.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "1 to 9.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "listType": {
+          "description": "`NumberedList`, `BulletList` or `NoList`.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "format": {
+          "description": "An InDesign sample string (`\"1, 2, 3, 4...\"`) or Word's numFmt name\n(`decimal`, `lowerRoman`, `upperLetter`, …).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "expression": {
+          "description": "The marker: `^1.^2.` (InDesign) or `%1.%2.` (Word).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "suffix": {
+          "description": "`tab`, `space` or `nothing`: what follows the marker.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "startAt": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int32",
+          "default": null
+        },
+        "restartAfter": {
+          "description": "Word's lvlRestart: restart after a paragraph at level `1..=k`; 0 never.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "leftIndent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "firstLineIndent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "tabPosition": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "bulletCharacter": {
+          "description": "The bullet as a one-character string.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "bulletFont": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "markerCharacterStyle": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "level"
+      ]
     },
     "StyleCollection": {
       "description": "Which style collection a `SetStyleProperty` targets.",
@@ -8823,6 +9190,84 @@
         "object",
         "cell",
         "table"
+      ]
+    },
+    "FindSpec": {
+      "description": "Engine ADR 1021 — what to find.",
+      "type": "object",
+      "properties": {
+        "find": {
+          "type": "string"
+        },
+        "storyId": {
+          "description": "One story; every story when absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "mode": {
+          "$ref": "#/$defs/FindMode",
+          "default": "literal"
+        },
+        "matchCase": {
+          "type": "boolean",
+          "default": false
+        },
+        "wholeWord": {
+          "type": "boolean",
+          "default": false
+        },
+        "paragraphStyle": {
+          "description": "Only hits in paragraphs of this style (`ParagraphStyle/<id>`).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "characterStyle": {
+          "description": "Only hits whose runs all carry this character style.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "limit": {
+          "description": "At most this many hits.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        }
+      },
+      "required": [
+        "find"
+      ]
+    },
+    "FindMode": {
+      "description": "Engine ADR 1021 — how a find pattern reads.",
+      "oneOf": [
+        {
+          "description": "The text as written (Word's specials `^p` `^t` `^l` `^m` `^?` `^#`\n`^$` `^^` still apply).",
+          "type": "string",
+          "const": "literal"
+        },
+        {
+          "description": "Word's wildcards: `?` `*` `@` `<` `>` `[…]` `[!…]` `{n;m}` `(…)`.",
+          "type": "string",
+          "const": "wildcards"
+        },
+        {
+          "description": "An ECMAScript regular expression.",
+          "type": "string",
+          "const": "regex"
+        }
       ]
     },
     "GuideOrientationSpec": {

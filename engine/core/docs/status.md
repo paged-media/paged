@@ -216,6 +216,22 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **Condition sets as InDesign records them.** A set keeps each condition's recorded visibility;
   applying it restores the listed conditions and leaves the others as they are. Bleed and slug
   set in paged reach an IDML save, with a `DocumentPreference` added to a package that had none.
+- **Word's paragraph, character and list model** ([ADR 1018](adr/1018-word-paragraph-character-and-list-model.md)).
+  Runs and styles carry highlight (a band behind the glyphs), hidden text (no room unless the
+  document's `showHiddenText` is on), Word's underline kinds and an underline colour, and
+  double strikethrough; a paragraph carries its own shading and border over its style's. A
+  numbering list may carry Word's nine level definitions (format, `%1.%2.` text, start,
+  restart, indents, bullet and its font), laid over the paragraph's list cascade. Twelve
+  property paths set them; `setListLevel`, `restartNumbering` and `setStyleBasedOn` (cycles
+  refused) edit lists and styles; Enter at a paragraph's end applies the style's Next Style.
+  IDML carries the underline kind and colour, double strike and direct shading / border;
+  highlight is written as InDesign's highlight underline, hidden text and list levels only in
+  the `.paged` model.
+- **Find and replace** ([ADR 1021](adr/1021-find-and-replace.md)). Literal, Word wildcards or
+  ECMAScript regex (on the `regress` engine Boa already links), match case, whole word, Word's
+  `^p` `^t` `^l` `^m` `^?` `^#`, style filters; hits in caret and character offsets with
+  context (`RequestFindText`, `paged.find`); `findReplace` replaces one hit or all of them as
+  one undo step.
 - **Fidelity tooling.** The fixture generator (67 samples), the image-diff tool, 66
   reference PDFs with thresholds (`docx-pagination` has none and is not gated), and the
   scripts that drive InDesign to export them.
@@ -236,6 +252,10 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **No font and no colour profile is bundled.** Text for which neither a registered font
   nor a default font resolves is not shaped. Without a CMYK profile, CMYK is converted by a
   naive formula.
+- **Word additions not yet everywhere** (ADRs 1018, 1021). Level-2+ list counts do not continue
+  across stories; tables and notes draw no underline kinds or highlight; a changed `BasedOn` of
+  a style from the source package is not re-spelt in its IDML `<Properties>`; find does not
+  search table cells or notes.
 - **A commit rebuilds the whole document.** Caches make unchanged paragraphs and stories
   cheap, and only a build of text edits in one story reuses previous pages.
 - **Two mutation lanes.** Text edits have no `Operation` form; they use `TextOp` in

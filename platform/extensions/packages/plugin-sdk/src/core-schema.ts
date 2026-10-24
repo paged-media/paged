@@ -943,6 +943,20 @@ export const CORE_PATHS: Record<
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   // A clip group is protocol 76 (engine ADR 1010); a pre-71 engine has none.
   groupClip: V71,
+  // Word's character and paragraph additions are protocol 76 (engine ADR
+  // 1018); a pre-71 engine has none.
+  characterHighlightColor: V71,
+  characterHidden: V71,
+  characterUnderlineType: V71,
+  characterUnderlineColor: V71,
+  characterDoubleStrikethrough: V71,
+  paragraphShadingOn: V71,
+  paragraphShadingColor: V71,
+  paragraphShadingTint: V71,
+  paragraphBorderOn: V71,
+  paragraphBorderColor: V71,
+  paragraphBorderWeight: V71,
+  documentShowHiddenText: V71,
   frameDropShadowBlendMode: {
     scope: "frame",
     wire: "text",
