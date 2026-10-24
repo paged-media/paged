@@ -85,6 +85,15 @@ const TOOLS = [
   // end to end in journey/plugins/draw-tools.journey.spec.ts).
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
+  // WP6.1 wave 3 — Reflect and Reshape in the Transform flyout, Shaper,
+  // Path Eraser and Join with the Pencil, Star and Flare with the shapes.
+  "media.paged.draw.tool.reflect",
+  "media.paged.draw.tool.reshape",
+  "media.paged.draw.tool.shaper",
+  "media.paged.draw.tool.pathEraser",
+  "media.paged.draw.tool.join",
+  "media.paged.draw.tool.star",
+  "media.paged.draw.tool.flare",
 ] as const;
 
 // "Vector stroke" (`panel.stroke`) and "Vector fill" (`panel.fill`) are
@@ -237,6 +246,16 @@ const COMMANDS = [
   "media.paged.draw.command.shapeBuild",
   "media.paged.draw.command.widthProfile",
   "media.paged.draw.command.updateLinkedRecipes",
+  // WP6.1 wave 3 — Star / Flare and their Path Options sections, and the
+  // gesture tools' typed commands.
+  "media.paged.draw.command.insertStar",
+  "media.paged.draw.command.insertFlare",
+  "media.paged.draw.command.insertStarOptions",
+  "media.paged.draw.command.insertFlareOptions",
+  "media.paged.draw.command.joinScrub",
+  "media.paged.draw.command.pathErase",
+  "media.paged.draw.command.reshapeAt",
+  "media.paged.draw.command.shaperStroke",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
@@ -282,6 +301,13 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.repeat": "repeat",
   "media.paged.draw.tool.knife": "scissors",
   "media.paged.draw.tool.scissorsAnyPoint": "scissors",
+  "media.paged.draw.tool.reflect": "transform",
+  "media.paged.draw.tool.reshape": "transform",
+  "media.paged.draw.tool.shaper": "pencil",
+  "media.paged.draw.tool.pathEraser": "pencil",
+  "media.paged.draw.tool.join": "pencil",
+  "media.paged.draw.tool.star": "shape",
+  "media.paged.draw.tool.flare": "shape",
 };
 
 /** Root DOM marker each panel renders. The SCHEMA panel ("Draw
@@ -571,7 +597,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 21 registered.
+    // TOOLS — all 27 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -591,7 +617,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 119 registered.
+    // COMMANDS — all 127 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -629,15 +655,16 @@ test.describe("plugin surface · paged.draw", () => {
     ).toEqual([]);
 
     // And the totals the campaign quotes, so a silent shrink is loud.
-    // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(20);
+    // 20 since the Pencil became the host's alone (draw ADR 359); 27
+    // with the WP6.1 wave-3 tools.
+    expect(TOOLS).toHaveLength(27);
     expect(PANELS).toHaveLength(10);
-    expect(COMMANDS).toHaveLength(119);
+    expect(COMMANDS).toHaveLength(127);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 19 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 27 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

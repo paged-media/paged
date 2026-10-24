@@ -19,10 +19,10 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// Ninety entries: seventy-five under the Draw menu (folded into Plugins ▸
-// Draw, and shown as a context menu while artwork is selected), four
+// Ninety-two entries: seventy-five under the Draw menu (folded into Plugins ▸
+// Draw, and shown as a context menu while artwork is selected), six
 // insert verbs filed under Insert (Arc…, Spiral…, Rectangular grid…, Polar
-// grid…) and eleven under the host's Edit ▸ Select same.
+// grid…, Star…, Flare…) and eleven under the host's Edit ▸ Select same.
 //
 // Every test starts from the same artwork, two overlapping filled
 // rectangles with both selected (reloaded before each test), so each verb
@@ -1403,6 +1403,38 @@ test.describe.serial("plugin menus — paged.draw", () => {
       live,
       "Edit/Select same/Stroke weight within…",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Object/Insert star… — raises Path Options, where the star is set up", async () => {
+    covers("menu:Object/Insert star…");
+    await expectGreyedAndInert(bare, "Object/Insert star…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert star…",
+      "media.paged.draw.command.insertStarOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Object/Insert flare… — raises Path Options, where the flare is set up", async () => {
+    covers("menu:Object/Insert flare…");
+    await expectGreyedAndInert(bare, "Object/Insert flare…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert flare…",
+      "media.paged.draw.command.insertFlareOptions",
     );
     expect(out.shell).toEqual([
       { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
