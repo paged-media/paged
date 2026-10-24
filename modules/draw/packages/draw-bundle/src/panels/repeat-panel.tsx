@@ -66,7 +66,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.repeatPanel", {
   summary:
     "Repeat the selected artwork around a circle, in a grid or as a mirror image; Update rebuilds the copies after you edit the original.",
-  note: "A repeat makes real copies of the artwork and remembers how it built them. Editing the original does not move the copies until you choose Update. Dragging the on-canvas handle changes one setting and shows a guide; the copies are rebuilt when you let go, as one undo step. Clipping puts the copies inside a frame that crops them; a clipped repeat cannot be grouped, and the original stays outside the frame so you can keep editing it. Building or updating a repeat is one undo step, or two when it is clipped. Expand keeps the copies as ordinary artwork; Release removes them and keeps the original. The saved settings are kept outside undo.",
+  note: "A repeat makes real copies of the artwork and remembers how it built them. While Update automatically is on, editing the original rebuilds the copies in the same undo step; with it off, they move only when you choose Update. Dragging the on-canvas handle changes one setting and shows a guide; the copies are rebuilt when you let go, as one undo step. Clipping puts the copies inside a frame that crops them; a clipped repeat cannot be grouped, and the original stays outside the frame so you can keep editing it. Building or updating a repeat is one undo step, or two when it is clipped. Expand keeps the copies as ordinary artwork; Release removes them and keeps the original. The saved settings are kept outside undo.",
   rowAround: "{count} around {radius} pt",
   rowAxis: "axis {angle}°",
   rowClipped: " · clipped",
