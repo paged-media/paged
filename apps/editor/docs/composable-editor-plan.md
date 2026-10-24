@@ -1254,7 +1254,12 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   canvas is the same image at another size; another crop or no selection is refused with the
   reason, as it is headless. A kept selection is set back into the engine when its frame's
   image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
-  its pixels change and one undo restores them (`modules/image/docs/status.md`).
+  its pixels change and one undo restores them (`modules/image/docs/status.md`). The leftovers
+  (2026-10-24, image ADR 465 amendment of that day): a kept selection belongs to the stored
+  revision it was made on, follows a quarter turn or flip committed on its frame (the editor's
+  own turns and flips now carry the live selection too) and is refused, with the reason, on a
+  revision it was not carried to. What stays is by rule: another crop's offset is unknown, and
+  a selection is session state, never written to the document (ADR 460).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a defined name
