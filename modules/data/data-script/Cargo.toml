@@ -11,9 +11,8 @@ description = "paged.data constrained scripting surface (spec §10): a sandboxed
 workspace = true
 
 [dependencies]
-# boa 0.22 turned `temporal` on by default; the sandbox keeps the feature
-# set 0.21's defaults gave it.
-boa_engine = { version = "0.22", default-features = false, features = ["float16", "xsum"] }
+# The engine's sandboxed interpreter (core ADR 1015, PM-0015: one interpreter).
+paged-action = { path = "../../../engine/core/crates/paged-action" }
 paged-data-core = { path = "../../../engine/core/crates/paged-data-core" }
 paged-data-automation = { path = "../../../engine/core/crates/paged-data-automation" }
 data-js = { path = "../data-js" }

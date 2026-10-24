@@ -68,6 +68,8 @@ use boa_engine::{
 use paged_canvas::channel::{CollectionName, Mutation};
 pub use paged_canvas::channel::{HostObjectAnswer, HostObjectCall, HostObjectError};
 
+mod actions;
+pub use actions::clear_actions;
 mod host_bridge;
 pub use host_bridge::MAX_HOST_ROUNDS;
 use paged_canvas::CanvasModel;
@@ -1442,6 +1444,9 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             1,
         )
         .build();
+    // Core ADR 1015 — `paged.actions.*`: the action registry.
+    let actions = actions::object(ctx, guarded);
+    paged.set(js_string!("actions"), actions, false, ctx)?;
     ctx.register_global_property(js_string!("paged"), paged, Attribute::all())?;
 
     let console = ObjectInitializer::new(ctx)
