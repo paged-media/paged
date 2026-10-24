@@ -145,6 +145,13 @@ draw B-02). The headless harness records both
   `hitTest(pageId, pt, filter)` [draw: scissors/anchor tools],
   `elementGeometry(ids)`, `tree()`,
   `planarRegions(elementIds, point?)` (§4.3c).
+  Since 0.74.3-canary.16 (engine WP2.7, additive) the `spreads` collection
+  names each spread's pages (`pageIds`) and its top-level items with the
+  page each sits on (`members`, by `elementGeometry`'s centre rule; `null`
+  on the pasteboard), and a `pages` row carries its place in the spread
+  (`indexInSpread`, with `pageOrigin`), its spine side (`bindingEdge`) and
+  its inside / outside margins (`marginInsidePt`, `marginOutsidePt`) beside
+  the physical four. Older engines omit the fields.
 - `undo()` / `redo()` — shared history, no plugin-local stacks.
 - `onDidChange(l)` — typed events for every committed change (every panel
   audit showed this exact subscribe pattern, hand-rolled 20+ times in

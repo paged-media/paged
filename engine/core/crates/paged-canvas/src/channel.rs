@@ -3363,6 +3363,42 @@ pub struct SpreadSummary {
     /// mirror. Empty for spreads with no guides.
     #[serde(default)]
     pub guides: Vec<GuideSummary>,
+    /// WP2.7 — the spread's pages, by id, in spread order (left to
+    /// right): the `PageSummary.self_id`s whose `spread_id` names this
+    /// spread. Additive; older workers omit it.
+    #[serde(default)]
+    pub page_ids: Vec<String>,
+    /// WP2.7 — the spread's top-level page items (a group stands for its
+    /// members) in paint order, each with the page it sits on by the
+    /// rule `elementGeometry` applies: the page that holds the centre of
+    /// the item's transformed box, `None` on the pasteboard. Additive;
+    /// older workers omit it.
+    #[serde(default)]
+    pub members: Vec<SpreadMemberSummary>,
+}
+
+/// WP2.7 — one top-level page item of a spread and the page it sits on
+/// (`None`: the pasteboard). Carried on [`SpreadSummary::members`].
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SpreadMemberSummary {
+    pub id: crate::element_selection::ElementId,
+    #[serde(default)]
+    pub page_id: Option<String>,
+}
+
+/// WP2.7 — the edge of a page its binding (the spine) runs along, the
+/// renderer's rule: a page whose centre lies left of the spread's
+/// spine (spread x = 0) is a verso, bound on its right; every other
+/// page (a recto, a page alone in its spread, a non-facing page centred
+/// on the spine) is bound on its left.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify, PartialEq, Eq)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum BindingEdgeWire {
+    Left,
+    Right,
 }
 
 /// W3.A0 — one live ruler guide on a spread, carried inline on
@@ -3457,6 +3493,26 @@ pub struct PageSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[tsify(optional)]
     pub spread_id: Option<String>,
+    /// WP2.7 — the page's position in its spread, 0-based, left to right
+    /// (`SpreadSummary.page_ids[index_in_spread]` is this page). Older
+    /// workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub index_in_spread: Option<u32>,
+    /// WP2.7 — the edge the spine runs along ([`BindingEdgeWire`]):
+    /// `right` on a verso, `left` on a recto and on a single page. Older
+    /// workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub binding_edge: Option<BindingEdgeWire>,
+    /// WP2.7 — the margins on the spine side (inside) and away from it
+    /// (outside), pt: `margin_left_pt` / `margin_right_pt` (the page's
+    /// physical left and right) resolved through `binding_edge`. Inside
+    /// is the left margin on a recto, the right one on a verso.
+    #[serde(default)]
+    pub margin_inside_pt: f32,
+    #[serde(default)]
+    pub margin_outside_pt: f32,
 }
 
 /// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
