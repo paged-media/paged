@@ -640,24 +640,33 @@ impl DataSession {
 
     fn run_transform(&mut self, t: &TransformDef) -> Result<usize, String> {
         let store = self.store().map_err(|e| e.to_string())?;
-        let mut tables = serde_json::Map::new();
-        for input in &t.inputs {
+        // The inputs go in as JSON text written in each table's column order
+        // (a `serde_json::Map` would sort the keys), parsed in the sandbox, so
+        // a row a transform passes through keeps its table's column order.
+        let mut tables = String::from("{");
+        for (i, input) in t.inputs.iter().enumerate() {
             let rs = store
                 .records(input, 0, None)
                 .map_err(|e| format!("input {input}: {e}"))?;
-            tables.insert(input.clone(), rows_json(&rs));
+            if i > 0 {
+                tables.push(',');
+            }
+            tables.push_str(&json_text(&serde_json::Value::String(input.clone())));
+            tables.push(':');
+            tables.push_str(&rows_json(&rs));
         }
+        tables.push('}');
         // The rows come back as JSON text: `JSON.stringify` keeps the keys in
         // the order the transform wrote them, and the store's JSON reader
         // types the columns as an import does.
         let wrapped = format!(
-            "(tables, params) => JSON.stringify(({}\n)(tables, params))",
+            "(tables, params) => JSON.stringify(({}\n)(JSON.parse(tables), params))",
             t.source
         );
         let out = paged_action::js::call(
             &wrapped,
             &[
-                serde_json::Value::Object(tables),
+                serde_json::Value::String(tables),
                 serde_json::Value::Object(t.params.clone()),
             ],
             paged_action::js::JsBudget::default(),
@@ -2300,21 +2309,30 @@ pub fn record_set_json(rs: &RecordSet) -> serde_json::Value {
 }
 
 /// A record set's rows as JSON objects (a transform's input).
-fn rows_json(rs: &RecordSet) -> serde_json::Value {
+fn rows_json(rs: &RecordSet) -> String {
     let set = record_set_json(rs);
     let names: Vec<String> = rs.schema.fields.iter().map(|f| f.name.clone()).collect();
     let columns = set["columns"].as_array().cloned().unwrap_or_default();
-    serde_json::Value::Array(
-        (0..rs.row_count)
-            .map(|r| {
-                serde_json::Value::Object(
-                    names
-                        .iter()
-                        .zip(&columns)
-                        .map(|(n, c)| (n.clone(), c[r].clone()))
-                        .collect(),
-                )
-            })
-            .collect(),
-    )
+    let mut out = String::from("[");
+    for r in 0..rs.row_count {
+        if r > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        for (i, (n, c)) in names.iter().zip(&columns).enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&json_text(&serde_json::Value::String(n.clone())));
+            out.push(':');
+            out.push_str(&json_text(&c[r]));
+        }
+        out.push('}');
+    }
+    out.push(']');
+    out
+}
+
+fn json_text(v: &serde_json::Value) -> String {
+    serde_json::to_string(v).unwrap_or_else(|_| "null".into())
 }
