@@ -1276,6 +1276,10 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   host has the native-open door, so `paged-node` opens it as its own document); canvas edits in
   table cells are saved back on export, paragraphs added or removed in a cell included, and a
   placed document's tables are found by their content after the story around them changed.
+  A changed run list is saved back too, in body paragraphs and cells: formatting given to part
+  of a run splits that `w:r` (the parts keep its `w:rPr`, the changed one gets only what
+  changed), direct formatting the engine can express is written, untouched runs stay byte for
+  byte (the engine reads a cell's styled `paragraphs`).
 - **slide:** done. The typed `newSlide` places the layout's placeholders like the panel does;
   reorder (`slide.index` writable) and a typed `duplicateSlide`; a typed `exportPptx`. Palette
   commands with a menu entry each: File ▸ Open PowerPoint deck… and Export PowerPoint deck…,
