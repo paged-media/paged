@@ -187,7 +187,7 @@ import { defineMessages } from "@paged-media/strings";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.blend", {
-  make: "Blend: Make from the two selected objects (smooth colour / steps / distance — artwork rebuilt by Update, not a live link)",
+  make: "Blend: Make from the two selected objects (smooth colour / steps / distance — rebuilt when a key changes, or by Update)",
   update:
     "Blend: Update (new options + the keys' CURRENT geometry; the intermediates get new ids)",
   replaceSpine:
@@ -195,8 +195,7 @@ const M = defineMessages("draw.blend", {
   reverseSpine: "Blend: Reverse spine (the intermediates travel the other way)",
   reverseFrontToBack:
     "Blend: Reverse front to back (paint order only — nothing moves)",
-  selectKeys:
-    "Blend: Select the key objects (edit them, then Update — that is how a blend follows an edit)",
+  selectKeys: "Blend: Select the key objects (edit them; the blend follows)",
   expand: "Blend: Expand (keep every intermediate as ordinary artwork)",
   release: "Blend: Release (remove the intermediates, keep the key objects)",
 });
