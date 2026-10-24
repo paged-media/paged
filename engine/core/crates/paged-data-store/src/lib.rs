@@ -44,7 +44,7 @@ mod types;
 
 pub use diag::Diagnostic;
 pub use read::{Cell, Column, Format, Table};
-pub use store::{ColumnInfo, ImportReport, Preview, Store, AS_WRITTEN_PREFIX};
+pub use store::{ColumnInfo, ImportReport, Preview, RowEdit, Store, AS_WRITTEN_PREFIX};
 pub use types::ColumnType;
 
 /// A store failure: an engine error (with the SQL's diagnostic), a file that

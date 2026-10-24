@@ -26,6 +26,7 @@
 // extensions, the Arrow conversion — is gone: the same engine answers in the
 // editor, in `paged-node` and on the server.
 
+import type { DataRowEdit, ProviderRecordSet } from "@paged-media/plugin-api";
 import type { DataEngineLike } from "../engine";
 import type { ImportFormat } from "./import";
 
@@ -97,6 +98,17 @@ export interface QueryHandle {
   describe(sql: string): Awaitable<StoreColumn[]>;
   /** The first `limit` rows of a query as text and its row count. */
   preview(sql: string, limit: number): Awaitable<StorePreview>;
+  /** A window of a source table, typed, in the provider shape (the data
+   *  door, extensions ADR 343). Absent on an engine built before it. */
+  records?(
+    table: string,
+    offset: number,
+    limit: number,
+  ): Awaitable<ProviderRecordSet>;
+  /** Apply row edits to a source table in one transaction; the row count. */
+  edit?(table: string, edits: readonly DataRowEdit[]): Awaitable<number>;
+  /** A query's rows, typed, in the provider shape (the guard has run). */
+  queryRecords?(sql: string): Awaitable<ProviderRecordSet>;
 }
 
 /** The store of a booted engine, or null for an engine built before it. */
@@ -131,5 +143,20 @@ export function storeHandle(e: DataEngineLike): QueryHandle | null {
     preview(sql, limit) {
       return e.store_preview!(sql, limit) as StorePreview;
     },
+    ...(typeof e.store_records === "function" &&
+    typeof e.store_edit === "function" &&
+    typeof e.store_query_records === "function"
+      ? {
+          records(table: string, offset: number, limit: number) {
+            return e.store_records!(table, offset, limit) as ProviderRecordSet;
+          },
+          edit(table: string, edits: readonly DataRowEdit[]) {
+            return e.store_edit!(table, [...edits]);
+          },
+          queryRecords(sql: string) {
+            return e.store_query_records!(sql) as ProviderRecordSet;
+          },
+        }
+      : {}),
   };
 }

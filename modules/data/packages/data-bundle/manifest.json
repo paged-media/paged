@@ -29,6 +29,9 @@
     ],
     "dataProviders": {
       "publish": ["dataset"]
+    },
+    "data": {
+      "serve": true
     }
   },
   "contributes": {

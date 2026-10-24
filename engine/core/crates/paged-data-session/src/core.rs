@@ -487,6 +487,39 @@ impl DataSession {
             .collect()
     }
 
+    /// A window of a source table as the data door's record set (the
+    /// provider shape: `{ schema: { fields }, columns, rowCount }`, one JSON
+    /// array per field). Dates and timestamps are ISO text, bytes and error
+    /// values `null`.
+    pub fn store_records(
+        &mut self,
+        table: &str,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> Result<serde_json::Value, data_store::StoreError> {
+        let rs = self.store()?.records(table, offset, limit)?;
+        Ok(record_set_json(&rs))
+    }
+
+    /// A query's rows in the provider shape (the data door's `query`). The
+    /// caller has run the query guard: this runs on the store's
+    /// `query_only` connection like every user query.
+    pub fn store_query_records(&mut self, sql: &str) -> Result<serde_json::Value, data_store::StoreError> {
+        let rs = self.store()?.query(sql)?;
+        Ok(record_set_json(&rs))
+    }
+
+    /// Apply row edits to a source table (the data door's `write`): one
+    /// transaction, the as-written twin kept in step. Returns the row count.
+    /// The bindings over it see the new rows at the next refresh.
+    pub fn store_edit(
+        &mut self,
+        table: &str,
+        edits: &[data_store::RowEdit],
+    ) -> Result<usize, data_store::StoreError> {
+        self.store()?.edit(table, edits)
+    }
+
     /// The columns a query produces, with their types.
     pub fn store_describe(
         &mut self,
@@ -1827,4 +1860,21 @@ impl DataSession {
     ) -> Result<data_bind::catalogue::CataloguePlan, SessionError> {
         Ok(self.engine.resolve_catalogue(query_id, spec)?)
     }
+}
+
+/// A record set in the provider shape (`ProviderRecordSet` of the contract):
+/// the schema's fields, then one JSON array per field.
+pub fn record_set_json(rs: &RecordSet) -> serde_json::Value {
+    use serde_json::{json, Value as J};
+    let cell = |v: &data_core::Value| match v {
+        data_core::Value::Null | data_core::Value::Bytes(_) | data_core::Value::Error(_) => J::Null,
+        data_core::Value::Bool(b) => J::Bool(*b),
+        data_core::Value::Number(n) => serde_json::Number::from_f64(*n).map_or(J::Null, J::Number),
+        other => J::String(other.as_display()),
+    };
+    json!({
+        "schema": { "fields": rs.schema.fields },
+        "columns": rs.columns.iter().map(|c| c.iter().map(cell).collect::<Vec<_>>()).collect::<Vec<_>>(),
+        "rowCount": rs.row_count,
+    })
 }

@@ -772,6 +772,42 @@ mod wasm {
             // JSON-compatible: a SQL NULL crosses as `null`, not `undefined`.
             to_js_json(&out)
         }
+
+        /// A window of a source table in the provider shape (the data
+        /// door's `records`, extensions ADR 343):
+        /// `{schema: {fields}, columns, rowCount}`. `limit` 0 means all.
+        pub fn store_records(
+            &mut self,
+            table: &str,
+            offset: usize,
+            limit: usize,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_records(table, offset, (limit > 0).then_some(limit))
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// A query's rows in the provider shape (the data door's `query`;
+        /// the bundle's guard has checked `sql`).
+        pub fn store_query_records(&mut self, sql: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_query_records(sql)
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// Apply row edits (`[{op: "set", row, field, value} | {op:
+        /// "insert", values} | {op: "delete", row}]`) to a source table in
+        /// one transaction (the data door's `write`). Returns the row count.
+        pub fn store_edit(&mut self, table: &str, edits: JsValue) -> Result<usize, JsValue> {
+            let edits: Vec<data_store::RowEdit> = from_js(edits)?;
+            self.session
+                .store_edit(table, &edits)
+                .map_err(|e| store_error(&e))
+        }
     }
 
     /// A store failure as a JS `Error` whose `message` says what happened and
