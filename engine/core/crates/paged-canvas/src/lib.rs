@@ -68,6 +68,7 @@ pub mod snap;
 pub mod snap_point;
 pub mod snapshot;
 pub mod template;
+pub mod undo_label;
 
 pub use camera::{Camera, CameraLayout, CameraSabLayout, CAMERA_SAB_BYTES};
 pub use channel::{

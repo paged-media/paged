@@ -731,7 +731,17 @@ export type WorkerToMain = WorkerToMainKind & {
 //   `TooLarge` / `NothingDrawn`.
 //   An older worker ignores the new fields and answers a whole-page PNG,
 //   which a caller detects by the reply's missing `format` / `region`.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
+// v77 — named undo steps (engine ADR 1016): `LabelStep { appliedSeq, label
+//   }` → `StepLabeled`; `RequestUndoLog { limit }` → `UndoLog
+//   { undo, redo, undoLen, redoLen, depth }`; `UndoTo { appliedSeq }` /
+//   `RedoTo { appliedSeq }` step the history several steps in one round trip
+//   (reply `UndoApplied` / `RedoApplied` with `steps`); `RestoreTo {
+//   appliedSeq, label }` goes back to a step as ONE new undo step (reply
+//   `MutationApplied`); `SetHistoryDepth {
+//   depth }` → `HistoryDepthApplied { depth }`. Additive on the same bump:
+//   `AmendMutation.label`, `CommitGesture.label`. New message kinds an older
+//   worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -864,6 +874,34 @@ pub struct MintedElement {
     pub element: crate::element_selection::ElementId,
     /// The story minted with it, for the kinds that carry one.
     pub story_id: Option<String>,
+}
+
+/// v77 (engine ADR 1016) — one named undo step on the wire.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoLogEntryWire {
+    /// What `UndoTo` / `RedoTo` name.
+    pub applied_seq: u64,
+    /// The step's name: the caller's words, or the engine's English
+    /// default.
+    pub label: String,
+    /// The derivation key of an engine default (`moveFrame`,
+    /// `set:fillColor`, `gesture:rotate`, `batch`, `script`), for a host
+    /// that translates the defaults it knows; `None` when a caller named
+    /// the step.
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+impl From<crate::model::UndoLogEntry> for UndoLogEntryWire {
+    fn from(e: crate::model::UndoLogEntry) -> Self {
+        Self {
+            applied_seq: e.applied_seq,
+            label: e.label.text,
+            key: e.label.key,
+        }
+    }
 }
 
 /// Concept 3 — PDF export options as the dialog sends them. Every
@@ -1156,7 +1194,58 @@ pub enum MainToWorkerKind {
     AmendMutation {
         applied_seq: u64,
         mutation: Mutation,
+        /// v77 (engine ADR 1016) — rename the amended step. Absent keeps
+        /// the name it had.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
+    /// v77 (engine ADR 1016) — name the undo step `applied_seq` `label`
+    /// (the caller's words, shown by the History panel and the Edit menu,
+    /// instead of the engine's default), when it is still the top of the
+    /// undo log: the step the caller's write just made (the `appliedSeq` of
+    /// its `MutationApplied` / `GestureCommitted` reply). A separate message
+    /// rather than a labelled `Mutate`, so a write's own message stays the
+    /// one every recorder and lane already knows. A blank label keeps the
+    /// default. Reply: `StepLabeled` (`labeled: false` when the step is no
+    /// longer the top, or the write logged none).
+    LabelStep { applied_seq: u64, label: String },
+    /// v77 (engine ADR 1016) — read the named undo timeline: the newest
+    /// `limit` undo steps (oldest first) and redo steps (next redo first);
+    /// absent = all of them. Reply: `UndoLog`.
+    RequestUndoLog {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        limit: Option<u32>,
+    },
+    /// v77 (engine ADR 1016) — undo every step down to and including the
+    /// step `applied_seq` (an `UndoLog.undo` entry), in one round trip.
+    /// Reply: `UndoApplied` (its `undoneSeq` is `applied_seq`, `steps` how
+    /// many were undone, `pageIds` every page they touched), or
+    /// `MutationFailed` when that step is not on the undo log.
+    UndoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1016) — redo every step up to and including the
+    /// step `applied_seq` (an `UndoLog.redo` entry). Reply: `RedoApplied`
+    /// or `MutationFailed`, as for `UndoTo`.
+    RedoTo { applied_seq: u64 },
+    /// v77 (engine ADR 1016) — make the document what it was right after
+    /// the step `applied_seq` (`0`: before the oldest step on the undo
+    /// log), as ONE new undo step named `label` (default "Restore"): the
+    /// History panel's snapshot restore. The steps it walked over stay
+    /// recoverable — undoing the restore brings them back. Reply:
+    /// `MutationApplied` (its `appliedSeq` names the new step), or
+    /// `MutationFailed` when the step is on neither log or is current.
+    RestoreTo {
+        applied_seq: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
+    },
+    /// v77 (engine ADR 1016) — keep at most `depth` undo steps (clamped to
+    /// 1..=10,000, the cap of ADR 110); a shallower depth evicts the oldest
+    /// steps now. Held by the worker across document loads. Reply:
+    /// `HistoryDepthApplied` with the depth in force.
+    SetHistoryDepth { depth: u32 },
     /// Request the per-page display list. Worker replies with
     /// `DisplayListReady` carrying a small descriptor (page id +
     /// command count + generation counters). Phase 1 does not stream
@@ -1806,6 +1895,11 @@ pub enum MainToWorkerKind {
     /// committed mutation lands on the unified undo log.
     CommitGesture {
         handle: crate::gesture::GestureHandle,
+        /// v77 (engine ADR 1016) — the committed step's name. Absent names
+        /// it after the gesture ("Move", "Resize", "Rotate", …).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        label: Option<String>,
     },
     /// Phase B — discard the active gesture. Reply
     /// `GestureCancelled { handle, page_ids }`; scene reverts to the
@@ -2120,6 +2214,11 @@ pub enum WorkerToMainKind {
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1016) — how many steps an `UndoTo` undid
+        /// (`undoneSeq` is the last, `pageIds` the union). Absent for `Undo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         /// Editor-ops — same page-grid refresh contract as
         /// `MutationApplied`: undoing a page mutation changes the
         /// page list and the editor must not need a reload to see
@@ -2130,12 +2229,37 @@ pub enum WorkerToMainKind {
         #[serde(default)]
         page_sizes_pt: Option<Vec<(f32, f32)>>,
     },
+    /// v77 (engine ADR 1016) — `RequestUndoLog` reply: the named undo
+    /// timeline. `undo` is oldest first (its last entry is what an undo
+    /// reverts), `redo` next-redo first; `undoLen` / `redoLen` are the
+    /// whole logs' lengths (the lists may be cut to the limit), `depth` the
+    /// history depth in force.
+    UndoLog {
+        undo: Vec<UndoLogEntryWire>,
+        redo: Vec<UndoLogEntryWire>,
+        undo_len: u32,
+        redo_len: u32,
+        depth: u32,
+        /// Steps the depth evicted since the document opened: while `0`,
+        /// `RestoreTo { appliedSeq: 0 }` reaches the opened document.
+        evicted: u32,
+    },
+    /// v77 (engine ADR 1016) — `SetHistoryDepth` reply.
+    HistoryDepthApplied { depth: u32 },
+    /// v77 (engine ADR 1016) — `LabelStep` reply: whether the step took
+    /// the name.
+    StepLabeled { applied_seq: u64, labeled: bool },
     /// Phase 3 Item 7 — redo applied.
     RedoApplied {
         redone_seq: u64,
         applied_seq: u64,
         page_ids: Vec<PageId>,
         cache_stats: LayoutCacheStats,
+        /// v77 (engine ADR 1016) — how many steps a `RedoTo` redid. Absent
+        /// for `Redo`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        steps: Option<u32>,
         #[serde(default)]
         page_structure_changed: bool,
         #[serde(default)]
@@ -4875,8 +4999,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v76() {
-        assert_eq!(PROTOCOL_VERSION.0, 76);
+    fn protocol_version_is_v77() {
+        assert_eq!(PROTOCOL_VERSION.0, 77);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

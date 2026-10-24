@@ -322,7 +322,10 @@ mod wasm {
             // JSON-channel envelope's existing sequence width.
             let seq_u64 = seq as u64;
             let reply = match paged_canvas::CanvasModel::load(doc_id, bytes, opts) {
-                Ok(model) => {
+                Ok(mut model) => {
+                    if let Some(depth) = self.core.history_depth {
+                        model.set_history_depth(depth);
+                    }
                     let handle = model.handle();
                     self.core.model = Some(model);
                     #[cfg(feature = "gpu")]

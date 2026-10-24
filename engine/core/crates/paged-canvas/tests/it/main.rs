@@ -131,6 +131,7 @@ mod toc_ops;
 mod tracked_change_ops;
 mod translate_gesture;
 mod translate_path_gesture;
+mod undo_log;
 mod utf8_offsets;
 mod virtual_paths;
 mod w3a0_read_surface;

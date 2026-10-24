@@ -957,6 +957,12 @@ impl CanvasModel {
         let mut outcome = self
             .apply_operation(op)
             .map_err(|e| GestureError::Mutate(format!("{e:?}")))?;
+        // Engine ADR 1016 — the step is named after the gesture ("Move",
+        // "Rotate"), not after the property ops it lowered to.
+        self.set_step_label(
+            outcome.applied_seq,
+            crate::undo_label::for_gesture(&session.gesture, session.modifiers.alt),
+        );
         outcome.reflow = resized_frame.and_then(|frame_id| {
             self.frame_content_box(&frame_id)
                 .map(|content_box| crate::channel::FrameReflowInfo {
