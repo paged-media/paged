@@ -83,6 +83,14 @@ const TOOLS = [
   // end to end in journey/plugins/draw-tools.journey.spec.ts).
   "media.paged.draw.tool.knife",
   "media.paged.draw.tool.scissorsAnyPoint",
+  // WP6.1 — keyless, in the host's transform / pencil / shape flyouts.
+  "media.paged.draw.tool.reflect",
+  "media.paged.draw.tool.reshape",
+  "media.paged.draw.tool.shaper",
+  "media.paged.draw.tool.pathEraser",
+  "media.paged.draw.tool.join",
+  "media.paged.draw.tool.star",
+  "media.paged.draw.tool.flare",
 ] as const;
 
 // "Vector stroke" (`panel.stroke`) and "Vector fill" (`panel.fill`) are
@@ -104,6 +112,10 @@ const PANELS = [
   "media.paged.draw.panel.blend",
   "media.paged.draw.panel.objectsOnPath",
   "media.paged.draw.panel.pathOptions",
+  // WP6.6 / WP6.5 — Image Trace options, Recolor Artwork, Color Guide.
+  "media.paged.draw.panel.imageTrace",
+  "media.paged.draw.panel.recolorArtwork",
+  "media.paged.draw.panel.colorGuide",
   "media.paged.draw.panel.properties",
 ] as const;
 
@@ -227,6 +239,28 @@ const COMMANDS = [
   "media.paged.draw.command.shapeBuild",
   "media.paged.draw.command.widthProfile",
   "media.paged.draw.command.updateLinkedRecipes",
+  // WP6.1 (tools' commands, Select same, Global Edit), WP6.6 (Re-trace,
+  // Image Trace options) and WP6.5 (Recolor Artwork, the Color Guide).
+  "media.paged.draw.command.insertStarOptions",
+  "media.paged.draw.command.insertFlareOptions",
+  "media.paged.draw.command.joinScrub",
+  "media.paged.draw.command.pathErase",
+  "media.paged.draw.command.reshapeAt",
+  "media.paged.draw.command.shaperStroke",
+  "media.paged.draw.command.insertStar",
+  "media.paged.draw.command.insertFlare",
+  "media.paged.draw.command.selectSameOpacity",
+  "media.paged.draw.command.selectSameBlendMode",
+  "media.paged.draw.command.selectSameAppearance",
+  "media.paged.draw.command.selectSameGraphicStyle",
+  "media.paged.draw.command.selectSameSymbolInstance",
+  "media.paged.draw.command.selectSameShapeKind",
+  "media.paged.draw.command.globalEdit",
+  "media.paged.draw.command.retraceImage",
+  "media.paged.draw.command.imageTraceOptions",
+  "media.paged.draw.command.recolorArtwork",
+  "media.paged.draw.command.recolorArtworkOptions",
+  "media.paged.draw.command.applyGuideColor",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
@@ -272,6 +306,13 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.repeat": "repeat",
   "media.paged.draw.tool.knife": "scissors",
   "media.paged.draw.tool.scissorsAnyPoint": "scissors",
+  "media.paged.draw.tool.reflect": "transform",
+  "media.paged.draw.tool.reshape": "transform",
+  "media.paged.draw.tool.shaper": "pencil",
+  "media.paged.draw.tool.pathEraser": "pencil",
+  "media.paged.draw.tool.join": "pencil",
+  "media.paged.draw.tool.star": "shape",
+  "media.paged.draw.tool.flare": "shape",
 };
 
 /** Root DOM marker each panel renders. The SCHEMA panel ("Draw
@@ -287,6 +328,9 @@ const PANEL_MARKER: Record<string, string> = {
   "media.paged.draw.panel.blend": "[data-draw-blend-panel]",
   "media.paged.draw.panel.objectsOnPath": "[data-draw-onpath-panel]",
   "media.paged.draw.panel.pathOptions": "[data-draw-pathopts-panel]",
+  "media.paged.draw.panel.imageTrace": "[data-draw-image-trace-panel]",
+  "media.paged.draw.panel.recolorArtwork": "[data-draw-recolor-panel]",
+  "media.paged.draw.panel.colorGuide": "[data-draw-color-guide-panel]",
   // ADR 323 — object properties as host PropertyFields (a schema panel).
   "media.paged.draw.panel.properties":
     '[data-schema-panel="media.paged.draw.panel.properties"]',
@@ -596,9 +640,9 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(20);
-    expect(PANELS).toHaveLength(10);
-    expect(COMMANDS).toHaveLength(112);
+    expect(TOOLS).toHaveLength(27);
+    expect(PANELS).toHaveLength(13);
+    expect(COMMANDS).toHaveLength(132);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
