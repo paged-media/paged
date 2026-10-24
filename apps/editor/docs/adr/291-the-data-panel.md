@@ -55,12 +55,26 @@ Query), bind (right-click any property).
   underlined in the worst state of the bindings reading its field: in step, changed in the data
   (or kept as placed), failed. A status line counts the bindings by state, and **Update
   document** reads the data again and updates every placed field, table and image.
+- Amended 2026-10-24: `data@1` gained `placements()` (each page item a binding places content
+  in, by ADR 131 address, with the binding's sync state; read role). paged.data answers it from
+  the session's hosts (image, barcode and visibility frames, the frame a table or record flow was
+  lowered into, the frame a variable's or rule's story starts in, the element a property binding
+  is carried by) and resolves a property binding's selector through `host.objects`. Built on it:
+  - **Canvas field markers.** View ▸ Show data markers (off by default, `dataMarkers` view
+    toggle, `paged.view.toggleDataMarkers`) draws non-printing corner brackets on every placed
+    frame, in its binding's state: in step green (`--status-approved`), changed in the data,
+    kept as placed or not resolved yet amber (`--status-review`), failed red (`--status-error`);
+    a frame several bindings place into takes the worst. The overlay is
+    `packages/shell/src/overlays/data-markers.tsx`; it reads nothing while off.
+  - **Jump to a field's instances.** Double-clicking a bound field's header selects the page
+    items the bindings reading that field are placed in (the second click of the double-click
+    does not reverse the sort).
 - Not part of this record, and not built yet:
-  - per-record status (a record new or deleted in the source) and the canvas field markers,
-    which need the service to report placed instances per record;
+  - per-record status (a record new or deleted in the source) and markers per record, which
+    need the service to report which record each instance shows;
   - drag to place, which needs a canvas drop target for a field;
   - record templates and their library, and a pagination inspector, which stay paged.data's
     (Data Merge, record flow) until they have a door;
-  - double-click to jump to a record's instances.
+  - double-click to jump to one record's instances (the field's instances are selectable).
 
   Each needs a door member it does not have today, and the panel says nothing it cannot back.

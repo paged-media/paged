@@ -304,6 +304,24 @@ panel of these rows. The fields:
 - Path Options: its sections are the args of the path-op and insert-shape typed commands, a
   command form rather than property fields.
 
+## Actions
+
+On a host with `actions@1` (extensions ADR 344, PM-0015) the bundle registers two pure steps
+over an asset (`src/actions.ts`; manifest `capabilities.actions.register`). Neither edits the
+document; Image Trace and Recolor Artwork remain the commands that do.
+
+| Id                         | In → out      | What it does                                                                                                         |
+| -------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.draw/trace`   | asset → asset | a raster picture traced to SVG (`image/svg+xml`) at the picture's pixel size; the trace kernel's options by name     |
+| `media.paged.draw/recolor` | asset → asset | an SVG's solid fills and strokes reduced to `count`, moved to a harmony (`rule`, `base`, `rotate`) or mapped (`map`) |
+
+The trace runs the trace wasm in a `host.workers` worker when the host has one. Its decode is
+the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
+`OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
+host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
+waits for `paged-raster` (PM-0014). The recolour writes draw-geometry's SVG flattening: one
+path per shape, solid paints only. Recolouring a raster is pixel work and is not registered.
+
 ## Limits of what is shipped
 
 - **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one

@@ -187,6 +187,7 @@ export type {
   DataChange,
   DataEvaluation,
   DataBindingStatus,
+  DataPlacement,
   ActionsSurface,
   ActionDefinition,
   ActionInfo,
