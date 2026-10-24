@@ -13,6 +13,7 @@ import type {
   DataBindingInfo,
   DataBindingSpec,
   DataChange,
+  DataEvaluation,
   DataRowEdit,
   DataService,
   DataTableInfo,
@@ -34,6 +35,12 @@ export interface DataDoorDeps {
     spec: DataBindingSpec,
   ): Promise<{ ok: boolean; reason?: string }>;
   removeBinding(id: string): Promise<boolean>;
+  /** An expression's value at a record (the engine's `evaluate_at`). */
+  evaluate(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<DataEvaluation>;
   /** The defined bindings as the engine payload carries them. */
   bindings(): readonly {
     id: string;
@@ -169,6 +176,13 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     async unbind(id) {
       if (!(await deps.removeBinding(id)))
         throw new Error(`no binding "${id}"`);
+    },
+    async evaluate(query, expr, record) {
+      if (!queryOf(query))
+        throw new Error(
+          `no query "${query}" (an expression reads a query's fields)`,
+        );
+      return deps.evaluate(query, expr, record);
     },
     async bindings() {
       const out: DataBindingInfo[] = [];

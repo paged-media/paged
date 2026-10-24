@@ -570,6 +570,34 @@
       "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
     },
     {
+      "tool": "media.paged.draw.tool.reflect",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.reshape",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.shaper",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.pathEraser",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.join",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.star",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.flare",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
       "tool": "media.paged.image.tool.crop",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
     },
@@ -664,6 +692,14 @@
     {
       "tool": "media.paged.image.tool.type",
       "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.eyedropper",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.colorSampler",
+      "unspecified": "module tool: acts inside the raster edit context, covered by its handler tests (modules/image/glue/test/tool-gestures.spec.ts); matrix rows are the follow-up"
     }
   ]
 }

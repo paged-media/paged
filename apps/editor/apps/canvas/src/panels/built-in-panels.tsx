@@ -103,6 +103,7 @@ import { ScriptEditorPanel } from "./script-editor";
 import { KeyboardShortcutsPanel } from "./keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./problems-panel";
 import { JournalPanel } from "./journal-panel";
+import { DataPanel } from "./data-panel";
 import { LibraryPanel } from "./library-panel";
 import { TreePanel } from "./tree-panel";
 import { ExportCenterPanel } from "./cockpit/export-center-panel";
@@ -207,6 +208,7 @@ const M = defineMessages("app.builtInPanels", {
   keyboardShortcuts: "Keyboard shortcuts",
   problems: "Problems",
   journal: "Journal",
+  data: "Data",
   library: "Library",
   table: "Table",
   tabs: "Tabs",
@@ -1149,6 +1151,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.journal);
     },
     component: JournalPanel,
+    defaultDock: "bottom",
+    defaultGroup: "console",
+  },
+  {
+    // Editor ADR 291 — the document's data as a grid (data@1): tabs per
+    // table, sort, filter, group, the fields bindings read; a first-run
+    // guide while there is none.
+    id: "paged.data",
+    get title() {
+      return t(M.data);
+    },
+    component: DataPanel,
     defaultDock: "bottom",
     defaultGroup: "console",
   },

@@ -789,6 +789,21 @@ mod wasm {
             to_js_json(&out)
         }
 
+        /// An expression's value at a record of `query` (the bind popover's
+        /// preview): `{display, value, error?}`. Defines nothing.
+        pub fn evaluate_at(
+            &self,
+            query: &str,
+            expr: &str,
+            record: usize,
+        ) -> Result<JsValue, JsValue> {
+            to_js_json(
+                &self
+                    .session
+                    .evaluate_at(&QueryId::from(query), expr, record),
+            )
+        }
+
         /// Define (or redefine) a transform (data ADR 562):
         /// `{id, inputs, source, params?}`.
         pub fn define_transform(&mut self, def: JsValue) -> Result<(), JsValue> {

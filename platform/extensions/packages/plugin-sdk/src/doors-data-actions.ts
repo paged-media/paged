@@ -58,12 +58,19 @@ export interface DataBackend {
   /** The live service and its owner, or null. */
   current(): { owner: string; service: DataService } | null;
   onDidChange(listener: (change: DataChange) => void): Disposable;
+  /** Fires when a service starts or stops serving (a host panel shows
+   *  "no data" until one does). */
+  onDidChangeService(listener: () => void): Disposable;
 }
 
 /** Build the shared data backend. */
 export function createDataRegistry(): DataBackend {
   let live: { owner: string; service: DataService } | null = null;
   const listeners = new Set<(change: DataChange) => void>();
+  const serviceListeners = new Set<() => void>();
+  const served = () => {
+    for (const l of [...serviceListeners]) l();
+  };
   return {
     serve(owner, service) {
       if (live)
@@ -72,13 +79,16 @@ export function createDataRegistry(): DataBackend {
         );
       const entry = { owner, service };
       live = entry;
+      served();
       return {
         changed(change) {
           if (live !== entry) return;
           for (const l of [...listeners]) l(change);
         },
         dispose() {
-          if (live === entry) live = null;
+          if (live !== entry) return;
+          live = null;
+          served();
         },
       };
     },
@@ -86,6 +96,10 @@ export function createDataRegistry(): DataBackend {
     onDidChange(listener) {
       listeners.add(listener);
       return toDisposable(() => listeners.delete(listener));
+    },
+    onDidChangeService(listener) {
+      serviceListeners.add(listener);
+      return toDisposable(() => serviceListeners.delete(listener));
     },
   };
 }
@@ -168,6 +182,10 @@ export function createDataSurface(
     async bindings() {
       const s = service("bindings", "bind");
       return [...(await member(s, "bindings", "bindings")())];
+    },
+    async evaluate(query, expr, record) {
+      const s = service("evaluate", "read");
+      return member(s, "evaluate", "evaluate")(query, expr, record);
     },
     onDidChange(listener) {
       requireDeclared(
