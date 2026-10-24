@@ -64,7 +64,8 @@ import {
   SPREADSHEET_EXTENSIONS,
 } from "../import-xlsx";
 import { columnLabel, type WorkbookSession } from "../session";
-import { COMMANDS, DOC_STYLES, WORKBOOK as M } from "../messages";
+import { CHART_STYLE, COMMANDS, DOC_STYLES, WORKBOOK as M } from "../messages";
+import { ChartStyleSection } from "./chart-style-section";
 import { FormatSection, NamesSection, tokenLabel } from "./format-section";
 import { PROPERTIES_PANEL_ID } from "./properties-panel";
 import { DocStylesSection } from "./doc-styles-section";
@@ -957,6 +958,19 @@ export function makeWorkbookPanel(
                 );
               })()}
             </Section>
+
+            {/* CHART STYLE (sheet ADR 525) — the charts' roles bound to the
+             *  document's swatches, styles and colour groups. */}
+            {st.engine ? (
+              <Section id="chartStyle" title={t(CHART_STYLE.title)}>
+                <ChartStyleSection
+                  host={host}
+                  session={session}
+                  styles={{ body, input, button: secondaryButton, row, note }}
+                  view={live}
+                />
+              </Section>
+            ) : null}
 
             {/* FUNCTION BROWSER — the 224-function library was reachable only
              *  by typing into the grid formula bar. Searchable, grouped by

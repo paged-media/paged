@@ -26,9 +26,12 @@
 //! Isolation-clean: this mirrors the core wire shape as a plugin-local type
 //! (deserialized from the JSON the bundle forwards) — no core dependency.
 
-use docx_lower::ir::{LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun};
+use docx_lower::ir::{
+    LoweredBlock, LoweredDoc, LoweredParagraph, LoweredRun, LoweredStyle, PropValue,
+    StyleCollection, StyleProp,
+};
 
-use crate::diff::Align;
+use crate::diff::{Align, EDIT_STYLE_PREFIX};
 use serde::{Deserialize, Serialize};
 
 /// Plugin-local twin of the core `StoryContent` wire struct (camelCase JSON).
@@ -48,14 +51,132 @@ pub struct ParagraphContentIn {
     pub runs: Vec<RunContentIn>,
 }
 
-/// One read-back run. Only `text` + `character_style` drive the overlay today
-/// (direct-override fields are carried for forward use but not yet applied).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// One read-back run: its text, its applied character style, and the
+/// direct character formatting the canvas gave it (each `None` = none). A
+/// run with direct formatting overlays as an edit style over its character
+/// style ([`run_token`]); `tracking` has no Word property here and is not
+/// written.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunContentIn {
     pub text: String,
     #[serde(default)]
     pub character_style: Option<String>,
+    #[serde(default)]
+    pub font: Option<String>,
+    #[serde(default)]
+    pub font_style: Option<String>,
+    #[serde(default)]
+    pub point_size: Option<f32>,
+    #[serde(default)]
+    pub fill_color: Option<String>,
+    #[serde(default)]
+    pub underline: Option<bool>,
+    #[serde(default)]
+    pub strikethru: Option<bool>,
+    #[serde(default)]
+    pub capitalization: Option<String>,
+    #[serde(default)]
+    pub baseline_shift: Option<f32>,
+    #[serde(default)]
+    pub position: Option<String>,
+    #[serde(default)]
+    pub tracking: Option<f32>,
+}
+
+impl RunContentIn {
+    /// The run's direct formatting as engine style properties (the paths
+    /// `docx-lower` writes a synthesized character style with).
+    fn overrides(&self) -> Vec<StyleProp> {
+        let mut out = Vec::new();
+        let mut push = |path: &str, value: PropValue| {
+            out.push(StyleProp {
+                path: path.to_string(),
+                value,
+            })
+        };
+        if let Some(f) = &self.font {
+            push("characterFontFamily", PropValue::Text(f.clone()));
+        }
+        if let Some(f) = &self.font_style {
+            push("characterFontStyle", PropValue::Text(f.clone()));
+        }
+        if let Some(pt) = self.point_size {
+            push("characterFontSize", PropValue::Length(pt));
+        }
+        if let Some(c) = &self.fill_color {
+            push("characterFillColor", PropValue::ColorRef(c.clone()));
+        }
+        if let Some(u) = self.underline {
+            push("characterUnderline", PropValue::Bool(u));
+        }
+        if let Some(st) = self.strikethru {
+            push("characterStrikethru", PropValue::Bool(st));
+        }
+        if let Some(c) = &self.capitalization {
+            push("characterCase", PropValue::Text(c.clone()));
+        }
+        if let Some(b) = self.baseline_shift {
+            push("characterBaselineShift", PropValue::Length(b));
+        }
+        if let Some(p) = &self.position {
+            push("characterPosition", PropValue::Text(p.clone()));
+        }
+        out
+    }
+}
+
+/// The lowered style token a read-back run overlays with: its character
+/// style, or — when the canvas formatted it directly — an edit style
+/// (`EDIT_STYLE_PREFIX`) based on that style and holding the overrides,
+/// added to `styles` once per distinct (style, overrides). The differ
+/// resolves it to the run's look with the overrides applied.
+fn run_token(styles: &mut Vec<LoweredStyle>, r: &RunContentIn) -> Option<String> {
+    let props = r.overrides();
+    if props.is_empty() {
+        return r.character_style.clone();
+    }
+    if let Some(s) = styles.iter().find(|s| {
+        s.id.starts_with(EDIT_STYLE_PREFIX) && s.based_on == r.character_style && s.props == props
+    }) {
+        return Some(s.id.clone());
+    }
+    let n = styles
+        .iter()
+        .filter(|s| s.id.starts_with(EDIT_STYLE_PREFIX))
+        .count();
+    let id = format!("{EDIT_STYLE_PREFIX}{n}");
+    styles.push(LoweredStyle {
+        id: id.clone(),
+        name: format!("docx-edit-{n}"),
+        collection: StyleCollection::Character,
+        based_on: r.character_style.clone(),
+        props,
+    });
+    Some(id)
+}
+
+/// A paragraph's runs as read back, each with its token ([`run_token`]).
+/// Where the count is the baseline's, the baseline runs keep their other
+/// fields (a hyperlink target, a merge field).
+fn overlay_runs(styles: &mut Vec<LoweredStyle>, runs: &mut Vec<LoweredRun>, read: &[RunContentIn]) {
+    let tokens: Vec<Option<String>> = read.iter().map(|r| run_token(styles, r)).collect();
+    if read.len() == runs.len() {
+        for ((run, r), token) in runs.iter_mut().zip(read).zip(tokens) {
+            run.text = r.text.clone();
+            run.char_style_id = token;
+        }
+    } else {
+        *runs = read
+            .iter()
+            .zip(tokens)
+            .map(|(r, token)| LoweredRun {
+                text: r.text.clone(),
+                char_style_id: token,
+                ..Default::default()
+            })
+            .collect();
+    }
 }
 
 /// The read-back paragraphs one baseline paragraph poured as, folded back into
@@ -94,9 +215,12 @@ fn fold_segments(
 /// lowering. Structure-preserving: read-back paragraphs map 1:1 onto the
 /// baseline's PARAGRAPH blocks in order (table blocks are skipped: the read-back
 /// story holds no native table, its cells come through [`overlay_cells`]); a
-/// paragraph whose run list changed in style is replaced (the diff aligns it).
+/// paragraph's runs become the runs read back, a directly formatted run with
+/// an edit style ([`run_token`]), and the differ maps them onto the Word runs.
 pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) -> LoweredDoc {
     let mut edited = baseline.clone();
+    // The edit styles are gathered here while the blocks are borrowed.
+    let mut styles = std::mem::take(&mut edited.styles);
     let mut ci = 0usize;
     for block in edited.story.blocks.iter_mut() {
         let p = match block {
@@ -115,41 +239,13 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
         }
         let end = (ci + parts).min(content.paragraphs.len());
         let folded = fold_segments(p, &content.paragraphs[ci..end]);
-        let cp = &folded;
         ci = end;
-        if cp.runs.len() == p.runs.len() {
-            for (run, cr) in p.runs.iter_mut().zip(&cp.runs) {
-                run.text = cr.text.clone();
-                run.char_style_id = cr.character_style.clone();
-            }
-        } else if same_style_spans(
-            p.runs.iter().map(|r| r.char_style_id.as_deref()),
-            cp.runs.iter().map(|r| r.character_style.as_deref()),
-        ) {
-            // The engine joins neighbouring runs of one style (a merge
-            // field's result after plain text reads back as one run): the
-            // styles still match span for span, so only text changed. Keep
-            // the Word runs and patch the text into them, as a cell's is.
-            let text: String = cp.runs.iter().map(|r| r.text.as_str()).collect();
-            if patch_runs(&mut p.runs, &text).is_err() {
-                continue;
-            }
-        } else {
-            // Increment 2 — the run list CHANGED (a run was added or removed in
-            // the editor). Replace it wholesale; `diff` aligns the two lists by
-            // (text, style) identity and emits the insert/delete ops.
-            let template = p.runs.first().cloned().unwrap_or_default();
-            p.runs = cp
-                .runs
-                .iter()
-                .map(|cr| LoweredRun {
-                    text: cr.text.clone(),
-                    char_style_id: cr.character_style.clone(),
-                    ..template.clone()
-                })
-                .collect();
-        }
+        // The run list as read back: the differ maps it onto the Word runs
+        // character by character (text edits, runs the engine joined, a
+        // run split by a new look, direct formatting).
+        overlay_runs(&mut styles, &mut p.runs, &folded.runs);
     }
+    edited.styles = styles;
     edited
 }
 
@@ -157,12 +253,19 @@ pub fn overlay_story_content(baseline: &LoweredDoc, content: &StoryContentIn) ->
 /// the lowered story, the `cell`'s index in its lowered cell list, and its
 /// live text — its paragraphs joined by `\n`, as the engine reads a cell's
 /// `text` (the read-back story holds no table, so cells come separately).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CellContentIn {
     pub block: usize,
     pub cell: usize,
     pub text: String,
+    /// The cell's paragraphs with their runs and formatting, as the engine
+    /// reads a cell's `paragraphs` (the story read's shape), when the host
+    /// has that read. With it, runs split or joined and direct formatting
+    /// in the cell are written back as they are in body paragraphs; without
+    /// it only the text is (the run list kept).
+    #[serde(default)]
+    pub paragraphs: Option<Vec<ParagraphContentIn>>,
 }
 
 /// Overlay read-back table cells onto the `edited` lowering (the cell
@@ -180,9 +283,24 @@ pub struct CellContentIn {
 /// the paragraph before it, or the one after it at the cell's start — with
 /// one run carrying its text, and a removed one is dropped (never the cell's
 /// last: Word requires it). `diff` turns these into cell paragraph clones
-/// and deletes. A table poured as text, or a cell that is not in the
+/// and deletes. With the cell's styled read (`paragraphs`), a kept
+/// paragraph takes the runs read back instead, as a body paragraph does
+/// ([`overlay_story_content`]), so runs split by a new look and direct
+/// formatting are written too; a paragraph added in the cell still takes
+/// its neighbour's look. A table poured as text, or a cell that is not in the
 /// lowering, is left as it was and reported in the returned ledger.
 pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<String> {
+    let mut styles = std::mem::take(&mut edited.styles);
+    let skips = overlay_cells_into(edited, &mut styles, cells);
+    edited.styles = styles;
+    skips
+}
+
+fn overlay_cells_into(
+    edited: &mut LoweredDoc,
+    styles: &mut Vec<LoweredStyle>,
+    cells: &[CellContentIn],
+) -> Vec<String> {
     let mut skips = Vec::new();
     for c in cells {
         let Some(LoweredBlock::Table(t)) = edited.story.blocks.get_mut(c.block) else {
@@ -203,9 +321,25 @@ pub fn overlay_cells(edited: &mut LoweredDoc, cells: &[CellContentIn]) -> Vec<St
             skips.push(format!("block {}: no cell {}", c.block, c.cell));
             continue;
         };
+        // The styled read, when it agrees with the text read.
+        let styled = c.paragraphs.as_ref().filter(|ps| {
+            ps.iter()
+                .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+                == c.text
+        });
         let texts: Vec<String> = c.text.split('\n').map(str::to_string).collect();
         if texts.len() != cell.paragraphs.len() {
-            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts);
+            cell.paragraphs = restructure_cell(&cell.paragraphs, &texts, styled, styles);
+            continue;
+        }
+        if let Some(read) = styled {
+            for (p, rp) in cell.paragraphs.iter_mut().zip(read) {
+                if !(p.runs.is_empty() && rp.runs.iter().all(|r| r.text.is_empty())) {
+                    overlay_runs(styles, &mut p.runs, &rp.runs);
+                }
+            }
             continue;
         }
         for (k, (p, new)) in cell.paragraphs.iter_mut().zip(&texts).enumerate() {
@@ -235,7 +369,12 @@ fn patch_paragraph(p: &mut LoweredParagraph, new: &str) -> Result<(), String> {
 
 /// A cell's paragraphs once the read-back `texts` (a different count) are
 /// aligned onto them — see [`overlay_cells`].
-fn restructure_cell(paras: &[LoweredParagraph], texts: &[String]) -> Vec<LoweredParagraph> {
+fn restructure_cell(
+    paras: &[LoweredParagraph],
+    texts: &[String],
+    styled: Option<&Vec<ParagraphContentIn>>,
+    styles: &mut Vec<LoweredStyle>,
+) -> Vec<LoweredParagraph> {
     let old: Vec<String> = paras
         .iter()
         .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
@@ -252,9 +391,15 @@ fn restructure_cell(paras: &[LoweredParagraph], texts: &[String]) -> Vec<Lowered
             Align::Match(b, e) => {
                 anchor = Some(b);
                 let mut p = paras[b].clone();
-                // A run-less paragraph gains its run; `patch_runs` cannot fail
-                // otherwise.
-                let _ = patch_paragraph(&mut p, &texts[e]);
+                match styled.and_then(|ps| ps.get(e)) {
+                    // Its runs as read, formatting included.
+                    Some(rp) if !p.runs.is_empty() => overlay_runs(styles, &mut p.runs, &rp.runs),
+                    // A run-less paragraph gains its run; `patch_runs`
+                    // cannot fail otherwise.
+                    _ => {
+                        let _ = patch_paragraph(&mut p, &texts[e]);
+                    }
+                }
                 out.push(p);
             }
             Align::Del(_) => {}
@@ -284,25 +429,6 @@ fn restructure_cell(paras: &[LoweredParagraph], texts: &[String]) -> Vec<Lowered
         }
     }
     out
-}
-
-/// Two run lists carry the same styles in the same order once neighbouring
-/// runs of one style are taken as one span.
-fn same_style_spans<'a>(
-    a: impl Iterator<Item = Option<&'a str>>,
-    b: impl Iterator<Item = Option<&'a str>>,
-) -> bool {
-    let spans = |it: &mut dyn Iterator<Item = Option<&'a str>>| {
-        let mut out: Vec<Option<&'a str>> = Vec::new();
-        for s in it {
-            if out.last() != Some(&s) {
-                out.push(s);
-            }
-        }
-        out
-    };
-    let (mut a, mut b) = (a, b);
-    spans(&mut a) == spans(&mut b)
 }
 
 /// Rewrite `runs` so their texts concatenate to `new`, keeping the run list:
@@ -414,34 +540,208 @@ mod tests {
         assert!(patch_runs(&mut rs, "").is_ok());
     }
 
-    #[test]
-    fn runs_the_engine_joined_are_patched_in_place() {
-        use docx_lower::ir::LoweredParagraph;
+    fn para_doc(texts: &[&str]) -> LoweredDoc {
         let mut base = LoweredDoc::default();
         base.story
             .blocks
             .push(LoweredBlock::Paragraph(LoweredParagraph {
-                runs: runs(&["Dear ", "«Name»"]),
+                runs: runs(texts),
                 ..Default::default()
             }));
-        let read = |text: &str| StoryContentIn {
+        base
+    }
+
+    fn read(runs: Vec<RunContentIn>) -> StoryContentIn {
+        StoryContentIn {
             self_id: "s".into(),
             paragraphs: vec![ParagraphContentIn {
                 paragraph_style: None,
-                runs: vec![RunContentIn {
-                    text: text.into(),
-                    character_style: None,
-                }],
+                runs,
             }],
+        }
+    }
+
+    fn plain(text: &str) -> RunContentIn {
+        RunContentIn {
+            text: text.into(),
+            ..Default::default()
+        }
+    }
+
+    fn bold(text: &str) -> RunContentIn {
+        RunContentIn {
+            text: text.into(),
+            font_style: Some("Bold".into()),
+            ..Default::default()
+        }
+    }
+
+    fn edits(base: &LoweredDoc, content: &StoryContentIn) -> crate::EditSet {
+        let edited = overlay_story_content(base, content);
+        crate::diff(base, &edited, &crate::DocxBindings::default())
+    }
+
+    #[test]
+    fn runs_the_engine_joined_map_back_onto_their_word_runs() {
+        let base = para_doc(&["Dear ", "«Name»"]);
+        let same = edits(&base, &read(vec![plain("Dear «Name»")]));
+        assert!(same.runs.is_empty() && same.structural.is_empty());
+        let e = edits(&base, &read(vec![plain("Dear «Name»!")]));
+        assert!(e.structural.is_empty());
+        assert_eq!(e.runs.len(), 1);
+        assert_eq!(e.runs[0].run, 1);
+        assert_eq!(e.runs[0].new_text.as_deref(), Some("«Name»!"));
+        assert!(e.runs[0].new_props.is_none());
+    }
+
+    #[test]
+    fn a_word_made_bold_splits_its_run_and_leaves_the_others() {
+        use crate::edit::{RunPiece, StructuralEdit};
+        let base = para_doc(&["Intro. ", "Hello world!"]);
+        let e = edits(
+            &base,
+            &read(vec![plain("Intro. Hello "), bold("world"), plain("!")]),
+        );
+        assert!(e.runs.is_empty(), "{:?}", e.runs);
+        let [StructuralEdit::SplitRun {
+            block: 0,
+            run: 1,
+            base: own,
+            pieces,
+        }] = e.structural.as_slice()
+        else {
+            panic!("one split of run 1: {:?}", e.structural)
         };
-        let texts_of = |d: &LoweredDoc| match &d.story.blocks[0] {
-            LoweredBlock::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect::<Vec<_>>(),
-            LoweredBlock::Table(_) => unreachable!(),
+        assert_eq!(own.props, docx_core::RunProps::default());
+        let bolded = crate::edit::RunFormat {
+            props: docx_core::RunProps {
+                bold: Some(true),
+                ..Default::default()
+            },
+            rstyle: None,
         };
-        let same = overlay_story_content(&base, &read("Dear «Name»"));
-        assert_eq!(texts_of(&same), ["Dear ", "«Name»"]);
-        let edited = overlay_story_content(&base, &read("Dear «Name»!"));
-        assert_eq!(texts_of(&edited), ["Dear ", "«Name»!"]);
+        assert_eq!(
+            pieces,
+            &[
+                RunPiece {
+                    text: "Hello ".into(),
+                    format: None
+                },
+                RunPiece {
+                    text: "world".into(),
+                    format: Some(bolded.clone())
+                },
+                RunPiece {
+                    text: "!".into(),
+                    format: None
+                },
+            ]
+        );
+        // A whole run made bold is an edit of its look in place; typing
+        // bold text right after it extends it.
+        let e = edits(&base, &read(vec![plain("Intro. "), bold("Hello world!!")]));
+        assert!(e.structural.is_empty());
+        assert_eq!(e.runs.len(), 1);
+        assert_eq!(e.runs[0].new_text.as_deref(), Some("Hello world!!"));
+        assert_eq!(e.runs[0].new_props, Some(bolded.props.clone()));
+        assert_eq!(e.runs[0].base, Some(crate::edit::RunFormat::default()));
+    }
+
+    #[test]
+    fn typed_text_goes_to_the_run_whose_look_it_has() {
+        use crate::edit::StructuralEdit;
+        // Bold text typed between a plain and a bold run extends the bold
+        // one at its start rather than splitting the plain one. The
+        // baseline's second run is bold (an edit style's token).
+        let base = overlay_story_content(
+            &para_doc(&["Hello ", "world"]),
+            &read(vec![plain("Hello "), bold("world")]),
+        );
+        let base2 = base.clone();
+        let edited2 =
+            overlay_story_content(&base2, &read(vec![plain("Hello "), bold("big world")]));
+        let e = crate::diff(&base2, &edited2, &crate::DocxBindings::default());
+        assert!(
+            !e.structural
+                .iter()
+                .any(|s| matches!(s, StructuralEdit::SplitRun { .. })),
+            "{:?}",
+            e.structural
+        );
+        assert_eq!(e.runs.len(), 1);
+        assert_eq!(e.runs[0].run, 1);
+        assert_eq!(e.runs[0].new_text.as_deref(), Some("big world"));
+        assert!(e.runs[0].new_props.is_none());
+    }
+
+    #[test]
+    fn a_styled_cell_read_writes_a_split_in_the_cell() {
+        use crate::edit::StructuralEdit;
+        use docx_lower::ir::{LoweredCell, LoweredTable};
+        let mut base = LoweredDoc::default();
+        base.story.blocks.push(LoweredBlock::Table(LoweredTable {
+            rows: 1,
+            cols: 1,
+            cells: vec![LoweredCell {
+                paragraphs: vec![LoweredParagraph {
+                    runs: runs(&["Total 12"]),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }));
+        let mut edited = base.clone();
+        let skips = overlay_cells(
+            &mut edited,
+            &[CellContentIn {
+                block: 0,
+                cell: 0,
+                text: "Total 12".into(),
+                paragraphs: Some(vec![ParagraphContentIn {
+                    paragraph_style: None,
+                    runs: vec![plain("Total "), bold("12")],
+                }]),
+            }],
+        );
+        assert!(skips.is_empty());
+        let e = crate::diff(&base, &edited, &crate::DocxBindings::default());
+        assert!(e.cells.is_empty());
+        let [StructuralEdit::SplitCellRun {
+            block: 0,
+            cell: 0,
+            para: 0,
+            run: 0,
+            pieces,
+            ..
+        }] = e.structural.as_slice()
+        else {
+            panic!("{:?}", e.structural)
+        };
+        assert_eq!(pieces.len(), 2);
+        assert!(pieces[0].format.is_none());
+        assert_eq!(
+            pieces[1].format.as_ref().map(|f| f.props.bold),
+            Some(Some(true))
+        );
+        // A styled read that disagrees with the text read is not used.
+        let mut edited = base.clone();
+        overlay_cells(
+            &mut edited,
+            &[CellContentIn {
+                block: 0,
+                cell: 0,
+                text: "Total 14".into(),
+                paragraphs: Some(vec![ParagraphContentIn {
+                    paragraph_style: None,
+                    runs: vec![bold("Other")],
+                }]),
+            }],
+        );
+        let e = crate::diff(&base, &edited, &crate::DocxBindings::default());
+        assert!(e.structural.is_empty());
+        assert_eq!(e.cells.len(), 1);
+        assert_eq!(e.cells[0].new_text.as_deref(), Some("Total 14"));
     }
 
     #[test]

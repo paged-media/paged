@@ -266,6 +266,8 @@ pub struct RefOut {
     pub role: String,
     pub rgb: Option<u32>,
     pub swatch: Option<String>,
+    /// The swatch's colour model (`rgb`, `cmyk`, `spot`, `lab`).
+    pub model: Option<String>,
     pub paragraph: Option<String>,
     pub character: Option<String>,
 }
@@ -301,6 +303,9 @@ pub struct ExtOut {
     /// The chart slots a save left empty (deleted charts): recorded so a
     /// reload keeps every index.
     pub removed: Vec<u32>,
+    /// The chart's own series palette: a document colour group and its
+    /// swatches, each already encoded (`id|model|RRGGBB`).
+    pub palette: Option<(String, Vec<String>)>,
 }
 
 // ── XML helpers ─────────────────────────────────────────────────────────────
@@ -972,6 +977,7 @@ pub fn ext_xml(e: &ExtOut) -> String {
         }
         for (k, v) in [
             ("swatch", &r.swatch),
+            ("model", &r.model),
             ("paragraph", &r.paragraph),
             ("character", &r.character),
         ] {
@@ -981,7 +987,15 @@ pub fn ext_xml(e: &ExtOut) -> String {
         }
         x.push_str("/>");
     }
-    x.push_str("</pg:refs></c:ext>");
+    x.push_str("</pg:refs>");
+    if let Some((group, swatches)) = &e.palette {
+        let _ = write!(x, r#"<pg:palette group="{}">"#, esc(group));
+        for sw in swatches {
+            let _ = write!(x, r#"<pg:swatch ref="{}"/>"#, esc(sw));
+        }
+        x.push_str("</pg:palette>");
+    }
+    x.push_str("</c:ext>");
     x
 }
 

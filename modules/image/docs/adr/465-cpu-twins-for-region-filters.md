@@ -130,8 +130,13 @@ editor's live selection:
   state: one coverage, at the resolution of the image open in the session, never written to the
   document. While the frame's image is open, its live selection counts. When another image
   opens, the session keeps the closing frame's selection (the last four frames, dropped when
-  that frame opens again, where its live selection counts, and when another document opens,
-  since frame ids are per document), so a script can still filter within it. The coverage is
+  another document opens, since frame ids are per document), so a script can still filter
+  within it. When that frame's image opens again, the kept selection is set back into the
+  engine (`selection_set_coverage`: coverage bytes of the bound image's size, folded under a
+  combine mode, `replace` making it exactly those bytes) and is the live selection again, as if
+  the frame had never closed; the session then drops its copy. A frame that now holds the same
+  image at another size gets it resampled as below; another crop of the image drops it, as a
+  crop drops a live selection. The coverage is
   at the size of the image it was made on: when the object model's canvas is the same image at
   another resolution (the aspect agrees within a pixel) it is resampled bilinearly at pixel
   centres, as resizing an image resizes its selection; another aspect is another crop, where
@@ -150,12 +155,14 @@ editor's live selection:
 Evidence: `image-js/src/region_filter.rs` (`RegionMask`, `mask_coverage`, `filter_masked_cpu`,
 `filter_masked_gpu`), `image-js/src/lib.rs` (`filter_region_rgba8`'s mask arguments),
 `glue/src/object-model/image-objects.ts` (`FILTER_FIELDS`, the mask and selection checks),
-`glue/src/session.ts` (`liveSelection`, the kept selections), `glue/src/object-model/image-objects.ts`
+`image-js/src/selection.rs` (`SessionSelection::apply_coverage`, behind `selection_set_coverage`),
+`glue/src/session.ts` (`liveSelection`, the kept selections, `restoreSelection`), `glue/src/object-model/image-objects.ts`
 (`coverageAt`); tests in `image-conformance/tests/it/cpu_twins.rs` (the rasteriser, the fill
 rules and ops, the CPU path under a mask, the two paths under a mask),
 `glue/test/region-filter.spec.ts` (a polygon and an alpha mask headless, fill rules and ops, the
 selection source, a resampled and a refused selection), `glue/test/selection.spec.ts` (the
-selection kept for a closed frame), `apps/cli/test/cli-image.spec.ts` (a polygon, a hole by fill
+selection kept for a closed frame, set back when it reopens, resampled or dropped), the
+`selection.rs` unit test of coverage bytes as the selection, `apps/cli/test/cli-image.spec.ts` (a polygon, a hole by fill
 rule and by op, an alpha mask from `@path`, `selection: true` refused), and
 `apps/editor/apps/canvas/tests/plugin-surface/image-filter-selection.spec.ts` (a marquee selection
 in the running editor: only its pixels change, one undo restores them).

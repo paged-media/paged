@@ -165,6 +165,50 @@ describe.each(ADAPTERS)("host.document — %s", (_name, make) => {
     sub.dispose();
   });
 
+  test("mutateWithBytes takes amend: the bytes join the step, refused once history moved", async () => {
+    expect(t.host.supports("document.mutate.amend@2")).toBe(true);
+    // A 1x1 PNG.
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+      0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+      0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+      0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+      0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00,
+      0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ]);
+    const props = async () =>
+      JSON.stringify(await t.host.document.elementProperties(BOX));
+    const slot = {
+      op: "replaceImageBytes",
+      args: { elementId: "ubox", bytes: [] },
+    } as never;
+    const original = await props();
+    const edit = await t.host.document.mutate({
+      op: "setElementProperty",
+      args: {
+        elementId: BOX,
+        path: "frameOpacity",
+        value: { type: "length", value: 50 },
+      },
+    } as never);
+    expect(edit.applied).toBe(true);
+    const seq = edit.applied ? edit.appliedSeq : undefined;
+    const out = await t.host.document.mutateWithBytes(slot, png, {
+      amend: seq,
+    });
+    expect(out.applied).toBe(true);
+    // One undo reverts the edit and the bytes.
+    await t.host.document.undo();
+    expect(await props()).toBe(original);
+    const late = await t.host.document.mutateWithBytes(slot, png, {
+      amend: out.applied ? out.appliedSeq : -1,
+    });
+    expect(late.applied).toBe(false);
+    if (!late.applied)
+      expect(late.error).toMatchObject({ error: { kind: "notAmendable" } });
+    expect(await props()).toBe(original);
+  });
+
   test("a mutation the engine refuses is a result, never a throw", async () => {
     const out = await t.host.document.mutate({
       op: "setElementProperty",

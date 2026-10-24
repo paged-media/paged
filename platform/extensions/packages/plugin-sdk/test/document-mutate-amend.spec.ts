@@ -185,3 +185,217 @@ describe("mutate(…, { amend }) on the real engine", () => {
     expect(await props(h)).toBe(original);
   });
 });
+
+// ── Extensions ADR 337 amendment: bytes, scripts and follow-ups ────────
+
+/** A 1x1 PNG, the smallest bytes `replaceImageBytes` decodes. */
+const PNG_1X1 = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44,
+  0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0, 0x1f, 0x00, 0x05, 0x00,
+  0x01, 0xff, 0x89, 0x99, 0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+  0x44, 0xae, 0x42, 0x60, 0x82,
+]);
+
+/** The test rectangle's properties, as text (compared before/after). */
+const rectProps = async (live: HeadlessHost) =>
+  JSON.stringify(await live.host.document.elementProperties(RECT));
+
+const bytesSlot = () =>
+  ({
+    op: "replaceImageBytes",
+    args: { elementId: "urect", bytes: [] },
+  }) as never;
+
+describe("mutateWithBytes(…, { amend })", () => {
+  let h: HeadlessHost | null = null;
+  afterEach(() => {
+    h?.dispose();
+    h = null;
+  });
+
+  it("takes the binary amend lane where the host wires it", async () => {
+    const fake = createFakeEditor();
+    const calls: unknown[][] = [];
+    (fake.editor as unknown as { amendWithBytes: unknown }).amendWithBytes =
+      async (...args: unknown[]) => {
+        calls.push(args);
+        return {
+          kind: "mutationApplied",
+          payload: { createdId: null, pageIds: [], appliedSeq: 9 },
+        };
+      };
+    const { host } = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+    });
+    expect(host.supports("document.mutate.amend@2")).toBe(true);
+    const out = await host.document.mutateWithBytes(bytesSlot(), PNG_1X1, {
+      amend: 4,
+      transfer: true,
+    });
+    expect(out).toMatchObject({ applied: true, appliedSeq: 9 });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![0]).toBe(4);
+    expect(calls[0]![2]).toBe(PNG_1X1);
+    expect(calls[0]![3]).toBe(true);
+    // Not a step number: refused before anything is sent.
+    const bad = await host.document.mutateWithBytes(bytesSlot(), PNG_1X1, {
+      amend: -1,
+    });
+    expect(bad.applied).toBe(false);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("joins the step on the real engine (JSON lane): one undo reverts both", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const original = await rectProps(h);
+    const seen: DocumentChangeEvent[] = [];
+    h.host.document.onDidChange((e) => seen.push(e));
+    await h.host.document.mutate(opacity(50));
+    const seq = seen[0]!.appliedSeq!;
+    const out = await h.host.document.mutateWithBytes(bytesSlot(), PNG_1X1, {
+      amend: seq,
+    });
+    expect(out.applied).toBe(true);
+    await h.host.document.undo();
+    expect(await rectProps(h)).toBe(original);
+    // The history moved: refused, nothing applied.
+    const late = await h.host.document.mutateWithBytes(bytesSlot(), PNG_1X1, {
+      amend: out.applied ? out.appliedSeq! : -1,
+    });
+    expect(late).toMatchObject({
+      applied: false,
+      error: { error: { kind: "notAmendable" } },
+    });
+    expect(await rectProps(h)).toBe(original);
+  });
+});
+
+describe("a script run's change names its step", () => {
+  let h: HeadlessHost | null = null;
+  afterEach(() => {
+    h?.dispose();
+    h = null;
+  });
+
+  it("carries appliedSeq; a follow-up joins the run's one step", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const original = await rectProps(h);
+    const seen: DocumentChangeEvent[] = [];
+    h.host.document.onDidChange((e) => seen.push(e));
+    const run = await h.runScript(
+      `paged.set('rectangle:urect', 'frameOpacity', 60);
+       paged.set('rectangle:urect', 'frameOpacity', 50);`,
+    );
+    expect(run.error).toBeNull();
+    const change = seen.find((e) => e.kind === "scriptResult");
+    expect(typeof change?.appliedSeq).toBe("number");
+    const follow = await h.host.document.mutate(opacity(30), {
+      amend: change!.appliedSeq,
+    });
+    expect(follow.applied).toBe(true);
+    // ONE undo: both script writes and the follow-up.
+    await h.host.document.undo();
+    expect(await rectProps(h)).toBe(original);
+  });
+
+  it("names none when the run moved the history", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    await h.host.document.mutate(opacity(50));
+    const seen: DocumentChangeEvent[] = [];
+    h.host.document.onDidChange((e) => seen.push(e));
+    const run = await h.runScript(
+      `paged.undo(); paged.set('rectangle:urect', 'frameOpacity', 40);`,
+    );
+    expect(run.error).toBeNull();
+    const change = seen.find((e) => e.kind === "scriptResult");
+    expect(change).toBeDefined();
+    expect(change!.appliedSeq).toBeUndefined();
+  });
+});
+
+describe("an object write's followUp joins its step", () => {
+  let h: HeadlessHost | null = null;
+  afterEach(() => {
+    h?.dispose();
+    h = null;
+  });
+
+  it("runs after the commit, amends it, and the result names the step", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const original = await rectProps(h);
+    const live = h;
+    const steps: number[] = [];
+    live.objects.register({
+      plugin: "acme.follow",
+      model: {
+        kinds: [
+          {
+            kind: "x",
+            title: "x",
+            schema: [{ path: "p", type: { kind: "number" } }],
+            hostOf: () => "doc",
+            list: () => [],
+            get: () => ({ kind: "absent" }),
+            set: () => ({
+              kind: "mutations",
+              mutations: [opacity(70)],
+              followUp: async ({ appliedSeq }) => {
+                steps.push(appliedSeq);
+                const out = await live.host.document.mutate(opacity(25), {
+                  amend: appliedSeq,
+                });
+                return out.applied ? out.appliedSeq : undefined;
+              },
+            }),
+          },
+        ],
+      },
+    });
+    const out = await live.objects.set("plugin:acme.follow/x/1", "p", 1);
+    expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(steps).toHaveLength(1);
+    const step = out.outcome?.applied ? out.outcome.appliedSeq : undefined;
+    expect(step).toBeGreaterThan(steps[0]!);
+    const both = await rectProps(live);
+    expect(both).not.toBe(original);
+    await live.host.document.undo();
+    expect(await rectProps(live)).toBe(original);
+  });
+
+  it("a follow-up that throws leaves the committed write", async () => {
+    h = await createHeadlessHost({ console: silent });
+    await h.load(minimalIdml());
+    const original = await rectProps(h);
+    h.objects.register({
+      plugin: "acme.throws",
+      model: {
+        kinds: [
+          {
+            kind: "x",
+            title: "x",
+            schema: [{ path: "p", type: { kind: "number" } }],
+            hostOf: () => "doc",
+            list: () => [],
+            get: () => ({ kind: "absent" }),
+            set: () => ({
+              kind: "mutations",
+              mutations: [opacity(70)],
+              followUp: async () => {
+                throw new Error("boom");
+              },
+            }),
+          },
+        ],
+      },
+    });
+    const out = await h.objects.set("plugin:acme.throws/x/1", "p", 1);
+    expect(out).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await rectProps(h)).not.toBe(original);
+  });
+});

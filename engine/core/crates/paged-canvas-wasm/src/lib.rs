@@ -459,6 +459,29 @@ mod wasm {
             serde_json::to_string(&reply).unwrap_or_default()
         }
 
+        /// v76 (engine ADR 1004 amendment) — `mutateWithBytesDirect` applied
+        /// INTO the undo step `appliedSeq` names, as `amendMutation` does
+        /// for a JSON mutation. Returns the `Mutate` reply envelope as JSON
+        /// (`notAmendable` when the step may no longer be joined).
+        #[wasm_bindgen(js_name = amendWithBytesDirect)]
+        pub fn amend_with_bytes_direct(
+            &mut self,
+            seq: u32,
+            applied_seq: f64,
+            mutation_json: &str,
+            bytes: Vec<u8>,
+        ) -> String {
+            let (reply, effect) = self.core.amend_with_bytes(
+                seq as u64,
+                applied_seq as u64,
+                mutation_json,
+                bytes,
+                &now_ms,
+            );
+            self.apply_cache_effect(effect);
+            serde_json::to_string(&reply).unwrap_or_default()
+        }
+
         /// Number of pages in the loaded document, or 0 if no
         /// document is loaded.
         #[wasm_bindgen(js_name = pageCount)]

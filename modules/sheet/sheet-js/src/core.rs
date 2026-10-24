@@ -50,6 +50,7 @@ use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, 
 use sheet_xlsx::XlsxDocument;
 
 pub mod cf;
+mod chart_style;
 mod charts;
 pub mod csv;
 mod docstyles;
@@ -65,6 +66,9 @@ pub mod sort;
 pub mod tables;
 pub mod validation;
 pub mod whatif;
+pub use chart_style::{
+    ChartStyleIn, ChartStyleOut, PaletteIn, PaletteOut, RoleIn, RoleOut, SwatchIn,
+};
 pub use charts::{ChartInfo, ChartsheetInfo, SparklineInfo, CHART_KIND_TAGS};
 pub use docstyles::{DocReferences, NamedStyleUsage};
 pub use format::{

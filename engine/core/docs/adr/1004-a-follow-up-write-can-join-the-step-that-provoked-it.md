@@ -52,3 +52,34 @@ an edit and leaves it alone.
 - A write that is not undoable on its own (a container part) stays outside the step, as it is
   outside every step.
 - `undoneSeq` of an undo of an amended step is the amending write's seq, not the edit's.
+
+## Amendment — 2026-10-23: scripts and the binary lane
+
+Additive on protocol v76 (unreleased; no bump).
+
+**A script run is one undo step, and its reply names it.** A run's own records (its core writes
+and the host commits it reported in `HostObjectsResult.committed`) fold into one `Composite`
+whether or not it wrote through the host; before, only a run that suspended on the host was
+folded, and a synchronous run of several writes was several steps. `ScriptResult.appliedSeq` is
+the seq of that step when a follow-up write may still join it (`CanvasModel::sole_step_since`):
+it is the only entry logged since the run began, it is the top of the log, the amend anchor
+points at it, and no undo or redo ran during the run (`CanvasModel::history_moves`). Absent for
+a read-only run, a run that called `paged.undo()` / `paged.redo()`, and a run a foreign edit
+split. A listener amends it exactly as it amends a `MutationApplied`.
+
+**An amended step keeps its old numbers.** A host commit made while a script waits is reported
+to the script by the seq its reply carried; a follow-up write that amends that commit before
+the script resumes renumbers the step. The model remembers each renumbering
+(`amend_origins`, the newest 256; `amend_lineage`), and the script fold claims a step by any
+number it was known by, so the amended commit stays inside the script's one step.
+
+**The binary lane amends too.** `amendWithBytesDirect(seq, appliedSeq, mutationJson, bytes)`
+(`WorkerCore::amend_with_bytes`) is `mutateWithBytesDirect` applied as an `AmendMutation`: the
+same slot rule, the same `NotAmendable` refusal with nothing applied.
+
+### Consequences
+
+- A rebuild provoked by a script's edit joins the script's step; one undo reverts the script and
+  the rebuild.
+- `paged.set(a); paged.set(b)` in one run is one undo step (it was two).
+- `ScriptResult.writes` still counts the writes; the steps they make are now one.

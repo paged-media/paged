@@ -422,6 +422,8 @@
   "draw.properties.subpathStarts": "Konturanfänge",
   "draw.properties.symbol": "Symbol",
   "draw.properties.title": "Zeichnen-Einstellungen",
+  "draw.recipeAutoUpdate.hint": "Erstellt das Bildmaterial im selben Rückgängig-Schritt neu, wenn Sie bearbeiten, woraus es besteht, oder seine Einstellungen ändern. Aus: Wählen Sie selbst Aktualisieren.",
+  "draw.recipeAutoUpdate.label": "Automatisch aktualisieren, wenn sich eine Quelle ändert",
   "draw.recipeUpdate.command": "Die aus der Auswahl erstellten Rezepte aktualisieren",
   "draw.repeat.expand": "Wiederholen: Umwandeln (jede Instanz bleibt als normales Bildmaterial erhalten)",
   "draw.repeat.grid": "Wiederholen: Raster aus Auswahl (Zeilen × Spalten, Abstand, Spiegeln – Bildmaterial wird durch „Aktualisieren“ neu erstellt, keine Live-Verknüpfung)",

@@ -91,6 +91,12 @@ export interface EngineCanvasWorker {
     mutationJson: string,
     bytes: Uint8Array,
   ): string;
+  amendWithBytesDirect?(
+    seq: number,
+    appliedSeq: number,
+    mutationJson: string,
+    bytes: Uint8Array,
+  ): string;
   free(): void;
 }
 

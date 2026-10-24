@@ -777,6 +777,17 @@ export interface PagedEditor {
     bytes: Uint8Array,
     transfer?: boolean,
   ): Promise<WorkerToMain>;
+  /** Engine ADR 1004 amendment — {@link mutateWithBytes} applied INTO the
+   *  undo step `appliedSeq` names (canvas-wasm `amendWithBytesDirect`), as
+   *  the `amendMutation` message does for a JSON mutation. Optional: absent
+   *  on an older host, and the SDK then splices `Array.from(bytes)` into
+   *  the slot and sends `amendMutation`. */
+  amendWithBytes?(
+    appliedSeq: number,
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer?: boolean,
+  ): Promise<WorkerToMain>;
   /** C-6 (I-06) — the renderer RESOURCE-PROVIDER channel. The editor
    *  routes these to the canvas-wasm `claimImageResource` /
    *  `submitResourceTiles` / `releaseImageResource` messages (the v44
