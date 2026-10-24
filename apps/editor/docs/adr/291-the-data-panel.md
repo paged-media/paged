@@ -59,8 +59,18 @@ Query), bind (right-click any property).
   - per-record status (a record new or deleted in the source) and the canvas field markers,
     which need the service to report placed instances per record;
   - drag to place, which needs a canvas drop target for a field;
-  - record templates and their library, and a pagination inspector, which stay paged.data's
-    (Data Merge, record flow) until they have a door;
   - double-click to jump to a record's instances.
 
   Each needs a door member it does not have today, and the panel says nothing it cannot back.
+- Amended 2026-10-24: record templates and their library, and the pagination inspector, are
+  built, as paged.data's own panels (PM-0015 L4: they are the module's workflows, not the
+  host's). **Record templates** lists the document's templates with the record flows using
+  each, makes one from the selected text frames (lines written as for Data Merge, `<<field>>`
+  a field), renames (the flows follow) and deletes (refused while a flow uses it), and
+  previews a template filled with record N of a query. **Record flow pagination** sets a
+  flow's options the engine implements (its template and line height, group by, repeated and
+  continued group headers, a group footer with a count and a sum, average, minimum or
+  maximum) inline, and shows what the paginator makes of it over the start page's margin box:
+  records placed, records per page, repeated headers, overflow, a record taller than a page.
+  They reach this panel only when `data@1` gains members for them; until then the Data panel
+  does not show them.

@@ -204,6 +204,98 @@ fn placeholders(text: &str) -> Vec<(usize, &str, usize)> {
     out
 }
 
+/// One line of a record template read off a frame's text (a record flow's
+/// "catalog cell"): the static `label` printed before the value, and the
+/// binding-language `expr` evaluated per record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateLine {
+    pub label: String,
+    pub expr: String,
+}
+
+/// What [`template_lines`] read: one line per text line, and the
+/// placeholders it could not turn into a field reference.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct TemplateLines {
+    pub lines: Vec<TemplateLine>,
+    /// `<<name>>`s whose name is not a field reference of the binding language
+    /// (a space, a leading digit, a keyword): kept as literal text.
+    pub unreferenced: Vec<String>,
+}
+
+/// Read a record template from frame text written as for Data Merge: each
+/// line is one template line, and a `<<field>>` reads the record's `field`.
+/// `Price: <<price>>` becomes the label `Price: ` and the expression `price`;
+/// a line with more than one field, or text after its field, becomes one `&`
+/// concatenation (`<<w>> × <<h>> mm` → `w & " × " & h & " mm"`); a line with
+/// no field is a label alone. Empty lines are dropped.
+pub fn template_lines(text: &str) -> TemplateLines {
+    let mut out = TemplateLines::default();
+    for raw in text.split(['\n', '\r', '\u{2029}']) {
+        if raw.trim().is_empty() {
+            continue;
+        }
+        let mut spans: Vec<(usize, &str, usize)> = Vec::new();
+        for span in placeholders(raw) {
+            if is_field_ident(span.1) {
+                spans.push(span);
+            } else if !out.unreferenced.iter().any(|u| u == span.1) {
+                out.unreferenced.push(span.1.to_string());
+            }
+        }
+        let line = match spans.as_slice() {
+            [] => TemplateLine {
+                label: raw.to_string(),
+                expr: "\"\"".to_string(),
+            },
+            [(start, name, end)] if *end == raw.len() => TemplateLine {
+                label: raw[..*start].to_string(),
+                expr: (*name).to_string(),
+            },
+            _ => {
+                let mut parts: Vec<String> = Vec::new();
+                let mut at = 0;
+                for (start, name, end) in &spans {
+                    if *start > at {
+                        parts.push(string_literal(&raw[at..*start]));
+                    }
+                    parts.push((*name).to_string());
+                    at = *end;
+                }
+                if at < raw.len() {
+                    parts.push(string_literal(&raw[at..]));
+                }
+                TemplateLine {
+                    label: String::new(),
+                    expr: parts.join(" & "),
+                }
+            }
+        };
+        out.lines.push(line);
+    }
+    out
+}
+
+/// A name the binding language reads as a field: a letter or `_`, then
+/// letters, digits and `_`, and not a keyword.
+fn is_field_ident(name: &str) -> bool {
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_alphabetic() || first == '_')
+        && chars.all(|c| c.is_alphanumeric() || c == '_')
+        && !matches!(
+            name.to_ascii_uppercase().as_str(),
+            "TRUE" | "FALSE" | "NULL"
+        )
+}
+
+/// A binding-language string literal (a doubled quote escapes a quote).
+fn string_literal(text: &str) -> String {
+    format!("\"{}\"", text.replace('"', "\"\""))
+}
+
 /// Merge one template text: every `<<field>>` becomes `value(field)`
 /// verbatim (`None` merges as empty). With `remove_blank_lines`, a line whose
 /// only content is fields that are all empty disappears (Data Merge's Remove
@@ -556,6 +648,35 @@ mod tests {
     }
 
     const LETTER_MARGINS: Bounds = [36.0, 36.0, 756.0, 576.0];
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_record_templates_lines_from_frame_text__feat__data_lower_record_templates() {
+        let t = template_lines(
+            "<<name>>\nPrice: <<price>>\n\n<<w>> × <<h>> mm\nIn stock\n<<a b>> <<sku>>",
+        );
+        let pairs: Vec<(&str, &str)> = t
+            .lines
+            .iter()
+            .map(|l| (l.label.as_str(), l.expr.as_str()))
+            .collect();
+        assert_eq!(
+            pairs,
+            [
+                ("", "name"),
+                ("Price: ", "price"),
+                ("", "w & \" × \" & h & \" mm\""),
+                ("In stock", "\"\""),
+                ("<<a b>> ", "sku"),
+            ]
+        );
+        assert_eq!(t.unreferenced, ["a b"]);
+        assert_eq!(
+            template_lines("<<x>> said \"hi\"").lines[0].expr,
+            "x & \" said \"\"hi\"\"\""
+        );
+        assert_eq!(template_lines("<<true>>").unreferenced, ["true"]);
+    }
 
     #[test]
     fn data_lower_merge_text_is_verbatim_and_drops_only_field_only_blank_lines() {

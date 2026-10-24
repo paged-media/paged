@@ -52,7 +52,7 @@ pub use data_session::{columns, core, labels, review};
 mod wasm {
     use crate::columns::ColumnBuf;
     use crate::core::DataSession;
-    use data_core::{BindingId, QueryId};
+    use data_core::{BindingId, QueryId, TemplateRef};
     use wasm_bindgen::prelude::*;
 
     /// The wasm class the bundle consumes — a thin shim over [`DataSession`].
@@ -94,6 +94,81 @@ mod wasm {
         pub fn define_template(&mut self, template: JsValue) -> Result<(), JsValue> {
             self.session.define_template(from_js(template)?);
             Ok(())
+        }
+
+        /// The template library: `TemplateEntry[]` (`{ template, usedBy }`).
+        pub fn template_library(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.template_library())
+        }
+
+        /// Define template `id` from frame text with `<<field>>`s:
+        /// `TemplateDraft` (`{ template, unreferenced }`).
+        pub fn template_from_text(
+            &mut self,
+            id: &str,
+            text: &str,
+            line_height_pt: f64,
+        ) -> Result<JsValue, JsValue> {
+            let draft = self
+                .session
+                .template_from_text(&TemplateRef::from(id), text, line_height_pt)
+                .map_err(map_err)?;
+            to_js(&draft)
+        }
+
+        /// Template `id` filled with record `record` (0-based) of `query`:
+        /// `TemplateLinePreview[]` (`{ text, error? }`).
+        pub fn preview_template(
+            &self,
+            id: &str,
+            query: &str,
+            record: usize,
+        ) -> Result<JsValue, JsValue> {
+            let lines = self
+                .session
+                .preview_template(&TemplateRef::from(id), &QueryId::from(query), record)
+                .map_err(map_err)?;
+            to_js(&lines)
+        }
+
+        /// Rename a template and the record flows using it: the moved ids.
+        pub fn rename_template(&mut self, from: &str, to: &str) -> Result<JsValue, JsValue> {
+            let moved = self
+                .session
+                .rename_template(&TemplateRef::from(from), &TemplateRef::from(to))
+                .map_err(map_err)?;
+            to_js(&moved)
+        }
+
+        /// Remove a template no record flow uses; `false` when there was none.
+        pub fn remove_template(&mut self, id: &str) -> Result<bool, JsValue> {
+            self.session
+                .remove_template(&TemplateRef::from(id))
+                .map_err(map_err)
+        }
+
+        /// A record flow's recipe (`RecordFlowDef`), or null.
+        pub fn record_flow(&self, binding: &str) -> Result<JsValue, JsValue> {
+            match self.session.record_flow(&BindingId::from(binding)) {
+                Some(def) => to_js(&def),
+                None => Ok(JsValue::NULL),
+            }
+        }
+
+        /// Set a record flow's template and options (`FlowOpts`).
+        pub fn set_record_flow(
+            &mut self,
+            binding: &str,
+            template: &str,
+            options: JsValue,
+        ) -> Result<(), JsValue> {
+            self.session
+                .set_record_flow(
+                    &BindingId::from(binding),
+                    &TemplateRef::from(template),
+                    from_js(options)?,
+                )
+                .map_err(map_err)
         }
 
         /// Define a placeholder anchor.
@@ -272,7 +347,7 @@ mod wasm {
 
         /// Resolve a record-flow binding and paginate it over a caller-supplied
         /// frame chain (§9.4). `chain` is `FrameCapacity[]`, `opts` is
-        /// `FlowLayoutOpts` (or undefined for defaults).
+        /// `FlowLayoutOpts` (or undefined for the binding's own options).
         pub fn lower_record_flow(
             &mut self,
             binding: &str,
@@ -281,7 +356,9 @@ mod wasm {
         ) -> Result<JsValue, JsValue> {
             let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
             let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
-                data_lower::FlowLayoutOpts::default()
+                self.session
+                    .flow_layout(&BindingId::from(binding))
+                    .unwrap_or_default()
             } else {
                 from_js(opts)?
             };
@@ -338,7 +415,7 @@ mod wasm {
         /// Run a §10 batch over a record-flow binding: resolve, partition by
         /// `mode`, and paginate each unit. Returns `BatchRun[]`
         /// (`{ label, flow }`). `chain` is `FrameCapacity[]`, `opts` is
-        /// `FlowLayoutOpts` (or undefined for defaults).
+        /// `FlowLayoutOpts` (or undefined for the binding's own options).
         pub fn run_record_flow_batch(
             &mut self,
             binding: &str,
@@ -349,7 +426,9 @@ mod wasm {
             let mode = from_js(mode)?;
             let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
             let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
-                data_lower::FlowLayoutOpts::default()
+                self.session
+                    .flow_layout(&BindingId::from(binding))
+                    .unwrap_or_default()
             } else {
                 from_js(opts)?
             };
