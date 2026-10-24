@@ -265,7 +265,9 @@ export function FilterDialog({
           filterId={def.id}
           p={p}
           value={dialog.values[p.key] ?? p.default}
-          disabled={busy}
+          // Never while a pass runs: a drag must not be cut off by the
+          // preview it causes (the session coalesces, latest wins).
+          disabled={false}
           onChange={(v) => onChange({ [p.key]: v })}
         />
       ))}
