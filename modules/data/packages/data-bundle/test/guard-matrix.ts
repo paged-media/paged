@@ -9,8 +9,7 @@
 // (3 rows), both imported as sources.
 import cases from "../../../conformance/query-guard/cases.json";
 
-export const FIXTURE_CSV: { people: string; orders: string } =
-  cases.fixtureCsv;
+export const FIXTURE_CSV: { people: string; orders: string } = cases.fixtureCsv;
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
