@@ -1,5 +1,87 @@
 # paged.doc — status
 
+## Wasm size (measured 2026-10-24)
+
+`docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
+then `wasm-opt -Oz`):
+
+|                     | bytes                |
+| ------------------- | -------------------- |
+| raw                 | 6,879,227 (6.56 MiB) |
+| gzip -9             | 1,876,393 (1.79 MiB) |
+| brotli -q 11        | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes` | 8,388,608 (8 MiB)    |
+
+That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
+panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
+That profile landed on 2026-10-14 and uses size-first codegen for `ooxmlsdk` and the
+engine model crates. The build also enforces `maxBytes`.
+
+What the wasm is made of: on the 10.2 MB module before wasm-bindgen and wasm-opt,
+`ooxmlsdk` is 6.8 MB. Most of that is the generated readers for WordprocessingML
+(2.1 MB), DrawingML (1.1 MB), charts (0.6 MB), PresentationML (0.5 MB; a Word file never
+contains it, and what links it in has not been traced yet), OMML (0.36 MB) and VML (0.29 MB). The plugin's own
+crates are about 0.3 MB.
+
+ooxmlsdk 0.12 has no per-schema cargo features (only `parts`, `mce`, `validators`
+and `flat-opc`). So dropping schemas the plugin never reads means forking the
+crate. That is the next lever if later waves outgrow the headroom.
+`opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
+fifth slower (see `Cargo.toml`).
+
+## W0: tracked changes, content controls, hidden text (2026-10-24)
+
+The import no longer loses content silently (Word-parity program, wave W0;
+save-back rules in [ADR 602](adr/602-save-back-is-a-byte-splice.md), amendment
+of 2026-10-24):
+
+- **Tracked changes are shown as accepted.** Runs inside `w:ins` and
+  `w:moveTo` show as plain text, runs inside `w:del` and `w:moveFrom` are not
+  shown, a run's `w:rPrChange` and a paragraph's `w:pPrChange` show the new
+  formatting. This also applies inside hyperlinks, simple fields and content
+  controls. A paragraph whose mark is a tracked deletion and that has nothing
+  left is not shown; one that keeps content stays its own paragraph (accepting
+  would join it to the next). Diagnostic (warning): "N tracked change(s) shown
+  as accepted; review them in Word". The markup stays in the `.docx`.
+  Recording, accept and reject are W3.
+- **Content controls keep their content.** Run-level (`w:sdt` in a
+  paragraph), block-level (in the body and in table cells), row-level and
+  cell-level controls show their content as plain paragraphs, runs, rows and
+  cells. A Word table of contents, which is a block control, shows its cached
+  entries. Diagnostic (info): "N content control(s) kept as plain content".
+  Editable controls (checkbox, dropdown, date) are W4.
+- **Hidden text (`w:vanish`) is not shown**, as in Word with hidden text off:
+  the run's own `w:vanish`, or its character style's (through `basedOn`);
+  `w:vanish w:val="0"` on the run shows it again. Diagnostic (info): "N hidden
+  run(s) not shown". The engine has no hidden flag yet (W1). Leaving the run
+  out was chosen over rendering it, because save-back can keep it safely: the
+  run keeps its ordinal, so the runs around it stay addressable, and its
+  bytes are never addressed.
+- **Save-back keeps everything the canvas does not show.** Runs inside a
+  tracked change or a content control, and every paragraph inside a block
+  content control, are locked (`RunSource::Tracked` / `ContentControl`,
+  `ParagraphHeld`). An edit that reaches a locked run is refused for its whole
+  paragraph, so Word's paragraph never holds half of a canvas edit. Deleting a
+  paragraph that holds tracked deletions or hidden text is refused (the user
+  never saw what would go with it), and so is rewriting a `w:pPr` that
+  records a tracked change. Row and column edits are refused on a table with
+  row or cell controls. Every refusal is named in the save-back ledger. Edits
+  beside these constructs land on their own `<w:r>`. A table inside a body-level
+  block control is counted like any body table and stays editable.
+- **The patcher's locator is stricter**, matching what the import counts.
+  Body runs, hyperlinks and `w:pPr` are addressed only as direct children of a
+  `body › p`; cell runs only under a `tc › p`; wrapper runs only as direct
+  children of a wrapper there; tables only at body level (in the body or in a
+  body-level block control). Before this, the runs of a paragraph in a text box
+  or a content control advanced the enclosing body paragraph's run count, so an
+  edit after an inline text box could land inside the text box. Empty `<w:r/>`
+  elements count in cells and wrappers too, as they do in the import. A target
+  the pass never meets is reported instead of being dropped.
+- Tests: `docx-conformance/tests/it/w0_losses.rs` (builders
+  `tracked_changes_docx`, `content_controls_docx`, `hidden_text_docx`) cover
+  import, diagnostics, zero-edit identity (EditSet and story read-back),
+  edits beside and inside each construct, and the refusals.
+
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
 
 - `MERGEFIELD` parsed in both field forms (name, switches, instruction), carried on runs and
@@ -327,9 +409,12 @@ ops use.)
 - **Standalone true-open** — degrades to embedded placement + a diagnostic when
   `document.openNative@1` is unwired; the editor and the SDK's headless host
   (`paged-node`) both wire it.
-- **Constructs still past the tier line** — tracked changes, floating
-  (anchored-with-wrap) images and internal `#anchor` links (a renderer door) →
-  surfaced as honest ADR-007 diagnostics on open, not silently dropped.
+- **Constructs still past the tier line** — floating (anchored-with-wrap)
+  images and internal `#anchor` links (a renderer door) → surfaced as honest
+  ADR-007 diagnostics on open, not silently dropped. (Tracked changes were
+  listed here, but until W0 nothing reported them: inserted text vanished
+  without a word. They are now shown as accepted with a diagnostic, see
+  "W0" at the top.)
   (Page/column breaks, `w:pageBreakBefore` and odd/even sections now lower to
   the engine's break-before rule `paragraphStartParagraph`, core protocol 64,
   matched against Word's own page map `docx-conformance/fixtures/

@@ -3700,8 +3700,9 @@ mod wasm {
     ///
     /// The bound image takes the new extent and the composite IN PLACE —
     /// the handle stays. Its mip pyramid goes; the selection is dropped
-    /// whenever the extent changes, and always by a crop or resample (a
-    /// selection does not survive a crop, as in Photoshop). It is ONE
+    /// by a canvas resize, a crop, a straighten, an arbitrary rotation and a
+    /// resample (a selection does not survive a crop, as in Photoshop); a
+    /// quarter turn or a flip carries it along with the pixels. It is ONE
     /// undo step and the history before it stays: undoing it restores
     /// the extent the older steps were recorded against.
     /// Returns `[width, height]`.
@@ -3809,7 +3810,10 @@ mod wasm {
                     if deselect {
                         sel.clear();
                     }
-                    sel.bind(doc.handle, w, h);
+                    // A quarter turn or a flip moves every pixel without
+                    // resampling: the selection goes with them (it used to
+                    // stay where it was — over other pixels — or drop).
+                    sel.follow_canvas_op(&op, doc.handle, w, h);
                 });
                 Ok(vec![w, h])
             }

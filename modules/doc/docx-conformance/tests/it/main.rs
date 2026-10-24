@@ -32,3 +32,4 @@ mod sections;
 mod symbols;
 mod tall_rows;
 mod template_fields;
+mod w0_losses;

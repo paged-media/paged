@@ -141,4 +141,17 @@ describe("paged.web importHtml and makeWebFrame (typed)", () => {
     expect(list.every((x) => typeof x.message === "string")).toBe(true);
     expect(list.some((x) => x.message.includes("doc.missing"))).toBe(true);
   });
+
+  it("webFrame.page is the page number {{frame.page}} renders as", async () => {
+    const { webFrame } = (await h.objects.invoke(`${C}insertWebFrame`, {
+      page: "page:#1",
+      bounds: [10, 10, 110, 210],
+      html: "<p>Page {{frame.page}}</p>",
+      css: "",
+    })) as { webFrame: string };
+    expect(await h.objects.get(webFrame, "page")).toEqual({
+      kind: "value",
+      value: 1,
+    });
+  });
 });

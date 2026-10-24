@@ -114,6 +114,7 @@ import { NOTICES } from "./messages";
 import { createDataTools, type DataToolsApi } from "./data-tools";
 import type { EnterResult } from "./engine-w2";
 import {
+  chartArtAt,
   chartPlacement,
   chartSizeOf,
   elementsOutline,
@@ -406,6 +407,9 @@ export interface ObjectBridge {
    *  document undo or redo, or an open): copies an undo restored refresh
    *  with later edits. Returns how many were added. */
   rediscoverCharts(): Promise<number>;
+  /** A sheet was renamed through the object model (`was` its old name):
+   *  the refresh re-stamps the bindings that still carry it. */
+  sheetRenamed(id: number, was: string): void;
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -1361,6 +1365,16 @@ export function createWorkbookSession(
   // S-04 and the WRONG one for a panel retargeting on the frame you just
   // entered: with two sheet frames on the page they disagree.
   const loweredTables = new Map<string, LoweredTableInfo>();
+  // Sheet id → the name the placed tables' bindings of that sheet carry
+  // (bindings name the sheet, and a later session finds a table by it):
+  // recorded on first sight and by a rename, so a refresh that finds the
+  // sheet renamed re-stamps them.
+  const boundSheetNames = new Map<number, string>();
+  /** A sheet was renamed from `was`: until the refresh re-stamps them, its
+   *  tables' bindings carry that name. */
+  function sheetRenamed(id: number, was: string): void {
+    if (!boundSheetNames.has(id)) boundSheetNames.set(id, was);
+  }
   // Wave 4 — the charts this session placed (their elements, so a refresh
   // can replace them) and the live paginated chains (storyId → handle).
   let placedCharts: PlacedChart[] = [];
@@ -3729,11 +3743,6 @@ export function createWorkbookSession(
     }, REFRESH_DEBOUNCE_MS);
   }
 
-  /** The name of sheet `id` (bindings carry names), or null if it is gone. */
-  function sheetNameOf(id: number): string | null {
-    return state.engine?.listSheets().find((s) => s.id === id)?.name ?? null;
-  }
-
   /** Refresh every placed table (in place), chart (replaced) and chain
    *  (re-paginated over its own tables). Serialised: a refresh requested
    *  while one runs queues behind it. Never rejects. */
@@ -3743,8 +3752,24 @@ export function createWorkbookSession(
         const engine = state.engine;
         if (!engine) return;
         const version = revision;
+        // The sheets' names, read once for the whole refresh (the tables'
+        // bindings and the chains' records carry them).
+        let names: Map<number, string> | null = null;
+        const nameOf = (id: number): string | null =>
+          (names ??= new Map(
+            engine.listSheets().map((x) => [x.id, x.name] as const),
+          )).get(id) ?? null;
+        // The sheets renamed since their tables' bindings were stamped.
+        const renamed = new Set<number>();
+        for (const info of loweredTables.values()) {
+          const name = nameOf(info.sheet);
+          if (name === null) continue;
+          const was = boundSheetNames.get(info.sheet);
+          if (was === undefined) boundSheetNames.set(info.sheet, name);
+          else if (was !== name) renamed.add(info.sheet);
+        }
         for (let [frameId, info] of [...loweredTables]) {
-          const name = sheetNameOf(info.sheet);
+          const name = nameOf(info.sheet);
           if (name === null) continue;
           let next: LoweredContent;
           let windowed: string | null = null;
@@ -3758,7 +3783,8 @@ export function createWorkbookSession(
             host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
-          const moved = viewMoved.delete(frameId);
+          // A renamed sheet: the binding takes the new name like a view.
+          const moved = viewMoved.delete(frameId) || renamed.has(info.sheet);
           // A window frame's binding names the cells it shows now.
           if (windowed && windowed !== info.range) {
             info = { ...info, range: windowed };
@@ -3816,6 +3842,10 @@ export function createWorkbookSession(
             lastLoweredTable = replaced;
           if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
         }
+        for (const id of renamed) {
+          const name = nameOf(id);
+          if (name !== null) boundSheetNames.set(id, name);
+        }
         const charts: PlacedChart[] = [];
         for (let placed of placedCharts) {
           if (
@@ -3858,7 +3888,9 @@ export function createWorkbookSession(
         }
         placedCharts = charts;
         for (const chain of chains.values()) {
-          await chain.sub.refresh();
+          // The sheet's name now: a renamed sheet's chain re-stamps its
+          // record with it.
+          await chain.sub.refresh(nameOf(chain.sheet) ?? undefined);
         }
       })
       .catch((err) => {
@@ -3939,6 +3971,7 @@ export function createWorkbookSession(
         if (!ids) continue;
       }
       const d = binding.data;
+      boundSheetNames.set(sheet.id, d.sheet);
       // A window frame lowers the window that fits its box: read the box.
       let boxPt: { widthPt: number; heightPt: number } | undefined;
       if (d.sizing === "window") {
@@ -4037,6 +4070,7 @@ export function createWorkbookSession(
         range,
         storyId,
         record,
+        binding.data.sheet,
       );
       if (!from) continue;
       const sub = subscribeChainReflow(host, engine, sheet.id, range, storyId, {
@@ -4133,7 +4167,9 @@ export function createWorkbookSession(
    *  `art` a refresh follows). A copy whose binding recorded both its box
    *  and its art is followed to where its art stands now, so a chart moved
    *  in an earlier session is redrawn where it is; one that recorded only
-   *  its box stands at it; one placed before either was recorded gets its
+   *  its box (the version just before the amendment) is followed from the
+   *  art drawing it again at that box gives; one placed before either was
+   *  recorded gets its
    *  box on discovery — the page-space outline of its elements — and from
    *  then on behaves as a new one (its next redraw records both). Null
    *  when no element is on a page. */
@@ -4151,9 +4187,24 @@ export function createWorkbookSession(
       : null;
     const art = anchor?.bounds;
     const scale = copy.anchor.kind !== "textFrame";
+    // A binding that recorded its box but not its art (the version just
+    // before the amendment): the art is where its element stood when the
+    // chart was drawn at that box, which drawing it again there gives.
+    const engine = state.engine;
+    const drawnArt =
+      copy.art ??
+      (copy.box && art && engine
+        ? await chartArtAt(
+            host,
+            engine,
+            copy.chartIndex,
+            anchor?.pageId ?? outline.pageId,
+            copy.box,
+          )
+        : null);
     const bounds =
-      copy.box && copy.art && art
-        ? (followBox(copy.box, copy.art, art, scale) ?? copy.box)
+      copy.box && drawnArt && art
+        ? (followBox(copy.box, drawnArt, art, scale) ?? copy.box)
         : (copy.box ?? outline.bounds);
     return {
       pageId: anchor?.pageId ?? outline.pageId,
@@ -4630,6 +4681,7 @@ export function createWorkbookSession(
       placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
       return taken;
     },
+    sheetRenamed,
     rediscoverCharts: () =>
       rediscoverCharts().catch((err) => {
         host.log.warn("chart rediscovery failed", err);
@@ -6740,7 +6792,9 @@ export function createWorkbookSession(
       return structureVerb((e) => {
         if (!e.renameSheet)
           throw new Error("engine wasm predates rename_sheet");
+        const was = e.listSheets().find((x) => x.id === id)?.name;
         e.renameSheet(id, name);
+        if (was !== undefined) sheetRenamed(id, was);
       });
     },
 
@@ -6752,6 +6806,7 @@ export function createWorkbookSession(
       });
       if (r.ok) {
         // Sheet ids shifted; the journal and placements on that sheet are moot.
+        boundSheetNames.clear();
         editJournal = [];
         journalCursor = 0;
         for (const [k, info] of [...loweredTables]) {

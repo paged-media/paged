@@ -137,14 +137,17 @@ function DataMarkersRender(props: OverlayProps) {
     if (!on || !service) return;
     // Each refresh is numbered: a late reply of an older one (every await
     // is a chance for the document to have moved on) is dropped.
-    const runs = { latest: 0, live: true };
+    // A counter object, not a captured `let`: the React Compiler does not
+    // lower an update of a variable captured by a closure.
+    const runs = { current: 0 };
+    let live = true;
     const refresh = () => {
-      runs.latest += 1;
-      const mine = runs.latest;
+      runs.current += 1;
+      const mine = runs.current;
       void readMarkers(
         service,
         client,
-        () => runs.live && mine === runs.latest,
+        () => live && mine === runs.current,
       ).then((read) => {
         if (read !== "superseded") setMarkers(read);
       });
@@ -161,7 +164,7 @@ function DataMarkersRender(props: OverlayProps) {
     });
     return () => {
       off();
-      runs.live = false;
+      live = false;
       // Toggled off (or the service gone): drop the mirror, so turning the
       // markers on again never flashes the state of edits ago.
       setMarkers([]);

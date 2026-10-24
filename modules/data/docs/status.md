@@ -261,8 +261,8 @@ Not done:
   writes another property (a stroke weight) needs its permission in the field's grants, and a
   write to an item the template does not open is refused. A text variable and a picture are
   not module fields: they are text and image fields of their frames. `paged template check`
-  still reports the query's derived `recordCount` as a difference after a record field is
-  filled (it compares derived rows).
+  compares stored rows only, so a filled record field's derived `recordCount` is no
+  difference.
 
 - **Catalogues** ([ADR 560](adr/560-template-fields-are-binding-targets.md), plan F8;
   `src/catalogue.ts`). A template's own text, picture and visibility fields are binding
@@ -280,9 +280,15 @@ Not done:
   author's page policy opens the template page (`{ "allow": ["document.pages"] }`): the
   engine asks `document.pages` of the page removed or duplicated, and the copies inherit
   the grant; the first run is an author's (it marks the template page with this plugin's
-  page label). Not yet: a page whose stories hold a table, an anchored object or a footnote
-  cannot be copied; module fields are not catalogue targets; the editor's Template panel
-  has no control for the page grant.
+  page label). The Template panel's "This page" section sets the page grant. Two limits stay,
+  with their reasons: a page whose stories hold a table, an anchored object or a footnote
+  cannot be copied, because the engine's `duplicatePage` refuses a story holding an object
+  with an id of its own (a copy would put that id in the document twice; re-minting those ids
+  is engine work, shared with `duplicateElements` and snippet paste, core
+  `paged-mutate/src/apply/duplicate_page.rs`); and module fields are not catalogue targets,
+  because the engine's catalogue plan (`plan_catalogue`) types each value by a core field
+  kind and has no type for a module's value, which the data@1 binding work is redesigning
+  (the catalogue's targets follow it there).
 
 - **Inspection commands** (plan G4). Typed, read-only: `previewQuery { sql, limit }`,
   `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the

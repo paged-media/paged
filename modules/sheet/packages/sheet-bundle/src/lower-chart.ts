@@ -542,6 +542,40 @@ async function measureLabels(
   return out;
 }
 
+/**
+ * ADR 522 amendment — where the element carrying a placed chart's binding
+ * stood when the chart was drawn at `box`: the `art` the drawing recorded
+ * (the version just before the amendment recorded the box but not the
+ * art). The chart's geometry is a function of the workbook, so drawing it
+ * again at the box, without writing anything, gives the outline its first
+ * element had: the same translation `lowerChartToFrame` makes, with the
+ * labels measured as it measures them. Null when the engine cannot draw
+ * the chart or it draws nothing.
+ */
+export async function chartArtAt(
+  host: BundleHost,
+  engine: SheetEngine,
+  chartIndex: number,
+  pageId: PageId,
+  box: [number, number, number, number],
+): Promise<[number, number, number, number] | null> {
+  let geom: ChartGeometry;
+  try {
+    geom = engine.getChartGeometry(chartIndex, ...chartSizeOf(box));
+  } catch {
+    return null;
+  }
+  const [top, left] = box;
+  const { art } = chartGeometryToMutations(
+    geom,
+    { pageId, bounds: [top, left, top + geom.heightPt, left + geom.widthPt] },
+    makeBinding("", `chart:${chartIndex}`, 0),
+    undefined,
+    await measureLabels(host, geom),
+  );
+  return art ?? null;
+}
+
 export async function lowerChartToFrame(
   host: BundleHost,
   engine: SheetEngine,
