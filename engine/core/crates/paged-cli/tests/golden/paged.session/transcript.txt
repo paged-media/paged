@@ -4,7 +4,7 @@ $ paged session
 {"ok":true,"protocol":"<PROTOCOL>","ready":true}
 {"error":"no document loaded","ok":false}
 {"ok":true,"pageCount":1,"pageIds":["usp"]}
-{"ok":true,"pages":[{"bleedBottomPt":0.0,"bleedLeftPt":0.0,"bleedRightPt":0.0,"bleedTopPt":0.0,"columnCount":1,"columnGutterPt":0.0,"index":1,"marginBottomPt":0.0,"marginLeftPt":0.0,"marginRightPt":0.0,"marginTopPt":0.0,"name":"1","pageOrigin":[0.0,0.0],"pluginMetadata":[],"selfId":"usp","sizePt":[200.0,100.0],"spreadId":"us"}]}
+{"ok":true,"pages":[{"bindingEdge":"left","bleedBottomPt":0.0,"bleedLeftPt":0.0,"bleedRightPt":0.0,"bleedTopPt":0.0,"columnCount":1,"columnGutterPt":0.0,"index":1,"indexInSpread":0,"marginBottomPt":0.0,"marginInsidePt":0.0,"marginLeftPt":0.0,"marginOutsidePt":0.0,"marginRightPt":0.0,"marginTopPt":0.0,"name":"1","pageOrigin":[0.0,0.0],"pluginMetadata":[],"selfId":"usp","sizePt":[200.0,100.0],"spreadId":"us"}]}
 {"ok":true,"result":{"error":null,"output":["[log] 1"],"pageIds":[],"writes":0}}
 {"combined":"<DIGEST>","ok":true,"pageDigests":{"usp":"<DIGEST>"},"stateHash":"<DIGEST>"}
 {"heightPx":50,"ok":true,"out":"p.png","pageId":"usp","widthPx":100}
