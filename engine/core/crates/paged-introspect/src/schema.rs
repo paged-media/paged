@@ -672,6 +672,8 @@ pub const STROKE_TYPES: &[&str] = &[
     "StrokeStyle/$ID/Thin - Thin",
 ];
 pub const STROKE_ALIGNMENT: &[&str] = &["CenterAlignment", "InsideAlignment", "OutsideAlignment"];
+/// Engine ADR 1006 — a frame's fill rule.
+pub const FILL_RULES: &[&str] = &["NonZero", "EvenOdd"];
 pub const TEXT_WRAP_MODES: &[&str] = &[
     "None",
     "BoundingBoxTextWrap",

@@ -284,10 +284,11 @@ pub fn outline_stroke(
     style.end_cap = kurbo_cap(cap);
     let outline = kurbo::stroke(path, &style, &StrokeOpts::default(), TOLERANCE);
     // RAW expansion output. kurbo draws conservative inner joins
-    // that loop through source vertices — correct under the engine's
-    // nonzero fill (paged-gpu fills FillRule::Winding), so we keep
-    // the anchors as emitted rather than running a winding-sensitive
-    // resolve. (Even-odd consumers would need a cleanup pass.)
+    // that loop through source vertices — correct under the nonzero
+    // fill rule, IDML's and the default, so we keep the anchors as
+    // emitted rather than running a winding-sensitive resolve. (An item
+    // whose `fill_rule` is `EvenOdd` would need a cleanup pass; engine
+    // ADR 1006.)
     let (mut a, s, _o) = bezpath_to_anchors(&outline);
     if a.len() < 2 {
         return None;

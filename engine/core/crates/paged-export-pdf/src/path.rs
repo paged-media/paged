@@ -24,6 +24,22 @@ use pdf_writer::Content;
 /// Emit the path-construction ops for `path`. Quadratics are
 /// degree-elevated to exact cubics (`c1 = p0 + 2/3(ctrl − p0)`,
 /// `c2 = p + 2/3(ctrl − p)`) — no flattening, vectors stay vectors.
+/// Fill the current path by `path`'s rule: `f` or `f*` (engine ADR 1006).
+pub fn fill(content: &mut Content, path: &PathData) {
+    match path.fill_rule {
+        paged_compose::FillRule::NonZero => content.fill_nonzero(),
+        paged_compose::FillRule::EvenOdd => content.fill_even_odd(),
+    };
+}
+
+/// Clip to the current path by `path`'s rule: `W` or `W*`.
+pub fn clip(content: &mut Content, path: &PathData) {
+    match path.fill_rule {
+        paged_compose::FillRule::NonZero => content.clip_nonzero(),
+        paged_compose::FillRule::EvenOdd => content.clip_even_odd(),
+    };
+}
+
 pub fn emit_path(content: &mut Content, path: &PathData) {
     let mut current: (f32, f32) = (0.0, 0.0);
     let mut start: (f32, f32) = (0.0, 0.0);
@@ -100,17 +116,15 @@ mod tests {
         // cubic must pass through the same midpoint: Q(0.5) =
         // 0.25*p0 + 0.5*ctrl + 0.25*p2 = (3, 3).
         let mut content = Content::new();
-        let path = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::QuadTo {
-                    cx: 3.0,
-                    cy: 6.0,
-                    x: 6.0,
-                    y: 0.0,
-                },
-            ],
-        };
+        let path = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::QuadTo {
+                cx: 3.0,
+                cy: 6.0,
+                x: 6.0,
+                y: 0.0,
+            },
+        ]);
         emit_path(&mut content, &path);
         let ops = String::from_utf8(content.finish().to_vec()).unwrap();
         // c1 = (2, 4), c2 = (4, 4) — exact 2/3 lerp.
@@ -120,19 +134,17 @@ mod tests {
     #[test]
     fn close_resets_current_point_for_following_quad() {
         let mut content = Content::new();
-        let path = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 10.0, y: 10.0 },
-                PathSegment::LineTo { x: 20.0, y: 10.0 },
-                PathSegment::Close,
-                PathSegment::QuadTo {
-                    cx: 13.0,
-                    cy: 16.0,
-                    x: 16.0,
-                    y: 10.0,
-                },
-            ],
-        };
+        let path = PathData::new(vec![
+            PathSegment::MoveTo { x: 10.0, y: 10.0 },
+            PathSegment::LineTo { x: 20.0, y: 10.0 },
+            PathSegment::Close,
+            PathSegment::QuadTo {
+                cx: 13.0,
+                cy: 16.0,
+                x: 16.0,
+                y: 10.0,
+            },
+        ]);
         emit_path(&mut content, &path);
         let ops = String::from_utf8(content.finish().to_vec()).unwrap();
         // After close, current = (10,10): c1 = 10 + 2/3*3 = 12.

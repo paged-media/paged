@@ -775,6 +775,27 @@ fn anchors_eq_formatted(a: &[PathAnchor], b: &[PathAnchor]) -> bool {
     a.len() == b.len() && a.iter().zip(b).all(|(x, y)| anchor_key(x) == anchor_key(y))
 }
 
+/// Engine ADR 1006 — the anchors IDML is given for an outline. IDML fills
+/// non-zero and has no attribute for another rule, so an even-odd
+/// outline is re-wound to the non-zero outline that fills the same area.
+/// One whose contours cross cannot be, keeps its anchors (it fills
+/// non-zero in InDesign) and is reported lost (`paged-canvas`'s export
+/// losses).
+fn idml_anchors(
+    anchors: &[PathAnchor],
+    subpath_starts: &[usize],
+    subpath_open: &[bool],
+    rule: paged_model::FillRule,
+) -> Vec<PathAnchor> {
+    match rule {
+        paged_model::FillRule::EvenOdd => {
+            paged_model::winding::even_odd_as_non_zero(anchors, subpath_starts, subpath_open)
+                .unwrap_or_else(|| anchors.to_vec())
+        }
+        paged_model::FillRule::NonZero => anchors.to_vec(),
+    }
+}
+
 /// The model path geometry for the page item `name`/`self_id` carries,
 /// if that kind tracks anchors (TextFrame / Rectangle / Polygon /
 /// GraphicLine). Oval geometry is bounds-only in the model (no anchors),
@@ -800,7 +821,7 @@ fn model_geometry(
             }),
         b"TextFrame" => frames.get(self_id).map(|f| ModelGeometry {
             oval: false,
-            anchors: f.anchors.clone(),
+            anchors: idml_anchors(&f.anchors, &f.subpath_starts, &f.subpath_open, f.fill_rule),
             subpath_starts: f.subpath_starts.clone(),
             bounds: f.bounds,
         }),
@@ -809,7 +830,7 @@ fn model_geometry(
             .find(|r| r.self_id.as_deref() == Some(self_id))
             .map(|r| ModelGeometry {
                 oval: false,
-                anchors: r.anchors.clone(),
+                anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
                 bounds: r.bounds,
             }),
@@ -818,7 +839,7 @@ fn model_geometry(
             .find(|r| r.self_id.as_deref() == Some(self_id))
             .map(|r| ModelGeometry {
                 oval: false,
-                anchors: r.anchors.clone(),
+                anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
                 bounds: r.bounds,
             }),
@@ -827,7 +848,7 @@ fn model_geometry(
             .find(|r| r.self_id.as_deref() == Some(self_id))
             .map(|r| ModelGeometry {
                 oval: false,
-                anchors: r.anchors.clone(),
+                anchors: idml_anchors(&r.anchors, &r.subpath_starts, &r.subpath_open, r.fill_rule),
                 subpath_starts: r.subpath_starts.clone(),
                 bounds: r.bounds,
             }),
@@ -2423,7 +2444,7 @@ fn write_new_item(
                         content_target: Default::default(),
                     },
                     p.bounds,
-                    &p.anchors,
+                    &idml_anchors(&p.anchors, &p.subpath_starts, &p.subpath_open, p.fill_rule),
                     &p.subpath_starts,
                     &p.subpath_open,
                     // C-62 — a pen path's line ends (and their scales).
