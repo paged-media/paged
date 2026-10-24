@@ -58,6 +58,7 @@ import { CrossReferencesPanel } from "./cross-references-panel";
 import { HyperlinksPanel } from "./hyperlinks-panel";
 import { IndexPanel } from "./index-panel";
 import { InfoPanel } from "./info-panel";
+import { ZoomNavigatorPanel } from "./zoom-navigator-panel";
 import { LinksPanel } from "./links-panel";
 import { EffectsPanel } from "./effects-panel";
 import { FrameFittingPanel } from "./frame-fitting-panel";
@@ -195,6 +196,7 @@ const M = defineMessages("app.builtInPanels", {
   effects: "Effects",
   layers: "Layers",
   info: "Info",
+  navigator: "Navigator",
   attributes: "Attributes",
   properties: "Properties",
   aiAssistant: "AI Assistant",
@@ -1016,6 +1018,18 @@ export const BUILT_IN_PANELS: PanelContribution[] = [
       return t(M.info);
     },
     component: InfoPanel,
+    defaultDock: "right",
+    defaultGroup: "inspector",
+  },
+  {
+    // WP4.5 — the zoom proxy (a view of the page with the view rectangle;
+    // drag to pan, zoom slider / field / buttons). `paged.pages` is the
+    // page list, which this repository called "navigator" before.
+    id: "paged.navigator",
+    get title() {
+      return t(M.navigator);
+    },
+    component: ZoomNavigatorPanel,
     defaultDock: "right",
     defaultGroup: "inspector",
   },
