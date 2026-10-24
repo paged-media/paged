@@ -28,7 +28,7 @@ pub enum Format {
     WebP,
     Gif,
     Bmp,
-    /// Photoshop document or large document (`8BPS`); recognised, not read.
+    /// Photoshop document or large document (`8BPS`).
     Psd,
 }
 

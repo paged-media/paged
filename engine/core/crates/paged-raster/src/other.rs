@@ -76,6 +76,7 @@ pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterI
         iptc: None,
         photoshop_irb: None,
         has_layers: false,
+        layer_count: Some(0),
         resolution: None,
         orientation: 1,
         page_count: 1,
