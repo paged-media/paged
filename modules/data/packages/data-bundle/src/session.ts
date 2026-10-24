@@ -58,6 +58,10 @@ import { t as tr } from "@paged-media/strings";
 import { BINDINGS, SOURCES, STATUS } from "./messages";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
+  recordTemplateMethods,
+  type RecordTemplateMethods,
+} from "./record-templates";
+import {
   DATA_PART_DIR,
   SESSION_PART,
   contentHash,
@@ -538,7 +542,11 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 
 /** The session API the panels + commands drive. */
 export interface DataSourceSession
-  extends ReviewSession, PropertyMethods, CatalogueMethods {
+  extends
+    ReviewSession,
+    PropertyMethods,
+    CatalogueMethods,
+    RecordTemplateMethods {
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
@@ -2717,6 +2725,15 @@ export function createSession(
       setMessage: (message) => {
         state.message = message;
       },
+    }),
+    ...recordTemplateMethods({
+      host,
+      ensureEngine,
+      engineNow: () => engine,
+      startPage,
+      markDirty,
+      emit,
+      report,
     }),
     ...reviewMethods({
       host,

@@ -39,6 +39,17 @@ export interface DataEngineLike {
   define_query(query: unknown): void;
   define_binding(def: unknown): void;
   define_template(template: unknown): void;
+  /** The record-template library (`TemplateEntry[]`), and its changes.
+   *  Optional: a wasm built before the library lacks them. */
+  template_library?(): unknown;
+  template_from_text?(id: string, text: string, lineHeightPt: number): unknown;
+  rename_template?(from: string, to: string): unknown;
+  remove_template?(id: string): boolean;
+  preview_template?(id: string, query: string, record: number): unknown;
+  /** A record flow's recipe (`RecordFlowDef`) or null; set its template and
+   *  `FlowOpts`. */
+  record_flow?(binding: string): unknown;
+  set_record_flow?(binding: string, template: string, options: unknown): void;
   define_placeholder(placeholder: unknown): void;
   set_param(name: string, value: unknown): void;
   set_locale(locale: unknown): void;
