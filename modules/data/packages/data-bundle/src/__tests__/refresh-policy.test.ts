@@ -2,9 +2,9 @@
 // a remote source whose origin is consented, re-runs the queries only when the
 // fetched content changed, and stops when consent goes; a local file refuses
 // an interval (a browser page cannot watch a file); `onOpen` acts once on
-// restore and never fetches an unconsented origin. Engine and DuckDB are
-// stubs here — the fetch → DuckDB → engine path runs for real in
-// test/sources-real.spec.ts and duckdb-real.spec.ts.
+// restore and never fetches an unconsented origin. The engine and its
+// store are stubs here — the fetch → store → engine path runs for real in
+// test/sources-real.spec.ts and store-real.spec.ts.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
 import {

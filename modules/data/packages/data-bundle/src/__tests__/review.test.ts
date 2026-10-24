@@ -100,10 +100,17 @@ async function sessionWith(
   }));
   mock.module("../query/store", () => ({
     ...actualStore,
-    storeHandle: (e: DataEngineLike) => storeDouble(e, {
+    storeHandle: (e: DataEngineLike) =>
+      storeDouble(e, {
         importCsv: async (name, text) => {
           await duck?.registerCsv?.(name, text);
-          return { table: name, columns: [], rows: 0, errorCells: 0, asWritten: true };
+          return {
+            table: name,
+            columns: [],
+            rows: 0,
+            errorCells: 0,
+            asWritten: true,
+          };
         },
       }),
   }));

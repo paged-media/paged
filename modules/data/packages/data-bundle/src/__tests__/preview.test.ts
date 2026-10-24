@@ -193,7 +193,8 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike, rows = 0) {
   }));
   mock.module("../query/store", () => ({
     ...actualStore,
-    storeHandle: (e: DataEngineLike) => storeDouble(e, {
+    storeHandle: (e: DataEngineLike) =>
+      storeDouble(e, {
         query: () => ({
           schema: { fields: [] },
           columns: [],
@@ -218,7 +219,7 @@ describe("data_bind_preview_step session lane (§9)", () => {
 
   it("the session keeps each query's record count and the stepped-to record, for a panel shown again", async () => {
     const fake = fakeHost();
-    // The count is what DuckDB delivered (no engine call per refresh).
+    // The count is what the store delivered (no engine call per refresh).
     const s = await sessionWith(fake.host, fakeEngine(), 24);
     s.addQuery("q_all", "SELECT * FROM people", "recordStream");
     await s.refreshData();

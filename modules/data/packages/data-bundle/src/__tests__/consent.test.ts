@@ -17,7 +17,7 @@
  */
 
 // D-03 — the session's network-consent gate (host.network consumption). The
-// gate a remote/governed source crosses before DuckDB httpfs reaches an origin:
+// gate a remote/governed source crosses before a fetch reaches an origin:
 // it requests per-origin consent through the host and returns the granted set.
 // Tested against a fake host implementing the plugin-api NetworkSurface (the
 // real host-impl is tested in plugin-sdk).

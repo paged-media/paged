@@ -23,18 +23,16 @@ describe("hostWasm", () => {
       url: `https://modules.example/${name}.wasm`,
       integrity: SRI,
     }));
-    expect(await hostWasm(host(true, { resolve }))("duckdb-engine")).toEqual({
-      url: "https://modules.example/duckdb-engine.wasm",
+    expect(await hostWasm(host(true, { resolve }))("data-engine")).toEqual({
+      url: "https://modules.example/data-engine.wasm",
       integrity: SRI,
     });
-    expect(resolve).toHaveBeenCalledWith("duckdb-engine");
+    expect(resolve).toHaveBeenCalledWith("data-engine");
   });
 
   it("is null on a host without a module backend, and the door is not called", async () => {
     const resolve = vi.fn();
-    expect(
-      await hostWasm(host(false, { resolve }))("duckdb-engine"),
-    ).toBeNull();
+    expect(await hostWasm(host(false, { resolve }))("data-engine")).toBeNull();
     expect(resolve).not.toHaveBeenCalled();
   });
 });
