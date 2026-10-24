@@ -155,6 +155,13 @@
       "media.paged.draw.command.selectSameFill",
       "media.paged.draw.command.selectSameStroke",
       "media.paged.draw.command.selectSameStrokeWeight",
+      "media.paged.draw.command.selectSameOpacity",
+      "media.paged.draw.command.selectSameBlendMode",
+      "media.paged.draw.command.selectSameAppearance",
+      "media.paged.draw.command.selectSameGraphicStyle",
+      "media.paged.draw.command.selectSameSymbolInstance",
+      "media.paged.draw.command.selectSameShapeKind",
+      "media.paged.draw.command.globalEdit",
       "media.paged.draw.command.insertArc",
       "media.paged.draw.command.insertSpiral",
       "media.paged.draw.command.insertRectGrid",
@@ -2621,6 +2628,173 @@
               },
               "tolerance": {
                 "kind": "length"
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameOpacity",
+          "title": "Select same opacity",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameBlendMode",
+          "title": "Select same blend mode",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameAppearance",
+          "title": "Select same appearance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameGraphicStyle",
+          "title": "Select same graphic style",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameSymbolInstance",
+          "title": "Select same symbol instance",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.selectSameShapeKind",
+          "title": "Select same shape kind",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              }
+            }
+          },
+          "result": {
+            "kind": "list",
+            "of": {
+              "kind": "ref",
+              "to": "frame"
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.globalEdit",
+          "title": "Global edit",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "tolerance": {
+                "kind": "length"
+              },
+              "anySize": {
+                "kind": "bool"
               }
             }
           },

@@ -133,6 +133,10 @@ import {
   SELECT_SAME_COMMAND_IDS,
 } from "./commands/select-same";
 import {
+  contributeGlobalEditCommand,
+  GLOBAL_EDIT_COMMAND_IDS,
+} from "./commands/global-edit";
+import {
   contributeInsertShapeCommands,
   INSERT_SHAPE_COMMAND_IDS,
 } from "./commands/insert-shapes";
@@ -523,8 +527,11 @@ export function activate(host: BundleHost): BundleHandle {
   // the host can amend a step (engine ADR 1004).
   const recipeAutoUpdateSub = contributeRecipeAutoUpdate(host);
   // Phase 9 (Tier B) — Select-same (pure selection over fill / stroke /
-  // stroke-weight; no mutation).
+  // stroke-weight, and since WP6.1 opacity / blending mode / appearance /
+  // graphic style / symbol / shape kind; no mutation), and Global Edit
+  // (the same, by geometry).
   const selectSameCommandsSub = contributeSelectSameCommands(host);
+  const globalEditCommandSub = contributeGlobalEditCommand(host);
   // Wave 2 — the parametric insert-shape commands (Arc / Spiral /
   // Rect grid / Polar grid). Each takes its generator's real parameters
   // as a payload (commands/insert-shapes.ts); with none it repeats the
@@ -651,6 +658,7 @@ export function activate(host: BundleHost): BundleHandle {
         OPACITY_MASK_COMMAND_IDS.length +
         TEXT_ON_PATH_COMMAND_IDS.length +
         SELECT_SAME_COMMAND_IDS.length +
+        GLOBAL_EDIT_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
@@ -681,6 +689,7 @@ export function activate(host: BundleHost): BundleHandle {
       blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();
       selectSameCommandsSub.dispose();
+      globalEditCommandSub.dispose();
       textOnPathCommandsSub.dispose();
       cutCommandsSub.dispose();
       widthProfileCommandsSub.dispose();

@@ -123,6 +123,11 @@ defineMessages("menu", {
   Fill: "Fill",
   "Stroke weight": "Stroke weight",
   "Stroke weight within…": "Stroke weight within…",
+  Opacity: "Opacity",
+  "Blending mode": "Blending mode",
+  "Symbol instance": "Symbol instance",
+  "Shape kind": "Shape kind",
+  "Geometry (Global Edit)": "Geometry (Global Edit)",
   "Image trace…": "Image trace…",
 });
 
@@ -288,6 +293,27 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
     "Edit/Select same/Stroke weight within…",
     "selectSameStrokeWeightOptions",
     "select-same",
+  ],
+  ["Edit/Select same/Opacity", "selectSameOpacity", "select-same-more"],
+  ["Edit/Select same/Blending mode", "selectSameBlendMode", "select-same-more"],
+  ["Edit/Select same/Appearance", "selectSameAppearance", "select-same-more"],
+  [
+    "Edit/Select same/Graphic style",
+    "selectSameGraphicStyle",
+    "select-same-more",
+  ],
+  [
+    "Edit/Select same/Symbol instance",
+    "selectSameSymbolInstance",
+    "select-same-more",
+  ],
+  ["Edit/Select same/Shape kind", "selectSameShapeKind", "select-same-more"],
+  //    Global Edit selects by GEOMETRY (commands/global-edit.ts): the
+  //    selection half of Illustrator's mode, not the mode.
+  [
+    "Edit/Select same/Geometry (Global Edit)",
+    "globalEdit",
+    "select-same-geometry",
   ],
 
   // ── Trace ── (STILL an ellipsis over fixed settings: Image Trace has
