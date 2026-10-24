@@ -56,7 +56,8 @@ impl ScriptData for People {
         offset: usize,
         limit: Option<usize>,
     ) -> Result<Value, String> {
-        self.asked.push(format!("records {table} {offset} {limit:?}"));
+        self.asked
+            .push(format!("records {table} {offset} {limit:?}"));
         if table != "people" {
             return Err(format!("no table {table}"));
         }

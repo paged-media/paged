@@ -46,6 +46,9 @@ Options:
           
           [possible values: author, editor, filler, viewer]
 
+      --source <ID=FILE>
+          A data source's file, repeatable: `--source products=products.csv`. The script reads it as `paged.data.*` (tables, records, query, evaluate), with the document's binding labels' queries run through the query guard, as `paged data apply` runs them. A source the labels do not declare is read by the file's extension
+
       --standard <STANDARD>
           "pdf17" (default) or "pdfx4". X-4 needs a resolvable output intent — give one here or let the document's profile serve
           

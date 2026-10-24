@@ -537,10 +537,7 @@ pub struct ScriptDataSession {
 /// imported under its id by the file's extension, so a script can read a
 /// file into a document that binds nothing yet. `None` when there is
 /// neither a label nor a `--source`: the run gets no data door.
-pub fn script_data(
-    session: &mut Session,
-    sources: &[String],
-) -> Result<Option<ScriptDataSession>> {
+pub fn script_data(session: &mut Session, sources: &[String]) -> Result<Option<ScriptDataSession>> {
     let recipe = read_recipe(session)?;
     let payload = recipe.document_payload().context("the document's recipe")?;
     let labelled = recipe.from_elements > 0

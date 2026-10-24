@@ -225,10 +225,7 @@ fn a_script_reads_the_bound_document_s_data__feat__data_bind_labels_native() {
     let lines: Vec<&str> = out.lines().collect();
     assert_eq!(lines[0], "[log] tables [\"products\"]", "{out}");
     assert_eq!(lines[1], "[log] q 2", "{out}");
-    assert!(
-        lines[2].contains("read_csv() reads files or URLs"),
-        "{out}"
-    );
+    assert!(lines[2].contains("read_csv() reads files or URLs"), "{out}");
     assert_eq!(lines[3], "[log] query 1 name|opacity Grace", "{out}");
     assert_eq!(lines[4], "[log] records 1 Grace", "{out}");
     assert_eq!(lines[5], "[log] evaluate GRACE", "{out}");

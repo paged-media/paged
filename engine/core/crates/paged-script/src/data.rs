@@ -50,8 +50,12 @@ pub trait ScriptData {
     /// What the run can read.
     fn tables(&mut self) -> Result<Value, String>;
     /// A window of `table` (`limit: None` reads to the end) as a record set.
-    fn records(&mut self, table: &str, offset: usize, limit: Option<usize>)
-        -> Result<Value, String>;
+    fn records(
+        &mut self,
+        table: &str,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> Result<Value, String>;
     /// The rows of `sql` as a record set. An implementation guards the query
     /// (one SELECT over the tables, no file or URL reads) before it runs.
     fn query(&mut self, sql: &str) -> Result<Value, String>;
