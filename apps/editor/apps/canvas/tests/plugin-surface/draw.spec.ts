@@ -53,7 +53,9 @@
 //   these lists honest.
 
 import { expect, test } from "@playwright/test";
+import { covers } from "@paged-media/test-kit";
 
+import { mutate } from "../e2e/harness/ui";
 import { Designer } from "../journey/driver/designer";
 
 type Page = import("@playwright/test").Page;
@@ -182,6 +184,14 @@ const COMMANDS = [
   "media.paged.draw.command.selectSameFill",
   "media.paged.draw.command.selectSameStroke",
   "media.paged.draw.command.selectSameStrokeWeight",
+  // WP6.1 — Select same past paint, and Global Edit (the selection half).
+  "media.paged.draw.command.selectSameOpacity",
+  "media.paged.draw.command.selectSameBlendMode",
+  "media.paged.draw.command.selectSameAppearance",
+  "media.paged.draw.command.selectSameGraphicStyle",
+  "media.paged.draw.command.selectSameSymbolInstance",
+  "media.paged.draw.command.selectSameShapeKind",
+  "media.paged.draw.command.globalEdit",
   "media.paged.draw.command.insertArc",
   "media.paged.draw.command.insertSpiral",
   "media.paged.draw.command.insertRectGrid",
@@ -484,6 +494,30 @@ async function activateToolCommand(page: Page, toolId: string): Promise<void> {
   }, toolId);
 }
 
+/** Invoke a command with a payload (the panel rows' path: a symbol id,
+ *  a page point). */
+async function runWithPayload(
+  page: Page,
+  id: string,
+  payload: unknown,
+): Promise<void> {
+  await page.evaluate(
+    ({ id, payload }) =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              commands: {
+                invoke(id: string, payload?: unknown): Promise<unknown>;
+              };
+            };
+          };
+        }
+      ).__canvas.registries.commands.invoke(id, payload),
+    { id, payload },
+  );
+}
+
 /** All element ids of one kind, in document order. */
 async function idsOfKind(page: Page, kind: string): Promise<string[]> {
   return page.evaluate(async (k) => {
@@ -557,7 +591,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 107 registered.
+    // COMMANDS — all 119 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -598,7 +632,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(20);
     expect(PANELS).toHaveLength(10);
-    expect(COMMANDS).toHaveLength(112);
+    expect(COMMANDS).toHaveLength(119);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
@@ -974,6 +1008,200 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(() => artworkCount(page), { timeout: 10_000 })
       .toBeGreaterThan(itemsBefore);
+  });
+
+  // ── 7b. Select same past paint, and Global Edit ───────────────────
+
+  test("Select same by opacity, blending mode, appearance, graphic style, symbol and shape kind, and Global Edit, select exactly the matches @feat:plugin-draw.select-same @level:happy", async ({
+    page,
+  }) => {
+    covers("command:media.paged.draw.command.selectSameAppearance");
+    covers("command:media.paged.draw.command.selectSameShapeKind");
+    covers("command:media.paged.draw.command.globalEdit");
+    covers("command:media.paged.draw.command.selectSameOpacity");
+    covers("command:media.paged.draw.command.selectSameBlendMode");
+    covers("command:media.paged.draw.command.selectSameGraphicStyle");
+    covers("command:media.paged.draw.command.selectSameSymbolInstance");
+    const designer = new Designer(page);
+    await designer.open();
+    await designer.newDocument();
+
+    // Three rectangles of three different sizes and one pen path: r1 and
+    // r2 painted alike, r3 red.
+    const r1 = await designer.drawRectangle({
+      x0: 80,
+      y0: 90,
+      x1: 200,
+      y1: 200,
+    });
+    const r2 = await designer.drawRectangle({
+      x0: 240,
+      y0: 90,
+      x1: 380,
+      y1: 230,
+    });
+    const r3 = await designer.drawRectangle({
+      x0: 420,
+      y0: 90,
+      x1: 520,
+      y1: 170,
+    });
+    const p = await designer.drawPath([
+      [100, 300],
+      [220, 340],
+      [160, 420],
+    ]);
+    for (const id of [r1, r2, r3, p]) expect(id, "drew the shape").not.toBe("");
+    await designer.applyFill("rectangle", r1);
+    await designer.applyFill("rectangle", r2);
+    const red = await designer.createSwatch("select-same-red", [220, 20, 20]);
+    await designer.applyFill("rectangle", r3, red);
+
+    const rect = (id: string) => ({ kind: "rectangle", id });
+    /** Select `refs`, run `command`, and wait for the selection it sets. */
+    const selects = async (
+      refs: Array<{ kind: string; id: string }>,
+      command: string,
+      expected: string[],
+      message: string,
+    ) => {
+      await designer.selectElements(refs);
+      await designer.runCommand(command);
+      await expect
+        .poll(
+          async () =>
+            (await designer.elementSelection()).map((e) => e.id).sort(),
+          { message, timeout: 8_000 },
+        )
+        .toEqual([...expected].sort());
+    };
+    const C = "media.paged.draw.command";
+    const setProperty = (
+      id: string,
+      path: "frameOpacity" | "frameBlendMode",
+      value: number | string,
+    ) =>
+      mutate(page, {
+        op: "setElementProperty",
+        args: {
+          elementId: rect(id),
+          path,
+          value:
+            typeof value === "number"
+              ? { type: "length", value }
+              : { type: "text", value },
+        },
+      });
+
+    // APPEARANCE — the complete paint: r2 shares r1's, red r3 does not.
+    await designer.selectElements([rect(r1)]);
+    await designer.runCommand(`${C}.selectSameAppearance`);
+    await expect
+      .poll(async () => (await designer.elementSelection()).map((e) => e.id), {
+        timeout: 8_000,
+      })
+      .toContain(r2);
+    const sameAppearance = (await designer.elementSelection()).map((e) => e.id);
+    expect(sameAppearance, "the reference is in its own match").toContain(r1);
+    expect(
+      sameAppearance,
+      "a red rectangle is another appearance",
+    ).not.toContain(r3);
+
+    // SHAPE KIND — every rectangle, whatever its paint or size; not the path.
+    await selects(
+      [rect(r1)],
+      `${C}.selectSameShapeKind`,
+      [r1, r2, r3],
+      "same shape kind: the three rectangles, not the pen path",
+    );
+
+    // GLOBAL EDIT — a copy of r1 moved elsewhere is the same geometry;
+    // r2 and r3 are rectangles of other sizes and are not.
+    const before = await idsOfKind(page, "rectangle");
+    await mutate(page, {
+      op: "duplicateElements",
+      args: { elementIds: [rect(r1)], offset: [0, 260] },
+    });
+    await expect
+      .poll(async () => (await idsOfKind(page, "rectangle")).length)
+      .toBe(before.length + 1);
+    const copy = (await idsOfKind(page, "rectangle")).find(
+      (id) => !before.includes(id),
+    )!;
+    await selects(
+      [rect(r1)],
+      `${C}.globalEdit`,
+      [r1, copy],
+      "Global Edit: the reference and its moved copy, no other size",
+    );
+
+    // OPACITY — r1 and r3 at 40 %; r2 and the copy keep the default 100 %.
+    await setProperty(r1, "frameOpacity", 40);
+    await setProperty(r3, "frameOpacity", 40);
+    await selects(
+      [rect(r1)],
+      `${C}.selectSameOpacity`,
+      [r1, r3],
+      "same opacity: the two 40 % rectangles",
+    );
+
+    // BLENDING MODE — r1 and r2 multiply; the rest stay Normal.
+    await setProperty(r1, "frameBlendMode", "Multiply");
+    await setProperty(r2, "frameBlendMode", "Multiply");
+    await selects(
+      [rect(r1)],
+      `${C}.selectSameBlendMode`,
+      [r1, r2],
+      "same blending mode: the two Multiply rectangles",
+    );
+
+    // GRAPHIC STYLE — saving a style from r2 + r3 links both; r1 stays
+    // unlinked, so from it the command has nothing to match and the
+    // selection is left as it was.
+    await designer.selectElements([rect(r2), rect(r3)]);
+    await designer.runCommand(`${C}.saveGraphicStyle`);
+    await selects(
+      [rect(r2)],
+      `${C}.selectSameGraphicStyle`,
+      [r2, r3],
+      "same graphic style: the two linked rectangles",
+    );
+    await selects(
+      [rect(r1)],
+      `${C}.selectSameGraphicStyle`,
+      [r1],
+      "an unlinked reference matches no style: the selection stays",
+    );
+
+    // SYMBOL — two instances of a symbol defined from r1 select each
+    // other; the source r1 is not an instance. An instance re-emits the
+    // definition through insertPath, so its leaf is a path.
+    await designer.selectElements([rect(r1)]);
+    await designer.runCommand(`${C}.defineSymbol`);
+    const placed: string[] = [];
+    for (const x of [300, 450]) {
+      const ids = await idsOfKind(page, "polygon");
+      await runWithPayload(page, `${C}.placeSymbolInstance`, {
+        symbolId: "sym-1",
+        x,
+        y: 400,
+      });
+      await expect
+        .poll(async () => (await idsOfKind(page, "polygon")).length, {
+          message: "placing an instance re-emits its geometry as a path",
+        })
+        .toBe(ids.length + 1);
+      placed.push(
+        (await idsOfKind(page, "polygon")).find((id) => !ids.includes(id))!,
+      );
+    }
+    await selects(
+      [{ kind: "polygon", id: placed[0]! }],
+      `${C}.selectSameSymbolInstance`,
+      placed,
+      "same symbol: both instances, not the source",
+    );
   });
 
   // ── 8. the recipe families ────────────────────────────────────────
