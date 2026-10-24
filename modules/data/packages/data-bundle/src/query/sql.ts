@@ -272,8 +272,9 @@ const notATable = (name: string) =>
   `"${name}" is not an imported source table — a query reads source tables only`;
 
 /** The allow-list walk over the tokens. Throws a GuardError at the first
- *  thing a data query may not do. */
-function walk(tokens: Token[]): void {
+ *  thing a data query may not do. Each table a FROM or JOIN names goes into
+ *  `tables` (a CTE's name among them). */
+function walk(tokens: Token[], tables?: string[]): void {
   if (tokens.length === 0) throw new GuardError("the query is empty");
   const semi = tokens.find((t) => isPunct(t, ";"));
   if (semi)
@@ -357,6 +358,7 @@ function walk(tokens: Token[]): void {
       ) {
         throw new GuardError(notATable(name), t.at);
       }
+      tables?.push(table);
       i = j;
       continue;
     }
@@ -401,6 +403,21 @@ function walk(tokens: Token[]): void {
   }
   if (stack.length !== 1)
     throw new GuardError(`unbalanced brackets: a "${top().close}" is missing`);
+}
+
+/** The tables a query's FROM and JOIN items name, each once, in the order
+ *  they are written (the Data panel's pipeline: what a query reads). A
+ *  query the guard refuses names none. A CTE's own name is among them: the
+ *  caller keeps the names of tables it knows. */
+export function tablesRead(sql: string): string[] {
+  const found: string[] = [];
+  try {
+    walk(lex(trimSql(sql)), found);
+  } catch (err) {
+    if (!(err instanceof GuardError)) throw err;
+    return [];
+  }
+  return [...new Set(found)];
 }
 
 /** Check one query. Returns null when it may run. Pure: asks the engine

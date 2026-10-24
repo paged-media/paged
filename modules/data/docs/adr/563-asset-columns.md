@@ -51,3 +51,13 @@ in the frame, so the missing picture shows as an empty frame with a status, not 
 - A data URI makes the document larger than a link would: the price of a document that does not
   depend on a server. A link-only column is a column that is not declared an asset column.
 - The pipeline view and the per-column action picker are the Data panel's (editor ADR 291).
+
+## Amendments
+
+- Amended 2026-10-24: the data door serves the asset columns (`assetColumns`,
+  `setAssetColumn`, extensions ADR 343; plugin-sdk 0.74.3-canary.24). `setAssetColumn` refuses
+  a query that is not defined and a field its records do not have (clearing a column whose field
+  went away is allowed), and a chain step without an action or with parameters that are not an
+  object; it trims the base, saves the column in the session part and announces a change of the
+  query, so a reader (the Data panel) reads the columns again. The editor's per-column picker is
+  the Data panel's picture column editor (editor ADR 291, amended the same day).

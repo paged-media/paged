@@ -10,9 +10,10 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 
 - **All PPTX semantics live in Rust** (`pptx-*`, `slide-*` crates, one wasm module). TypeScript
   packages are glue: bundle lifecycle, panels, file input, slideshow UI.
-- **The engine at runtime only through the host contract.** One crate builds on the engine's
-  model: `slide-native` (`paged-model`, `paged-scene`, `paged-store`, path dependencies on
-  `engine/core/crates` at the same commit, ADR 708). No other engine crate, no other module,
+- **The engine at runtime only through the host contract.** Two crates build on the engine's
+  model (`paged-model`, `paged-scene`, `paged-store`, path dependencies on `engine/core/crates`
+  at the same commit): `slide-native` writes the deck (ADR 708), `pptx-export` reads the
+  document back (ADR 711). No other engine crate, no other module,
   no git dependency; `deny.toml` denies git sources.
 - **The OOXML foundation is shared** (`platform/shared/ooxml`, doc ADR 607): the package
   read and its memory budget, rels, the XML helpers and DrawingML colour. Change it there;

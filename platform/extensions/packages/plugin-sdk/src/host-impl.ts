@@ -56,6 +56,7 @@ import type {
   BlobSurface,
   CollectionName,
   PropertyPath,
+  Value,
   PartsSurface,
   NativeDocumentSurface,
   DocumentsSurface,
@@ -78,6 +79,8 @@ import type {
   DocumentSurface,
   EditContextContribution,
   FrameSurfaceContribution,
+  ControlBarGroupContribution,
+  StatusItemContribution,
   ElementId,
   FontFaceAsset,
   HitFilter,
@@ -129,6 +132,9 @@ import type {
   StorageSurface,
   TextCaret,
   TextSurface,
+  TextSelection,
+  TextPropertyRead,
+  TextFormatResult,
   ViewportSurface,
   RenderSurface,
   SnapshotPng,
@@ -138,6 +144,14 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { DisposableStore, toDisposable } from "./disposables.js";
+import {
+  caretReadRange,
+  contentToChar,
+  paragraphsRange,
+  paragraphTexts,
+  wordAroundCaret,
+} from "./text-selection.js";
+import { formatAddress } from "./object-address.js";
 import {
   createActionsSurface,
   createDataSurface,
@@ -200,6 +214,70 @@ function spliceBytesSlot(m: MutationInput, bytes: number[]): MutationInput {
   return visit(m);
 }
 
+/** C4 — a story-range path the engine applies per CHARACTER (the rest,
+ *  `paragraph*` and `appliedParagraphStyle`, per paragraph). */
+export function isCharacterPath(path: string): boolean {
+  return path.startsWith("character") || path === "appliedCharacterStyle";
+}
+
+/** A refusal in words: the engine's `{ message }` / string, or JSON. */
+function describeError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const m = (error as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
+/** Extensions ADR 348 — the host keys no scoped binding may take: save,
+ *  print, the chrome toggle and the command palette. */
+export const RESERVED_HOST_KEYS: readonly string[] = [
+  "cmd+s",
+  "cmd+p",
+  "cmd+\\",
+  "cmd+shift+p",
+];
+
+/** Is `key` (a binding combo) one of {@link RESERVED_HOST_KEYS}? Modifier
+ *  order and the `meta`/`ctrl` spellings do not matter. */
+export function isReservedHostKey(key: string): boolean {
+  const norm = (k: string) => {
+    const parts = k.trim().toLowerCase().split("+");
+    const last = parts.pop() ?? "";
+    const mods = new Set(
+      parts.map((m) =>
+        m === "meta" || m === "ctrl" || m === "control" ? "cmd" : m,
+      ),
+    );
+    return [
+      ...["cmd", "alt", "option", "shift"].filter((m) => mods.has(m)),
+      last,
+    ]
+      .join("+")
+      .replace("option", "alt");
+  };
+  const n = norm(key);
+  return RESERVED_HOST_KEYS.some((r) => norm(r) === n);
+}
+
+/** Extensions ADR 348 — is a context scope active in `state` (the
+ *  `PagedEditor` handle)? The active frame-level edit context, or, when
+ *  none is active, the document context a bundle holds. */
+export function contextScopeActive(state: unknown, type: string): boolean {
+  const st = state as {
+    editContext?: { type?: string } | null;
+    documentContext?: string | null;
+  } | null;
+  if (st?.editContext) return st.editContext.type === type;
+  return st?.documentContext === type;
+}
+
 /** The implemented feature set — `host.supports()` answers from this,
  *  so docs/tests can't drift from code. Form: `"area.member@major"`. */
 export const HOST_FEATURES: readonly string[] = [
@@ -223,6 +301,14 @@ export const HOST_FEATURES: readonly string[] = [
   // Extensions ADR 334 — the frame-surface DOOR (static); whether a host
   // will mount it is the dynamic `editContext.frameSurface@1`.
   "contribute.frameSurface@1",
+  // Extensions ADR 348 — the control-bar group and status-item DOORS
+  // (static); a host that renders them is the dynamic
+  // `controlBar.groups@1` / `statusBar.items@1`. The keybinding `scope`
+  // is static: the SDK checks it, the host ranks it (`keybinding.scope@1`
+  // when the host's registry reads it).
+  "contribute.controlBarGroup@1",
+  "contribute.statusItem@1",
+  "contribute.keybinding.scope@1",
   // ADR 323 — the object model: the contribution door and `host.objects`
   // (core addresses always route; a private registry serves core + this
   // bundle's own kinds when the host injects no shared one).
@@ -749,6 +835,18 @@ export interface TextCaretBackend {
 }
 
 /**
+ * Extensions ADR 348 (C4) — the reader the editor injects to back
+ * `host.text.selection()` / `onDidChangeSelection`: the user's text
+ * selection in content offsets (`null` for none, and for a cell-qualified
+ * one — the C-9 gap), and a change subscription. The SDK builds the
+ * property reads and format writes on it over the document doors.
+ */
+export interface TextSelectionBackend {
+  read(): TextSelection | null;
+  subscribe(listener: () => void): () => void;
+}
+
+/**
  * The backend the editor injects to back `host.nativeDocument` (ADR-021 /
  * document-model direction): the isolate-safe replacement for an importer/
  * exporter reaching through `host.editor.client`. It exposes read access to
@@ -1199,13 +1297,24 @@ export type BundleTrust = "first-party";
  */
 export type ShellBackend = Omit<
   ShellSurface,
-  "saveFile" | "enterEditContext" | "exitEditContext"
+  "saveFile" | "enterEditContext" | "exitEditContext" | "setDocumentContext"
 > &
   Partial<Pick<ShellSurface, "saveFile" | "enterEditContext">> & {
     /** Leave the active edit context of `type` (extensions ADR 334); the
      *  host answers false when that type is not the active one. */
     exitEditContext?(type: string, opts: { commit: boolean }): Promise<boolean>;
   };
+
+/**
+ * Extensions ADR 348 — the host's document context: which plugin content
+ * type the OPEN DOCUMENT is (`host.shell.setDocumentContext`). `set` holds
+ * it for `pluginId` (or, with `null`, drops it — a `null` from a plugin
+ * that does not hold it changes nothing) and answers whether the host took
+ * it. The host drops it itself when the document is replaced or closed.
+ */
+export interface DocumentContextBackend {
+  set(pluginId: string, type: string | null): boolean;
+}
 
 /** The host's will-save registry (protocol 66 batch): the editor awaits
  *  every registered listener before it serialises the document. The SDK
@@ -1370,6 +1479,16 @@ export interface CreateBundleHostOptions {
    *  always answers `null` (the honest no-reader door — a read door like
    *  `text.measureString`, no capability gate). */
   textCaret?: TextCaretBackend;
+  /** Host-provided TEXT-SELECTION reader (extensions ADR 348). When
+   *  present, `host.text.selection()` reads through it and
+   *  `supports("text.selection@1")` / `supports("text.format@1")` answer
+   *  true. When absent, `selection()` is `null` and the format writes
+   *  answer `{ applied: false }`. */
+  textSelection?: TextSelectionBackend;
+  /** Host-provided DOCUMENT CONTEXT (extensions ADR 348). When present,
+   *  `host.shell.setDocumentContext` reaches it and
+   *  `supports("shell.documentContext@1")` answers true. */
+  documentContext?: DocumentContextBackend;
   /** Host-provided CLIPBOARD backend (K-6 / S-14). When present,
    *  `host.clipboard.read/write` go through it (capability-gated on
    *  `capabilities.clipboard`) and `supports("clipboard@1")` answers true.
@@ -1727,6 +1846,26 @@ export function createBundleHost(
   // than accepted and silently inert.
   const registeredContexts = new Set<string>();
   const bindingRegistry = options?.bindingProviders;
+  /** Extensions ADR 348 — a scope names a context THIS bundle declared
+   *  and registered (the contribution borrows its declaration). */
+  const requireOwnContext = (type: string | undefined, door: string): void => {
+    if (typeof type !== "string" || type === "") {
+      throw new Error(`plugin-api: ${door} — scope.editContext is required`);
+    }
+    requireDeclared(
+      declaresType(declared?.editContexts, type),
+      door,
+      `contributes.editContexts[] must declare { type: "${type}" } ` +
+        `(a scoped contribution borrows its edit context's declaration)`,
+    );
+    if (!registeredContexts.has(type)) {
+      throw new Error(
+        `plugin-api: ${door} scoped to "${type}" — no such edit context is ` +
+          `registered by ${manifest.id}. Call contribute.editContext({ type: ` +
+          `"${type}", … }) first.`,
+      );
+    }
+  };
 
   // -------------------------------------------------------------------
   // Which lanes must be implemented for which declaration. Declaring a
@@ -1880,6 +2019,19 @@ export function createBundleHost(
         "contribute.keybinding",
         "capabilities.keybindings must be true",
       );
+      if (c.scope) {
+        // Extensions ADR 348 — a scoped binding outranks the host's own
+        // keys and its text input while the context is active, so it may
+        // only name a context of THIS bundle, and never a reserved key.
+        requireOwnContext(c.scope.editContext, "contribute.keybinding");
+        if (isReservedHostKey(c.key)) {
+          throw new Error(
+            `plugin-api: contribute.keybinding("${c.key}") — that key is ` +
+              `reserved by the host (${RESERVED_HOST_KEYS.join(", ")}); a ` +
+              `scoped binding may not take it`,
+          );
+        }
+      }
       return store.add(getEditor().registries.keybindings.register(c));
     },
     menu(c) {
@@ -1928,6 +2080,7 @@ export function createBundleHost(
             const st = state as {
               document?: { handle?: { pageCount?: number } | null } | null;
               editContext?: { type?: string } | null;
+              documentContext?: string | null;
             } | null;
             if (
               !st?.document?.handle ||
@@ -1935,7 +2088,7 @@ export function createBundleHost(
             ) {
               return false;
             }
-            if (editContext !== null && st.editContext?.type !== editContext)
+            if (editContext !== null && !contextScopeActive(st, editContext))
               return false;
             // The command's own `when` decides too (MNU-1): an entry onto
             // a command that cannot run where the user stands is greyed,
@@ -2053,6 +2206,35 @@ export function createBundleHost(
           `contribute.frameSurface("${c.contextType}") registered nothing — the ` +
             `host wired no frame-surface registry (probe ` +
             `supports("editContext.frameSurface@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(c));
+    },
+    // Extensions ADR 348 (C1, C3) — both borrow their context's
+    // declaration, like a frame surface: a group for a context that can
+    // never be active is a silently dead group.
+    controlBarGroup(c: ControlBarGroupContribution) {
+      assertNamespaced(c.id, "controlBarGroup");
+      requireOwnContext(c.scope?.editContext, "contribute.controlBarGroup");
+      const reg = getEditor()?.registries?.controlBarGroups;
+      if (!reg) {
+        log.warn(
+          `contribute.controlBarGroup("${c.id}") registered nothing — the host ` +
+            `wired no control-bar registry (probe supports("controlBar.groups@1"))`,
+        );
+        return store.add(toDisposable(() => {}));
+      }
+      return store.add(reg.register(c));
+    },
+    statusItem(c: StatusItemContribution) {
+      assertNamespaced(c.id, "statusItem");
+      requireOwnContext(c.scope?.editContext, "contribute.statusItem");
+      const reg = getEditor()?.registries?.statusItems;
+      if (!reg) {
+        log.warn(
+          `contribute.statusItem("${c.id}") registered nothing — the host ` +
+            `wired no status-bar registry (probe supports("statusBar.items@1"))`,
         );
         return store.add(toDisposable(() => {}));
       }
@@ -3264,6 +3446,7 @@ export function createBundleHost(
   // usable (the plugin checks `supports("text.measure@1")` to know which
   // it got). `~0.5em` advance + `0.8em/0.2em` asc/desc are the standard
   // fallback the bundle already used before this door existed.
+  const textSelection = options?.textSelection;
   const text: TextSurface = {
     async measureString(family, style, str, sizePt) {
       const editorText = getEditor().text;
@@ -3305,7 +3488,145 @@ export function createBundleHost(
         texts.map((t) => text.measureString(family, style, t, sizePt)),
       );
     },
+    // Extensions ADR 348 (C4) — the selection doors. The reader is the
+    // host's; the reads and writes are the document doors' (`RequestGet`
+    // and `setElementProperty` on the selection's story range), with the
+    // content offsets the selection carries converted to the character
+    // offsets a story range counts (text-selection.ts).
+    selection(): TextSelection | null {
+      return textSelection?.read() ?? null;
+    },
+    onDidChangeSelection(listener) {
+      if (!textSelection) return store.add(toDisposable(() => {}));
+      const off = textSelection.subscribe(() => {
+        try {
+          listener();
+        } catch (err) {
+          log.warn(`text.onDidChangeSelection listener threw: ${String(err)}`);
+        }
+      });
+      return store.add(toDisposable(off));
+    },
+    async properties(paths) {
+      requireDocRead("text.properties");
+      const sel = textSelection?.read() ?? null;
+      if (!sel) return null;
+      const content = await document.storyContent(sel.storyId);
+      if (!content) return null;
+      const paras = paragraphTexts(content);
+      const [start, end] =
+        sel.start === sel.end
+          ? caretReadRange(paras, sel.start)
+          : [contentToChar(paras, sel.start), contentToChar(paras, sel.end)];
+      const address = formatAddress({
+        kind: "storyRange",
+        story: sel.storyId,
+        start,
+        end,
+      });
+      const out: Partial<Record<PropertyPath, TextPropertyRead | null>> = {};
+      await Promise.all(
+        paths.map(async (path) => {
+          out[path] = await readTextPath(address, path);
+        }),
+      );
+      return out;
+    },
+    async format(properties) {
+      return writeSelection(properties);
+    },
+    async applyStyle(scope, styleId) {
+      return writeSelection([
+        {
+          path:
+            scope === "paragraph"
+              ? "appliedParagraphStyle"
+              : "appliedCharacterStyle",
+          value: { type: "text", value: styleId },
+        },
+      ]);
+    },
   };
+
+  async function readTextPath(
+    address: string,
+    path: PropertyPath,
+  ): Promise<TextPropertyRead | null> {
+    try {
+      const r = (await getEditor().client.send({
+        kind: "requestGet",
+        payload: { address, path },
+      } as never)) as {
+        kind: string;
+        payload?: {
+          value: { type: string; value: unknown } | null;
+          error: string | null;
+          mixed?: boolean;
+        };
+      };
+      if (r?.kind !== "propertyValue" || !r.payload) return null;
+      if (r.payload.error) return null;
+      if (r.payload.mixed) return "mixed";
+      return {
+        value: (r.payload.value?.value ?? null) as Value["value"],
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** One batch of story-range writes on the selection: paragraph paths on
+   *  the selected range (the caret's paragraph when collapsed), character
+   *  paths on the selected characters or the word around a caret. */
+  async function writeSelection(
+    properties: readonly {
+      path: PropertyPath;
+      value: Value;
+      extent?: "paragraphs";
+    }[],
+  ): Promise<TextFormatResult> {
+    const sel = textSelection?.read() ?? null;
+    if (!sel) return { applied: false, error: "no text selection" };
+    if (properties.length === 0) return { applied: true };
+    const content = await document.storyContent(sel.storyId);
+    if (!content) return { applied: false, error: "the story is not readable" };
+    const paras = paragraphTexts(content);
+    const start = contentToChar(paras, sel.start);
+    const end = contentToChar(paras, sel.end);
+    let charRange: [number, number] | null = [start, end];
+    if (start === end) charRange = wordAroundCaret(paras, sel.start);
+    const range = (r: [number, number]): ElementId =>
+      ({
+        kind: "storyRange",
+        id: { story_id: sel.storyId, start: r[0], end: r[1] },
+      }) as ElementId;
+    const ops: Mutation[] = [];
+    for (const p of properties) {
+      const character = isCharacterPath(p.path);
+      const r =
+        character && p.extent === "paragraphs"
+          ? paragraphsRange(paras, sel.start, sel.end)
+          : character
+            ? charRange
+            : ([start, end] as [number, number]);
+      if (!r) {
+        return {
+          applied: false,
+          error: "the caret stands between words: select the text to format",
+        };
+      }
+      ops.push({
+        op: "setElementProperty",
+        args: { elementId: range(r), path: p.path, value: p.value },
+      } as Mutation);
+    }
+    const outcome = await document.mutate(
+      ops.length === 1 ? ops[0]! : ({ op: "batch", args: { ops } } as Mutation),
+    );
+    return outcome.applied
+      ? { applied: true }
+      : { applied: false, error: describeError(outcome.error) };
+  }
 
   // ------------------------------------------------------- overlay
   // The tool-preview channel is a render-pipeline surface — gated on
@@ -3656,6 +3977,8 @@ export function createBundleHost(
   // has to be the honest one — a missing member must never surface to a
   // bundle as `host.shell.saveFile is not a function`.
   const shellBackend = options?.shell;
+  let holdsDocumentContext = false;
+  const documentContextBackend = options?.documentContext;
   const shell: ShellSurface = {
     openPanel(panelId) {
       if (shellBackend) {
@@ -3731,6 +4054,35 @@ export function createBundleHost(
         if (await shellBackend.exitEditContext(type, opts)) return true;
       }
       return false;
+    },
+    // Extensions ADR 348 — the document context. Only this bundle's own
+    // registered types; the host drops it with the document, and the
+    // bundle's disposal drops it too (registered below).
+    setDocumentContext(type) {
+      if (type !== null && !registeredContexts.has(type)) {
+        throw new Error(
+          `plugin-api: shell.setDocumentContext("${type}") — ${manifest.id} has ` +
+            `registered no edit context of that type.`,
+        );
+      }
+      if (!documentContextBackend) {
+        if (type !== null)
+          log.warn(
+            `shell.setDocumentContext("${type}") ignored — the host app wired ` +
+              `no document context (probe supports("shell.documentContext@1"))`,
+          );
+        return false;
+      }
+      const took = documentContextBackend.set(manifest.id, type);
+      if (took && type !== null && !holdsDocumentContext) {
+        holdsDocumentContext = true;
+        store.add(
+          toDisposable(() => {
+            documentContextBackend.set(manifest.id, null);
+          }),
+        );
+      }
+      return took;
     },
   };
 
@@ -4822,6 +5174,15 @@ export function createBundleHost(
   if (typeof options?.shell?.exitEditContext === "function") {
     featureSet.add("shell.exitEditContext@1");
   }
+  if (options?.documentContext) {
+    featureSet.add("shell.documentContext@1");
+  }
+  if (getEditor()?.registries?.controlBarGroups) {
+    featureSet.add("controlBar.groups@1");
+  }
+  if (getEditor()?.registries?.statusItems) {
+    featureSet.add("statusBar.items@1");
+  }
   if (getEditor()?.registries?.frameSurfaces) {
     featureSet.add("editContext.frameSurface@1");
     if (getEditor()?.registries?.frameSurfaces?.fullscreen) {
@@ -4914,6 +5275,12 @@ export function createBundleHost(
     // means a real system-clipboard backend is wired, so a bundle can
     // actually read/write the clipboard (K-6 / S-14).
     featureSet.add("clipboard@1");
+  }
+  if (options?.textSelection) {
+    // Extensions ADR 348 (C4) — a real selection reader is wired: the
+    // property reads and format writes have a selection to work on.
+    featureSet.add("text.selection@1");
+    featureSet.add("text.format@1");
   }
   if (options?.textCaret) {
     // The caret door always exists (no-reader fallback: always null); this

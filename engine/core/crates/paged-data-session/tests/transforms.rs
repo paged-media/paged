@@ -147,3 +147,24 @@ fn a_failing_transform_is_reported_and_reaches_nothing__feat__data_transforms() 
     assert!(msg(2).contains("array of rows"), "{}", msg(2));
     assert!(msg(3).contains("input nope"), "{}", msg(3));
 }
+
+#[test]
+fn a_passed_through_row_keeps_its_table_column_order__feat__data_transforms() {
+    let mut s = session();
+    s.define_transform(transform(
+        "cheap",
+        &["products"],
+        "(t, p) => t.products.filter((r) => r.price < p.below)",
+        json!({ "below": 10 }),
+    ));
+    assert_eq!(s.run_transforms()[0].outcome, Ok(1));
+    let p = s.store_preview("SELECT * FROM cheap", 10).unwrap();
+    assert_eq!(
+        p.columns
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
+        ["sku", "name", "price"],
+        "a filter keeps the source's column order"
+    );
+}
