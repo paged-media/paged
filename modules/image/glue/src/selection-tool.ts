@@ -124,6 +124,8 @@ export function makeSelectionGesture(
       if (!machine || !e.pagePoint || !fit) return;
       const mode = modeFromModifiers(e.modifiers);
       const point = pageToImage(e.pagePoint);
+      // An armed Curves eyedropper takes the click.
+      if (session.takeCurvesPick(point)) return;
       if (kind === "wand") {
         // Click tool: commit immediately, with the tolerance and
         // contiguity the tool options carry.
