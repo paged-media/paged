@@ -818,6 +818,104 @@ mod wasm {
             to_js(&self.session.named_styles())
         }
 
+        /// The workbook's document-style mapping (sheet ADR 524):
+        /// `{enabled, entries: {styleName: {para?, char?, cell?}}}`.
+        pub fn doc_style_map(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.doc_style_map())
+        }
+
+        /// Replace the whole document-style mapping (the undo of a change):
+        /// the switch and one row per entry across the parallel lists (an
+        /// empty id = none).
+        pub fn set_doc_style_map(
+            &mut self,
+            enabled: bool,
+            styles: Vec<String>,
+            para: Vec<String>,
+            chars: Vec<String>,
+            cell: Vec<String>,
+        ) -> Result<(), JsValue> {
+            let mut map = sheet_lower::DocStyleMap {
+                enabled,
+                ..Default::default()
+            };
+            let id = |v: &[String], i: usize| v.get(i).filter(|s| !s.is_empty()).cloned();
+            for (i, name) in styles.iter().enumerate() {
+                map.set(
+                    name,
+                    sheet_lower::DocStyleTarget {
+                        para: id(&para, i),
+                        char: id(&chars, i),
+                        cell: id(&cell, i),
+                    },
+                );
+            }
+            self.session.set_doc_style_map(map).map_err(map_err)
+        }
+
+        /// Turn "Use document styles" on or off (the table is kept).
+        pub fn set_doc_styles_enabled(&mut self, on: bool) -> Result<(), JsValue> {
+            self.session.set_doc_styles_enabled(on).map_err(map_err)
+        }
+
+        /// Map one Excel named style to document styles (no id at all
+        /// clears the entry).
+        pub fn set_doc_style_mapping(
+            &mut self,
+            style: &str,
+            para: Option<String>,
+            chars: Option<String>,
+            cell: Option<String>,
+        ) -> Result<(), JsValue> {
+            let target = sheet_lower::DocStyleTarget {
+                para: para.filter(|s| !s.is_empty()),
+                char: chars.filter(|s| !s.is_empty()),
+                cell: cell.filter(|s| !s.is_empty()),
+            };
+            self.session
+                .set_doc_style_mapping(style, target)
+                .map_err(map_err)
+        }
+
+        /// The workbook's named styles with how many cells use each and
+        /// their fonts: `[{name, builtinId?, cells, fontName?, fontSize?,
+        /// bold, italic, color?}]`, Normal first.
+        pub fn named_style_usage(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.named_style_usage())
+        }
+
+        /// Which document style ids exist (`undefined` = unknown): a mapped
+        /// id the document lacks falls back to the workbook's look. Whether
+        /// what the cells resolve to changed.
+        pub fn set_document_styles_available(
+            &mut self,
+            ids: Option<Vec<String>>,
+        ) -> Result<bool, JsValue> {
+            self.session
+                .set_document_styles_available(ids)
+                .map_err(map_err)
+        }
+
+        /// Every document style and swatch the workbook names, with how
+        /// many cells name each: `{paraStyles, charStyles, cellStyles,
+        /// swatches}` (id → cells).
+        pub fn doc_references(&self) -> Result<JsValue, JsValue> {
+            to_js(&self.session.doc_references())
+        }
+
+        /// Point every reference to document style or swatch `from` at
+        /// `to` (`model`: the new swatch's colour model). How many changed.
+        pub fn remap_doc_reference(
+            &mut self,
+            from: &str,
+            to: &str,
+            model: Option<String>,
+        ) -> Result<u32, JsValue> {
+            self.session
+                .remap_doc_reference(from, to, model.as_deref())
+                .map_err(map_err)
+        }
+
         /// The style ids of every cell of `range`, row-major — a snapshot
         /// for `set_style_ids` (the in-session undo of a format change).
         pub fn get_style_ids(&self, sheet: u16, range: &str) -> Result<Vec<u32>, JsValue> {
@@ -942,19 +1040,44 @@ mod wasm {
         /// sizes?}], categoryAxisTitle?, valueAxisTitle?, valueAxisMin?,
         /// valueAxisMax?, valueAxisLogBase?, valueAxisFormat?,
         /// legendPosition?, dataLabels, style?, flattened3d,
-        /// titleParagraphStyle?}]`.
+        /// titleParagraphStyle?, roles, seriesPalette?}]`.
         pub fn chart_specs(&self) -> Result<JsValue, JsValue> {
-            to_js(&self.session.chart_specs())
+            to_js_obj(&self.session.chart_specs())
         }
 
         /// Patch chart `index` (`{kind?, title?, legend?, series?,
-        /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?}`;
-        /// `null` clears a nullable field). Validated whole first.
+        /// categoryAxisTitle?, valueAxisTitle?, valueAxisMin?, valueAxisMax?,
+        /// roles?, resetRoles?, seriesPalette?}`; `null` clears a nullable
+        /// field). Validated whole first.
         /// Written into the chart part on save.
         pub fn update_chart(&mut self, index: u32, patch: JsValue) -> Result<(), JsValue> {
             let patch: crate::core::ChartPatch = serde_wasm_bindgen::from_value(patch)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             self.session.update_chart(index, patch).map_err(map_err)
+        }
+
+        /// Sheet ADR 525 — the workbook's document chart style: `{roles:
+        /// {[role]: {swatch?: {id, model, fallbackRgb}, paragraphStyle?,
+        /// characterStyle?}}, palette?: {group, swatches}}`.
+        pub fn chart_style(&self) -> Result<JsValue, JsValue> {
+            to_js_obj(&self.session.chart_style())
+        }
+
+        /// Sheet ADR 525 — replace the workbook's document chart style (the
+        /// shape `chart_style` reads; an empty object clears it). Validated
+        /// whole first; spliced into `workbook.xml`.
+        pub fn set_chart_style(&mut self, style: JsValue) -> Result<(), JsValue> {
+            let style: crate::core::ChartStyleIn = serde_wasm_bindgen::from_value(style)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session.set_chart_style(style).map_err(map_err)
+        }
+
+        /// Sheet ADR 525 — chart `index`'s overrides become the workbook
+        /// default; the chart then follows it.
+        pub fn use_chart_style_as_default(&mut self, index: u32) -> Result<(), JsValue> {
+            self.session
+                .use_chart_style_as_default(index)
+                .map_err(map_err)
         }
 
         /// Delete chart `index` (its slot stays, so other charts keep their
@@ -1014,6 +1137,16 @@ mod wasm {
     /// the serde derives, matching the TS contract).
     pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// [`to_js`] with maps as plain objects (keyed records such as the
+    /// chart style roles), not JS `Map`s.
+    pub(crate) fn to_js_obj<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+        serde::Serialize::serialize(
+            value,
+            &serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true),
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 
     /// The hash of the sources this wasm was built from

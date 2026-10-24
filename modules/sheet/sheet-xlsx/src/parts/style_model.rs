@@ -42,6 +42,19 @@
 //! On read a colour reference is restored only when the concrete colour the
 //! record stores still equals the recorded sRGB — another application that
 //! changed the colour wins over the stale reference.
+//!
+//! ## The workbook's document-style mapping (sheet ADR 524)
+//!
+//! "Use document styles" and the table from Excel named styles to document
+//! styles ride the style sheet's own `extLst` ([`MAP_EXT_URI`]):
+//!
+//! ```xml
+//! <extLst><ext uri="{6F3D1A52-8E0B-4C71-9B5A-2D7C4E9F1A31}" xmlns:pg="urn:paged:sheet:docstyles">
+//!   <pg:docStyleMap enabled="1">
+//!     <pg:map style="Heading 1" para="ParagraphStyle/Heading 1"/>
+//!   </pg:docStyleMap>
+//! </ext></extLst>
+//! ```
 
 use crate::error::XlsxError;
 use crate::style_edit::{parse_elem, Elem};
@@ -53,6 +66,9 @@ use sheet_core::visual::{
 };
 use sheet_format::ColorPalette;
 use std::collections::BTreeMap;
+
+/// The `uri` of the style sheet's document-style mapping (sheet ADR 524).
+pub const MAP_EXT_URI: &str = "{6F3D1A52-8E0B-4C71-9B5A-2D7C4E9F1A31}";
 
 /// The `uri` of the paged document-styles extension.
 pub const DOC_EXT_URI: &str = "{6F3D1A52-8E0B-4C71-9B5A-2D7C4E9F1A30}";
@@ -108,6 +124,41 @@ pub struct StyleSheet {
     pub dxfs: Vec<DifferentialFormat>,
     /// `<colors><indexedColors>` (empty = the default palette).
     pub indexed: Vec<Option<(u8, u8, u8)>>,
+    /// The workbook's document-style mapping (sheet ADR 524).
+    pub doc_map: sheet_lower::DocStyleMap,
+}
+
+/// The `<pg:docStyleMap>` element → the mapping.
+pub(crate) fn doc_map_of(el: &Elem) -> sheet_lower::DocStyleMap {
+    let mut map = sheet_lower::DocStyleMap {
+        enabled: matches!(el.attr("enabled").as_deref(), Some("1" | "true")),
+        ..Default::default()
+    };
+    for m in el.children.iter().filter(|c| c.local() == "map") {
+        if let Some(name) = m.attr("style").filter(|n| !n.is_empty()) {
+            let nonempty = |k: &str| m.attr(k).filter(|v| !v.is_empty());
+            map.set(
+                &name,
+                sheet_lower::DocStyleTarget {
+                    para: nonempty("para"),
+                    char: nonempty("char"),
+                    cell: nonempty("cell"),
+                },
+            );
+        }
+    }
+    map
+}
+
+/// The mapping element of a style sheet's root `extLst`, if any.
+pub(crate) fn find_doc_map(root: &Elem) -> Option<&Elem> {
+    root.child("extLst")?
+        .children
+        .iter()
+        .find(|e| e.local() == "ext" && e.attr("uri").as_deref() == Some(MAP_EXT_URI))?
+        .children
+        .iter()
+        .find(|c| c.local() == "docStyleMap")
 }
 
 fn flag(el: &Elem, local: &str) -> Option<bool> {
@@ -457,6 +508,7 @@ impl StyleSheet {
             })
             .collect();
         out.dxfs = items("dxfs", "dxf").into_iter().map(dxf_of).collect();
+        out.doc_map = find_doc_map(&root).map(doc_map_of).unwrap_or_default();
         if let Some(colors) = sec("colors") {
             if let Some(ic) = colors.child("indexedColors") {
                 out.indexed = ic

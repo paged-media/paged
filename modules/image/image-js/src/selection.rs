@@ -168,6 +168,27 @@ impl SessionSelection {
         Ok(())
     }
 
+    /// Fold coverage BYTES (`width·height` of the bound image, row-major,
+    /// 0 … 255) into the selection under `mode` — a selection given back
+    /// as data: the one the glue kept when a frame's image closed, set
+    /// again when that image reopens (`Replace` makes it exactly these
+    /// bytes). Errors when nothing is bound or the length is not the
+    /// bound image's pixel count.
+    pub fn apply_coverage(&mut self, bytes: &[u8], mode: CombineMode) -> Result<(), String> {
+        let bound = self.bound.ok_or("no image bound (selection_bind first)")?;
+        let shape = SelectionCoverage::from_data(bound.width, bound.height, bytes.to_vec())
+            .ok_or_else(|| {
+                format!(
+                    "{} coverage bytes, but the bound image is {}×{} ({} pixels)",
+                    bytes.len(),
+                    bound.width,
+                    bound.height,
+                    bound.width as usize * bound.height as usize
+                )
+            })?;
+        self.apply_shape(shape, mode)
+    }
+
     /// Select everything explicitly (an all-one coverage — shows as a
     /// full-extent selection in the panel; the adjust chain still takes
     /// the trivial-mask fast path).
@@ -361,6 +382,37 @@ mod tests {
     /// A 3×3 square in the middle of a 9×9 field.
     fn square() -> SelectionCoverage {
         SelectionCoverage::rasterize_rect(9, 9, 3.0, 3.0, 3.0, 3.0)
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn coverage_bytes_set_the_selection_exactly__feat__image_editor_region_filter() {
+        let mut s = SessionSelection::new();
+        let bytes = [0u8, 64, 128, 255, 255, 0];
+        assert!(
+            s.apply_coverage(&bytes, CombineMode::Replace).is_err(),
+            "nothing bound"
+        );
+        s.bind(7, 3, 2);
+        let rev = s.revision();
+        s.apply_coverage(&bytes, CombineMode::Replace).unwrap();
+        assert_eq!(
+            s.coverage().unwrap().data(),
+            &bytes,
+            "replace is these bytes"
+        );
+        assert!(s.revision() > rev);
+        assert!(s.mask_for(7).is_some(), "the adjust chain masks with it");
+        // Folded under a mode like any shape: intersect keeps the overlap.
+        s.apply_coverage(&[255, 255, 0, 0, 255, 255], CombineMode::Intersect)
+            .unwrap();
+        assert_eq!(s.coverage().unwrap().data(), &[0, 64, 0, 0, 255, 0]);
+        // Another length is refused with the bound size, and changes nothing.
+        let err = s
+            .apply_coverage(&[255; 4], CombineMode::Replace)
+            .unwrap_err();
+        assert!(err.contains("3×2"), "{err}");
+        assert_eq!(s.coverage().unwrap().data(), &[0, 64, 0, 0, 255, 0]);
     }
 
     #[test]

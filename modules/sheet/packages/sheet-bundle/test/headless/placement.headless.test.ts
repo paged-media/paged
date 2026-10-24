@@ -41,7 +41,7 @@ import {
 } from "@paged-media/plugin-sdk";
 import type { ElementId } from "@paged-media/plugin-api";
 
-import { parseBinding } from "../../../sheet-host-model/src";
+import { BINDING_KEY, parseBinding } from "../../../sheet-host-model/src";
 import { sheetBundle } from "../../src";
 import { headlessEnv, P, type SheetEnv } from "../conformance/env";
 import { C, openBook } from "../conformance/scenarios";
@@ -146,6 +146,94 @@ async function groups(
   walk(await host.document.tree());
   return out;
 }
+
+type Doc = Pick<HeadlessHost["host"], "document">;
+
+/** An element's page-space outline `[top, left, bottom, right]`. */
+async function outline(
+  host: Doc,
+  id: ElementId,
+): Promise<[number, number, number, number]> {
+  const [g] = await host.document.elementGeometry([id]);
+  const [t, l, b, r] = g!.bounds;
+  const [a, bb, c, d, tx, ty] = g!.itemTransform ?? [1, 0, 0, 1, 0, 0];
+  const xs = [l, r, r, l].map((x, i) => a * x + c * [t, t, b, b][i]! + tx);
+  const ys = [l, r, r, l].map((x, i) => bb * x + d * [t, t, b, b][i]! + ty);
+  return [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)];
+}
+
+/** The one placed chart's group and the element carrying its binding. */
+async function chartOnPage(host: Doc): Promise<{
+  group: ElementId;
+  anchor: ElementId;
+  binding: NonNullable<ReturnType<typeof parseBinding>>;
+}> {
+  type Node = Awaited<ReturnType<Doc["document"]["tree"]>>[number];
+  let found: {
+    group: ElementId;
+    anchor: ElementId;
+    binding: NonNullable<ReturnType<typeof parseBinding>>;
+  } | null = null;
+  const walk = (nodes: readonly Node[], parent: Node | null) => {
+    for (const n of nodes) {
+      const entry = n.pluginMetadata?.find((m) => m.key === BINDING_KEY);
+      const b = entry ? parseBinding(JSON.parse(entry.value)) : null;
+      if (n.id && parent?.id && b?.data.range.startsWith("chart:"))
+        found = { group: parent.id, anchor: n.id, binding: b };
+      if (n.children) walk(n.children, n);
+    }
+  };
+  walk(await host.document.tree(), null);
+  if (!found) throw new Error("no placed chart on the page");
+  return found;
+}
+
+/** Move a placed chart's group by `(dx, dy)` pt. */
+async function moveChart(host: Doc, dx: number, dy: number): Promise<void> {
+  const { group } = await chartOnPage(host);
+  const r = await host.document.mutate({
+    op: "setGroupTransform",
+    args: { groupId: group.id as string, transform: [1, 0, 0, 1, dx, dy] },
+  } as never);
+  expect(r.applied).toBe(true);
+}
+
+/** A second headless host over `bytes` (a reopened document). */
+async function reopen(bytes: Uint8Array): Promise<HeadlessHost> {
+  const h2 = await createHeadlessHost({
+    console: { log() {}, warn() {}, error() {}, debug() {}, info() {} },
+    storage: mapBacking(),
+    resolveFrom: new URL("../..", import.meta.url).pathname,
+  } as never);
+  await h2.load(bytes);
+  h2.loadBundle(sheetBundle);
+  await settle();
+  await new Promise((r) => setTimeout(r, 200));
+  return h2;
+}
+
+/** Set a cell through the object model. */
+async function setCell(
+  objects: HeadlessHost["objects"] | Env["objects"],
+  cell: string,
+  value: string,
+): Promise<void> {
+  const w = await objects.batch([
+    {
+      op: "set",
+      address: `${P}/cell/book!${cell}`,
+      path: "value",
+      value,
+    } as never,
+  ]);
+  expect(w.reason ?? "").toBe("");
+}
+
+const near = (
+  a: readonly number[],
+  b: readonly number[],
+  tolerance = 0.5,
+): boolean => a.every((v, i) => Math.abs(v - b[i]!) <= tolerance);
 
 /** Past the session's refresh debounce. */
 const refreshed = async () => {
@@ -272,7 +360,11 @@ describe.skipIf(!ENGINE_BUILT)(
         repeatHeaderRows: 1,
       })) as { frame: string };
       expect(r.frame).toBe(`textFrame:${first}`);
-      expect(env.mutationsSince(m)).toHaveLength(1);
+      // One write, and the chain's record joined to its undo step.
+      expect(env.mutationsSince(m).map((x) => [x.op, !!x.amended])).toEqual([
+        ["batch", false],
+        ["setPluginMetadata", true],
+      ]);
       await env.settle();
       const tables = await exportedTableCells(env.h);
       expect(tables.length).toBe(2);
@@ -451,7 +543,10 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(made.reason ?? "").toBe("");
       await env.settle();
 
+      const m0 = env.mark();
       const r = await place(env, { source: "printArea", ref: "book" });
+      // ADR 522 amendment — every area in one write, one undo step.
+      expect(env.mutationsSince(m0)).toHaveLength(1);
       expect(r.frames).toHaveLength(2);
       expect(r.frame).toBe(r.frames[0]!);
       await env.settle();
@@ -466,10 +561,21 @@ describe.skipIf(!ENGINE_BUILT)(
       expect(second[0]).toBeGreaterThan(first[2]);
       expect(second[1]).toBeCloseTo(first[1], 3);
 
+      // Each area's frame is tracked: an edit refreshes it in place.
+      await setCell(env.objects, "A2", "Quinces");
+      await refreshed();
+      tables = await exportedTableCells(env.h);
+      expect(tables.map((t) => [...t.values()])).toEqual([
+        ["name", "Quinces"],
+        ["3", "7"],
+      ]);
+      await setCell(env.objects, "A2", "Apples");
+      await refreshed();
+
       // Across a chain: the areas' tables follow one another in the story.
-      await env.undo();
-      await env.undo();
-      expect(await exportedTableCells(env.h)).toHaveLength(0);
+      // (One undo per step: the two edits' refreshes, then the placement.)
+      while ((await exportedTableCells(env.h)).length > 0) await env.undo();
+      expect(await charts(env)).toEqual([]);
       const head = await chain(env);
       const m = env.mark();
       await place(env, {
@@ -477,7 +583,12 @@ describe.skipIf(!ENGINE_BUILT)(
         ref: "book",
         chain: `textFrame:${head}`,
       });
-      expect(env.mutationsSince(m)).toHaveLength(1);
+      // One write; the chain's record (with both areas) joins its step.
+      expect(env.mutationsSince(m).filter((x) => !x.amended)).toHaveLength(1);
+      expect((await bindingOf(env, `textFrame:${head}`)).chain?.areas).toEqual([
+        "A1:A2",
+        "B3:B4",
+      ]);
       await env.settle();
       tables = await exportedTableCells(env.h);
       expect(tables.flatMap((t) => [...t.values()])).toEqual([
@@ -552,6 +663,203 @@ describe.skipIf(!ENGINE_BUILT)(
         const after = await groups(h2.host);
         expect(after).toHaveLength(1);
         expect(after).not.toEqual(placed);
+      } finally {
+        h2.dispose();
+      }
+    });
+
+    it("a chart moved on the page is redrawn where it now stands", async () => {
+      await openBook(env);
+      await addChart(env);
+      await env.objects.invoke(`${C}.lowerChartToFrame` as never, { chart: 0 });
+      await env.settle();
+      const placed = await chartOnPage(env.host);
+      const box = placed.binding.data.box!;
+      // The binding records where its element was drawn: its outline now.
+      expect(
+        near(placed.binding.data.art!, await outline(env.host, placed.anchor)),
+      ).toBe(true);
+
+      await moveChart(env.host, 90, 40);
+      await env.settle();
+      await setCell(env.objects, "B2", "40");
+      await refreshed();
+      const redrawn = await chartOnPage(env.host);
+      expect(redrawn.group).not.toEqual(placed.group);
+      expect(
+        near(redrawn.binding.data.box!, [
+          box[0] + 40,
+          box[1] + 90,
+          box[2] + 40,
+          box[3] + 90,
+        ]),
+      ).toBe(true);
+    });
+
+    it("a chart moved before the document was saved is redrawn where it stands after reopening", async () => {
+      await openBook(env);
+      await addChart(env);
+      await env.objects.invoke(`${C}.lowerChartToFrame` as never, { chart: 0 });
+      await env.settle();
+      const box = (await chartOnPage(env.host)).binding.data.box!;
+      await moveChart(env.host, -10, 120);
+      await env.settle();
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        await setCell(h2.objects, "B3", "30");
+        await refreshed();
+        const redrawn = await chartOnPage(h2.host);
+        expect(
+          near(redrawn.binding.data.box!, [
+            box[0] + 120,
+            box[1] - 10,
+            box[2] + 120,
+            box[3] - 10,
+          ]),
+        ).toBe(true);
+      } finally {
+        h2.dispose();
+      }
+    });
+
+    it("a chart placed before its box was recorded gets one on discovery, then follows a move", async () => {
+      await openBook(env);
+      await addChart(env);
+      await env.objects.invoke(`${C}.lowerChartToFrame` as never, { chart: 0 });
+      await env.settle();
+      // As an earlier version wrote it: no box, no art.
+      const placed = await chartOnPage(env.host);
+      const { box: _box, art: _art, ...older } = placed.binding.data;
+      const w = await env.host.document.mutate({
+        op: "setPluginMetadata",
+        args: {
+          elementId: placed.anchor,
+          key: BINDING_KEY,
+          value: JSON.stringify({ v: 2, data: older }),
+        },
+      } as never);
+      expect(w.applied).toBe(true);
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        const found = await chartOnPage(h2.host);
+        expect(found.binding.data.box).toBeUndefined();
+        // The box it gets is the outline of its elements as they stand.
+        const at = await outline(h2.host, found.group);
+        await moveChart(h2.host, 30, 20);
+        await settle();
+        await setCell(h2.objects, "B4", "9");
+        await refreshed();
+        const redrawn = await chartOnPage(h2.host);
+        expect(redrawn.group).not.toEqual(found.group);
+        // Redrawn where it was moved to, its box and art now recorded.
+        expect(
+          near(redrawn.binding.data.box!, [
+            at[0] + 20,
+            at[1] + 30,
+            at[2] + 20,
+            at[3] + 30,
+          ]),
+        ).toBe(true);
+        expect(redrawn.binding.data.art).toBeDefined();
+      } finally {
+        h2.dispose();
+      }
+    });
+
+    it("a paginated chain is found again when its document is reopened, and stays live", async () => {
+      await openBook(env);
+      const head = await chain(env);
+      await place(env, {
+        ref: "book!A1:B4",
+        chain: `textFrame:${head}`,
+        repeatHeaderRows: 1,
+      });
+      await env.settle();
+      // The chain's first frame records it: source, rows, its two tables.
+      const b = await bindingOf(env, `textFrame:${head}`);
+      expect(b.range).toBe("A1:B4");
+      expect(b.chain?.repeatHeaderRows).toBe(1);
+      expect(b.chain?.tables).toHaveLength(2);
+      // An edit in this session re-stamps it in the refresh's own step.
+      await setCell(env.objects, "B4", "8");
+      await refreshed();
+      const restamped = await bindingOf(env, `textFrame:${head}`);
+      expect(restamped.chain?.tables.map((t) => t.tableId)).toEqual(
+        b.chain!.tables.map((t) => t.tableId),
+      );
+      expect(restamped.chain?.tables[1]!.hash).not.toBe(
+        b.chain!.tables[1]!.hash,
+      );
+
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        // An edit in the reopened document reflows the chain in place.
+        await setCell(h2.objects, "A3", "Plums");
+        await refreshed();
+        const tables = await exportedTableCells(h2);
+        expect(tables).toHaveLength(2);
+        const all = tables.flatMap((t) => [...t.values()]);
+        expect(all).toEqual(expect.arrayContaining(["Apples", "Plums", "8"]));
+        expect(all).not.toContain("Pears");
+        // The repeated header still leads the second frame.
+        expect([...tables[1]!.values()]).toContain("name");
+        // A reopened chain's first frame is no sheet frame of its own.
+        expect(
+          parseBinding(
+            await h2.host.document.getMetadata({
+              kind: "textFrame",
+              id: head,
+            } as ElementId),
+          )?.data.chain?.tables,
+        ).toHaveLength(2);
+      } finally {
+        h2.dispose();
+      }
+    });
+
+    it("a chain whose recorded tables no longer match the workbook is replaced on the next refresh", async () => {
+      await openBook(env);
+      const head = await chain(env);
+      await place(env, { ref: "book!A1:B4", chain: `textFrame:${head}` });
+      await env.settle();
+      const b = await bindingOf(env, `textFrame:${head}`);
+      // The record goes stale: a hash the workbook does not paginate to.
+      const stale = {
+        v: 2,
+        data: {
+          ...b,
+          chain: {
+            ...b.chain!,
+            tables: b.chain!.tables.map((t) => ({ ...t, hash: "00000000" })),
+          },
+        },
+      };
+      await env.host.document.mutate({
+        op: "setPluginMetadata",
+        args: {
+          elementId: { kind: "textFrame", id: head },
+          key: BINDING_KEY,
+          value: JSON.stringify(stale),
+        },
+      } as never);
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        await refreshed();
+        await setCell(h2.objects, "A2", "Kiwis");
+        await refreshed();
+        const tables = await exportedTableCells(h2);
+        expect(tables).toHaveLength(2);
+        const all = tables.flatMap((t) => [...t.values()]);
+        expect(all).toEqual(expect.arrayContaining(["Kiwis", "Figs"]));
+        expect(all).not.toContain("Apples");
       } finally {
         h2.dispose();
       }

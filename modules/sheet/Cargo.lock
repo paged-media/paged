@@ -1038,6 +1038,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
+ "sheet-chart",
  "sheet-core",
  "sheet-format",
  "sheet-lower",
@@ -1070,6 +1071,7 @@ dependencies = [
 name = "sheet-lower"
 version = "0.0.0"
 dependencies = [
+ "proptest",
  "serde",
  "serde_json",
  "sheet-core",
