@@ -4186,6 +4186,9 @@ pub struct SceneTreeNode {
     /// Human-readable label. For frames falls back to the kind + raw
     /// id; for pages uses the parsed `<Page Name>`.
     pub label: String,
+    /// A group's members, bottom first. Engine ADR 1010: a container
+    /// frame's pasted-in (B-18) children too, so every page item of the
+    /// document is reachable from the tree.
     #[serde(default)]
     pub children: Vec<SceneTreeNode>,
     /// C-65 — the item's plugin metadata (its reserved-namespace
@@ -4199,6 +4202,12 @@ pub struct SceneTreeNode {
     /// field" (an older engine omits it everywhere). Additive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_metadata: Option<Vec<PluginMetadataEntry>>,
+    /// Engine ADR 1010 — `true` on a CLIP GROUP's row: its last child
+    /// (the top-most member) is the clipping path and paints nothing of
+    /// its own. Absent everywhere else. Additive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub clip: Option<bool>,
 }
 
 /// C-65 — one plugin-metadata Label entry on a scene-tree node.

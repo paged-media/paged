@@ -32,7 +32,7 @@ use crate::error::OperationError;
 use crate::operation::{AppliedOperation, InvalidationHint, NodeId, Operation, PropertyPath};
 
 /// Resolve a `FrameRef`'s `Self` id against its spread's backing vecs.
-fn ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
+pub(super) fn frame_ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
     match r {
         FrameRef::TextFrame(i) => spread.text_frames.get(i)?.self_id.as_deref(),
         FrameRef::Rectangle(i) => spread.rectangles.get(i)?.self_id.as_deref(),
@@ -77,6 +77,52 @@ pub(super) fn leaf_ref_in_spread(spread: &Spread, node: &NodeId) -> Option<Frame
     }
 }
 
+/// The list that names `r`, as the item owning it: the group whose
+/// members hold it, or the container it is pasted into. `None` at the
+/// spread's top level (or for an item no list names).
+fn owner_of(spread: &Spread, r: FrameRef) -> Option<FrameRef> {
+    if let Some(gi) = spread.groups.iter().position(|g| g.members.contains(&r)) {
+        return Some(FrameRef::Group(gi));
+    }
+    let (host, _) = spread
+        .nested_children
+        .iter()
+        .find(|(_, children)| children.contains(&r))?;
+    container_ref(spread, host)
+}
+
+/// The `FrameRef` of the container whose `Self` id is `id`.
+fn container_ref(spread: &Spread, id: &str) -> Option<FrameRef> {
+    let is = |s: &Option<String>| s.as_deref() == Some(id);
+    if let Some(i) = spread.rectangles.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::Rectangle(i));
+    }
+    if let Some(i) = spread.ovals.iter().position(|f| is(&f.self_id)) {
+        return Some(FrameRef::Oval(i));
+    }
+    spread
+        .polygons
+        .iter()
+        .position(|f| is(&f.self_id))
+        .map(FrameRef::Polygon)
+}
+
+/// Engine ADR 1010 — the page item a paste-into or a release acts on
+/// for `node`: the item itself, or, for a grouped item, the OUTERMOST
+/// group above it (InDesign and Illustrator paste and release a group
+/// whole; a member cannot leave its group that way). Climbs groups only:
+/// a group pasted into a container is where the climb stops.
+fn acting_ref(spread: &Spread, node: &NodeId) -> Option<FrameRef> {
+    let mut r = super::layer::member_frame_ref(spread, node)?;
+    for _ in 0..=spread.groups.len() {
+        match spread.groups.iter().position(|g| g.members.contains(&r)) {
+            Some(gi) => r = FrameRef::Group(gi),
+            None => break,
+        }
+    }
+    Some(r)
+}
+
 /// B-18: true when `node` is currently pasted into some container.
 /// `apply_remove_node` gates on this — deleting a nested child
 /// directly would produce a RemoveNode inverse that restores it
@@ -88,7 +134,7 @@ pub(super) fn is_nested_child(doc: &paged_scene::Document, node: &NodeId) -> boo
         if spread.nested_children.is_empty() {
             continue;
         }
-        if let Some(child_ref) = leaf_ref_in_spread(spread, node) {
+        if let Some(child_ref) = super::layer::member_frame_ref(spread, node) {
             if spread
                 .nested_children
                 .values()
@@ -112,6 +158,12 @@ fn invalid(node: &NodeId, reason: String) -> OperationError {
 /// B-18 — `Operation::PasteInto`. See the operation doc for the
 /// contract; geometry is preserved in document space (the child's
 /// composed `item_transform` is not touched).
+///
+/// Engine ADR 1010: the child may be a group, and a grouped item stands
+/// for its outermost group, which is what moves (the applied op names
+/// that group, so redo and the inverse act on it too). A group keeps its
+/// stored transform: a pasted-in group's frame is spread space, like a
+/// top-level group's.
 pub(super) fn apply_paste_into(
     doc: &mut paged_scene::Document,
     container: &NodeId,
@@ -129,8 +181,6 @@ pub(super) fn apply_paste_into(
             });
         }
     };
-    // Child kind gate: leaf page items only. A Group child is a B-18
-    // residual — the parse side flattens pasted-in groups too.
     if !matches!(
         child,
         NodeId::TextFrame(_)
@@ -138,13 +188,11 @@ pub(super) fn apply_paste_into(
             | NodeId::Oval(_)
             | NodeId::GraphicLine(_)
             | NodeId::Polygon(_)
+            | NodeId::Group(_)
     ) {
         return Err(invalid(
             child,
-            format!(
-                "B-18: a {} cannot be pasted into a frame (leaf page items only)",
-                child.kind()
-            ),
+            format!("B-18: a {} cannot be pasted into a frame", child.kind()),
         ));
     }
     if child.self_id() == container_id {
@@ -153,57 +201,46 @@ pub(super) fn apply_paste_into(
 
     for parsed in doc.spreads.iter_mut() {
         let spread = &mut parsed.spread;
-        let Some(child_ref) = leaf_ref_in_spread(spread, child) else {
+        if super::layer::member_frame_ref(spread, child).is_none() {
             continue;
-        };
-        let container_here = match container {
-            NodeId::Rectangle(s) => spread
-                .rectangles
-                .iter()
-                .any(|r| r.self_id.as_deref() == Some(s.as_str())),
-            NodeId::Oval(s) => spread
-                .ovals
-                .iter()
-                .any(|o| o.self_id.as_deref() == Some(s.as_str())),
-            NodeId::Polygon(s) => spread
-                .polygons
-                .iter()
-                .any(|p| p.self_id.as_deref() == Some(s.as_str())),
-            _ => false,
-        };
-        if !container_here {
+        }
+        let Some(container_ref) = container_ref(spread, &container_id) else {
             return Err(invalid(
                 container,
                 "B-18: container and child must live on the same spread".into(),
             ));
-        }
-        // No cycles: the container must not be nested (directly or
-        // transitively) inside the child.
-        let mut cursor: &str = container_id.as_str();
-        let mut hops = 0usize;
-        loop {
-            let host = spread.nested_children.iter().find_map(|(h, children)| {
-                children
-                    .iter()
-                    .any(|&r| ref_self_id(spread, r) == Some(cursor))
-                    .then_some(h.as_str())
-            });
-            match host {
-                Some(h) if h == child.self_id() => {
-                    return Err(invalid(
-                        child,
-                        "B-18: pasting here would nest the container inside its own child".into(),
-                    ));
-                }
-                Some(h) => {
-                    hops += 1;
-                    if hops > 64 {
-                        break; // defensive: malformed cycle in input data
-                    }
-                    cursor = h;
-                }
+        };
+        let child_ref = acting_ref(spread, child).expect("resolved above");
+        let Some(acting) = super::layer::node_for_frame_ref(spread, child_ref) else {
+            return Err(invalid(child, "B-18: the item's group has no id".into()));
+        };
+        // No cycles: the container must not sit (directly or through
+        // any chain of groups and containers) inside the child.
+        let mut cursor = container_ref;
+        for _ in 0..=64 {
+            if cursor == child_ref {
+                return Err(invalid(
+                    child,
+                    "B-18: pasting here would nest the container inside its own child".into(),
+                ));
+            }
+            match owner_of(spread, cursor) {
+                Some(up) => cursor = up,
                 None => break,
             }
+        }
+        // A clip group's clipping path paints nothing of its own, and
+        // content pasted into it would surface inside the clip once the
+        // IDML writer lowers the group to paste-into.
+        if spread
+            .groups
+            .iter()
+            .any(|g| g.clip_member() == Some(container_ref))
+        {
+            return Err(invalid(
+                container,
+                "the frame is a clipping path (release the clipping mask first)".into(),
+            ));
         }
         // The child must currently be top-level.
         if spread
@@ -214,12 +251,6 @@ pub(super) fn apply_paste_into(
             return Err(invalid(
                 child,
                 "B-18: the item is already pasted into a container (release it first)".into(),
-            ));
-        }
-        if spread.groups.iter().any(|g| g.members.contains(&child_ref)) {
-            return Err(invalid(
-                child,
-                "B-18: a grouped item cannot be pasted into a frame (ungroup first)".into(),
             ));
         }
         ensure_frames_in_order(spread);
@@ -236,16 +267,16 @@ pub(super) fn apply_paste_into(
         return Ok(AppliedOperation {
             op: Operation::PasteInto {
                 container: container.clone(),
-                child: child.clone(),
+                child: acting.clone(),
                 child_index,
             },
             inverse: Operation::ReleaseFrom {
-                child: child.clone(),
+                child: acting.clone(),
                 restore_slot: Some(slot),
             },
             invalidation: InvalidationHint {
                 structural: true,
-                frame_geometry: vec![child.clone()],
+                frame_geometry: vec![acting],
                 ..Default::default()
             },
         });
@@ -263,8 +294,11 @@ pub(super) fn apply_release_from(
 ) -> Result<AppliedOperation, OperationError> {
     for parsed in doc.spreads.iter_mut() {
         let spread = &mut parsed.spread;
-        let Some(child_ref) = leaf_ref_in_spread(spread, child) else {
+        let Some(child_ref) = acting_ref(spread, child) else {
             continue;
+        };
+        let Some(acting) = super::layer::node_for_frame_ref(spread, child_ref) else {
+            return Err(invalid(child, "B-18: the item's group has no id".into()));
         };
         let mut found: Option<(String, usize)> = None;
         for (host, children) in &spread.nested_children {
@@ -312,17 +346,17 @@ pub(super) fn apply_release_from(
         spread.frames_in_order.insert(slot, child_ref);
         return Ok(AppliedOperation {
             op: Operation::ReleaseFrom {
-                child: child.clone(),
+                child: acting.clone(),
                 restore_slot,
             },
             inverse: Operation::PasteInto {
                 container: host_node,
-                child: child.clone(),
+                child: acting.clone(),
                 child_index: Some(child_idx),
             },
             invalidation: InvalidationHint {
                 structural: true,
-                frame_geometry: vec![child.clone()],
+                frame_geometry: vec![acting],
                 ..Default::default()
             },
         });

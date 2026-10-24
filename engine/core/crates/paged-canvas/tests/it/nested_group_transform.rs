@@ -399,6 +399,7 @@ fn a_turned_nested_group_reopens_where_it_was_drawn() {
                 ElementId::Rectangle("a".to_string()),
                 ElementId::Rectangle("b".to_string()),
             ],
+            clip: false,
         })
         .expect("group a b"),
     );
@@ -409,6 +410,7 @@ fn a_turned_nested_group_reopens_where_it_was_drawn() {
                 ElementId::Group(inner.clone()),
                 ElementId::Rectangle("c".to_string()),
             ],
+            clip: false,
         })
         .expect("group inner c"),
     );

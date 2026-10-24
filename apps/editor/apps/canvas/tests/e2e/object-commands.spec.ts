@@ -47,10 +47,12 @@
 // is inside must still be painted, in the same stacking order.
 
 import { expect, test, type Page } from "@playwright/test";
+import { covers } from "@paged-media/test-kit";
 import { PNG } from "pngjs";
 
 import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { pagePng } from "./harness/gesture";
+import { clickMenuRow } from "./harness/shell-surface";
 import { diffPngPixels } from "./harness/pixel-diff";
 
 const BRING_TO_FRONT = "paged.object.bringToFront";
@@ -71,6 +73,7 @@ const NUDGE_UP_LARGE = "paged.object.nudgeUpLarge";
 const NUDGE_DOWN_LARGE = "paged.object.nudgeDownLarge";
 const MAKE_CLIP = "paged.object.makeClippingMask";
 const RELEASE_CLIP = "paged.object.releaseClippingMask";
+const EDIT_CLIP = "paged.object.editClippingContents";
 // Lock and Hide (F-41), with their spread-wide inverses.
 const LOCK = "paged.object.lock";
 const UNLOCK_ALL_ON_SPREAD = "paged.object.unlockAllOnSpread";
@@ -589,10 +592,14 @@ test.describe("E2E paged.object — the structural command layer", () => {
         NUDGE_DOWN_LARGE,
         MAKE_CLIP,
         RELEASE_CLIP,
+        EDIT_CLIP,
         LOCK,
         UNLOCK_ALL_ON_SPREAD,
         HIDE,
         SHOW_ALL_ON_SPREAD,
+        // WP4.4's Transform each (its own spec covers it).
+        "paged.object.transformEach",
+        "paged.object.transformEachDialog",
       ].sort(),
     );
     // ONE category, and it is the editor's — not a plugin namespace.
@@ -613,12 +620,14 @@ test.describe("E2E paged.object — the structural command layer", () => {
         "Object/Nudge up",
         "Object/Nudge down",
         "Object/Delete",
-        "Object/Make clipping mask",
-        "Object/Release clipping mask",
+        "Object/Clipping mask/Make",
+        "Object/Clipping mask/Release",
+        "Object/Clipping mask/Edit contents",
         "Object/Lock",
         "Object/Unlock all on spread",
         "Object/Hide",
         "Object/Show all on spread",
+        "Object/Transform/Transform each…",
       ].sort(),
     );
     // Both platform variants, plus the shifted-glyph alternates the
@@ -2114,26 +2123,34 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     bOutside: "paper",
   };
 
-  test("AC-OBJ-32 — Make clipping mask, from the Object menu, really clips; ONE undo restores the page @feat:frames-paths.nested-content @feat:frames-paths.path-clipping @feat:editor-shell.menus @feat:round-tripping.undo-redo @level:happy", async ({
+  /** The clip group the selection holds after Make (engine ADR 1010). */
+  async function clipGroupOf(page: Page): Promise<ElementRef> {
+    const [group] = await selection(page);
+    expect(group?.kind, "Make selects the clip group").toBe("group");
+    return group!;
+  }
+
+  test("AC-OBJ-32 — Object ▸ Clipping mask ▸ Make, from three objects, really clips as ONE clip group; ONE undo restores the page @feat:frames-paths.clip-groups @feat:frames-paths.path-clipping @feat:editor-shell.menus @feat:round-tripping.undo-redo @level:happy", async ({
     page,
   }) => {
+    covers("menu:Object/Clipping mask/Make");
     const { a, b, k } = await stage(page);
     const before = await pageShot(page);
     expect(probe(before)).toEqual(UNCLIPPED);
 
     await select(page, [b, k, a]);
-    await page.locator('[data-menu-trigger="Object"]').click();
-    const menu = page.locator('[role="menu"]');
-    await menu.getByRole("menuitem", { name: /^Make clipping mask/ }).click();
+    await clickMenuRow(page, "Object/Clipping mask/Make");
 
     // What was painted outside the ellipse is gone; what is inside it is
-    // still there, B still above A.
+    // still there, B still above A; the ellipse paints nothing.
     await expect.poll(async () => probe(await pageShot(page))).toEqual(CLIPPED);
     const clipped = await pageShot(page);
-    // The content left the stacking list (it is nested), and the
-    // clipping path is what is selected.
-    expect(await structure(page)).toBe(key(k));
-    await expect.poll(() => selection(page)).toEqual([k]);
+    // One clip group of the three, the clipping path on top; the group
+    // is what is selected.
+    const group = await clipGroupOf(page);
+    expect(await structure(page)).toBe(
+      `${key(group)}[${[a, b, k].map(key).join(",")}]`,
+    );
 
     await undo(page);
     await expect
@@ -2147,13 +2164,13 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
       .toBe(0);
   });
 
-  test("AC-OBJ-33 — Release pops the content back out, beneath the clipping path and in order; one undo re-clips @feat:frames-paths.nested-content @feat:layers.z-ordering @feat:round-tripping.undo-redo @level:happy", async ({
+  test("AC-OBJ-33 — Object ▸ Clipping mask ▸ Release dissolves the clip group: everything back in place and in order; one undo re-clips @feat:frames-paths.clip-groups @feat:layers.z-ordering @feat:round-tripping.undo-redo @level:happy", async ({
     page,
   }) => {
+    covers("menu:Object/Clipping mask/Release");
     const { a, b, k } = await stage(page);
-    // A bystander ABOVE the clipping path, so "beneath the clipping path"
-    // is a different place from "the front of the spread", where the
-    // engine's own release would put the content.
+    // A bystander ABOVE the clipping path, so "in place" is a different
+    // place from "the front of the spread".
     const [top] = await insertStack(page, 1);
     const before = await pageShot(page);
     await select(page, [a, b, k]);
@@ -2161,8 +2178,9 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     await expect.poll(async () => probe(await pageShot(page))).toEqual(CLIPPED);
     const clipped = await pageShot(page);
 
+    // From the clipping path itself: it stands for its clip group.
     await select(page, [k]);
-    await invokeCommand(page, RELEASE_CLIP);
+    await clickMenuRow(page, "Object/Clipping mask/Release");
     await expect
       .poll(async () => diffPngPixels(before, await pageShot(page)).changed)
       .toBe(0);
@@ -2175,14 +2193,13 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     await expect
       .poll(async () => diffPngPixels(clipped, await pageShot(page)).changed)
       .toBe(0);
-    expect(await structure(page)).toBe([k, top].map(key).join(","));
     await undo(page);
     await expect
       .poll(async () => diffPngPixels(before, await pageShot(page)).changed)
       .toBe(0);
   });
 
-  test("AC-OBJ-34 — a nudged clipping path carries its content, and undo is pixel-identical @feat:frames-paths.nested-content @feat:editor-tools.move.translate @feat:round-tripping.undo-redo @level:happy", async ({
+  test("AC-OBJ-34 — a nudged clip group moves whole, and undo is pixel-identical @feat:frames-paths.clip-groups @feat:editor-tools.move.translate @feat:round-tripping.undo-redo @level:happy", async ({
     page,
   }) => {
     const { a, b, k } = await stage(page);
@@ -2193,8 +2210,6 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     const start = await geometry(page, [a, b, k]);
 
     await invokeCommand(page, NUDGE_RIGHT_LARGE);
-    // Every one of the three moved by exactly 10 pt — the content too,
-    // although the scene tree does not list it.
     await expect
       .poll(async () =>
         (await geometry(page, [a, b, k])).map((g) => g.transform),
@@ -2211,7 +2226,7 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
       .toBe(0);
   });
 
-  test("AC-OBJ-35 — a deleted clipping path takes its content; undo brings both back, still clipped @feat:frames-paths.nested-content @feat:frames-paths.frame.delete @feat:round-tripping.undo-redo @level:happy", async ({
+  test("AC-OBJ-35 — a deleted clip group takes everything; undo brings it back, still clipped @feat:frames-paths.clip-groups @feat:frames-paths.frame.delete @feat:round-tripping.undo-redo @level:happy", async ({
     page,
   }) => {
     const empty = await pageShot(page);
@@ -2219,38 +2234,26 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     await select(page, [a, b, k]);
     await invokeCommand(page, MAKE_CLIP);
     await expect.poll(async () => probe(await pageShot(page))).toEqual(CLIPPED);
+    const clipped = await pageShot(page);
+    const group = await clipGroupOf(page);
 
-    await select(page, [k]);
     await invokeCommand(page, DELETE);
-    // Nothing left behind — without the content in the batch the engine
-    // pops it back out as free objects (engine-findings §12).
     await expect
       .poll(async () => diffPngPixels(empty, await pageShot(page)).changed)
       .toBe(0);
     expect(await structure(page)).toBe("");
     expect(await geometry(page, [a, b, k])).toEqual([]);
 
-    // Undo brings all three back CLIPPED: nothing paints outside the
-    // ellipse, A paints inside it. Not pixel-identical, and not because
-    // of the clip: an undone delete rebuilds each frame from the
-    // engine's minimal record, which keeps the fill colour and drops the
-    // TINT (engine-findings §11), so B returns solid. The overlap probe
-    // is the one that reads B's tint and is left out for that reason.
     await undo(page);
     await expect
-      .poll(async () => {
-        const { aOutside, aInside, bOutside } = probe(await pageShot(page));
-        return { aOutside, aInside, bOutside };
-      })
-      .toEqual({ aOutside: "paper", aInside: "ink", bOutside: "paper" });
-    expect(await structure(page)).toBe(key(k));
-    // …and re-nested with its index: Release still finds the content.
-    await select(page, [k]);
-    await invokeCommand(page, RELEASE_CLIP);
-    await expect.poll(() => structure(page)).toBe([a, b, k].map(key).join(","));
+      .poll(async () => diffPngPixels(clipped, await pageShot(page)).changed)
+      .toBe(0);
+    expect(await structure(page)).toBe(
+      `${key(group)}[${[a, b, k].map(key).join(",")}]`,
+    );
   });
 
-  test("AC-OBJ-36 — every refusal reaches the Problems panel, and nothing changes @feat:frames-paths.nested-content @feat:editor-shell.panels.problems @level:edge", async ({
+  test("AC-OBJ-36 — every refusal reaches the Problems panel, and nothing changes; a group CAN be clipped @feat:frames-paths.clip-groups @feat:editor-shell.panels.problems @level:edge", async ({
     page,
   }) => {
     await openPanel(page, "paged.problems");
@@ -2285,35 +2288,59 @@ test.describe("E2E paged.object — clipping masks against the real engine", () 
     await invokeCommand(page, MAKE_CLIP);
     await expectProblem("a clipping mask needs two or more objects");
 
-    // A group cannot be content.
+    // A frame that clips nothing has nothing to release.
+    await select(page, [r2]);
+    await invokeCommand(page, RELEASE_CLIP);
+    await expectProblem(`rectangle ${r2.id} clips nothing`);
+    expect(await structure(page)).toBe(shape);
+
+    // A group is content like any other object (engine ADR 1010).
     await select(page, [r1, r2]);
     await invokeCommand(page, GROUP);
     const grouped = (await selection(page))[0];
     expect(grouped.kind).toBe("group");
     const [over] = await insertStack(page, 1);
-    const grouped0 = await structure(page);
     await select(page, [grouped, over]);
     await invokeCommand(page, MAKE_CLIP);
-    await expectProblem(`group ${grouped.id} cannot be clipped`);
-    expect(await structure(page)).toBe(grouped0);
+    const clipGroup = await clipGroupOf(page);
+    await expect
+      .poll(() => structure(page))
+      .toContain(`${key(clipGroup)}[${key(grouped)}[`);
 
-    // Content nested by anything else carries no index: Release says so.
+    // Content another tool pasted into a frame is found through the tree.
     const [host, guest] = await insertStack(page, 2);
     const nested = await mutate(page, {
       op: "pasteInto",
       args: { containerId: host, childId: guest },
     });
     expect(nested.kind).toBe("mutationApplied");
-    const raw = await structure(page);
     await select(page, [host]);
     await invokeCommand(page, RELEASE_CLIP);
-    await expectProblem(
-      `rectangle ${host.id} holds no content this editor clipped`,
-    );
-    await expect(problem.locator("[data-problem-message]")).toContainText(
-      "the engine has no read that lists what is inside a frame",
-    );
-    expect(await structure(page)).toBe(raw);
+    await expect
+      .poll(() => structure(page))
+      .toContain([guest, host].map(key).join(","));
+  });
+
+  test("AC-OBJ-37 — Object ▸ Clipping mask ▸ Edit contents selects what the mask clips, not its path; it writes nothing @feat:frames-paths.clip-groups @feat:editor-shell.menus @level:happy", async ({
+    page,
+  }) => {
+    covers("menu:Object/Clipping mask/Edit contents");
+    const { a, b, k } = await stage(page);
+    await select(page, [a, b, k]);
+    await invokeCommand(page, MAKE_CLIP);
+    await expect.poll(async () => probe(await pageShot(page))).toEqual(CLIPPED);
+    const shape = await structure(page);
+    await clickMenuRow(page, "Object/Clipping mask/Edit contents");
+    await expect
+      .poll(async () => (await selection(page)).map(key).sort())
+      .toEqual([a, b].map(key).sort());
+    expect(await structure(page)).toBe(shape);
+    // From the clipping path itself, the same.
+    await select(page, [k]);
+    await invokeCommand(page, EDIT_CLIP);
+    await expect
+      .poll(async () => (await selection(page)).map(key).sort())
+      .toEqual([a, b].map(key).sort());
   });
 });
 
@@ -2447,15 +2474,17 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
       op: "pasteInto",
       args: { containerId: container, childId: child },
     });
-    expect(await structure(page)).toBe(key(container));
+    // Engine ADR 1010: the tree lists the child under its container.
+    const nestedShape = `${key(container)}[${key(child)}]`;
+    expect(await structure(page)).toBe(nestedShape);
     await mutate(page, { op: "deleteFrame", args: { frameId: container.id } });
     // On 0.64 the child reappeared as a free top-level item.
     expect(await structure(page)).toBe("");
     expect(await geometry(page, [child])).toEqual([]);
-    // One undo re-nests it: the tree lists the container alone again,
-    // and the child is back (answers by id, released by releaseFrom).
+    // One undo re-nests it: the tree lists the child under the container
+    // again (answers by id, released by releaseFrom).
     await undo(page);
-    expect(await structure(page)).toBe(key(container));
+    expect(await structure(page)).toBe(nestedShape);
     expect(await geometry(page, [child])).toHaveLength(1);
     const released = await mutate(page, {
       op: "releaseFrom",
@@ -2465,20 +2494,16 @@ test.describe("E2E engine anchors — what paged.object.* works around", () => {
     expect(await structure(page)).toBe([container, child].map(key).join(","));
   });
 
-  test("AC-OBJ-ENGINE-5 — some read lists what is pasted into a frame @feat:frames-paths.nested-content @level:edge", async ({
+  test("AC-OBJ-ENGINE-5 — the scene tree lists what is pasted into a frame (engine ADR 1010) @feat:frames-paths.nested-content @feat:frames-paths.clip-groups @level:edge", async ({
     page,
   }) => {
-    test.fail(
-      true,
-      "engine-findings §15: nested content is in no scene tree, group-leaves or property read",
-    );
+    // engine-findings §15, FIXED by engine ADR 1010.
     const [container, child] = await insertStack(page, 2);
     await mutate(page, {
       op: "pasteInto",
       args: { containerId: container, childId: child },
     });
-    // The natural answer: the container's tree node lists its content.
-    // Today it is `rectangle:<container>` with no children.
+    // The container's tree node lists its content.
     expect(await structure(page)).toBe(`${key(container)}[${key(child)}]`);
   });
 

@@ -158,6 +158,7 @@ fn group(doc: &mut Document, members: &[NodeId]) -> String {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )

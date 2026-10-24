@@ -1477,6 +1477,7 @@ fn overlapping_group(m: &mut CanvasModel) -> String {
     let out = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![ElementId::Rectangle(a), ElementId::Rectangle(b)],
+            clip: false,
         })
         .expect("group");
     match out.created_id.expect("created id") {
@@ -2151,6 +2152,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             let b = add_rect(m, (150.0, 150.0, 350.0, 350.0));
             Mutation::CreateGroup {
                 member_ids: vec![ElementId::Rectangle(a), ElementId::Rectangle(b)],
+                clip: false,
             }
         },
         |m| {
@@ -2182,6 +2184,7 @@ fn frame_cases(c: &mut Vec<Case>) {
             let out = m
                 .apply_mutation(&Mutation::CreateGroup {
                     member_ids: vec![ElementId::Rectangle(a), ElementId::Rectangle(b)],
+                    clip: false,
                 })
                 .expect("group");
             let id = match out.created_id.expect("created id") {
@@ -2197,6 +2200,7 @@ fn frame_cases(c: &mut Vec<Case>) {
         let out = m
             .apply_mutation(&Mutation::CreateGroup {
                 member_ids: vec![ElementId::Rectangle(a), ElementId::Rectangle(b)],
+                clip: false,
             })
             .expect("group");
         let id = match out.created_id.expect("created id") {
