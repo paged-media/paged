@@ -264,20 +264,37 @@ fn parse_layer_info(r: &mut ByteReader, container: Container) -> Result<(Vec<Lay
         return Ok((Vec::new(), false));
     }
     let mut sub = r.sub(len)?;
+    parse_layer_info_body(&mut sub, container, true)
+}
+
+/// The layer info sub-block AFTER its length field: the signed layer
+/// count, the records, then the channel image data. The `Layr`, `Lr16`
+/// and `Lr32` blocks carry exactly this, framed by their own block
+/// length (a 16-bit document's layers; a layered TIFF's ImageSourceData).
+/// Without `channels` the records are read and the channel image data
+/// after them is not (a summary that copies no pixels).
+pub(crate) fn parse_layer_info_body(
+    sub: &mut ByteReader,
+    container: Container,
+    channels: bool,
+) -> Result<(Vec<LayerRecord>, bool)> {
     let raw_count = sub.i16()?;
     let transparency_in_merged = raw_count < 0;
     let count = raw_count.unsigned_abs() as usize;
 
     let mut layers = Vec::with_capacity(count);
     for _ in 0..count {
-        layers.push(LayerRecord::parse(&mut sub, container)?);
+        layers.push(LayerRecord::parse(sub, container)?);
+    }
+    if !channels {
+        return Ok((layers, transparency_in_merged));
     }
     // Channel image data follows in layer/channel order. Each channel's
     // declared `data_len` includes the 2-byte compression tag.
     for layer in &mut layers {
         for ci in 0..layer.channels.len() {
             let data_len = layer.channels[ci].data_len as usize;
-            let cd = ChannelData::parse(&mut sub, data_len)?;
+            let cd = ChannelData::parse(sub, data_len)?;
             layer.channel_data.push(cd);
         }
     }

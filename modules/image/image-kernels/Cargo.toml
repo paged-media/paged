@@ -22,7 +22,7 @@ reference = []
 cpu = []
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 bytemuck = { workspace = true }
 
 [dev-dependencies]
