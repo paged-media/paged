@@ -77,9 +77,25 @@ kernel_family! {
     }
 }
 
+kernel_family! {
+    /// out = rgb of a with the ALPHA of b — Lock Transparent Pixels: a
+    /// paint result keeps the layer's own transparency (in0 = the
+    /// painted window, in1 = the untouched base).
+    static BAND_KEEP_ALPHA, params BandKeepAlphaParams, ref band_keep_alpha {
+        id: "band.keep_alpha",
+        class: KernelClass::Point,
+        inputs: 2,
+        params: {},
+        eval: |a, b, p| pack4(a[0], a[1], a[2], b[3]),
+        mip_exact: true,
+        tolerance: Tolerance::Exact,
+    }
+}
+
 pub static FAMILY: &[&KernelDef] = &[
     &BAND_COPY,
     &BAND_EXTRACT,
     &BAND_SET_ALPHA,
     &BAND_BROADCAST_ALPHA,
+    &BAND_KEEP_ALPHA,
 ];

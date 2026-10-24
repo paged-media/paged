@@ -64,6 +64,12 @@ pub mod coverage;
 // window IS the ABI mask a dab composites under. Mask PREP, exactly like
 // `coverage` — no image pixel is touched here.
 pub mod dab;
+// The brush engine's oriented tips, combine modes, texture and coverage
+// lowering (mask preparation, like `dab`).
+pub mod brush;
+// Brush Settings as a deterministic dab planner (seeded jitter, symmetry,
+// pulled-string smoothing).
+pub mod dynamics;
 
 // …and its GPU half: the stroke compositor. Turns a coverage window into
 // pixels through registered kernels ONLY (`gen.solid` + `cast.*` +
@@ -105,7 +111,7 @@ pub use reduce::{
 pub use residency::{Acquired, ResidencyManager, Tier, HEAP_TILE_BYTES};
 pub use resident::{GpuBatch, ReadTicket, Resident, TexFormat};
 pub use selection::SelectionMask;
-pub use stroke::{composite_stroke_window, PaintMode};
+pub use stroke::{composite_stroke_window, keep_alpha_window, PaintMode};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GpuError {

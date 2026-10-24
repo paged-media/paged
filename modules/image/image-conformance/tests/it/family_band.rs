@@ -24,9 +24,10 @@
 use image_conformance::harness::{assert_within, parity, RefTile};
 use image_conformance::Px;
 use image_kernels::families::band::{
-    band_broadcast_alpha, band_copy, band_extract, band_set_alpha, BandBroadcastAlphaParams,
-    BandCopyParams, BandExtractParams, BandSetAlphaParams, BAND_BROADCAST_ALPHA, BAND_COPY,
-    BAND_EXTRACT, BAND_SET_ALPHA,
+    band_broadcast_alpha, band_copy, band_extract, band_keep_alpha, band_set_alpha,
+    BandBroadcastAlphaParams, BandCopyParams, BandExtractParams, BandKeepAlphaParams,
+    BandSetAlphaParams, BAND_BROADCAST_ALPHA, BAND_COPY, BAND_EXTRACT, BAND_KEEP_ALPHA,
+    BAND_SET_ALPHA,
 };
 
 /// A gradient where the four channels carry visibly distinct values —
@@ -139,5 +140,21 @@ fn band_broadcast_alpha_edge_parity() {
     match parity(&BAND_BROADCAST_ALPHA, band_broadcast_alpha, &[&tile], &p) {
         Some(r) => assert_within(r, &BAND_BROADCAST_ALPHA),
         None => eprintln!("SKIP: no GPU adapter"),
+    }
+}
+
+#[test]
+#[allow(non_snake_case)]
+fn band_keep_alpha_parity__feat__image_editor_brush_engine() {
+    // in0 = a painted window, in1 = the base whose alpha must survive.
+    let painted = gradient_tile(48, 40);
+    // Every alpha class: opaque, transparent, the 0.5 line, and ramps.
+    let base = RefTile::from_fn(48, 40, |x, y| {
+        Px([0.9, 0.1, 0.4, ((x * 7 + y * 3) % 9) as f32 / 8.0])
+    });
+    let p = BandKeepAlphaParams::new();
+    match parity(&BAND_KEEP_ALPHA, band_keep_alpha, &[&painted, &base], &p) {
+        Some(r) => assert_within(r, &BAND_KEEP_ALPHA),
+        None => eprintln!("band.keep_alpha: no device, parity skipped"),
     }
 }

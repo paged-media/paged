@@ -468,6 +468,7 @@ impl LayerStack {
             structure_generation: 0,
             edit_mask: false,
             fold: Default::default(),
+            history_states: Default::default(),
         })
     }
 }

@@ -99,7 +99,9 @@
 use half::f16;
 
 use image_kernels::families::arithmetic::{MathAddParams, MATH_ADD};
-use image_kernels::families::band::{BandSetAlphaParams, BAND_SET_ALPHA};
+use image_kernels::families::band::{
+    BandKeepAlphaParams, BandSetAlphaParams, BAND_KEEP_ALPHA, BAND_SET_ALPHA,
+};
 use image_kernels::families::cast::{
     CastPremultiplyParams, CastUnpremultiplyParams, CAST_PREMULTIPLY, CAST_UNPREMULTIPLY,
 };
@@ -580,6 +582,51 @@ pub async fn composite_stroke_window(
         }
     };
     let t = b.read(&result);
+    Ok(b.finish_async().await?.swap_remove(t.0))
+}
+
+/// LOCK TRANSPARENT PIXELS: the painted window with the BASE window's
+/// alpha restored — one registered dispatch (`band.keep_alpha`, rgb of
+/// in0, alpha of in1). Both are straight rgba16float `w·h·8` bytes.
+///
+/// Straight space is what makes this exact: a paint result's colour is
+/// the blend, its alpha is replaced, and a pixel that was fully
+/// transparent stays fully transparent (its rgb changes but cannot be
+/// seen) — Photoshop's "preserve transparency".
+pub async fn keep_alpha_window(
+    ctx: &GpuContext,
+    painted_f16: &[u8],
+    base_f16: &[u8],
+    w: u32,
+    h: u32,
+) -> Result<Vec<u8>, GpuError> {
+    let texels = (w as usize) * (h as usize);
+    if painted_f16.len() != texels * 8 || base_f16.len() != texels * 8 {
+        return Err(GpuError::Kernel {
+            kernel: BAND_KEEP_ALPHA.id,
+            detail: format!(
+                "windows are {} and {} bytes, expected {}",
+                painted_f16.len(),
+                base_f16.len(),
+                texels * 8
+            ),
+        });
+    }
+    if texels == 0 {
+        return Ok(Vec::new());
+    }
+    let mut b = GpuBatch::new(ctx);
+    let painted = b.upload(w, h, TexFormat::Rgba16Float, painted_f16);
+    let base = b.upload(w, h, TexFormat::Rgba16Float, base_f16);
+    let out = b.target(w, h);
+    b.dispatch(
+        &BAND_KEEP_ALPHA,
+        &[&painted, &base],
+        BandKeepAlphaParams::new().as_bytes(),
+        None,
+        &out,
+    )?;
+    let t = b.read(&out);
     Ok(b.finish_async().await?.swap_remove(t.0))
 }
 

@@ -54,6 +54,8 @@ describe("imageBundle.activate", () => {
     load(fake);
     expect(fake.panels.ids()).toEqual([
       PANEL_ID,
+      "media.paged.image.panel.brushSettings",
+      "media.paged.image.panel.brushPresets",
       "media.paged.image.panel.properties",
     ]);
     expect(fake.commands.ids()).toEqual([
@@ -131,6 +133,14 @@ describe("imageBundle.activate", () => {
       "media.paged.image.command.applyToFile",
       "media.paged.image.command.saveToFile",
       "media.paged.image.command.loadBrushLibrary",
+      // The brush engine's panels and preset verbs (WP5.7).
+      "media.paged.image.command.openBrushSettings",
+      "media.paged.image.command.openBrushPresets",
+      "media.paged.image.command.defineBrushPreset",
+      "media.paged.image.command.importBrushPresets",
+      "media.paged.image.command.exportBrushPresetsAbr",
+      "media.paged.image.command.exportBrushPresetsJson",
+      "media.paged.image.command.toggleLockTransparent",
       // The raster↔vector bridge + the luminosity mask.
       "media.paged.image.command.selectionToPath",
       "media.paged.image.command.pathToSelection",
@@ -175,6 +185,14 @@ describe("imageBundle.activate", () => {
       "media.paged.image.tool.sponge",
       "media.paged.image.tool.blur",
       "media.paged.image.tool.sharpen",
+      // The brush engine's tools (WP5.7).
+      "media.paged.image.tool.smudge",
+      "media.paged.image.tool.mixerBrush",
+      "media.paged.image.tool.colorReplacement",
+      "media.paged.image.tool.historyBrush",
+      "media.paged.image.tool.artHistoryBrush",
+      "media.paged.image.tool.backgroundEraser",
+      "media.paged.image.tool.magicEraser",
       "media.paged.image.tool.spotHeal",
       "media.paged.image.tool.patch",
       "media.paged.image.tool.type",
