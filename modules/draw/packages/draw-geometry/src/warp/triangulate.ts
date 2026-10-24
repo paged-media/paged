@@ -46,6 +46,8 @@
 // pure, and free of host types — a port target for `paged-warp`.
 
 import type { Vec2, Vec2Mut } from "../types";
+import { pointInPolygon } from "../polygon";
+import { segmentDistance } from "../rdp";
 
 export type Triangle = [number, number, number];
 
@@ -74,35 +76,16 @@ export interface TriangulateOptions {
 const orient = (a: Vec2, b: Vec2, c: Vec2): number =>
   (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 
-/** Even-odd point in rings. */
+/** Even-odd point in rings: inside an odd number of them (polygon.ts's
+ *  crossing test, per ring). */
 export function pointInRings(
   p: Vec2,
   rings: readonly (readonly Vec2[])[],
 ): boolean {
   let inside = false;
-  for (const ring of rings) {
-    const n = ring.length;
-    for (let i = 0, j = n - 1; i < n; j = i++) {
-      const a = ring[i]!;
-      const b = ring[j]!;
-      if (
-        a[1] > p[1] !== b[1] > p[1] &&
-        p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
-      )
-        inside = !inside;
-    }
-  }
+  for (const ring of rings) if (pointInPolygon(p, ring)) inside = !inside;
   return inside;
 }
-
-const segDist = (p: Vec2, a: Vec2, b: Vec2): number => {
-  const dx = b[0] - a[0];
-  const dy = b[1] - a[1];
-  const l2 = dx * dx + dy * dy;
-  let t = l2 > 0 ? ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2 : 0;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
-};
 
 /** Resample a closed ring so no edge exceeds `spacing`; consecutive
  *  duplicates dropped. */
@@ -390,7 +373,7 @@ function buildMesh(
       if (!inside(p)) continue;
       let near = false;
       for (const [a, b] of edges)
-        if (segDist(p, a, b) < spacing * 0.5) {
+        if (segmentDistance(p, a, b) < spacing * 0.5) {
           near = true;
           break;
         }

@@ -393,9 +393,10 @@ describe("PerspectiveSelectMachine [plugin-draw.distortion-tools]", () => {
     const xs = s.commit!.flat.anchors.map((x) => x.anchor[0]);
     expect(Math.min(...xs)).toBeCloseTo(20, 6);
     expect(Math.max(...xs)).toBeCloseTo(120, 6);
+    // The ellipse starts at its right-hand point (svg-shapes' κ ellipse).
     expect(
       pageToPlane(g, "right", s.commit!.page.anchors[0]!.anchor)![0],
-    ).toBeCloseTo(70, 3);
+    ).toBeCloseTo(120, 3);
   });
 
   it("no active plane: free artwork is not attached; a click commits nothing; Escape cancels", () => {

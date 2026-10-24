@@ -81,6 +81,30 @@ const M = defineMessages("draw.toolOptions", {
   reshapeRadius: "Falloff along the path",
   points: "Points",
   radius2: "Radius 2",
+  brushWidth: "Width",
+  brushHeight: "Height",
+  intensity: "Intensity",
+  usePressure: "Use pressure pen",
+  detail: "Detail",
+  simplify: "Simplify",
+  twirlRate: "Twirl rate",
+  complexity: "Complexity",
+  horizontal: "Horizontal",
+  vertical: "Vertical",
+  affectAnchors: "Brush affects anchor points",
+  affectIn: "Brush affects in tangent handles",
+  affectOut: "Brush affects out tangent handles",
+  on: "On",
+  off: "Off",
+  density: "Mesh density",
+  normal: "Normal",
+  more: "More points",
+  fewer: "Fewer points",
+  showMesh: "Show mesh",
+  dragDraws: "A drag on nothing draws",
+  nothing: "Nothing",
+  rectangle: "Rectangle",
+  ellipse: "Ellipse",
 });
 
 type OptionValue = number | boolean | string;
@@ -433,6 +457,216 @@ export const STAR_OPTIONS = defineToolOptions({
   ],
 });
 
+// ------------------------------------------------- the distortion tools
+//
+// THE LIQUIFY FAMILY carries Illustrator's options dialog per tool: the
+// GLOBAL BRUSH (width, height, angle, intensity, use pressure) and the
+// tool's own (detail and simplify on all seven; twirl rate on Twirl;
+// complexity and the three "brush affects" switches on Scallop and
+// Crystallize; Wrinkle adds horizontal and vertical). Defaults are
+// Illustrator's (100 × 100, 0°, 50 %, detail 2, simplify 50, twirl 40°,
+// complexity 1, wrinkle 0 % / 100 %). A switch is a select whose DEFAULT
+// is first (gap 2 above), so "on" leads where the default is on.
+
+const onOff = (key: string, label: string, on: boolean): SelectOption => ({
+  kind: "select",
+  key,
+  label,
+  options: on
+    ? [
+        { value: "on", label: M.on },
+        { value: "off", label: M.off },
+      ]
+    : [
+        { value: "off", label: M.off },
+        { value: "on", label: M.on },
+      ],
+  default: on ? "on" : "off",
+});
+
+const brushFields = (): OptionDef[] => [
+  {
+    kind: "number",
+    key: "width",
+    label: M.brushWidth,
+    min: 1,
+    max: 2000,
+    step: 1,
+    unit: "pt",
+    default: 100,
+  },
+  {
+    kind: "number",
+    key: "height",
+    label: M.brushHeight,
+    min: 1,
+    max: 2000,
+    step: 1,
+    unit: "pt",
+    default: 100,
+  },
+  {
+    kind: "number",
+    key: "angle",
+    label: M.angle,
+    min: -180,
+    max: 180,
+    step: 1,
+    unit: "°",
+    default: 0,
+  },
+  {
+    kind: "number",
+    key: "intensity",
+    label: M.intensity,
+    min: 1,
+    max: 100,
+    step: 1,
+    unit: "%",
+    default: 50,
+  },
+  onOff("usePressure", M.usePressure, false),
+  {
+    kind: "number",
+    key: "detail",
+    label: M.detail,
+    min: 1,
+    max: 10,
+    step: 1,
+    default: 2,
+  },
+  {
+    kind: "number",
+    key: "simplify",
+    label: M.simplify,
+    min: 0.2,
+    max: 100,
+    step: 0.2,
+    default: 50,
+  },
+];
+
+const complexityField: OptionDef = {
+  kind: "number",
+  key: "complexity",
+  label: M.complexity,
+  min: 0,
+  max: 15,
+  step: 1,
+  default: 1,
+};
+
+const affectFields = (): OptionDef[] => [
+  onOff("affectAnchors", M.affectAnchors, true),
+  onOff("affectIn", M.affectIn, true),
+  onOff("affectOut", M.affectOut, true),
+];
+
+const liquifyTool = (kind: string, extra: OptionDef[] = []) =>
+  defineToolOptions({
+    toolId: `media.paged.draw.tool.${kind}`,
+    fields: [...brushFields(), ...extra],
+  });
+
+export const WARP_OPTIONS = liquifyTool("warp");
+export const TWIRL_OPTIONS = liquifyTool("twirl", [
+  {
+    kind: "number",
+    key: "twirlRate",
+    label: M.twirlRate,
+    min: -180,
+    max: 180,
+    step: 1,
+    unit: "°",
+    default: 40,
+  },
+]);
+export const PUCKER_OPTIONS = liquifyTool("pucker");
+export const BLOAT_OPTIONS = liquifyTool("bloat");
+export const SCALLOP_OPTIONS = liquifyTool("scallop", [
+  complexityField,
+  ...affectFields(),
+]);
+export const CRYSTALLIZE_OPTIONS = liquifyTool("crystallize", [
+  complexityField,
+  ...affectFields(),
+]);
+export const WRINKLE_OPTIONS = liquifyTool("wrinkle", [
+  {
+    kind: "number",
+    key: "horizontal",
+    label: M.horizontal,
+    min: 0,
+    max: 100,
+    step: 1,
+    unit: "%",
+    default: 0,
+  },
+  {
+    kind: "number",
+    key: "vertical",
+    label: M.vertical,
+    min: 0,
+    max: 100,
+    step: 1,
+    unit: "%",
+    default: 100,
+  },
+  complexityField,
+  ...affectFields(),
+]);
+
+/** The seven liquify tools' options, by kind. */
+export const LIQUIFY_OPTIONS = {
+  warp: WARP_OPTIONS,
+  twirl: TWIRL_OPTIONS,
+  pucker: PUCKER_OPTIONS,
+  bloat: BLOAT_OPTIONS,
+  scallop: SCALLOP_OPTIONS,
+  crystallize: CRYSTALLIZE_OPTIONS,
+  wrinkle: WRINKLE_OPTIONS,
+} as const;
+
+/** Puppet Warp — Illustrator's control-bar options: the mesh density
+ *  (normal, more or fewer points) and whether the mesh is drawn. */
+export const PUPPET_WARP_OPTIONS = defineToolOptions({
+  toolId: "media.paged.draw.tool.puppetWarp",
+  fields: [
+    {
+      kind: "select",
+      key: "density",
+      label: M.density,
+      options: [
+        { value: "normal", label: M.normal },
+        { value: "more", label: M.more },
+        { value: "fewer", label: M.fewer },
+      ],
+      default: "normal",
+    },
+    onOff("showMesh", M.showMesh, true),
+  ],
+});
+
+/** Perspective Selection — what a drag on empty canvas draws on the
+ *  active plane (Illustrator draws with its shape tools while the grid is
+ *  on; here the selection tool carries that choice). */
+export const PERSPECTIVE_SELECT_OPTIONS = defineToolOptions({
+  toolId: "media.paged.draw.tool.perspectiveSelect",
+  fields: [
+    {
+      kind: "select",
+      key: "shape",
+      label: M.dragDraws,
+      options: [
+        { value: "none", label: M.nothing },
+        { value: "rectangle", label: M.rectangle },
+        { value: "ellipse", label: M.ellipse },
+      ],
+      default: "none",
+    },
+  ],
+});
+
 /** Every tool that declares options, by tool id — what `tools.ts`
  *  attaches to the contribution and what the spec walks. */
 export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
@@ -443,4 +677,7 @@ export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
   LASSO_OPTIONS,
   RESHAPE_OPTIONS,
   STAR_OPTIONS,
+  ...Object.values(LIQUIFY_OPTIONS),
+  PUPPET_WARP_OPTIONS,
+  PERSPECTIVE_SELECT_OPTIONS,
 ];

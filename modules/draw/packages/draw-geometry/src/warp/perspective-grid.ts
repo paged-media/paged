@@ -56,7 +56,7 @@
 // Pure, deterministic, no host types — the perspective-grid half of the
 // future `paged-warp` crate.
 
-import type { AnchorTable, AnchorTriple, Vec2, Vec2Mut } from "../types";
+import type { AnchorTable, Vec2, Vec2Mut } from "../types";
 import {
   applyHomography,
   homographyFromQuads,
@@ -64,6 +64,7 @@ import {
   mapTableProjective,
   type Homography,
 } from "./homography";
+import { ellipseToPath, mapTable, rectToPath } from "../svg-shapes";
 
 export type GridKind = 1 | 2 | 3;
 export type PlaneId = "left" | "right" | "floor";
@@ -468,80 +469,28 @@ export function moveGridHandle(
 
 // ------------------------------------------------- drawing on a plane
 
-const corner = (p: Vec2Mut): AnchorTriple => ({
-  anchor: p,
-  left: [p[0], p[1]],
-  right: [p[0], p[1]],
-});
-
-/** A rectangle [x0,y0]-[x1,y1] in a plane's object frame (flat). */
+/** A rectangle [a]-[b] in a plane's object frame (flat): svg-shapes'
+ *  sharp rectangle, TL TR BR BL. */
 export function flatRect(a: Vec2, b: Vec2): AnchorTable {
   const x0 = Math.min(a[0], b[0]);
-  const x1 = Math.max(a[0], b[0]);
   const y0 = Math.min(a[1], b[1]);
-  const y1 = Math.max(a[1], b[1]);
-  return {
-    anchors: [
-      corner([x0, y0]),
-      corner([x1, y0]),
-      corner([x1, y1]),
-      corner([x0, y1]),
-    ],
-    subpathStarts: [0],
-    subpathOpen: [false],
-  };
+  return rectToPath(x0, y0, Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
 }
 
-/** The ellipse inscribed in [a, b] (four cubic quarter arcs; κ =
- *  0.5523), flat. */
+/** The ellipse inscribed in [a, b], flat: svg-shapes' four-arc κ
+ *  ellipse (starting at its right-hand point). */
 export function flatEllipse(a: Vec2, b: Vec2): AnchorTable {
-  const cx = (a[0] + b[0]) / 2;
-  const cy = (a[1] + b[1]) / 2;
-  const rx = Math.abs(b[0] - a[0]) / 2;
-  const ry = Math.abs(b[1] - a[1]) / 2;
-  const k = 0.5522847498307936;
-  const pt = (x: number, y: number): Vec2Mut => [x, y];
-  return {
-    anchors: [
-      {
-        anchor: pt(cx, cy - ry),
-        left: pt(cx - k * rx, cy - ry),
-        right: pt(cx + k * rx, cy - ry),
-      },
-      {
-        anchor: pt(cx + rx, cy),
-        left: pt(cx + rx, cy - k * ry),
-        right: pt(cx + rx, cy + k * ry),
-      },
-      {
-        anchor: pt(cx, cy + ry),
-        left: pt(cx + k * rx, cy + ry),
-        right: pt(cx - k * rx, cy + ry),
-      },
-      {
-        anchor: pt(cx - rx, cy),
-        left: pt(cx - rx, cy + k * ry),
-        right: pt(cx - rx, cy - k * ry),
-      },
-    ],
-    subpathStarts: [0],
-    subpathOpen: [false],
-  };
+  return ellipseToPath(
+    (a[0] + b[0]) / 2,
+    (a[1] + b[1]) / 2,
+    Math.abs(b[0] - a[0]) / 2,
+    Math.abs(b[1] - a[1]) / 2,
+  );
 }
 
-/** Translate a flat table (pure). */
-export function translateTable(t: AnchorTable, d: Vec2): AnchorTable {
-  const m = (p: Vec2): Vec2Mut => [p[0] + d[0], p[1] + d[1]];
-  return {
-    anchors: t.anchors.map((a) => ({
-      anchor: m(a.anchor),
-      left: m(a.left),
-      right: m(a.right),
-    })),
-    subpathStarts: [...t.subpathStarts],
-    ...(t.subpathOpen ? { subpathOpen: [...t.subpathOpen] } : {}),
-  };
-}
+/** Translate a flat table (svg-shapes' affine `mapTable`). */
+export const translateTable = (t: AnchorTable, d: Vec2): AnchorTable =>
+  mapTable(t, [1, 0, 0, 1, d[0], d[1]]);
 
 /** A flat (object-frame) table projected onto the plane, page space;
  *  curves subdivided to `tolerance` pt. */

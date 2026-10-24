@@ -67,6 +67,8 @@
 import type { AnchorTable, AnchorTriple, Vec2, Vec2Mut } from "../types";
 import { splitSegmentDeCasteljau } from "../bezier";
 import { simplifyContour } from "../simplify-fit";
+import { contourRanges } from "../compound";
+import { polylineLength } from "../path-locate";
 
 export type LiquifyKind =
   "warp" | "twirl" | "pucker" | "bloat" | "scallop" | "crystallize" | "wrinkle";
@@ -230,14 +232,11 @@ const copyTriple = (a: AnchorTriple): AnchorTriple => ({
   right: [a.right[0], a.right[1]],
 });
 
-const contours = (table: AnchorTable): Array<[number, number, boolean]> => {
-  const n = table.anchors.length;
-  const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
-  return starts.map((from, i) => {
-    const to = i + 1 < starts.length ? starts[i + 1]! : n;
-    return [from, to, !(table.subpathOpen?.[i] ?? false)];
-  });
-};
+/** Each contour as `[from, to, closed]` (compound.ts's ranges). */
+const contours = (table: AnchorTable): Array<[number, number, boolean]> =>
+  contourRanges(table.anchors.length, table.subpathStarts).map(
+    ([from, to], i) => [from, to, !(table.subpathOpen?.[i] ?? false)],
+  );
 
 /** The brush's axis-aligned box, grown by `margin`. */
 function brushBox(
@@ -256,13 +255,6 @@ function brushBox(
     b.center[1] + hy,
   ];
 }
-
-const polygonLength = (p: readonly Vec2[]): number => {
-  let l = 0;
-  for (let i = 1; i < p.length; i++)
-    l += Math.hypot(p[i]![0] - p[i - 1]![0], p[i]![1] - p[i - 1]![1]);
-  return l;
-};
 
 const boxesMeet = (
   pts: readonly Vec2[],
@@ -339,7 +331,7 @@ export function liquifyDensify(
         const c = stack.pop()!;
         if (
           budget > 0 &&
-          polygonLength(c) > sp &&
+          polylineLength(c) > sp &&
           boxesMeet(c, box) &&
           pieces.length + stack.length < 4096
         ) {
