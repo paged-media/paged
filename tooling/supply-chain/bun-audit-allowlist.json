@@ -2,14 +2,6 @@
   "$comment": "Advisories bun audit may report without failing CI, each until its expiry (tooling/supply-chain/bun-audit.mjs, docs/migration/renovate.md). An entry past `expires` fails; an entry bun no longer reports fails too, so delete it in the change that clears it.",
   "advisories": [
     {
-      "id": "GHSA-vfj7-8cjw-p6xm",
-      "package": "braces",
-      "severity": "high",
-      "owner": "@drietsch",
-      "expires": "2026-12-31",
-      "reason": "Build-time only: tailwindcss 3 > micromatch > braces in the editor's CSS build, never shipped to a browser. No braces release fixes it (3.0.3 is the latest); Tailwind 4 drops the chain, and is held as its own series with a visual review (docs/migration/npm-latest.md)."
-    },
-    {
       "id": "GHSA-rj75-hqrm-r3gf",
       "package": "postcss-selector-parser",
       "severity": "moderate",
