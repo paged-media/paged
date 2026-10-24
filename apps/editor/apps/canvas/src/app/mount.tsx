@@ -200,7 +200,11 @@ const _schemaRendererCompat: _AssertSchemaRenderer = true;
 void _schemaRendererCompat;
 import { CodeEditor } from "@paged-media/ui";
 import { HostColorPicker } from "../plugin-color-picker";
-import { ObjectPropertyField, ObjectPropertyFrame } from "@paged-media/shell";
+import {
+  ObjectPropertyField,
+  ObjectPropertyFrame,
+  setDataDoorSource,
+} from "@paged-media/shell";
 import {
   cockpitActionsOf,
   createEditorScope,
@@ -549,6 +553,10 @@ function PluginBundles() {
       diagnosticsSink: problemsSink,
       pages,
     });
+    // Editor ADRs 291, 292: the Data panel and the bind popover read the
+    // document's data from the same shared backend the bundles meet at.
+    const dataBackend = hostOptions.shared.data;
+    if (dataBackend) setDataDoorSource(scope, dataBackend);
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.

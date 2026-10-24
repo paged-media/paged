@@ -2315,6 +2315,23 @@ export interface DataService {
   bind?(spec: DataBindingSpec): Promise<DataBindingInfo>;
   unbind?(id: string): Promise<void>;
   bindings?(): Promise<readonly DataBindingInfo[]>;
+  /** An expression's value at a record of `query`, defining nothing (a bind
+   *  popover's live preview, editor ADR 292). */
+  evaluate?(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<DataEvaluation>;
+}
+
+/** What an expression gives at a record. */
+export interface DataEvaluation {
+  /** As a field shows it. */
+  display: string;
+  /** As JSON (`null` when it has none or failed). */
+  value: unknown;
+  /** The parse or evaluation error. */
+  error?: string;
 }
 
 /** The handle a serving bundle holds. */
@@ -2341,6 +2358,12 @@ export interface DataSurface {
   bind(spec: DataBindingSpec): Promise<DataBindingInfo>;
   unbind(id: string): Promise<void>;
   bindings(): Promise<readonly DataBindingInfo[]>;
+  /** An expression's value at a record of `query` (`read`). */
+  evaluate(
+    query: string,
+    expr: string,
+    record: number,
+  ): Promise<DataEvaluation>;
   /** Fires when a table's rows change (`read`). */
   onDidChange(listener: (change: DataChange) => void): Disposable;
 }

@@ -2540,6 +2540,16 @@ export function createSession(
     transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
+    evaluate: async (query, expr, record) => {
+      const e = await ensureEngine();
+      if (typeof e.evaluate_at !== "function")
+        return {
+          display: "",
+          value: null,
+          error: "this data engine cannot preview (rebuild it)",
+        };
+      return e.evaluate_at(query, expr, record);
+    },
     bindings: () =>
       ((engine?.payload() as { bindings?: unknown[] } | undefined)?.bindings ??
         []) as ReturnType<Parameters<typeof createDataDoor>[0]["bindings"]>,

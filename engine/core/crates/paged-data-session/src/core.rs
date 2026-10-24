@@ -62,6 +62,15 @@ pub enum SessionError {
     Decode(String),
 }
 
+/// What an expression gives at a record ([`DataSession::evaluate_at`]).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EvalPreview {
+    pub display: String,
+    pub value: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 /// One query of a [`DataSession::refresh_queries`]: its row count, or why
 /// it did not run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1220,6 +1229,43 @@ impl DataSession {
             total,
             error: None,
         })
+    }
+
+    /// An expression's value at a record of `query`, as the bind popover
+    /// previews it (no binding is defined): the display text, the value as
+    /// JSON, and the parse or evaluation error if there is one.
+    pub fn evaluate_at(&self, query: &QueryId, expr: &str, record: usize) -> EvalPreview {
+        let check = self.check_expression(expr, Some(query));
+        if let Some(error) = check.error.filter(|_| !check.ok) {
+            return EvalPreview {
+                display: String::new(),
+                value: serde_json::Value::Null,
+                error: Some(error),
+            };
+        }
+        match self.engine.evaluate_at(query, expr, record) {
+            Err(e) => EvalPreview {
+                display: String::new(),
+                value: serde_json::Value::Null,
+                error: Some(e.to_string()),
+            },
+            Ok(Value::Error(e)) => EvalPreview {
+                display: Value::Error(e.clone()).as_display(),
+                value: serde_json::Value::Null,
+                error: Some(Value::Error(e).as_display()),
+            },
+            Ok(v) => EvalPreview {
+                display: v.as_display(),
+                value: match &v {
+                    Value::Null => serde_json::Value::Null,
+                    Value::Bool(b) => serde_json::Value::Bool(*b),
+                    Value::Number(n) => serde_json::Number::from_f64(*n)
+                        .map_or(serde_json::Value::Null, serde_json::Value::Number),
+                    other => serde_json::Value::String(other.as_display()),
+                },
+                error: None,
+            },
+        }
     }
 
     /// A per-record binding's display text for record `record`, WITHOUT
