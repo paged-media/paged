@@ -921,23 +921,28 @@ Taken on 2026-10-21, with the implementation plan
 - **Engine decision records** get a new number range, so they no longer collide with the
   editor's.
 
-### Open questions
+### Decided on 2026-10-24 (the former open questions)
 
-1. **Cross-origin isolation.** Can the editor run without `SharedArrayBuffer` in a degraded
-   mode for hosts that cannot set COOP and COEP? Or is the iframe the answer for them?
-2. **Stable ids.** Command, panel and tool ids become a public contract once hosts reference
-   them in profiles and feature sets. Which ids are public, and how are they versioned and
-   deprecated?
-3. **Touch and small screens.** The `template-fill` and `form` presets are the first shapes
-   that phones will meet.
-4. **Document-bound roles.** Should a template be able to _require_ a role, so that opening
-   it in the full editor needs an explicit "edit template"?
-5. **Permission granularity in text.** Is `text.edit` per story enough, or does a field need
-   "only this range of the story"? A placeholder run already gives a range; is a second
-   mechanism needed?
-6. **Field values with style.** A text field takes plain text in the first version. Bold and
-   italics within a value, and paragraph breaks, need a rule.
-7. **Choice fields over styles.** Are allowed lists of paragraph styles and swatches enough,
-   or do authors need "alternates": whole variants of a frame?
+1. **Cross-origin isolation.** No degraded in-page mode. A host that cannot send COOP and COEP
+   embeds through the iframe (`connectEditor`); `createEditor` on a page that is not
+   cross-origin isolated refuses with a message that names the iframe path.
+2. **Stable ids.** The package's `feature-ids.json` is the public list of command, panel and
+   tool ids. An id leaves it only after a deprecation window, with an alias that keeps an old
+   profile or feature set working, and the change is in the release notes.
+3. **Touch and small screens.** The `template-fill` and `form` presets are made usable on phones
+   and tablets: touch-sized targets, pinch zoom, a form-first layout below a breakpoint, and
+   image upload from the camera. The full and focused editors stay desktop editors.
+4. **Document-bound roles.** No. Roles stay per session and the host decides them; the full
+   editor shows a template as a template and offers "Edit template" explicitly.
+5. **Permission granularity in text.** A placeholder run is the range mechanism: a field limited
+   to part of a story is a placeholder run (from XML tags or Make field on a selection). No
+   second mechanism.
+6. **Field values with style.** The author lists the character styles a text field allows (for
+   example Bold and Italic) and whether it takes line and paragraph breaks. The form offers
+   exactly those; the value is written as runs in the allowed styles, and nothing else is
+   accepted.
+7. **Choice fields over frames.** Authors can group variant frames (alternates) under one
+   choice field; the filler picks one and the others are hidden. Alternates round-trip as
+   hidden items in IDML.
 8. **Licensing for embedders.** It follows the repository's licence terms and is outside the
    scope of this paper.

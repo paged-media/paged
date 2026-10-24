@@ -5,11 +5,7 @@
       "name": "an asset through one step",
       "input": {
         "kind": "asset",
-        "bytes": [
-          0,
-          10,
-          255
-        ],
+        "bytes": [0, 10, 255],
         "mediaType": "image/x-gray"
       },
       "steps": [
@@ -28,11 +24,7 @@
         "kind": "value",
         "value": {
           "b": 1.5,
-          "a": [
-            1,
-            2,
-            -0.25
-          ],
+          "a": [1, 2, -0.25],
           "c": "é ü \"q\""
         }
       },
@@ -41,7 +33,7 @@
           "action": "x",
           "params": {
             "q": 2,
-            "p": 1e+21
+            "p": 1e21
           }
         }
       ],
@@ -60,12 +52,7 @@
               }
             ]
           },
-          "columns": [
-            [
-              "A-1",
-              "B-2"
-            ]
-          ],
+          "columns": [["A-1", "B-2"]],
           "rowCount": 2
         }
       },
@@ -79,9 +66,7 @@
         {
           "action": "data/sort",
           "params": {
-            "by": [
-              "sku"
-            ],
+            "by": ["sku"],
             "tiny": 1.5e-7
           }
         }
@@ -92,10 +77,7 @@
       "name": "a selection",
       "input": {
         "kind": "selection",
-        "value": [
-          "rectangle:u1",
-          "textFrame:u2"
-        ]
+        "value": ["rectangle:u1", "textFrame:u2"]
       },
       "steps": [
         {
