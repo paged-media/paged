@@ -953,10 +953,33 @@ mod wasm {
                 dpi,
                 hide_items,
                 markers,
+                only,
+                clip,
+                format,
+                background,
+                trim,
             } = msg.kind
             else {
                 return None;
             };
+            // Extensions ADR 338 — `only`, `clip`, `rgba` and a transparent
+            // ground are drawn on the CPU rasterizer (the reply then
+            // carries straight alpha and the region exactly).
+            let v2 = paged_canvas::SnapshotRequest {
+                page_id: &page_id,
+                target_width_px,
+                dpi,
+                hide: &hide_items,
+                only: &only,
+                clip,
+                format,
+                background,
+                markers,
+                trim,
+            };
+            if !v2.is_v1() {
+                return None;
+            }
             let mut presenter = self.presenter.borrow_mut();
             let presenter = presenter.as_mut()?;
             let model = self.core.model.as_ref()?;
@@ -967,6 +990,7 @@ mod wasm {
                 target_width_px,
                 dpi,
                 &hide_items,
+                &[],
                 markers,
             ) {
                 Ok(found) => found,
@@ -1019,7 +1043,7 @@ mod wasm {
             // ADR 205 — the page as the exports draw it: the fidelity
             // suite compares this against InDesign's PDF.
             let (page, _) =
-                paged_canvas::snapshot_page(model, pid, 0, Some(dpi), &[], false).ok()?;
+                paged_canvas::snapshot_page(model, pid, 0, Some(dpi), &[], &[], false).ok()?;
             let page_scene = paged_gpu::SurfacePresenter::build_page_scene(
                 &page.list,
                 page.width_pt,
