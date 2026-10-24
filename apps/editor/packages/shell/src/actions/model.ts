@@ -123,6 +123,70 @@ export interface ActionStep {
   failed?: boolean;
   /** User toggle: skip this step on replay without deleting it. */
   disabled?: boolean;
+  /** WP4.11 — a breakpoint: playback pauses BEFORE this step and waits
+   *  for Continue (Photoshop's "toggle dialog" stop, minus the dialog). */
+  pause?: boolean;
+  /** WP4.11 — set on an inserted STOP (command {@link STOP_STEP_COMMAND}):
+   *  playback halts here and shows `message`; Continue goes on after it.
+   *  A stop invokes nothing — it is not a command, and a batch run, which
+   *  has nobody to read the message, passes it by and logs it. */
+  stop?: { message: string };
+}
+
+/** The pseudo command an inserted stop carries. Never registered: the
+ *  player handles it before the registry would be asked. */
+export const STOP_STEP_COMMAND = "paged.actions.stopStep";
+
+/** An inserted stop showing `message`. */
+export function stopStep(message: string): ActionStep {
+  return {
+    command: STOP_STEP_COMMAND,
+    title: message,
+    verdict: "contextual",
+    stop: { message },
+  };
+}
+
+export function isStopStep(step: ActionStep): boolean {
+  return step.command === STOP_STEP_COMMAND && !!step.stop;
+}
+
+/** WP4.11 — "run an action on import" (Photoshop's droplet, as a rule):
+ *  after an importer or the open path finished with a file whose name
+ *  ends in one of `extensions`, `actionId` plays over the result. */
+export interface ImportRule {
+  id: string;
+  /** Lower-case extensions without the dot (`idml`, `xlsx`, `png`); an
+   *  empty list matches every file. */
+  extensions: string[];
+  actionId: string;
+  enabled: boolean;
+}
+
+/** Does `rule` apply to a file named `name`? */
+export function importRuleMatches(rule: ImportRule, name: string): boolean {
+  if (!rule.enabled) return false;
+  if (rule.extensions.length === 0) return true;
+  const dot = name.lastIndexOf(".");
+  const ext = dot < 0 ? "" : name.slice(dot + 1).toLowerCase();
+  return rule.extensions.includes(ext);
+}
+
+/** Parse "idml, .XLSX png" into `["idml","xlsx","png"]`. */
+export function parseExtensions(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split(/[\s,;]+/)
+        .map((e) =>
+          e
+            .trim()
+            .replace(/^\*?\./, "")
+            .toLowerCase(),
+        )
+        .filter((e) => e.length > 0),
+    ),
+  ];
 }
 
 /** What the recorder saw happen that it could not turn into a step. */
@@ -152,6 +216,9 @@ export interface PagedAction {
 export interface ActionLibrary {
   schema: number;
   actions: PagedAction[];
+  /** WP4.11 — the run-on-import rules. Optional, so a library an older
+   *  build wrote still reads (additive; the schema number stays). */
+  importRules?: ImportRule[];
 }
 
 export const EMPTY_LIBRARY: ActionLibrary = {
@@ -171,6 +238,7 @@ export const NON_RECORDABLE_COMMANDS: readonly string[] = [
   "paged.actions.record",
   "paged.actions.stop",
   "paged.actions.play",
+  "paged.actions.batch",
 ];
 
 export function isRecordable(commandId: string): boolean {
@@ -388,6 +456,10 @@ export function toDemoScript(action: PagedAction): string {
     );
   }
   for (const { index, step } of plan.run) {
+    if (isStopStep(step)) {
+      lines.push(`// ${index + 1}. stop: ${step.stop?.message ?? ""}`);
+      continue;
+    }
     const payload =
       step.payload === undefined ? "" : `, ${JSON.stringify(step.payload)}`;
     lines.push(
@@ -424,7 +496,21 @@ function isStep(value: unknown): value is ActionStep {
     !!s &&
     typeof s.command === "string" &&
     typeof s.title === "string" &&
-    VERDICTS.includes(s.verdict)
+    VERDICTS.includes(s.verdict) &&
+    (s.pause === undefined || typeof s.pause === "boolean") &&
+    (s.stop === undefined || (!!s.stop && typeof s.stop.message === "string"))
+  );
+}
+
+function isImportRule(value: unknown): value is ImportRule {
+  const r = value as ImportRule | undefined;
+  return (
+    !!r &&
+    typeof r.id === "string" &&
+    typeof r.actionId === "string" &&
+    typeof r.enabled === "boolean" &&
+    Array.isArray(r.extensions) &&
+    r.extensions.every((e) => typeof e === "string")
   );
 }
 
@@ -454,7 +540,12 @@ export function parseLibrary(value: unknown): ActionLibrary {
       isTally(a.uncaptured) &&
       typeof a.includeDocumentBound === "boolean",
   );
-  return { schema: ACTIONS_SCHEMA_VERSION, actions };
+  const rules = Array.isArray(lib.importRules)
+    ? lib.importRules.filter(isImportRule)
+    : [];
+  return rules.length > 0
+    ? { schema: ACTIONS_SCHEMA_VERSION, actions, importRules: rules }
+    : { schema: ACTIONS_SCHEMA_VERSION, actions };
 }
 
 export function newActionId(): string {
