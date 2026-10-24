@@ -161,6 +161,11 @@ import {
   TransformEachDialog,
 } from "../panels/transform-each-dialog";
 import {
+  BATCH_MENU_ITEMS,
+  BatchDialog,
+  buildBatchCommands,
+} from "../panels/batch-dialog";
+import {
   OPEN_AS_TEMPLATE_COMMANDS,
   OPEN_AS_TEMPLATE_MENU_ITEMS,
   OpenAsTemplateDialog,
@@ -1408,6 +1413,7 @@ function CanvasAppIntegration() {
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
       ...transformEachDialogCommands,
+      ...buildBatchCommands(),
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1422,6 +1428,7 @@ function CanvasAppIntegration() {
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
+      ...BATCH_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1635,6 +1642,7 @@ function CanvasAppRoot() {
       <CoreCommandDialog />
       <GlobalLightDialog />
       <TransformEachDialog />
+      <BatchDialog />
       <OpenAsTemplateDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in

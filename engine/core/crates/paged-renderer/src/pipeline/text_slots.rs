@@ -59,6 +59,10 @@ pub(crate) struct TextBlock {
     pub slot: usize,
     /// Walk order of the owning frame; breaks ties on a shared slot.
     pub z_seq: u32,
+    /// The block is the text of a hidden frame (`Visible="false"`, or on
+    /// a hidden layer): it is laid out, so the thread flows through the
+    /// frame as InDesign flows it, and removed here instead of moved.
+    pub drop: bool,
 }
 
 /// Rebuild `list.commands` so every block sits at its slot.
@@ -67,12 +71,18 @@ pub(crate) struct TextBlock {
 /// (a block already in front of its anchor has nowhere to move). Blocks
 /// sharing a slot keep `z_seq` order. Commands no block covers keep
 /// their relative order, so anything with no slot — text on a path,
-/// anchored images, footnote pools — stays exactly where it was.
+/// anchored images, footnote pools — stays exactly where it was. A
+/// `drop` block is removed, with its glyph-run entries.
 pub(crate) fn relocate_text_blocks(list: &mut DisplayList, blocks: &mut [TextBlock]) {
     if blocks.is_empty() {
         return;
     }
     let n = list.commands.len();
+    let dropped: usize = blocks
+        .iter()
+        .filter(|b| b.drop)
+        .map(|b| b.end.min(n).saturating_sub(b.start))
+        .sum();
     blocks.sort_by_key(|b| (b.slot, b.z_seq, b.start));
     debug_assert!(
         blocks.iter().all(|b| b.end <= n && b.start <= b.end),
@@ -95,6 +105,10 @@ pub(crate) fn relocate_text_blocks(list: &mut DisplayList, blocks: &mut [TextBlo
     for i in 0..=n {
         while next < blocks.len() && blocks[next].slot <= i {
             let b = blocks[next];
+            if b.drop {
+                next += 1;
+                continue;
+            }
             for (offset, cmd) in list.commands[b.start..b.end.min(n)].iter().enumerate() {
                 remap[b.start + offset] = out.len() as u32;
                 out.push(cmd.clone());
@@ -109,26 +123,36 @@ pub(crate) fn relocate_text_blocks(list: &mut DisplayList, blocks: &mut [TextBlo
     // A block whose slot sits past the end of the list still has to land.
     while next < blocks.len() {
         let b = blocks[next];
+        if b.drop {
+            next += 1;
+            continue;
+        }
         for (offset, cmd) in list.commands[b.start..b.end.min(n)].iter().enumerate() {
             remap[b.start + offset] = out.len() as u32;
             out.push(cmd.clone());
         }
         next += 1;
     }
-    debug_assert_eq!(out.len(), n, "relocation changed the command count");
-    debug_assert!(
-        remap.iter().all(|&r| r != u32::MAX),
+    debug_assert_eq!(
+        out.len(),
+        n - dropped,
+        "relocation changed the command count"
+    );
+    debug_assert_eq!(
+        remap.iter().filter(|&&r| r == u32::MAX).count(),
+        dropped,
         "relocation dropped a command"
     );
 
     list.commands = out;
     if let Some(table) = list.glyph_runs.as_mut() {
+        table
+            .entries
+            .retain(|e| remap.get(e.command_index as usize) != Some(&u32::MAX));
         for entry in table.entries.iter_mut() {
             let old = entry.command_index as usize;
             if let Some(&new) = remap.get(old) {
-                if new != u32::MAX {
-                    entry.command_index = new;
-                }
+                entry.command_index = new;
             }
         }
     }
@@ -235,9 +259,54 @@ mod tests {
             end: 6,
             slot: 2,
             z_seq: 1,
+            drop: false,
         }];
         relocate_text_blocks(&mut list, &mut blocks);
         assert_eq!(ids(&list), vec![0, 1, 4, 5, 2, 3]);
+    }
+
+    #[test]
+    fn a_hidden_frames_block_is_dropped_with_its_glyph_runs() {
+        // 0 1 | 2 3 (a hidden frame's glyphs) | 4 5 (a visible frame's,
+        // moved to slot 1).
+        let mut list = list_of(6);
+        let mut runs = paged_compose::GlyphRunTable::default();
+        for i in [2u32, 5] {
+            runs.push(paged_compose::GlyphRunEntry {
+                command_index: i,
+                font_id: 0,
+                face_id: Some(0),
+                glyph_id: i,
+                font_size: 10.0,
+                transform: Transform::IDENTITY,
+                paint: Paint::Solid(Color::BLACK),
+                is_stroke: false,
+                structure: runs.current,
+                unicode: None,
+            });
+        }
+        list.glyph_runs = Some(runs);
+        let mut blocks = [
+            TextBlock {
+                start: 2,
+                end: 4,
+                slot: 2,
+                z_seq: 0,
+                drop: true,
+            },
+            TextBlock {
+                start: 4,
+                end: 6,
+                slot: 1,
+                z_seq: 1,
+                drop: false,
+            },
+        ];
+        relocate_text_blocks(&mut list, &mut blocks);
+        assert_eq!(ids(&list), vec![0, 4, 5, 1]);
+        let table = list.glyph_runs.as_ref().expect("table");
+        let left: Vec<u32> = table.entries.iter().map(|e| e.command_index).collect();
+        assert_eq!(left, vec![2], "the dropped glyph's entry goes too");
     }
 
     #[test]
@@ -249,12 +318,14 @@ mod tests {
                 end: 8,
                 slot: 1,
                 z_seq: 9,
+                drop: false,
             },
             TextBlock {
                 start: 4,
                 end: 6,
                 slot: 1,
                 z_seq: 2,
+                drop: false,
             },
         ];
         relocate_text_blocks(&mut list, &mut blocks);
@@ -270,6 +341,7 @@ mod tests {
             end: 5,
             slot: 3,
             z_seq: 1,
+            drop: false,
         }];
         relocate_text_blocks(&mut list, &mut blocks);
         assert_eq!(ids(&list), vec![0, 1, 2, 3, 4]);
@@ -299,6 +371,7 @@ mod tests {
             end: 6,
             slot: 2,
             z_seq: 1,
+            drop: false,
         }];
         relocate_text_blocks(&mut list, &mut blocks);
         let table = list.glyph_runs.as_ref().expect("table");

@@ -144,6 +144,10 @@ export interface MountOptions<S> {
   /** The editor scope to mount into: another panel of the same editor
    *  (`h.scope`). Default a new editor's. */
   scope?: EditorScope;
+  /** The binding-provider registry the shell resolves through (a test
+   *  registers an edit context's provider on it and marks the context
+   *  active). Default a fresh, empty one. */
+  bindingProviders?: ReturnType<typeof createBindingProviderRegistry>;
 }
 
 interface Bridge {
@@ -385,8 +389,13 @@ function FollowPages() {
 export function ShellProviders({
   client,
   scope,
+  bindingProviders,
   children,
-}: PropsWithChildren<{ client: CanvasClient; scope: EditorScope }>): ReactNode {
+}: PropsWithChildren<{
+  client: CanvasClient;
+  scope: EditorScope;
+  bindingProviders?: ReturnType<typeof createBindingProviderRegistry>;
+}>): ReactNode {
   return (
     <EditorScopeProvider scope={scope}>
       <CanvasClientProvider client={client}>
@@ -410,7 +419,8 @@ export function ShellProviders({
                                           <EditContextStackProvider>
                                             <BindingProviderProvider
                                               host={
-                                                createBindingProviderRegistry() as never
+                                                (bindingProviders ??
+                                                  createBindingProviderRegistry()) as never
                                               }
                                             >
                                               <ObjectModelProvider
@@ -523,7 +533,11 @@ export async function mountPanel<S = undefined>(
   let result!: ReturnType<typeof render>;
   await act(async () => {
     result = render(
-      <ShellProviders client={client} scope={scope}>
+      <ShellProviders
+        client={client}
+        scope={scope}
+        bindingProviders={options.bindingProviders}
+      >
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
         <SeedDocument handle={handle} resolution={engine.lastResolution} />
         <FollowPages />

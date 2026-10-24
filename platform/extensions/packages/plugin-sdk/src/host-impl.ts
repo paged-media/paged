@@ -148,6 +148,7 @@ import { documentChangeOf } from "./document-change.js";
 import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
 import { makeSchemaPanelComponent } from "./schema-panel.js";
 import { mapBacking } from "./testing.js";
+import { regionAround, snapshotCropped } from "./rasterize.js";
 import {
   englishStrings,
   stringsSurface,
@@ -334,6 +335,12 @@ export const HOST_FEATURES: readonly string[] = [
   // `hideItems`). Static like the snapper: the flag says this SDK
   // forwards the query; an engine that refuses answers null.
   "render.snapshot@1",
+  // Extensions ADR 338 — `only` / `clip` / `trim` / raw RGBA / a
+  // transparent ground, and `render.element`. Static for the same reason:
+  // the fields are additive on protocol 76, so an engine without them
+  // draws the whole page as a PNG — and the SDK answers null wherever
+  // the reply cannot honour the request (no `region`, no `rgba`).
+  "render.snapshot@2",
   // DOC-03 structured whole-story read (canvas-wasm v54). Static for the same
   // reason as storage.parts@1: the pinned engine is the server, and the worker
   // handshake refuses a protocol older than the pin — so a running bundle is
@@ -3126,19 +3133,56 @@ export function createBundleHost(
   // v70 — a page as a PNG from the engine's renderer, optionally with
   // items left out (`requestSnapshot.hideItems`, a query: no document
   // change, no undo step). A read, gated like the other document reads.
+  // Extensions ADR 338 (@2) — a region, the named items alone, raw
+  // pixels, a transparent ground and a trim; `element` builds on them.
+  const MAX_SNAPSHOT_DPI = 2400;
+  const checkDpi = (dpi: number | undefined, door: string): void => {
+    if (
+      dpi !== undefined &&
+      !(Number.isFinite(dpi) && dpi >= 1 && dpi <= MAX_SNAPSHOT_DPI)
+    ) {
+      throw new Error(`${door}: dpi must be 1 to ${MAX_SNAPSHOT_DPI}`);
+    }
+  };
   const render: RenderSurface = {
     async snapshot(pageId, opts) {
       requireDocRead("render.snapshot");
+      const dpi = opts?.dpi;
+      checkDpi(dpi, "host.render.snapshot");
       const widthPx = Math.round(opts?.widthPx ?? 0);
-      if (!(widthPx >= 1 && widthPx <= 8192)) {
+      if (dpi === undefined && !(widthPx >= 1 && widthPx <= 8192)) {
         throw new Error("host.render.snapshot: widthPx must be 1 to 8192");
       }
       const hideItems = Array.isArray(opts?.hideItems) ? opts.hideItems : [];
+      const only = Array.isArray(opts?.only) ? opts.only : [];
+      const clip = opts?.clip;
+      const rgba = opts?.format === "rgba";
+      const transparent = opts?.background === "transparent";
+      const trim = opts?.trim === true;
       let reply: { kind: string; payload?: unknown };
       try {
         reply = (await getEditor().client.send({
           kind: "requestSnapshot",
-          payload: { pageId, targetWidthPx: widthPx, hideItems },
+          payload: {
+            pageId,
+            targetWidthPx: Math.max(0, Math.min(widthPx, 8192)),
+            hideItems,
+            ...(dpi !== undefined ? { dpi } : {}),
+            ...(only.length > 0 ? { only } : {}),
+            ...(clip
+              ? {
+                  clip: {
+                    x: clip.x,
+                    y: clip.y,
+                    width: clip.width,
+                    height: clip.height,
+                  },
+                }
+              : {}),
+            ...(rgba ? { format: "rgba" } : {}),
+            ...(transparent ? { background: "transparent" } : {}),
+            ...(trim ? { trim: true } : {}),
+          },
         } as never)) as { kind: string; payload?: unknown };
       } catch {
         return null;
@@ -3147,13 +3191,58 @@ export function createBundleHost(
         return null;
       }
       const p = reply.payload as SnapshotPng;
+      // An engine before @2 ignores the new fields and draws the whole
+      // page as a PNG: never hand that out as the region or the pixels
+      // that were asked for.
+      if (rgba && p.format !== "rgba") return null;
+      if ((clip || (trim && transparent)) && !p.region) return null;
       return {
         pageId: p.pageId,
         widthPx: p.widthPx,
         heightPx: p.heightPx,
-        png: Uint8Array.from(p.pngBytes),
+        png: Uint8Array.from(p.pngBytes ?? []),
         layoutGeneration: p.layoutGeneration,
+        format: p.format === "rgba" ? "rgba" : "png",
+        ...(p.rgba && p.rgba.length > 0
+          ? { rgba: Uint8Array.from(p.rgba) }
+          : {}),
+        ...(p.region
+          ? {
+              region: {
+                x: p.region.x,
+                y: p.region.y,
+                width: p.region.width,
+                height: p.region.height,
+              },
+            }
+          : {}),
       };
+    },
+    async element(id, opts) {
+      requireDocRead("render.element");
+      const dpi = opts?.dpi ?? 72;
+      checkDpi(dpi, "host.render.element");
+      const margin = opts?.marginPt ?? 72;
+      if (!(Number.isFinite(margin) && margin >= 0)) {
+        throw new Error("host.render.element: marginPt must be 0 or more");
+      }
+      let geometry;
+      try {
+        [geometry] = await getEditor().client.elementGeometry([id]);
+      } catch {
+        return null;
+      }
+      // A pasteboard item belongs to no page, and a snapshot is a page's.
+      if (!geometry?.pageId) return null;
+      return snapshotCropped(
+        render.snapshot,
+        geometry.pageId,
+        [id],
+        regionAround([geometry], margin),
+        dpi,
+        opts?.format === "rgba" ? "rgba" : "png",
+        opts?.background === "paper" ? "paper" : "transparent",
+      );
     },
   };
 

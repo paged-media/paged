@@ -256,6 +256,13 @@ export {
   planValueEdit,
 } from "./value-edit.js";
 export {
+  rasterizeElements,
+  regionAround,
+  type PlacedGeometry,
+  type RasterizeOptions,
+  type RasterizedElements,
+} from "./rasterize.js";
+export {
   publishObjectList,
   type ObjectListRow,
   type PublishObjectListOptions,
