@@ -138,6 +138,23 @@ describe.skipIf(!ready && !required)(
           .columns,
       ).toEqual([[3]]);
 
+      // Editor ADR 292: the bind popover's compiled rules and maps
+      // (apps/editor shell bind-expr.ts) evaluate in the engine, over the
+      // query's refreshed rows (a write reaches bindings at the refresh).
+      await s.refreshData();
+      const rule =
+        'IF(value > 50, 14, IF(IFERROR(FIND("A", sku), 0) > 0, 12, 10))';
+      const at = async (expr: string, r: number) =>
+        (await consumer.data.evaluate("q", expr, r)).value;
+      expect([await at(rule, 0), await at(rule, 1), await at(rule, 2)]).toEqual(
+        [12, 14, 10],
+      );
+      const map = 'SWITCH(sku, "A-1", "Red", "B-2", "Blue", "Black")';
+      expect([await at(map, 0), await at(map, 2)]).toEqual(["Red", "Black"]);
+      expect(
+        (await consumer.data.evaluate("q", "nope +", 0)).error,
+      ).toBeTruthy();
+
       const b = await consumer.data.bind({
         target: "rectangle:urect",
         path: "frameOpacity",

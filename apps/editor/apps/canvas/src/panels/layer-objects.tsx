@@ -548,6 +548,7 @@ export function LayerObjects({ layers, run }: LayerObjectsProps) {
           <span
             className="inline-block h-2 w-0.5 shrink-0"
             style={{ background: colour }}
+            data-color-preview
           />
           <span className="min-w-0 flex-1 truncate text-xs">{n.label}</span>
           <button
@@ -651,6 +652,7 @@ export function LayerObjects({ layers, run }: LayerObjectsProps) {
                   style={{ background: b.colour }}
                   title={strings.t(M.layerColour)}
                   data-layer-colour={b.colour}
+                  data-color-preview
                 />
                 <span className="min-w-0 flex-1 truncate text-xs">
                   {key === NO_LAYER_ID

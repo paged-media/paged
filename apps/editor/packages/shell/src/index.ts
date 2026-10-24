@@ -126,6 +126,14 @@ export {
   type ActiveTool,
 } from "./state/selection-context";
 export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
+// Editor ADRs 291, 292 — the document's data (data@1) for the editor's own
+// surfaces; the app points it at the shared backend.
+export {
+  setDataDoorSource,
+  useDataService,
+  useDataRevision,
+  type DataDoorSource,
+} from "./state/data-door";
 export {
   ALIGN_SCOPE,
   ALIGN_TO,

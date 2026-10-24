@@ -976,6 +976,34 @@ impl ResolutionEngine {
         self.condition_fires(query_id, when, self.locale)
     }
 
+    /// An expression's value at record `record` (in the query's delivered
+    /// order) — the bind popover's live preview. Nothing is defined, linked
+    /// or recorded.
+    pub fn evaluate_at(
+        &self,
+        query_id: &QueryId,
+        expr: &str,
+        record: usize,
+    ) -> Result<Value, ResolveError> {
+        let records = self
+            .results
+            .get(query_id)
+            .ok_or_else(|| ResolveError::NoResult(query_id.clone()))?;
+        let order = self.cached_order(query_id, records, &[]);
+        let Some(&row) = order.get(record) else {
+            return Ok(Value::Null);
+        };
+        let ctx = RowCtx {
+            records,
+            row,
+            params: &self.params,
+        };
+        Ok(eval_str(
+            expr,
+            &EvalCtx::new(&ctx, self.today).with_locale(self.locale),
+        ))
+    }
+
     fn condition_fires(
         &self,
         query_id: &QueryId,
