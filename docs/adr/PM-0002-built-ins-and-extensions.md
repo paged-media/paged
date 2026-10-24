@@ -1,7 +1,9 @@
 # PM-0002 — Built-in modules share internal code; extensions see only the public contract
 
 - **Status:** Accepted 2026-10-18. Amended 2026-10-24 by [PM-0014](PM-0014-capability-layering.md)
-  (the image codecs merge with the engine's decoders).
+  (the image codecs merge with the engine's decoders). Amended 2026-10-24 by
+  [PM-0015](PM-0015-data-and-actions-are-platform-layers.md) (data and actions are reached
+  through two doors).
 - **Scope:** `modules/*`, `platform/shared/*`, `platform/extensions` (`plugin-api`, `plugin-sdk`),
   `apps/editor`.
 
@@ -63,3 +65,10 @@ image module's codecs, PSD reader, pixel types and kernels move into or merge wi
 crates (`paged-raster`, `paged-psd`, `paged-pixel`, `paged-kernels`), and a module may
 path-depend on `engine/core` crates. The formula engines and the doc and slide binaries stay
 as stated above. Extensions still see only the public contract.
+
+## Amendment (2026-10-24): data and actions through two doors
+
+[PM-0015](PM-0015-data-and-actions-are-platform-layers.md) layers data binding and computed
+steps (actions) like every other capability: the engine holds bindings and the action runner,
+and built-ins and extensions alike reach records, bindings and actions through the `data@1`
+and `actions@1` doors of plugin-sdk, never through paged.data's or another module's internals.

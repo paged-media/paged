@@ -26,9 +26,10 @@ paged-template = { path = "../paged-template" }
 # than adding one.
 paged-mutate = { path = "../paged-mutate" }
 # `paged place --fit` resolves the fit into the image transform with
-# `paged_model::fitting`, reading the picture's pixel size from its header.
+# `paged_model::fitting`, reading the picture's pixel size from its header
+# (`paged_raster::probe`).
 paged-model = { path = "../paged-model" }
-image = { workspace = true }
+paged-raster = { path = "../paged-raster" }
 # `ElementId::parse` — the address grammar `paged describe` publishes.
 paged-wire = { path = "../paged-wire" }
 # ADR 132 — `paged set` / `paged get` coerce by the property schemas.
@@ -58,6 +59,8 @@ paged-test-resources.workspace = true
 serde_json = "1"
 # `package_folder` reads the packaged IDML back.
 zip = { workspace = true }
+# `engine_serve` decodes the PNG a render returns.
+image = { workspace = true }
 
 [lints]
 workspace = true

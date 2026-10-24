@@ -1357,7 +1357,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         MAKE_MIRROR_REPEAT_COMMAND_ID,
       ]) {
         expect(commandFor(h, id).title).toContain(
-          "artwork rebuilt by Update, not a live link",
+          "rebuilt when the original changes, or by Update",
         );
       }
       // EXPAND and RELEASE are DIFFERENT verbs, and the titles say which
@@ -1384,7 +1384,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       // The panel repeats both AND states the undo arithmetic.
       // The panel's About text says the same things in plain words.
       expect(t(REPEAT_PANEL_NOTE)).toContain(
-        "Editing the original does not move the copies until you choose Update",
+        "editing the original rebuilds the copies in the same undo step",
       );
       expect(t(REPEAT_PANEL_NOTE)).toContain(
         "a clipped repeat cannot be grouped",

@@ -73,8 +73,14 @@ The ENGINE is far ahead of what a user can reach from the panels:
   Remote sources fetch only consented origins AND only origins the editor
   build lists (editor ADR 218, `PAGED_DATA_ORIGINS`; RFI D-03 residual).
   Still not built: SQLite/DB-attach execution (sqlite_scanner cannot open
-  DuckDB-WASM's registered files), worker-hosted DuckDB, merge to a NEW
-  document (no plugin door creates one; merges go into the current document).
+  DuckDB-WASM's registered files), worker-hosted DuckDB. Merge to a NEW
+  document ships through the host's documents door (editor ADR 219).
+- DIRECTION (PM-0015, 2026-10-24): data becomes a platform layer — bindings
+  in the engine model, the `data-*` crates moving to `engine/core/crates`, a
+  `data@1` door, Turso replacing DuckDB-WASM (compiled in, not vendored),
+  transforms and asset actions in the engine's Boa interpreter. Reserved
+  records 561–563 here. Until 561 lands, DuckDB-WASM stays the shipped engine
+  and the license-boundary rule below describes it.
 
 ## Project State & Feature Matrix (cockpit)
 
@@ -128,7 +134,8 @@ Rules for every code change in this repo:
   linked, or redistributed. Such tools are integrated, if at all, ONLY by
   consuming their data _outputs_ (tables + optional metadata sidecars) through
   the standard source adapters (§7) — touching zero engine code. The ONE
-  bundled engine is **MIT DuckDB-WASM**, vendored as a prebuilt artifact under
+  bundled engine is **MIT DuckDB-WASM** (to be replaced by MIT Turso compiled
+  into the data engine, PM-0015 / record 561), vendored as a prebuilt artifact under
   `vendor/duckdb-wasm/` (attribution in `SOURCE.md`), never compiled in-tree.
   `deny.toml` [licenses] enforces the permissive-only allow-list; any dependency
   pulling in a non-allow-listed license fails the build (the §16 license-boundary
@@ -166,7 +173,7 @@ Rules for every code change in this repo:
   factories closing over `BundleHost`; styling = the token layer (`--pg-*`,
   `--status-*`, `--font-mono`, `--space-*`, `--radius-*`).
 - **Reserved seams stay honest.** What the engine can do but a user cannot
-  reach (merge to a new document, DB-attach execution, worker-hosted DuckDB) is said so in the manifest,
+  reach (DB-attach execution, worker-hosted DuckDB) is said so in the manifest,
   the UI, `docs/status.md` and the RFI. Never fake it, and never leave a
   "not yet" message standing after the door exists.
 - **CLEAN-ROOM (§3).** `references/` (any reference engine, IF ever mounted) is
