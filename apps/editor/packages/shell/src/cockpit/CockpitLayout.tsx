@@ -50,6 +50,7 @@ import { useWorkflowMode } from "../state/workflow-mode-context";
 import { useChromeRegions } from "../state/chrome-regions";
 import { PanelHost } from "./PanelHost";
 import { RightDock } from "./RightDock";
+import { StatusBar } from "../chrome/ContributedBarItems";
 import { DocTitleBar } from "./canvas-frame/DocTitleBar";
 import { GuideDragController } from "./canvas-frame/GuideDragController";
 import { HRuler, VRulerStrip } from "./canvas-frame/Rulers";
@@ -209,6 +210,9 @@ export function CockpitLayout({
             cursor → linkFrames / insertTextFrame; overset badge set). */}
         {!isOverride && <ThreadingController />}
         {!isOverride && thumbnails && <ThumbnailRail />}
+        {/* Editor ADR 298 — the status items of the active context (a Word
+            document's page and word counts); absent when none apply. */}
+        {!isOverride && <StatusBar />}
       </main>
 
       {chrome.has("right") && (

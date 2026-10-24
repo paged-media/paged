@@ -113,6 +113,7 @@ import {
   useOptionalTool,
   useEditorKeys,
   useEditorRoot,
+  useRegistries,
 } from "@paged-media/shell";
 
 import { textInputSurface } from "./TextInputSurface";
@@ -179,6 +180,7 @@ export function toolEndsTextEditing(toolId: string): boolean {
 export function useTextEditing(ctx: TextEditingContext) {
   const root = useEditorRoot();
   const keys = useEditorKeys();
+  const { keybindings } = useRegistries();
   // Shift-extend anchor: the offset that stays fixed while the focus
   // end moves. Reset to the caret offset on any non-extending move so a
   // fresh Shift+arrow grows from the current caret, not a stale anchor.
@@ -245,6 +247,10 @@ export function useTextEditing(ctx: TextEditingContext) {
       // A field, a dialog, an open menu, a composition: not the text's
       // (R9, R10).
       if (canvasKeyYields(e)) return;
+      // Editor ADR 299 — a scoped binding of the active edit context
+      // takes the key before the text does (Cmd+B inside a Word
+      // document, Tab as a list level): the registry runs it.
+      if (keybindings.claims(e)) return;
       const ctx = latest();
       const client = ctx.client;
       if (!client) return;
@@ -611,7 +617,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     return () => {
       for (const off of offs) off();
     };
-  }, [keys, root]);
+  }, [keys, root, keybindings]);
 
   // Keyboard focus follows the caret: a caret placed in a story takes
   // focus for the text input surface when nothing else holds it (the

@@ -34,6 +34,9 @@ import {
   createEditContextRegistry,
   createExporterRegistry,
   createFrameSurfaceRegistry,
+  createControlBarGroupRegistry,
+  createDocumentContextStore,
+  createStatusItemRegistry,
   createImporterRegistry,
   createKeybindingRegistry,
   createMenuRegistry,
@@ -47,6 +50,9 @@ import {
   type EditContextRegistry,
   type ExporterRegistry,
   type FrameSurfaceRegistry,
+  type ControlBarGroupRegistry,
+  type DocumentContextStore,
+  type StatusItemRegistry,
   type ImporterRegistry,
   type KeybindingRegistry,
   type MenuRegistry,
@@ -91,6 +97,14 @@ export interface ShellRegistries {
   /** Frame surfaces (extensions ADR 334): a bundle's live editing surface
    *  for one of its edit contexts, mounted over the active frame. */
   frameSurfaces: FrameSurfaceRegistry;
+  /** Control-bar groups (extensions ADR 348, editor ADR 298): a bundle's
+   *  segment of the control bar while its edit context is active. */
+  controlBarGroups: ControlBarGroupRegistry;
+  /** Status-bar items (extensions ADR 348, editor ADR 298). */
+  statusItems: StatusItemRegistry;
+  /** The document context (extensions ADR 348): the plugin content type
+   *  the open document is. Dropped when a document loads. */
+  documentContext: DocumentContextStore;
 }
 
 const Context = createContext<ShellRegistries | null>(null);
@@ -140,6 +154,9 @@ export function createShellRegistries(
     importers: createImporterRegistry(),
     exporters: createExporterRegistry(),
     frameSurfaces: createFrameSurfaceRegistry(),
+    controlBarGroups: createControlBarGroupRegistry(),
+    statusItems: createStatusItemRegistry(),
+    documentContext: createDocumentContextStore(),
   };
 }
 
