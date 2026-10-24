@@ -1,0 +1,7 @@
+# Pinned for reproducible local + CI builds. Every Cargo workspace in this
+# repository pins the same stable toolchain. The CI workflow names it too
+# (dtolnay/rust-toolchain does not read this file), so bump them together.
+# Native only: the host is a desktop sidecar, never a wasm build.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]

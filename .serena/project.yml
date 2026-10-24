@@ -33,7 +33,7 @@ ls_specific_settings:
     # Applied on top of Serena's own rust-analyzer initializationOptions
     # (top-level keys replace Serena's). There is no root Cargo.toml and
     # rust-analyzer only discovers the root and one level below it, so the
-    # ten Cargo workspaces are listed (as in .vscode/settings.json).
+    # eleven Cargo workspaces are listed (as in .vscode/settings.json).
     # rust.analyzerTargetDir is rust-analyzer's alias of cargo.targetDir:
     # its cargo check runs in target/rust-analyzer and never takes the
     # build's target-directory lock.
@@ -49,6 +49,7 @@ ls_specific_settings:
         - "modules/slide/Cargo.toml"
         - "modules/web/packages/web-render/Cargo.toml"
         - "apps/server/server/Cargo.toml"
+        - "apps/ml-host/Cargo.toml"
       rust:
         analyzerTargetDir: true
 
