@@ -36,6 +36,7 @@ mod filters_radius;
 mod golden_expansion;
 mod gpu_module_kernels;
 mod oracle_photoshop;
+mod oracle_photoshop_selection;
 mod oracle_vips;
 mod pipeline_async;
 mod pipeline_e2e;
