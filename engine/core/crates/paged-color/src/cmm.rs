@@ -55,7 +55,7 @@ pub enum WorkingColor {
 /// RelativeColorimetric-centric — Saturation/Absolute degrade to
 /// the nearest supported behaviour there (documented limitation,
 /// measured by `tests/parity.rs`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Intent {
     Perceptual,
     RelativeColorimetric,
