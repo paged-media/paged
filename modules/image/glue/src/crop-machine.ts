@@ -80,19 +80,18 @@ export interface CropMachine {
    *  (TL, TR, BR, BL), rotated by the straighten angle — the overlay
    *  signal the caller passes to `host.overlay.setToolPreview`. */
   overlayPolyline(): Array<[number, number]>;
-  /** Commit the crop INCLUDING the straighten angle: the engine rotates
-   *  the image by `−angle` about the rect centre (`geom.rotate_bilinear`,
+  /** Commit the crop INCLUDING the straighten angle over the whole layer
+   *  stack bound to the image (`layersCrop`): every layer and mask is
+   *  rotated by `−angle` about the rect centre (`geom.rotate_bilinear`,
    *  backward-mapped bilinear, clamp-to-edge) so the rotated FRAME the
-   *  overlay drew lands upright, then cuts the rect. Returns the NEW
-   *  image handle/info; throws (engine message) on an empty rect.
+   *  overlay drew lands upright, then cut to the rect — in place, as one
+   *  undo step. Returns the new extent; throws (engine message) on an
+   *  empty rect.
    *
    *  At angle 0 this is the pure axis-aligned cut — no GPU, no resample,
    *  no interpolation blur. A non-zero angle IS a resample, so it needs
    *  the WebGPU device (the engine says so honestly without one). */
-  commit(
-    engine: ImageEngine,
-    sourceHandle: number,
-  ): Promise<{ handle: number; width: number; height: number }>;
+  commit(engine: ImageEngine): Promise<{ width: number; height: number }>;
 }
 
 /** Resolve a preset to the wasm aspect lock given the source dimensions
@@ -208,15 +207,16 @@ export function createCropMachine(
       return engine.cropFrameCorners(state.rect, state.angle);
     },
 
-    commit(eng, sourceHandle) {
+    commit(eng) {
       const r = state.rect;
-      return eng.straightenCrop(
-        sourceHandle,
+      const x = Math.max(0, Math.round(r.x));
+      const y = Math.max(0, Math.round(r.y));
+      return eng.layersCrop(
         {
-          x: Math.round(r.x),
-          y: Math.round(r.y),
-          w: Math.round(r.w),
-          h: Math.round(r.h),
+          x,
+          y,
+          w: Math.max(0, Math.round(r.x + r.w) - x),
+          h: Math.max(0, Math.round(r.y + r.h) - y),
         },
         state.angle,
       );
