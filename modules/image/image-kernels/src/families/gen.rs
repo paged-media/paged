@@ -1902,6 +1902,178 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 }
 ";
 
+// ───────────────────────────── add noise ───────────────────────────
+//
+// Filter ▸ Noise ▸ Add Noise: the gen.noise hash ADDED to the image
+// rather than replacing it. Per texel a PCG stream is seeded from
+// (gx, gy, seed) exactly as `gen.noise` seeds its one draw, and each
+// further draw is `state = pcg(state)`; `u = f32(state >> 8) / 2²⁴`.
+//
+//   uniform:  n = u − ½                         (range ±½)
+//   gaussian: n = (u₁ + u₂ + u₃ + u₄ − 2) · ½   (Irwin–Hall, n = 4:
+//             bell-shaped, the same σ as the uniform form, and built
+//             from adds alone — no log/cos, so the lanes stay
+//             bit-identical through `n`)
+//
+// MONOCHROMATIC draws one n for all three colour channels (grey
+// noise); otherwise R, G and B take successive draws. The noise is
+// added in the premultiplied working space scaled by alpha and clamped
+// to [0, α], so a transparent pixel stays transparent and alpha is
+// untouched. `amount` 0 is the identity.
+
+/// `gen.add_noise` params.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct GenAddNoiseParams {
+    pub ox: i32,
+    pub oy: i32,
+    pub seed: u32,
+    /// Noise amplitude: the added value is `n · amount`.
+    pub amount: f32,
+    /// 0 = uniform, 1 = gaussian.
+    pub gaussian: u32,
+    /// 1 = one draw shared by R, G and B.
+    pub mono: u32,
+    pub _pad0: u32,
+    pub _abi_pad: u32,
+}
+
+impl GenAddNoiseParams {
+    pub fn new(seed: u32, amount: f32, gaussian: bool, mono: bool) -> Self {
+        Self {
+            ox: 0,
+            oy: 0,
+            seed,
+            amount,
+            gaussian: u32::from(gaussian),
+            mono: u32::from(mono),
+            _pad0: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// See the section comment. A point kernel over the image (the hash
+/// needs the global coordinate, so the tile origin is a param);
+/// `ChannelEpsF16(1)` — the hash and `n` are bit-identical, only the
+/// final add and clamp round.
+pub static GEN_ADD_NOISE: KernelDef = KernelDef {
+    id: "gen.add_noise",
+    class: KernelClass::Point,
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<GenAddNoiseParams>(),
+        fields: &[
+            ParamField {
+                name: "ox",
+                wgsl_ty: "i32",
+            },
+            ParamField {
+                name: "oy",
+                wgsl_ty: "i32",
+            },
+            ParamField {
+                name: "seed",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "amount",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "gaussian",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "mono",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_pad0",
+                wgsl_ty: "u32",
+            },
+        ],
+    },
+    wgsl: GEN_ADD_NOISE_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(1),
+};
+
+const GEN_ADD_NOISE_WGSL: &str = "\
+// paged.image kernel `gen.add_noise` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    ox: i32,
+    oy: i32,
+    seed: u32,
+    amount: f32,
+    gaussian: u32,
+    mono: u32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+fn pcg(v: u32) -> u32 {
+    let state = v * 747796405u + 2891336453u;
+    let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+var<private> g_state : u32;
+
+fn draw() -> f32 {
+    g_state = pcg(g_state);
+    return f32(g_state >> 8u) * 5.9604644775390625e-8;
+}
+
+fn sample_n() -> f32 {
+    if (params.gaussian != 0u) {
+        // One statement per draw: the stream order is the contract.
+        let u1 = draw();
+        let u2 = draw();
+        let u3 = draw();
+        let u4 = draw();
+        return (((u1 + u2) + u3) + u4 - 2.0) * 0.5;
+    }
+    return draw() - 0.5;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let dims = textureDimensions(outp);
+    if (gid.x >= dims.x || gid.y >= dims.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let a = textureLoad(in0, xy, 0);
+    let gx = bitcast<u32>(params.ox + i32(gid.x));
+    let gy = bitcast<u32>(params.oy + i32(gid.y));
+    g_state = pcg(gx ^ pcg(gy ^ pcg(params.seed)));
+    var n = vec3<f32>(0.0);
+    if (params.mono != 0u) {
+        n = vec3<f32>(sample_n());
+    } else {
+        let r = sample_n();
+        let g = sample_n();
+        let b = sample_n();
+        n = vec3<f32>(r, g, b);
+    }
+    let rgb = clamp(a.rgb + n * (params.amount * a.a), vec3<f32>(0.0), vec3<f32>(a.a));
+    let result = vec4<f32>(rgb, a.a);
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
 pub static FAMILY: &[&KernelDef] = &[
     &GEN_SOLID,
     &GEN_CHECKER,
@@ -1912,4 +2084,5 @@ pub static FAMILY: &[&KernelDef] = &[
     &GEN_DIAMOND_GRADIENT,
     &GEN_NOISE,
     &GEN_PATTERN,
+    &GEN_ADD_NOISE,
 ];

@@ -337,8 +337,8 @@ export async function resetAdjustments(ctx: PageContext): Promise<void> {
 }
 
 /**
- * Resample the working image through the panel's Resize row (the T1
- * kernels — `image.editor.resample`). Keeps the committed bytes at
+ * Resample the working image through the panel's Image Size dialog (the
+ * T1 kernels — `image.editor.resample`). Keeps the committed bytes at
  * exhibit resolution instead of ten full-resolution re-encodes.
  * Returns true when the engine confirmed the swap.
  */
@@ -348,6 +348,8 @@ export async function resampleTo(
   h: number,
   filter: "lanczos3" | "mitchell" | "nearest" = "lanczos3",
 ): Promise<boolean> {
+  const opener = ctx.page.locator("[data-image-open-image-size]");
+  if ((await opener.count()) > 0) await opener.first().click();
   await ctx.page.locator("[data-image-resize-w]").fill(String(w));
   await ctx.page.locator("[data-image-resize-h]").fill(String(h));
   await ctx.page.locator("[data-image-resize-filter]").selectOption(filter);

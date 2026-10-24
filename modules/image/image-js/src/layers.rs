@@ -244,6 +244,14 @@ pub enum CanvasOp {
         height: u32,
         degrees: f32,
     },
+    /// Image ▸ Image Rotation ▸ Arbitrary: every buffer turned by
+    /// `degrees` (positive = clockwise) about the canvas centre through
+    /// `geom.rotate_bilinear`, onto a canvas grown to the rotated
+    /// bounds. The added corners are transparent (layers) and revealed
+    /// (masks). A quarter turn is the exact op instead.
+    RotateArbitrary {
+        degrees: f32,
+    },
 }
 
 /// The reconstruction filter of [`CanvasOp::Resample`] — the three T1
@@ -277,7 +285,40 @@ impl ResampleFilter {
     }
 }
 
+/// The extent that holds a `w`×`h` canvas turned by `degrees`: the
+/// rotated rectangle's bounding box, rounded UP (a few thousandths of a
+/// pixel of trigonometric noise are forgiven, so 45° on a square does
+/// not grow by a stray column).
+pub fn rotated_bounds(w: u32, h: u32, degrees: f32) -> (u32, u32) {
+    let t = f64::from(degrees).to_radians();
+    let (c, s) = (t.cos().abs(), t.sin().abs());
+    let (w, h) = (f64::from(w), f64::from(h));
+    let fit = |v: f64| ((v - 1e-3).ceil().max(1.0)) as u32;
+    (fit(w * c + h * s), fit(w * s + h * c))
+}
+
 impl CanvasOp {
+    /// Image ▸ Image Rotation ▸ Arbitrary as the op it is: a quarter or
+    /// half turn (and a whole one, which is no op) becomes the EXACT
+    /// rotation, so it moves pixels instead of resampling them; any
+    /// other angle is [`CanvasOp::RotateArbitrary`]. `None` for a whole
+    /// turn. Positive is clockwise.
+    pub fn rotation(degrees: f32) -> Option<Self> {
+        let d = degrees.rem_euclid(360.0);
+        let near = |v: f32| (d - v).abs() < 1e-4;
+        if near(0.0) || near(360.0) {
+            None
+        } else if near(90.0) {
+            Some(Self::RotateCw)
+        } else if near(180.0) {
+            Some(Self::Rotate180)
+        } else if near(270.0) {
+            Some(Self::RotateCcw)
+        } else {
+            Some(Self::RotateArbitrary { degrees })
+        }
+    }
+
     /// The canvas extent after the op.
     pub fn output_size(&self, w: u32, h: u32) -> (u32, u32) {
         match *self {
@@ -287,6 +328,7 @@ impl CanvasOp {
             | CanvasOp::Crop { width, height, .. }
             | CanvasOp::Resample { width, height, .. }
             | CanvasOp::Straighten { width, height, .. } => (width, height),
+            CanvasOp::RotateArbitrary { degrees } => rotated_bounds(w, h, degrees),
         }
     }
 
@@ -295,7 +337,9 @@ impl CanvasOp {
     pub fn is_exact(&self) -> bool {
         !matches!(
             self,
-            CanvasOp::Resample { .. } | CanvasOp::Straighten { .. }
+            CanvasOp::Resample { .. }
+                | CanvasOp::Straighten { .. }
+                | CanvasOp::RotateArbitrary { .. }
         )
     }
 
@@ -311,6 +355,7 @@ impl CanvasOp {
             CanvasOp::Crop { .. } => "Crop",
             CanvasOp::Resample { .. } => "Image size",
             CanvasOp::Straighten { .. } => "Straighten and crop",
+            CanvasOp::RotateArbitrary { .. } => "Rotate canvas",
         }
     }
 
@@ -388,7 +433,9 @@ impl CanvasOp {
                 let (sx, sy) = (x + ox, y + oy);
                 (sx < w && sy < h).then_some((sx, sy))
             }
-            CanvasOp::Resample { .. } | CanvasOp::Straighten { .. } => None,
+            CanvasOp::Resample { .. }
+            | CanvasOp::Straighten { .. }
+            | CanvasOp::RotateArbitrary { .. } => None,
         }
     }
 
@@ -1322,10 +1369,22 @@ impl LayerStack {
             if !rerendered {
                 let canvas = layer.rgba.canvas();
                 let depth = canvas.depth();
-                let out = gpu_canvas_op(ctx, op, &pixels_to_f16(canvas), w, h).await?;
+                let out = if matches!(op, CanvasOp::RotateArbitrary { .. }) {
+                    // The rotated edge blends with the transparent
+                    // surround: interpolate ASSOCIATED colour, or the
+                    // fringe darkens towards the black of rgb(0,0,0,0).
+                    let win = premultiply_f16(&pixels_to_f16(canvas));
+                    unpremultiply_f16(&gpu_canvas_op(ctx, op, &win, w, h).await?)
+                } else {
+                    gpu_canvas_op(ctx, op, &pixels_to_f16(canvas), w, h).await?
+                };
                 layer.rgba = f16_to_pixels(&out, depth).into();
             }
-            if let (LayerKind::Smart(src), CanvasOp::Straighten { .. }) = (&mut layer.kind, op) {
+            if let (
+                LayerKind::Smart(src),
+                CanvasOp::Straighten { .. } | CanvasOp::RotateArbitrary { .. },
+            ) = (&mut layer.kind, op)
+            {
                 // `check_canvas_op` admitted it only at 1:1 over the
                 // canvas, where the source IS the render: it turns with it.
                 src.rgba = layer.rgba.canvas().to_rgba8().into_owned().into();
@@ -1333,8 +1392,8 @@ impl LayerStack {
                 src.height = oh;
             }
             if let Some(mask) = &layer.mask {
-                let out =
-                    gpu_canvas_op(ctx, op, &coverage_to_f16(mask.canvas().data()), w, h).await?;
+                let out = gpu_canvas_op_mask(ctx, op, &coverage_to_f16(mask.canvas().data()), w, h)
+                    .await?;
                 layer.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out))
                     .map(|c| Arc::new(c).into());
             }
@@ -1342,7 +1401,7 @@ impl LayerStack {
         let mut groups = self.groups.clone();
         for g in &mut groups {
             if let Some(mask) = &g.mask {
-                let out = gpu_canvas_op(ctx, op, &coverage_to_f16(mask.data()), w, h).await?;
+                let out = gpu_canvas_op_mask(ctx, op, &coverage_to_f16(mask.data()), w, h).await?;
                 g.mask = SelectionCoverage::from_data(ow, oh, f16_to_coverage(&out)).map(Arc::new);
             }
         }
@@ -1368,10 +1427,10 @@ impl LayerStack {
                 _ => "canvas size must be at least 1×1".into(),
             }));
         }
-        if let CanvasOp::Straighten { degrees, .. } = op {
+        if let CanvasOp::Straighten { degrees, .. } | CanvasOp::RotateArbitrary { degrees } = op {
             if !degrees.is_finite() {
                 return Err(IngestError::Unsupported(
-                    "the straighten angle must be finite".into(),
+                    "the rotation angle must be finite".into(),
                 ));
             }
         }
@@ -1392,6 +1451,15 @@ impl LayerStack {
             {
                 Err(IngestError::Unsupported(
                     "cropping a smart object that is rendered at another scale is not \
+                     supported (its render would no longer line up with its source)"
+                        .into(),
+                ))
+            }
+            CanvasOp::RotateArbitrary { .. }
+                if smart(&|s| s.scale != 1.0 || s.width != w || s.height != h) =>
+            {
+                Err(IngestError::Unsupported(
+                    "rotating a smart object that is rendered at another scale is not \
                      supported (its render would no longer line up with its source)"
                         .into(),
                 ))
@@ -3656,11 +3724,117 @@ async fn gpu_canvas_op(
             .map_err(|e| IngestError::Pipeline(e.to_string()))?;
             Ok(cut_window(&rotated, w, 8, (x, y, width, height)))
         }
+        CanvasOp::RotateArbitrary { degrees } => {
+            rotate_onto_bounds(ctx, win, w, h, degrees, [0; 8]).await
+        }
         _ => Err(IngestError::Unsupported(format!(
             "{} is an exact op with no dispatch",
             op.label()
         ))),
     }
+}
+
+/// [`gpu_canvas_op`] for a MASK window: the added corners of an
+/// arbitrary rotation are REVEALED (coverage 1), as Canvas Size's added
+/// area is, so the canvas a mask grows into does not hide what is later
+/// painted there.
+async fn gpu_canvas_op_mask(
+    ctx: &GpuContext,
+    op: CanvasOp,
+    win: &[u8],
+    w: u32,
+    h: u32,
+) -> Result<Vec<u8>, IngestError> {
+    match op {
+        CanvasOp::RotateArbitrary { degrees } => {
+            let one = half::f16::ONE.to_le_bytes();
+            let pad = [
+                one[0], one[1], one[0], one[1], one[0], one[1], one[0], one[1],
+            ];
+            rotate_onto_bounds(ctx, win, w, h, degrees, pad).await
+        }
+        _ => gpu_canvas_op(ctx, op, win, w, h).await,
+    }
+}
+
+/// Turn a `w`×`h` rgba16float window by `degrees` (clockwise) about its
+/// centre onto the rotated bounds. `geom.rotate_bilinear` clamps to the
+/// edge, so the window first gains a one-texel border of `pad` (one
+/// texel's 8 bytes): every sample outside the image then reads `pad`,
+/// and the image edge is interpolated against it (antialiased) instead
+/// of smearing the edge pixels into the corners.
+async fn rotate_onto_bounds(
+    ctx: &GpuContext,
+    win: &[u8],
+    w: u32,
+    h: u32,
+    degrees: f32,
+    pad: [u8; 8],
+) -> Result<Vec<u8>, IngestError> {
+    use image_kernels::families::geom::{RotateBilinearParams, GEOM_ROTATE_BILINEAR};
+    let (pw, ph) = (w + 2, h + 2);
+    let mut padded = Vec::with_capacity(pw as usize * ph as usize * 8);
+    for y in 0..ph {
+        for x in 0..pw {
+            if x == 0 || y == 0 || x == pw - 1 || y == ph - 1 {
+                padded.extend_from_slice(&pad);
+            } else {
+                let i = ((y - 1) as usize * w as usize + (x - 1) as usize) * 8;
+                padded.extend_from_slice(&win[i..i + 8]);
+            }
+        }
+    }
+    let (ow, oh) = rotated_bounds(w, h, degrees);
+    let params = RotateBilinearParams::new(
+        degrees,
+        (pw as f32 / 2.0, ph as f32 / 2.0),
+        (ow as f32 / 2.0, oh as f32 / 2.0),
+    );
+    image_gpu::execute_windowed_once_async(
+        ctx,
+        &GEOM_ROTATE_BILINEAR,
+        &padded,
+        pw,
+        ph,
+        params.as_bytes(),
+        None,
+        ow,
+        oh,
+    )
+    .await
+    .map_err(|e| IngestError::Pipeline(e.to_string()))
+}
+
+/// Straight → associated alpha over an rgba16float window.
+fn premultiply_f16(win: &[u8]) -> Vec<u8> {
+    use half::f16;
+    let mut out = Vec::with_capacity(win.len());
+    for px in win.as_chunks::<8>().0 {
+        let c = |i: usize| f16::from_le_bytes([px[i * 2], px[i * 2 + 1]]).to_f32();
+        let a = c(3);
+        for i in 0..3 {
+            out.extend_from_slice(&f16::from_f32(c(i) * a).to_le_bytes());
+        }
+        out.extend_from_slice(&px[6..8]);
+    }
+    out
+}
+
+/// Associated → straight alpha over an rgba16float window (a zero alpha
+/// leaves zero colour).
+fn unpremultiply_f16(win: &[u8]) -> Vec<u8> {
+    use half::f16;
+    let mut out = Vec::with_capacity(win.len());
+    for px in win.as_chunks::<8>().0 {
+        let c = |i: usize| f16::from_le_bytes([px[i * 2], px[i * 2 + 1]]).to_f32();
+        let a = c(3);
+        for i in 0..3 {
+            let v = if a > 0.0 { (c(i) / a).min(1.0) } else { 0.0 };
+            out.extend_from_slice(&f16::from_f32(v).to_le_bytes());
+        }
+        out.extend_from_slice(&px[6..8]);
+    }
+    out
 }
 
 /// The rectangle `(x, y, cw, ch)` (inside the `w`-wide buffer) of a
@@ -4260,6 +4434,92 @@ mod tests {
         );
         assert_eq!(s.undo().as_deref(), Some("Straighten and crop"));
         assert_eq!((s.width, s.height), (3, 2));
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn arbitrary_rotation_snaps_quarter_turns_and_sizes_the_bounds__feat__image_editor_canvas_ops()
+    {
+        assert_eq!(CanvasOp::rotation(90.0), Some(CanvasOp::RotateCw));
+        assert_eq!(CanvasOp::rotation(-90.0), Some(CanvasOp::RotateCcw));
+        assert_eq!(CanvasOp::rotation(540.0), Some(CanvasOp::Rotate180));
+        assert_eq!(CanvasOp::rotation(360.0), None);
+        assert_eq!(
+            CanvasOp::rotation(30.0),
+            Some(CanvasOp::RotateArbitrary { degrees: 30.0 })
+        );
+        // A square at 45° grows to its diagonal, rounded up.
+        assert_eq!(rotated_bounds(100, 100, 45.0), (142, 142));
+        assert_eq!(rotated_bounds(40, 10, 90.0), (10, 40));
+        assert_eq!(rotated_bounds(40, 10, 0.0), (40, 10));
+        // The arbitrary op is a resample: GPU-only and refused without a
+        // device, recording nothing.
+        let mut s = numbered();
+        let err = pollster::block_on(
+            s.transform_canvas_gpu(None, CanvasOp::RotateArbitrary { degrees: 30.0 }),
+        )
+        .expect_err("no gpu");
+        assert!(err.to_string().contains("GPU-only"), "{err}");
+        assert!(s.undo_labels().is_empty());
+        let err = pollster::block_on(
+            s.transform_canvas_gpu(None, CanvasOp::RotateArbitrary { degrees: f32::NAN }),
+        )
+        .expect_err("nan");
+        assert!(err.to_string().contains("finite"), "{err}");
+    }
+
+    #[test]
+    #[allow(non_snake_case)]
+    fn arbitrary_rotation_grows_the_canvas_over_every_layer_in_one_undo_step__feat__image_editor_canvas_ops(
+    ) {
+        let Some(ctx) = device() else { return };
+        // A 20×10 opaque layer and a masked one above it.
+        let mut s = LayerStack::from_image(
+            20,
+            10,
+            Arc::from([200u8, 200, 200, 255].repeat(20 * 10).into_boxed_slice()),
+        )
+        .expect("valid");
+        s.add("top");
+        let cov = SelectionCoverage::from_data(20, 10, vec![128; 200]).expect("cov");
+        s.layers[1].mask = Some(Arc::new(cov).into());
+        pollster::block_on(
+            s.transform_canvas_gpu(Some(ctx), CanvasOp::RotateArbitrary { degrees: 30.0 }),
+        )
+        .expect("rotate");
+        let (ow, oh) = rotated_bounds(20, 10, 30.0);
+        assert_eq!((s.width, s.height), (ow, oh));
+        assert!(ow > 20 && oh > 10, "{ow}×{oh}: the canvas grew");
+        assert_eq!(s.layers.len(), 2, "the layers are kept");
+        let px = s.layers[0].rgba.to_rgba8().into_owned();
+        let at = |x: u32, y: u32| {
+            let i = ((y * ow + x) * 4) as usize;
+            [px[i], px[i + 1], px[i + 2], px[i + 3]]
+        };
+        // The centre is still the image; a corner is new, transparent canvas.
+        let c = at(ow / 2, oh / 2);
+        assert!(c[3] == 255 && c[0].abs_diff(200) <= 1, "centre {c:?}");
+        assert_eq!(at(0, 0)[3], 0, "an added corner is transparent");
+        // The edge is antialiased against the transparent surround, and
+        // its colour is not darkened towards black (associated alpha).
+        let edge = (0..ow)
+            .map(|x| at(x, oh / 2))
+            .find(|p| p[3] > 0 && p[3] < 255)
+            .expect("a partly covered edge texel");
+        assert!(edge[0].abs_diff(200) <= 2, "edge colour {edge:?}");
+        // The mask turned with it; its added corners are revealed.
+        let m = s.layers[1].mask.as_ref().expect("mask").canvas();
+        assert_eq!((m.width(), m.height()), (ow, oh));
+        assert!(m.data()[(oh / 2 * ow + ow / 2) as usize].abs_diff(128) <= 1);
+        assert_eq!(m.data()[0], 255);
+        assert_eq!(s.undo_labels(), vec!["Rotate canvas"]);
+        assert_eq!(s.undo().as_deref(), Some("Rotate canvas"));
+        assert_eq!((s.width, s.height), (20, 10));
+        assert_eq!(
+            s.layers[0].rgba.to_rgba8()[0],
+            200,
+            "undo restores the pixels"
+        );
     }
 
     // ── smart objects ────────────────────────────────────────────────
