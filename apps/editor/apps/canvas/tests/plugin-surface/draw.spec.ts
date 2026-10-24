@@ -342,7 +342,9 @@ const PANEL_MARKER: Record<string, string> = {
 // ── helpers ─────────────────────────────────────────────────────────
 
 interface RegistrySnapshot {
-  tools: string[];
+  tools: string[  "media.paged.draw.command.rasterizeOptions",
+  "media.paged.draw.command.rasterize",
+];
   panels: string[];
   commands: string[];
   importers: string[];
@@ -669,7 +671,7 @@ test.describe("plugin surface · paged.draw", () => {
     // 20 since the Pencil became the host's alone (draw ADR 359).
     expect(TOOLS).toHaveLength(27);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(132);
+    expect(COMMANDS).toHaveLength(134);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
