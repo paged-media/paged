@@ -56,7 +56,8 @@ const hex = (n: number): string =>
  *   · 3 in 5 — a `<rect>` with a fill AND a stroke (two swatches);
  *   · 1 in 5 — a `<circle>` with a fill only (one swatch);
  *   · 1 in 5 — a `<path>` of THREE closed subpaths with a fill only
- *     (one swatch, three inserts: `insertPath` takes one contour).
+ *     (one swatch, ONE compound element: `insertPath` takes one contour,
+ *     so the first is inserted and the table written by `framePath`).
  *
  *  Every colour is distinct, so no two shapes share a swatch. Everything
  *  lands inside the 612 × 792 page. */
@@ -165,7 +166,8 @@ async function landed(
 }
 
 /** What the 50-shape file must put where — written from the SVG, not
- *  from the importer: one row per CONTOUR, in document order. A shape
+ *  from the importer: one row per SHAPE (a compound's row is its first
+ *  contour), in document order. A shape
  *  with no stroke gets the engine's creation fallback, a 1 pt
  *  `Color/Black` (`SVG_IMPORT_UNSTROKED`; the swatch is named "Black"). */
 function expected50(): {
@@ -183,9 +185,7 @@ function expected50(): {
       // A circle's path starts at its rightmost point.
       rows.push({ at: [x + 27, y + 15], fill, stroke: "Black", weight: 1 });
     } else if (i % 5 === 4) {
-      for (const dx of [0, 14, 28]) {
-        rows.push({ at: [x + dx, y], fill, stroke: "Black", weight: 1 });
-      }
+      rows.push({ at: [x, y], fill, stroke: "Black", weight: 1 });
     } else {
       rows.push({ at: [x, y], fill, stroke: hex(i * 2 + 1), weight: 1 });
     }
@@ -253,14 +253,15 @@ describe("perf budgets — interchange", () => {
       const after = await leafIds(w.h);
       const known = new Set(before.map((id) => String(id.id)));
       const made = after.filter((id) => !known.has(String(id.id)));
-      // 30 + 10 + 3 × 10 contours, each its own element…
-      expect(made).toHaveLength(70);
+      // 30 + 10 + 10 shapes, each ONE element — the three-contour paths
+      // compounds…
+      expect(made).toHaveLength(50);
       // …appended, so the file paints on top, in document order.
-      expect(after.slice(-70)).toEqual(made);
+      expect(after.slice(-50)).toEqual(made);
       expect(await landed(w, made)).toEqual(expected50());
       expect(done).toEqual({
         shapes: 50,
-        elements: 70,
+        elements: 50,
         swatches: 80,
         batches: 1,
         refused: 0,
@@ -276,10 +277,11 @@ describe("perf budgets — interchange", () => {
       report("svg import 50", counted, { undoSteps, leavesAdded: made.length });
 
       // ---- the budget.
-      // ONE mutation. Its 430 children: 80 swatches, and for each of the
-      // 70 contours an insert, a bind and three paint writes.
+      // ONE mutation. Its 350 children: 80 swatches, for each of the 50
+      // shapes an insert, a bind and three paint writes, and for each of
+      // the 10 compounds its `framePath` and `frameBounds`.
       // As found: 201 mutations.
-      expect(counted.mutations).toEqual([{ op: "batch", ops: 430 }]);
+      expect(counted.mutations).toEqual([{ op: "batch", ops: 350 }]);
       // ONE press of undo removes the file. As found: 150.
       expect(undoSteps).toBe(1);
       expect(await leafIds(w.h)).toEqual(before);
@@ -311,13 +313,13 @@ describe("perf budgets — interchange", () => {
 
       // Exactly the new leaves, in insertion (= paint) order.
       expect(inserted).toEqual((await leafIds(w.h)).slice(before.length));
-      expect(inserted).toHaveLength(70);
+      expect(inserted).toHaveLength(50);
       expect(await landed(w, inserted)).toEqual(expected50());
 
       const undoSteps = await undoStepsSince(w, mark);
       report("svg import 50, with ids", counted, { undoSteps });
 
-      expect(counted.mutations).toEqual([{ op: "batch", ops: 430 }]);
+      expect(counted.mutations).toEqual([{ op: "batch", ops: 350 }]);
       expect(undoSteps).toBe(1);
       // As found: 2.
       expect(counted.count("document.tree")).toBe(0);
