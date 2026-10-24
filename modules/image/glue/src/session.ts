@@ -80,6 +80,14 @@ import {
   type ImageHistogram,
   type LayerHistory,
   type LayerStackInfo,
+  type AdjustmentKind,
+  type AlignEdge,
+  type AlignTo,
+  type ColorLabel,
+  type FillKind,
+  type Knockout,
+  type LayerLocksInfo,
+  type LayerParams,
   type EditTarget,
   type PsdLayerInfo,
   type RasterFormat,
@@ -226,7 +234,22 @@ export type ImageDialog =
   | { kind: "filter"; filter: FilterDialogState }
   | { kind: "imageSize" }
   | { kind: "trim" }
-  | { kind: "rotate" };
+  | { kind: "rotate" }
+  | { kind: "blendingOptions"; index: number };
+
+/** The Layers list's search and filter (Photoshop's filter bar): rows
+ *  whose name contains `query`, of `kind`, with colour label `color`. */
+export interface LayerFilter {
+  query: string;
+  kind: "all" | "pixels" | "adjustment" | "fill" | "smart";
+  color: ColorLabel | "all";
+}
+
+export const NO_LAYER_FILTER: LayerFilter = {
+  query: "",
+  kind: "all",
+  color: "all",
+};
 
 /** The Curves eyedroppers. */
 export type CurvesPick = "black" | "grey" | "white";
@@ -398,6 +421,8 @@ export interface ImageSessionState {
   brushPreset: number | null;
   /** The dialog on top of the panel, or null. */
   dialog: ImageDialog | null;
+  /** The Layers list's search and filter. */
+  layerFilter: LayerFilter;
   /** The resolution the image declares, in pixels per inch (read from a
    *  PNG's pHYs or a JPEG's JFIF density on open, set by Image Size);
    *  null when it declares none (Image Size then shows 72). The PNG and
@@ -608,6 +633,9 @@ export interface ImageSession {
   /** Show one of the Image dialogs (Image Size, Trim, Arbitrary
    *  rotation) on top of the panel. */
   openDialog(kind: "imageSize" | "trim" | "rotate"): boolean;
+  /** Layer ▸ Layer Style ▸ Blending Options… for layer `index` (the
+   *  active one by default): fill opacity, knockout and Blend If. */
+  openBlendingOptions(index?: number): boolean;
   /** Close the Image dialog (a filter dialog is cancelled). */
   closeDialog(): Promise<void>;
   /** IMAGE ▸ Trim away `by` (transparent pixels, or the top-left or
@@ -1018,6 +1046,79 @@ export interface ImageSession {
    *  non-destructive counterpart of {@link bakeAdjustToLayer}. No pixel
    *  is written, so deleting the layer restores the original exactly. */
   addAdjustmentLayer(): Promise<boolean>;
+
+  // ── Photoshop layer parity (WP5.3) — each verb is one undo step ──
+  /** Layer ▸ New Adjustment Layer ▸ `kind`, at Photoshop's defaults,
+   *  above the active layer; a selection becomes its mask. */
+  addAdjustmentLayerOf(kind: AdjustmentKind): Promise<boolean>;
+  /** Retune a typed adjustment layer (its Properties); `values` is the
+   *  kind's block (`Adjustment::values`). */
+  setTypedAdjustment(
+    index: number,
+    values: readonly number[],
+    cube?: readonly number[],
+    label?: string,
+  ): Promise<boolean>;
+  /** An adjustment or fill layer's parameters, or null. */
+  layerParams(index: number): LayerParams | null;
+  /** Layer ▸ New Fill Layer ▸ Solid Color (the foreground colour),
+   *  Gradient (foreground to background) or Pattern (the defined
+   *  pattern); a selection becomes its mask. */
+  addFillLayer(kind: FillKind): Promise<boolean>;
+  /** A fill layer's Properties: its block (`FillSource::values`). */
+  setFillLayer(
+    index: number,
+    kind: FillKind,
+    values: readonly number[],
+  ): Promise<boolean>;
+  /** Layer ▸ Rasterize: a fill layer's or smart object's render becomes
+   *  pixels. */
+  rasterizeLayer(index: number): Promise<boolean>;
+  setLayerFillOpacity(index: number, fill: number): Promise<boolean>;
+  /** Blend If's 32 sliders, or null to clear. */
+  setLayerBlendIf(
+    index: number,
+    sliders: readonly number[] | null,
+  ): Promise<boolean>;
+  setLayerKnockout(index: number, knockout: Knockout): Promise<boolean>;
+  /** The four locks (any left out keep their state). */
+  setLayerLocks(
+    index: number,
+    locks: Partial<LayerLocksInfo & { pixels: boolean }>,
+  ): boolean;
+  setLayerColor(index: number, color: ColorLabel): boolean;
+  setGroupColor(id: number, color: ColorLabel): boolean;
+  /** Link the layers at `indices` (two or more): they move together. */
+  linkLayers(indices: readonly number[]): boolean;
+  unlinkLayer(index: number): boolean;
+  mergeDown(): Promise<boolean>;
+  mergeVisible(): Promise<boolean>;
+  stampVisible(): Promise<boolean>;
+  flattenImage(): Promise<boolean>;
+  /** Merge group `id` (the active layer's group by default). */
+  mergeGroup(id?: number): Promise<boolean>;
+  layerViaCopy(): Promise<boolean>;
+  layerViaCut(): Promise<boolean>;
+  /** New Layer Comp (records visibility, position and appearance unless
+   *  told otherwise). */
+  newLayerComp(
+    name?: string,
+    record?: Partial<{
+      visibility: boolean;
+      position: boolean;
+      appearance: boolean;
+    }>,
+  ): boolean;
+  updateLayerComp(id: number): boolean;
+  applyLayerComp(id: number): Promise<boolean>;
+  deleteLayerComp(id: number): boolean;
+  renameLayerComp(id: number, name: string): boolean;
+  /** Align the active layer and its links on `edge` of the canvas, the
+   *  selection, or their joint bounds. */
+  alignLayers(edge: AlignEdge, to?: AlignTo): Promise<boolean>;
+  distributeLayers(axis: "horizontal" | "vertical"): Promise<boolean>;
+  /** The Layers list's search and filter (by name, kind, colour label). */
+  setLayerFilter(patch: Partial<LayerFilter>): void;
   /** Undo / redo the newest journaled PIXEL edit (paint, fill, bake).
    *  Layer STRUCTURE changes are not journaled. */
   undo(): Promise<boolean>;
@@ -1420,6 +1521,46 @@ const E = defineMessages("image.effect", {
   average: "Average",
 });
 
+/** The Photoshop-parity layer verbs (WP5.3): their names, as the
+ *  status line reports them, and their outcomes. */
+const L = defineMessages("image.layerOps", {
+  newAdjustmentLayer: "New adjustment layer",
+  adjustment: "Adjustment",
+  newFillLayer: "New fill layer",
+  fillLayer: "Fill layer",
+  rasterize: "Rasterize layer",
+  fillOpacity: "Fill opacity",
+  blendIf: "Blend If",
+  knockout: "Knockout",
+  lock: "Lock layer",
+  colorLabel: "Colour label",
+  link: "Link layers",
+  unlink: "Unlink layer",
+  mergeDown: "Merge down",
+  mergeVisible: "Merge visible",
+  stampVisible: "Stamp visible",
+  flatten: "Flatten image",
+  mergeGroup: "Merge group",
+  viaCopy: "Layer via copy",
+  viaCut: "Layer via cut",
+  newComp: "New layer comp",
+  updateComp: "Update layer comp",
+  applyComp: "Apply layer comp",
+  deleteComp: "Delete layer comp",
+  renameComp: "Rename layer comp",
+  align: "Align layers",
+  distribute: "Distribute layers",
+  move: "Move",
+  adjustmentAdded:
+    "Adjustment layer “{name}” added — it changes everything beneath it.",
+  fillAdded: "Fill layer “{name}” added.",
+  done: "{what} done.",
+  noGroup: "The active layer is not in a group.",
+  positionLocked: "Layer “{name}” has its position locked.",
+  noPatternForFill: "No pattern defined — use Define pattern first.",
+  compApplied: "Layer comp “{name}” applied.",
+});
+
 /** Each selection modification's outcome. */
 const MODIFIED: Record<SelectionModifyOp, string> = {
   expand: S.selectionExpanded,
@@ -1540,6 +1681,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     brushLibraryName: null,
     brushPreset: null,
     dialog: null,
+    layerFilter: NO_LAYER_FILTER,
     ppi: null,
     curvesPicker: null,
     channelCurves: null,
@@ -1933,6 +2075,87 @@ export function createImageSession(host: BundleHost): ImageSession {
       return false;
     }
     return finishMaskEdit();
+  };
+
+  /** `layerOp` for the async doors (the merges, a fill's render). */
+  const layerOpAsync = async (
+    what: string,
+    mutate: () => Promise<unknown>,
+  ): Promise<boolean> => {
+    if (!engine || !state.source) {
+      setStatus(t(S.nothingIngestedIngestAPlacedImage));
+      return false;
+    }
+    state.busy = true;
+    emit();
+    try {
+      await mutate();
+    } catch (err) {
+      state.busy = false;
+      setStatus(t(S.whatFailed, { what: t(what), error: errText(err) }));
+      refreshLayers();
+      emit();
+      return false;
+    }
+    state.busy = false;
+    const ok = await recomposite();
+    if (ok) setStatus(t(L.done, { what: t(what) }));
+    return ok;
+  };
+
+  /** A layer edit that changes no pixel (a lock, a label, a link, a comp
+   *  record): re-read the rows, no composite. */
+  const quietLayerEdit = (what: string, run: () => void): boolean => {
+    if (!engine || !state.source) {
+      setStatus(t(S.nothingIngestedIngestAPlacedImage));
+      return false;
+    }
+    try {
+      run();
+    } catch (err) {
+      setStatus(t(S.whatFailed, { what: t(what), error: errText(err) }));
+      return false;
+    }
+    refreshLayers();
+    emit();
+    return true;
+  };
+
+  /** A move that may find nothing to move: the engine records no step
+   *  then, and nothing is re-composited (the image is not edited). */
+  const moveOp = async (what: string, run: () => void): Promise<boolean> => {
+    if (!engine || !state.source) {
+      setStatus(t(S.nothingIngestedIngestAPlacedImage));
+      return false;
+    }
+    const before = engine.layersHistory()?.generation;
+    try {
+      run();
+    } catch (err) {
+      setStatus(t(S.whatFailed, { what: t(what), error: errText(err) }));
+      refreshLayers();
+      emit();
+      return false;
+    }
+    if (engine.layersHistory()?.generation === before) {
+      refreshLayers();
+      emit();
+      return true;
+    }
+    return recomposite();
+  };
+
+  const activeLayerName = (): string =>
+    state.layers.layers[state.layers.active]?.name ?? "";
+
+  /** The Move tool's refusal on a position-locked layer. */
+  const positionLocked = (): boolean => {
+    const row = state.layers.layers[state.layers.active];
+    if (row && (row.locks.position || row.locks.all)) {
+      setStatus(t(L.positionLocked, { name: row.name }));
+      return true;
+    }
+    return false;
   };
 
   /** Undo/redo one journaled PIXEL edit. An empty label means the
@@ -3918,6 +4141,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     async moveSelection(dx, dy, vacate = VacateMode.Transparent) {
+      if (positionLocked()) return false;
       return this.applyEffect(E.moveSelection, (h) =>
         engine!.applyMoveSelection(h, dx, dy, vacate),
       );
@@ -4014,6 +4238,15 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
     async offsetLayer(dx, dy, edge = EdgePolicy.Transparent) {
+      if (positionLocked()) return false;
+      // A LINKED layer moves with its links, as one step (an exact
+      // whole-pixel move engine-side).
+      const row = state.layers.layers[state.layers.active];
+      if (row?.link != null && edge === EdgePolicy.Transparent) {
+        return layerOp(L.move, () =>
+          engine!.layersTranslate(Math.round(dx), Math.round(dy)),
+        );
+      }
       return this.applyEffect(E.move, (h) =>
         engine!.applyOffset(h, dx, dy, edge),
       );
@@ -5144,6 +5377,224 @@ export function createImageSession(host: BundleHost): ImageSession {
         setStatus(t(S.adjustmentLayerAddedItTransformsEverything));
       }
       return ok;
+    },
+
+    // ── Photoshop layer parity (WP5.3) ───────────────────────────
+
+    async addAdjustmentLayerOf(kind) {
+      const ok = await layerOp(L.newAdjustmentLayer, () => {
+        engine!.layerAddTypedAdjustment(kind, "", [], [], "", true);
+      });
+      if (ok) setStatus(t(L.adjustmentAdded, { name: activeLayerName() }));
+      return ok;
+    },
+
+    setTypedAdjustment(index, values, cube = [], label = "") {
+      const kind = state.layers.layers[index]?.adjustKind;
+      return layerOp(L.adjustment, () => {
+        if (!kind) throw new Error(`layer ${index} is not an adjustment layer`);
+        engine!.layerSetTypedAdjustment(index, kind, values, cube, label);
+      });
+    },
+
+    layerParams(index) {
+      if (!engine || !state.source) return null;
+      try {
+        const p = engine.layerParams(index);
+        return p.adjustment || p.fill ? p : null;
+      } catch (err) {
+        host.log.debug("layer params failed", err);
+        return null;
+      }
+    },
+
+    async addFillLayer(kind) {
+      if (!engine || !state.source) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (!state.gpu) {
+        setStatus(t(S.gpuOnlyKernel, { label: t(L.newFillLayer) }));
+        return false;
+      }
+      const rgb = (c: Rgba01) => [c[0] * 255, c[1] * 255, c[2] * 255];
+      const { fg, bg } = state.colors;
+      let values: number[];
+      let tile = -1;
+      if (kind === "solid") values = rgb(fg);
+      else if (kind === "gradient")
+        values = [0, 90, 100, 0, 0, 0, 2, 0, ...rgb(fg), 1, ...rgb(bg)];
+      else {
+        if (patternHandle === null) {
+          setStatus(t(L.noPatternForFill));
+          return false;
+        }
+        values = [100, 0];
+        tile = patternHandle;
+      }
+      state.busy = true;
+      emit();
+      try {
+        await engine.layerAddFill(kind, values, tile, "", true);
+      } catch (err) {
+        state.busy = false;
+        setStatus(
+          t(S.whatFailed, { what: t(L.newFillLayer), error: errText(err) }),
+        );
+        refreshLayers();
+        emit();
+        return false;
+      }
+      state.busy = false;
+      const ok = await recomposite();
+      if (ok) setStatus(t(L.fillAdded, { name: activeLayerName() }));
+      return ok;
+    },
+
+    async setFillLayer(index, kind, values) {
+      return layerOpAsync(L.fillLayer, () =>
+        engine!.layerSetFill(index, kind, values, -1),
+      );
+    },
+
+    rasterizeLayer(index) {
+      return layerOp(L.rasterize, () => engine!.layerRasterize(index));
+    },
+
+    setLayerFillOpacity(index, fill) {
+      return layerOp(L.fillOpacity, () =>
+        engine!.layerSetFillOpacity(index, fill),
+      );
+    },
+
+    setLayerBlendIf(index, sliders) {
+      return layerOp(L.blendIf, () => engine!.layerSetBlendIf(index, sliders));
+    },
+
+    setLayerKnockout(index, knockout) {
+      return layerOp(L.knockout, () =>
+        engine!.layerSetKnockout(index, knockout),
+      );
+    },
+
+    setLayerLocks(index, locks) {
+      const row = state.layers.layers[index];
+      if (!row) return false;
+      // A lock changes no pixel, so it does not re-composite.
+      return quietLayerEdit(L.lock, () =>
+        engine!.layerSetLocks(
+          index,
+          locks.pixels ?? row.locked,
+          locks.transparency ?? row.locks.transparency,
+          locks.position ?? row.locks.position,
+          locks.all ?? row.locks.all,
+        ),
+      );
+    },
+
+    setLayerColor(index, color) {
+      return quietLayerEdit(L.colorLabel, () =>
+        engine!.layerSetColor(index, color),
+      );
+    },
+
+    setGroupColor(id, color) {
+      return quietLayerEdit(L.colorLabel, () =>
+        engine!.groupSetColor(id, color),
+      );
+    },
+
+    linkLayers(indices) {
+      return quietLayerEdit(L.link, () => {
+        engine!.layersLink(indices);
+      });
+    },
+
+    unlinkLayer(index) {
+      return quietLayerEdit(L.unlink, () => engine!.layerUnlink(index));
+    },
+
+    mergeDown() {
+      return layerOpAsync(L.mergeDown, () => engine!.layersMergeDown());
+    },
+    mergeVisible() {
+      return layerOpAsync(L.mergeVisible, () => engine!.layersMergeVisible());
+    },
+    stampVisible() {
+      return layerOpAsync(L.stampVisible, () => engine!.layersStampVisible());
+    },
+    flattenImage() {
+      return layerOpAsync(L.flatten, () => engine!.layersFlatten());
+    },
+    async mergeGroup(id) {
+      const gid = id ?? state.layers.layers[state.layers.active]?.group ?? null;
+      if (gid === null) {
+        setStatus(t(L.noGroup));
+        return false;
+      }
+      return layerOpAsync(L.mergeGroup, () => engine!.layersMergeGroup(gid));
+    },
+    layerViaCopy() {
+      return layerOp(L.viaCopy, () => {
+        engine!.layerVia(false);
+      });
+    },
+    layerViaCut() {
+      return layerOp(L.viaCut, () => {
+        engine!.layerVia(true);
+      });
+    },
+
+    newLayerComp(name = "", record = {}) {
+      return quietLayerEdit(L.newComp, () => {
+        engine!.compNew(
+          name,
+          record.visibility ?? true,
+          record.position ?? true,
+          record.appearance ?? true,
+        );
+      });
+    },
+    updateLayerComp(id) {
+      return quietLayerEdit(L.updateComp, () => engine!.compUpdate(id));
+    },
+    async applyLayerComp(id) {
+      const name = state.layers.comps.find((c) => c.id === id)?.name ?? "";
+      const ok = await layerOp(L.applyComp, () => engine!.compApply(id));
+      if (ok) setStatus(t(L.compApplied, { name }));
+      return ok;
+    },
+    deleteLayerComp(id) {
+      return quietLayerEdit(L.deleteComp, () => engine!.compDelete(id));
+    },
+    renameLayerComp(id, name) {
+      return quietLayerEdit(L.renameComp, () => engine!.compRename(id, name));
+    },
+
+    alignLayers(edge, to = "canvas") {
+      return moveOp(L.align, () => engine!.layersAlign(edge, to));
+    },
+    distributeLayers(axis) {
+      return moveOp(L.distribute, () => engine!.layersDistribute(axis));
+    },
+
+    setLayerFilter(patch) {
+      state.layerFilter = { ...state.layerFilter, ...patch };
+      emit();
+    },
+
+    openBlendingOptions(index) {
+      if (!state.source || state.layers.layers.length === 0) {
+        setStatus(t(S.nothingIngestedIngestAPlacedImage));
+        return false;
+      }
+      if (openFilter()) void cancelFilter();
+      state.dialog = {
+        kind: "blendingOptions",
+        index: index ?? state.layers.active,
+      };
+      emit();
+      return true;
     },
 
     async bakeAdjustToLayer() {

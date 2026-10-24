@@ -56,9 +56,13 @@ use image_gpu::coverage::SelectionCoverage;
 use image_gpu::selection::SelectionMask;
 use image_gpu::stroke::window_is_opaque;
 use image_gpu::{GpuBatch, GpuContext, Resident, TexFormat};
-use image_kernels::families::arithmetic::{MathMulParams, MATH_MUL};
+use image_kernels::families::arithmetic::{
+    MathMulConstParams, MathMulParams, MATH_MUL, MATH_MUL_CONST,
+};
 use image_kernels::families::band::{
-    BandBroadcastAlphaParams, BandSetAlphaParams, BAND_BROADCAST_ALPHA, BAND_SET_ALPHA,
+    BandBlendIfParams, BandBroadcastAlphaParams, BandFadeNeutralParams, BandSetAlphaParams,
+    BandTakeParams, BAND_BLEND_IF, BAND_BROADCAST_ALPHA, BAND_FADE_NEUTRAL, BAND_SET_ALPHA,
+    BAND_TAKE,
 };
 use image_kernels::families::cast::{
     CastPremultiplyParams, CastUnpremultiplyParams, CAST_PREMULTIPLY, CAST_UNPREMULTIPLY,
@@ -148,6 +152,33 @@ impl CovKey {
     }
 }
 
+/// Where a knockout layer's hole shows through to: a saved fold state
+/// (`Some(slot)`: the start of its pass-through group, or the Background
+/// layer), or transparency (`None`: an isolated group's own start, or a
+/// stack without a Background).
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct KnockoutStep {
+    pub slot: Option<u32>,
+    /// The layer's opacity: the knocked-out result mixes in by it (the
+    /// blend itself runs at the fill).
+    pub opacity: f32,
+}
+
+/// The slot the Background layer's fold state is saved under.
+pub(super) const DEEP_SLOT: u32 = u32::MAX;
+
+/// What a pixel step does beyond a plain blend (the blending options).
+#[derive(Clone, PartialEq, Default)]
+pub(super) struct PixelExtra {
+    /// Blend If: the coverage the layer blends with, from its own and the
+    /// backdrop's values (`band.blend_if`), times its mask.
+    pub blend_if: Option<BandBlendIfParams>,
+    /// Fill opacity on a special mode: the plate fades toward the mode's
+    /// neutral colour before it blends (`band.fade_neutral`).
+    pub fade: Option<BandFadeNeutralParams>,
+    pub knockout: Option<KnockoutStep>,
+}
+
 /// One step of the fold, in the order the fold runs them.
 #[derive(Clone)]
 pub(super) enum Step {
@@ -163,6 +194,9 @@ pub(super) enum Step {
         gamma: Option<f32>,
         opacity: f32,
         cov: CovKey,
+        /// The blending options in effect (`None`: a plain blend). A step
+        /// with extras is always canvas-sized (`rect: None`).
+        extra: Option<Box<PixelExtra>>,
     },
     /// Run the adjust chain over the accumulator, through the layer's
     /// coverage scaled by its opacity.
@@ -171,6 +205,18 @@ pub(super) enum Step {
         opacity: f32,
         cov: CovKey,
     },
+    /// Run point kernels over the RESIDENT accumulator, in order, and mix
+    /// the result in through the layer's coverage × opacity — a Gradient
+    /// Map, Selective Color or Color Lookup layer (no readback).
+    Direct {
+        layer: u32,
+        ops: Arc<Vec<(&'static KernelDef, Vec<u8>)>>,
+        opacity: f32,
+        cov: CovKey,
+    },
+    /// Keep the accumulator as it is now under `slot` (a knockout's
+    /// backdrop).
+    Save { slot: u32 },
     /// Park the accumulator and start an isolated group's own.
     Open { group: u32 },
     /// Start a CLIPPING GROUP (Photoshop's): park the accumulator, put the
@@ -212,6 +258,7 @@ impl Step {
                     gamma,
                     opacity,
                     cov,
+                    extra,
                 },
                 Step::Pixel {
                     layer: l2,
@@ -221,6 +268,7 @@ impl Step {
                     gamma: g2,
                     opacity: o2,
                     cov: c2,
+                    extra: e2,
                 },
             ) => {
                 layer == l2
@@ -230,7 +278,32 @@ impl Step {
                     && std::ptr::eq(*blend, *b2)
                     && opacity.to_bits() == o2.to_bits()
                     && cov.same(c2)
+                    && extra == e2
             }
+            (
+                Step::Direct {
+                    layer,
+                    ops,
+                    opacity,
+                    cov,
+                },
+                Step::Direct {
+                    layer: l2,
+                    ops: o2,
+                    opacity: p2,
+                    cov: c2,
+                },
+            ) => {
+                layer == l2
+                    && opacity.to_bits() == p2.to_bits()
+                    && cov.same(c2)
+                    && ops.len() == o2.len()
+                    && ops
+                        .iter()
+                        .zip(o2.iter())
+                        .all(|((d, b), (d2, b2))| std::ptr::eq(*d, *d2) && b == b2)
+            }
+            (Step::Save { slot }, Step::Save { slot: s2 }) => slot == s2,
             (
                 Step::Adjust {
                     params,
@@ -284,7 +357,15 @@ impl Step {
     fn is_layer(&self) -> bool {
         matches!(
             self,
-            Step::Pixel { .. } | Step::Adjust { .. } | Step::ClipOpen { .. }
+            Step::Pixel { .. } | Step::Adjust { .. } | Step::ClipOpen { .. } | Step::Direct { .. }
+        )
+    }
+
+    /// Does this step need more than the point-wise windowed refold?
+    fn needs_whole_refold(&self) -> bool {
+        matches!(
+            self,
+            Step::Direct { .. } | Step::Save { .. } | Step::Pixel { extra: Some(_), .. }
         )
     }
 }
@@ -302,6 +383,8 @@ pub(super) struct FoldState {
     /// The premultiplied base of each open clipping group (its alpha is
     /// the group's).
     clip: Vec<Resident>,
+    /// Knockout backdrops kept by `Step::Save`.
+    saved: Vec<(u32, Option<Resident>)>,
 }
 
 /// Everything the fold keeps on the device between composites.
@@ -416,7 +499,9 @@ impl FoldCache {
         let live: Vec<u32> = steps
             .iter()
             .filter_map(|s| match s {
-                Step::Pixel { layer, .. } | Step::ClipOpen { layer, .. } => Some(*layer),
+                Step::Pixel { layer, .. }
+                | Step::ClipOpen { layer, .. }
+                | Step::Direct { layer, .. } => Some(*layer),
                 Step::Close { group, .. } => Some(*group),
                 _ => None,
             })
@@ -453,6 +538,23 @@ impl LayerStack {
                 steps.push(Step::ClipClose { blend, opacity });
             }
         };
+        // KNOCKOUT needs the fold state at its backdrops: the Background
+        // layer (deep) and the start of each pass-through group (shallow).
+        // They are saved only when some layer knocks out.
+        let knocks = plates.iter().any(|(i, _)| {
+            let l = &self.layers[*i];
+            l.ext.knockout != super::Knockout::None && !l.clipped && l.is_pixels()
+        });
+        let background = knocks
+            && plates.first().is_some_and(|(i, _)| {
+                let l = &self.layers[*i];
+                *i == 0
+                    && l.name == super::BACKGROUND_LAYER_NAME
+                    && l.group.is_none()
+                    && l.is_pixels()
+                    && !self.layers.get(1).is_some_and(|n| n.clipped)
+            });
+        let mut entered: Vec<u32> = Vec::new();
         let mut checkpoint = None;
         for (index, plate) in plates {
             let layer = &self.layers[*index];
@@ -475,8 +577,9 @@ impl LayerStack {
                 steps.push(self.close_step(gid));
                 clip_base = None;
             }
+            entered.retain(|g| want.contains(g));
             for gid in want.iter().copied() {
-                if open.contains(&gid) {
+                if open.contains(&gid) || entered.contains(&gid) {
                     continue;
                 }
                 let isolates = self
@@ -489,6 +592,12 @@ impl LayerStack {
                     open.push(gid);
                     steps.push(Step::Open { group: gid });
                     clip_base = None;
+                } else {
+                    entered.push(gid);
+                    if knocks {
+                        close_clip(&mut steps, &mut clip_group);
+                        steps.push(Step::Save { slot: gid });
+                    }
                 }
             }
             if layer.clipped {
@@ -534,25 +643,67 @@ impl LayerStack {
                     None
                 },
             };
-            if let Some(params) = layer.adjust_params() {
-                steps.push(Step::Adjust {
-                    params: Box::new(params.clone()),
-                    opacity: layer.opacity,
-                    cov,
-                });
+            let fill = layer.ext.fill_opacity.clamp(0.0, 1.0);
+            if let Some(adj) = layer.adjustment() {
+                // An adjustment layer's fill opacity is its opacity again
+                // (it has no pixels for the fill to act on separately).
+                let opacity = layer.opacity * fill;
+                match adj.to_chain() {
+                    Some(params) => steps.push(Step::Adjust {
+                        params: Box::new(params),
+                        opacity,
+                        cov,
+                    }),
+                    None => steps.push(Step::Direct {
+                        layer: layer.id,
+                        ops: Arc::new(adj.direct_ops()),
+                        opacity,
+                        cov,
+                    }),
+                }
                 continue;
             }
+            // THE BLENDING OPTIONS. Fill opacity multiplies the opacity,
+            // except on the eight special modes, where it fades the plate
+            // toward the mode's neutral colour inside the blend instead.
+            let neutral = super::special_fill_neutral(layer.blend).filter(|_| fill < 1.0);
+            let knockout =
+                (layer.ext.knockout != super::Knockout::None && !layer.clipped).then(|| {
+                    KnockoutStep {
+                        slot: self.knockout_slot(layer, background),
+                        opacity: layer.opacity,
+                    }
+                });
+            let blend_fill = if neutral.is_some() { 1.0 } else { fill };
+            let opacity = match knockout {
+                Some(_) => blend_fill,
+                None => layer.opacity * blend_fill,
+            };
+            let extra = PixelExtra {
+                blend_if: layer.live_blend_if().map(|b| b.kernel_params()),
+                fade: neutral.map(|n| BandFadeNeutralParams::new(n, fill)),
+                knockout,
+            };
+            let extra = (extra != PixelExtra::default()).then(|| Box::new(extra));
+            let (px, rect) = match &extra {
+                Some(_) => (canvas_of((*index, plate)), None),
+                None => (Arc::clone(&plate.px), plate.rect),
+            };
             steps.push(Step::Pixel {
                 layer: layer.id,
-                px: Arc::clone(&plate.px),
-                rect: plate.rect,
+                px,
+                rect,
                 blend: layer.blend,
                 gamma: layer
                     .blend_gamma
                     .filter(|_| std::ptr::eq(layer.blend, &COMPOSE_NORMAL)),
-                opacity: layer.opacity,
+                opacity,
                 cov,
+                extra,
             });
+            if background && *index == 0 {
+                steps.push(Step::Save { slot: DEEP_SLOT });
+            }
         }
         let checkpoint = checkpoint.unwrap_or(steps.len());
         close_clip(&mut steps, &mut clip_group);
@@ -560,6 +711,30 @@ impl LayerStack {
             steps.push(self.close_step(gid));
         }
         (steps, checkpoint)
+    }
+
+    /// The backdrop a knockout layer shows through to (`KnockoutStep`).
+    fn knockout_slot(&self, layer: &super::Layer, background: bool) -> Option<u32> {
+        let deep = background.then_some(DEEP_SLOT);
+        if layer.ext.knockout == super::Knockout::Deep {
+            return deep;
+        }
+        // Shallow: the start of the innermost enclosing group.
+        match layer.group {
+            None => deep,
+            Some(gid) => {
+                let isolates = self
+                    .groups
+                    .iter()
+                    .find(|g| g.id == gid)
+                    .is_some_and(|g| g.isolates());
+                if isolates {
+                    None
+                } else {
+                    Some(gid)
+                }
+            }
+        }
     }
 
     fn close_step(&self, gid: u32) -> Step {
@@ -608,6 +783,131 @@ impl LayerStack {
                 Step::Open { .. } => {
                     let acc = st.acc.take();
                     st.parked.push(acc);
+                }
+                Step::Save { slot } => {
+                    st.saved.retain(|(s, _)| s != slot);
+                    st.saved.push((*slot, st.acc.clone()));
+                }
+                Step::Direct {
+                    layer,
+                    ops,
+                    opacity,
+                    cov,
+                } => {
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    let mut cur = acc.clone();
+                    for (def, params) in ops.iter() {
+                        let out = batch.target(w, h);
+                        batch
+                            .dispatch(def, &[&cur], params, None, &out)
+                            .map_err(gpu_err)?;
+                        cur = out;
+                    }
+                    let mask = cache.mask(batch, *layer, cov, w, h);
+                    st.acc = Some(match scaled_mask(ctx, batch, mask, *opacity, w, h)? {
+                        None => cur,
+                        Some(m) => take_through(batch, &acc, &cur, &m, w, h)?,
+                    });
+                }
+                Step::Pixel {
+                    layer,
+                    px,
+                    rect: None,
+                    blend,
+                    gamma,
+                    opacity,
+                    cov,
+                    extra: Some(x),
+                } => {
+                    let plate = cache.plate(batch, *layer, px, w, h)?;
+                    let mut mask = cache.mask(batch, *layer, cov, w, h);
+                    let acc = st.acc.take().unwrap_or_else(|| ctx.zeros(w, h));
+                    // BLEND IF: the coverage from the layer's own and the
+                    // backdrop's values, times the layer's mask.
+                    if let Some(bi) = &x.blend_if {
+                        let c = batch.target(w, h);
+                        batch
+                            .dispatch(&BAND_BLEND_IF, &[&acc, &plate], bi.as_bytes(), None, &c)
+                            .map_err(gpu_err)?;
+                        mask = Some(match mask {
+                            None => c,
+                            Some(m) => {
+                                let both = batch.target(w, h);
+                                batch
+                                    .dispatch(
+                                        &MATH_MUL,
+                                        &[&c, &m],
+                                        MathMulParams::new().as_bytes(),
+                                        None,
+                                        &both,
+                                    )
+                                    .map_err(gpu_err)?;
+                                both
+                            }
+                        });
+                    }
+                    // FILL on a special mode: toward the neutral first.
+                    let src = match &x.fade {
+                        None => plate.clone(),
+                        Some(f) => {
+                            let out = batch.target(w, h);
+                            batch
+                                .dispatch(&BAND_FADE_NEUTRAL, &[&plate], f.as_bytes(), None, &out)
+                                .map_err(gpu_err)?;
+                            out
+                        }
+                    };
+                    st.acc = Some(match &x.knockout {
+                        None => {
+                            let out = batch.target(w, h);
+                            batch
+                                .dispatch(
+                                    pixel_kernel(blend, *gamma),
+                                    &[&acc, &src],
+                                    &pixel_params(*opacity, *gamma),
+                                    mask.as_ref(),
+                                    &out,
+                                )
+                                .map_err(gpu_err)?;
+                            out
+                        }
+                        // KNOCKOUT: where the layer has pixels the backdrop
+                        // replaces what is beneath; the layer blends onto
+                        // that at its fill, and the result mixes in through
+                        // its mask at its opacity.
+                        Some(k) => {
+                            let backdrop = k
+                                .slot
+                                .and_then(|s| st.saved.iter().find(|(id, _)| *id == s))
+                                .and_then(|(_, r)| r.clone())
+                                .unwrap_or_else(|| ctx.zeros(w, h));
+                            let alpha = batch.target(w, h);
+                            batch
+                                .dispatch(
+                                    &BAND_BROADCAST_ALPHA,
+                                    &[&plate],
+                                    BandBroadcastAlphaParams::new().as_bytes(),
+                                    None,
+                                    &alpha,
+                                )
+                                .map_err(gpu_err)?;
+                            let hole = take_through(batch, &acc, &backdrop, &alpha, w, h)?;
+                            let blended = batch.target(w, h);
+                            batch
+                                .dispatch(
+                                    pixel_kernel(blend, *gamma),
+                                    &[&hole, &src],
+                                    &pixel_params(*opacity, *gamma),
+                                    None,
+                                    &blended,
+                                )
+                                .map_err(gpu_err)?;
+                            match scaled_mask(ctx, batch, mask, k.opacity, w, h)? {
+                                None => blended,
+                                Some(m) => take_through(batch, &acc, &blended, &m, w, h)?,
+                            }
+                        }
+                    });
                 }
                 Step::ClipOpen { layer, px, cov } => {
                     let plate = cache.plate(batch, *layer, px, w, h)?;
@@ -658,6 +958,7 @@ impl LayerStack {
                     gamma,
                     opacity,
                     cov,
+                    extra: _,
                 } => {
                     // A BOUNDED plate (ADR 464): blend it into a window of
                     // the accumulator and write the window back into a
@@ -699,6 +1000,7 @@ impl LayerStack {
                     gamma,
                     opacity,
                     cov,
+                    extra: None,
                 } => {
                     let plate = cache.plate(batch, *layer, px, w, h)?;
                     let mask = cache.mask(batch, *layer, cov, w, h);
@@ -915,6 +1217,55 @@ pub(super) fn clip_close(
     Ok(out)
 }
 
+/// `mix(a, b, m)` — `band.take` through the mask `m`.
+fn take_through(
+    batch: &mut GpuBatch<'_>,
+    a: &Resident,
+    b: &Resident,
+    m: &Resident,
+    w: u32,
+    h: u32,
+) -> Result<Resident, IngestError> {
+    let out = batch.target(w, h);
+    batch
+        .dispatch(
+            &BAND_TAKE,
+            &[a, b],
+            BandTakeParams::new().as_bytes(),
+            Some(m),
+            &out,
+        )
+        .map_err(gpu_err)?;
+    Ok(out)
+}
+
+/// A coverage scaled by an opacity: `None` when the result is one
+/// everywhere (no mask, full opacity).
+fn scaled_mask(
+    ctx: &GpuContext,
+    batch: &mut GpuBatch<'_>,
+    mask: Option<Resident>,
+    opacity: f32,
+    w: u32,
+    h: u32,
+) -> Result<Option<Resident>, IngestError> {
+    if opacity >= 1.0 {
+        return Ok(mask);
+    }
+    let base = mask.unwrap_or_else(|| ctx.one_mask(w, h));
+    let out = batch.target(w, h);
+    batch
+        .dispatch(
+            &MATH_MUL_CONST,
+            &[&base],
+            MathMulConstParams::new(opacity.max(0.0)).as_bytes(),
+            None,
+            &out,
+        )
+        .map_err(gpu_err)?;
+    Ok(Some(out))
+}
+
 /// The (old, new) pixels of the one plate a brush sample changed.
 type PlatePair = (Arc<[u8]>, Arc<[u8]>);
 
@@ -1047,11 +1398,11 @@ impl LayerStack {
             return Ok(None);
         };
         // A clipping group refolds whole (its base's alpha and its close
-        // are not windowed here).
-        if steps
-            .iter()
-            .any(|s| matches!(s, Step::ClipOpen { .. } | Step::ClipClose { .. }))
-        {
+        // are not windowed here), and so do the blending options and the
+        // direct adjustments.
+        if steps.iter().any(|s| {
+            matches!(s, Step::ClipOpen { .. } | Step::ClipClose { .. }) || s.needs_whole_refold()
+        }) {
             return Ok(None);
         }
         let Some((prefix, state)) = &cache.checkpoint else {
@@ -1092,6 +1443,7 @@ impl LayerStack {
                         gamma: g1,
                         opacity: o1,
                         cov: c1,
+                        extra: None,
                     },
                     Step::Pixel {
                         layer: l2,
@@ -1101,6 +1453,7 @@ impl LayerStack {
                         gamma: g2,
                         opacity: o2,
                         cov: c2,
+                        extra: None,
                     },
                 ) => {
                     l1 == l2
@@ -1202,6 +1555,7 @@ impl LayerStack {
                     gamma,
                     opacity,
                     cov,
+                    extra: _,
                 } => {
                     // The plate's window: copied from the cached plate,
                     // or uploaded and premultiplied (premultiplying an
@@ -1255,7 +1609,11 @@ impl LayerStack {
                         .map_err(gpu_err)?;
                     acc = Some(out);
                 }
-                Step::Adjust { .. } | Step::ClipOpen { .. } | Step::ClipClose { .. } => {
+                Step::Adjust { .. }
+                | Step::ClipOpen { .. }
+                | Step::ClipClose { .. }
+                | Step::Direct { .. }
+                | Step::Save { .. } => {
                     unreachable!("excluded above")
                 }
             }

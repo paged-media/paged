@@ -88,6 +88,7 @@ import {
 } from "./canvas-ops";
 import {
   clonePgil,
+  DEFAULT_EXT,
   readPgil,
   stackFromImage,
   writePgil,
@@ -354,6 +355,19 @@ const IMAGE_ROWS: PropertySchema[] = [
   },
 ];
 
+/** Photoshop's colour labels, in its order (the manifest's index). */
+const LABELS = [
+  "none",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "violet",
+  "gray",
+] as const;
+const KNOCKOUTS = ["none", "shallow", "deep"] as const;
+
 const LAYER_ROWS: PropertySchema[] = [
   {
     path: "name",
@@ -394,8 +408,63 @@ const LAYER_ROWS: PropertySchema[] = [
   },
   {
     path: "kind",
-    type: { kind: "enum", members: ["pixels", "adjustment", "smart"] },
+    type: {
+      kind: "enum",
+      members: ["pixels", "adjustment", "smart", "fill"],
+    },
     access: "readOnly",
+  },
+  {
+    path: "fillOpacity",
+    type: { kind: "number", unit: "percent" },
+    range: { min: 0, max: 100 },
+    default: 100,
+    summary:
+      "Fill opacity: the layer's own pixels, apart from its opacity (on the eight special " +
+      "blend modes it acts inside the blend).",
+  },
+  {
+    path: "knockout",
+    type: { kind: "enum", members: ["none", "shallow", "deep"] },
+    default: "none",
+    summary:
+      "Knockout: the layer cuts through the layers beneath it to its group's start (shallow) " +
+      "or to the Background (deep).",
+  },
+  {
+    path: "colorLabel",
+    type: { kind: "enum", members: [...LABELS] },
+    default: "none",
+  },
+  {
+    path: "lockTransparency",
+    type: { kind: "bool" },
+    default: false,
+    summary: "Paint, fills and filters keep every pixel's alpha.",
+  },
+  {
+    path: "lockPosition",
+    type: { kind: "bool" },
+    default: false,
+  },
+  {
+    path: "lockAll",
+    type: { kind: "bool" },
+    default: false,
+    summary: "Pixels, transparency, position and the blending properties.",
+  },
+  {
+    path: "adjustmentKind",
+    type: { kind: "text" },
+    access: "readOnly",
+    summary:
+      "An adjustment layer's kind (levels, curves, … ; chain for a stored chain), else absent.",
+  },
+  {
+    path: "fillKind",
+    type: { kind: "text" },
+    access: "readOnly",
+    summary: "A fill layer's kind (solid, gradient, pattern), else absent.",
   },
   {
     path: "id",
@@ -765,6 +834,24 @@ export function createImageObjects(
         return value(l.clipped);
       case "kind":
         return value(l.kind);
+      case "fillOpacity":
+        return value(Math.round(l.ext.fillOpacity * 100 * 1000) / 1000);
+      case "knockout":
+        return value(KNOCKOUTS[l.ext.knockout] ?? "none");
+      case "colorLabel":
+        return value(LABELS[l.ext.color] ?? "none");
+      case "lockTransparency":
+        return value((l.ext.locks & 1) !== 0);
+      case "lockPosition":
+        return value((l.ext.locks & 2) !== 0);
+      case "lockAll":
+        return value((l.ext.locks & 4) !== 0);
+      case "adjustmentKind":
+        return l.kind === "adjustment"
+          ? value(l.typed ? l.typed.kind : "chain")
+          : absent;
+      case "fillKind":
+        return l.fill ? value(l.fill.kind) : absent;
       case "id":
         return value(l.id);
       case "hasMask":
@@ -1071,6 +1158,33 @@ export function createImageObjects(
       case "clipped":
         l.clipped = v as boolean;
         return;
+      case "fillOpacity":
+        l.ext = { ...l.ext, fillOpacity: Math.fround((v as number) / 100) };
+        return;
+      case "knockout": {
+        const k = KNOCKOUTS.indexOf(v as (typeof KNOCKOUTS)[number]);
+        if (k > 0 && l.kind === "adjustment")
+          throw new Refused("knockout needs pixels to cut with");
+        l.ext = { ...l.ext, knockout: Math.max(0, k) };
+        return;
+      }
+      case "colorLabel":
+        l.ext = {
+          ...l.ext,
+          color: Math.max(0, LABELS.indexOf(v as (typeof LABELS)[number])),
+        };
+        return;
+      case "lockTransparency":
+      case "lockPosition":
+      case "lockAll": {
+        const bit =
+          path === "lockTransparency" ? 1 : path === "lockPosition" ? 2 : 4;
+        l.ext = {
+          ...l.ext,
+          locks: (v as boolean) ? l.ext.locks | bit : l.ext.locks & ~bit,
+        };
+        return;
+      }
       case "order": {
         if (s.stack.groups.length > 0)
           throw new Refused(
@@ -1484,7 +1598,10 @@ export function createImageObjects(
       mask: null,
       maskRect: null,
       adjust: kind === "adjustment" ? defaultAdjust() : null,
+      typed: null,
+      fill: null,
       smart: null,
+      ext: { ...DEFAULT_EXT },
     };
     s.stack.layers.push(l);
     s.stack.active = s.stack.layers.length - 1;

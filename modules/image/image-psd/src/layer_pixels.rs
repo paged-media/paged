@@ -189,6 +189,11 @@ pub struct LayerPlate {
     /// has checked these plates against the merged composite (module
     /// docs).
     pub smart: bool,
+    /// The index of the plate's layer record in
+    /// `PsdFile::layer_mask.layers`, for a consumer that reads more of the
+    /// record than the plate carries (blending ranges, fill content,
+    /// locks).
+    pub record: usize,
 }
 
 impl LayerPlate {
@@ -865,6 +870,12 @@ impl PsdFile {
                     .any(|a| &a.key == b"TySh" || &a.key == b"tySh"),
                 adjustment,
                 color_overlay,
+                record: self
+                    .layer_mask
+                    .layers
+                    .iter()
+                    .position(|r| std::ptr::eq(r, layer))
+                    .unwrap_or(usize::MAX),
             });
         }
         for (g, record) in group_records.iter().enumerate() {
