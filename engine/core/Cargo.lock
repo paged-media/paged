@@ -3570,6 +3570,7 @@ name = "paged-script"
 version = "0.0.0"
 dependencies = [
  "boa_engine",
+ "paged-action",
  "paged-canvas",
  "paged-gen",
  "paged-introspect",
