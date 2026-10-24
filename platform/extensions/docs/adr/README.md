@@ -58,6 +58,7 @@ and each one names the plugins that follow it and those that do not.
 | [335](335-modules-contribute-template-field-kinds.md) | Modules contribute template field kinds | Accepted 2026-10-23 |
 | [336](336-document-style-reads-for-bundles.md) | Document style reads for bundles | Accepted 2026-10-23 |
 | [337](337-a-follow-up-write-joins-the-edits-undo-step.md) | A follow-up write joins the undo step of the edit that provoked it | Accepted 2026-10-23 |
+| [338](338-items-render-to-pixels.md) | Items render to pixels: a region, the named items alone, raw RGBA, a transparent ground | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this repository's code rests on are listed in
 [`../README.md`](../README.md).

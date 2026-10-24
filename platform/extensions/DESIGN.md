@@ -399,6 +399,31 @@ the id does not resolve; or the address is structural (`storyRange`,
 read at all). A caller that needs to tell them apart still has `tree()`.
 A pure read, gated on `capabilities.document.read` like every other.
 
+### 4.3e `host.render` — page and item images [ADR 323 · ADR 338]
+
+`render.snapshot(pageId, options)` draws a page with the engine's own
+renderer (`render.snapshot@1`: a whole page as a PNG, items left out on
+request). `render.snapshot@2` adds what a feature that works on PIXELS
+needs: `only` (the named items alone, in their stacking order — a story
+by its `storyRange` draws its whole thread), `clip` (a page region in pt,
+grown to whole pixels and answered as `region`), `dpi`, `format: "rgba"`
+(straight-alpha RGBA8 in `rgba`), `background: "transparent"` and `trim`
+(crop to what was drawn — the one way to learn what a stroke and its
+effects cover). `render.element(id, { dpi, format, background })` is one
+item, cropped to it; plugin-sdk's `rasterizeElements(host, ids, { ppi })`
+does several and answers the `insertFrame` bounds that put the image
+exactly over them.
+
+**Consumer (the promotion rule):** paged.draw's Object ▸ Rasterize…
+(`draw-bundle/src/commands/rasterize.ts`), one undo step; paged.image's
+type layers and vector smart objects are the next two.
+
+**Honesty across engines.** The fields are additive on protocol 76, so an
+engine before them answers a whole-page PNG. The SDK returns `null` where
+the reply cannot be what was asked (no `rgba`, no `region`), never the
+wrong image, and the flag stays static like @1. The worker's GPU snapshot
+path draws only v1 requests; any @2 option is drawn on the CPU rasterizer.
+
 ### 4.4 `host.selection`, `host.viewport`
 
 `selection.get()/set()/onDidChange` (the post-insert select pattern
