@@ -36,6 +36,7 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   invertAffine,
+  rectToPath,
   type Affine,
   type AnchorTable,
 } from "@paged-media/draw-geometry";
@@ -69,6 +70,31 @@ export function tableThrough(
   return { ...table, anchors: anchorsToPage(table.anchors, m) };
 }
 
+/** A RECTANGLE drawn as a box carries no path (`pathAnchors` answers no
+ *  anchors), so its outline is its frame box — svg-shapes' sharp
+ *  rectangle in the element's own space, under the transform the geometry
+ *  read reports. A `framePath` write then gives it the distorted path
+ *  (measured: the engine accepts it on a box rectangle). */
+async function readBoxRectangle(
+  host: BundleHost,
+  id: ElementId,
+): Promise<DistortTarget | null> {
+  if (id.kind !== "rectangle") return null;
+  const [g] = await host.document.elementGeometry([id]).catch(() => []);
+  if (!g?.pageId || !g.bounds) return null;
+  const [top, left, bottom, right] = g.bounds;
+  const table = rectToPath(left, top, right - left, bottom - top);
+  if (table.anchors.length === 0) return null;
+  const matrix = (g.itemTransform ?? null) as Affine | null;
+  return {
+    id,
+    pageId: g.pageId,
+    table,
+    matrix,
+    page: tableThrough(table, matrix),
+  };
+}
+
 /** Read `ids` that are editable paths (others are skipped). */
 export async function readDistortTargets(
   host: BundleHost,
@@ -77,7 +103,11 @@ export async function readDistortTargets(
   const out: DistortTarget[] = [];
   for (const id of ids) {
     const read = await readEditablePath(host, id);
-    if (!read) continue;
+    if (!read) {
+      const box = await readBoxRectangle(host, id);
+      if (box) out.push(box);
+      continue;
+    }
     const { table, matrix } = tableOfRead(read);
     out.push({
       id,

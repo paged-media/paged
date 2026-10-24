@@ -93,6 +93,18 @@ const TOOLS = [
   "media.paged.draw.tool.join",
   "media.paged.draw.tool.star",
   "media.paged.draw.tool.flare",
+  // WP6.7 — keyless: the Liquify flyout, Puppet Warp in the host's Free
+  // Transform flyout, the Perspective pair in a flyout of their own.
+  "media.paged.draw.tool.warp",
+  "media.paged.draw.tool.twirl",
+  "media.paged.draw.tool.pucker",
+  "media.paged.draw.tool.bloat",
+  "media.paged.draw.tool.scallop",
+  "media.paged.draw.tool.crystallize",
+  "media.paged.draw.tool.wrinkle",
+  "media.paged.draw.tool.puppetWarp",
+  "media.paged.draw.tool.perspectiveGrid",
+  "media.paged.draw.tool.perspectiveSelect",
 ] as const;
 
 // "Vector stroke" (`panel.stroke`) and "Vector fill" (`panel.fill`) are
@@ -264,13 +276,33 @@ const COMMANDS = [
   "media.paged.draw.command.recolorArtwork",
   "media.paged.draw.command.recolorArtworkOptions",
   "media.paged.draw.command.applyGuideColor",
+  // Object ▸ Rasterize (extensions ADR 338) and its "…" raiser.
+  "media.paged.draw.command.rasterize",
+  "media.paged.draw.command.rasterizeOptions",
+  // WP6.7 — the distortion tools' gestures as data, the Puppet Warp tool
+  // switch, and the perspective grid's View / Object verbs.
+  "media.paged.draw.command.liquifyStroke",
+  "media.paged.draw.command.puppetWarp",
+  "media.paged.draw.command.puppetWarpTool",
+  "media.paged.draw.command.perspectiveShowGrid",
+  "media.paged.draw.command.perspectiveHideGrid",
+  "media.paged.draw.command.perspectiveLockGrid",
+  "media.paged.draw.command.perspectiveUnlockGrid",
+  "media.paged.draw.command.perspectiveOnePoint",
+  "media.paged.draw.command.perspectiveTwoPoint",
+  "media.paged.draw.command.perspectiveThreePoint",
+  "media.paged.draw.command.perspectiveSetPlane",
+  "media.paged.draw.command.attachToPerspective",
+  "media.paged.draw.command.releaseFromPerspective",
+  "media.paged.draw.command.moveOnPerspective",
+  "media.paged.draw.command.drawOnPerspective",
 ] as const;
 
 const IMPORTER = "media.paged.draw.importer.svg";
 const EXPORTER = "media.paged.draw.exporter.svg";
 const EDIT_CONTEXT = "vectorGraphic";
 
-/** The seven `contributes.partTypes[]` this bundle persists into the
+/** The eight `contributes.partTypes[]` this bundle persists into the
  *  `.paged` container. They are declared capability, not runtime
  *  registry rows — there is no host part-type registry to read them
  *  back from — so this list exists to NAME them (the coverage gate's
@@ -283,6 +315,8 @@ const PART_TYPES = [
   "repeatRecipe",
   "blendRecipe",
   "objectsOnPathRecipe",
+  // WP6.7 — the per-page perspective grids (ADR 363).
+  "perspectiveGrid",
 ] as const;
 
 /** Rail slot (`data-tool-slot`) each tool lands in. `pen`, `type` and
@@ -316,6 +350,16 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.join": "pencil",
   "media.paged.draw.tool.star": "shape",
   "media.paged.draw.tool.flare": "shape",
+  "media.paged.draw.tool.warp": "liquify",
+  "media.paged.draw.tool.twirl": "liquify",
+  "media.paged.draw.tool.pucker": "liquify",
+  "media.paged.draw.tool.bloat": "liquify",
+  "media.paged.draw.tool.scallop": "liquify",
+  "media.paged.draw.tool.crystallize": "liquify",
+  "media.paged.draw.tool.wrinkle": "liquify",
+  "media.paged.draw.tool.puppetWarp": "transform",
+  "media.paged.draw.tool.perspectiveGrid": "perspective",
+  "media.paged.draw.tool.perspectiveSelect": "perspective",
 };
 
 /** Root DOM marker each panel renders. The SCHEMA panel ("Draw
@@ -608,7 +652,7 @@ test.describe("plugin surface · paged.draw", () => {
 
     const reg = await registrySnapshot(page);
 
-    // TOOLS — all 27 registered.
+    // TOOLS — all 37 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
     expect(missingTools, "every declared tool is in the tool registry").toEqual(
       [],
@@ -628,7 +672,7 @@ test.describe("plugin surface · paged.draw", () => {
       "Vector stroke / Vector fill are no longer registered",
     ).toEqual([]);
 
-    // COMMANDS — all 127 registered.
+    // COMMANDS — all 149 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
     expect(
       missingCommands,
@@ -646,7 +690,7 @@ test.describe("plugin surface · paged.draw", () => {
     // PART TYPES — declared-only capability (no host registry mirrors
     // them). Pin the count so a manifest that grows a part type without
     // a spec noticing still trips something.
-    expect(PART_TYPES).toHaveLength(7);
+    expect(PART_TYPES).toHaveLength(8);
 
     // PARITY THE OTHER WAY. The lists above are transcribed by hand;
     // a bundle that GAINS a contribution must not slip past unnamed,
@@ -667,14 +711,14 @@ test.describe("plugin surface · paged.draw", () => {
 
     // And the totals the campaign quotes, so a silent shrink is loud.
     // 20 since the Pencil became the host's alone (draw ADR 359).
-    expect(TOOLS).toHaveLength(27);
+    expect(TOOLS).toHaveLength(37);
     expect(PANELS).toHaveLength(13);
-    expect(COMMANDS).toHaveLength(132);
+    expect(COMMANDS).toHaveLength(149);
   });
 
   // ── 2. the rail ───────────────────────────────────────────────────
 
-  test("all 27 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
+  test("all 37 tools reach the tool rail and activate @feat:plugin-platform.tool-registration @feat:plugin-platform.bundle-lifecycle @level:gesture", async ({
     page,
   }) => {
     const designer = new Designer(page);

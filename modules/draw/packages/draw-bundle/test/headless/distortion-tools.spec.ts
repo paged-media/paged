@@ -223,6 +223,27 @@ describe("draw conformance — the distortion tools (WP6.7) [plugin-draw.distort
     });
   });
 
+  it("a BOX rectangle (no path of its own) is distorted through its frame box, in ONE undo step", async () => {
+    const made = await h.host.document.mutate({
+      op: "insertFrame",
+      args: { pageId: PAGE_ID, bounds: [120, 320, 240, 500] },
+    } as never);
+    if (!made.applied) throw new Error("insertFrame refused");
+    const box = made.createdId!;
+    expect((await h.host.document.pathAnchors(box))!.anchors).toEqual([]);
+    await h.host.selection.set([box]);
+    await h.objects.invoke(`${C}.perspectiveShowGrid`, { page: PAGE_ID });
+    await h.objects.invoke(`${C}.attachToPerspective`, {
+      targets: [`rectangle:${String(box.id)}`],
+    });
+    expect((await h.host.document.pathAnchors(box))!.anchors).toHaveLength(4);
+    expect(
+      perspectiveLinkOf(await h.host.document.getMetadata(box)),
+    ).not.toBeNull();
+    await h.host.document.undo();
+    expect((await h.host.document.pathAnchors(box))!.anchors).toEqual([]);
+  });
+
   describe("Puppet Warp", () => {
     it("puppetWarp: holding the left side and dragging the right bends the square — ONE undo step", async () => {
       covers("command:media.paged.draw.command.puppetWarp");
@@ -290,17 +311,14 @@ describe("draw conformance — the distortion tools (WP6.7) [plugin-draw.distort
 
   describe("the perspective grid", () => {
     it("View ▸ Perspective grid: show / hide / lock / unlock / the presets / the plane change the grid and write NO mutation", async () => {
-      for (const id of [
-        "perspectiveShowGrid",
-        "perspectiveHideGrid",
-        "perspectiveLockGrid",
-        "perspectiveUnlockGrid",
-        "perspectiveOnePoint",
-        "perspectiveTwoPoint",
-        "perspectiveThreePoint",
-        "perspectiveSetPlane",
-      ])
-        covers(`command:media.paged.draw.command.${id}`);
+      covers("command:media.paged.draw.command.perspectiveShowGrid");
+      covers("command:media.paged.draw.command.perspectiveHideGrid");
+      covers("command:media.paged.draw.command.perspectiveLockGrid");
+      covers("command:media.paged.draw.command.perspectiveUnlockGrid");
+      covers("command:media.paged.draw.command.perspectiveOnePoint");
+      covers("command:media.paged.draw.command.perspectiveTwoPoint");
+      covers("command:media.paged.draw.command.perspectiveThreePoint");
+      covers("command:media.paged.draw.command.perspectiveSetPlane");
       const { host, work } = countingHost(h.host);
       void host;
       await h.objects.invoke(`${C}.perspectiveShowGrid`, { page: PAGE_ID });
