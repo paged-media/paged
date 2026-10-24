@@ -680,8 +680,8 @@ export {
 } from "./commands/text-on-path";
 export { maskOrPathRefusalReason } from "./commands/refusal";
 // Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
-// (C-28). EXPORT-ONLY today: honoured by the CPU rasterizer and by PDF
-// export, NOT by the Vello/WebGPU backend the canvas draws through.
+// (C-28). Honoured by the CPU rasterizer, the Vello/WebGPU canvas and
+// PDF export alike.
 // `OPACITY_MASK_CANVAS_NOTE` is the pinned wording; the command title
 // carries it too.
 export {

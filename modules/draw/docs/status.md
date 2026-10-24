@@ -1,9 +1,10 @@
 # Status
 
-What `paged.draw` ships and what it does not, read from the code on `main` at
-`@paged-media/draw` 0.1.0-canary.20 (published; manifest version 0.5.0). The bundle declares
-`@paged-media/plugin-api` and `@paged-media/plugin-sdk` `>=0.2.55-canary.0` as peers; its
-tests run against `@paged-media/canvas-wasm` 0.71.8. Every shipped item is registered by
+What `paged.draw` ships and what it does not, read from the code on `main`, 2026-10-24, at
+`@paged-media/draw` 0.1.0-canary.20 (a private workspace package; manifest version 0.5.0). The
+bundle takes `@paged-media/plugin-api` and `@paged-media/plugin-sdk` from the workspace as peers;
+its tests run against the in-tree `@paged-media/canvas-wasm` (`0.<protocol>.0-dev`, built by
+`moon run core:wasm-pkg`). Every shipped item is registered by
 `activate(host)`. How the parts fit is in [`architecture.md`](architecture.md); what each
 canary added is under [Releases](#releases).
 
