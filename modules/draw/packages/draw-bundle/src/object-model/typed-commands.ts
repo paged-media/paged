@@ -528,6 +528,14 @@ export const TWINS: readonly TwinSpec[] = [
   // raised) — the untyped baseline is a ratchet that does not grow.
   twin("insertStarOptions", {}),
   twin("insertFlareOptions", {}),
+  // Object ▸ Rasterize (extensions ADR 338): the selection as one image
+  // frame at `ppi`, and its "…" raiser.
+  twin("rasterize", {
+    ...T,
+    ppi: NUM,
+    background: enumOf(["transparent", "paper"]),
+  }),
+  twin("rasterizeOptions", {}),
   // The width profile (the Width tool's bake, its profile as data) and the
   // rebuild of the recipes a changed source feeds.
   twin("widthProfile", { ...T, widths: { kind: "list", of: LEN } }),

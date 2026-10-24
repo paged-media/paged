@@ -353,6 +353,18 @@ describe("paged.draw commands — objects (real engine)", () => {
     });
   });
 
+  describe("Rasterize (extensions ADR 338)", () => {
+    it("turns the selection into one image frame; an empty selection is refused [plugin-platform.render-snapshot-v2]", async () => {
+      covers("command:media.paged.draw.command.rasterize");
+      await rig.open(F1(), [RECT, POLY]);
+      await expectApplies(rig, `${C}.rasterize`, {
+        ppi: 72,
+        background: "transparent",
+      });
+      await expectRefuses(rig, F1(), [], `${C}.rasterize`);
+    });
+  });
+
   // On a host that cannot raise a panel (this one: no shell doors), a
   // "…" command applies its operation with the last used values and says
   // so — the panel-raising branch is asserted over the fake editor in
@@ -433,6 +445,12 @@ describe("paged.draw commands — objects (real engine)", () => {
       covers("command:media.paged.draw.command.insertPolarGridOptions");
       await rig.open(F1(), []);
       await expectApplies(rig, `${C}.insertPolarGridOptions`);
+    });
+
+    it("Rasterize… rasterizes the selection with the last used parameters [plugin-platform.render-snapshot-v2]", async () => {
+      covers("command:media.paged.draw.command.rasterizeOptions");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.rasterizeOptions`);
     });
 
     it("Star… inserts a star with the last used parameters [plugin-draw.tool-wave-3]", async () => {
