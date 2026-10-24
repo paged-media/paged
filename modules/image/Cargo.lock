@@ -737,6 +737,7 @@ dependencies = [
  "bytemuck",
  "naga",
  "paged-pixel",
+ "paged-warp",
 ]
 
 [[package]]
@@ -1145,6 +1146,10 @@ dependencies = [
 
 [[package]]
 name = "paged-test-resources"
+version = "0.0.0"
+
+[[package]]
+name = "paged-warp"
 version = "0.0.0"
 
 [[package]]

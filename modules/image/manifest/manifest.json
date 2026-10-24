@@ -108,10 +108,12 @@
       "media.paged.image.command.average",
       "media.paged.image.command.imageSize",
       "media.paged.image.command.trim",
-      "media.paged.image.command.rotateArbitrary"
+      "media.paged.image.command.rotateArbitrary",
+      "media.paged.image.command.freeTransform"
     ],
     "tools": [
       "media.paged.image.tool.crop",
+      "media.paged.image.tool.transform",
       "media.paged.image.tool.move",
       "media.paged.image.tool.marqueeRect",
       "media.paged.image.tool.marqueeEllipse",
@@ -220,6 +222,14 @@
         {
           "id": "media.paged.image.command.claimTiles",
           "title": "Serve image tiles to the renderer",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.image.command.freeTransform",
+          "title": "Free transform",
           "args": {
             "kind": "struct",
             "fields": {}

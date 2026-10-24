@@ -1352,6 +1352,21 @@
   tests:
     rust: ["image-conformance/tests/it/family_geom.rs"]
 
+- id: geom.warp_projective
+  rust_path: families::geom::GEOM_WARP_PROJECTIVE
+  state_row: image.kernel.family-t2
+  class: resample
+  mip_exact: false
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Backward-mapped projective warp (a 3x3 homography): inverse mapping per output texel with the homogeneous divide; Wolberg, Digital Image Warping (IEEE CS Press, 1990), section 3; Heckbert, Fundamentals of Texture Mapping and Image Warping (UC Berkeley, 1989), section 2.2; no reference reading"
+    - "Bicubic reconstruction: Catmull-Rom cubic convolution (a = -0.5), Keys, Cubic convolution interpolation for digital image processing, IEEE TASSP 29(6), 1981; bilinear as geom.rotate_bilinear"
+    - "Transparent outside the source on associated alpha (no fringe); selection mode floats the masked pixels over what stays (Free Transform of a selection, WP5.6)"
+  tests:
+    rust: ["image-conformance/tests/it/family_geom.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
+
 # ── gen family (T2; procedural generators, unary-dummy lane) ─
 
 - id: gen.solid

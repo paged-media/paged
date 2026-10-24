@@ -61,6 +61,7 @@ defineMessages("menu", {
   Filter: "Filter",
   "Shape blur": "Shape blur",
   "Apply crop": "Apply crop",
+  "Free transform": "Free transform",
   "Set type": "Set type",
   "Load brush library (.abr)…": "Load brush library (.abr)…",
   "Commit edits to the document": "Commit edits to the document",
@@ -259,6 +260,7 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   // These two convert between the DOCUMENT's paths and the image's
   // selection, so they belong beside the host's selection verbs rather
   // than buried three levels into a plugin menu.
+  ["Edit/Free transform", "freeTransform", "img-transform"],
   ["Edit/Selection to path", "selectionToPath", "img-sel-conv"],
   ["Edit/Path to selection", "pathToSelection", "img-sel-conv"],
 ];

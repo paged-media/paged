@@ -35,6 +35,7 @@ too_many_arguments = "allow"
 # compile unchanged until a mechanical rename.
 image-core = { path = "../../engine/core/crates/paged-pixel", package = "paged-pixel" }
 image-psd = { path = "../../engine/core/crates/paged-psd", package = "paged-psd" }
+paged-warp = { path = "../../engine/core/crates/paged-warp" }
 thiserror = "2"
 anyhow = "1"
 bytes = "1"

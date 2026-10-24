@@ -556,3 +556,46 @@ describe("colour tools [editor-shell.raster-color-binding]", () => {
     k.dispose();
   });
 });
+
+describe("free transform", () => {
+  it("free transform: the tool opens the host box over the layer; a corner drag and Enter resample once with the image-px matrix @level:gesture [image.editor.transform-warp]", async () => {
+    covers("tool:media.paged.image.tool.transform");
+    const k = await ingested();
+    const calls = spyOn(k.session, { transformLayer: true });
+    // The frame is 200×100 pt holding the 4×2 image (50 pt a pixel).
+    await gestures(k.toolTarget)
+      .tool(`${T}.transform`)
+      .settle()
+      .drag({ from: [200, 100], to: [300, 150] })
+      .key("Enter")
+      .settle();
+    expect(calls).toHaveLength(1);
+    const m = JSON.parse(
+      calls[0]!.slice("transformLayer(".length, -1),
+    ) as number[];
+    // ×1.5 about the top-left: image px (4, 2) lands on (6, 3).
+    const w = m[6]! * 4 + m[7]! * 2 + m[8]!;
+    expect((m[0]! * 4 + m[1]! * 2 + m[2]!) / w).toBeCloseTo(6);
+    expect((m[3]! * 4 + m[4]! * 2 + m[5]!) / w).toBeCloseTo(3);
+    expect(k.docOps()).toEqual([]);
+    k.dispose();
+  });
+
+  it("Edit ▸ Free transform opens the box and, run again, applies it @level:gesture", async () => {
+    covers("command:media.paged.image.command.freeTransform");
+    const k = await ingested();
+    const calls = spyOn(k.session, { transformLayer: true });
+    await k.run(`${C}.freeTransform`);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls, "opening applies nothing").toEqual([]);
+    await k.run(`${C}.freeTransform`);
+    // The box was open: the second run applied it — an unchanged box is
+    // the identity map.
+    expect(calls).toHaveLength(1);
+    const m = JSON.parse(
+      calls[0]!.slice("transformLayer(".length, -1),
+    ) as number[];
+    [1, 0, 0, 0, 1, 0, 0, 0, 1].forEach((v, i) => expect(m[i]).toBeCloseTo(v));
+    k.dispose();
+  });
+});
