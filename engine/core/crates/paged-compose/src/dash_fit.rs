@@ -377,24 +377,20 @@ mod tests {
 
     fn rect(w: f32, h: f32) -> PathData {
         // InDesign's order: down the left edge first.
-        PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: 0.0, y: h },
-                PathSegment::LineTo { x: w, y: h },
-                PathSegment::LineTo { x: w, y: 0.0 },
-                PathSegment::Close,
-            ],
-        }
+        PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 0.0, y: h },
+            PathSegment::LineTo { x: w, y: h },
+            PathSegment::LineTo { x: w, y: 0.0 },
+            PathSegment::Close,
+        ])
     }
 
     fn line(l: f32) -> PathData {
-        PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: l, y: 0.0 },
-            ],
-        }
+        PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: l, y: 0.0 },
+        ])
     }
 
     /// Dash starts along the first contour of each piece.

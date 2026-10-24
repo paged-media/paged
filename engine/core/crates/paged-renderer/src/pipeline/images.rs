@@ -457,7 +457,8 @@ pub(super) fn emit_polygon_image(
             &poly.subpath_starts,
             &poly.subpath_open,
             super::shapes::uniform_corner(&poly.corners),
-        );
+        )
+        .with_fill_rule(crate::module::list_fill_rule(poly.fill_rule));
         let cache_key = match poly.self_id.as_deref() {
             Some(sid) => fnv_1a_u64(sid.as_bytes()),
             None => path_signature(&poly.anchors),
@@ -468,15 +469,13 @@ pub(super) fn emit_polygon_image(
         // Anchor-less polygon: synthesise the AABB unit rect path
         // (same key as rectangles use, so both share one entry).
         const CLIP_UNIT_RECT_KEY: u64 = 0x1d_4c_69_70_5f_72_65_63;
-        let path = paged_compose::PathData {
-            segments: vec![
-                paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
-                paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
-                paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
-                paged_compose::PathSegment::Close,
-            ],
-        };
+        let path = paged_compose::PathData::new(vec![
+            paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
+            paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
+            paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
+            paged_compose::PathSegment::Close,
+        ]);
         let (id, _) = page.list.paths.intern(CLIP_UNIT_RECT_KEY, path);
         id
     };
@@ -723,15 +722,13 @@ fn emit_clipped_image(
     // Unit-rect path interned under a stable key so multiple clipped-
     // image emissions share the same entry in the path buffer.
     const CLIP_UNIT_RECT_KEY: u64 = 0x1d_4c_69_70_5f_72_65_63; // "idClip_rec"
-    let path = paged_compose::PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: 0.0, y: 0.0 },
-            PathSegment::LineTo { x: 1.0, y: 0.0 },
-            PathSegment::LineTo { x: 1.0, y: 1.0 },
-            PathSegment::LineTo { x: 0.0, y: 1.0 },
-            PathSegment::Close,
-        ],
-    };
+    let path = paged_compose::PathData::new(vec![
+        PathSegment::MoveTo { x: 0.0, y: 0.0 },
+        PathSegment::LineTo { x: 1.0, y: 0.0 },
+        PathSegment::LineTo { x: 1.0, y: 1.0 },
+        PathSegment::LineTo { x: 0.0, y: 1.0 },
+        PathSegment::Close,
+    ]);
     let (clip_path_id, _) = list.paths.intern(CLIP_UNIT_RECT_KEY, path);
     let clip_transform = Transform::for_rect_in(clip_rect, clip_outer);
     emit_image_under_clip(

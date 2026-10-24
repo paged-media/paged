@@ -267,6 +267,7 @@ mod tests {
             anchors: Vec::new(),
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: paged_model::FillRule::NonZero,
             effects: None,
             gradient_fill_angle: None,
             gradient_fill_length: None,
@@ -6862,6 +6863,73 @@ mod tests {
                 .as_ref()
                 .and_then(|ff| ff.auto_fit),
             Some(false)
+        );
+    }
+
+    /// Engine ADR 1006 — `frame.fillRule` sets the outline's rule on a
+    /// rectangle and a text frame, repaints without reflow, and undoes to
+    /// the rule it replaced; anything but the two names is refused.
+    #[test]
+    #[allow(non_snake_case)]
+    fn frame_fill_rule_set_property_round_trips__feat__frames_paths_fill_rule_even_odd() {
+        let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
+        let node = NodeId::Rectangle("Rectangle/r1".to_string());
+        let applied = p
+            .apply(set_op(
+                node.clone(),
+                PropertyPath::FrameFillRule,
+                Value::Text("EvenOdd".into()),
+            ))
+            .unwrap();
+        assert_eq!(
+            p.document().spreads[0].spread.rectangles[0].fill_rule,
+            paged_model::FillRule::EvenOdd
+        );
+        assert_eq!(applied.invalidation.frame_style, vec![node.clone()]);
+        assert!(applied.invalidation.text_reflow.is_empty());
+        assert!(matches!(
+            &applied.inverse,
+            Operation::SetProperty { value: Value::Text(v), .. } if v == "NonZero"
+        ));
+        crate::apply(p.document_mut(), &applied.inverse).unwrap();
+        assert_eq!(
+            p.document().spreads[0].spread.rectangles[0].fill_rule,
+            paged_model::FillRule::NonZero
+        );
+        assert_round_trips(
+            &mut p,
+            set_op(
+                node.clone(),
+                PropertyPath::FrameFillRule,
+                Value::Text("EvenOdd".into()),
+            ),
+            |d| {
+                assert_eq!(
+                    d.spreads[0].spread.rectangles[0].fill_rule,
+                    paged_model::FillRule::EvenOdd
+                )
+            },
+        );
+        let err = p.apply(set_op(
+            node,
+            PropertyPath::FrameFillRule,
+            Value::Text("Winding".into()),
+        ));
+        assert!(matches!(err, Err(OperationError::InvalidValue { .. })));
+        let mut t = Project::new(document_with_one_textframe("TextFrame/u1"));
+        assert_round_trips(
+            &mut t,
+            set_op(
+                NodeId::TextFrame("TextFrame/u1".to_string()),
+                PropertyPath::FrameFillRule,
+                Value::Text("EvenOdd".into()),
+            ),
+            |d| {
+                assert_eq!(
+                    d.spreads[0].spread.text_frames[0].fill_rule,
+                    paged_model::FillRule::EvenOdd
+                )
+            },
         );
     }
 

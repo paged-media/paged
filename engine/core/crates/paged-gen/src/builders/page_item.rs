@@ -223,7 +223,8 @@ impl PathPoint {
 /// One sub-path inside a `<Polygon>`'s `<PathGeometry>`. Each entry
 /// becomes a single `<GeometryPathType>` element with its own
 /// `<PathPointArray>`. Multiple sub-paths in one polygon = compound
-/// path (visible via the renderer's even-odd fill rule).
+/// path. IDML fills non-zero, so a hole is a sub-path wound against the
+/// contour around it.
 #[derive(Clone)]
 pub struct PolygonSubPath {
     /// Points walked in order. For a closed sub-path, the emitter sets

@@ -1049,7 +1049,7 @@ impl Walker<'_, '_> {
                     // path's bbox in local space.
                     content.transform(transform.0);
                     crate::path::emit_path(content, path);
-                    content.clip_nonzero();
+                    crate::path::clip(content, path);
                     content.end_path();
                     let bbox = path_bbox(path);
                     let sh_ref =
@@ -1063,7 +1063,7 @@ impl Walker<'_, '_> {
                 if let Some(g) = list.radial_gradient(*id) {
                     content.transform(transform.0);
                     crate::path::emit_path(content, path);
-                    content.clip_nonzero();
+                    crate::path::clip(content, path);
                     content.end_path();
                     let bbox = path_bbox(path);
                     let sh_ref =
@@ -1084,7 +1084,7 @@ impl Walker<'_, '_> {
                 );
                 content.transform(transform.0);
                 crate::path::emit_path(content, path);
-                content.fill_nonzero();
+                crate::path::fill(content, path);
             }
         }
         content.restore_state();
@@ -1183,7 +1183,7 @@ pub(crate) fn emit_transformed_clip(
 ) {
     let transformed = transform_path(path, transform);
     crate::path::emit_path(content, &transformed);
-    content.clip_nonzero();
+    crate::path::clip(content, &transformed);
     content.end_path();
 }
 
@@ -1195,9 +1195,8 @@ pub(crate) fn transform_path(
     let m = t.0;
     let map =
         |x: f32, y: f32| -> (f32, f32) { (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]) };
-    paged_compose::PathData {
-        segments: path
-            .segments
+    paged_compose::PathData::new(
+        path.segments
             .iter()
             .map(|seg| match *seg {
                 S::MoveTo { x, y } => {
@@ -1236,7 +1235,8 @@ pub(crate) fn transform_path(
                 S::Close => S::Close,
             })
             .collect(),
-    }
+    )
+    .with_fill_rule(path.fill_rule)
 }
 
 pub(crate) fn path_bbox(path: &paged_compose::PathData) -> paged_compose::Rect {
@@ -1453,27 +1453,25 @@ mod tests {
 
     #[test]
     fn transform_path_maps_every_segment_kind_pointwise() {
-        let path = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 1.0, y: 1.0 },
-                PathSegment::LineTo { x: 2.0, y: 0.0 },
-                PathSegment::QuadTo {
-                    cx: 3.0,
-                    cy: 4.0,
-                    x: 5.0,
-                    y: 6.0,
-                },
-                PathSegment::CubicTo {
-                    cx1: 1.0,
-                    cy1: 2.0,
-                    cx2: 3.0,
-                    cy2: 4.0,
-                    x: 5.0,
-                    y: 6.0,
-                },
-                PathSegment::Close,
-            ],
-        };
+        let path = PathData::new(vec![
+            PathSegment::MoveTo { x: 1.0, y: 1.0 },
+            PathSegment::LineTo { x: 2.0, y: 0.0 },
+            PathSegment::QuadTo {
+                cx: 3.0,
+                cy: 4.0,
+                x: 5.0,
+                y: 6.0,
+            },
+            PathSegment::CubicTo {
+                cx1: 1.0,
+                cy1: 2.0,
+                cx2: 3.0,
+                cy2: 4.0,
+                x: 5.0,
+                y: 6.0,
+            },
+            PathSegment::Close,
+        ]);
         // Scale 2 + translate (10, 20).
         let t = Transform([2.0, 0.0, 0.0, 2.0, 10.0, 20.0]);
         let out = transform_path(&path, &t);
@@ -1507,31 +1505,27 @@ mod tests {
     fn path_bbox_covers_control_points_and_handles_degenerates() {
         // Control points count toward the (conservative) bbox — a
         // shading painted over it must cover the whole clip region.
-        let path = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 10.0, y: 10.0 },
-                PathSegment::LineTo { x: 30.0, y: 10.0 },
-                PathSegment::QuadTo {
-                    cx: 50.0,
-                    cy: 40.0,
-                    x: 30.0,
-                    y: 20.0,
-                },
-            ],
-        };
+        let path = PathData::new(vec![
+            PathSegment::MoveTo { x: 10.0, y: 10.0 },
+            PathSegment::LineTo { x: 30.0, y: 10.0 },
+            PathSegment::QuadTo {
+                cx: 50.0,
+                cy: 40.0,
+                x: 30.0,
+                y: 20.0,
+            },
+        ]);
         let b = path_bbox(&path);
         assert_eq!((b.x, b.y), (10.0, 10.0));
         assert_eq!((b.w, b.h), (40.0, 30.0));
 
         // Empty path → the documented 1×1 fallback at the origin.
-        let empty = path_bbox(&PathData { segments: vec![] });
+        let empty = path_bbox(&PathData::new(vec![]));
         assert_eq!((empty.x, empty.y, empty.w, empty.h), (0.0, 0.0, 1.0, 1.0));
 
         // A single point degenerates to the minimum non-zero extent
         // (zero-area rects break shading BBoxes downstream).
-        let point = path_bbox(&PathData {
-            segments: vec![PathSegment::MoveTo { x: 5.0, y: 5.0 }],
-        });
+        let point = path_bbox(&PathData::new(vec![PathSegment::MoveTo { x: 5.0, y: 5.0 }]));
         assert!(point.w > 0.0 && point.h > 0.0);
     }
 

@@ -40,6 +40,7 @@ mod export_bookmarks;
 mod export_idml;
 mod export_pdf;
 mod field_boundary_typing;
+mod fill_rule;
 mod font_registry_scan;
 mod footnote_ops;
 mod footnote_option_paths;

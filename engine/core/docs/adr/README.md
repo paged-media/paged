@@ -84,7 +84,7 @@ is not written yet.
 | [151](151-which-side-text-wraps-to.md) | Which side text wraps to, and the contour it wraps round | Accepted 2026-10-14 |
 | [152](152-a-cells-fill-tint.md) | A cell's fill tint, on the cell and from its style | Accepted 2026-10-14 |
 | [153](153-a-paragraphs-line-setting.md) | A paragraph's line setting: auto leading, a lone word, the last line, balance, no break | Accepted 2026-10-14 |
-| [154](154-a-placed-pdf-is-drawn-from-its-own-operations.md) | A placed PDF is drawn from its own drawing operations | Accepted 2026-10-14 |
+| [154](154-a-placed-pdf-is-drawn-from-its-own-operations.md) | A placed PDF is drawn from its own drawing operations | Accepted 2026-10-14 (amended 2026-10-24) |
 | [155](155-column-rules.md) | Column rules: where InDesign draws the rule between two columns | Accepted 2026-10-14 |
 | [156](156-how-indesign-numbers-footnotes.md) | How InDesign numbers footnotes: per story, restarted by page, spread or section | Accepted 2026-10-15 |
 | [157](157-every-page-numbering-style.md) | Every page-numbering style InDesign offers, formatted as InDesign formats it | Accepted 2026-10-15 |
@@ -120,7 +120,7 @@ is not written yet.
 | [187](187-the-wire-describes-itself-as-json-schema.md) | The wire describes itself as JSON Schema | Accepted 2026-10-18 |
 | [188](188-snapshots-draw-on-the-worker-gpu.md) | Snapshots draw on the worker's GPU, and a lost device is replaced | Accepted 2026-10-19 |
 | [189](189-one-rendering-model.md) | One rendering model: Vello on the GPU, vello_cpu on the CPU | Accepted 2026-10-19 (amended 2026-10-19) |
-| [190](190-a-placed-svg-draws-its-filters.md) | A placed SVG draws its filters | Accepted 2026-10-19 |
+| [190](190-a-placed-svg-draws-its-filters.md) | A placed SVG draws its filters | Accepted 2026-10-19 (amended 2026-10-20, 2026-10-24) |
 | [191](191-a-group-transforms-about-its-box.md) | A group transforms about its box | Accepted 2026-10-19 |
 | [192](192-a-reflection-reads-as-the-flip-with-the-smaller-turn.md) | A reflection reads as the flip with the smaller turn | Accepted 2026-10-19 |
 | [193](193-page-item-snippets.md) | Page-item snippets: what Copy takes and Paste puts back | Accepted 2026-10-19 |
@@ -145,6 +145,7 @@ is not written yet.
 | [1002](1002-xml-tags-carry-template-fields.md) | XML tags carry template fields, and the XML structure is written | Accepted 2026-10-23 |
 | [1003](1003-a-placed-pdf-shows-the-page-the-document-names.md) | A placed PDF shows the page the document names | Accepted 2026-10-23 |
 | [1004](1004-a-follow-up-write-can-join-the-step-that-provoked-it.md) | A follow-up write can join the undo step that provoked it | Accepted 2026-10-23 |
+| [1006](1006-fill-rule-is-a-native-property.md) | The fill rule is a native property | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

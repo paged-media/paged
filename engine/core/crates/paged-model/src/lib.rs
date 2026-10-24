@@ -32,6 +32,7 @@
 
 pub mod fitting;
 pub mod image_bytes;
+pub mod winding;
 
 use std::collections::BTreeMap;
 
@@ -1434,6 +1435,12 @@ pub struct TextFrame {
     /// IDML's `<GeometryPathType PathOpen="true">` lifts to a `true`
     /// here so the renderer doesn't auto-close lassoed paths (P-15).
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1006 — the rule the outline fills and clips by.
+    /// `NonZero` is IDML's rule (it has no attribute for another) and
+    /// the default; `EvenOdd` is native, kept in a `.paged` model part
+    /// and re-wound or reported as lost on IDML export.
+    #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
+    pub fill_rule: FillRule,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
@@ -1592,6 +1599,7 @@ impl TextFrame {
             anchors: Vec::new(),
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: FillRule::NonZero,
             effects: None,
             fill_transparency: None,
             stroke_transparency: None,
@@ -1996,6 +2004,12 @@ pub struct Rectangle {
     pub subpath_starts: Vec<usize>,
     /// Per-contour open/closed flags; see [`Polygon::subpath_open`].
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1006 — the rule the outline fills and clips by.
+    /// `NonZero` is IDML's rule (it has no attribute for another) and
+    /// the default; `EvenOdd` is native, kept in a `.paged` model part
+    /// and re-wound or reported as lost on IDML export.
+    #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
+    pub fill_rule: FillRule,
 }
 
 impl Rectangle {
@@ -2084,6 +2098,7 @@ impl Rectangle {
             anchors: Vec::new(),
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: FillRule::NonZero,
         }
     }
 }
@@ -2476,6 +2491,14 @@ pub struct Oval {
     /// ovals spell it).
     #[serde(default)]
     pub end_cap: Option<String>,
+    /// Engine ADR 1006 — the rule the outline fills and clips by.
+    /// `NonZero` is IDML's rule (it has no attribute for another) and
+    /// the default; `EvenOdd` is native, kept in a `.paged` model part
+    /// and re-wound or reported as lost on IDML export.
+    /// An ellipse is one simple contour, which both rules fill alike; the
+    /// field is here so every frame kind takes the same write.
+    #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
+    pub fill_rule: FillRule,
 }
 
 impl Oval {
@@ -2532,6 +2555,7 @@ impl Oval {
             corner_option: None,
             corners: Default::default(),
             end_cap: None,
+            fill_rule: FillRule::NonZero,
         }
     }
 }
@@ -2582,6 +2606,12 @@ pub struct GraphicLine {
     pub subpath_starts: Vec<usize>,
     /// Parallel to `subpath_starts`. See [`TextFrame::subpath_open`].
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1006 — the rule the outline fills and clips by.
+    /// `NonZero` is IDML's rule (it has no attribute for another) and
+    /// the default; `EvenOdd` is native, kept in a `.paged` model part
+    /// and re-wound or reported as lost on IDML export.
+    #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
+    pub fill_rule: FillRule,
     /// `<TextPath>` children attached to this line. See
     /// [`Polygon::text_paths`].
     pub text_paths: Vec<TextPath>,
@@ -2690,6 +2720,7 @@ impl GraphicLine {
             anchors: Vec::new(),
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: FillRule::NonZero,
             text_paths: Vec::new(),
             effects: None,
             opacity: None,
@@ -2707,6 +2738,39 @@ impl GraphicLine {
             corner_option: None,
             corners: Default::default(),
             end_cap: None,
+        }
+    }
+}
+
+/// Engine ADR 1006 — which points a filled outline covers. IDML knows
+/// only `NonZero` (a hole is a contour wound against its outer one);
+/// `EvenOdd` makes every other crossing a hole whatever the winding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum FillRule {
+    #[default]
+    NonZero,
+    EvenOdd,
+}
+
+impl FillRule {
+    pub fn is_non_zero(&self) -> bool {
+        *self == FillRule::NonZero
+    }
+
+    /// The wire spelling (`"NonZero"` / `"EvenOdd"`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            FillRule::NonZero => "NonZero",
+            FillRule::EvenOdd => "EvenOdd",
+        }
+    }
+
+    /// Reads the wire spelling; `""` is `NonZero`.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "" | "NonZero" => Some(FillRule::NonZero),
+            "EvenOdd" => Some(FillRule::EvenOdd),
+            _ => None,
         }
     }
 }
@@ -3007,6 +3071,12 @@ pub struct Polygon {
     /// close so polygons used as lassoed strokes / clip paths don't
     /// silently fill into rectangles (P-15).
     pub subpath_open: Vec<bool>,
+    /// Engine ADR 1006 — the rule the outline fills and clips by.
+    /// `NonZero` is IDML's rule (it has no attribute for another) and
+    /// the default; `EvenOdd` is native, kept in a `.paged` model part
+    /// and re-wound or reported as lost on IDML export.
+    #[serde(default, skip_serializing_if = "FillRule::is_non_zero")]
+    pub fill_rule: FillRule,
     /// `<TextWrapPreference>` parsed off the polygon, if any.
     /// `None` ⇒ the polygon does not exclude text.
     pub text_wrap: Option<TextWrap>,
@@ -3176,6 +3246,7 @@ impl Polygon {
             anchors: Vec::new(),
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: FillRule::NonZero,
             text_wrap: None,
             item_layer: None,
             effects: None,
