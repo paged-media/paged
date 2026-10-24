@@ -19,9 +19,9 @@ path = "src/main.rs"
 workspace = true
 
 [dependencies]
-data-core = { path = "../data-core" }
-data-lower = { path = "../data-lower" }
-data-automation = { path = "../data-automation" }
+paged-data-core = { path = "../../../engine/core/crates/paged-data-core" }
+paged-data-lower = { path = "../../../engine/core/crates/paged-data-lower" }
+paged-data-automation = { path = "../../../engine/core/crates/paged-data-automation" }
 data-js = { path = "../data-js" }
 data-script = { path = "../data-script" }
 serde.workspace = true

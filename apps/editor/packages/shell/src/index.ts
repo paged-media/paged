@@ -125,6 +125,7 @@ export {
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
+export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
@@ -572,6 +573,10 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  isolationDimContribution,
+  isolationScopeRoot,
+  isolationOutline,
+  isolationVeilPath,
   marginGuidesContribution,
   marginGuides,
   pathEditContribution,

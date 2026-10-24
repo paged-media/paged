@@ -51,12 +51,7 @@ import { regularPolygonPath } from "./star";
 import { polylineDistance, polylineLength } from "./path-locate";
 
 export type ShaperKind =
-  | "line"
-  | "rectangle"
-  | "ellipse"
-  | "triangle"
-  | "polygon"
-  | "scribble";
+  "line" | "rectangle" | "ellipse" | "triangle" | "polygon" | "scribble";
 
 export interface ShaperRecognition {
   kind: ShaperKind;
@@ -175,7 +170,10 @@ function lineFrom(a: Vec2, b: Vec2): AnchorTable {
   return lineToPath(a[0], a[1], b[0], b[1]);
 }
 
-function rectangleFrom(corners: readonly Vec2[], all: readonly Vec2[]): AnchorTable {
+function rectangleFrom(
+  corners: readonly Vec2[],
+  all: readonly Vec2[],
+): AnchorTable {
   // Every edge's angle off its nearest axis.
   let axisAligned = true;
   let longest = 0;
@@ -242,10 +240,13 @@ export function recogniseShape(
   const outline = simplifyRdp(points, CORNER_EPS * diag * 0.5);
   let reversals = 0;
   for (let i = 1; i + 1 < outline.length; i++) {
-    if (turnDeg(outline[i - 1]!, outline[i]!, outline[i + 1]!) > SCRIBBLE_TURN_DEG)
+    if (
+      turnDeg(outline[i - 1]!, outline[i]!, outline[i + 1]!) > SCRIBBLE_TURN_DEG
+    )
       reversals++;
   }
-  if (reversals >= SCRIBBLE_MIN_REVERSALS) return { kind: "scribble", table: null };
+  if (reversals >= SCRIBBLE_MIN_REVERSALS)
+    return { kind: "scribble", table: null };
 
   // 3. Line.
   const first = points[0]!;
@@ -296,8 +297,7 @@ export function recogniseShape(
   if (corners.length >= 3) {
     const ring = [...corners, corners[0]!];
     polygonResidual =
-      points.reduce((s, p) => s + polylineDistance(p, ring), 0) /
-      points.length;
+      points.reduce((s, p) => s + polylineDistance(p, ring), 0) / points.length;
   }
   if (ellipseError < ELLIPSE_ERROR && ellipseResidual <= polygonResidual) {
     const circle = Math.abs(rx - ry) / Math.max(rx, ry) <= CIRCLE_RATIO;

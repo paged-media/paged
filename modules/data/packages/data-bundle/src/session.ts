@@ -23,6 +23,7 @@
 // read-only snapshot the panels render. ZERO binding/expression semantics live
 // here (CLAUDE.md hard rule) — it orchestrates the Rust engine.
 
+import { createDataDoor, type DataDoor } from "./data-door";
 import type {
   BundleHost,
   DataProviderHandle,
@@ -536,6 +537,8 @@ export function hasDocumentsDoors(host: BundleHost): boolean {
 export interface DataSourceSession
   extends ReviewSession, PropertyMethods, CatalogueMethods {
   getState(): SessionState;
+  /** The data door this session serves (`data@1`, extensions ADR 343). */
+  dataDoor(): DataDoor;
   /** host.objects (ADR 323): the document ops of a definition change made
    *  with `{ labels: "defer" }` — the element labels the recipe asks for,
    *  plus the document label naming the new session version — for the
@@ -2507,9 +2510,22 @@ export function createSession(
   });
   const objectsUp = () => objectsOf(host) !== null;
 
+  // Extensions ADR 343 — the data door paged.data serves (`data-door.ts`).
+  const door = createDataDoor({
+    ensureStore,
+    sourceNames: () => sourceNames,
+    queries: () => [...queries.values()],
+    addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
+    removeBinding: (id) => props.removeBinding(id),
+    bindings: () =>
+      ((engine?.payload() as { bindings?: unknown[] } | undefined)?.bindings ??
+        []) as ReturnType<Parameters<typeof createDataDoor>[0]["bindings"]>,
+  });
+
   let preObjectWrite: string | null = null;
   const self: DataSourceSession = {
     ...props,
+    dataDoor: () => door,
     async beforeObjectWrite() {
       preObjectWrite = null;
       if (labelHash !== null || !labelActive) return;
@@ -2610,6 +2626,7 @@ export function createSession(
           capability: "inline",
         });
         if (!sourceNames.includes(name)) sourceNames.push(name);
+        door.touched(name);
         importedCsv.set(name, csvText);
         pendingCsv.delete(name);
         state.status = "ready";
@@ -2703,6 +2720,7 @@ export function createSession(
         const d = await ensureStore();
         const e = await ensureEngine();
         const out = await loadIntoStore(d, name, format, bytes, options?.sheet);
+        door.touched(name);
         e.define_source({
           id: name,
           kind: {
@@ -3287,6 +3305,7 @@ export function createSession(
             // engine; a re-delivery of the same data changes nothing.
             const rows = await d.ingest(q.id, trimSql(q.sql));
             keepRecordCount(q.id, rows);
+            door.touched(q.id);
           } catch (err) {
             const diag = diagnoseStoreError(err);
             report({

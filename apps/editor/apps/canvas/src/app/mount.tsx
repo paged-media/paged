@@ -41,6 +41,7 @@ import {
   pluginOverlayLayersContribution,
   guideOverlayContribution,
   pageDecorationsContribution,
+  isolationDimContribution,
   marginGuidesContribution,
   pathEditContribution,
   resizeHandlesContribution,
@@ -305,6 +306,8 @@ import { PRESETS } from "../profiles/presets";
 // contributions' `z` values inside OverlayHost.
 const BUILT_IN_OVERLAYS: OverlayContribution[] = [
   pageDecorationsContribution,
+  // WP4.6 — the isolation veil outside an entered edit context or group.
+  isolationDimContribution,
   // Template fields (docs/composable-editor.md §7.10): outlines, labels and a
   // picture's Replace button, for an author and a filler only.
   templateFieldsContribution,

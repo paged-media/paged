@@ -66,15 +66,16 @@ export const DATA_CMD = "media.paged.data.command";
  *  README grant row). */
 export const CSV_FIXTURE = pathResolve(HERE, "../../assets/annual-orders.csv");
 
-/** The paged.data DSL's own per-function registry (the in-repo module at
- *  `<repo root>/modules/data`) — read at build time by the
- *  expression-language page. */
+/** The paged.data DSL's own per-function registry (in the engine crate
+ *  `<repo root>/engine/core/crates/paged-data-core`, PM-0015) — read at
+ *  build time by the expression-language page. */
 export const FUNCTIONS_REGISTRY = pathResolve(
   HERE,
   "../../../../../../../..",
-  "modules",
-  "data",
-  "registry",
+  "engine",
+  "core",
+  "crates",
+  "paged-data-core",
   "functions",
 );
 
@@ -592,7 +593,7 @@ export interface DslFamily {
 
 /**
  * The 42-function roster, read from the plugin's own per-function
- * registry (`registry/functions/*.yaml` — the same files data-core's
+ * registry (`paged-data-core/functions/*.yaml` — the same files data-core's
  * build.rs consumes: no row → no dispatch → uncallable). A narrow
  * line reader, not a YAML parser: rows are `- id:` blocks and each
  * carries one `name:` line. Null when the registry is absent.

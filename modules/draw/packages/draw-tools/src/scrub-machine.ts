@@ -33,7 +33,12 @@
 // No simplification: the eraser needs every sample it swept, and the
 // Shaper's recogniser does its own outline.
 
-import { clone, dist, type Vec2, type Vec2Mut } from "@paged-media/draw-geometry";
+import {
+  clone,
+  dist,
+  type Vec2,
+  type Vec2Mut,
+} from "@paged-media/draw-geometry";
 
 export type ScrubEvent =
   | { type: "down"; point: Vec2 }

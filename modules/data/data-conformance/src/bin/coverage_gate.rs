@@ -20,13 +20,16 @@
 //! Registry-driven dispatch already guarantees *no row → no dispatch*; this
 //! binary enforces the dual: *every `implemented` row → real tests on disk*.
 //!
-//! It reads every `registry/functions/*.yaml` and `registry/features/*.yaml`
-//! (rows are YAML sequences of maps; unknown fields tolerated) and, for each
-//! row with `status: implemented`, verifies its `tests:` pointers resolve:
+//! It reads every function row (`functions/*.yaml` of `paged-data-core`, in
+//! `engine/core/crates` since PM-0015 moved the engine crates there) and every
+//! `registry/features/*.yaml` (rows are YAML sequences of maps; unknown fields
+//! tolerated) and, for each row with `status: implemented`, verifies its
+//! `tests:` pointers resolve:
 //!
 //! - `tests.rust` — `"path/to/file.rs::prefix"`: the file must exist
-//!   (repo-relative) AND contain `fn <prefix>` (a test fn whose name *starts
-//!   with* the prefix).
+//!   (module-relative, or `engine:<crate>/…` for a crate in
+//!   `engine/core/crates`) AND contain `fn <prefix>` (a test fn whose name
+//!   *starts with* the prefix).
 //! - `tests.corpus` / `tests.vitest` — the file must exist (repo-relative).
 //! - any other lane — informational only, never a gap.
 //!
@@ -34,8 +37,9 @@
 //! summary plus the gap list and exits `1` iff any gap exists. Dependency-light
 //! (`serde_norway` + `std`). Repo root resolves as `CARGO_MANIFEST_DIR/..`.
 //!
-//! `--junit <nextest junit.xml>` adds the second half: every `tests.rust`
-//! pointer must also have RUN and PASSED in that report. Without it the gate
+//! `--junit <nextest junit.xml>` (once per report: the module's and the
+//! engine's) adds the second half: every `tests.rust` pointer must also have
+//! RUN and PASSED in one of those reports. Without it the gate
 //! only proved that a test with the right name prefix existed on disk, so an
 //! `#[ignore]`d skeleton, a test filtered out of the run, or a red test all
 //! counted as coverage. With it, a pointer is a gap when no testcase of the
@@ -62,13 +66,30 @@ struct FileStats {
     gaps: usize,
 }
 
+/// A rust pointer into a crate of `engine/core/crates`, not the module.
+const ENGINE: &str = "engine:";
+
+/// `engine/core/crates`, from the module root.
+fn engine_crates(root: &Path) -> PathBuf {
+    root.join("../../engine/core/crates")
+}
+
+/// The file a pointer's path names, and the path `binary_for` reads.
+fn pointer_file<'a>(root: &Path, rel_path: &'a str) -> (PathBuf, &'a str) {
+    match rel_path.strip_prefix(ENGINE) {
+        Some(inner) => (engine_crates(root).join(inner), inner),
+        None => (root.join(rel_path), rel_path),
+    }
+}
+
 fn main() -> ExitCode {
     let root = repo_root();
-    let registry = root.join("registry");
 
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let junit = match args.iter().position(|a| a == "--junit") {
-        Some(i) => {
+    let mut junit: Option<JunitReport> = None;
+    let mut i = 0;
+    while i < args.len() {
+        if args[i] == "--junit" {
             let Some(path) = args.get(i + 1) else {
                 eprintln!("coverage-gate: --junit needs a path");
                 return ExitCode::FAILURE;
@@ -80,29 +101,34 @@ fn main() -> ExitCode {
                         "coverage-gate: reading {} testcase(s) from {path}",
                         report.cases.len()
                     );
-                    Some(report)
+                    junit
+                        .get_or_insert_with(|| JunitReport { cases: Vec::new() })
+                        .cases
+                        .extend(report.cases);
                 }
                 Err(e) => {
                     eprintln!("coverage-gate: cannot read --junit {path}: {e}");
                     return ExitCode::FAILURE;
                 }
             }
+            i += 2;
+        } else {
+            i += 1;
         }
-        None => None,
-    };
+    }
 
     let mut files = Vec::new();
-    for sub in ["functions", "features"] {
-        match collect_yaml(&registry.join(sub)) {
+    for dir in [
+        engine_crates(&root).join("paged-data-core/functions"),
+        root.join("registry/features"),
+    ] {
+        match collect_yaml(&dir) {
             Ok(mut found) => {
                 found.sort();
                 files.extend(found);
             }
             Err(e) => {
-                eprintln!(
-                    "coverage-gate: cannot scan {}: {e}",
-                    registry.join(sub).display()
-                );
+                eprintln!("coverage-gate: cannot scan {}: {e}", dir.display());
                 return ExitCode::FAILURE;
             }
         }
@@ -240,7 +266,7 @@ fn check_rust_pointer(
         return;
     }
 
-    let abs = root.join(rel_path);
+    let (abs, _) = pointer_file(root, rel_path);
     let entry = text_cache
         .entry(abs.clone())
         .or_insert_with(|| std::fs::read_to_string(&abs).ok());
@@ -341,6 +367,7 @@ fn check_rust_pointer_ran(report: &JunitReport, ptr: &str, push: &mut impl FnMut
     let Some((rel_path, prefix)) = ptr.split_once("::") else {
         return; // malformed pointers are reported by check_rust_pointer
     };
+    let rel_path = rel_path.strip_prefix(ENGINE).unwrap_or(rel_path);
     let Some((binary, module)) = binary_for(rel_path) else {
         push(format!(
             "rust pointer `{ptr}` — `{rel_path}` is neither under src/ nor tests/ (cannot match it to a test run)"
@@ -468,6 +495,9 @@ fn yaml_kind(v: &serde_norway::Value) -> &'static str {
 }
 
 fn rel_to_root(root: &Path, file: &Path) -> String {
+    if let Ok(inner) = file.strip_prefix(engine_crates(root)) {
+        return format!("{ENGINE}{}", inner.to_string_lossy());
+    }
     file.strip_prefix(root)
         .unwrap_or(file)
         .to_string_lossy()

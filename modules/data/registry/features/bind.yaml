@@ -186,3 +186,19 @@
       - "packages/data-bundle/src/__tests__/sync-panel.test.ts"
       - "packages/data-host-model/src/__tests__/fields.test.ts"
       - "packages/data-bundle/test/sync-review-real-core.spec.ts"
+
+- id: data.bind.labels-native
+  title: The engine reads the bindings a document carries in its labels (core ADR 1014)
+  spec: paged-data-session src/labels.rs (PM-0015)
+  status: implemented
+  provenance:
+    [
+      "the Rust form of the bundle's restoreFromLabels: the document label's recipe, then every element label (its copy of a binding wins, with targets re-pointed at today's ids)",
+      "both readers replay conformance/labels/cases.json, recorded from the bundle's reader, so a document reads to one recipe in the editor and on the command line",
+    ]
+  tests:
+    rust:
+      - "engine:paged-data-session/tests/labels.rs::labels_restore_as_the_bundle_restores_them__feat__data_bind_labels_native"
+      - "engine:paged-data-session/tests/labels.rs::every_restored_recipe_is_a_session_payload__feat__data_bind_labels_native"
+      - "engine:paged-data-session/tests/labels.rs::a_restored_file_source_asks_for_its_file_again__feat__data_bind_labels_native"
+    vitest: ["packages/data-bundle/test/labels-conformance.spec.ts"]

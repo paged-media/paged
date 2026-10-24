@@ -42,7 +42,7 @@
   tests:
     rust:
       [
-        "data-lower/src/merge.rs::data_lower_merge",
+        "engine:paged-data-lower/src/merge.rs::data_lower_merge",
         "data-conformance/tests/it/oracle.rs::data_oracle_indesign",
       ]
 

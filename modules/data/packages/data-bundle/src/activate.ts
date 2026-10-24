@@ -138,6 +138,15 @@ export function activate(host: BundleHost): BundleHandle {
     defaultDock: "right",
   });
 
+  // Extensions ADR 343 — serve the document's data to every other bundle
+  // (paged.sheet edits a table, an extension binds its objects). One
+  // service per editor: a host with no data backend says so in supports().
+  if (host.supports("data@1")) {
+    const door = session.dataDoor();
+    const handle = host.data.serve(door.service);
+    door.onChange((change) => handle.changed(change));
+  }
+
   // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
   // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).
   if (host.supports("contribute.importer@1")) {

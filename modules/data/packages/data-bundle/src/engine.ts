@@ -190,6 +190,12 @@ export interface DataEngineLike {
   store_describe?(sql: string): unknown;
   /** The first rows of a query as text and its count (`StorePreview`). */
   store_preview?(sql: string, limit: number): unknown;
+  /** A window of a source table in the provider shape (`limit` 0 = all). */
+  store_records?(table: string, offset: number, limit: number): unknown;
+  /** A query's rows in the provider shape (the guard has run). */
+  store_query_records?(sql: string): unknown;
+  /** Apply row edits to a source table; the row count. */
+  store_edit?(table: string, edits: unknown): number;
   /** §9.1: override one binding's formatting locale (a tag; `null` clears).
    *  Optional: absent on a wasm artifact built before the locale table. */
   set_binding_locale?(binding: string, locale: string | null): void;

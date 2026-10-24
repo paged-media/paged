@@ -1,0 +1,6 @@
+$ paged data apply bound.paged --source nope
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "nope" is not ID=FILE

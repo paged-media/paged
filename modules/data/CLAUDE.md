@@ -21,7 +21,11 @@ ADR 561), every file read in Rust, query rows read straight into a
 Spec (the authority): [`docs/concept.md`](./docs/concept.md).
 SDK gap tracker: the cross-repo RFI `thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md` (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
-Rust crates (Cargo workspace, top level per spec §4): `data-core` (frozen
+Rust crates (spec §4). Since PM-0015 the engine-level ones are
+`engine/core/crates/paged-data-*` in the ENGINE's Cargo workspace (library names
+unchanged: `data_core`, …); this workspace keeps `data-js` (a wasm shim over
+`paged-data-session`'s `DataSession`), `data-cli`, `data-script` and
+`data-conformance`, which reach them by path: `data-core` (frozen
 types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
 `data-bind` (resolution/sync engine), `data-lower`, `data-store` (the query
 store and the file readers), `data-xlsx`, `data-js` (wasm-bindgen surface),
@@ -136,7 +140,7 @@ Rules for every code change in this repo:
   pulling in a non-allow-listed license fails the build (the §16 license-boundary
   gate). Arrow / ADBC / `parquet` (Apache-2.0) are permitted.
 - **REGISTRY-DRIVEN DISPATCH (§12.2).** The expression function table is
-  generated at build time from `registry/functions/*.yaml`
+  generated at build time from `engine/core/crates/paged-data-core/functions/*.yaml`
   (`data-core/build.rs` emits the name→id table; `data-expr/build.rs` emits the
   dispatch match, FnId parity). No row → no dispatch entry → **an unregistered
   function is uncallable by construction**. Same principle for source adapters,
@@ -191,9 +195,10 @@ Rules for every code change in this repo:
 
 - `~/paged/cockpit/docs/features/data/<id>.md` (Cockpit, chapter `data`) — the STATUS
   ledger (component `plugin.data`; `claims:` planned/partial/shipped, health from evidence).
-- `plugin-data/registry/` (here) — build-consumed metadata: `functions/*.yaml`
-  (one row per expression function: family, arity, provenance, test pointers —
-  drives codegen) and `features/*.yaml` (source/query/bind/lower/security/...
+- `registry/` (here) and `engine/core/crates/paged-data-core/functions/*.yaml`
+  — build-consumed metadata: the function rows (one per expression function:
+  family, arity, provenance, test pointers — drives codegen; with the crate in
+  the engine since PM-0015) and `features/*.yaml` (source/query/bind/lower/security/...
   rulings + test pointers). The ids mirror the Cockpit `data.*` ids so the
   registries join by id.
 
@@ -206,10 +211,13 @@ moon run data:test
 cargo build --workspace
 cargo nextest run --workspace --profile ci --no-fail-fast   # writes target/nextest/ci/junit.xml
 cargo clippy --workspace --all-targets -- -D warnings
-cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml   # the §12.2 gate
+# The engine-level crates test in the engine's workspace; the gate takes both reports:
+(cd ../../engine/core && cargo nextest run --profile ci -p 'paged-data-*')
+cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml \
+  --junit ../../engine/core/target/nextest/ci/junit.xml   # the §12.2 gate
 
 # Dependency guards (CI runs these; run before claiming green)
-cargo tree -p data-expr --edges normal | grep -E 'data-(sources|query|bind|lower|js)' && echo LEAK
+(cd ../../engine/core && cargo tree -p paged-data-expr --edges normal | grep -E 'paged-data-(sources|query|bind|lower|store)' && echo LEAK)
 cargo tree -p data-js --target wasm32-unknown-unknown | grep -E 'data-conformance|proptest' && echo LEAK
 cargo deny check
 
@@ -230,6 +238,6 @@ bun run validate:manifest
 # Oracles (docs/design/oracles.md): replays run in the suites above
 # (data-conformance oracle.rs / oracle_props.rs; data-store sqlite_oracle.rs;
 # bun test indesign-merge-store). Re-recording is local only:
-SQLITE3=/path/to/sqlite3 node conformance/sqlite-sql/record.mjs
+SQLITE3=/path/to/sqlite3 node ../../engine/core/crates/paged-data-store/tests/sqlite-sql/record.mjs
 bash conformance/indesign-merge/record.sh   # drives InDesign 2025
 ```

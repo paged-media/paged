@@ -37,19 +37,46 @@ describe("subRun — the exact sub-curve between two locations [plugin-draw.tool
   ];
 
   it("traces the original cubic between the two parameters", () => {
-    const run = subRun(curve, false, { segment: 0, t: 0.25 }, { segment: 0, t: 0.75 })!;
+    const run = subRun(
+      curve,
+      false,
+      { segment: 0, t: 0.25 },
+      { segment: 0, t: 0.75 },
+    )!;
     expect(run).toHaveLength(2);
     for (const u of [0, 0.3, 0.6, 1]) {
-      const got = evalCubic(run[0]!.anchor, run[0]!.right, run[1]!.left, run[1]!.anchor, u);
-      const want = evalCubic([0, 0], [40, -60], [60, -60], [100, 0], 0.25 + 0.5 * u);
+      const got = evalCubic(
+        run[0]!.anchor,
+        run[0]!.right,
+        run[1]!.left,
+        run[1]!.anchor,
+        u,
+      );
+      const want = evalCubic(
+        [0, 0],
+        [40, -60],
+        [60, -60],
+        [100, 0],
+        0.25 + 0.5 * u,
+      );
       expect(got[0]).toBeCloseTo(want[0], 9);
       expect(got[1]).toBeCloseTo(want[1], 9);
     }
   });
 
   it("wraps through the closing segment of a closed contour", () => {
-    const sq = [corner([0, 0]), corner([10, 0]), corner([10, 10]), corner([0, 10])];
-    const run = subRun(sq, true, { segment: 2, t: 0.5 }, { segment: 0, t: 0.5 })!;
+    const sq = [
+      corner([0, 0]),
+      corner([10, 0]),
+      corner([10, 10]),
+      corner([0, 10]),
+    ];
+    const run = subRun(
+      sq,
+      true,
+      { segment: 2, t: 0.5 },
+      { segment: 0, t: 0.5 },
+    )!;
     expect(run.map((a) => a.anchor)).toEqual([
       [5, 10],
       [0, 10],
@@ -57,13 +84,23 @@ describe("subRun — the exact sub-curve between two locations [plugin-draw.tool
       [5, 0],
     ]);
     // An open contour cannot wrap.
-    expect(subRun(sq.slice(0, 3), false, { segment: 1, t: 0 }, { segment: 0, t: 0 })).toBeNull();
+    expect(
+      subRun(sq.slice(0, 3), false, { segment: 1, t: 0 }, { segment: 0, t: 0 }),
+    ).toBeNull();
   });
 });
 
 describe("planPathErase — the Path Eraser removes what the drag covered [plugin-draw.tool-wave-3]", () => {
   it("a drag across the middle of an open line leaves two pieces meeting the brush's edge", () => {
-    const plan = planPathErase(line([0, 0], [100, 0]), false, [[50, -20], [50, 20]], 5)!;
+    const plan = planPathErase(
+      line([0, 0], [100, 0]),
+      false,
+      [
+        [50, -20],
+        [50, 20],
+      ],
+      5,
+    )!;
     expect(plan.pieces).toHaveLength(2);
     expect(plan.pieces[0]![0]!.anchor).toEqual([0, 0]);
     expect(plan.pieces[0]!.at(-1)!.anchor[0]).toBeCloseTo(45, 4);
@@ -72,20 +109,59 @@ describe("planPathErase — the Path Eraser removes what the drag covered [plugi
   });
 
   it("over an END it shortens the path; over all of it nothing is left", () => {
-    const end = planPathErase(line([0, 0], [100, 0]), false, [[95, 0], [110, 0]], 10)!;
+    const end = planPathErase(
+      line([0, 0], [100, 0]),
+      false,
+      [
+        [95, 0],
+        [110, 0],
+      ],
+      10,
+    )!;
     expect(end.pieces).toHaveLength(1);
     expect(end.pieces[0]!.at(-1)!.anchor[0]).toBeCloseTo(85, 4);
-    const all = planPathErase(line([0, 0], [100, 0]), false, [[-5, 0], [105, 0]], 10)!;
+    const all = planPathErase(
+      line([0, 0], [100, 0]),
+      false,
+      [
+        [-5, 0],
+        [105, 0],
+      ],
+      10,
+    )!;
     expect(all.pieces).toEqual([]);
   });
 
   it("a drag that misses is no plan", () => {
-    expect(planPathErase(line([0, 0], [100, 0]), false, [[50, 30], [60, 30]], 5)).toBeNull();
+    expect(
+      planPathErase(
+        line([0, 0], [100, 0]),
+        false,
+        [
+          [50, 30],
+          [60, 30],
+        ],
+        5,
+      ),
+    ).toBeNull();
   });
 
   it("a CLOSED square erased across one edge opens into ONE piece through its corners", () => {
-    const sq = [corner([0, 0]), corner([100, 0]), corner([100, 100]), corner([0, 100])];
-    const plan = planPathErase(sq, true, [[50, -10], [50, 10]], 5)!;
+    const sq = [
+      corner([0, 0]),
+      corner([100, 0]),
+      corner([100, 100]),
+      corner([0, 100]),
+    ];
+    const plan = planPathErase(
+      sq,
+      true,
+      [
+        [50, -10],
+        [50, 10],
+      ],
+      5,
+    )!;
     expect(plan.pieces).toHaveLength(1);
     const piece = plan.pieces[0]!;
     expect(piece[0]!.anchor[0]).toBeCloseTo(55, 4);
@@ -100,7 +176,14 @@ describe("planJoinScrub — the Join tool's plan [plugin-draw.tool-wave-3]", () 
   it("a scrub over the GAP of two open ends extends the first to the second's end exactly", () => {
     const a = line([0, 0], [100, 0]);
     const b = line([120, 10], [200, 10]);
-    const plan = planJoinScrub([{ anchors: a }, { anchors: b }], [[95, -5], [125, 15]], 8)!;
+    const plan = planJoinScrub(
+      [{ anchors: a }, { anchors: b }],
+      [
+        [95, -5],
+        [125, 15],
+      ],
+      8,
+    )!;
     expect(plan.kind).toBe("gap");
     if (plan.kind !== "gap") return;
     expect(plan.a).toBe(0);
@@ -116,21 +199,51 @@ describe("planJoinScrub — the Join tool's plan [plugin-draw.tool-wave-3]", () 
     // a's START is nearer b's START than the scrubbed pair is.
     const a = line([0, 0], [100, 0]);
     const b = line([0, 5], [100, 60]);
-    const plan = planJoinScrub([{ anchors: a }, { anchors: b }], [[98, 0], [100, 30], [101, 58]], 5)!;
+    const plan = planJoinScrub(
+      [{ anchors: a }, { anchors: b }],
+      [
+        [98, 0],
+        [100, 30],
+        [101, 58],
+      ],
+      5,
+    )!;
     expect(plan.kind).toBe("gap");
     if (plan.kind !== "gap") return;
     expect(plan.aAnchors.at(-1)!.anchor).toEqual([100, 60]);
   });
 
   it("one path's two ends close it", () => {
-    const u = [corner([0, 0]), corner([0, 100]), corner([100, 100]), corner([100, 0])];
-    expect(planJoinScrub([{ anchors: u }], [[-3, 0], [103, 0]], 6)).toEqual({ kind: "close", path: 0 });
+    const u = [
+      corner([0, 0]),
+      corner([0, 100]),
+      corner([100, 100]),
+      corner([100, 0]),
+    ];
+    expect(
+      planJoinScrub(
+        [{ anchors: u }],
+        [
+          [-3, 0],
+          [103, 0],
+        ],
+        6,
+      ),
+    ).toEqual({ kind: "close", path: 0 });
   });
 
   it("a scrub over the OVERHANGS of a crossing trims both and pins them to the crossing", () => {
     const a = line([0, 50], [120, 50]); // overhangs to x 120
     const b = line([100, 0], [100, 70]); // overhangs to y 70
-    const plan = planJoinScrub([{ anchors: a }, { anchors: b }], [[110, 56], [104, 56], [106, 60]], 6)!;
+    const plan = planJoinScrub(
+      [{ anchors: a }, { anchors: b }],
+      [
+        [110, 56],
+        [104, 56],
+        [106, 60],
+      ],
+      6,
+    )!;
     expect(plan.kind).toBe("crossing");
     if (plan.kind !== "crossing") return;
     expect(plan.point[0]).toBeCloseTo(100, 6);
@@ -141,6 +254,15 @@ describe("planJoinScrub — the Join tool's plan [plugin-draw.tool-wave-3]", () 
 
   it("a scrub over nothing is no plan", () => {
     const a = line([0, 0], [100, 0]);
-    expect(planJoinScrub([{ anchors: a }], [[300, 300], [310, 300]], 5)).toBeNull();
+    expect(
+      planJoinScrub(
+        [{ anchors: a }],
+        [
+          [300, 300],
+          [310, 300],
+        ],
+        5,
+      ),
+    ).toBeNull();
   });
 });

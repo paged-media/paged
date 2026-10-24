@@ -1,0 +1,11 @@
+$ paged data apply
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+
+Usage: paged data apply <DOC>
+
+For more information, try '--help'.

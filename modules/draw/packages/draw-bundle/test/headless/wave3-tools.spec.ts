@@ -97,15 +97,26 @@ const DOC = () =>
       ]),
   );
 
-const tableOf = async (h: HeadlessHost, id: ElementId): Promise<PathAnchorsResult | null> =>
-  h.host.document.pathAnchors(id);
+const tableOf = async (
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<PathAnchorsResult | null> => h.host.document.pathAnchors(id);
 
-const key = (ids: readonly ElementId[]) => ids.map((i) => `${i.kind}:${String(i.id)}`).sort();
+const key = (ids: readonly ElementId[]) =>
+  ids.map((i) => `${i.kind}:${String(i.id)}`).sort();
 
-const drag = (handler: ReturnType<typeof createJoinHandler>, pts: [number, number][], opts: { alt?: boolean; shift?: boolean } = {}) => {
+const drag = (
+  handler: ReturnType<typeof createJoinHandler>,
+  pts: [number, number][],
+  opts: { alt?: boolean; shift?: boolean } = {},
+) => {
   handler.onPointerDown(pointerAt(PAGE_ID, pts[0]!, opts));
-  for (const p of pts.slice(1, -1)) handler.onPointerMove(pointerAt(PAGE_ID, p, opts));
-  handler.onPointerUp({ ...pointerAt(PAGE_ID, pts[pts.length - 1]!, opts), maxDelta: 50 });
+  for (const p of pts.slice(1, -1))
+    handler.onPointerMove(pointerAt(PAGE_ID, p, opts));
+  handler.onPointerUp({
+    ...pointerAt(PAGE_ID, pts[pts.length - 1]!, opts),
+    maxDelta: 50,
+  });
 };
 
 describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", () => {
@@ -134,13 +145,17 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       "shape",
       "pencil",
     ]);
-    for (const id of WAVE3_TOOL_IDS) expect(group(id)!.shortcut).toBeUndefined();
+    for (const id of WAVE3_TOOL_IDS)
+      expect(group(id)!.shortcut).toBeUndefined();
   });
 
   describe("Simplify — live preview and the corner angle", () => {
     it("the preview draws the simplified selection in the bundle's overlay layer, before anything is written", async () => {
       const { host, work } = countingHost(h.host);
-      const preview = await simplifyPreviewOf(host, [WAVE], { tolerance: 2, cornerAngle: 0 });
+      const preview = await simplifyPreviewOf(host, [WAVE], {
+        tolerance: 2,
+        cornerAngle: 0,
+      });
       expect(preview.before).toBe(61);
       expect(preview.after).toBeLessThan(12);
       expect(preview.shapes).toHaveLength(1);
@@ -149,20 +164,29 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(layer?.shapes).toHaveLength(1);
       expect((layer!.shapes[0] as { dashed?: boolean }).dashed).toBe(true);
       clearSimplifyPreview(h.host);
-      expect(h.overlayLayers().find((l) => l.key === layer!.key)?.shapes).toEqual([]);
+      expect(
+        h.overlayLayers().find((l) => l.key === layer!.key)?.shapes,
+      ).toEqual([]);
       expect(work.mutations).toEqual([]);
     });
 
     it("a corner angle (100°) keeps the square's corners and writes EXACTLY the preview in one undo step", async () => {
       await h.host.selection.set([WAVE, SQ]);
-      const preview = await simplifyPreviewOf(h.host, [WAVE], { tolerance: 2, cornerAngle: 100 });
+      const preview = await simplifyPreviewOf(h.host, [WAVE], {
+        tolerance: 2,
+        cornerAngle: 100,
+      });
       const before = await tableOf(h, WAVE);
       const { host, work } = countingHost(h.host);
       await applySimplifyPath(host, { tolerance: 2, cornerAngle: 100 });
       expect(work.mutations).toHaveLength(1);
       const after = (await tableOf(h, WAVE))!;
       expect(after.anchors).toHaveLength(preview.after);
-      const want = (preview.shapes[0] as unknown as { anchors: { anchor: [number, number] }[] }).anchors;
+      const want = (
+        preview.shapes[0] as unknown as {
+          anchors: { anchor: [number, number] }[];
+        }
+      ).anchors;
       after.anchors.forEach((a, i) => {
         expect(a.anchor[0]).toBeCloseTo(want[i]!.anchor[0], 3);
         expect(a.anchor[1]).toBeCloseTo(want[i]!.anchor[1], 3);
@@ -210,7 +234,9 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(Math.max(x0, x1)).toBeCloseTo(400, 3);
       await h.host.document.undo();
       const [back] = await h.host.document.elementGeometry([SQ]);
-      expect(back!.itemTransform ?? [1, 0, 0, 1, 0, 0]).toEqual([1, 0, 0, 1, 0, 0]);
+      expect(back!.itemTransform ?? [1, 0, 0, 1, 0, 0]).toEqual([
+        1, 0, 0, 1, 0, 0,
+      ]);
     });
 
     it("Alt+click on a host with no panel door reflects with the last-used angle about the clicked point", async () => {
@@ -238,7 +264,15 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
   describe("Join tool", () => {
     it("a scrub over the GAP joins the two paths into one open path, one undo step", async () => {
       const { host, work } = countingHost(h.host);
-      const r = await applyJoinScrub(host, PAGE_ID, [[395, 245], [425, 255]], 8);
+      const r = await applyJoinScrub(
+        host,
+        PAGE_ID,
+        [
+          [395, 245],
+          [425, 255],
+        ],
+        8,
+      );
       expect(r).toMatchObject({ applied: true, kind: "gap" });
       expect(work.mutations).toHaveLength(1);
       const leaves = key(await leafIds(h));
@@ -259,11 +293,26 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
     it("a scrub over the overhangs of a CROSSING trims both and welds them at the crossing", async () => {
       await h.load(
         packageWithSpread(
-          pathItem("Polygon", "a", "250 100 250 220", true, [{ a: [100, 250] }, { a: [220, 250] }]) +
-            pathItem("Polygon", "b", "150 200 270 200", true, [{ a: [200, 150] }, { a: [200, 270] }]),
+          pathItem("Polygon", "a", "250 100 250 220", true, [
+            { a: [100, 250] },
+            { a: [220, 250] },
+          ]) +
+            pathItem("Polygon", "b", "150 200 270 200", true, [
+              { a: [200, 150] },
+              { a: [200, 270] },
+            ]),
         ),
       );
-      const r = await applyJoinScrub(h.host, PAGE_ID, [[210, 256], [204, 256], [206, 260]], 6);
+      const r = await applyJoinScrub(
+        h.host,
+        PAGE_ID,
+        [
+          [210, 256],
+          [204, 256],
+          [206, 260],
+        ],
+        6,
+      );
       expect(r).toMatchObject({ applied: true, kind: "crossing" });
       const t = (await tableOf(h, A))!;
       const pts = t.anchors.map((a) => a.anchor);
@@ -287,7 +336,11 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       let r: JoinResult | null = null;
       const handler = createJoinHandler(h.host, { onJoin: (x) => (r = x) });
       handler.onActivate(undefined as never);
-      drag(handler, [[95, 100], [150, 102], [205, 100]]);
+      drag(handler, [
+        [95, 100],
+        [150, 102],
+        [205, 100],
+      ]);
       await settle();
       expect(r).toMatchObject({ applied: true, kind: "close" });
       expect((await tableOf(h, poly("u")))!.subpathOpen).toEqual([false]);
@@ -315,7 +368,9 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
 
     it("the live tool adds an anchor where the press lands on a segment", async () => {
       let applied: boolean | null = null;
-      const handler = createReshapeHandler(h.host, { onReshape: (_id, a) => (applied = a) });
+      const handler = createReshapeHandler(h.host, {
+        onReshape: (_id, a) => (applied = a),
+      });
       handler.onActivate(undefined as never);
       handler.onPointerDown(pointerAt(PAGE_ID, [150, 100]));
       handler.onPointerMove(pointerAt(PAGE_ID, [150, 80]));
@@ -325,14 +380,28 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(applied).toBe(true);
       const t = (await tableOf(h, SQ))!;
       expect(t.anchors).toHaveLength(5);
-      expect(t.anchors.some((a) => Math.abs(a.anchor[0] - 150) < 1e-3 && Math.abs(a.anchor[1] - 70) < 1e-3)).toBe(true);
+      expect(
+        t.anchors.some(
+          (a) =>
+            Math.abs(a.anchor[0] - 150) < 1e-3 &&
+            Math.abs(a.anchor[1] - 70) < 1e-3,
+        ),
+      ).toBe(true);
     });
   });
 
   describe("Path Eraser", () => {
     it("a drag across an open line splits it into two painted pieces — one undo step", async () => {
       const { host, work } = countingHost(h.host);
-      const r = await applyPathErase(host, PAGE_ID, [[350, 230], [350, 270]], 10);
+      const r = await applyPathErase(
+        host,
+        PAGE_ID,
+        [
+          [350, 230],
+          [350, 270],
+        ],
+        10,
+      );
       expect(r.erased).toEqual([A]);
       expect(r.inserted).toBe(1);
       expect(work.mutations).toHaveLength(1);
@@ -345,7 +414,15 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
     });
 
     it("across a CLOSED square's edge it opens the square into one open path", async () => {
-      const r = await applyPathErase(h.host, PAGE_ID, [[150, 90], [150, 110]], 10);
+      const r = await applyPathErase(
+        h.host,
+        PAGE_ID,
+        [
+          [150, 90],
+          [150, 110],
+        ],
+        10,
+      );
       expect(r.erased).toEqual([SQ]);
       const t = (await tableOf(h, SQ))!;
       expect(t.subpathOpen).toEqual([true]);
@@ -354,12 +431,26 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
     });
 
     it("erasing all of a path deletes it; the live tool erases what it is dragged over", async () => {
-      const all = await applyPathErase(h.host, PAGE_ID, [[290, 250], [410, 250]], 10);
+      const all = await applyPathErase(
+        h.host,
+        PAGE_ID,
+        [
+          [290, 250],
+          [410, 250],
+        ],
+        10,
+      );
       expect(all.removed).toEqual([A]);
       let r: EraseResult | null = null;
-      const handler = createPathEraserHandler(h.host, { onErase: (x) => (r = x) });
+      const handler = createPathEraserHandler(h.host, {
+        onErase: (x) => (r = x),
+      });
       handler.onActivate(undefined as never);
-      drag(handler, [[470, 240], [470, 250], [470, 260]]);
+      drag(handler, [
+        [470, 240],
+        [470, 250],
+        [470, 260],
+      ]);
       await settle();
       expect(r!.erased).toEqual([B]);
     });
@@ -377,7 +468,9 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       await settle();
       const leaves = await leafIds(h);
       expect(leaves).toHaveLength(before + 1);
-      const star = leaves.find((id) => !["sq", "wave", "a", "b"].includes(String(id.id)))!;
+      const star = leaves.find(
+        (id) => !["sq", "wave", "a", "b"].includes(String(id.id)),
+      )!;
       const t = (await tableOf(h, star))!;
       expect(t.anchors).toHaveLength(12);
       expect(t.subpathOpen ?? [false]).toEqual([false]);
@@ -399,19 +492,27 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
 
     it("a Flare is its parts GROUPED in one batch; the halo fades with a radial gradient feather", async () => {
       const { host, work } = countingHost(h.host);
-      const parts = await applyInsertFlare(host, { cx: 300, cy: 500, rays: 6, rings: 3 }, PAGE_ID);
+      const parts = await applyInsertFlare(
+        host,
+        { cx: 300, cy: 500, rays: 6, rings: 3 },
+        PAGE_ID,
+      );
       expect(parts).toBe(11);
       expect(work.mutations).toHaveLength(1);
       const tree = await h.host.document.tree();
       const groups: SceneTreeNode[] = [];
       const walk = (ns: readonly SceneTreeNode[]) =>
-        ns.forEach((n) => (n.id?.kind === "group" ? groups.push(n) : walk(n.children ?? [])));
+        ns.forEach((n) =>
+          n.id?.kind === "group" ? groups.push(n) : walk(n.children ?? []),
+        );
       walk(tree);
       expect(groups).toHaveLength(1);
       expect(groups[0]!.children).toHaveLength(11);
       const halo = groups[0]!.children![0]!.id as ElementId;
       const props = await h.host.document.elementProperties(halo);
-      const feather = props!.entries.find((e) => e.path === "frameGradientFeather");
+      const feather = props!.entries.find(
+        (e) => e.path === "frameGradientFeather",
+      );
       expect(feather?.value).toBeTruthy();
       await h.host.document.undo();
       expect(await leafIds(h)).toHaveLength(4);
@@ -419,7 +520,9 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
 
     it("the Flare tool's two gestures insert a flare", async () => {
       let done = false;
-      const handler = createFlareHandler(h.host, { onFlare: () => (done = true) });
+      const handler = createFlareHandler(h.host, {
+        onFlare: () => (done = true),
+      });
       handler.onActivate(undefined as never);
       handler.onPointerDown(pointerAt(PAGE_ID, [300, 500]));
       handler.onPointerUp(pointerAt(PAGE_ID, [330, 500]));
@@ -444,25 +547,43 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       expect(leaves).toHaveLength(2);
       const rect = (await tableOf(h, leaves[0]!))!;
       expect(rect.anchors).toHaveLength(4);
-      expect(rect.anchors.map((a) => a.anchor)).toEqual(recogniseShape(S.rectangle!)!.table!.anchors.map((a) => a.anchor));
+      expect(rect.anchors.map((a) => a.anchor)).toEqual(
+        recogniseShape(S.rectangle!)!.table!.anchors.map((a) => a.anchor),
+      );
       await h.host.document.undo();
       expect(await leafIds(h)).toHaveLength(1);
     });
 
     it("a scribble ACROSS two overlapping squares merges them; one inside their overlap punches it out", async () => {
       const two = () =>
-        packageWithSpread(squareItem("p", 100, 100, 100) + squareItem("q", 150, 150, 100));
+        packageWithSpread(
+          squareItem("p", 100, 100, 100) + squareItem("q", 150, 150, 100),
+        );
       await h.load(two());
       const across: [number, number][] = [];
-      for (let i = 0; i <= 6; i++) across.push([i % 2 === 0 ? 120 : 230, 120 + i * 18]);
+      for (let i = 0; i <= 6; i++)
+        across.push([i % 2 === 0 ? 120 : 230, 120 + i * 18]);
       const merged = await applyShaperStroke(h.host, PAGE_ID, across);
-      expect(merged).toMatchObject({ applied: true, kind: "scribble", mode: "keep" });
+      expect(merged).toMatchObject({
+        applied: true,
+        kind: "scribble",
+        mode: "keep",
+      });
       expect(await leafIds(h)).toHaveLength(1);
       await h.load(two());
       const inside: [number, number][] = [];
-      for (let i = 0; i <= 6; i++) inside.push([i % 2 === 0 ? 160 : 190, 160 + i * 5]);
-      const punched = (await applyShaperStroke(h.host, PAGE_ID, inside)) as ShaperResult;
-      expect(punched).toMatchObject({ applied: true, kind: "scribble", mode: "remove" });
+      for (let i = 0; i <= 6; i++)
+        inside.push([i % 2 === 0 ? 160 : 190, 160 + i * 5]);
+      const punched = (await applyShaperStroke(
+        h.host,
+        PAGE_ID,
+        inside,
+      )) as ShaperResult;
+      expect(punched).toMatchObject({
+        applied: true,
+        kind: "scribble",
+        mode: "remove",
+      });
     });
 
     it("the live tool recognises a recorded triangle", async () => {
@@ -470,7 +591,10 @@ describe("draw conformance — WP6.1 part 2 tools [plugin-draw.tool-wave-3]", ()
       let r: ShaperResult | null = null;
       const handler = createShaperHandler(h.host, { onShape: (x) => (r = x) });
       handler.onActivate(undefined as never);
-      drag(handler, S.triangle!.map((p) => [p[0], p[1]] as [number, number]));
+      drag(
+        handler,
+        S.triangle!.map((p) => [p[0], p[1]] as [number, number]),
+      );
       await settle();
       expect(r).toMatchObject({ applied: true, kind: "triangle" });
     });
