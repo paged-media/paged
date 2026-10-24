@@ -64,6 +64,7 @@ import type {
 } from "@paged-media/plugin-api";
 import {
   BINDING_KEY,
+  DEFAULT_GRID_SVG_OPTIONS,
   cellFillSwatchOps,
   contentHash,
   defaultPlacement,
@@ -1087,9 +1088,11 @@ export function withSparklines(
 /** A frame page lowered without gridlines says so to the table writer
  *  (`LoweredContent.noGridlines`). */
 function withoutGridlines(content: LoweredContent): LoweredContent {
+  // A frame page also pads its text as the grid draws it.
+  const padded = { ...content, textInsetPt: DEFAULT_GRID_SVG_OPTIONS.pad };
   return content.rules.h.length === 0 && content.rules.v.length === 0
-    ? { ...content, noGridlines: true }
-    : content;
+    ? { ...padded, noGridlines: true }
+    : padded;
 }
 
 /** A window frame's page lowering and the A1 range it covers, or null when

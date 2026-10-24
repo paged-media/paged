@@ -471,6 +471,42 @@ describe("sheet_lower_native_table: grid rules → cell edge strokes", () => {
     },
   };
 
+  it("a frame page without gridlines writes all four edges of every cell as no line", () => {
+    // The engine keeps a cell's top and left apart from its neighbour's
+    // bottom and right: an inner edge left unset draws the default stroke.
+    const ops = loose(
+      tableDecorOps({ ...CONTENT, noGridlines: true }, "Story/u1", "tbl9").ops,
+    );
+    const rows = CONTENT.rows.length;
+    const cols = CONTENT.cols.length;
+    for (const path of [
+      "cellTopEdgeStrokeWeight",
+      "cellLeftEdgeStrokeWeight",
+      "cellBottomEdgeStrokeWeight",
+      "cellRightEdgeStrokeWeight",
+    ]) {
+      const edges = ops.filter((o) => o.args.path === path);
+      expect(edges.length, path).toBe(rows * cols);
+      for (const e of edges)
+        expect(e.args.value).toEqual({ type: "length", value: 0 });
+    }
+  });
+
+  it("a frame page pads the text of every cell with text, left and right", () => {
+    const ops = loose(
+      tableDecorOps({ ...CONTENT, textInsetPt: 3 }, "Story/u1", "tbl9").ops,
+    );
+    const withText = CONTENT.rows.flatMap((r) =>
+      r.cells.filter((c) => c.text.length > 0),
+    ).length;
+    for (const path of ["cellInsetLeft", "cellInsetRight"]) {
+      const insets = ops.filter((o) => o.args.path === path);
+      expect(insets.length, path).toBe(withText);
+      for (const o of insets)
+        expect(o.args.value).toEqual({ type: "length", value: 3 });
+    }
+  });
+
   it("maps boundary rules to top/bottom/left/right edges of boundary cells", () => {
     const decor = tableDecorOps(RULED, "Story/u1", "tbl9");
     expect(decor.unmappedRules).toBe(0);
