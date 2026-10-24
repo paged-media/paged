@@ -1037,7 +1037,8 @@ pub(super) fn emit_text_frame_into(
             subpath_starts,
             subpath_open,
             super::shapes::uniform_corner(&resolved.corners),
-        );
+        )
+        .with_fill_rule(resolved.fill_rule);
         let cache_key = match resolved.self_id {
             Some(id) => fnv_1a_u64(id.as_bytes()),
             None => path_signature(anchors),
@@ -1086,15 +1087,13 @@ pub(super) fn emit_text_frame_into(
             (Geometry::TextFrameRect { rect: r }, None) => {
                 let (id, _) = page.list.paths.intern(
                     paged_compose::UNIT_RECT_KEY,
-                    paged_compose::PathData {
-                        segments: vec![
-                            paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                            paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
-                            paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
-                            paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
-                            paged_compose::PathSegment::Close,
-                        ],
-                    },
+                    paged_compose::PathData::new(vec![
+                        paged_compose::PathSegment::MoveTo { x: 0.0, y: 0.0 },
+                        paged_compose::PathSegment::LineTo { x: 1.0, y: 0.0 },
+                        paged_compose::PathSegment::LineTo { x: 1.0, y: 1.0 },
+                        paged_compose::PathSegment::LineTo { x: 0.0, y: 1.0 },
+                        paged_compose::PathSegment::Close,
+                    ]),
                 );
                 (Some(id), Transform::for_rect_in(*r, outer), Some(*r))
             }

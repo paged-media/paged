@@ -1469,15 +1469,13 @@ mod tests {
     /// `(x, y)`, as a unit-square path plus the transform that places
     /// it — the shape every emitter hands the mask builders.
     fn rect(x: f32, y: f32, w: f32, h: f32) -> (PathData, Transform) {
-        let path = PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: 1.0, y: 0.0 },
-                PathSegment::LineTo { x: 1.0, y: 1.0 },
-                PathSegment::LineTo { x: 0.0, y: 1.0 },
-                PathSegment::Close,
-            ],
-        };
+        let path = PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 1.0 },
+            PathSegment::LineTo { x: 0.0, y: 1.0 },
+            PathSegment::Close,
+        ]);
         (path, Transform([w, 0.0, 0.0, h, x, y]))
     }
 
