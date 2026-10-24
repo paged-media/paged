@@ -28,7 +28,7 @@ import { act } from "@testing-library/react";
 import { covers } from "@paged-media/test-kit";
 
 import type {
-  DataBindingInfo,
+  DataBindingStatus,
   DataService,
   DataTableInfo,
   ProviderRecordSet,
@@ -131,11 +131,12 @@ const TABLE: DataTableInfo = {
   writable: true,
 };
 
-function serve(tables: DataTableInfo[], bindings: DataBindingInfo[] = []) {
+function serve(tables: DataTableInfo[], statuses: DataBindingStatus[] = []) {
   const backend = createDataRegistry();
   const scope = createEditorScope();
   setDataDoorSource(scope, backend);
   const queries: string[] = [];
+  let refreshed = 0;
   const service: DataService = {
     tables: () => tables,
     records: async () => recordSet(ROWS),
@@ -143,10 +144,13 @@ function serve(tables: DataTableInfo[], bindings: DataBindingInfo[] = []) {
       queries.push(sql);
       return recordSet(run(sql));
     },
-    bindings: async () => bindings,
+    status: async () => statuses,
+    async refresh() {
+      refreshed++;
+    },
   };
   const handle = act(() => void backend.serve("media.paged.data", service));
-  return { scope, backend, queries, handle };
+  return { scope, backend, queries, handle, refreshes: () => refreshed };
 }
 
 const settle = () =>
@@ -181,15 +185,22 @@ describe("Data panel", () => {
 
   test("a table: its tab, count, rows; sort, filter and group run in the service", async () => {
     covers("panel:paged.data");
-    const { scope, queries } = serve(
+    const { scope, queries, refreshes } = serve(
       [TABLE],
       [
         {
           id: "b1",
-          target: "rectangle:u1",
-          path: "frameOpacity",
+          kind: "property",
           query: "products",
-          expr: "price * 2",
+          fields: ["price"],
+          status: "linked",
+        },
+        {
+          id: "b2",
+          kind: "variable",
+          query: "products",
+          fields: ["cat"],
+          status: "stale",
         },
       ],
     );
@@ -208,17 +219,20 @@ describe("Data panel", () => {
         (r) => r.querySelector("[role='gridcell']")?.textContent,
       );
     expect(firstColumn()).toEqual(["A-1", "B-2", "C-3"]);
-    // The field a binding reads is marked.
+    // The fields bindings read carry their state; the bar counts them.
+    const header = (f: string) =>
+      h.root.querySelector(`[data-data-header='${f}']`);
+    expect(header("price")?.getAttribute("data-bound")).toBe("ok");
+    expect(header("cat")?.getAttribute("data-bound")).toBe("warn");
+    expect(header("sku")?.hasAttribute("data-bound")).toBe(false);
     expect(
-      h.root
-        .querySelector("[data-data-header='price']")
-        ?.hasAttribute("data-bound"),
-    ).toBe(true);
-    expect(
-      h.root
-        .querySelector("[data-data-header='sku']")
-        ?.hasAttribute("data-bound"),
-    ).toBe(false);
+      h.root.querySelector("[data-data-status='stale']")?.textContent,
+    ).toContain("1 changed in the data");
+    await act(async () =>
+      (h.root.querySelector("[data-data-update]") as HTMLElement).click(),
+    );
+    await settle();
+    expect(refreshes()).toBe(1);
 
     // Sort by price, descending on a second click.
     await act(async () =>

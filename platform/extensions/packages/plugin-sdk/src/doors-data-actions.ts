@@ -187,6 +187,14 @@ export function createDataSurface(
       const s = service("evaluate", "read");
       return member(s, "evaluate", "evaluate")(query, expr, record);
     },
+    async status() {
+      const s = service("status", "read");
+      return [...(await member(s, "status", "status")())];
+    },
+    async refresh() {
+      const s = service("refresh", "bind");
+      return member(s, "refresh", "refresh")();
+    },
     onDidChange(listener) {
       requireDeclared(
         cap?.read === true,

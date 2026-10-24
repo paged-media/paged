@@ -2540,6 +2540,11 @@ export function createSession(
     transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
+    syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
+    refresh: async () => {
+      await self.refreshData();
+      await self.lowerAll();
+    },
     evaluate: async (query, expr, record) => {
       const e = await ensureEngine();
       if (typeof e.evaluate_at !== "function")
