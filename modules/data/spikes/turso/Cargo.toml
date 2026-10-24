@@ -1,0 +1,42 @@
+# The Turso spike (PM-0015): Turso's core compiled with the data engine's own
+# types, measured against the DuckDB-WASM baseline. Its own workspace, so the
+# module's build and CI never compile it; supply-chain CI checks its
+# dependencies with its deny.toml. Report: ../../docs/design/turso-spike-2026-10.md.
+[package]
+name = "data-store-spike"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.99"
+license = "AGPL-3.0-only OR LicenseRef-PMEL"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+data-core = { path = "../../data-core" }
+# MIT. Default features off (no encryption, SIMD, autovacuum or full-text
+# search); 0.8.3 builds only with `fs` (core paths call `Database::open_file`)
+# and `uuid` (incremental/dbsp.rs), so both stay on although the store is
+# in-memory.
+turso_core = { version = "=0.8.3", default-features = false, features = ["fs", "uuid", "time", "json", "series"] }
+# MIT OR Unlicense.
+csv = "1"
+thiserror = "2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# MIT OR Apache-2.0: the panic message on the console instead of a bare trap.
+wasm-bindgen = "=0.2.129"
+console_error_panic_hook = "0.1"
+# MIT OR Apache-2.0: the clock (std::time panics on wasm32-unknown-unknown).
+js-sys = "0.3"
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
