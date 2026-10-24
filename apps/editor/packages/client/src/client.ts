@@ -79,6 +79,7 @@ import {
   type SnapLine,
   type SnapshotPng,
   type TextCellAddr,
+  type UndoLogEntryWire,
   type WordBounds,
   type WorkerToMain,
 } from "./protocol";
@@ -87,6 +88,19 @@ import { GestureBuffer } from "./sab/gesture";
 import type { JournalEntry, UncapturedLedger } from "./journal";
 
 /** What {@link CanvasClient.snapshotBackendInfo} reports. */
+/** Engine ADR 1016 — the `undoLog` reply ({@link CanvasClient.undoLog}). */
+export interface UndoLog {
+  /** Oldest first; the last step is what an undo reverts. */
+  undo: UndoLogEntryWire[];
+  /** The next redo first. */
+  redo: UndoLogEntryWire[];
+  undoLen: number;
+  redoLen: number;
+  depth: number;
+  /** Steps the depth evicted since the document opened. */
+  evicted: number;
+}
+
 export interface SnapshotBackendInfo {
   /** The policy {@link CanvasClient.setSnapshotBackend} set. */
   requested: "auto" | "gpu" | "cpu";
@@ -2498,6 +2512,64 @@ export class CanvasClient {
   /** Redo the last undone mutation. See {@link undo}. */
   async redo(): Promise<WorkerToMain> {
     return this.send({ kind: "redo" });
+  }
+
+  /**
+   * Engine ADR 1016 — the named undo timeline: the newest `limit` undo
+   * steps oldest first and the redo steps next-redo first (all of them
+   * without a limit), with the logs' lengths and the history depth.
+   */
+  async undoLog(limit?: number): Promise<UndoLog> {
+    const reply = await this.send({
+      kind: "requestUndoLog",
+      payload: limit === undefined ? {} : { limit },
+    });
+    if (reply.kind === "undoLog") return reply.payload;
+    throw new Error(`unexpected reply: ${reply.kind}`);
+  }
+
+  /** Engine ADR 1016 — name the undo step `appliedSeq` (the step a write
+   *  just made) `label`. Resolves whether it took the name: a step that is
+   *  no longer the top of the undo log keeps its own. */
+  async labelStep(appliedSeq: number, label: string): Promise<boolean> {
+    const reply = await this.send({
+      kind: "labelStep",
+      payload: { appliedSeq, label },
+    });
+    return reply.kind === "stepLabeled" && reply.payload.labeled;
+  }
+
+  /** Engine ADR 1016 — undo down to and including the step `appliedSeq`,
+   *  in one round trip. Resolves with the reply (`undoApplied`, or
+   *  `mutationFailed` when the step is not on the undo log). */
+  async undoTo(appliedSeq: number): Promise<WorkerToMain> {
+    return this.send({ kind: "undoTo", payload: { appliedSeq } });
+  }
+
+  /** Engine ADR 1016 — redo up to and including the step `appliedSeq`. */
+  async redoTo(appliedSeq: number): Promise<WorkerToMain> {
+    return this.send({ kind: "redoTo", payload: { appliedSeq } });
+  }
+
+  /** Engine ADR 1016 — make the document what it was right after the step
+   *  `appliedSeq` (`0`: before the oldest step) as ONE new undo step named
+   *  `label` (a snapshot restore). Reply: `mutationApplied`. */
+  async restoreTo(appliedSeq: number, label?: string): Promise<WorkerToMain> {
+    return this.send({
+      kind: "restoreTo",
+      payload: label ? { appliedSeq, label } : { appliedSeq },
+    });
+  }
+
+  /** Engine ADR 1016 — keep at most `depth` undo steps (1..=10,000); the
+   *  worker keeps the depth across loads. Resolves with the depth in force. */
+  async setHistoryDepth(depth: number): Promise<number> {
+    const reply = await this.send({
+      kind: "setHistoryDepth",
+      payload: { depth },
+    });
+    if (reply.kind === "historyDepthApplied") return reply.payload.depth;
+    throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
   /** Write the camera transform. Worker reads it on the next frame. */

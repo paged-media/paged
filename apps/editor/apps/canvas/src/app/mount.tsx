@@ -273,6 +273,7 @@ import { appCatalogRegistry } from "../panels/catalog-registry";
 import { CanvasPanel } from "../panels/canvas-panel";
 import { problemsOf, type ProblemsStore } from "../panels/problems-store";
 import { BUILT_IN_PANELS } from "../panels/built-in-panels";
+import { applyHistoryDepthPreference } from "../panels/history-panel";
 import { PlaygroundController } from "../playground/PlaygroundController";
 import { debugFlag } from "../debug-flags";
 import { IframeScriptBridge } from "../playground/IframeScriptBridge";
@@ -813,6 +814,11 @@ function CanvasAppIntegration() {
   useEffect(() => {
     return setJournalDrainer(() => client.drainJournal());
   }, [client]);
+  // Editor ADR 285 — the history-depth preference reaches the worker once;
+  // it keeps the depth across document loads.
+  useEffect(() => {
+    applyHistoryDepthPreference(instance.scope, client);
+  }, [instance.scope, client]);
   // ADR 025 — the opt-in `documentShape` export section. The engine's
   // `DocumentStats` is already pure counts, so this carries structure and no
   // content. A PROVIDER, not a snapshot: the dialog must show the document
