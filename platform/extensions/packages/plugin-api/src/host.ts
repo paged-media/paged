@@ -2332,6 +2332,25 @@ export interface DataService {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** Every binding with its sync state (the Data panel's colour cues). */
+  status?(): Promise<readonly DataBindingStatus[]>;
+  /** Read the data again and bring the placed content up to date (the Data
+   *  panel's Update document). */
+  refresh?(): Promise<void>;
+}
+
+/** A binding and its sync state: `linked` (placed and in step with the
+ *  data), `stale` (the data changed since it was placed), `pinned` or
+ *  `overridden` (kept as it is on purpose), `error`, `unresolved` (not
+ *  resolved yet). */
+export interface DataBindingStatus {
+  id: string;
+  kind: string;
+  query?: string;
+  /** The fields its expressions read. */
+  fields: readonly string[];
+  status: "linked" | "stale" | "pinned" | "overridden" | "error" | "unresolved";
+  message?: string;
 }
 
 /** What an expression gives at a record. */
@@ -2374,6 +2393,10 @@ export interface DataSurface {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** Every binding with its sync state (`read`). */
+  status(): Promise<readonly DataBindingStatus[]>;
+  /** Read the data again and update the document (`bind`). */
+  refresh(): Promise<void>;
   /** Fires when a table's rows change (`read`). */
   onDidChange(listener: (change: DataChange) => void): Disposable;
 }

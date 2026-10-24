@@ -50,9 +50,14 @@ Query), bind (right-click any property).
 
 - paged.sheet's data tables (its Edit in sheet) and this grid read the same tables, and any
   bundle serving `data@1` gets the panel.
+- Amended 2026-10-24: `data@1` gained `status()` (each binding with its sync state and the
+  fields its expressions read) and `refresh()` (plugin-sdk 0.74.3-canary.21). A header is
+  underlined in the worst state of the bindings reading its field: in step, changed in the data
+  (or kept as placed), failed. A status line counts the bindings by state, and **Update
+  document** reads the data again and updates every placed field, table and image.
 - Not part of this record, and not built yet:
-  - per-record sync status (placed and in sync, changed in the source, deleted, new) and the
-    canvas field markers, which need the service to report placed instances per record;
+  - per-record status (a record new or deleted in the source) and the canvas field markers,
+    which need the service to report placed instances per record;
   - drag to place, which needs a canvas drop target for a field;
   - record templates and their library, and a pagination inspector, which stay paged.data's
     (Data Merge, record flow) until they have a door;

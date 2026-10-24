@@ -164,6 +164,14 @@ describe.skipIf(!ready && !required)(
       expect(
         (await consumer.data.bindings()).map((x) => [x.id, x.path]),
       ).toEqual([[b.id, "frameOpacity"]]);
+      // Editor ADR 291's colour cues and Update document.
+      const st = (await consumer.data.status()).find((x) => x.id === b.id);
+      expect(st).toMatchObject({ kind: "property", query: "q", fields: [] });
+      expect(["linked", "unresolved", "stale"]).toContain(st!.status);
+      await consumer.data.refresh();
+      expect(
+        (await consumer.data.status()).find((x) => x.id === b.id)?.status,
+      ).toBe("linked");
       await consumer.data.unbind(b.id);
       expect(await consumer.data.bindings()).toEqual([]);
 

@@ -34,7 +34,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
 import type {
-  DataBindingInfo,
+  DataBindingStatus,
   DataService,
   DataTableInfo,
   ProviderRecordSet,
@@ -90,6 +90,17 @@ const M = defineMessages("app.dataPanel", {
   opBlank: "is empty",
   opNotBlank: "is not empty",
   remove: "Remove",
+  update: "Update document",
+  updateTitle:
+    "Read the data again and bring every placed field, table and image up to date",
+  updating: "Updating…",
+  inSync: "{count} in step",
+  stale: "{count} changed in the data",
+  kept: "{count} kept as placed",
+  errors: "{count} failed",
+  fieldLinked: "every binding reading it is in step",
+  fieldStale: "the data changed since it was placed",
+  fieldError: "a binding reading it failed",
 });
 
 const ROW_H = 22;
@@ -130,20 +141,43 @@ const button: CSSProperties = {
   cursor: "pointer",
 };
 
-/** How many bindings read each field of `table` (a field named in the
- *  expression as a bare word). */
-function boundFields(
-  bindings: readonly DataBindingInfo[],
+type Tone = "ok" | "warn" | "error" | "none";
+const RANK: Record<Tone, number> = { none: 0, ok: 1, warn: 2, error: 3 };
+
+function toneOf(st: DataBindingStatus["status"]): Tone {
+  if (st === "linked") return "ok";
+  if (st === "error") return "error";
+  if (st === "unresolved") return "none";
+  return "warn";
+}
+
+/** Per field of `table`: how many bindings read it and the worst of their
+ *  states (EasyCatalog's colour cues, at the field). */
+function fieldStates(
+  statuses: readonly DataBindingStatus[],
   table: string,
-): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const b of bindings) {
+): Map<string, { count: number; tone: Tone }> {
+  const out = new Map<string, { count: number; tone: Tone }>();
+  for (const b of statuses) {
     if (b.query !== table) continue;
-    for (const w of b.expr.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? [])
-      out.set(w, (out.get(w) ?? 0) + 1);
+    const tone = toneOf(b.status);
+    for (const f of b.fields) {
+      const cur = out.get(f) ?? { count: 0, tone: "none" as Tone };
+      out.set(f, {
+        count: cur.count + 1,
+        tone: RANK[tone] > RANK[cur.tone] ? tone : cur.tone,
+      });
+    }
   }
   return out;
 }
+
+const TONE_COLOR: Record<Tone, string> = {
+  ok: status.ok,
+  warn: status.warn,
+  error: status.error,
+  none: color.mutedFg,
+};
 
 function cell(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -205,11 +239,11 @@ function Start({ hasService }: { hasService: boolean }) {
 function Grid({
   service,
   table,
-  bindings,
+  statuses,
 }: {
   service: DataService;
   table: DataTableInfo;
-  bindings: readonly DataBindingInfo[];
+  statuses: readonly DataBindingStatus[];
 }) {
   const { t } = useStrings();
   const revision = useDataRevision();
@@ -237,7 +271,7 @@ function Grid({
     ? [{ field: group, desc: false }, ...sort.filter((s) => s.field !== group)]
     : sort;
   const sql = gridSql(table.name, filters, match, keys);
-  const bound = boundFields(bindings, table.name);
+  const bound = fieldStates(statuses, table.name);
 
   // The count, and (grouped) the group field's values in order.
   useEffect(() => {
@@ -507,17 +541,24 @@ function Grid({
         >
           {visible.map((f) => {
             const s = keys.findIndex((k) => k.field === f.name);
-            const n = bound.get(f.name) ?? 0;
+            const b = bound.get(f.name);
+            const n = b?.count ?? 0;
+            const cue =
+              b?.tone === "error"
+                ? t(M.fieldError)
+                : b?.tone === "warn"
+                  ? t(M.fieldStale)
+                  : t(M.fieldLinked);
             return (
               <button
                 key={f.name}
                 type="button"
                 role="columnheader"
                 data-data-header={f.name}
-                data-bound={n > 0 ? "" : undefined}
+                data-bound={n > 0 ? (b?.tone ?? "none") : undefined}
                 title={
                   n > 0
-                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })}`
+                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })} · ${cue}`
                     : t(M.sortHint)
                 }
                 aria-sort={
@@ -534,7 +575,7 @@ function Grid({
                   borderRight: `1px solid ${color.border}`,
                   borderBottom:
                     n > 0
-                      ? `2px solid ${status.ok}`
+                      ? `2px solid ${TONE_COLOR[b?.tone ?? "none"]}`
                       : `1px solid ${color.border}`,
                   background: "transparent",
                   fontWeight: 600,
@@ -637,12 +678,67 @@ function Grid({
   );
 }
 
+function StatusBar({
+  statuses,
+  updating,
+  onUpdate,
+}: {
+  statuses: readonly DataBindingStatus[];
+  updating: boolean;
+  onUpdate: (() => void) | null;
+}) {
+  const { t } = useStrings();
+  const count = (tone: Tone) =>
+    statuses.filter((b) => toneOf(b.status) === tone).length;
+  const stale = statuses.filter((b) => b.status === "stale").length;
+  const kept = statuses.filter(
+    (b) => b.status === "pinned" || b.status === "overridden",
+  ).length;
+  const chip = (tone: Tone, text: string, attr: string) => (
+    <span data-data-status={attr} style={{ ...small, color: TONE_COLOR[tone] }}>
+      ● {text}
+    </span>
+  );
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: space[2],
+        padding: `${space[1]} ${space[2]}`,
+      }}
+    >
+      {statuses.length > 0 &&
+        chip("ok", t(M.inSync, { count: count("ok") }), "linked")}
+      {stale > 0 && chip("warn", t(M.stale, { count: stale }), "stale")}
+      {kept > 0 && chip("none", t(M.kept, { count: kept }), "kept")}
+      {count("error") > 0 &&
+        chip("error", t(M.errors, { count: count("error") }), "error")}
+      <span style={{ flex: 1 }} />
+      {onUpdate && (
+        <button
+          type="button"
+          data-data-update=""
+          style={button}
+          title={t(M.updateTitle)}
+          disabled={updating}
+          onClick={onUpdate}
+        >
+          {updating ? t(M.updating) : t(M.update)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function DataPanel() {
   const { t } = useStrings();
   const service = useDataService();
   const revision = useDataRevision();
   const [tables, setTables] = useState<readonly DataTableInfo[]>([]);
-  const [bindings, setBindings] = useState<readonly DataBindingInfo[]>([]);
+  const [statuses, setStatuses] = useState<readonly DataBindingStatus[]>([]);
+  const [updating, setUpdating] = useState(false);
   const [active, setActive] = useState("");
 
   useEffect(() => {
@@ -651,9 +747,9 @@ export function DataPanel() {
     void Promise.resolve(service.tables()).then((all) => {
       if (live) setTables(all);
     });
-    void service.bindings?.().then(
-      (b) => live && setBindings(b),
-      () => live && setBindings([]),
+    void service.status?.().then(
+      (b) => live && setStatuses(b),
+      () => live && setStatuses([]),
     );
     return () => {
       live = false;
@@ -709,12 +805,27 @@ export function DataPanel() {
           </button>
         ))}
       </div>
+      <StatusBar
+        statuses={statuses}
+        updating={updating}
+        onUpdate={
+          service && typeof service.refresh === "function"
+            ? () => {
+                setUpdating(true);
+                void service.refresh!().then(
+                  () => setUpdating(false),
+                  () => setUpdating(false),
+                );
+              }
+            : null
+        }
+      />
       {service && (
         <Grid
           key={table.name}
           service={service}
           table={table}
-          bindings={bindings}
+          statuses={statuses}
         />
       )}
     </div>

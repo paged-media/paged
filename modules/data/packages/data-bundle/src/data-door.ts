@@ -11,6 +11,7 @@
 
 import type {
   DataBindingInfo,
+  DataBindingStatus,
   DataBindingSpec,
   DataChange,
   DataEvaluation,
@@ -41,10 +42,15 @@ export interface DataDoorDeps {
     expr: string,
     record: number,
   ): Promise<DataEvaluation>;
+  /** A binding's sync state as the engine names it, or null. */
+  syncStatusOf(id: string): string | null;
+  /** Read the data again and lower every binding (the panel's Update). */
+  refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
   bindings(): readonly {
     id: string;
     kind: string;
+    [k: string]: unknown;
     target?: unknown;
     path?: unknown;
     query?: unknown;
@@ -59,6 +65,25 @@ export interface DataDoor {
   touched(table: string): void;
   /** Hear the changes (the serving handle's `changed`). */
   onChange(listener: (change: DataChange) => void): void;
+}
+
+const STATUSES = new Set(["linked", "stale", "pinned", "overridden", "error"]);
+
+/** The fields a binding's expressions read: the bare names in them, not a
+ *  function's name (followed by "(") and not inside a string. */
+export function fieldsRead(b: Record<string, unknown>): string[] {
+  const texts: string[] = [];
+  for (const k of ["expr", "when"])
+    if (typeof b[k] === "string") texts.push(b[k] as string);
+  const out = new Set<string>();
+  for (const text of texts) {
+    const bare = text.replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, " ");
+    for (const m of bare.matchAll(/\b[A-Za-z_][A-Za-z0-9_]*\b(?!\s*\()/g)) {
+      const w = m[0];
+      if (!/^(TRUE|FALSE|AND|OR|NOT)$/i.test(w)) out.add(w);
+    }
+  }
+  return [...out];
 }
 
 const NO_RECORDS =
@@ -183,6 +208,26 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
           `no query "${query}" (an expression reads a query's fields)`,
         );
       return deps.evaluate(query, expr, record);
+    },
+    async status() {
+      const out: DataBindingStatus[] = [];
+      for (const b of deps.bindings()) {
+        const raw = deps.syncStatusOf(b.id);
+        const status = STATUSES.has(raw ?? "")
+          ? (raw as DataBindingStatus["status"])
+          : "unresolved";
+        out.push({
+          id: b.id,
+          kind: b.kind,
+          ...(typeof b.query === "string" ? { query: b.query } : {}),
+          fields: fieldsRead(b),
+          status,
+        });
+      }
+      return out;
+    },
+    async refresh() {
+      await deps.refresh();
     },
     async bindings() {
       const out: DataBindingInfo[] = [];
