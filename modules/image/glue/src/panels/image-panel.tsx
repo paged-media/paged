@@ -62,7 +62,6 @@ import type {
   LayerInfo,
   LevelsChannel,
   PressureTarget,
-  ResampleFilter,
   Rgba01,
 } from "../engine";
 import {
@@ -91,6 +90,14 @@ import {
   type DistortParams,
 } from "./sections/distort-section";
 import { Section } from "./sections/disclosure";
+import { FilterDialog } from "./sections/filter-dialog";
+import {
+  ImageSizeDialog,
+  RotateDialog,
+  TrimDialog,
+} from "./sections/image-dialogs";
+import { CurvesTools } from "./sections/curves-tools";
+import { FILTERS, filterDef, type FilterId } from "../filters";
 import {
   actionBar,
   kicker,
@@ -1982,11 +1989,15 @@ const P = defineMessages("image.panel", {
     "reconstruction filter and edge rule with the crop straighten.",
   stylize: "Stylize, blur & pixelate",
   galleryNote:
-    "One-click defaults, not a parameter surface: each of these is a single " +
-    "kernel and every one has an identity setting, so a slider adds nothing " +
-    "a designer cannot get by applying twice. Emboss and find edges share " +
-    "one 3×3 neighbourhood read; the two radial modes are one kernel, where " +
-    "zoom is the degenerate arc.",
+    "Each opens its dialog: every parameter of its kernel, previewed live on " +
+    "the canvas, applied with OK as one undo step. Median, Maximum and " +
+    "Minimum are with the rank filters; Average fills the selection with " +
+    "its average colour at once.",
+  average: "Average",
+  averageTitle: "Fill the selection (or the layer) with its average colour",
+  imageSizeOpen: "Image size…",
+  trimOpen: "Trim…",
+  rotateOpen: "Rotate…",
   resize: "Resize",
   nearest: "Nearest",
   resampleTitle: "Resample the source",
@@ -2141,6 +2152,50 @@ const GALLERY = defineMessages("image.gallery", {
     "wraparound case.",
 });
 
+/** The filters the rank section opens (Median, Maximum, Minimum). */
+const RANK_FILTERS: ReadonlySet<FilterId> = new Set([
+  "median",
+  "maximum",
+  "minimum",
+]);
+
+/** `boxBlur` → `box-blur` (the buttons' data attributes). */
+const kebab = (id: string) =>
+  id.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
+/** Each filter button's own data attribute (`data-image-box-blur`, …),
+ *  built once here: the React Compiler does not lower a computed key. */
+const FILTER_ATTRS: Record<string, Record<string, string>> = Object.fromEntries(
+  FILTERS.map((f) => [f.id, { [`data-image-${kebab(f.id)}`]: "" }]),
+);
+
+/** The buttons' tooltips, where the panel always had one. */
+const FILTER_TITLES: Partial<Record<FilterId, string>> = {
+  emboss: GALLERY.embossTitle,
+  findEdges: GALLERY.findEdgesTitle,
+  motionBlur: GALLERY.motionBlurTitle,
+  radialBlur: GALLERY.spinBlurTitle,
+  mosaic: GALLERY.mosaicTitle,
+  paintDaubs: GALLERY.paintDaubsTitle,
+  posterEdges: GALLERY.posterEdgesTitle,
+  glowingEdges: GALLERY.glowingEdgesTitle,
+  halftone: GALLERY.halftoneTitle,
+  filmGrain: GALLERY.filmGrainTitle,
+  spatter: GALLERY.spatterTitle,
+  crosshatch: GALLERY.crosshatchTitle,
+  basRelief: GALLERY.basReliefTitle,
+  photocopy: GALLERY.photocopyTitle,
+  stainedGlass: GALLERY.stainedGlassTitle,
+  texturizer: GALLERY.texturizerTitle,
+  despeckle: GALLERY.despeckleTitle,
+  dustScratches: GALLERY.dustScratchesTitle,
+  offset: GALLERY.offsetTitle,
+  lensBlur: GALLERY.lensBlurTitle,
+  reduceNoise: GALLERY.reduceNoiseTitle,
+  smartSharpen: GALLERY.smartSharpenTitle,
+  selectiveColour: GALLERY.selectiveColourTitle,
+};
+
 export function makeImagePanel(session: ImageSession) {
   // A declaration, so the React Compiler sees the component (it cannot see
   // `return function ImagePanel()`, editor ADR 229).
@@ -2185,10 +2240,6 @@ export function makeImagePanel(session: ImageSession) {
 
     const s = live.state();
     const p = s.params;
-    const [resizeW, setResizeW] = useState(s.source?.width ?? 0);
-    const [resizeH, setResizeH] = useState(s.source?.height ?? 0);
-    const [resizeFilter, setResizeFilter] =
-      useState<ResampleFilter>("lanczos3");
     // Track the natural size when the source changes (a new import, a
     // crop, a resize). Adjusted while rendering, React's pattern for state
     // that follows a value (an effect would paint the old size first).
@@ -2196,8 +2247,6 @@ export function makeImagePanel(session: ImageSession) {
     const [sizedFor, setSizedFor] = useState(sourceSize);
     if (sizedFor !== sourceSize) {
       setSizedFor(sourceSize);
-      setResizeW(s.source?.width ?? 0);
-      setResizeH(s.source?.height ?? 0);
       setCanvasSize((c) => ({
         ...c,
         width: s.source?.width ?? 0,
@@ -2220,6 +2269,14 @@ export function makeImagePanel(session: ImageSession) {
       });
       setAspect("free");
       setAngle(0);
+    }
+    // The Curves tools (Auto, the eyedroppers) set the channel curves in
+    // the session; the editor here follows them.
+    const [curvesFor, setCurvesFor] = useState(s.channelCurves);
+    if (curvesFor !== s.channelCurves) {
+      setCurvesFor(s.channelCurves);
+      const c = s.channelCurves;
+      if (c) setCurvePointsBy((m) => ({ ...m, r: c.r, g: c.g, b: c.b }));
     }
     const disabled = s.busy || !s.source;
     const engineLine =
@@ -2378,6 +2435,53 @@ export function makeImagePanel(session: ImageSession) {
             </span>
           </div>
         ) : null}
+
+        {/* THE DIALOG on top: a filter's parameters with its live
+            preview, or Image Size / Trim / Arbitrary rotation. */}
+        {s.dialog?.kind === "filter" && (
+          <FilterDialog
+            def={filterDef(s.dialog.filter.id)}
+            dialog={s.dialog.filter}
+            gpu={s.gpu}
+            busy={s.busy}
+            onChange={(patch) => session.setFilterValues(patch)}
+            onPreview={(on) => void session.setFilterPreview(on)}
+            onBefore={(b) => void session.setFilterBefore(b)}
+            onOk={() => void session.commitFilterDialog()}
+            onCancel={() => void session.cancelFilterDialog()}
+          />
+        )}
+        {s.dialog?.kind === "imageSize" && s.source && (
+          <ImageSizeDialog
+            key={`${s.source.width}x${s.source.height}`}
+            width={s.source.width}
+            height={s.source.height}
+            ppi={s.ppi}
+            gpu={s.gpu}
+            busy={s.busy}
+            onResample={(w, h, f, ppi) => void session.resizeTo(w, h, f, ppi)}
+            onResolution={(ppi) => {
+              session.setResolution(ppi);
+              void session.closeDialog();
+            }}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "trim" && (
+          <TrimDialog
+            busy={s.busy}
+            onTrim={(by) => void session.trim(by)}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
+        {s.dialog?.kind === "rotate" && (
+          <RotateDialog
+            gpu={s.gpu}
+            busy={s.busy}
+            onRotate={(d) => void session.rotateCanvas(d)}
+            onCancel={() => void session.closeDialog()}
+          />
+        )}
 
         {/* CMS rung 1 — SAY which colour treatment the ingest applied.
             "sRGB assumed" is the honest majority case (most PNG/JPEG carry
@@ -3159,16 +3263,11 @@ export function makeImagePanel(session: ImageSession) {
           <button
             type="button"
             data-image-gradient-map
-            disabled={s.busy || !s.gpu || !s.source}
+            disabled={s.busy || !s.source}
             title={t(P.gradientMapTitle)}
-            onClick={() =>
-              void session.applyGradientMap(
-                [0.05, 0.1, 0.25],
-                [1.0, 0.85, 0.55],
-              )
-            }
+            onClick={() => void session.openFilterDialog("gradientMap")}
           >
-            {t(P.gradientMap)}
+            {t(P.gradientMap)}…
           </button>
         </div>
         <div style={note}>{t(P.gradientMapNote)}</div>
@@ -3181,225 +3280,27 @@ export function makeImagePanel(session: ImageSession) {
 
         <div style={sectionTitle}>{t(P.stylize)}</div>
         <div style={row}>
+          {FILTERS.filter((f) => !RANK_FILTERS.has(f.id)).map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              data-image-filter={f.id}
+              {...FILTER_ATTRS[f.id]}
+              disabled={s.busy || !s.source}
+              title={FILTER_TITLES[f.id] ? t(FILTER_TITLES[f.id]!) : undefined}
+              onClick={() => void session.openFilterDialog(f.id)}
+            >
+              {t(f.label)}…
+            </button>
+          ))}
           <button
             type="button"
-            data-image-emboss
+            data-image-average
             disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.embossTitle)}
-            onClick={() => void session.applyEmboss(135, 1)}
+            title={t(P.averageTitle)}
+            onClick={() => void session.applyAverage()}
           >
-            {t(GALLERY.emboss)}
-          </button>
-          <button
-            type="button"
-            data-image-find-edges
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.findEdgesTitle)}
-            onClick={() => void session.applyFindEdges(1)}
-          >
-            {t(GALLERY.findEdges)}
-          </button>
-          <button
-            type="button"
-            data-image-motion-blur
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.motionBlurTitle)}
-            onClick={() => void session.applyMotionBlur(0, 24)}
-          >
-            {t(GALLERY.motionBlur)}
-          </button>
-          <button
-            type="button"
-            data-image-spin-blur
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.spinBlurTitle)}
-            onClick={() => void session.applyRadialBlur(0.5, 0.5, 0.15, true)}
-          >
-            {t(GALLERY.spinBlur)}
-          </button>
-          <button
-            type="button"
-            data-image-zoom-blur
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.zoomBlurTitle)}
-            onClick={() => void session.applyRadialBlur(0.5, 0.5, 0.15, false)}
-          >
-            {t(GALLERY.zoomBlur)}
-          </button>
-          <button
-            type="button"
-            data-image-mosaic
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.mosaicTitle)}
-            onClick={() => void session.applyMosaic(12)}
-          >
-            {t(GALLERY.mosaic)}
-          </button>
-          <button
-            type="button"
-            data-image-paint-daubs
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.paintDaubsTitle)}
-            onClick={() => void session.galleryKuwahara(6, 1)}
-          >
-            {t(GALLERY.paintDaubs)}
-          </button>
-          <button
-            type="button"
-            data-image-poster-edges
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.posterEdgesTitle)}
-            onClick={() => void session.galleryPosterizeEdges(6, 1, 0.08, 1)}
-          >
-            {t(GALLERY.posterEdges)}
-          </button>
-          <button
-            type="button"
-            data-image-glowing-edges
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.glowingEdgesTitle)}
-            onClick={() => void session.galleryGlowingEdges(1.6, 0.4, 1)}
-          >
-            {t(GALLERY.glowingEdges)}
-          </button>
-          <button
-            type="button"
-            data-image-halftone
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.halftoneTitle)}
-            onClick={() => void session.galleryHalftone(6, 45, 1.2, 1)}
-          >
-            {t(GALLERY.halftone)}
-          </button>
-          <button
-            type="button"
-            data-image-film-grain
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.filmGrainTitle)}
-            onClick={() => void session.galleryGrain(1, 1, false, 0.5)}
-          >
-            {t(GALLERY.filmGrain)}
-          </button>
-          <button
-            type="button"
-            data-image-spatter
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.spatterTitle)}
-            onClick={() => void session.galleryDiffuse(1, 4, 0, 0, 1)}
-          >
-            {t(GALLERY.spatter)}
-          </button>
-          <button
-            type="button"
-            data-image-crosshatch
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.crosshatchTitle)}
-            onClick={() => void session.galleryCrosshatch(45, 6, 0.7, 2, 1)}
-          >
-            {t(GALLERY.crosshatch)}
-          </button>
-          <button
-            type="button"
-            data-image-bas-relief
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.basReliefTitle)}
-            onClick={() => void session.galleryBasRelief(135, 30, 1.5, 1)}
-          >
-            {t(GALLERY.basRelief)}
-          </button>
-          <button
-            type="button"
-            data-image-photocopy
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.photocopyTitle)}
-            onClick={() => void session.galleryThresholdInk(0.5, 0.08, 1)}
-          >
-            {t(GALLERY.photocopy)}
-          </button>
-          <button
-            type="button"
-            data-image-stained-glass
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.stainedGlassTitle)}
-            onClick={() => void session.galleryStainedGlass(1, 24, 0.5, 1)}
-          >
-            {t(GALLERY.stainedGlass)}
-          </button>
-          <button
-            type="button"
-            data-image-texturizer
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.texturizerTitle)}
-            onClick={() =>
-              void session.galleryTexturizer(1, 0, 24, 0.6, 135, 1)
-            }
-          >
-            {t(GALLERY.texturizer)}
-          </button>
-          <button
-            type="button"
-            data-image-despeckle
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.despeckleTitle)}
-            onClick={() => void session.applyDespeckle(0.12, 1)}
-          >
-            {t(GALLERY.despeckle)}
-          </button>
-          <button
-            type="button"
-            data-image-dust-scratches
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.dustScratchesTitle)}
-            onClick={() => void session.applyDustScratches(2, 0.15)}
-          >
-            {t(GALLERY.dustScratches)}
-          </button>
-          <button
-            type="button"
-            data-image-offset
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.offsetTitle)}
-            onClick={() => void session.offsetFilter(32, 32)}
-          >
-            {t(GALLERY.offset)}
-          </button>
-          <button
-            type="button"
-            data-image-lens-blur
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.lensBlurTitle)}
-            onClick={() => void session.applyLensBlur(8, 0.75, 4)}
-          >
-            {t(GALLERY.lensBlur)}
-          </button>
-          <button
-            type="button"
-            data-image-reduce-noise
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.reduceNoiseTitle)}
-            onClick={() => void session.applyReduceNoise(4, 0.12, 0.8)}
-          >
-            {t(GALLERY.reduceNoise)}
-          </button>
-          <button
-            type="button"
-            data-image-smart-sharpen
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.smartSharpenTitle)}
-            onClick={() => void session.applySmartSharpen(2, 1.2, 0.02, 0.25)}
-          >
-            {t(GALLERY.smartSharpen)}
-          </button>
-          <button
-            type="button"
-            data-image-selective-color
-            disabled={s.busy || !s.gpu || !s.source}
-            title={t(GALLERY.selectiveColourTitle)}
-            onClick={() =>
-              void session.applySelectiveColor(0, [0, 0.2, 0.2, 0], false)
-            }
-          >
-            {t(GALLERY.selectiveColour)}
+            {t(P.average)}
           </button>
         </div>
         <div style={note}>{t(P.galleryNote)}</div>
@@ -3541,60 +3442,33 @@ export function makeImagePanel(session: ImageSession) {
           onClose={() => session.closeBrushLibrary()}
         />
 
-        {/* Resize — the T1 resample kernels (GPU-only; the button says so
-            when no device). Swaps the engine source like a crop commit. */}
+        {/* Image Size, Trim and Arbitrary rotation open their dialogs
+            (shown on top of the panel). */}
         <div style={sectionTitle}>{t(P.resize)}</div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            font: `12px ${font.sans}`,
-          }}
-        >
-          <input
-            type="number"
-            min={1}
-            data-image-resize-w
-            value={resizeW}
-            onChange={(e) =>
-              setResizeW(Math.max(1, Number(e.target.value) | 0))
-            }
-            style={{ width: 64, font: `11px ${font.mono}` }}
-            disabled={disabled}
-          />
-          ×
-          <input
-            type="number"
-            min={1}
-            data-image-resize-h
-            value={resizeH}
-            onChange={(e) =>
-              setResizeH(Math.max(1, Number(e.target.value) | 0))
-            }
-            style={{ width: 64, font: `11px ${font.mono}` }}
-            disabled={disabled}
-          />
-          <select
-            data-image-resize-filter
-            value={resizeFilter}
-            onChange={(e) => setResizeFilter(e.target.value as ResampleFilter)}
-            disabled={disabled}
-          >
-            <option value="lanczos3">Lanczos 3</option>
-            <option value="mitchell">Mitchell</option>
-            <option value="nearest">{t(P.nearest)}</option>
-          </select>
+        <div style={row}>
           <button
             type="button"
-            data-image-resize-apply
-            disabled={disabled || !s.gpu}
-            title={s.gpu ? t(P.resampleTitle) : t(P.resampleGpuOnly)}
-            onClick={() =>
-              void session.resizeTo(resizeW, resizeH, resizeFilter)
-            }
+            data-image-open-image-size
+            disabled={disabled}
+            onClick={() => session.openDialog("imageSize")}
           >
-            {t(P.resample)}
+            {t(P.imageSizeOpen)}
+          </button>
+          <button
+            type="button"
+            data-image-open-trim
+            disabled={disabled}
+            onClick={() => session.openDialog("trim")}
+          >
+            {t(P.trimOpen)}
+          </button>
+          <button
+            type="button"
+            data-image-open-rotate
+            disabled={disabled}
+            onClick={() => session.openDialog("rotate")}
+          >
+            {t(P.rotateOpen)}
           </button>
         </div>
 
@@ -3721,6 +3595,13 @@ export function makeImagePanel(session: ImageSession) {
             {t(P.resetCurve)}
           </button>
         </div>
+
+        <CurvesTools
+          armed={s.curvesPicker}
+          disabled={disabled}
+          onAuto={() => void session.autoCurves()}
+          onArm={(k) => session.armCurvesPicker(k)}
+        />
 
         {/* Crop + straighten */}
         <div style={sectionTitle}>{t(P.crop)}</div>

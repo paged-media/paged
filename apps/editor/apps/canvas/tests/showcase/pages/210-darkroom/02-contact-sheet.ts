@@ -158,6 +158,8 @@ const TILES: TileSpec[] = [
     exporter: EXPORTER.png,
     apply: async (ctx) => {
       await ctx.page.locator("[data-image-find-edges]").click();
+      // The button opens the Filter dialog; OK applies its defaults.
+      await ctx.page.locator("[data-filter-ok]").click();
       await panelStatus(ctx, 30_000);
     },
   },
@@ -168,6 +170,8 @@ const TILES: TileSpec[] = [
     exporter: EXPORTER.png,
     apply: async (ctx) => {
       await ctx.page.locator("[data-image-halftone]").click();
+      // The button opens the Filter dialog; OK applies its defaults.
+      await ctx.page.locator("[data-filter-ok]").click();
       await panelStatus(ctx, 30_000);
     },
   },

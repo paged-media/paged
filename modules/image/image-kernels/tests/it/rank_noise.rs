@@ -439,13 +439,18 @@ fn rank_despeckle_large_threshold_degrades_to_a_plain_median() {
     }
 }
 
-/// Sanity: the two new kernels are the only rank/morph entries the
-/// family gained, and every one of them is a windowed module (so the
+/// Sanity: the family is the 3×3 five plus the three runtime-radius
+/// forms (Maximum, Minimum, Median with a radius), and every one of
+/// them is a windowed module (so the
 /// engine inflates an ROI for it).
 #[test]
 fn rank_noise_family_stays_windowed() {
     let defs: Vec<&KernelDef> = FAMILY.to_vec();
-    assert_eq!(defs.len(), 5, "dilate, erode, median3, despeckle, dust");
+    assert_eq!(
+        defs.len(),
+        8,
+        "dilate, erode, median3, despeckle, dust, dilate_r, erode_r, median_r"
+    );
     for d in defs {
         assert!(
             matches!(d.class, KernelClass::Windowed { .. }),

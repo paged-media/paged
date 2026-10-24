@@ -111,7 +111,10 @@ export function makeMoveGesture(
     },
     onPointerDown(e: CanvasPointerEvent) {
       if (!fit || !e.pagePoint || !session.state().source) return;
-      start = pageToImage(fit, e.pagePoint);
+      const at = pageToImage(fit, e.pagePoint);
+      // An armed Curves eyedropper takes the click.
+      if (session.takeCurvesPick(at)) return;
+      start = at;
       delta = [0, 0];
       preview();
     },

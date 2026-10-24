@@ -51,6 +51,7 @@ import de from "../locales/de.json" with { type: "json" };
 import manifest from "../manifest.json";
 
 import { createImageSession } from "./session";
+import { filterDef } from "./filters";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { makeCropGesture } from "./crop-tool";
@@ -111,6 +112,11 @@ const CMD = defineMessages("image.command", {
   deselectImage: "Deselect (image)",
   invertSelectionImage: "Invert selection (image)",
   featherSelectionImage: "Feather selection (image)",
+  filterDialog: "{label}… (filter)",
+  averageBlur: "Average (fill the selection with its average colour)",
+  imageSize: "Image size…",
+  trim: "Trim…",
+  rotateArbitrary: "Rotate canvas by an arbitrary angle…",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -721,6 +727,79 @@ export function activate(host: BundleHost): BundleHandle {
       handler: () => {
         host.shell.openPanel(PANEL_ID);
         void run();
+      },
+    });
+  }
+  // FILTER ▸ … — each one-shot filter opens the generic Filter dialog
+  // (live preview on the canvas, OK one undo step, Cancel restores).
+  // The table is literal so every command id is readable as written.
+  for (const [suffix, id] of [
+    ["filterBoxBlur", "boxBlur"],
+    ["filterSurfaceBlur", "surfaceBlur"],
+    ["filterMotionBlur", "motionBlur"],
+    ["filterRadialBlur", "radialBlur"],
+    ["filterLensBlur", "lensBlur"],
+    ["filterAddNoise", "addNoise"],
+    ["filterDespeckle", "despeckle"],
+    ["filterDustScratches", "dustScratches"],
+    ["filterMedian", "median"],
+    ["filterReduceNoise", "reduceNoise"],
+    ["filterHighPass", "highPass"],
+    ["filterMaximum", "maximum"],
+    ["filterMinimum", "minimum"],
+    ["filterOffset", "offset"],
+    ["filterSmartSharpen", "smartSharpen"],
+    ["filterEmboss", "emboss"],
+    ["filterFindEdges", "findEdges"],
+    ["filterGlowingEdges", "glowingEdges"],
+    ["filterMosaic", "mosaic"],
+    ["filterHalftone", "halftone"],
+    ["filterPaintDaubs", "paintDaubs"],
+    ["filterPosterEdges", "posterEdges"],
+    ["filterFilmGrain", "filmGrain"],
+    ["filterSpatter", "spatter"],
+    ["filterCrosshatch", "crosshatch"],
+    ["filterBasRelief", "basRelief"],
+    ["filterPhotocopy", "photocopy"],
+    ["filterStainedGlass", "stainedGlass"],
+    ["filterGlass", "glass"],
+    ["filterTexturizer", "texturizer"],
+    ["filterGradientMap", "gradientMap"],
+    ["filterSelectiveColour", "selectiveColour"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.filterDialog, { label: t(filterDef(id).label) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.openFilterDialog(id);
+      },
+    });
+  }
+  command({
+    id: "media.paged.image.command.average",
+    title: t(CMD.averageBlur),
+    category: "Image",
+    handler: () => {
+      host.shell.openPanel(PANEL_ID);
+      void session.applyAverage();
+    },
+  });
+  // IMAGE ▸ Image Size / Trim / Image Rotation ▸ Arbitrary — dialogs on
+  // top of the Image panel.
+  for (const [suffix, title, kind] of [
+    ["imageSize", CMD.imageSize, "imageSize"],
+    ["trim", CMD.trim, "trim"],
+    ["rotateArbitrary", CMD.rotateArbitrary, "rotate"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        session.openDialog(kind);
       },
     });
   }

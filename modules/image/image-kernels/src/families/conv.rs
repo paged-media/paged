@@ -1632,6 +1632,376 @@ fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
 }
 ";
 
+// ───────────────────── box / surface / high pass ─────────────────────
+//
+// Filter ▸ Blur ▸ Box Blur, Filter ▸ Blur ▸ Surface Blur and Filter ▸
+// Other ▸ High Pass. All three take a runtime radius (clamped by the
+// shader to the class bound, never reading past the window) and DERIVE
+// their halo from the bound textures, as `conv.bilateral` does, so they
+// are correct under the windowed and the one-shot dispatcher alike.
+// Taps clamp to the window edge (the edge pixel repeats). Summation is
+// dy outer ascending, dx inner ascending — the family's fixed reduction
+// order, mirrored by the scalar twins (§6.3).
+
+/// Compile-time MAX radius of `conv.box_r` (ROI bound, §8.3).
+pub const BOX_MAX_RADIUS: u16 = 32;
+/// Compile-time MAX radius of `conv.surface` (ROI bound, §8.3).
+pub const SURFACE_MAX_RADIUS: u16 = 16;
+/// Compile-time MAX tap radius of `conv.high_pass`; the Gaussian's σ
+/// is clamped to a third of it so the cut-off stays at 3σ.
+pub const HIGH_PASS_MAX_RADIUS: u16 = 32;
+
+/// `conv.box_r` params.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct ConvBoxRadiusParams {
+    /// Half-extent in px: the mean runs over (2r + 1)² taps.
+    pub radius: u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub _abi_pad: u32,
+}
+
+impl ConvBoxRadiusParams {
+    pub fn new(radius: u32) -> Self {
+        Self {
+            radius,
+            _pad0: 0,
+            _pad1: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// BOX BLUR: the unweighted mean of the (2r + 1)² square. Radius 0 is
+/// the identity (one tap, divided by one).
+pub static CONV_BOX_R: KernelDef = KernelDef {
+    id: "conv.box_r",
+    class: KernelClass::Windowed {
+        radius: (BOX_MAX_RADIUS, BOX_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<ConvBoxRadiusParams>(),
+        fields: &[
+            ParamField {
+                name: "radius",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_pad0",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_pad1",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_abi_pad",
+                wgsl_ty: "u32",
+            },
+        ],
+    },
+    wgsl: CONV_BOX_R_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(2),
+};
+
+const CONV_BOX_R_WGSL: &str = "\
+// paged.image kernel `conv.box_r` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+const R_MAX : u32 = 32u;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wd = textureDimensions(in0);
+    let win = vec2<i32>(i32(wd.x), i32(wd.y));
+    let base = xy + (win - vec2<i32>(i32(d.x), i32(d.y))) / 2;
+    let center = textureLoad(in0, base, 0);
+    let r = i32(min(params.radius, R_MAX));
+    var sum = vec4<f32>(0.0);
+    for (var dy = -r; dy <= r; dy = dy + 1) {
+        for (var dx = -r; dx <= r; dx = dx + 1) {
+            let c = clamp(base + vec2<i32>(dx, dy), vec2<i32>(0, 0), win - vec2<i32>(1, 1));
+            sum = sum + textureLoad(in0, c, 0);
+        }
+    }
+    let side = f32(2 * r + 1);
+    let result = sum / (side * side);
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(center, result, vec4<f32>(m)));
+}
+";
+
+/// `conv.surface` params.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct ConvSurfaceParams {
+    /// Half-extent in px of the square neighbourhood.
+    pub radius: u32,
+    /// Tonal threshold in channel units (Photoshop's levels / 255).
+    pub threshold: f32,
+    pub _pad0: u32,
+    pub _abi_pad: u32,
+}
+
+impl ConvSurfaceParams {
+    pub fn new(radius: u32, threshold: f32) -> Self {
+        Self {
+            radius,
+            threshold,
+            _pad0: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// SURFACE BLUR: an edge-preserving mean. Every tap of the square is
+/// weighted, PER CHANNEL, by how close it is to the centre in value:
+/// `w = max(0, 1 − |s − c| / (2.5·threshold))` — a triangular range
+/// weight, so a tap more than 2.5 thresholds away contributes nothing
+/// and an edge with more contrast than that survives untouched. There
+/// is no spatial falloff (that is what separates it from
+/// `conv.bilateral`, whose range AND space weights are Gaussian).
+///
+/// Identities: radius 0, and threshold ≤ 0 (only the centre, whose
+/// weight is 1, counts). Weights are products of exact differences and
+/// one division, so the lanes agree to `ChannelEpsF16(4)`.
+///
+/// Provenance: edge-preserving neighbourhood averaging with a range
+/// kernel — the "sigma filter" (Lee, CVGIP 1983) and the bilateral
+/// family (Tomasi & Manduchi, ICCV 1998); the triangular range weight
+/// and its 2.5 factor are this kernel's own choice.
+pub static CONV_SURFACE: KernelDef = KernelDef {
+    id: "conv.surface",
+    class: KernelClass::Windowed {
+        radius: (SURFACE_MAX_RADIUS, SURFACE_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<ConvSurfaceParams>(),
+        fields: &[
+            ParamField {
+                name: "radius",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "threshold",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "_pad0",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_abi_pad",
+                wgsl_ty: "u32",
+            },
+        ],
+    },
+    wgsl: CONV_SURFACE_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const CONV_SURFACE_WGSL: &str = "\
+// paged.image kernel `conv.surface` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius: u32,
+    threshold: f32,
+    _pad0: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+const R_MAX : u32 = 16u;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wd = textureDimensions(in0);
+    let win = vec2<i32>(i32(wd.x), i32(wd.y));
+    let base = xy + (win - vec2<i32>(i32(d.x), i32(d.y))) / 2;
+    let center = textureLoad(in0, base, 0);
+    var result = center;
+    if (params.threshold > 0.0) {
+        let r = i32(min(params.radius, R_MAX));
+        let inv = 1.0 / (2.5 * params.threshold);
+        var acc = vec4<f32>(0.0);
+        var wsum = vec4<f32>(0.0);
+        for (var dy = -r; dy <= r; dy = dy + 1) {
+            for (var dx = -r; dx <= r; dx = dx + 1) {
+                let c = clamp(base + vec2<i32>(dx, dy), vec2<i32>(0, 0), win - vec2<i32>(1, 1));
+                let s = textureLoad(in0, c, 0);
+                let w = max(vec4<f32>(0.0), vec4<f32>(1.0) - abs(s - center) * inv);
+                acc = acc + s * w;
+                wsum = wsum + w;
+            }
+        }
+        // The centre's own weight is 1, so wsum >= 1 on every channel.
+        result = acc / wsum;
+    }
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(center, result, vec4<f32>(m)));
+}
+";
+
+/// `conv.high_pass` params.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, ::bytemuck::Pod, ::bytemuck::Zeroable)]
+pub struct ConvHighPassParams {
+    /// The Gaussian's σ in px (Photoshop's High Pass "radius").
+    pub radius_px: f32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub _abi_pad: u32,
+}
+
+impl ConvHighPassParams {
+    pub fn new(radius_px: f32) -> Self {
+        Self {
+            radius_px,
+            _pad0: 0,
+            _pad1: 0,
+            _abi_pad: 0,
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        ::bytemuck::bytes_of(self)
+    }
+}
+
+/// HIGH PASS: the image minus its Gaussian blur, re-centred on mid-grey
+/// — `out = clamp(a − blur(a) + ½·α, 0, α)` per colour channel in the
+/// premultiplied working space (α is kept). Flat areas go to 50 % grey
+/// and only detail finer than σ remains, which is why it is the
+/// standard base for an Overlay/Soft-Light sharpening layer.
+///
+/// σ is clamped to [0, HIGH_PASS_MAX_RADIUS / 3] and the taps run to
+/// ⌈3σ⌉ (a 2D Gaussian, weights computed in-shader and normalised by
+/// their sum). σ = 0 leaves one tap, so the blur is the pixel and the
+/// result is flat grey — there is no identity, as in Photoshop.
+/// `exp()` is a transcendental, so the lanes agree to `ChannelEpsF16(4)`.
+///
+/// Provenance: high-pass = signal − low-pass, standard signal
+/// processing; the ½ bias is the usual display offset. No reference
+/// reading.
+pub static CONV_HIGH_PASS: KernelDef = KernelDef {
+    id: "conv.high_pass",
+    class: KernelClass::Windowed {
+        radius: (HIGH_PASS_MAX_RADIUS, HIGH_PASS_MAX_RADIUS),
+    },
+    inputs: 1,
+    params: ParamsLayout {
+        size: ::core::mem::size_of::<ConvHighPassParams>(),
+        fields: &[
+            ParamField {
+                name: "radius_px",
+                wgsl_ty: "f32",
+            },
+            ParamField {
+                name: "_pad0",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_pad1",
+                wgsl_ty: "u32",
+            },
+            ParamField {
+                name: "_abi_pad",
+                wgsl_ty: "u32",
+            },
+        ],
+    },
+    wgsl: CONV_HIGH_PASS_WGSL,
+    module: true,
+    mip_exact: false,
+    gpu_tolerance: Tolerance::ChannelEpsF16(4),
+};
+
+const CONV_HIGH_PASS_WGSL: &str = "\
+// paged.image kernel `conv.high_pass` — handwritten under ABI v1.1.
+// AGPL-3.0-only OR LicenseRef-PMEL; (c) And The Next GmbH.
+
+struct Params {
+    radius_px: f32,
+    _pad0: u32,
+    _pad1: u32,
+    _abi_pad: u32,
+}
+
+@group(0) @binding(0) var in0 : texture_2d<f32>;
+@group(1) @binding(0) var<uniform> params : Params;
+@group(2) @binding(0) var mask : texture_2d<f32>;
+@group(3) @binding(0) var outp : texture_storage_2d<rgba16float, write>;
+
+const R_MAX : i32 = 32;
+
+@compute @workgroup_size(16, 16, 1)
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+    let d = textureDimensions(outp);
+    if (gid.x >= d.x || gid.y >= d.y) { return; }
+    let xy = vec2<i32>(i32(gid.x), i32(gid.y));
+    let wd = textureDimensions(in0);
+    let win = vec2<i32>(i32(wd.x), i32(wd.y));
+    let base = xy + (win - vec2<i32>(i32(d.x), i32(d.y))) / 2;
+    let a = textureLoad(in0, base, 0);
+    let sigma = clamp(params.radius_px, 0.0, f32(R_MAX) / 3.0);
+    let r = min(i32(ceil(3.0 * sigma)), R_MAX);
+    let inv2s2 = 1.0 / (2.0 * max(sigma * sigma, 1e-6));
+    var acc = vec4<f32>(0.0);
+    var wsum = 0.0;
+    for (var dy = -r; dy <= r; dy = dy + 1) {
+        for (var dx = -r; dx <= r; dx = dx + 1) {
+            let c = clamp(base + vec2<i32>(dx, dy), vec2<i32>(0, 0), win - vec2<i32>(1, 1));
+            let w = exp(-f32(dx * dx + dy * dy) * inv2s2);
+            acc = acc + textureLoad(in0, c, 0) * w;
+            wsum = wsum + w;
+        }
+    }
+    let blur = acc / wsum;
+    let rgb = clamp(a.rgb - blur.rgb + vec3<f32>(0.5 * a.a), vec3<f32>(0.0), vec3<f32>(a.a));
+    let result = vec4<f32>(rgb, a.a);
+    let m = textureLoad(mask, xy, 0).r;
+    textureStore(outp, xy, mix(a, result, vec4<f32>(m)));
+}
+";
+
 pub static FAMILY: &[&KernelDef] = &[
     &CONV_LENS,
     &CONV_BILATERAL,
@@ -1645,4 +2015,7 @@ pub static FAMILY: &[&KernelDef] = &[
     &CONV_MOTION,
     &CONV_RADIAL,
     &CONV_SHAPE,
+    &CONV_BOX_R,
+    &CONV_SURFACE,
+    &CONV_HIGH_PASS,
 ];
