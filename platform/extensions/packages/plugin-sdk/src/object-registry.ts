@@ -410,6 +410,7 @@ export function createObjectRegistry(
   async function batch(
     ops: readonly ObjectOp[],
     note: Note = null,
+    label?: string,
   ): Promise<ObjectWriteResult> {
     const no = (e: Refusal): ObjectWriteResult => ({
       applied: false,
@@ -823,7 +824,11 @@ export function createObjectRegistry(
         commandPlans.length > 0
           ? await coreCommands!.snapshot(commandPlans.map((c) => c.plan))
           : null;
-      const outcome = await core.commit(mutations);
+      // Engine ADR 1016 — the caller's name for the one undo step.
+      const outcome = await core.commit(
+        mutations,
+        label !== undefined ? { label } : undefined,
+      );
       if (!outcome.applied) {
         const reason = describe(outcome.error);
         // A pre-70 engine has no page labels.
@@ -1206,9 +1211,9 @@ export function createObjectRegistry(
     tracked(note) {
       const view: ObjectsSurface = {
         ...surface,
-        set: (address, path, value) =>
-          batch([{ op: "set", address, path, value }], note),
-        batch: (ops) => batch(ops, note),
+        set: (address, path, value, opts) =>
+          batch([{ op: "set", address, path, value }], note, opts?.label),
+        batch: (ops, opts) => batch(ops, note, opts?.label),
         invoke: (command, args) => invoke(command, args, note),
       };
       return view;
@@ -1225,10 +1230,10 @@ export function createObjectRegistry(
       }
       return out;
     },
-    set(address, path, value) {
-      return batch([{ op: "set", address, path, value }]);
+    set(address, path, value, opts) {
+      return batch([{ op: "set", address, path, value }], null, opts?.label);
     },
-    batch: (ops) => batch(ops),
+    batch: (ops, opts) => batch(ops, null, opts?.label),
     async schema(addressOrKind) {
       const parsed = parseAddress(addressOrKind);
       const kind =

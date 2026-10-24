@@ -258,11 +258,36 @@ export interface EditContextContribution {
    *  label. Read when the menu renders, so return the current step. */
   undoLabel?(): string | null;
   redoLabel?(): string | null;
+  /** Editor ADR 285 — this context's OWN step list, for the host's History
+   *  panel while the context is active (its pixel steps, say, where the
+   *  document's would not change). `null` or absent ⇒ the panel lists the
+   *  document's steps. Read when the panel renders and again after every
+   *  {@link onDidChangeHistory} notification. Probe
+   *  `supports("editContext.historySteps@1")`: true when the host's
+   *  History panel reads it. */
+  historySteps?(): EditContextHistory | null;
+  /** Editor ADR 285 — notify the host whenever {@link historySteps} would
+   *  answer differently. Returns the unsubscribe. Absent ⇒ the panel reads
+   *  the list again only when the document changes. */
+  onDidChangeHistory?(listener: () => void): () => void;
   /** HOST-STAMPED, not author-supplied: the `x-paged:<manifest id>`
    *  metadata key the host resolves the candidate's `metadata` from
    *  before calling `matches`. The SDK adapter fills this from the
    *  bundle's manifest at registration; authors leave it undefined. */
   metadataKey?: string;
+}
+
+/** Editor ADR 285 — an edit context's own history ({@link
+ *  EditContextContribution.historySteps}). */
+export interface EditContextHistory {
+  /** Undo steps, OLDEST first: the last one is what an undo reverts. */
+  undo: readonly string[];
+  /** Redo steps, the next redo first. */
+  redo: readonly string[];
+  /** Walk the history `delta` steps: negative undoes `-delta` steps,
+   *  positive redoes `delta`. The History panel calls it with the distance
+   *  from the current position to the row clicked. */
+  step(delta: number): void | Promise<unknown>;
 }
 
 /** The live handle a context's `onEnter` / `onExit` receives — the
@@ -990,6 +1015,45 @@ export interface MutateOptions {
    * of its own.
    */
   amend?: number;
+  /**
+   * Engine ADR 1016 — the undo step's name, in the caller's words ("Add
+   * caption"), shown by the History panel and the Edit menu instead of
+   * the engine's default for the mutation ("Insert text frame"). With
+   * `amend` it renames the amended step. Blank keeps the default. The host
+   * names the step right after the write lands (the engine's `labelStep`),
+   * so a write that loses a race to another one keeps the default name.
+   * Probe `supports("document.undoLog@1")`: an older host ignores it.
+   */
+  label?: string;
+}
+
+/** Engine ADR 1016 — one named step of the undo timeline. */
+export interface UndoLogStep {
+  /** The step's number — what {@link DocumentSurface.undoTo} /
+   *  {@link DocumentSurface.redoTo} take, and the `appliedSeq` of the
+   *  change that made it. */
+  appliedSeq: number;
+  /** The step's name: the caller's label, or the engine's English default
+   *  ("Move", "Change fill", "Insert path"). */
+  label: string;
+  /** The key the engine derived a default from (`moveFrame`,
+   *  `set:fillColor`, `gesture:rotate`, `batch`, `script`) — a host
+   *  translates the defaults it knows by it. `null` when a caller named the
+   *  step. */
+  key: string | null;
+}
+
+/** Engine ADR 1016 — the named undo timeline ({@link DocumentSurface.undoLog}). */
+export interface UndoLog {
+  /** OLDEST first: the last step is what an undo reverts. */
+  undo: readonly UndoLogStep[];
+  /** The next redo first. */
+  redo: readonly UndoLogStep[];
+  /** The whole logs' lengths (the lists may be cut to the limit). */
+  undoLen: number;
+  redoLen: number;
+  /** How many undo steps the engine keeps (oldest evicted first). */
+  depth: number;
 }
 
 /** Options of {@link DocumentSurface.mutateWithBytes}. */
@@ -1004,6 +1068,9 @@ export interface MutateWithBytesOptions {
    *  then on. Probe `supports("document.mutate.amend@2")`: an older host
    *  ignores the option and would apply the write as a step of its own. */
   amend?: number;
+  /** Engine ADR 1016 — the undo step's name, as {@link MutateOptions.label}
+   *  (without `amend`). Probe `supports("document.undoLog@1")`. */
+  label?: string;
 }
 
 /** What {@link DocumentSurface.onWillSave} listeners receive. */
@@ -1268,6 +1335,25 @@ export interface DocumentSurface {
   ): Promise<MutationOutcome>;
   undo(): Promise<void>;
   redo(): Promise<void>;
+  /**
+   * Engine ADR 1016 — the named undo timeline: the newest `limit` undo
+   * steps (oldest first) and redo steps (next redo first); all of them
+   * without a limit. A read: `capabilities.document.read`. Probe
+   * `supports("document.undoLog@1")`; an older host rejects.
+   */
+  undoLog(options?: { limit?: number }): Promise<UndoLog>;
+  /**
+   * Engine ADR 1016 — undo every step down to and including the step
+   * `appliedSeq` names (an {@link UndoLog.undo} entry), in one engine round
+   * trip; the document is then as it was before that step. `false` when
+   * that step is not on the undo log (nothing moved). A write door:
+   * `capabilities.document.write`. Probe `supports("document.undoLog@1")`.
+   */
+  undoTo(appliedSeq: number): Promise<boolean>;
+  /** Engine ADR 1016 — redo every step up to and including the step
+   *  `appliedSeq` names (an {@link UndoLog.redo} entry), in one round
+   *  trip. `false` when it is not on the redo log. */
+  redoTo(appliedSeq: number): Promise<boolean>;
   collection<T>(name: CollectionName): Promise<readonly T[]>;
   meta(): Promise<DocumentMeta>;
   pathAnchors(id: ElementId): Promise<PathAnchorsResult | null>;
