@@ -2075,7 +2075,7 @@
           ]
         },
         {
-          "description": "v56 (B-18) — InDesign paste-into: nest an existing TOP-LEVEL\npage item inside a container Rectangle / Oval / Polygon. The\nchild keeps its document-space geometry (nothing moves on\ncanvas) and renders clipped by the container's outline. Rides\n`Operation::PasteInto`; one undo pops the child back to its\nexact stacking slot. Grouped / already-nested children and\nnon-container hosts are rejected with an honest error.",
+          "description": "v56 (B-18) — InDesign paste-into: nest an existing TOP-LEVEL\npage item inside a container Rectangle / Oval / Polygon. The\nchild keeps its document-space geometry (nothing moves on\ncanvas) and renders clipped by the container's outline. Rides\n`Operation::PasteInto`; one undo pops the child back to its\nexact stacking slot. Already-nested children and non-container\nhosts are rejected with an honest error. Engine ADR 1010: the\nchild may be a group, and a grouped item pastes its outermost\ngroup in (the reply's op names that group).",
           "type": "object",
           "properties": {
             "op": {
@@ -2310,7 +2310,7 @@
           ]
         },
         {
-          "description": "B-04 (protocol v32) — group page items on one spread.\nReference-based and z-order-neutral (the group takes the\nearliest member's paint slot). Reply carries the minted group\nid as `createdId` so the editor can select it. W1.20 (groups\nv2): `member_ids` may include existing `Group`s, producing a\nnested group-of-groups.",
+          "description": "B-04 (protocol v32) — group page items on one spread.\nReference-based and z-order-neutral (the group takes the\nearliest member's paint slot). Reply carries the minted group\nid as `createdId` so the editor can select it. W1.20 (groups\nv2): `member_ids` may include existing `Group`s, producing a\nnested group-of-groups.\n\nEngine ADR 1010 (additive, rides v76): `clip: true` makes a CLIP\nGROUP — Illustrator's Make Clipping Mask: the top-most member is\nthe clipping path, the rest paint inside its outline, and the\npath itself paints nothing. Refused unless the top-most member is\na Rectangle, Oval or Polygon hosting no pasted-in content.\nRelease is `dissolveGroup` (or `groupClip` false to keep the\ngroup).",
           "type": "object",
           "properties": {
             "op": {
@@ -2325,6 +2325,9 @@
                   "items": {
                     "$ref": "#/$defs/ElementId"
                   }
+                },
+                "clip": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -7293,6 +7296,11 @@
           "description": "`<Group>`'s `<BlendingSetting KnockoutGroup>`, `Value::Bool`.",
           "type": "string",
           "const": "groupKnockout"
+        },
+        {
+          "description": "Engine ADR 1010 — the group is a clip group: its top-most member\nclips the others (`paged_model::Group::clip`), `Value::Bool`.\nSetting it refuses a group whose top-most member is not a\nRectangle, Oval or Polygon, or hosts pasted-in content. No IDML\nattribute: the writer lowers a clip group to paste-into.",
+          "type": "string",
+          "const": "groupClip"
         },
         {
           "description": "`<DropShadowSetting BlendMode>`; `\"\"` is InDesign's `Multiply`.",

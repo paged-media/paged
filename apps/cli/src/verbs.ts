@@ -60,6 +60,7 @@ import {
   type CliSession,
   type SessionOptions,
 } from "./session";
+import { withModuleContentDrawn } from "./module-content";
 import { exporterArgs, pdfCommand, typedPdf } from "./pdf";
 import { describeType, parseCliValue } from "./values";
 import { defaultLibrary } from "./mcp/library";
@@ -779,7 +780,9 @@ const exportVerb: Verb = {
         ...(pages !== undefined ? { pages } : {}),
         options,
       });
-      const r = await typedPdf(s, typed, given);
+      const { value: r, notes } = await withModuleContentDrawn(s, () =>
+        typedPdf(s, typed, given),
+      );
       writeOutput(path, r.bytes);
       return {
         json: {
@@ -790,8 +793,12 @@ const exportVerb: Verb = {
           bytes: r.bytes.byteLength,
           ...(r.pageCount !== undefined ? { pageCount: r.pageCount } : {}),
           diagnostics: r.findings,
+          ...(notes.length ? { notes } : {}),
         },
-        text: `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
+        text: [
+          `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
+          ...notes,
+        ].join("\n"),
       };
     }
 
@@ -888,6 +895,88 @@ const apply: Verb = {
       json: { records: total, ...report, saved },
       text: `applied record ${record} of ${total ?? "?"}${saved ? `; saved ${(saved as { path: string }).path}` : ""}`,
     };
+  },
+};
+
+/** `data` — the document's data through the data door (`data@1`, extensions
+ *  ADR 343), as any bundle reads it: the tables, a window of one, or a query
+ *  (the serving bundle's guard checks it). `--data` imports a source first. */
+const dataVerb: Verb = {
+  name: "data",
+  usage: "<doc>",
+  summary:
+    "the document's data through data@1: its tables, a table's records, or a query",
+  min: 1,
+  max: 1,
+  options: [
+    {
+      name: "data",
+      value: "x.csv",
+      help: 'import a source first, as table "data" (CSV/TSV/JSON/Parquet/XLSX)',
+    },
+    { name: "table", value: "name", help: "the records of a table" },
+    { name: "query", value: "sql", help: "the records a query gives" },
+    { name: "offset", value: "n", help: "the first record (default 0)" },
+    { name: "limit", value: "n", help: "at most this many records" },
+    OUTPUT_FORMAT,
+  ],
+  reaches: ["invoke", "batch"],
+  async run({ args, session, cwd }) {
+    const [doc] = args.positionals as [string];
+    const s = await session(doc);
+    await requireData(s);
+    const file = flagStr(args, "data");
+    if (file) await loadRecords(s, resolve(cwd, file));
+    const service = s.h.data.current()?.service;
+    if (!service)
+      throw new CliError(
+        EXIT.failed,
+        "no bundle serves the document's data (paged.data serves data@1)",
+      );
+    const table = flagStr(args, "table");
+    const sql = flagStr(args, "query");
+    try {
+      if (!table && !sql) {
+        const tables = await service.tables();
+        return {
+          json: { tables },
+          text: tables
+            .map(
+              (t) =>
+                `${t.name}\t${t.kind}\t${t.rowCount}${t.writable ? "" : "\tderived"}`,
+            )
+            .join("\n"),
+        };
+      }
+      const offset = flagNumber(args, "offset", 0);
+      const limit = flagStr(args, "limit")
+        ? flagNumber(args, "limit", 0)
+        : undefined;
+      const rs = sql
+        ? await service.query!(sql)
+        : await service.records(table!, { offset, limit });
+      const names = rs.schema.fields.map((f) => f.name);
+      const rows = Array.from({ length: rs.rowCount }, (_, r) =>
+        Object.fromEntries(
+          names.map((n, c) => [n, rs.columns[c]?.[r] ?? null]),
+        ),
+      );
+      const shown = sql
+        ? rows.slice(offset, limit === undefined ? undefined : offset + limit)
+        : rows;
+      return {
+        json: { fields: rs.schema.fields, records: shown },
+        text: [
+          names.join("\t"),
+          ...shown.map((r) => names.map((n) => String(r[n] ?? "")).join("\t")),
+        ].join("\n"),
+      };
+    } catch (err) {
+      throw new CliError(
+        EXIT.failed,
+        `data: ${(err as Error).message ?? String(err)}`,
+      );
+    }
   },
 };
 
@@ -1529,6 +1618,7 @@ export const VERBS: readonly Verb[] = [
   run,
   ai,
   exportVerb,
+  dataVerb,
   apply,
   merge,
   generate,

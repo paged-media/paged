@@ -19,8 +19,8 @@
 // @feat: plugin-platform.object-model.node-cli
 //
 // ADR 324 — `paged merge` / `paged apply` over TODAY's paged.data session
-// (@paged-media/data, the workspace bundle): the real data-js engine, DuckDB in-process
-// (Node blocking build + the bundle's shipped engine wasm) and real core.
+// (@paged-media/data, the workspace bundle): the real data-js engine with its
+// query store inside it (ADR 561) and real core.
 // The merge is compared with InDesign's own Data Merge recording of the
 // long-record-set fixture, read from paged.data's lane
 // (modules/data/conformance/indesign-merge): 57 records, 2 columns, columns
@@ -576,6 +576,60 @@ describe("paged plugins", () => {
     const r = await cli(["plugins"], join(FIXTURES, ".."));
     expect(r.json.plugins.map((p: { id: string }) => p.id)).toContain(
       "media.paged.data",
+    );
+  });
+});
+
+describe("paged data — the document's data through data@1 (extensions ADR 343)", () => {
+  it("lists the tables, reads a window, runs a guarded query [plugin-platform.data-door]", async () => {
+    const csv = join(tmp.dir, "products.csv");
+    writeFileSync(csv, "sku,price\nA-1,9.5\nB-2,12\nC-3,30\n");
+    const tables = await cli(["data", fx.idml, "--data", csv, DATA]);
+    expect(tables.code, tables.out).toBe(0);
+    const data = (
+      tables.json.tables as { name: string; rowCount: number }[]
+    ).find((t) => t.name === "data");
+    expect(data?.rowCount).toBe(3);
+
+    const window = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--table",
+      "data",
+      "--offset",
+      "1",
+      "--limit",
+      "1",
+      DATA,
+    ]);
+    expect(window.code, window.out).toBe(0);
+    expect(window.json.records).toEqual([{ sku: "B-2", price: 12 }]);
+
+    const q = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--query",
+      'SELECT sku FROM "data" WHERE price > 10 ORDER BY sku',
+      DATA,
+    ]);
+    expect(q.json.records).toEqual([{ sku: "B-2" }, { sku: "C-3" }]);
+
+    const refused = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--query",
+      "SELECT * FROM read_csv('/etc/passwd')",
+      DATA,
+    ]);
+    expect(refused.code).toBe(1);
+    expect(refused.json.error.message).toContain(
+      "read_csv() reads files or URLs",
     );
   });
 });

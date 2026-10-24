@@ -28,6 +28,11 @@ export {
   type EditorHandle,
   type FieldValue,
 } from "./create-editor";
+export {
+  isEditorError,
+  type EditorError,
+  type EditorErrorCode,
+} from "./errors";
 export { mountEditor, type MountOptions, type MountedEditor } from "../main";
 export type { HostActions } from "../app/instance";
 export { PRESETS } from "../profiles/presets";

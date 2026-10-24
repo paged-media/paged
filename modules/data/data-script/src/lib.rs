@@ -36,8 +36,6 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use boa_engine::{Context, Source};
-
 use data_automation::BatchMode;
 use data_core::{Locale, Value};
 use data_js::core::DataSession;
@@ -74,13 +72,10 @@ pub struct BuildSpec {
 /// It is handed no host access; a reference to an absent global (`require`,
 /// `process`, `fetch`) is a `ReferenceError`, surfaced here as an `Err`.
 pub fn eval_spec(script: &str) -> Result<ScriptSpec, String> {
-    let mut context = Context::default();
-    let result = context
-        .eval(Source::from_bytes(script))
-        .map_err(|e| format!("script error: {e}"))?;
-    let json = result
-        .to_json(&mut context)
-        .map_err(|e| format!("script result is not JSON-serializable: {e}"))?
+    // The engine's sandbox (core ADR 1015): one interpreter for paged.data's
+    // build scripts and its transforms, with a budget and a fixed clock.
+    let json = paged_action::js::eval(script, paged_action::js::JsBudget::default())
+        .map_err(|e| format!("script error: {e}"))?
         .ok_or_else(|| "script returned undefined — return a spec object".to_string())?;
     serde_json::from_value(json).map_err(|e| format!("script spec shape: {e}"))
 }

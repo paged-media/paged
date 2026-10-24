@@ -394,25 +394,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-core"
-version = "0.0.0"
-dependencies = [
- "compact_str",
- "paged-fmt",
- "serde",
- "serde_norway",
- "smallvec",
- "thiserror",
-]
-
-[[package]]
 name = "data-store-spike"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
  "csv",
- "data-core",
  "js-sys",
+ "paged-data-core",
  "serde_json",
  "thiserror",
  "turso_core",
@@ -1031,6 +1019,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3b7bb0ecf2e447b1f20ee94ee79ef6eed1e9d4b3c36ce1903b9dea3bf205523"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "paged-data-core"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "paged-fmt",
+ "serde",
+ "serde_norway",
+ "smallvec",
+ "thiserror",
 ]
 
 [[package]]

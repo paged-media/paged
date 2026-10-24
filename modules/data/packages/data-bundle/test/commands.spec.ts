@@ -18,7 +18,7 @@
 
 // paged.data's commands, the UNIT layer: the real bundle on the SDK's
 // in-process host over the gesture kit's recording fake editor (no canvas
-// engine), with the real data-js engine and a real DuckDB. One test per
+// engine), with the real data-js engine with its query store. One test per
 // command id; the scenarios are shared with the headless layer
 // (./headless/commands.headless.test.ts) in ./conformance/scenarios.ts.
 //

@@ -19,7 +19,7 @@
 // paged.data's file importer (`media.paged.data.importer.table`, the
 // editor's File ▸ Open and drag-drop for JSON and Parquet), driven through
 // the contribution the real bundle registers, over the real data-js engine
-// and a real DuckDB, on the recording fake editor (./conformance/env.ts).
+// with its query store, on the recording fake editor (./conformance/env.ts).
 // Fixtures are built here.
 
 import {

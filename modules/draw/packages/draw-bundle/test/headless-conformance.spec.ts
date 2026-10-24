@@ -208,8 +208,9 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         // B-12 — the stroke dash-preset commands (Solid / Dashed /
         // Dotted / Dash-dot).
         // WP6.1 part 2 — six gesture/insert commands and two "…" raisers
-        // (registered among the rest; the kinds are what is counted).
-        ...Array<string>(8).fill("command"),
+        // (registered among the rest; the kinds are what is counted);
+        // Object ▸ Rasterize and its "…" raiser (extensions ADR 338).
+        ...Array<string>(10).fill("command"),
         "command",
         "command",
         "command",

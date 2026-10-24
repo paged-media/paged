@@ -26,6 +26,8 @@ pub enum V {
     Short(Vec<u16>),
     Long(Vec<u32>),
     Rational(Vec<(u32, u32)>),
+    SRational(Vec<(i32, i32)>),
+    Byte(Vec<u8>),
     Undefined(Vec<u8>),
 }
 
@@ -114,6 +116,14 @@ pub fn write(pages: &[Page], le: bool) -> Vec<u8> {
                         .flat_map(|(n, d)| u32b(*n).into_iter().chain(u32b(*d)))
                         .collect(),
                 ),
+                V::SRational(s) => (
+                    10,
+                    s.len() as u32,
+                    s.iter()
+                        .flat_map(|(n, d)| u32b(*n as u32).into_iter().chain(u32b(*d as u32)))
+                        .collect(),
+                ),
+                V::Byte(s) => (1, s.len() as u32, s.clone()),
                 V::Undefined(s) => (7, s.len() as u32, s.clone()),
             };
             let field = if data.len() <= 4 {

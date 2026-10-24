@@ -56,3 +56,4 @@ export type {
 } from "./object-model.js";
 export { SLIDE_PANEL_FIELDS, type PanelFieldList } from "./panel-fields.js";
 export { slidePanels, addressFor } from "./panels.js";
+export { SLIDE_KEYBINDINGS } from "./commands.js";

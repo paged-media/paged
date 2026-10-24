@@ -157,7 +157,12 @@ const boundsOp = (id: ElementId, table: AnchorTable): Mutation[] => {
 // ----------------------------------------------------------------- join
 
 export type JoinResult =
-  | { applied: true; kind: "close" | "gap" | "crossing"; kept: ElementId; removed: ElementId | null }
+  | {
+      applied: true;
+      kind: "close" | "gap" | "crossing";
+      kept: ElementId;
+      removed: ElementId | null;
+    }
   | { applied: false; reason: string };
 
 /** Join what the scrub `scrubPage` (page pt on `pageId`) crosses. */
@@ -170,9 +175,14 @@ export async function applyJoinScrub(
   const no = (reason: string): JoinResult => ({ applied: false, reason });
   if (scrubPage.length === 0) return no("a scrub is at least one point");
   const reads: (PathAnchorsResult & { id: ElementId })[] = [];
-  for (const id of await knifeCandidates(host, pageId, grownBox(scrubPage, tolerancePt))) {
+  for (const id of await knifeCandidates(
+    host,
+    pageId,
+    grownBox(scrubPage, tolerancePt),
+  )) {
     const read = await readEditablePath(host, id);
-    if (read && read.pageId === pageId && isOneOpenContour(read)) reads.push(read);
+    if (read && read.pageId === pageId && isOneOpenContour(read))
+      reads.push(read);
   }
   if (reads.length === 0) return no("the scrub is over no open path");
   const matrices = reads.map((r) => tableOfRead(r).matrix);
@@ -181,7 +191,8 @@ export async function applyJoinScrub(
     scrubPage,
     tolerancePt,
   );
-  if (!plan) return no("the scrub crosses no gap between endpoints and no crossing");
+  if (!plan)
+    return no("the scrub crosses no gap between endpoints and no crossing");
   if (plan.kind === "close") {
     const id = reads[plan.path]!.id;
     const outcome = await host.document.mutate(closePathMutationFor(id, 0));
@@ -204,7 +215,11 @@ export async function applyJoinScrub(
         inverseApplyAffine(ma, q[0], q[1]),
       );
       if (!p || !l || !r) return null;
-      out.push({ anchor: [p[0], p[1]], left: [l[0], l[1]], right: [r[0], r[1]] });
+      out.push({
+        anchor: [p[0], p[1]],
+        left: [l[0], l[1]],
+        right: [r[0], r[1]],
+      });
     }
     return out;
   };
@@ -259,18 +274,29 @@ export async function applyPathErase(
   const rewrites: Mutation[] = [];
   const deletes: Mutation[] = [];
   let i = 0;
-  for (const id of await knifeCandidates(host, pageId, grownBox(brushPage, radius))) {
+  for (const id of await knifeCandidates(
+    host,
+    pageId,
+    grownBox(brushPage, radius),
+  )) {
     const read = await readEditablePath(host, id);
     if (!read || read.pageId !== pageId) continue;
     if (read.subpathStarts.length > 1) {
-      host.log.debug(`path eraser: ${String(id.id)} is a compound path — skipped`);
+      host.log.debug(
+        `path eraser: ${String(id.id)} is a compound path — skipped`,
+      );
       continue;
     }
     const { matrix } = tableOfRead(read);
     const brush = toInner(matrix, brushPage);
     if (!brush) continue;
     const closed = !(read.subpathOpen?.[0] ?? false);
-    const plan = planPathErase(read.anchors, closed, brush, radius / affineScale(matrix));
+    const plan = planPathErase(
+      read.anchors,
+      closed,
+      brush,
+      radius / affineScale(matrix),
+    );
     if (!plan) continue;
     result.erased.push(id);
     if (plan.pieces.length === 0) {
@@ -290,15 +316,20 @@ export async function applyPathErase(
       );
       result.inserted++;
     });
-    if (closed) rewrites.push({ op: "pathOpenAt", args: { elementId: id, index: 0 } });
-    rewrites.push(...(rewritePathOps(id, openTable(plan.pieces[0]!)) as Mutation[]));
+    if (closed)
+      rewrites.push({ op: "pathOpenAt", args: { elementId: id, index: 0 } });
+    rewrites.push(
+      ...(rewritePathOps(id, openTable(plan.pieces[0]!)) as Mutation[]),
+    );
     i++;
   }
   const ops = [...inserts, ...rewrites, ...deletes];
   if (ops.length === 0) return result;
   const outcome = await host.document.mutate(batchMutationFor(ops));
   if (!outcome.applied) {
-    host.log.warn(`path eraser: the engine refused: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `path eraser: the engine refused: ${JSON.stringify(outcome.error)}`,
+    );
     return { erased: [], inserted: 0, removed: [] };
   }
   return result;
@@ -316,7 +347,9 @@ export async function applyReshapeTable(
     batchMutationFor(rewritePathOps(id, table) as Mutation[]),
   );
   if (!outcome.applied)
-    host.log.warn(`reshape: the engine refused: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `reshape: the engine refused: ${JSON.stringify(outcome.error)}`,
+    );
   return outcome.applied;
 }
 
@@ -379,7 +412,10 @@ async function pageOf(host: BundleHost, id: ElementId): Promise<string | null> {
   return g?.pageId ?? null;
 }
 
-async function pageFrom(host: BundleHost, p: Record<string, unknown>): Promise<string> {
+async function pageFrom(
+  host: BundleHost,
+  p: Record<string, unknown>,
+): Promise<string> {
   let page = typeof p.page === "string" ? p.page : "";
   if (page === "") {
     const [first] = host.selection.get();
@@ -393,7 +429,12 @@ export async function runJoinScrub(host: BundleHost, payload: unknown) {
   const p = payloadOf(payload);
   const path = pointsOf(p.path);
   if (path.length === 0) failed("a scrub is at least one point");
-  const r = await applyJoinScrub(host, await pageFrom(host, p), path, positive(p.tolerance, 4));
+  const r = await applyJoinScrub(
+    host,
+    await pageFrom(host, p),
+    path,
+    positive(p.tolerance, 4),
+  );
   if (!r.applied) failed(r.reason);
   return r.applied ? { kind: r.kind } : null;
 }
@@ -402,9 +443,18 @@ export async function runPathErase(host: BundleHost, payload: unknown) {
   const p = payloadOf(payload);
   const path = pointsOf(p.path);
   if (path.length === 0) failed("an erase is at least one point");
-  const r = await applyPathErase(host, await pageFrom(host, p), path, positive(p.width, 4));
+  const r = await applyPathErase(
+    host,
+    await pageFrom(host, p),
+    path,
+    positive(p.width, 4),
+  );
   if (r.erased.length === 0) failed("the drag passes over no path");
-  return { erased: r.erased.length, inserted: r.inserted, removed: r.removed.length };
+  return {
+    erased: r.erased.length,
+    inserted: r.inserted,
+    removed: r.removed.length,
+  };
 }
 
 export async function runReshapeAt(host: BundleHost, payload: unknown) {
@@ -443,19 +493,25 @@ export function contributePathToolCommands(host: BundleHost): Disposable {
       id: JOIN_SCRUB_COMMAND_ID,
       title: M.join,
       category: "Path",
-      handler: fromPalette(host, JOIN_SCRUB_COMMAND_ID, (p) => runJoinScrub(host, p)),
+      handler: fromPalette(host, JOIN_SCRUB_COMMAND_ID, (p) =>
+        runJoinScrub(host, p),
+      ),
     }),
     registerCommand(host, {
       id: PATH_ERASE_COMMAND_ID,
       title: M.erase,
       category: "Path",
-      handler: fromPalette(host, PATH_ERASE_COMMAND_ID, (p) => runPathErase(host, p)),
+      handler: fromPalette(host, PATH_ERASE_COMMAND_ID, (p) =>
+        runPathErase(host, p),
+      ),
     }),
     registerCommand(host, {
       id: RESHAPE_AT_COMMAND_ID,
       title: M.reshape,
       category: "Path",
-      handler: fromPalette(host, RESHAPE_AT_COMMAND_ID, (p) => runReshapeAt(host, p)),
+      handler: fromPalette(host, RESHAPE_AT_COMMAND_ID, (p) =>
+        runReshapeAt(host, p),
+      ),
     }),
   ];
   return {

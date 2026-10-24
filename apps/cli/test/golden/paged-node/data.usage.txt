@@ -1,0 +1,11 @@
+$ paged-node data
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node data <doc>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

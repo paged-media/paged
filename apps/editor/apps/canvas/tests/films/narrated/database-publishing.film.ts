@@ -19,12 +19,12 @@
 
 // Database publishing, the audience film (ADR 224): the website's
 // `films/database-publishing.yaml`. A product sheet designed once with
-// <<fields>>, the product feed imported into DuckDB in the Data layout, a
+// <<fields>>, the product feed imported into the data engine in the Data layout, a
 // Data Merge that sets every product on its own page, a paged.* script that
 // stamps a numbered footer on every page, and the catalogue exported as an
 // IDML package. Everything goes through the editor's own controls, every
-// step is asserted against the engine, and DuckDB is the real engine
-// (REQUIRE_REAL_DUCKDB=1).
+// step is asserted against the engine, and the data engine is the real one
+// (REQUIRE_REAL_ENGINE=1).
 //
 // The merge copies story-level formatting only (plugin-data docs/status.md,
 // Data Merge limits), so the sheet keeps one paragraph style per frame; the
@@ -526,7 +526,7 @@ film("database-publishing", async (k) => {
     await pointer.moveTo(await pt(k, 170, 502), { targetWidth: 60 });
   });
 
-  // ── The product feed, into DuckDB, in the Data layout. ──
+  // ── The product feed, into the data engine, in the Data layout. ──
   await k.scene("feed", async () => {
     k.unfocus();
     await press(

@@ -122,6 +122,10 @@ drop, File ▸ Open…, File ▸ Open PDF…, every importer that opens a docume
 doors ask Save / Don't save / Cancel. Placing a dropped file instead of opening it (F-03)
 stays open.
 
+**Verified (2026-10-24, `1c59d8ffc`).** A .docx dropped on an edited document asks the same
+question through the doc importer's `host.nativeDocument.open`; Cancel keeps the document and
+its edit (`doc-file-entry.spec.ts`, AC-DOCFE-3).
+
 <a id="f-02"></a>
 
 #### F-02 · Corrupt or unsupported files fail silently, sometimes with a success message
@@ -295,6 +299,12 @@ the importer writes the deck label into the package instead of writing it after 
 ADR 703 amendment). A Word file still opens "Edited": paged.doc builds the document with
 mutations after the open (styles, grow rules, the pour), which needs a load-time baseline the
 engine does not have yet.
+
+**Fixed (2026-10-24, `1c59d8ffc`).** A Word file opens clean too: once an importer that opened
+the document has finished, File ▸ Open, a drop and the shell's file input mark it saved
+(`CanvasClient.markSaved`), as they do the blank document minted for a workbook opened with
+nothing open. The first edit marks it "Edited" again. The import's own mutations stay on the
+undo stack until the engine has a load-time baseline.
 
 <a id="f-09"></a>
 

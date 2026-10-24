@@ -21,28 +21,19 @@
 // content INTO the layout and it VISIBLY renders on the page.
 //
 // paged.data publishes governed data into the document: a CSV registers through
-// the vendored DuckDB-WASM query engine, a binding resolves, and the bound
+// the data engine's query store, a binding resolves, and the bound
 // content LOWERS to native Paged content (data-host-model → Mutation) that
 // reaches the page. This journey drives that end to end through the REAL editor
 // host and render-verifies the result with a before/after pixel diff.
 //
-// DuckDB-WASM headless boot is UNBLOCKED (2026-06-18). The two documented walls
-// (data.journey.spec.ts header) are closed by the editor's Vite dev server:
-//   (3) the vendored `duckdb-browser-*.worker.js` / `duckdb-*.wasm` are served
-//       as RAW assets with the right MIME by the `duckdbDistRoute` middleware in
-//       `apps/canvas/vite.config.ts` (they previously fell through the SPA
-//       fallback → index.html → "Unexpected token '<'" in the worker). The same
-//       route rewrites the API entry's lone bare `apache-arrow` import to a
-//       same-origin virtual module so the entry loads;
-//   (4) the COI/pthread + SharedArrayBuffer DuckDB boot WORKS in the headless
-//       harness — on BOTH the bundled-Chromium `journeys` lane and the real-
-//       Chrome `journeys-gpu` lane (both cross-origin-isolated by the existing
-//       COOP/COEP plugin). The ~36 MiB engine reaches "ready" in ~3-4 s.
+// The data engine (the data-js wasm, the query store inside it, ADR 561) boots
+// in the headless harness on both the bundled-Chromium `journeys` lane and the
+// real-Chrome `journeys-gpu` lane.
 //
-// Defence in depth: if DuckDB ever fails to boot on a future host (a missing
-// vendored dist, a non-isolated context), the source never reaches "ready" and
-// the test SKIPS with the precise status rather than flaking — but on the
-// standard editor dev server the render assertion is HARD and drives green.
+// Defence in depth: if the engine ever fails to boot on a future host (a
+// missing bin/data_js_bg.wasm), the source never reaches "ready" and the test
+// SKIPS with the precise status rather than flaking — but on the standard
+// editor dev server the render assertion is HARD and drives green.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -51,7 +42,7 @@ import { Designer } from "../driver/designer";
 
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { addBindingThroughPanel } from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
@@ -87,7 +78,7 @@ test.describe("journey · paged.data render output", () => {
     await designer.newDocument();
 
     // ── 1. IMPORT GATEWAY — feed the CSV into the sources panel; the session
-    //    lazily boots the vendored DuckDB-WASM engine and registers the table.
+    //    lazily boots the data engine and registers the table.
     //    Reaching "ready" means the query engine booted (the unblocked path). ──
     await invoke(page, IMPORT_COMMAND);
     await openPanel(page, SOURCES_PANEL);
@@ -119,11 +110,11 @@ test.describe("journey · paged.data render output", () => {
       const got =
         (await status.getAttribute("data-status").catch(() => null)) ??
         "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
-        `paged.data render needs DuckDB-WASM to boot (engine status "${got}"). On the ` +
-          "standard editor dev server it boots on both lanes (Vite duckdbDistRoute + the " +
-          "COOP/COEP isolation). This skip only fires if the package shipped no bin/duckdb-engine.wasm or the " +
+        `paged.data render needs the data engine to boot (engine status "${got}"). On the ` +
+          "standard editor dev server it boots on both lanes; " +
+          "this skip only fires if the package shipped no bin/data_js_bg.wasm or the " +
           "context is not cross-origin isolated — see the file header.",
       );
     }
@@ -138,7 +129,7 @@ test.describe("journey · paged.data render output", () => {
     // ── 2. WIRE + LOWER — open the bindings panel, add bindings through its
     //    authoring row (a variable field and a table over "All rows of
     //    data_people", which defines that query on first use), then
-    //    lower it to the document. `lowerAll` refreshes the data through DuckDB
+    //    lower it to the document. `lowerAll` refreshes the data through the store
     //    and commits the resolved content as native Paged Mutations — the page,
     //    blank before, now carries the data-driven content. ──
     await openPanel(page, BINDINGS_PANEL);
@@ -152,7 +143,7 @@ test.describe("journey · paged.data render output", () => {
     await page.getByRole("button", { name: /lower to document/i }).click();
 
     // ── 3. RENDER ASSERTION (HARD) — the bound content visibly reached the
-    //    page. The lower lane refreshes data (a DuckDB query) and then
+    //    page. The lower lane refreshes data (a store query) and then
     //    commits the Mutations: polled until the commit lands (ADR 228). ──
     await designer.expectRenderChangesFrom(beforeLower);
   });

@@ -770,6 +770,50 @@ describe.skipIf(!ENGINE_BUILT)(
       }
     });
 
+    it("a chart whose binding recorded its box but not its art follows a move made before reopening", async () => {
+      await openBook(env);
+      await addChart(env);
+      await env.objects.invoke(`${C}.lowerChartToFrame` as never, { chart: 0 });
+      await env.settle();
+      // As the version just before ADR 522's amendment wrote it: a box, no art.
+      const placed = await chartOnPage(env.host);
+      const box = placed.binding.data.box!;
+      const { art: _art, ...older } = placed.binding.data;
+      const w = await env.host.document.mutate({
+        op: "setPluginMetadata",
+        args: {
+          elementId: placed.anchor,
+          key: BINDING_KEY,
+          value: JSON.stringify({ v: 2, data: older }),
+        },
+      } as never);
+      expect(w.applied).toBe(true);
+      // Moved in that session, before the document was saved.
+      await moveChart(env.host, 25, 60);
+      await env.settle();
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        expect((await chartOnPage(h2.host)).binding.data.art).toBeUndefined();
+        await setCell(h2.objects, "B2", "11");
+        await refreshed();
+        const redrawn = await chartOnPage(h2.host);
+        // Redrawn where it was moved to, not at its recorded box.
+        expect(
+          near(redrawn.binding.data.box!, [
+            box[0] + 60,
+            box[1] + 25,
+            box[2] + 60,
+            box[3] + 25,
+          ]),
+        ).toBe(true);
+        expect(redrawn.binding.data.art).toBeDefined();
+      } finally {
+        h2.dispose();
+      }
+    });
+
     it("a paginated chain is found again when its document is reopened, and stays live", async () => {
       await openBook(env);
       const head = await chain(env);
@@ -818,6 +862,54 @@ describe.skipIf(!ENGINE_BUILT)(
             } as ElementId),
           )?.data.chain?.tables,
         ).toHaveLength(2);
+      } finally {
+        h2.dispose();
+      }
+    });
+
+    it("a renamed sheet's placed table and paginated chain are found again on reopen", async () => {
+      await openBook(env);
+      const head = await chain(env);
+      const placed = await place(env, { ref: "book!A1:B4" });
+      await place(env, { ref: "book!A1:B4", chain: `textFrame:${head}` });
+      await env.settle();
+      expect((await bindingOf(env, placed.frame)).sheet).toBe("book");
+      const renamed = await env.objects.batch([
+        {
+          op: "set",
+          address: `${P}/sheet/book`,
+          path: "name",
+          value: "stock",
+        } as never,
+      ]);
+      expect(renamed.reason ?? "").toBe("");
+      await refreshed();
+      // The refresh re-stamps both bindings with the sheet's new name.
+      expect((await bindingOf(env, placed.frame)).sheet).toBe("stock");
+      const record = await bindingOf(env, `textFrame:${head}`);
+      expect(record.sheet).toBe("stock");
+      expect(record.chain?.tables).toHaveLength(2);
+
+      await new Promise((r) => setTimeout(r, 1200));
+      const { bytes } = await env.h.exportDocument("paged");
+      const h2 = await reopen(bytes);
+      try {
+        const w = await h2.objects.batch([
+          {
+            op: "set",
+            address: `${P}/cell/stock!B4`,
+            path: "value",
+            value: "77",
+          } as never,
+        ]);
+        expect(w.reason ?? "").toBe("");
+        await refreshed();
+        // Both were found and kept live: the plain table and the chain's
+        // last table show the edit.
+        const tables = await exportedTableCells(h2);
+        expect(tables).toHaveLength(3);
+        const showing = tables.filter((t) => [...t.values()].includes("77"));
+        expect(showing).toHaveLength(2);
       } finally {
         h2.dispose();
       }

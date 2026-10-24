@@ -9,9 +9,11 @@ macro_rules! covers {
     ($($id:literal),+ $(,)?) => {};
 }
 
+mod actions;
 mod advertised_paths_apply;
 mod advertised_values_construct;
 mod anchored_frames_query;
+mod data;
 mod dtp_examples;
 mod host_bridge;
 mod host_functions;

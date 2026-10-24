@@ -51,20 +51,27 @@ import de from "../locales/de.json" with { type: "json" };
 import manifest from "../manifest.json";
 
 import { createImageSession } from "./session";
+import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
+import { adjustmentKindLabel } from "./panels/sections/layer-parity";
 import { makeCropGesture } from "./crop-tool";
 import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
 import { makeGradientGesture } from "./gradient-tool";
 import { makeRedEyeGesture } from "./red-eye-tool";
+import {
+  makeColorSamplerGesture,
+  makeEyedropperGesture,
+} from "./sampler-tools";
 import { makePatchGesture } from "./patch-tool";
 import { makeSelectionGesture } from "./selection-tool";
 import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
+import { makeColorBindingProvider } from "./binding-provider/color-provider";
 import {
   contributeImageObjectModel,
   type UntypedCommand,
@@ -117,6 +124,30 @@ const CMD = defineMessages("image.command", {
   imageSize: "Image size…",
   trim: "Trim…",
   rotateArbitrary: "Rotate canvas by an arbitrary angle…",
+  newFillSolid: "New fill layer: solid colour",
+  newFillGradient: "New fill layer: gradient",
+  newFillPattern: "New fill layer: pattern",
+  newAdjustment: "New adjustment layer: {kind}",
+  blendingOptions: "Blending options of the active layer…",
+  rasterizeLayer: "Rasterize the active layer",
+  layerViaCopy: "Layer via copy",
+  layerViaCut: "Layer via cut",
+  mergeDown: "Merge down",
+  mergeVisible: "Merge visible",
+  mergeGroup: "Merge the active layer's group",
+  stampVisible: "Stamp visible",
+  flattenImage: "Flatten image",
+  alignLeft: "Align layers: left edges",
+  alignHCenter: "Align layers: horizontal centres",
+  alignRight: "Align layers: right edges",
+  alignTop: "Align layers: top edges",
+  alignVCenter: "Align layers: vertical centres",
+  alignBottom: "Align layers: bottom edges",
+  distributeHorizontal: "Distribute layers: horizontal centres",
+  distributeVertical: "Distribute layers: vertical centres",
+  linkLayers: "Link the active layer with the layer below",
+  unlinkLayer: "Unlink the active layer",
+  newLayerComp: "New layer comp",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -125,6 +156,8 @@ const TOOL = defineMessages("image.tool", {
   paintBucket: "Paint bucket",
   gradient: "Gradient",
   redEye: "Red eye",
+  eyedropper: "Eyedropper",
+  colorSampler: "Color sampler",
   marqueeRectangle: "Marquee (rectangle)",
   marqueeEllipse: "Marquee (ellipse)",
   lasso: "Lasso",
@@ -167,6 +200,8 @@ const MOVE_TOOL_ID = "media.paged.image.tool.move";
 const BUCKET_TOOL_ID = "media.paged.image.tool.bucket";
 const GRADIENT_TOOL_ID = "media.paged.image.tool.gradient";
 const RED_EYE_TOOL_ID = "media.paged.image.tool.redEye";
+const EYEDROPPER_TOOL_ID = "media.paged.image.tool.eyedropper";
+const COLOR_SAMPLER_TOOL_ID = "media.paged.image.tool.colorSampler";
 const DODGE_TOOL_ID = "media.paged.image.tool.dodge";
 const BURN_TOOL_ID = "media.paged.image.tool.burn";
 const SPONGE_TOOL_ID = "media.paged.image.tool.sponge";
@@ -288,6 +323,8 @@ export function activate(host: BundleHost): BundleHandle {
         wand: MAGIC_WAND_TOOL_ID,
         bucket: BUCKET_TOOL_ID,
         gradient: GRADIENT_TOOL_ID,
+        eyedropper: EYEDROPPER_TOOL_ID,
+        colorSampler: COLOR_SAMPLER_TOOL_ID,
       })
     : null;
   const optionsFor = (toolId: string) =>
@@ -352,6 +389,30 @@ export function activate(host: BundleHost): BundleHandle {
     group: HEAL_TOOL_ID,
     section: "drawType",
     gesture: () => makeRedEyeGesture(host, session),
+  });
+
+  // EYEDROPPER (WP4.10) — the colour under the pointer into the
+  // foreground (Alt: background); its own slot, with the Color Sampler in
+  // its flyout (Photoshop's pairing). No key: the shortcut register is full
+  // and `i` is the host's own Eyedropper.
+  contributeTool(host, {
+    id: EYEDROPPER_TOOL_ID,
+    ...optionsFor(EYEDROPPER_TOOL_ID),
+    title: t(TOOL.eyedropper),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeEyedropperGesture(host, session),
+  });
+  // COLOR SAMPLER — up to four fixed sampling points, read live.
+  contributeTool(host, {
+    id: COLOR_SAMPLER_TOOL_ID,
+    ...optionsFor(COLOR_SAMPLER_TOOL_ID),
+    title: t(TOOL.colorSampler),
+    icon: "tool-eyedropper",
+    group: EYEDROPPER_TOOL_ID,
+    section: "drawType",
+    gesture: () => makeColorSamplerGesture(host, session),
   });
 
   // The crop commit command (also surfaced as the panel's "Apply crop"
@@ -803,6 +864,108 @@ export function activate(host: BundleHost): BundleHandle {
       },
     });
   }
+  // LAYER ▸ New Fill Layer / New Adjustment Layer and the Layer menu's
+  // verbs (Photoshop parity, WP5.3). Each is one undo step in the image's
+  // own history; the tables are literal so every command id reads as
+  // written.
+  for (const [suffix, title, run] of [
+    ["newFillSolid", CMD.newFillSolid, () => session.addFillLayer("solid")],
+    [
+      "newFillGradient",
+      CMD.newFillGradient,
+      () => session.addFillLayer("gradient"),
+    ],
+    [
+      "newFillPattern",
+      CMD.newFillPattern,
+      () => session.addFillLayer("pattern"),
+    ],
+    [
+      "blendingOptions",
+      CMD.blendingOptions,
+      () => session.openBlendingOptions(),
+    ],
+    [
+      "rasterizeLayer",
+      CMD.rasterizeLayer,
+      () => session.rasterizeLayer(session.state().layers.active),
+    ],
+    ["layerViaCopy", CMD.layerViaCopy, () => session.layerViaCopy()],
+    ["layerViaCut", CMD.layerViaCut, () => session.layerViaCut()],
+    ["mergeDown", CMD.mergeDown, () => session.mergeDown()],
+    ["mergeVisible", CMD.mergeVisible, () => session.mergeVisible()],
+    ["mergeGroup", CMD.mergeGroup, () => session.mergeGroup()],
+    ["stampVisible", CMD.stampVisible, () => session.stampVisible()],
+    ["flattenImage", CMD.flattenImage, () => session.flattenImage()],
+    ["alignLeft", CMD.alignLeft, () => session.alignLayers("left")],
+    ["alignHCenter", CMD.alignHCenter, () => session.alignLayers("hcenter")],
+    ["alignRight", CMD.alignRight, () => session.alignLayers("right")],
+    ["alignTop", CMD.alignTop, () => session.alignLayers("top")],
+    ["alignVCenter", CMD.alignVCenter, () => session.alignLayers("vcenter")],
+    ["alignBottom", CMD.alignBottom, () => session.alignLayers("bottom")],
+    [
+      "distributeHorizontal",
+      CMD.distributeHorizontal,
+      () => session.distributeLayers("horizontal"),
+    ],
+    [
+      "distributeVertical",
+      CMD.distributeVertical,
+      () => session.distributeLayers("vertical"),
+    ],
+    [
+      "linkLayers",
+      CMD.linkLayers,
+      () => {
+        const a = session.state().layers.active;
+        return a > 0 ? session.linkLayers([a - 1, a]) : false;
+      },
+    ],
+    [
+      "unlinkLayer",
+      CMD.unlinkLayer,
+      () => session.unlinkLayer(session.state().layers.active),
+    ],
+    ["newLayerComp", CMD.newLayerComp, () => session.newLayerComp()],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void run();
+      },
+    });
+  }
+  for (const [suffix, kind] of [
+    ["newAdjustmentBrightnessContrast", "brightnessContrast"],
+    ["newAdjustmentLevels", "levels"],
+    ["newAdjustmentCurves", "curves"],
+    ["newAdjustmentExposure", "exposure"],
+    ["newAdjustmentVibrance", "vibrance"],
+    ["newAdjustmentHueSaturation", "hueSaturation"],
+    ["newAdjustmentColorBalance", "colorBalance"],
+    ["newAdjustmentBlackWhite", "blackWhite"],
+    ["newAdjustmentPhotoFilter", "photoFilter"],
+    ["newAdjustmentChannelMixer", "channelMixer"],
+    ["newAdjustmentColorLookup", "colorLookup"],
+    ["newAdjustmentInvert", "invert"],
+    ["newAdjustmentPosterize", "posterize"],
+    ["newAdjustmentThreshold", "threshold"],
+    ["newAdjustmentGradientMap", "gradientMap"],
+    ["newAdjustmentSelectiveColor", "selectiveColor"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.newAdjustment, { kind: adjustmentKindLabel(kind) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.addAdjustmentLayerOf(kind);
+      },
+    });
+  }
   command({
     id: "media.paged.image.command.commitImage",
     title: t(CMD.commitImageEditsToTheDocument),
@@ -1110,6 +1273,8 @@ export function activate(host: BundleHost): BundleHandle {
     [MAGIC_WAND_TOOL_ID]: "wand",
     [BUCKET_TOOL_ID]: "wand",
     [GRADIENT_TOOL_ID]: "gradient",
+    [EYEDROPPER_TOOL_ID]: "eyedropper",
+    [COLOR_SAMPLER_TOOL_ID]: "eyedropper",
   });
   const willSave = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(async () => {
@@ -1159,6 +1324,8 @@ export function activate(host: BundleHost): BundleHandle {
         BUCKET_TOOL_ID,
         GRADIENT_TOOL_ID,
         RED_EYE_TOOL_ID,
+        EYEDROPPER_TOOL_ID,
+        COLOR_SAMPLER_TOOL_ID,
         DODGE_TOOL_ID,
         BURN_TOOL_ID,
         SPONGE_TOOL_ID,
@@ -1236,6 +1403,14 @@ export function activate(host: BundleHost): BundleHandle {
           ).provider,
         ),
       );
+      // COLOUR (WP4.10) — the host Color panel's fill / stroke wells are
+      // the foreground / background, and a host swatch picks one.
+      providerHandles.push(
+        host.contribute.bindingProvider(
+          "rasterImage",
+          makeColorBindingProvider(host, session).provider,
+        ),
+      );
       // A provider's values change without an ENGINE mutation — a layer
       // toggled inside the plugin's own wasm stack moves nothing on the
       // document, so `host.document.onDidChange` never fires and a
@@ -1271,7 +1446,8 @@ export function activate(host: BundleHost): BundleHandle {
     untyped,
     undefined,
     () => session.state().source !== null,
-    (frameId) => session.liveSelection(frameId),
+    (frameId, record) => session.liveSelection(frameId, record),
+    (frameId, from, to, ops) => session.followCanvasOps(frameId, from, to, ops),
   );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).
@@ -1288,8 +1464,13 @@ export function activate(host: BundleHost): BundleHandle {
         publishPropertyLists(host))
       : null;
 
+  // PM-0015 — the CPU-lane steps over an encoded picture as actions
+  // (actions@1, extensions ADR 344), for data's asset columns and scripts.
+  const actionsSub = registerImageActions(host);
+
   return {
     dispose() {
+      actionsSub?.dispose();
       // Providers first, then the subscription that feeds them, then
       // the session they read. Reverse registration order: a handle
       // disposed after its session would be a live provider over a

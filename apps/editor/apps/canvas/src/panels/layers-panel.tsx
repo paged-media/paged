@@ -128,6 +128,7 @@ import {
 } from "@paged-media/strings";
 
 import { appCatalogRegistry } from "./catalog-registry";
+import { LayerObjects } from "./layer-objects";
 import { layerAddress } from "../object-model";
 
 export const LAYERS_PANEL_ID = "paged.layers";
@@ -649,6 +650,10 @@ export function LayersPanel(_: PanelProps) {
           bindings={layersBindings}
         />
       </CatalogRegistryProvider>
+      {/* WP4.6 — the page items on each layer (sublayers, select by row,
+          locate, target circles, drag reorder). Core's rows only: an edit
+          context answering the layer list owns its own items. */}
+      {!provider && rows && <LayerObjects layers={rows} run={run} />}
       {!provider && rows && rows.length > 0 && <LayerOptions rows={rows} />}
     </div>
   );

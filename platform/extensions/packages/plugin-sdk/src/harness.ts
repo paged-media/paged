@@ -117,6 +117,12 @@ import {
   type ToolSettingsBackend,
   type WillSaveBackend,
 } from "./host-impl.js";
+import {
+  createActionRegistry,
+  createDataRegistry,
+  type ActionBackend,
+  type DataBackend,
+} from "./doors-data-actions.js";
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { mapBacking } from "./testing.js";
 import { createCoreObjects } from "./core-objects.js";
@@ -179,6 +185,8 @@ export interface HarnessOptions
       | "secrets"
       | "bindingProviders"
       | "dataProviders"
+      | "data"
+      | "actions"
       | "objects"
       | "willSave"
       | "toolSettings"
@@ -448,6 +456,12 @@ export interface HeadlessHost {
    *  host here, so a provider bundle and a consumer bundle rendezvous
    *  headlessly and `supports("dataProviders@1")` is true. */
   readonly dataProviders: DataProviderBackend;
+  /** The SHARED data backend (`data@1`, extensions ADR 343) every bundle
+   *  host here shares, so a serving bundle (or `fakeDataService`) and its
+   *  consumers meet headlessly. */
+  readonly data: DataBackend;
+  /** The SHARED action registry (`actions@1`, ADR 344). */
+  readonly actions: ActionBackend;
   /** The will-save registry this host injected: `fire()` runs every
    *  bundle's `document.onWillSave` listener and awaits them, as a save
    *  would. */
@@ -1064,6 +1078,10 @@ export async function createHeadlessHost(
   // shared across the harness's hosts for the same reason: routing and
   // rendezvous are CROSS-bundle.
   const dataProviders = options.dataProviders ?? createDataProviderRegistry();
+  // Extensions ADRs 343, 344 — the data door and the action registry, shared
+  // the same way.
+  const data = options.data ?? createDataRegistry();
+  const actions = options.actions ?? createActionRegistry();
   const objects =
     options.objects ??
     createObjectRegistry({
@@ -1095,6 +1113,8 @@ export async function createHeadlessHost(
       secrets,
       bindingProviders,
       dataProviders,
+      data,
+      actions,
       objects,
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
@@ -1278,6 +1298,8 @@ export async function createHeadlessHost(
       );
     },
     dataProviders,
+    data,
+    actions,
     willSave,
     toolSettings,
     async load(idml: Uint8Array): Promise<string[]> {

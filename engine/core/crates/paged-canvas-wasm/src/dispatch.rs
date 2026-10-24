@@ -572,6 +572,11 @@ impl WorkerCore {
                 dpi,
                 hide_items,
                 markers,
+                only,
+                clip,
+                format,
+                background,
+                trim,
             } => {
                 let Some(model) = self.model.as_ref() else {
                     reply!(WorkerToMainKind::SnapshotFailed {
@@ -581,13 +586,20 @@ impl WorkerCore {
                 // An explicit `dpi` (> 0) wins over `target_width_px`:
                 // the fidelity suite drives DPI directly so the PNG
                 // matches `pdftoppm -r <dpi>` at the dimension boundary.
-                let res = paged_canvas::render_snapshot_png_hiding(
+                let res = paged_canvas::render_snapshot_request(
                     model,
-                    &page_id,
-                    target_width_px,
-                    dpi,
-                    &hide_items,
-                    markers,
+                    &paged_canvas::SnapshotRequest {
+                        page_id: &page_id,
+                        target_width_px,
+                        dpi,
+                        hide: &hide_items,
+                        only: &only,
+                        clip,
+                        format,
+                        background,
+                        markers,
+                        trim,
+                    },
                 );
                 match res {
                     Ok(snap) => WorkerToMainKind::SnapshotReady(snap),

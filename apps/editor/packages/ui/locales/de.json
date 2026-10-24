@@ -17,6 +17,7 @@
   "ui.color.lightness": "Luminanz",
   "ui.color.magenta": "Magenta",
   "ui.color.mixedSelection": "Gemischte Auswahl",
+  "ui.color.naiveCmyk": "CMYK einer RGB-Farbe durch eine einfache Umrechnung, nicht durch die Farbeinstellungen des Dokuments",
   "ui.color.noFill": "keine Fläche",
   "ui.color.outOfGamut": "Außerhalb des Farbumfangs des CMYK-Arbeitsfarbraums des Dokuments",
   "ui.color.red": "Rot",

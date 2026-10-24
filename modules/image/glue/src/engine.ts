@@ -780,7 +780,7 @@ export interface LayerInfo {
    *  transforms everything beneath it; a `smart` layer's pixels are a
    *  cached RENDER of preserved source bytes, so rescaling it is
    *  lossless. */
-  kind: "pixels" | "adjustment" | "smart";
+  kind: "pixels" | "adjustment" | "smart" | "fill";
   /** Whether a layer mask is attached at all. */
   hasMask: boolean;
   /** Whether that mask APPLIES. Disabled keeps the coverage — the two
@@ -792,7 +792,118 @@ export interface LayerInfo {
   clipped: boolean;
   /** The GROUP this layer belongs to, or null. */
   group: number | null;
+  /** FILL opacity 0–1: the layer's own pixels, apart from its opacity.
+   *  On the eight special modes it acts inside the blend. */
+  fillOpacity: number;
+  knockout: Knockout;
+  /** The locks beyond the image-pixels lock (`locked`). */
+  locks: LayerLocksInfo;
+  color: ColorLabel;
+  /** The link this layer belongs to (linked layers move together). */
+  link: number | null;
+  /** Blend If's 32 sliders (gray, red, green, blue; This Layer's black
+   *  low/high and white low/high, then the Underlying Layer's), or null
+   *  when every slider is open. */
+  blendIf: number[] | null;
+  /** An adjustment layer's kind ("chain": a stored multi-stage chain). */
+  adjustKind: AdjustmentKind | "chain" | null;
+  /** A fill layer's kind. */
+  fillKind: FillKind | null;
 }
+
+/** A plain layer's parity fields (Photoshop's defaults) — for a reader
+ *  that builds a row by hand, such as a test. */
+export const PLAIN_LAYER_PARITY = {
+  fillOpacity: 1,
+  knockout: "none",
+  locks: { transparency: false, position: false, all: false },
+  color: "none",
+  link: null,
+  blendIf: null,
+  adjustKind: null,
+  fillKind: null,
+} as const satisfies Pick<
+  LayerInfo,
+  | "fillOpacity"
+  | "knockout"
+  | "locks"
+  | "color"
+  | "link"
+  | "blendIf"
+  | "adjustKind"
+  | "fillKind"
+>;
+
+/** Photoshop's sixteen adjustment-layer kinds, in its menu order. */
+export const ADJUSTMENT_KINDS = [
+  "brightnessContrast",
+  "levels",
+  "curves",
+  "exposure",
+  "vibrance",
+  "hueSaturation",
+  "colorBalance",
+  "blackWhite",
+  "photoFilter",
+  "channelMixer",
+  "colorLookup",
+  "invert",
+  "posterize",
+  "threshold",
+  "gradientMap",
+  "selectiveColor",
+] as const;
+export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
+
+export type FillKind = "solid" | "gradient" | "pattern";
+
+/** Photoshop's colour labels, in its order. */
+export const COLOR_LABELS = [
+  "none",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "violet",
+  "gray",
+] as const;
+export type ColorLabel = (typeof COLOR_LABELS)[number];
+
+export type Knockout = "none" | "shallow" | "deep";
+
+export interface LayerLocksInfo {
+  transparency: boolean;
+  position: boolean;
+  all: boolean;
+}
+
+/** A layer comp (`layers_list`'s `comps`). */
+export interface LayerCompInfo {
+  id: number;
+  name: string;
+  visibility: boolean;
+  position: boolean;
+  appearance: boolean;
+}
+
+/** A layer's kind-specific parameters (`layers_layer_params`): the flat
+ *  block of an adjustment (`Adjustment::values`) or a fill
+ *  (`FillSource::values`). */
+export interface LayerParams {
+  adjustment?: AdjustmentKind | "chain";
+  fill?: FillKind;
+  values: number[];
+  /** A Color Lookup's look name. */
+  label?: string;
+  /** A pattern fill's pattern name and tile size. */
+  name?: string;
+  tile?: [number, number] | null;
+}
+
+export type AlignEdge =
+  "left" | "hcenter" | "right" | "top" | "vcenter" | "bottom";
+export type AlignTo = "canvas" | "selection" | "layers";
 
 /** What the paint tools write on the active layer (`layers_list`'s
  *  `editTarget`): its pixels, or its layer MASK. */
@@ -807,6 +918,8 @@ export interface LayerStackInfo {
   layers: LayerInfo[];
   /** Groups, keyed by the `group` field on each layer. */
   groups: LayerGroupInfo[];
+  /** Layer comps, in the panel's order. */
+  comps: LayerCompInfo[];
 }
 
 /** The undo readout (`layers_history`). The BOUND is part of it on
@@ -856,6 +969,7 @@ export interface LayerGroupInfo {
   isolates: boolean;
   /** The enclosing group, for nesting; null at the top level. */
   parent: number | null;
+  color: ColorLabel;
 }
 
 export const EMPTY_LAYER_STACK: LayerStackInfo = {
@@ -863,6 +977,7 @@ export const EMPTY_LAYER_STACK: LayerStackInfo = {
   editTarget: "pixels",
   layers: [],
   groups: [],
+  comps: [],
 };
 
 /** One PSD layer-record row (`psd_layer_list`), record order. */
@@ -1763,8 +1878,96 @@ export interface ImageEngine {
   layerSetGroupPassThrough(id: number, passThrough: boolean): void;
   /** Fold the stack and write the result into the bound image; returns
    *  the straight RGBA8. GPU-only whenever there is anything to blend; a
-   *  single plain visible layer needs no device at all. */
+   *  single plain visible layer needs no device at all. A fill layer whose
+   *  source changed is rendered first. */
   layersComposite(): Promise<Uint8Array>;
+
+  // ── Photoshop layer parity (WP5.3); each verb is one undo step ──
+  /** Layer ▸ New Adjustment Layer: `values` empty takes Photoshop's
+   *  defaults. With `maskFromSelection` a selection becomes its mask.
+   *  Returns its index. */
+  layerAddTypedAdjustment(
+    kind: AdjustmentKind,
+    name: string,
+    values: readonly number[],
+    cube: readonly number[],
+    label: string,
+    maskFromSelection: boolean,
+  ): number;
+  /** Retune a typed adjustment layer (a drag of one layer is one step). */
+  layerSetTypedAdjustment(
+    index: number,
+    kind: AdjustmentKind | "chain",
+    values: readonly number[],
+    cube: readonly number[],
+    label: string,
+  ): void;
+  /** An adjustment or fill layer's parameters ({} for others). */
+  layerParams(index: number): LayerParams;
+  /** Layer ▸ New Fill Layer (GPU-rendered). `tileHandle` is a pattern's
+   *  engine image, -1 otherwise. Returns its index. */
+  layerAddFill(
+    kind: FillKind,
+    values: readonly number[],
+    tileHandle: number,
+    name: string,
+    maskFromSelection: boolean,
+  ): Promise<number>;
+  layerSetFill(
+    index: number,
+    kind: FillKind,
+    values: readonly number[],
+    tileHandle: number,
+  ): Promise<void>;
+  /** A fill layer's or smart object's render becomes pixels. */
+  layerRasterize(index: number): void;
+  layerSetFillOpacity(index: number, fill: number): void;
+  /** Blend If's 32 sliders, or null to clear. */
+  layerSetBlendIf(index: number, sliders: readonly number[] | null): void;
+  layerSetKnockout(index: number, knockout: Knockout): void;
+  layerSetLocks(
+    index: number,
+    pixels: boolean,
+    transparency: boolean,
+    position: boolean,
+    all: boolean,
+  ): void;
+  layerSetColor(index: number, color: ColorLabel): void;
+  groupSetColor(id: number, color: ColorLabel): void;
+  layersLink(indices: readonly number[]): number;
+  layerUnlink(index: number): void;
+  layersMergeDown(): Promise<number>;
+  layersMergeVisible(): Promise<number>;
+  layersStampVisible(): Promise<number>;
+  layersFlatten(): Promise<void>;
+  layersMergeGroup(id: number): Promise<number>;
+  /** Layer via Copy (`cut` false) or Cut from the active layer and the
+   *  selection. */
+  layerVia(cut: boolean): number;
+  compNew(
+    name: string,
+    visibility: boolean,
+    position: boolean,
+    appearance: boolean,
+  ): number;
+  compUpdate(id: number): void;
+  compApply(id: number): void;
+  compDelete(id: number): void;
+  compRename(id: number, name: string): void;
+  /** Move the active layer and its links by whole pixels. */
+  layersTranslate(dx: number, dy: number): void;
+  layersAlign(edge: AlignEdge, to: AlignTo): void;
+  layersDistribute(axis: "horizontal" | "vertical"): void;
+  /** WP4.10 — the window `(x, y, w, h)` of layer `index`'s OWN pixels
+   *  (not the composite) as straight RGBA8, clipped to the canvas; empty
+   *  for an adjustment layer (`layers_window_rgba8`). */
+  layersWindow(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   /** BAKE the adjustment chain destructively into the ACTIVE layer
    *  (journaled, so undoable). The panel's chain is otherwise a
    *  re-runnable preview that mutates nothing. Throws at identity, on a
@@ -2399,6 +2602,76 @@ export interface ImageWasmModule {
   layers_set_group_blend(id: number, blend: string): void;
   layers_set_group_pass_through(id: number, passThrough: boolean): void;
   layers_composite(): Promise<Uint8Array>;
+  layers_add_typed_adjustment(
+    kind: string,
+    name: string,
+    values: Float32Array,
+    cube: Float32Array,
+    label: string,
+    mask_from_selection: boolean,
+  ): number;
+  layers_set_typed_adjustment(
+    index: number,
+    kind: string,
+    values: Float32Array,
+    cube: Float32Array,
+    label: string,
+  ): void;
+  layers_layer_params(index: number): string;
+  layers_add_fill(
+    kind: string,
+    values: Float32Array,
+    tile_handle: number,
+    name: string,
+    mask_from_selection: boolean,
+  ): Promise<number>;
+  layers_set_fill(
+    index: number,
+    kind: string,
+    values: Float32Array,
+    tile_handle: number,
+  ): Promise<void>;
+  layers_rasterize(index: number): void;
+  layers_set_fill_opacity(index: number, fill: number): void;
+  layers_set_blend_if(index: number, sliders: Uint8Array): void;
+  layers_set_knockout(index: number, knockout: string): void;
+  layers_set_locks(
+    index: number,
+    pixels: boolean,
+    transparency: boolean,
+    position: boolean,
+    all: boolean,
+  ): void;
+  layers_set_color(index: number, color: string): void;
+  layers_set_group_color(id: number, color: string): void;
+  layers_link(indices: Uint32Array): number;
+  layers_unlink(index: number): void;
+  layers_merge_down(): Promise<number>;
+  layers_merge_visible(): Promise<number>;
+  layers_stamp_visible(): Promise<number>;
+  layers_flatten(): Promise<void>;
+  layers_merge_group(id: number): Promise<number>;
+  layers_via(cut: boolean): number;
+  layers_comp_new(
+    name: string,
+    visibility: boolean,
+    position: boolean,
+    appearance: boolean,
+  ): number;
+  layers_comp_update(id: number): void;
+  layers_comp_apply(id: number): void;
+  layers_comp_delete(id: number): void;
+  layers_comp_rename(id: number, name: string): void;
+  layers_translate(dx: number, dy: number): void;
+  layers_align(edge: string, to: string): void;
+  layers_distribute(axis: string): void;
+  layers_window_rgba8(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   layers_bake_adjust(
     exposure_ev: number,
     brightness: number,
@@ -2860,6 +3133,7 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       return {
         ...parsed,
         editTarget: parsed.editTarget === "mask" ? "mask" : "pixels",
+        comps: parsed.comps ?? [],
       };
     },
     layersHistory() {
@@ -3316,6 +3590,63 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetGroupPassThrough: (id, pt) =>
       wasm.layers_set_group_pass_through(id, pt),
     layersComposite: () => wasm.layers_composite(),
+    layerAddTypedAdjustment: (kind, name, values, cube, label, fromSel) =>
+      wasm.layers_add_typed_adjustment(
+        kind,
+        name,
+        Float32Array.from(values),
+        Float32Array.from(cube),
+        label,
+        fromSel,
+      ),
+    layerSetTypedAdjustment: (index, kind, values, cube, label) =>
+      wasm.layers_set_typed_adjustment(
+        index,
+        kind,
+        Float32Array.from(values),
+        Float32Array.from(cube),
+        label,
+      ),
+    layerParams: (index) =>
+      JSON.parse(wasm.layers_layer_params(index)) as LayerParams,
+    layerAddFill: (kind, values, tile, name, fromSel) =>
+      wasm.layers_add_fill(
+        kind,
+        Float32Array.from(values),
+        tile,
+        name,
+        fromSel,
+      ),
+    layerSetFill: (index, kind, values, tile) =>
+      wasm.layers_set_fill(index, kind, Float32Array.from(values), tile),
+    layerRasterize: (index) => wasm.layers_rasterize(index),
+    layerSetFillOpacity: (index, fill) =>
+      wasm.layers_set_fill_opacity(index, fill),
+    layerSetBlendIf: (index, sliders) =>
+      wasm.layers_set_blend_if(index, Uint8Array.from(sliders ?? [])),
+    layerSetKnockout: (index, k) => wasm.layers_set_knockout(index, k),
+    layerSetLocks: (index, pixels, transparency, position, all) =>
+      wasm.layers_set_locks(index, pixels, transparency, position, all),
+    layerSetColor: (index, color) => wasm.layers_set_color(index, color),
+    groupSetColor: (id, color) => wasm.layers_set_group_color(id, color),
+    layersLink: (indices) => wasm.layers_link(Uint32Array.from(indices)),
+    layerUnlink: (index) => wasm.layers_unlink(index),
+    layersMergeDown: () => wasm.layers_merge_down(),
+    layersMergeVisible: () => wasm.layers_merge_visible(),
+    layersStampVisible: () => wasm.layers_stamp_visible(),
+    layersFlatten: () => wasm.layers_flatten(),
+    layersMergeGroup: (id) => wasm.layers_merge_group(id),
+    layerVia: (cut) => wasm.layers_via(cut),
+    compNew: (name, v, p, a) => wasm.layers_comp_new(name, v, p, a),
+    compUpdate: (id) => wasm.layers_comp_update(id),
+    compApply: (id) => wasm.layers_comp_apply(id),
+    compDelete: (id) => wasm.layers_comp_delete(id),
+    compRename: (id, name) => wasm.layers_comp_rename(id, name),
+    layersTranslate: (dx, dy) => wasm.layers_translate(dx, dy),
+    layersAlign: (edge, to) => wasm.layers_align(edge, to),
+    layersDistribute: (axis) => wasm.layers_distribute(axis),
+    layersWindow: (index, x, y, w, h) =>
+      wasm.layers_window_rgba8(index, x, y, w, h),
     layersAddAdjustment: (name, p) =>
       // The SAME wire block the bake and the preview use — one decode,
       // one meaning. The only difference is where the chain LIVES.

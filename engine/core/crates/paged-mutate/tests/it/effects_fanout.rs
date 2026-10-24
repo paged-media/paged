@@ -546,6 +546,7 @@ fn make_group(doc: &mut Document) -> String {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )

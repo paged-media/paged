@@ -624,6 +624,20 @@
           ]
         },
         {
+          "defaults": [],
+          "help": "A data source's file, repeatable: `--source products=products.csv`. The script reads it as `paged.data.*` (tables, records, query, evaluate), with the document's binding labels' queries run through the query guard, as `paged data apply` runs them. A source the labels do not declare is read by the file's extension",
+          "long": "source",
+          "name": "sources",
+          "positional": false,
+          "repeatable": true,
+          "required": false,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "ID=FILE"
+          ]
+        },
+        {
           "defaults": [
             "pdf17"
           ],
@@ -4935,6 +4949,370 @@
       "longAbout": null,
       "name": "ops",
       "subcommands": []
+    },
+    {
+      "about": "The bindings a document carries (paged.data), read and applied by the engine (core ADR 1014)",
+      "args": [],
+      "longAbout": null,
+      "name": "data",
+      "subcommands": [
+        {
+          "about": "The bindings the document's labels carry, with the object each writes and the source files the recipe asks for",
+          "args": [
+            {
+              "defaults": [],
+              "help": "IDML or `.paged` document",
+              "long": null,
+              "name": "doc",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DOC"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Answer JSON",
+              "long": "json",
+              "name": "json",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "JSON"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Font file or directory to make available, repeatable",
+              "long": "fonts",
+              "name": "fonts",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DIR|FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Bind one family (and optionally a style) to a file, repeatable: `--font-family \"Fraunces/Italic=/path/Fraunces-Italic.ttf\"`",
+              "long": "font-family",
+              "name": "font_family",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME[/STYLE]=PATH"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in",
+              "long": "font",
+              "name": "font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)",
+              "long": "no-default-font",
+              "name": "no_default_font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "NO_DEFAULT_FONT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. \"Coated FOGRA39\")",
+              "long": "cmyk-profile",
+              "name": "cmyk_profile",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME|FILE"
+              ]
+            }
+          ],
+          "longAbout": null,
+          "name": "bindings",
+          "subcommands": []
+        },
+        {
+          "about": "Resolve the bindings at one record and write their values",
+          "args": [
+            {
+              "defaults": [],
+              "help": "IDML or `.paged` document",
+              "long": null,
+              "name": "doc",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DOC"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "A source's file, repeatable: `--source products=products.csv`",
+              "long": "source",
+              "name": "sources",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "ID=FILE"
+              ]
+            },
+            {
+              "defaults": [
+                "0"
+              ],
+              "help": "The record (0-based) the bindings resolve at",
+              "long": "record",
+              "name": "record",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "RECORD"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Write the result here. The format follows the extension",
+              "long": "out",
+              "name": "out",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": "o",
+              "takesValues": true,
+              "valueNames": [
+                "OUT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Answer JSON",
+              "long": "json",
+              "name": "json",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "JSON"
+              ]
+            },
+            {
+              "defaults": [
+                "pdf17"
+              ],
+              "help": "\"pdf17\" (default) or \"pdfx4\". X-4 needs a resolvable output intent — give one here or let the document's profile serve",
+              "long": "standard",
+              "name": "standard",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "STANDARD"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Output-intent profile NAME, resolved against what this run registered. Defaults to the working space",
+              "long": "output-intent",
+              "name": "output_intent",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "OUTPUT_INTENT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Human-readable output condition for the OutputIntent dict",
+              "long": "output-condition",
+              "name": "output_condition",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "OUTPUT_CONDITION"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Crop marks, registration marks, colour bars, page info",
+              "long": "marks",
+              "name": "marks",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "MARKS"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "0-based inclusive page range, e.g. `0-9`",
+              "long": "pages",
+              "name": "pages",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FROM-TO"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Write the document's bookmarks as the PDF outline",
+              "long": "bookmarks",
+              "name": "bookmarks",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "BOOKMARKS"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Create Tagged PDF: a structure tree of stories and paragraphs, as InDesign's \"Create Tagged PDF\" writes it",
+              "long": "tagged",
+              "name": "tagged",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "TAGGED"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Font file or directory to make available, repeatable",
+              "long": "fonts",
+              "name": "fonts",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "DIR|FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Bind one family (and optionally a style) to a file, repeatable: `--font-family \"Fraunces/Italic=/path/Fraunces-Italic.ttf\"`",
+              "long": "font-family",
+              "name": "font_family",
+              "positional": false,
+              "repeatable": true,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME[/STYLE]=PATH"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in",
+              "long": "font",
+              "name": "font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "FILE"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)",
+              "long": "no-default-font",
+              "name": "no_default_font",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": false,
+              "valueNames": [
+                "NO_DEFAULT_FONT"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. \"Coated FOGRA39\")",
+              "long": "cmyk-profile",
+              "name": "cmyk_profile",
+              "positional": false,
+              "repeatable": false,
+              "required": false,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
+                "NAME|FILE"
+              ]
+            }
+          ],
+          "longAbout": "Resolve the bindings at one record and write their values.\n\nEach `--source ID=FILE` is imported into the store under the recipe's source id; every query passes the query guard first (a document's queries are code it carries). Property bindings are written on the objects their selectors name, variable bindings on their text variables, as `paged set` writes. Bindings the headless lane cannot write yet (images, tables, barcodes, record flows, rules) are listed, not skipped.",
+          "name": "apply",
+          "subcommands": []
+        }
+      ]
     },
     {
       "about": "List, read and write a `.paged` container's content parts",

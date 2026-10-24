@@ -125,6 +125,20 @@ export {
   useSelection,
   type ActiveTool,
 } from "./state/selection-context";
+export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
+// Editor ADRs 291, 292 — the document's data (data@1) for the editor's own
+// surfaces; the app points it at the shared backend.
+export {
+  setDataDoorSource,
+  setDataDropHandler,
+  useDataService,
+  useDataRevision,
+  useDataFieldDrop,
+  DATA_FIELD_DRAG_TYPE,
+  type DataDoorSource,
+  type DataFieldDrag,
+  type DataFieldDropHandler,
+} from "./state/data-door";
 export {
   ALIGN_SCOPE,
   ALIGN_TO,
@@ -481,6 +495,12 @@ export {
   setPendingImportSource,
   takePendingImportSource,
 } from "./state/import-source";
+export {
+  notifyImported,
+  onImported,
+  withImportHooksSuppressed,
+  type ImportedFile,
+} from "./state/import-hooks";
 
 // ── Shell root ─────────────────────────────────────────────────
 export { PagedShell, type PagedShellProps } from "./PagedShell";
@@ -566,6 +586,10 @@ export {
   pluginOverlayLayersContribution,
   renderPreviewShape,
   pageDecorationsContribution,
+  isolationDimContribution,
+  isolationScopeRoot,
+  isolationOutline,
+  isolationVeilPath,
   marginGuidesContribution,
   marginGuides,
   pathEditContribution,
@@ -576,6 +600,10 @@ export {
   selectionChromeContribution,
   threadingPortsContribution,
   threadLinesContribution,
+  dataMarkersContribution,
+  elementOfPlacement,
+  markersOf,
+  type DataMarkerTone,
   tableCellOverlayContribution,
   snapLinesContribution,
   applyAffine,
@@ -958,6 +986,11 @@ export {
   filterByRegion,
   resolveProfile,
   validateProfile,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdAliases,
+  type IdDeprecation,
   applyRegionEdit,
   excludedBy,
   globMatches,

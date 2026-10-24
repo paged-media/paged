@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.data wasm-bindgen surface (spec §4): the DataEngine the bundle consumes, a thin shim over the plain-Rust DataSession (load source manifest, define queries/bindings, ingest results, resolve, lower, sync, round-trip). crate-type cdylib for the wasm artifact."
+description = "paged.data wasm-bindgen surface (spec §4): the DataEngine the bundle consumes, a thin shim over the plain-Rust DataSession of the engine crate paged-data-session (load source manifest, define queries/bindings, ingest results, resolve, lower, sync, round-trip). crate-type cdylib for the wasm artifact."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -14,22 +14,17 @@ crate-type = ["cdylib", "rlib"]
 workspace = true
 
 [dependencies]
-data-core = { path = "../data-core" }
-data-sources = { path = "../data-sources" }
-data-bind = { path = "../data-bind" }
-data-expr = { path = "../data-expr" }
-data-lower = { path = "../data-lower" }
-data-barcode = { path = "../data-barcode" }
-data-dataset = { path = "../data-dataset" }
-data-query = { path = "../data-query" }
-data-automation = { path = "../data-automation" }
-data-xlsx = { path = "../data-xlsx" }
+paged-data-core = { path = "../../../engine/core/crates/paged-data-core" }
+paged-data-bind = { path = "../../../engine/core/crates/paged-data-bind" }
+paged-data-lower = { path = "../../../engine/core/crates/paged-data-lower" }
+paged-data-query = { path = "../../../engine/core/crates/paged-data-query" }
+paged-data-store = { path = "../../../engine/core/crates/paged-data-store" }
+paged-data-session = { path = "../../../engine/core/crates/paged-data-session" }
 serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen.workspace = true
+js-sys.workspace = true
 serde-wasm-bindgen.workspace = true
 console_error_panic_hook.workspace = true
 
@@ -42,4 +37,8 @@ console_error_panic_hook.workspace = true
 # cost 2–5 % on the criterion benches, which is why the CRATES keep them off by
 # default and only this boundary crate turns them on.
 default = ["perf-counters"]
-perf-counters = ["data-bind/perf-counters", "data-query/perf-counters"]
+perf-counters = [
+    "paged-data-bind/perf-counters",
+    "paged-data-query/perf-counters",
+    "paged-data-session/perf-counters",
+]

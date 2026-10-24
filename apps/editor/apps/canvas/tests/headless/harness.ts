@@ -119,6 +119,7 @@ import {
   makeClippingMask,
   nudgeSelection,
   releaseClippingMask,
+  editClippingContents,
   selectParentGroup,
   showAllOnSpread,
   ungroupSelection,
@@ -168,6 +169,10 @@ import {
   buildTransformEachDialogCommands,
   TRANSFORM_EACH_MENU_ITEMS,
 } from "../../src/panels/transform-each-dialog";
+import {
+  BATCH_MENU_ITEMS,
+  buildBatchCommands,
+} from "../../src/panels/batch-dialog";
 import { COCKPIT_MENU_SEAMS } from "../../src/cockpit-menus";
 import { buildTransformCommands } from "../../src/transform-commands";
 import { editorObjectsOf } from "../../src/object-model";
@@ -941,6 +946,7 @@ export async function createHeadlessEditor(
       fresh(() => nudgeSelection(objectDeps, direction, large))(),
     makeClippingMask: fresh(() => makeClippingMask(objectDeps)),
     releaseClippingMask: fresh(() => releaseClippingMask(objectDeps)),
+    editClippingContents: fresh(() => editClippingContents(objectDeps)),
     lock: fresh(() => lockSelection(objectDeps)),
     unlockAllOnSpread: fresh(() => unlockAllOnSpread(objectDeps)),
     hide: fresh(() => hideSelection(objectDeps)),
@@ -1019,6 +1025,7 @@ export async function createHeadlessEditor(
           (id) => editorObjectsOf(scope).addressOfElement(id),
         ),
       ),
+      ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
       ...buildCoreCommandEntries(),
       ...shellCommands,
@@ -1032,6 +1039,7 @@ export async function createHeadlessEditor(
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
       ...TRANSFORM_EACH_MENU_ITEMS,
+      ...BATCH_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ].map((m) => registries.menus.register(m)),
     ...[

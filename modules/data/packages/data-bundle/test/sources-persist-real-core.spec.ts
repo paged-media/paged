@@ -1,12 +1,12 @@
 // Wave 6 against the REAL stack (real core headless host, real data-js wasm,
-// real DuckDB): imported JSON / Parquet / XLSX sources are saved with the
+// the query store): imported JSON / Parquet / XLSX sources are saved with the
 // document — small files inline, a large one as its own `data/<hash>.json`
 // part — and come back on reopen, worksheet choice, saved query and refresh
 // policy included. The File ▸ Import door (`contribute.importer`) routes a
 // JSON file into the session.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -19,17 +19,15 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import {
-  bootRealDuckDB,
   bootRealEngine,
   DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "..", "..", "conformance", "sources");
@@ -38,25 +36,13 @@ const PARQUET = new Uint8Array(
   readFileSync(join(FIXTURES, "products.parquet")),
 );
 
-const probe = await bootRealDuckDB();
-const ready =
-  ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
-  existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -85,7 +71,7 @@ function bigJson(): Uint8Array {
 }
 
 describe.skipIf(!ready && !required)(
-  "imported files saved with the document, real core + engine + DuckDB [data.source.adapters]",
+  "imported files saved with the document, real core + engine [data.source.adapters]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {
@@ -101,7 +87,7 @@ describe.skipIf(!ready && !required)(
     it("JSON (large, a part), Parquet and XLSX (inline) come back on reopen [data.plugin.persistence]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const h1 = await open();
@@ -151,7 +137,7 @@ describe.skipIf(!ready && !required)(
         { id: "q", sql: "SELECT region, factor FROM book ORDER BY region" },
       ]);
 
-      // The data is back in DuckDB on first use.
+      // The data is back in the store on first use.
       expect(
         (await s2.previewQuery("SELECT count(*) FROM items")).rows,
       ).toEqual([["2000"]]);
@@ -169,7 +155,7 @@ describe.skipIf(!ready && !required)(
     it("a CSV or TSV source keeps its file name and format on reopen [data.plugin.persistence]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const h1 = await open();

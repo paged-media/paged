@@ -24,6 +24,12 @@ export { marqueeContribution } from "./marquee";
 export { toolPreviewContribution, renderPreviewShape } from "./tool-preview";
 export { pluginOverlayLayersContribution } from "./plugin-layers";
 export { pageDecorationsContribution } from "./page-decorations";
+export {
+  isolationDimContribution,
+  isolationOutline,
+  isolationScopeRoot,
+  isolationVeilPath,
+} from "./isolation-dim";
 export { marginGuidesContribution, marginGuides } from "./margin-guides";
 export { pathEditContribution, elementSupportsPathEdit } from "./path-edit";
 export { resizeHandlesContribution } from "./resize-handles";
@@ -33,6 +39,12 @@ export { guideOverlayContribution } from "./guide-overlay";
 export { selectionChromeContribution } from "./selection-chrome";
 export { threadingPortsContribution } from "./threading-ports";
 export { threadLinesContribution } from "./thread-lines";
+export {
+  dataMarkersContribution,
+  elementOfPlacement,
+  markersOf,
+  type DataMarkerTone,
+} from "./data-markers";
 export { tableCellOverlayContribution } from "./table-cell-overlay";
 export { snapLinesContribution } from "./snap-lines";
 

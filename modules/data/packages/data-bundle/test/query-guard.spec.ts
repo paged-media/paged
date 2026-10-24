@@ -1,35 +1,27 @@
-// The query guard's security matrix in the Node lane, over real DuckDB (the
-// shipped engine through DuckDB's Node runtime). The browser lane
-// (test/duckdb-browser.spec.ts) proves the same matrix in the shipped
-// worker; both lanes import the matrix from test/guard-matrix.ts.
+// The query guard's security matrix in the Node lane, over the real query
+// store (the shipped data-js wasm). The browser lane (test/store-browser.spec.ts)
+// proves the same matrix in headless Chromium; both lanes import the matrix
+// from test/guard-matrix.ts.
 import { beforeAll, describe, expect, it } from "bun:test";
-import type { DuckDBHandle } from "../src/query/duckdb";
-import { loadIntoDuckDB } from "../src/query/import";
+import { loadIntoStore } from "../src/query/import";
 import { checkQuery } from "../src/query/sql";
+import { storeHandle, type QueryHandle } from "../src/query/store";
 import { ALLOWED, FIXTURE_CSV, REFUSED } from "./guard-matrix";
-import { bootRealDuckDB, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+import {
+  bootRealEngine,
+  HAVE_ENGINE,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
-const boot = await bootRealDuckDB();
-const ready = boot.handle !== undefined;
-
-describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
-  "the query guard over real DuckDB in Node [data.security.gates]",
+describe.skipIf(!HAVE_ENGINE && !REQUIRE_REAL_ENGINE)(
+  "the query guard over the real query store in Node [data.security.gates]",
   () => {
-    let d: DuckDBHandle;
+    let d: QueryHandle;
     beforeAll(async () => {
-      expect(boot.handle, boot.error).toBeDefined();
-      d = boot.handle!;
-      for (const [name, text] of Object.entries(FIXTURE_CSV)) {
-        await loadIntoDuckDB(
-          d,
-          name,
-          "csv",
-          new TextEncoder().encode(text),
-          () => {
-            throw new Error("no xlsx here");
-          },
-        );
-      }
+      expect(HAVE_ENGINE, "the data-js wasm must be built").toBe(true);
+      d = storeHandle(await bootRealEngine(0))!;
+      for (const [name, text] of Object.entries(FIXTURE_CSV))
+        await loadIntoStore(d, name, "csv", new TextEncoder().encode(text));
     });
 
     it("refuses every reach outside the source tables", () => {
@@ -40,35 +32,36 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       }
     });
 
-    it("admits ordinary queries — joins, CTEs, aggregates — and DuckDB runs them", async () => {
+    it("admits ordinary queries — joins, CTEs, aggregates — and the store runs them", async () => {
       for (const [sql, rows] of ALLOWED) {
         expect(checkQuery(sql), sql).toBeNull();
-        expect((await d.rows(sql)).rows, sql).toEqual(rows);
+        expect((await d.preview(sql, 100)).rows, sql).toEqual(rows);
       }
     });
 
-    it("the engine lock: no statement changes a setting, and imports still work after it", async () => {
+    it("the query connection refuses writes, and imports still work after it", async () => {
+      // The store's own refusal, under the guard: user SQL runs on a
+      // `query_only` connection.
       for (const sql of [
-        "SET enable_external_access = true",
-        "SET lock_configuration = false",
-        "RESET lock_configuration",
-        "PRAGMA enable_external_access = true",
-        "SET autoinstall_known_extensions = true",
+        "INSERT INTO people VALUES ('Eve', 'Spy')",
+        "DELETE FROM orders",
+        "DROP TABLE people",
+        "CREATE TABLE x (a)",
       ]) {
-        await expect(d.exec(sql), sql).rejects.toThrow(
-          /configuration has been locked/,
-        );
+        expect(() => d.preview(sql, 1), sql).toThrow();
       }
-      await loadIntoDuckDB(
+      await loadIntoStore(
         d,
         "late",
         "csv",
         new TextEncoder().encode("a,b\n1,2\n"),
-        () => {
-          throw new Error("no xlsx here");
-        },
       );
-      expect((await d.rows("SELECT * FROM late")).rows).toEqual([["1", "2"]]);
+      expect((await d.preview("SELECT * FROM late", 10)).rows).toEqual([
+        ["1", "2"],
+      ]);
+      expect((await d.preview("SELECT count(*) FROM people", 1)).rows).toEqual([
+        ["2"],
+      ]);
     });
   },
 );

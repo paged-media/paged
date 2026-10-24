@@ -88,6 +88,7 @@ const HOST_MENU = [
   "View/Show text threads",
   "View/Snap to points",
   "View/Show heading anchors",
+  "View/Show data markers",
   "Edit/Select all",
   "Object/Bring to front",
   "Object/Bring forward",
@@ -101,8 +102,9 @@ const HOST_MENU = [
   "Object/Nudge up",
   "Object/Nudge down",
   "Object/Delete",
-  "Object/Make clipping mask",
-  "Object/Release clipping mask",
+  "Object/Clipping mask/Make",
+  "Object/Clipping mask/Release",
+  "Object/Clipping mask/Edit contents",
   "Object/Lock",
   "Object/Unlock all on spread",
   "Object/Hide",
@@ -142,6 +144,7 @@ const HOST_MENU = [
   "File/New from a brief…",
   "File/Open recent",
   "File/Close",
+  "File/Automate/Batch…",
   "File/Package…",
   "File/Print…",
   "Layout/Margins and columns…",
@@ -310,8 +313,9 @@ test.describe("the host menu bar", () => {
         "menu:Object/Nudge up",
         "menu:Object/Nudge down",
         "menu:Object/Delete",
-        "menu:Object/Make clipping mask",
-        "menu:Object/Release clipping mask",
+        "menu:Object/Clipping mask/Make",
+        "menu:Object/Clipping mask/Release",
+        "menu:Object/Clipping mask/Edit contents",
         "menu:Object/Lock",
         "menu:Object/Unlock all on spread",
         "menu:Object/Hide",
@@ -418,8 +422,9 @@ test.describe("the host menu bar", () => {
         "Object/Nudge up",
         "Object/Nudge down",
         "Object/Delete",
-        "Object/Make clipping mask",
-        "Object/Release clipping mask",
+        "Object/Clipping mask/Make",
+        "Object/Clipping mask/Release",
+        "Object/Clipping mask/Edit contents",
         "Object/Lock",
         "Object/Unlock all on spread",
         "Object/Hide",
@@ -499,8 +504,9 @@ test.describe("the host menu bar", () => {
       "menu:Object/Nudge up",
       "menu:Object/Nudge down",
       "menu:Object/Delete",
-      "menu:Object/Make clipping mask",
-      "menu:Object/Release clipping mask",
+      "menu:Object/Clipping mask/Make",
+      "menu:Object/Clipping mask/Release",
+      "menu:Object/Clipping mask/Edit contents",
       "menu:Object/Lock",
       "menu:Object/Unlock all on spread",
       "menu:Object/Hide",
@@ -618,8 +624,9 @@ test.describe("the host menu bar", () => {
       "menu:Object/Nudge up",
       "menu:Object/Nudge down",
       "menu:Object/Delete",
-      "menu:Object/Make clipping mask",
-      "menu:Object/Release clipping mask",
+      "menu:Object/Clipping mask/Make",
+      "menu:Object/Clipping mask/Release",
+      "menu:Object/Clipping mask/Edit contents",
       "menu:Object/Lock",
       "menu:Object/Unlock all on spread",
       "menu:Object/Hide",
@@ -730,7 +737,7 @@ test.describe("the host menu bar", () => {
       "menu:Object/Ungroup",
       "menu:Object/Delete",
       "menu:Object/Nudge left",
-      "menu:Object/Make clipping mask",
+      "menu:Object/Clipping mask/Make",
     );
     await openShell(page, { doc: true });
     await select(page, []);
@@ -745,8 +752,9 @@ test.describe("the host menu bar", () => {
       "Object/Select parent group",
       "Object/Nudge left",
       "Object/Delete",
-      "Object/Make clipping mask",
-      "Object/Release clipping mask",
+      "Object/Clipping mask/Make",
+      "Object/Clipping mask/Release",
+      "Object/Clipping mask/Edit contents",
       "Object/Lock",
       "Object/Hide",
     ])
@@ -764,6 +772,30 @@ test.describe("the host menu bar", () => {
     await expect(
       page.getByRole("menuitemcheckbox", { name: /Snap to points/ }),
     ).toHaveAttribute("aria-checked", "true", { timeout: 2_000 });
+  });
+
+  test("View/Show data markers toggles its checked state", async ({ page }) => {
+    covers("menu:View/Show data markers");
+    await openShell(page, { doc: true });
+    const trigger = page.locator('[data-menu-trigger="View"]');
+    const row = page.getByRole("menuitemcheckbox", {
+      name: /Show data markers/,
+    });
+    // Open the View menu from closed: whether a click on a checkbox row
+    // closes the menu is the menu's business, so close it ourselves first.
+    const openView = async () => {
+      await page.keyboard.press("Escape");
+      await expect(row).toBeHidden();
+      await trigger.click();
+      await expect(row).toBeVisible();
+    };
+    await openView();
+    // Off by default; a click turns it on, and the row shows it checked.
+    await expect(row).toHaveAttribute("aria-checked", "false");
+    await row.click();
+    await openView();
+    await expect(row).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("Escape");
   });
 });
 

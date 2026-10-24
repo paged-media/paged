@@ -27,7 +27,7 @@
 
 use std::collections::HashMap;
 
-use docx_core::{Block, CellPath, DocxDocument, RunSource, StyleKind, VMerge};
+use docx_core::{Block, CellPath, DocxDocument, ParagraphHeld, RunSource, StyleKind, VMerge};
 
 /// The provenance map for one document.
 #[derive(Debug, Clone, Default)]
@@ -54,6 +54,10 @@ pub enum BlockBinding {
         /// ptab's position as its one tab stop, which is not Word's, so a
         /// paragraph-formatting edit writes these back instead.
         word_tabs: Option<Vec<docx_core::TabStop>>,
+        /// What the paragraph holds that an edit must not lose (a content
+        /// control around it, runs the canvas does not show, a tracked
+        /// paragraph-property change).
+        held: ParagraphHeld,
     },
     /// A table: its `<w:tbl>` ordinal among the body's tables + one entry per
     /// LOWERED cell, in the same order `docx-lower` emits them (vMerge-continue
@@ -65,6 +69,9 @@ pub enum BlockBinding {
         /// present, whether a new column widens the span or splits it is
         /// ambiguous, so those ops are skipped rather than corrupting the grid.
         uniform_grid: bool,
+        /// Rows or cells inside content controls: the patcher's row and
+        /// column ordinals skip them, so row and column ops are refused.
+        content_control_rows: bool,
         cells: Vec<CellBinding>,
     },
 }
@@ -80,6 +87,9 @@ pub struct CellBinding {
 pub struct CellParaBinding {
     pub path: CellPath,
     pub runs: Vec<RunBinding>,
+    /// As [`BlockBinding::Paragraph::held`]; a cell paragraph inside a
+    /// content control has no path the patcher walks.
+    pub held: ParagraphHeld,
 }
 
 /// Which element a patchable run sits inside, when it is not a direct `<w:r>`
@@ -103,6 +113,42 @@ pub enum RunBinding {
     Wrapped { wrapper: Wrapper, run_ord: u32 },
     /// No stable provenance — not patched.
     NonPatchable,
+    /// Inside a tracked change or a content control — not patched, and an
+    /// edit reaching it refuses its whole paragraph (see `apply_edits`).
+    Locked(RunLock),
+}
+
+/// Why a run is [`RunBinding::Locked`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunLock {
+    /// Inside a tracked insertion or move (`w:ins` / `w:moveTo`).
+    TrackedChange,
+    /// Inside a content control (`w:sdt`).
+    ContentControl,
+}
+
+impl RunLock {
+    /// How a refusal names it.
+    pub fn describe(self) -> &'static str {
+        match self {
+            RunLock::TrackedChange => {
+                "inside a tracked change (accept or reject it in Word to edit it here)"
+            }
+            RunLock::ContentControl => "inside a content control",
+        }
+    }
+}
+
+/// What a paragraph-level op does with its paragraph, for
+/// [`DocxBindings::paragraph_refusal`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParaUse {
+    /// Names it as a place: a paragraph or run added after it or at its start.
+    Address,
+    /// Removes it.
+    Delete,
+    /// Rewrites its `w:pPr`.
+    Format,
 }
 
 /// A resolved run address in the source document.
@@ -131,9 +177,76 @@ impl DocxBindings {
                     run_ord: *run_ord,
                     wrapper: Some(*wrapper),
                 }),
-                RunBinding::NonPatchable => None,
+                RunBinding::NonPatchable | RunBinding::Locked(_) => None,
             },
             BlockBinding::Table { .. } => None,
+        }
+    }
+
+    /// The lock on a body run, if it is inside a tracked change or a content
+    /// control.
+    pub fn run_lock(&self, block: usize, run: usize) -> Option<RunLock> {
+        match self.blocks.get(block)? {
+            BlockBinding::Paragraph { runs, .. } => match runs.get(run)? {
+                RunBinding::Locked(lock) => Some(*lock),
+                _ => None,
+            },
+            BlockBinding::Table { .. } => None,
+        }
+    }
+
+    /// The lock on a table-cell run, as [`Self::run_lock`].
+    pub fn cell_run_lock(
+        &self,
+        block: usize,
+        cell: usize,
+        para: usize,
+        run: usize,
+    ) -> Option<RunLock> {
+        let BlockBinding::Table { cells, .. } = self.blocks.get(block)? else {
+            return None;
+        };
+        match cells.get(cell)?.paragraphs.get(para)?.runs.get(run)? {
+            RunBinding::Locked(lock) => Some(*lock),
+            _ => None,
+        }
+    }
+
+    /// Why a paragraph-level op on body block `block` must be refused, or
+    /// `None` when nothing the paragraph holds stands in its way. A
+    /// paragraph inside a content control is not on the patcher's path; one
+    /// holding runs the canvas does not show (tracked deletions, hidden
+    /// text) is not deleted, since the user never saw what would go with
+    /// it; one whose `w:pPr` records a tracked change keeps it.
+    pub fn paragraph_refusal(&self, block: usize, op: ParaUse) -> Option<&'static str> {
+        let BlockBinding::Paragraph { held, .. } = self.blocks.get(block)? else {
+            return None;
+        };
+        held_refusal(held, op)
+    }
+
+    /// The same for a TABLE-CELL paragraph.
+    pub fn cell_paragraph_refusal(
+        &self,
+        block: usize,
+        cell: usize,
+        para: usize,
+        op: ParaUse,
+    ) -> Option<&'static str> {
+        let BlockBinding::Table { cells, .. } = self.blocks.get(block)? else {
+            return None;
+        };
+        held_refusal(&cells.get(cell)?.paragraphs.get(para)?.held, op)
+    }
+
+    /// Why a row or column op on table block `block` must be refused.
+    pub fn table_refusal(&self, block: usize) -> Option<&'static str> {
+        match self.blocks.get(block)? {
+            BlockBinding::Table {
+                content_control_rows: true,
+                ..
+            } => Some("holds rows or cells inside content controls"),
+            _ => None,
         }
     }
 
@@ -142,6 +255,7 @@ impl DocxBindings {
     /// structural ops resolve on.
     pub fn para_ord(&self, block: usize) -> Option<u32> {
         match self.blocks.get(block)? {
+            BlockBinding::Paragraph { held, .. } if held.in_content_control => None,
             BlockBinding::Paragraph { para_ord, .. } => Some(*para_ord),
             BlockBinding::Table { .. } => None,
         }
@@ -151,6 +265,10 @@ impl DocxBindings {
     /// row-level structural ops resolve on. `None` when the block is not a table.
     pub fn table_ord(&self, block: usize) -> Option<u32> {
         match self.blocks.get(block)? {
+            BlockBinding::Table {
+                content_control_rows: true,
+                ..
+            } => None,
             BlockBinding::Table { table_ord, .. } => Some(*table_ord),
             BlockBinding::Paragraph { .. } => None,
         }
@@ -163,6 +281,7 @@ impl DocxBindings {
             BlockBinding::Table {
                 table_ord,
                 uniform_grid: true,
+                content_control_rows: false,
                 ..
             } => Some(*table_ord),
             _ => None,
@@ -176,7 +295,8 @@ impl DocxBindings {
         let BlockBinding::Table { cells, .. } = self.blocks.get(block)? else {
             return None;
         };
-        Some(cells.get(cell)?.paragraphs.get(para)?.path)
+        let cp = cells.get(cell)?.paragraphs.get(para)?;
+        (!cp.held.in_content_control).then_some(cp.path)
     }
 
     /// Resolve a TABLE-CELL run to its `(CellPath, run_ord, wrapper)` source
@@ -195,11 +315,30 @@ impl DocxBindings {
             return None;
         };
         let cp = cells.get(cell)?.paragraphs.get(para)?;
+        if cp.held.in_content_control {
+            return None;
+        }
         match cp.runs.get(run)? {
             RunBinding::Direct { run_ord } => Some((cp.path, *run_ord, None)),
             RunBinding::Wrapped { wrapper, run_ord } => Some((cp.path, *run_ord, Some(*wrapper))),
-            RunBinding::NonPatchable => None,
+            RunBinding::NonPatchable | RunBinding::Locked(_) => None,
         }
+    }
+}
+
+fn held_refusal(held: &ParagraphHeld, op: ParaUse) -> Option<&'static str> {
+    if held.in_content_control {
+        return Some("sits inside a content control");
+    }
+    match op {
+        ParaUse::Delete if held.unshown_runs > 0 => Some(
+            "holds tracked deletions or hidden text the canvas does not show, \
+             which would go with it",
+        ),
+        ParaUse::Format if held.tracked_ppr => {
+            Some("records a tracked change in its paragraph properties, which would be lost")
+        }
+        _ => None,
     }
 }
 
@@ -212,6 +351,11 @@ fn run_bindings(p: &docx_core::Paragraph) -> Vec<RunBinding> {
         // replay that filter to keep run indices aligned.
         .filter(|r| !r.text.is_empty())
         .map(|r| match r.source {
+            // A paragraph inside a content control: no run of it is on the
+            // patcher's path.
+            _ if p.held.in_content_control => RunBinding::Locked(RunLock::ContentControl),
+            Some(RunSource::Tracked) => RunBinding::Locked(RunLock::TrackedChange),
+            Some(RunSource::ContentControl) => RunBinding::Locked(RunLock::ContentControl),
             // ADR 028/029 — a page/column break INSIDE the run's text: the
             // patcher rewrites a run's text into its first `<w:t>`, which
             // would move the `<w:br>` to the end of the run. Not patched.
@@ -258,6 +402,7 @@ pub fn build_bindings(doc: &DocxDocument) -> DocxBindings {
                         .iter()
                         .any(|r| !r.ptabs.is_empty())
                         .then(|| p.props.tabs.clone()),
+                    held: p.held,
                 });
             }
             // Replay `docx-lower::lower_table`'s cell emission EXACTLY (a
@@ -277,6 +422,7 @@ pub fn build_bindings(doc: &DocxDocument) -> DocxBindings {
                                 .map(|p| CellParaBinding {
                                     path: p.source_cell.unwrap_or_default(),
                                     runs: run_bindings(p),
+                                    held: p.held,
                                 })
                                 .collect(),
                         });
@@ -299,6 +445,7 @@ pub fn build_bindings(doc: &DocxDocument) -> DocxBindings {
                 blocks.push(BlockBinding::Table {
                     table_ord,
                     uniform_grid,
+                    content_control_rows: t.content_control_rows,
                     cells,
                 });
             }

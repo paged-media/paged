@@ -143,6 +143,7 @@ fn create_group_is_z_order_neutral_and_round_trips() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -251,6 +252,7 @@ fn scattered_members_collect_deterministically_and_undo_is_exact() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -352,6 +354,7 @@ fn atomic_rejections_leave_the_document_untouched() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     );
@@ -369,6 +372,7 @@ fn atomic_rejections_leave_the_document_untouched() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     );
@@ -387,6 +391,7 @@ fn atomic_rejections_leave_the_document_untouched() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     );
@@ -405,6 +410,7 @@ fn atomic_rejections_leave_the_document_untouched() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -419,6 +425,7 @@ fn atomic_rejections_leave_the_document_untouched() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     );
@@ -512,6 +519,7 @@ fn nested_create_round_trips_and_restores_prior_structure() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -610,6 +618,7 @@ fn group_transform_moves_members_hit_and_render_agree_and_undo_restores() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -726,6 +735,7 @@ fn group_transform_undo_restores_the_stored_member_transforms() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -1015,6 +1025,7 @@ fn create_group_on_empty_frames_in_order_materialises_and_succeeds() {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )

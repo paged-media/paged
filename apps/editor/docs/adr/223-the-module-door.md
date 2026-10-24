@@ -53,3 +53,9 @@ manifest throws, listing each file and the Moon task that builds it (`moon run d
 `data:duckdb`, …), and the dev server and the build stop instead of shipping a door that
 answers null. A broken `manifest.json` in a workspace package throws too. A published package
 that does not ship a declared file is still left out. `bun run test:modules` covers it.
+
+## Amendment (2026-10-24): no DuckDB
+
+paged.data no longer runs DuckDB-WASM ([PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md),
+data record 561): its query store is Turso, compiled into its own engine wasm. What this record
+says about DuckDB describes the editor before that change.

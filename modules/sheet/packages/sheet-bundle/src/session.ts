@@ -30,6 +30,7 @@ import type {
   ElementId,
   PageId,
   ProviderRecordSet,
+  DataTableInfo,
   SceneLayerSurface,
   TabularClipboard,
 } from "@paged-media/plugin-api";
@@ -113,6 +114,7 @@ import { NOTICES } from "./messages";
 import { createDataTools, type DataToolsApi } from "./data-tools";
 import type { EnterResult } from "./engine-w2";
 import {
+  chartArtAt,
   chartPlacement,
   chartSizeOf,
   elementsOutline,
@@ -405,6 +407,9 @@ export interface ObjectBridge {
    *  document undo or redo, or an open): copies an undo restored refresh
    *  with later edits. Returns how many were added. */
   rediscoverCharts(): Promise<number>;
+  /** A sheet was renamed through the object model (`was` its old name):
+   *  the refresh re-stamps the bindings that still carry it. */
+  sheetRenamed(id: number, was: string): void;
 }
 
 /** The session's reactive state — a plain snapshot the panel renders. */
@@ -438,6 +443,11 @@ export interface SessionState {
      *  object-model wave); false = the snapshot is kept and only marked
      *  stale. */
     live?: boolean;
+    /** `"table"`: a table of the document's data (`data@1`, extensions ADR
+     *  343), edited in place — a committed body cell is written back to the
+     *  table (`providerId` is the table's name). Absent: a published
+     *  dataset (`dataProviders@1`), read only. */
+    kind?: "table";
   } | null;
   /** Wave 5 — bumps on every Cmd+F / "Find in sheet": the grid panel
    *  focuses its find field when it changes. */
@@ -884,6 +894,15 @@ export interface WorkbookSession extends DataToolsApi {
     providerId: string,
     opts?: { live?: boolean },
   ): Promise<void>;
+  /** PM-0015 step 7 — the tables of the document's data (`host.data`,
+   *  `data@1`): empty when no bundle serves them. Never throws. */
+  dataTables(): Promise<readonly DataTableInfo[]>;
+  /** Open a table of the document's data as the workbook (sheet 0: row 0
+   *  the field names, rows 1.. the records) and edit it in place: a
+   *  committed body cell of a writable table is written back
+   *  (`host.data.write`), and a change made elsewhere re-pulls it. False
+   *  (logged) when there is no data service or the table is gone. */
+  sourceFromDataTable(table: string): Promise<boolean>;
   /** ADR 323 — the object model's door into the session
    *  (`src/object-model.ts`). Not a panel API. */
   objectBridge(): ObjectBridge;
@@ -1323,6 +1342,15 @@ export function createWorkbookSession(
   // dataset (disposed + replaced on each `sourceFromDataset`, and on
   // `dispose`). Null when the workbook is not dataset-sourced.
   let dataSourceSub: { dispose(): void } | null = null;
+  /** The linked data table's field names, in column order (sheet 0's row 0),
+   *  whether it takes writes, and the revisions this session wrote (their
+   *  change events are its own echo, not a reason to re-pull). */
+  let linkedTable: {
+    table: string;
+    fields: string[];
+    writable: boolean;
+    written: Set<string>;
+  } | null = null;
 
   // C-1 / S-02 — the last frame this session lowered into (the target for
   // the in-frame grid) + the lazily-obtained scene-layer surface.
@@ -1337,6 +1365,16 @@ export function createWorkbookSession(
   // S-04 and the WRONG one for a panel retargeting on the frame you just
   // entered: with two sheet frames on the page they disagree.
   const loweredTables = new Map<string, LoweredTableInfo>();
+  // Sheet id → the name the placed tables' bindings of that sheet carry
+  // (bindings name the sheet, and a later session finds a table by it):
+  // recorded on first sight and by a rename, so a refresh that finds the
+  // sheet renamed re-stamps them.
+  const boundSheetNames = new Map<number, string>();
+  /** A sheet was renamed from `was`: until the refresh re-stamps them, its
+   *  tables' bindings carry that name. */
+  function sheetRenamed(id: number, was: string): void {
+    if (!boundSheetNames.has(id)) boundSheetNames.set(id, was);
+  }
   // Wave 4 — the charts this session placed (their elements, so a refresh
   // can replace them) and the live paginated chains (storyId → handle).
   let placedCharts: PlacedChart[] = [];
@@ -3090,6 +3128,65 @@ export function createWorkbookSession(
     }
   }
 
+  /** A committed cell of a linked data table, written back (`data@1`). Only
+   *  sheet 0's body inside the seeded fields is the table; a formula stays
+   *  the sheet's (the table keeps values), and the header is the schema. */
+  function writeBack(sheet: number, row: number, col: number, input: string) {
+    const link = linkedTable;
+    if (!link || state.dataSource?.kind !== "table" || sheet !== 0) return;
+    if (col >= link.fields.length) return;
+    if (row === 0) {
+      host.log.info(
+        `table "${link.table}": a field is renamed in its source, not in the sheet`,
+      );
+      return;
+    }
+    if (!link.writable) {
+      host.log.info(`table "${link.table}" is derived: edit its source table`);
+      return;
+    }
+    if (input.trimStart().startsWith("=")) {
+      host.log.info(
+        `table "${link.table}": a formula stays in the sheet; the table keeps values`,
+      );
+      return;
+    }
+    const field = link.fields[col]!;
+    void host.data
+      .write(link.table, [
+        { op: "set", row: row - 1, field, value: input === "" ? null : input },
+      ])
+      .then((r) => {
+        link.written.add(r.revision);
+        if (state.dataSource?.providerId === link.table)
+          state.dataSource = { ...state.dataSource, revision: r.revision };
+      })
+      .catch((err: unknown) => {
+        host.log.warn(
+          `table "${link.table}": the edit of ${field} (row ${row}) was not written — ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  }
+
+  /** Seed (or re-seed) sheet 0 from a data table. */
+  async function pullTable(
+    table: string,
+    engine: SheetEngine,
+  ): Promise<boolean> {
+    let records: ProviderRecordSet;
+    try {
+      records = await host.data.records(table);
+    } catch (err) {
+      host.log.warn(`table "${table}": records failed`, err);
+      return false;
+    }
+    const prev = seededExtent;
+    seededExtent = seedSheetFromRecords(engine, records, prev ?? undefined);
+    if (linkedTable?.table === table)
+      linkedTable.fields = records.schema.fields.map((f) => f.name);
+    return true;
+  }
+
   /** Window the active sheet into a GridScene + overlay the session
    *  selection. Shared by the `gridScene` door and `showGridInFrame`. */
   function computeGridScene(
@@ -3646,11 +3743,6 @@ export function createWorkbookSession(
     }, REFRESH_DEBOUNCE_MS);
   }
 
-  /** The name of sheet `id` (bindings carry names), or null if it is gone. */
-  function sheetNameOf(id: number): string | null {
-    return state.engine?.listSheets().find((s) => s.id === id)?.name ?? null;
-  }
-
   /** Refresh every placed table (in place), chart (replaced) and chain
    *  (re-paginated over its own tables). Serialised: a refresh requested
    *  while one runs queues behind it. Never rejects. */
@@ -3660,8 +3752,24 @@ export function createWorkbookSession(
         const engine = state.engine;
         if (!engine) return;
         const version = revision;
+        // The sheets' names, read once for the whole refresh (the tables'
+        // bindings and the chains' records carry them).
+        let names: Map<number, string> | null = null;
+        const nameOf = (id: number): string | null =>
+          (names ??= new Map(
+            engine.listSheets().map((x) => [x.id, x.name] as const),
+          )).get(id) ?? null;
+        // The sheets renamed since their tables' bindings were stamped.
+        const renamed = new Set<number>();
+        for (const info of loweredTables.values()) {
+          const name = nameOf(info.sheet);
+          if (name === null) continue;
+          const was = boundSheetNames.get(info.sheet);
+          if (was === undefined) boundSheetNames.set(info.sheet, name);
+          else if (was !== name) renamed.add(info.sheet);
+        }
         for (let [frameId, info] of [...loweredTables]) {
-          const name = sheetNameOf(info.sheet);
+          const name = nameOf(info.sheet);
           if (name === null) continue;
           let next: LoweredContent;
           let windowed: string | null = null;
@@ -3675,7 +3783,8 @@ export function createWorkbookSession(
             host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
-          const moved = viewMoved.delete(frameId);
+          // A renamed sheet: the binding takes the new name like a view.
+          const moved = viewMoved.delete(frameId) || renamed.has(info.sheet);
           // A window frame's binding names the cells it shows now.
           if (windowed && windowed !== info.range) {
             info = { ...info, range: windowed };
@@ -3733,6 +3842,10 @@ export function createWorkbookSession(
             lastLoweredTable = replaced;
           if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
         }
+        for (const id of renamed) {
+          const name = nameOf(id);
+          if (name !== null) boundSheetNames.set(id, name);
+        }
         const charts: PlacedChart[] = [];
         for (let placed of placedCharts) {
           if (
@@ -3775,7 +3888,9 @@ export function createWorkbookSession(
         }
         placedCharts = charts;
         for (const chain of chains.values()) {
-          await chain.sub.refresh();
+          // The sheet's name now: a renamed sheet's chain re-stamps its
+          // record with it.
+          await chain.sub.refresh(nameOf(chain.sheet) ?? undefined);
         }
       })
       .catch((err) => {
@@ -3856,6 +3971,7 @@ export function createWorkbookSession(
         if (!ids) continue;
       }
       const d = binding.data;
+      boundSheetNames.set(sheet.id, d.sheet);
       // A window frame lowers the window that fits its box: read the box.
       let boxPt: { widthPt: number; heightPt: number } | undefined;
       if (d.sizing === "window") {
@@ -3954,6 +4070,7 @@ export function createWorkbookSession(
         range,
         storyId,
         record,
+        binding.data.sheet,
       );
       if (!from) continue;
       const sub = subscribeChainReflow(host, engine, sheet.id, range, storyId, {
@@ -4050,7 +4167,9 @@ export function createWorkbookSession(
    *  `art` a refresh follows). A copy whose binding recorded both its box
    *  and its art is followed to where its art stands now, so a chart moved
    *  in an earlier session is redrawn where it is; one that recorded only
-   *  its box stands at it; one placed before either was recorded gets its
+   *  its box (the version just before the amendment) is followed from the
+   *  art drawing it again at that box gives; one placed before either was
+   *  recorded gets its
    *  box on discovery — the page-space outline of its elements — and from
    *  then on behaves as a new one (its next redraw records both). Null
    *  when no element is on a page. */
@@ -4068,9 +4187,24 @@ export function createWorkbookSession(
       : null;
     const art = anchor?.bounds;
     const scale = copy.anchor.kind !== "textFrame";
+    // A binding that recorded its box but not its art (the version just
+    // before the amendment): the art is where its element stood when the
+    // chart was drawn at that box, which drawing it again there gives.
+    const engine = state.engine;
+    const drawnArt =
+      copy.art ??
+      (copy.box && art && engine
+        ? await chartArtAt(
+            host,
+            engine,
+            copy.chartIndex,
+            anchor?.pageId ?? outline.pageId,
+            copy.box,
+          )
+        : null);
     const bounds =
-      copy.box && copy.art && art
-        ? (followBox(copy.box, copy.art, art, scale) ?? copy.box)
+      copy.box && drawnArt && art
+        ? (followBox(copy.box, drawnArt, art, scale) ?? copy.box)
         : (copy.box ?? outline.bounds);
     return {
       pageId: anchor?.pageId ?? outline.pageId,
@@ -4547,6 +4681,7 @@ export function createWorkbookSession(
       placedCharts = placedCharts.filter((p) => p.chartIndex !== index);
       return taken;
     },
+    sheetRenamed,
     rediscoverCharts: () =>
       rediscoverCharts().catch((err) => {
         host.log.warn("chart rediscovery failed", err);
@@ -5610,6 +5745,7 @@ export function createWorkbookSession(
       }
       if (!journaledSetCell(sheet, row, col, fromDisplay(row, col, input)))
         return false;
+      writeBack(sheet, row, col, input);
       // The dirty cut recomputed in Rust; refresh the panel (it re-requests
       // the windowed scene on the next render).
       emitter.emit({
@@ -6259,6 +6395,7 @@ export function createWorkbookSession(
         host.log.warn("sourceFromDataset: prior engine dispose failed", err);
       }
 
+      linkedTable = null; // a published dataset is read only
       seededExtent = seedSheetFromRecords(engine, snapshot.records);
 
       cancelPendingPersist(); // the prior workbook is replaced
@@ -6303,6 +6440,104 @@ export function createWorkbookSession(
       // The seeded workbook is document content: persist it like an edit.
       markEdited();
       emitter.emit();
+    },
+
+    async dataTables() {
+      if (!host.supports("data@1") || !host.data.available()) return [];
+      try {
+        return await host.data.tables();
+      } catch (err) {
+        host.log.warn("dataTables: tables failed", err);
+        return [];
+      }
+    },
+
+    async sourceFromDataTable(table: string) {
+      if (!host.supports("data@1") || !host.data.available()) {
+        host.log.warn(
+          `sourceFromDataTable("${table}"): no bundle serves the document's data (supports('data@1') is false, or paged.data is not loaded)`,
+        );
+        return false;
+      }
+      let info: DataTableInfo | undefined;
+      try {
+        info = (await host.data.tables()).find((t) => t.name === table);
+      } catch (err) {
+        host.log.warn(`sourceFromDataTable("${table}"): tables failed`, err);
+      }
+      if (!info) {
+        host.log.warn(`sourceFromDataTable("${table}"): no such table`);
+        return false;
+      }
+      let engine: SheetEngine;
+      try {
+        engine = await bootEmptyEngine();
+        state.bootError = null;
+      } catch (err) {
+        state.bootError = err instanceof Error ? err.message : ENGINE_NOT_BUILT;
+        host.log.warn("sourceFromDataTable: engine boot failed", err);
+        emitter.emit();
+        return false;
+      }
+      try {
+        state.engine?.dispose();
+      } catch (err) {
+        host.log.warn("sourceFromDataTable: prior engine dispose failed", err);
+      }
+      seededExtent = null;
+      linkedTable = {
+        table,
+        fields: info.schema.fields.map((f) => f.name),
+        writable: info.writable,
+        written: new Set(),
+      };
+      if (!(await pullTable(table, engine))) {
+        linkedTable = null;
+        return false;
+      }
+      cancelPendingPersist();
+      loadEpoch += 1;
+      forgetPlacements();
+      state.engine = engine;
+      dialectEngine();
+      state.activeSheet = 0;
+      state.fileName = table;
+      state.gridSelection = null;
+      defaultRangeForActive();
+      state.dataSource = {
+        providerId: table,
+        revision: info.revision,
+        stale: false,
+        live: true,
+        kind: "table",
+      };
+      dataSourceSub?.dispose();
+      dataSourceSub = host.data.onDidChange((change) => {
+        const link = linkedTable;
+        if (!link || change.table !== link.table) return;
+        if (link.written.delete(change.revision)) return; // our own write
+        if (state.engine !== engine) return;
+        void pullTable(link.table, engine).then((ok) => {
+          if (!ok || state.dataSource?.providerId !== link.table) return;
+          state.dataSource = { ...state.dataSource, revision: change.revision };
+          markEdited();
+          emitter.emit({
+            kind: "cells",
+            regions: [
+              {
+                sheet: 0,
+                firstRow: 0,
+                firstCol: 0,
+                lastRow: Math.max((seededExtent?.rows ?? 1) - 1, 0),
+                lastCol: Math.max((seededExtent?.cols ?? 1) - 1, 0),
+              },
+            ],
+          });
+        });
+      });
+      markEdited();
+      emitter.emit();
+      return true;
     },
 
     textSelectionRange() {
@@ -6557,7 +6792,9 @@ export function createWorkbookSession(
       return structureVerb((e) => {
         if (!e.renameSheet)
           throw new Error("engine wasm predates rename_sheet");
+        const was = e.listSheets().find((x) => x.id === id)?.name;
         e.renameSheet(id, name);
+        if (was !== undefined) sheetRenamed(id, was);
       });
     },
 
@@ -6569,6 +6806,7 @@ export function createWorkbookSession(
       });
       if (r.ok) {
         // Sheet ids shifted; the journal and placements on that sheet are moot.
+        boundSheetNames.clear();
         editJournal = [];
         journalCursor = 0;
         for (const [k, info] of [...loweredTables]) {

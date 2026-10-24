@@ -2613,6 +2613,161 @@ fn undecodable_bytes_are_undecoded_not_missing() {
     );
 }
 
+/// A one-rectangle IDML for the placed-EPS tests: the frame `eps`,
+/// 100 pt square at (20, 20).
+fn one_frame_idml() -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <Rectangle Self="eps" GeometricBounds="20 20 120 120"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+/// An EPSI file: a 72 x 36 preview at 1 bit (left half black) over a
+/// 36 x 18 pt bounding box.
+fn epsi_bytes() -> Vec<u8> {
+    let mut s = String::from(
+        "%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 36 18\n%%EndComments\n%%BeginPreview: 72 36 1 36\n",
+    );
+    for _ in 0..36 {
+        // 36 black pixels, 36 white: 4.5 bytes of FF, then 0.
+        s.push_str("%FFFFFFFFF000000000\n");
+    }
+    s.push_str("%%EndPreview\nnewpath 0 0 moveto 36 18 lineto stroke\n%%EOF\n");
+    s.into_bytes()
+}
+
+// The `__feat__` suffix links the test to the cockpit feature row
+// `images-graphics.format-extensions` (the evidence join's convention).
+#[allow(non_snake_case)]
+#[test]
+fn a_placed_eps_draws_its_preview_over_its_bounding_box__feat__images_graphics_format_extensions() {
+    // Engine ADR 1005: an EPS that carries a preview draws it (the frame
+    // fill and the decode failure were the outcome before), stretched
+    // over the artwork's bounding box in points, and the build says it
+    // drew a preview.
+    let mut doc = idml_import::import_idml_doc(&one_frame_idml()).expect("open IDML");
+    let rect = &mut doc.spreads[0].spread.rectangles[0];
+    rect.has_image_element = true;
+    rect.image_link = Some("assets/logo.eps".into());
+    rect.image_bytes = Some(epsi_bytes());
+    rect.image_item_transform = Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+    for markers in [false, true] {
+        let options = PipelineOptions {
+            degraded_asset_markers: markers,
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        let codes: Vec<_> = built.diagnostics.items.iter().map(|d| d.code).collect();
+        assert!(
+            codes.contains(&DiagnosticCode::ImageDrawnFromPreview),
+            "{codes:?}"
+        );
+        assert!(
+            !codes.contains(&DiagnosticCode::ImageDecodeFailed),
+            "{codes:?}"
+        );
+        assert!(
+            !codes.contains(&DiagnosticCode::ImageContentUnrenderable),
+            "a drawn preview carries no ghost cross: {codes:?}"
+        );
+        assert!(built.diagnostics.undecoded_image_frame_ids().is_empty());
+        let page = &built.pages[0];
+        let (image_id, transform) = page
+            .list
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                paged_compose::DisplayCommand::Image {
+                    image_id,
+                    transform,
+                } => Some((*image_id, *transform)),
+                _ => None,
+            })
+            .expect("the preview is drawn");
+        let img = page.list.image(image_id).expect("pooled image");
+        assert_eq!((img.width, img.height), (72, 36));
+        if !img.rgba.is_empty() {
+            assert_eq!(&img.rgba[..4], &[0, 0, 0, 255], "the left half is black");
+            assert_eq!(&img.rgba[71 * 4..72 * 4], &[255, 255, 255, 255]);
+        }
+        // The unit square of the picture spans the 36 x 18 pt box.
+        let (x0, y0) = transform.apply(0.0, 0.0);
+        let (x1, y1) = transform.apply(1.0, 1.0);
+        assert!(
+            ((x1 - x0) - 36.0).abs() < 1e-3 && ((y1 - y0) - 18.0).abs() < 1e-3,
+            "{x0},{y0} .. {x1},{y1}"
+        );
+    }
+}
+
+#[test]
+fn a_dos_eps_with_a_tiff_preview_is_drawn() {
+    let tiff = {
+        let img = image::RgbImage::from_pixel(4, 2, image::Rgb([200, 10, 10]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Tiff).unwrap();
+        out.into_inner()
+    };
+    let ps = b"%!PS-Adobe-3.0 EPSF-3.0\n%%BoundingBox: 0 0 8 4\n%%EndComments\n";
+    let mut eps = vec![0xC5, 0xD0, 0xD3, 0xC6];
+    for (off, len) in [
+        (30u32, ps.len() as u32),
+        (0, 0),
+        (30 + ps.len() as u32, tiff.len() as u32),
+    ] {
+        eps.extend(off.to_le_bytes());
+        eps.extend(len.to_le_bytes());
+    }
+    eps.extend([0xFF, 0xFF]);
+    eps.extend(ps);
+    eps.extend(&tiff);
+
+    let mut doc = idml_import::import_idml_doc(&one_frame_idml()).expect("open IDML");
+    let rect = &mut doc.spreads[0].spread.rectangles[0];
+    rect.has_image_element = true;
+    rect.image_link = Some("assets/logo.eps".into());
+    rect.image_bytes = Some(eps);
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+    let d = built
+        .diagnostics
+        .items
+        .iter()
+        .find(|d| d.code == DiagnosticCode::ImageDrawnFromPreview)
+        .expect("the preview diagnostic");
+    assert_eq!(d.frame_id.as_deref(), Some("eps"));
+    assert!(built.pages[0]
+        .list
+        .commands
+        .iter()
+        .any(|c| matches!(c, paged_compose::DisplayCommand::Image { .. })));
+}
+
 fn test_section(
     self_id: &str,
     page_start: &str,

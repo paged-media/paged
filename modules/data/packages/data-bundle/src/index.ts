@@ -17,7 +17,7 @@
  */
 
 // @paged-media/data-bundle — the paged.data plugin bundle (manifest + activate
-// + panels + the DuckDB-WASM query integration + the data-js engine boot). Thin
+// + panels + the data-js engine boot, the query store inside it). Thin
 // glue ONLY: all binding/expression/sync/lowering semantics live in the Rust
 // engine (data-* crates → data-js wasm).
 
@@ -46,17 +46,18 @@ export {
 export { bootEngine, ENGINE_NOT_BUILT, type DataEngineLike } from "./engine";
 export { commitLoweredTable, commitLoweredVariable } from "./lower";
 export {
-  bootDuckDB,
-  DUCKDB_ARTIFACTS,
-  DUCKDB_NOT_VENDORED,
-  type DuckDBHandle,
-} from "./query/duckdb";
+  STORE_MISSING,
+  storeHandle,
+  type QueryHandle,
+  type StoreColumn,
+  type StoreImport,
+  type StorePreview,
+} from "./query/store";
 export {
-  arrowToRecordSet,
-  classifyType,
-  cellToValue,
+  type ColumnBatch,
   type RecordSetJson,
   type ValueJson,
 } from "./query/recordset";
+export { ingestColumnBatch } from "./engine";
 export { makeSourcesPanel } from "./panels/sources-panel";
 export { makeBindingsPanel } from "./panels/bindings-panel";

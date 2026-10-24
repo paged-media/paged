@@ -46,14 +46,13 @@ import {
   arrangeSelection,
   buildObjectCommands,
   canClipBy,
-  clipContentOf,
-  clipIndexMutation,
   clipPlan,
   clippedContent,
+  editClippingContents,
   makeClippingMask,
   OBJECT_KEYBINDINGS,
   OBJECT_MENU_ITEMS,
-  OBJECT_METADATA_KEY,
+  PAGED_OBJECT_EDIT_CLIPPING_CONTENTS,
   PAGED_OBJECT_MAKE_CLIPPING_MASK,
   PAGED_OBJECT_RELEASE_CLIPPING_MASK,
   releaseClippingMask,
@@ -391,10 +390,12 @@ function depsWith(
       },
       // Two FREE rectangles beside the group, so a clipping mask has a
       // selection it can make (grouped items are refused before the wire).
+      // `d` holds `n` pasted in (the tree lists it, engine ADR 1010),
+      // giving Release something to release.
       sceneTree: async () => [
         group("g1", [leaf("a"), leaf("b")]),
         leaf("c"),
-        leaf("d"),
+        { ...leaf("d"), children: [leaf("n")] },
       ],
       setElementSelection: async (ids: unknown[]) => ids,
       // Every id answers with an un-transformed frame, so a nudge has a
@@ -407,12 +408,7 @@ function depsWith(
           hasImage: false,
         })),
       layers: async () => [],
-      // `d` is a clipping path whose index lists `n` — nested, so absent
-      // from the tree above — giving Release something to release.
-      elementProperties: async (id: ElementId) =>
-        id.kind === "rectangle" && id.id === "d"
-          ? clipIndexed(id, [rect("n")])
-          : null,
+      elementProperties: async () => null,
       undo: async () => ({ kind: "undoApplied", payload: {} }) as never,
     } as unknown as ObjectCommandDeps["client"],
     getSelection: () => selection,
@@ -422,26 +418,6 @@ function depsWith(
     activeEditContext: () => context,
   };
   return { deps, rec };
-}
-
-/** A property snapshot carrying the object layer's clipping index — the
- *  exact entry shape the engine returns for a plugin-metadata label. */
-function clipIndexed(id: ElementId, content: ElementId[]): ElementProperties {
-  const write = clipIndexMutation(id as PageItemId, content as PageItemId[]);
-  const args = (write as { args: { key: string; value: string | null } }).args;
-  return {
-    id,
-    kind: "Rectangle",
-    entries: [
-      {
-        path: "pluginMetadata",
-        value: {
-          type: "pluginMetadata",
-          value: { key: args.key, value: args.value, caller: null, prev: null },
-        },
-      },
-    ],
-  } as unknown as ElementProperties;
 }
 
 /** Each verb with a selection it would actually act on — ungroup needs
@@ -1243,19 +1219,6 @@ const node = (id: PageItemId): SceneTreeNode => ({
   label: id.id,
 });
 
-const metaArgs = (m: unknown) =>
-  (m as { args: { elementId: ElementId; key: string; value: string | null } })
-    .args;
-
-/** The index a metadata write carries, as plain keys. */
-const indexOf = (m: unknown): string[] => {
-  const value = metaArgs(m).value;
-  if (value === null) return [];
-  return (
-    JSON.parse(value) as { data: { clipContent: ElementId[] } }
-  ).data.clipContent.map(elementKey);
-};
-
 /** The engine's list rules, in miniature: a release APPENDS, an index
  *  reorder is remove-then-insert (core `apply_reorder_node`). Replays a
  *  release batch over one spread's top-level list. */
@@ -1278,7 +1241,7 @@ function replay(list: string[], ops: unknown[]): string[] {
 }
 
 test.describe("paged.object — the clipping-mask plan", () => {
-  test("AC-OBJ-PURE-30 — the TOPMOST clips; the rest are pasted back to front, and indexed, in one batch @feat:frames-paths.nested-content @feat:frames-paths.path-clipping @level:happy", () => {
+  test("AC-OBJ-PURE-30 — the TOPMOST clips: ONE clip group of the selection, back to front @feat:frames-paths.clip-groups @feat:frames-paths.path-clipping @level:happy", () => {
     const roots = spreadOf([
       node(r("a")),
       node(ov("o")),
@@ -1291,18 +1254,15 @@ test.describe("paged.object — the clipping-mask plan", () => {
     if (!plan.ok) return;
     expect(plan.clip).toEqual(poly("p"));
     expect(plan.content).toEqual([r("a"), r("b")]);
-    expect(plan.ops.slice(0, 2)).toEqual([
-      { op: "pasteInto", args: { containerId: poly("p"), childId: r("a") } },
-      { op: "pasteInto", args: { containerId: poly("p"), childId: r("b") } },
+    expect(plan.ops).toEqual([
+      {
+        op: "createGroup",
+        args: { memberIds: [r("a"), r("b"), poly("p")], clip: true },
+      },
     ]);
-    // The index rides the SAME batch, on the clipping path.
-    expect(plan.ops).toHaveLength(3);
-    expect(metaArgs(plan.ops[2]).elementId).toEqual(poly("p"));
-    expect(metaArgs(plan.ops[2]).key).toBe(OBJECT_METADATA_KEY);
-    expect(indexOf(plan.ops[2])).toEqual(["rectangle:a", "rectangle:b"]);
   });
 
-  test("AC-OBJ-PURE-31 — a higher LAYER outranks paint order, as the renderer does @feat:frames-paths.nested-content @feat:layers.z-ordering @level:edge", () => {
+  test("AC-OBJ-PURE-31 — a higher LAYER outranks paint order, as the renderer does @feat:frames-paths.clip-groups @feat:layers.z-ordering @level:edge", () => {
     const roots = spreadOf([node(r("a")), node(r("b"))]);
     // `a` paints first, but sits on the upper layer.
     const plan = clipPlan([r("a"), r("b")], roots, {
@@ -1315,7 +1275,7 @@ test.describe("paged.object — the clipping-mask plan", () => {
     expect(plan.ok && plan.content).toEqual([r("b")]);
   });
 
-  test("AC-OBJ-PURE-32 — every refusal is made before the wire, in words a user can act on @feat:frames-paths.nested-content @feat:editor-shell.panels.problems @level:edge", () => {
+  test("AC-OBJ-PURE-32 — every refusal is made before the wire, in words a user can act on; a group may be clipped @feat:frames-paths.clip-groups @feat:editor-shell.panels.problems @level:edge", () => {
     const refusal = (sel: ElementId[], roots: SceneTreeNode[]) => {
       const plan = clipPlan(sel, roots);
       return plan.ok ? null : plan.reason;
@@ -1336,13 +1296,11 @@ test.describe("paged.object — the clipping-mask plan", () => {
       group("g", [leaf("x"), leaf("y")]),
       node(r("a")),
     ]);
-    expect(refusal([g("g"), r("a")], grouped)).toBe(
-      "group g cannot be clipped: the engine pastes single objects into a " +
-        "frame, never a group. Ungroup it first.",
-    );
+    // Engine ADR 1010: a group is content like any other object.
+    expect(refusal([g("g"), r("a")], grouped)).toBeNull();
     expect(refusal([rect("x"), r("a")], grouped)).toBe(
-      "rectangle x is inside group g, and the engine cannot paste a grouped " +
-        "object into a frame. Ungroup first.",
+      "rectangle x is inside group g; a clipping mask groups objects of " +
+        "one level. Select group g instead, or ungroup it first.",
     );
     // A group on TOP is the clip-kind refusal, not the content one.
     expect(
@@ -1351,33 +1309,15 @@ test.describe("paged.object — the clipping-mask plan", () => {
         spreadOf([node(r("a")), group("g", [leaf("x")])]),
       ),
     ).toContain("the topmost object, group g, cannot be a clipping path");
-    // An id the tree does not list — already nested, or gone.
+    // An id the tree does not list — gone.
     expect(refusal([r("a"), r("n")], spreadOf([node(r("a"))]))).toBe(
       "rectangle n is not a free object on the page (it may already be " +
         "inside a clipping path).",
     );
-    // A clipping path INSIDE a group is the engine's to accept (measured).
-    expect(
-      refusal(
-        [r("a"), ov("o")],
-        spreadOf([node(r("a")), group("g", [node(ov("o"))])]),
-      ),
-    ).toBeNull();
   });
 
-  test("AC-OBJ-PURE-33 — clipping into a path that already clips keeps the old content listed @feat:frames-paths.nested-content @level:edge", () => {
-    const roots = spreadOf([node(r("a")), node(ov("o"))]);
-    const plan = clipPlan([r("a"), ov("o")], roots, { existing: [r("n")] });
-    expect(plan.ok).toBe(true);
-    if (!plan.ok) return;
-    expect(indexOf(plan.ops[plan.ops.length - 1])).toEqual([
-      "rectangle:n",
-      "rectangle:a",
-    ]);
-  });
-
-  test("AC-OBJ-PURE-34 — Release puts the content back BENEATH its clipping path, in order, then clears the index @feat:frames-paths.nested-content @feat:layers.z-ordering @level:happy", () => {
-    // One clipping path between two bystanders.
+  test("AC-OBJ-PURE-34 — Release puts pasted-in content back BENEATH its frame, in order @feat:frames-paths.nested-content @feat:layers.z-ordering @level:happy", () => {
+    // One frame between two bystanders.
     const roots = spreadOf([node(r("x")), node(ov("k")), node(r("y"))]);
     const ops = releasePlan(
       [{ container: ov("k"), content: [r("a"), r("b")] }],
@@ -1388,7 +1328,6 @@ test.describe("paged.object — the clipping-mask plan", () => {
       { op: "releaseFrom", args: { childId: r("b") } },
       { op: "reorderElement", args: { elementId: r("a"), to: { index: 1 } } },
       { op: "reorderElement", args: { elementId: r("b"), to: { index: 2 } } },
-      clipIndexMutation(ov("k"), []),
     ]);
     expect(replay(["rectangle:x", "oval:k", "rectangle:y"], ops)).toEqual([
       "rectangle:x",
@@ -1398,8 +1337,8 @@ test.describe("paged.object — the clipping-mask plan", () => {
       "rectangle:y",
     ]);
 
-    // A clipping path inside a group: a reorder cannot reparent, so the
-    // content lands beneath the GROUP.
+    // A frame inside a group: a reorder cannot reparent, so the content
+    // lands beneath the GROUP.
     const inGroup = spreadOf([
       node(r("x")),
       group("g", [node(ov("k")), leaf("z")]),
@@ -1412,8 +1351,8 @@ test.describe("paged.object — the clipping-mask plan", () => {
       ),
     ).toEqual(["rectangle:x", "rectangle:a", "group:g", "rectangle:y"]);
 
-    // Two clipping paths in one batch: each index is computed against
-    // the list as the previous reorder left it.
+    // Two frames in one batch: each index is computed against the list as
+    // the previous reorder left it.
     const two = spreadOf([node(ov("k1")), node(r("x")), node(ov("k2"))]);
     expect(
       replay(
@@ -1435,101 +1374,52 @@ test.describe("paged.object — the clipping-mask plan", () => {
     ]);
   });
 
-  test("AC-OBJ-PURE-35 — the index reads back what it wrote, and nothing it did not @feat:frames-paths.nested-content @level:edge", () => {
-    const props = clipIndexed(ov("k"), [r("a"), tf("t")]);
-    expect(clipContentOf(props)).toEqual([r("a"), tf("t")]);
-    // Clearing writes `null`, which deletes the label.
-    expect(metaArgs(clipIndexMutation(ov("k"), [])).value).toBeNull();
-    // Malformed, foreign or group-bearing labels read as no index / no group.
-    const entry = (key: string, value: string) =>
-      ({
-        id: ov("k"),
-        kind: "Oval",
-        entries: [
-          {
-            path: "pluginMetadata",
-            value: {
-              type: "pluginMetadata",
-              value: { key, value, caller: null, prev: null },
-            },
-          },
+  test("AC-OBJ-PURE-35 — what a frame holds is read off the tree, at every depth @feat:frames-paths.nested-content @level:edge", () => {
+    // k holds a and o2; o2 is itself a frame holding c; a pasted-in group
+    // gp holds a frame f with d inside.
+    const roots = spreadOf([
+      {
+        ...node(ov("k")),
+        children: [
+          node(r("a")),
+          { ...node(ov("o2")), children: [node(r("c"))] },
+          group("gp", [{ ...node(r("f")), children: [node(r("d"))] }]),
         ],
-      }) as unknown as ElementProperties;
-    expect(clipContentOf(entry(OBJECT_METADATA_KEY, "{not json"))).toEqual([]);
-    expect(
-      clipContentOf(
-        entry(
-          "x-paged:media.paged.draw",
-          JSON.stringify({ v: 1, data: { clipContent: [r("a")] } }),
-        ),
-      ),
-    ).toEqual([]);
-    expect(
-      clipContentOf(
-        entry(
-          OBJECT_METADATA_KEY,
-          JSON.stringify({
-            v: 1,
-            data: { clipContent: [g("g"), r("a"), { kind: "storyRange" }] },
-          }),
-        ),
-      ),
-    ).toEqual([r("a")]);
-    expect(clipContentOf(null)).toEqual([]);
+      },
+      node(r("x")),
+    ]);
+    expect(clippedContent(roots, [ov("k")]).map(elementKey)).toEqual([
+      "rectangle:a",
+      "oval:o2",
+      "rectangle:c",
+      "group:gp",
+      "rectangle:d",
+    ]);
     expect(
       [r("a"), ov("o"), poly("p"), ln("l"), tf("t"), g("g")].map(canClipBy),
     ).toEqual([true, true, true, false, false, false]);
   });
 
-  test("AC-OBJ-PURE-36 — a deleted clipping path takes its content, deepest first @feat:frames-paths.frame.delete @feat:frames-paths.nested-content @level:happy", () => {
-    const roots = spreadOf([node(ov("k")), node(r("x"))]);
-    // k clips a and o2; o2 is itself a clipping path holding c.
-    const index = new Map<string, PageItemId[]>([
-      ["oval:k", [r("a"), ov("o2")]],
-      ["oval:o2", [r("c")]],
+  test("AC-OBJ-PURE-36 — a deleted frame's content is the engine's to take @feat:frames-paths.frame.delete @feat:frames-paths.nested-content @level:happy", () => {
+    const roots = spreadOf([
+      { ...node(ov("k")), children: [node(r("a"))] },
+      node(r("x")),
     ]);
-    const plan = deletePlan([ov("k")], roots, index);
-    expect(plan.ok).toBe(true);
-    if (!plan.ok) return;
-    expect(plan.ops).toEqual([
-      { op: "releaseFrom", args: { childId: r("a") } },
-      { op: "deleteFrame", args: { frameId: "a" } },
-      { op: "releaseFrom", args: { childId: r("c") } },
-      { op: "deleteFrame", args: { frameId: "c" } },
-      { op: "releaseFrom", args: { childId: ov("o2") } },
-      { op: "deleteFrame", args: { frameId: "o2" } },
+    const plan = deletePlan([ov("k")], roots);
+    expect(plan.ok && plan.ops).toEqual([
       { op: "deleteFrame", args: { frameId: "k" } },
-    ]);
-    expect(plan.removed.map(elementKey)).toEqual([
-      "rectangle:a",
-      "rectangle:c",
-      "oval:o2",
-      "oval:k",
-    ]);
-    // Without an index the container's own delete is the whole plan
-    // (since engine 0.65 it takes its content along; engine-findings §12).
-    const bare = deletePlan([ov("k")], roots);
-    expect(bare.ok && bare.ops).toEqual([
-      { op: "deleteFrame", args: { frameId: "k" } },
-    ]);
-    // Flattening visits every level once.
-    expect(clippedContent(index, [ov("k")]).map(elementKey)).toEqual([
-      "rectangle:a",
-      "oval:o2",
-      "rectangle:c",
     ]);
   });
 });
 
 test.describe("paged.object — clipping masks, against a recorded client", () => {
-  /** A client over a fixed tree, a per-element property table, and a
-   *  set of ids that EXIST (answer `elementGeometry`). */
+  /** A client over a fixed tree and a per-element property table. */
   function clipDeps(options: {
     selection: ElementId[];
     tree: SceneTreeNode[];
     props?: Map<string, ElementProperties>;
-    exists?: Set<string>;
     refuse?: string;
+    createdId?: ElementId;
   }) {
     const sent: Array<{ op: string; args: Record<string, unknown> }> = [];
     const reports: Array<{ severity: string; message: string }> = [];
@@ -1551,23 +1441,22 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
                 }
               : {
                   kind: "mutationApplied",
-                  payload: { createdId: null, pageIds: [] },
+                  payload: {
+                    createdId: options.createdId ?? null,
+                    pageIds: [],
+                  },
                 }
           ) as never;
         },
         sceneTree: async () => options.tree,
         setElementSelection: async (ids: unknown[]) => ids,
         elementGeometry: async (ids: ElementId[]) =>
-          ids
-            .filter(
-              (id) => !options.exists || options.exists.has(elementKey(id)),
-            )
-            .map((id) => ({
-              id,
-              bounds: [0, 0, 10, 10],
-              itemTransform: [1, 0, 0, 1, 5, 5],
-              hasImage: false,
-            })),
+          ids.map((id) => ({
+            id,
+            bounds: [0, 0, 10, 10],
+            itemTransform: [1, 0, 0, 1, 5, 5],
+            hasImage: false,
+          })),
         layers: async () => [],
         elementProperties: async (id: ElementId) =>
           options.props?.get(elementKey(id)) ?? null,
@@ -1589,29 +1478,43 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
       ? (m.args.ops as Array<{ op: string; args: Record<string, unknown> }>)
       : [m];
 
-  test("AC-OBJ-PURE-37 — Make is ONE batch and selects the clipping path; an engine refusal is reported verbatim @feat:frames-paths.nested-content @feat:round-tripping.undo-redo @feat:editor-shell.panels.problems @level:happy", async () => {
-    const tree = spreadOf([node(r("a")), node(ov("k"))]);
-    const ok = clipDeps({ selection: [r("a"), ov("k")], tree });
-    await makeClippingMask(ok.deps);
-    expect(ok.sent).toHaveLength(1);
-    expect(opsOf(ok.sent[0]).map((o) => o.op)).toEqual([
-      "pasteInto",
-      "setPluginMetadata",
+  /** A clip group g of a and b under the path k. */
+  const clipped = () =>
+    spreadOf([
+      {
+        ...group("g", [node(r("a")), node(r("b")), node(ov("k"))]),
+        clip: true,
+      },
     ]);
-    expect(ok.selections).toEqual([[ov("k")]]);
+
+  test("AC-OBJ-PURE-37 — Make is ONE op and selects the clip group; an engine refusal is reported verbatim @feat:frames-paths.clip-groups @feat:round-tripping.undo-redo @feat:editor-shell.panels.problems @level:happy", async () => {
+    const tree = spreadOf([node(r("a")), node(ov("k"))]);
+    const ok = clipDeps({
+      selection: [r("a"), ov("k")],
+      tree,
+      createdId: g("g"),
+    });
+    await makeClippingMask(ok.deps);
+    expect(ok.sent).toEqual([
+      {
+        op: "createGroup",
+        args: { memberIds: [r("a"), ov("k")], clip: true },
+      },
+    ]);
+    expect(ok.selections).toEqual([[g("g")]]);
     expect(ok.reports).toEqual([]);
 
     const refused = clipDeps({
       selection: [r("a"), ov("k")],
       tree,
-      refuse: "B-18: container and child must live on the same spread",
+      refuse: "all members must live on the same spread",
     });
     await makeClippingMask(refused.deps);
     expect(refused.reports).toEqual([
       {
         severity: "error",
         message:
-          "Make clipping mask refused: B-18: container and child must live on the same spread",
+          "Make clipping mask refused: all members must live on the same spread",
       },
     ]);
     expect(refused.selections).toEqual([]);
@@ -1625,30 +1528,29 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     );
   });
 
-  test("AC-OBJ-PURE-38 — Release finds content through the index, keeps only what is still nested, and selects it @feat:frames-paths.nested-content @level:happy", async () => {
-    // The index lists a (nested), x (back in the tree — a script released
-    // it) and gone (no longer exists). Only `a` may be released: a
-    // `releaseFrom` for either of the others would roll the batch back.
-    const tree = spreadOf([node(r("x")), node(ov("k"))]);
-    const h = clipDeps({
+  test("AC-OBJ-PURE-38 — Release dissolves the clip group the selection is in, and selects its members @feat:frames-paths.clip-groups @level:happy", async () => {
+    for (const selection of [[g("g")], [r("b")], [ov("k")]]) {
+      const h = clipDeps({ selection, tree: clipped() });
+      await releaseClippingMask(h.deps);
+      expect(h.sent).toEqual([{ op: "dissolveGroup", args: { groupId: "g" } }]);
+      expect(h.selections).toEqual([[r("a"), r("b"), ov("k")]]);
+      expect(h.reports).toEqual([]);
+    }
+    // A frame's pasted-in content pops out, read off the tree.
+    const frame = clipDeps({
       selection: [ov("k")],
-      tree,
-      props: new Map([
-        ["oval:k", clipIndexed(ov("k"), [r("a"), r("x"), r("gone")])],
-      ]),
-      exists: new Set(["rectangle:a", "rectangle:x", "oval:k"]),
+      tree: spreadOf([{ ...node(ov("k")), children: [node(r("a"))] }]),
     });
-    await releaseClippingMask(h.deps);
-    expect(h.sent).toHaveLength(1);
-    const ops = opsOf(h.sent[0]);
+    await releaseClippingMask(frame.deps);
     expect(
-      ops.filter((o) => o.op === "releaseFrom").map((o) => o.args.childId),
+      opsOf(frame.sent[0])
+        .filter((o) => o.op === "releaseFrom")
+        .map((o) => o.args.childId),
     ).toEqual([r("a")]);
-    expect(h.selections).toEqual([[r("a"), ov("k")]]);
-    expect(h.reports).toEqual([]);
+    expect(frame.selections).toEqual([[r("a"), ov("k")]]);
   });
 
-  test("AC-OBJ-PURE-39 — Release with nothing to find says why, and sends nothing @feat:frames-paths.nested-content @feat:editor-shell.panels.problems @level:edge", async () => {
+  test("AC-OBJ-PURE-39 — Release with nothing to release says why, and sends nothing @feat:frames-paths.clip-groups @feat:editor-shell.panels.problems @level:edge", async () => {
     const tree = spreadOf([node(ov("k")), node(r("b"))]);
     const none = clipDeps({ selection: [ov("k")], tree });
     await releaseClippingMask(none.deps);
@@ -1656,11 +1558,7 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     expect(none.reports).toEqual([
       {
         severity: "error",
-        message:
-          "Release clipping mask refused: ellipse k holds no content this " +
-          "editor clipped. Content pasted in elsewhere — by InDesign, a script " +
-          "or a plugin — cannot be found: the engine has no read that lists " +
-          "what is inside a frame.",
+        message: "Release clipping mask refused: ellipse k clips nothing.",
       },
     ]);
     const wrongKind = clipDeps({
@@ -1669,14 +1567,33 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     });
     await releaseClippingMask(wrongKind.deps);
     expect(wrongKind.reports[0].message).toBe(
-      "Release clipping mask refused: select a clipping path — a rectangle, " +
-        "an ellipse or a path that holds clipped content.",
+      "Release clipping mask refused: select a clipping mask — a clip " +
+        "group, something inside one, or a frame that holds pasted-in content.",
     );
   });
 
-  test("AC-OBJ-PURE-40 — a nudged clipping path carries its content; a deleted one takes it @feat:editor-tools.move.translate @feat:frames-paths.frame.delete @feat:frames-paths.nested-content @level:happy", async () => {
-    const tree = spreadOf([node(ov("k"))]);
-    const props = new Map([["oval:k", clipIndexed(ov("k"), [r("a")])]]);
+  test("AC-OBJ-PURE-40 — a nudged frame carries its pasted-in content, a group child by its own transform @feat:editor-tools.move.translate @feat:frames-paths.nested-content @level:happy", async () => {
+    const tree = spreadOf([
+      {
+        ...node(ov("k")),
+        children: [node(r("a")), group("gp", [node(r("m"))])],
+      },
+    ]);
+    const props = new Map<string, ElementProperties>([
+      [
+        "group:gp",
+        {
+          id: g("gp"),
+          kind: "Group",
+          entries: [
+            {
+              path: "frameTransform",
+              value: { type: "transform", value: [1, 0, 0, 1, 2, 3] },
+            },
+          ],
+        } as unknown as ElementProperties,
+      ],
+    ]);
     const nudge = clipDeps({ selection: [ov("k")], tree, props });
     await nudgeSelection(nudge.deps, "right", true);
     expect(nudge.sent).toHaveLength(1);
@@ -1689,18 +1606,21 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
         op: "moveFrame",
         args: { frameId: "a", transform: [1, 0, 0, 1, 15, 5] },
       },
-    ]);
-
-    const del = clipDeps({ selection: [ov("k")], tree, props });
-    await deleteSelection(del.deps);
-    expect(opsOf(del.sent[0])).toEqual([
-      { op: "releaseFrom", args: { childId: r("a") } },
-      { op: "deleteFrame", args: { frameId: "a" } },
-      { op: "deleteFrame", args: { frameId: "k" } },
+      {
+        op: "setGroupTransform",
+        args: { groupId: "gp", transform: [1, 0, 0, 1, 12, 3] },
+      },
     ]);
   });
 
-  test("AC-OBJ-PURE-41 — two Object-menu rows and two commands; deliberately no keys @feat:editor-shell.menus @feat:frames-paths.nested-content @level:smoke", () => {
+  test("AC-OBJ-PURE-43 — Edit contents selects what the mask clips, not its path @feat:frames-paths.clip-groups @level:happy", async () => {
+    const h = clipDeps({ selection: [g("g")], tree: clipped() });
+    await editClippingContents(h.deps);
+    expect(h.sent).toEqual([]);
+    expect(h.selections).toEqual([[r("a"), r("b")]]);
+  });
+
+  test("AC-OBJ-PURE-41 — an Object ▸ Clipping mask submenu of three rows and three commands; deliberately no keys @feat:editor-shell.menus @feat:frames-paths.clip-groups @level:smoke", () => {
     const noop = () => {};
     const handlers = new Proxy({} as ObjectCommandHandlers, {
       get: () => noop,
@@ -1709,6 +1629,7 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     for (const id of [
       PAGED_OBJECT_MAKE_CLIPPING_MASK,
       PAGED_OBJECT_RELEASE_CLIPPING_MASK,
+      PAGED_OBJECT_EDIT_CLIPPING_CONTENTS,
     ]) {
       const command = commands.find((c) => c.id === id);
       expect(command?.category).toBe("Object");
@@ -1733,8 +1654,9 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
         m.order,
       ]),
     ).toEqual([
-      ["Object/Make clipping mask", 28],
-      ["Object/Release clipping mask", 29],
+      ["Object/Clipping mask/Make", 28],
+      ["Object/Clipping mask/Release", 28.1],
+      ["Object/Clipping mask/Edit contents", 28.2],
     ]);
   });
 });

@@ -67,7 +67,9 @@ export async function selectionPageBox(
 ): Promise<{ pageId: string; box: Box } | null> {
   const selection = host.selection.get();
   if (selection.length === 0) return null;
-  const geoms = await host.document.elementGeometry([...selection]).catch(() => []);
+  const geoms = await host.document
+    .elementGeometry([...selection])
+    .catch(() => []);
   let t = Infinity;
   let l = Infinity;
   let b = -Infinity;
@@ -104,12 +106,26 @@ export function reflectPreview(
   const p = snap.pivot;
   if (!p) return out;
   out.push(
-    { pageId, points: [[p[0] - crossPt, p[1]], [p[0] + crossPt, p[1]]] },
-    { pageId, points: [[p[0], p[1] - crossPt], [p[0], p[1] + crossPt]] },
+    {
+      pageId,
+      points: [
+        [p[0] - crossPt, p[1]],
+        [p[0] + crossPt, p[1]],
+      ],
+    },
+    {
+      pageId,
+      points: [
+        [p[0], p[1] - crossPt],
+        [p[0], p[1] + crossPt],
+      ],
+    },
   );
   if (snap.axisAngleDeg === null) return out;
   const a = (snap.axisAngleDeg * Math.PI) / 180;
-  const reach = box ? Math.hypot(box[2] - box[0], box[3] - box[1]) + 2 * crossPt : 20 * crossPt;
+  const reach = box
+    ? Math.hypot(box[2] - box[0], box[3] - box[1]) + 2 * crossPt
+    : 20 * crossPt;
   out.push({
     pageId,
     points: [
@@ -228,7 +244,8 @@ export function createReflectHandler(
         if (!box || pageId !== e.pageId) {
           const sel = await selectionPageBox(host);
           box = sel?.box ?? null;
-          if (sel && !machine.currentPivot()) machine.setDefaultPivot(centreOf(sel.box));
+          if (sel && !machine.currentPivot())
+            machine.setDefaultPivot(centreOf(sel.box));
         }
         pageId = e.pageId;
         await handle(machine.handle({ type: "down", ...event(e) }));
@@ -251,7 +268,8 @@ export function createReflectHandler(
     onKey(e) {
       if (e.key !== "Escape") return;
       queue.run(async () => {
-        if (machine) await handle(machine.handle({ type: "key", key: "Escape" }));
+        if (machine)
+          await handle(machine.handle({ type: "key", key: "Escape" }));
       });
     },
   };

@@ -2074,6 +2074,7 @@ mod tests {
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            clip: false,
         });
         Document {
             designmap: DesignMap::default(),

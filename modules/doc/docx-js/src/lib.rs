@@ -159,7 +159,10 @@ mod wasm {
         /// M2 edited save-back driven by the DOC-03 read: forward the host's
         /// `StoryContent` JSON (`host.document.storyContent(storyId)`), plus
         /// `cells: [{ block, cell, text, paragraphs? }]` for the native tables'
-        /// cells (`paragraphs`: the cell's styled read, when the host has it); it is
+        /// cells (`paragraphs`: the cell's styled read, when the host has it),
+        /// `tables: [{ block, rows }]` for the tables whose rows were added or
+        /// removed on the canvas (each live row's cell texts), and `colors`
+        /// (swatch id → `RRGGBB`) for colours the canvas made; it is
         /// overlaid on the import baseline, diffed, and saved. This is the LIVE
         /// path — live once the host injects the v54 read backend (gated by the
         /// bundle on `supports("document.readStory@1")`).
@@ -175,11 +178,19 @@ mod wasm {
             struct Cells {
                 #[serde(default)]
                 cells: Vec<docx_export::CellContentIn>,
+                #[serde(default)]
+                tables: Vec<docx_export::TableContentIn>,
+                #[serde(default)]
+                colors: std::collections::BTreeMap<String, String>,
             }
-            let Cells { cells } = serde_json::from_str(content_json)
+            let Cells {
+                cells,
+                tables,
+                colors,
+            } = serde_json::from_str(content_json)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let (bytes, skips) = session
-                .save_edited_from_content_and_cells(&content, &cells)
+                .save_edited_from_content_cells_and_tables(&content, &cells, &tables, &colors)
                 .map_err(|e| JsValue::from_str(&e))?;
             *self.last_skips.borrow_mut() = skips;
             Ok(bytes)

@@ -13,6 +13,9 @@
     "editContext": ["vectorGraphic"],
     "assets": ["images"],
     "network": false,
+    "actions": {
+      "register": true
+    },
     "workers": {
       "max": 2
     },
@@ -92,11 +95,13 @@
       "media.paged.draw.command.insertStarOptions",
       "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
+      "media.paged.draw.command.rasterizeOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
       "media.paged.draw.command.averageEndpoints",
       "media.paged.draw.command.reversePathDirection",
       "media.paged.draw.command.createOutlines",
+      "media.paged.draw.command.rasterize",
       "media.paged.draw.command.reflectHorizontal",
       "media.paged.draw.command.reflectVertical",
       "media.paged.draw.command.transformAgain",
@@ -3622,6 +3627,37 @@
         {
           "id": "media.paged.draw.command.insertFlareOptions",
           "title": "Insert flare options",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.draw.command.rasterize",
+          "title": "Rasterize",
+          "args": {
+            "kind": "struct",
+            "fields": {
+              "targets": {
+                "kind": "list",
+                "of": {
+                  "kind": "ref",
+                  "to": "frame"
+                }
+              },
+              "ppi": {
+                "kind": "number"
+              },
+              "background": {
+                "kind": "enum",
+                "members": ["transparent", "paper"]
+              }
+            }
+          }
+        },
+        {
+          "id": "media.paged.draw.command.rasterizeOptions",
+          "title": "Rasterize options",
           "args": {
             "kind": "struct",
             "fields": {}

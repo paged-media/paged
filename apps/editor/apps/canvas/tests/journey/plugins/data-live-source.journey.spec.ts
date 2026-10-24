@@ -41,7 +41,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
-import { skipWithoutDuckDB } from "./data-duckdb-gate";
+import { skipWithoutEngine } from "./data-engine-gate";
 import { dataFields } from "./data-engine";
 
 const PORT = 5297;
@@ -140,7 +140,7 @@ test.describe("journey · paged.data live remote source", () => {
     } catch {
       const got =
         (await item.getAttribute("data-status").catch(() => null)) ?? "unknown";
-      skipWithoutDuckDB(
+      skipWithoutEngine(
         got,
         `the live-source journey needs the remote load (status "${got}")`,
       );

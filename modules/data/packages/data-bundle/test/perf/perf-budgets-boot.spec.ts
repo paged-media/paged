@@ -39,7 +39,7 @@ import { openRealHost } from "../real-core";
 import { countingHost, type WorkLog } from "./counting-host";
 import {
   BUDGET_TIMEOUT_MS,
-  bootCountedDuck,
+  bootCountedStore,
   bootCountedEngine,
   expectBudget,
   onLabelled,
@@ -50,7 +50,7 @@ import {
   report,
   RUN_BUDGETS,
   sessionOver,
-  type CountedDuck,
+  type CountedStore,
   type Measured,
 } from "./harness";
 
@@ -58,7 +58,7 @@ import {
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../../src/engine"));
-const actualDuckdb = await importActual(() => import("../../src/query/duckdb"));
+const actualStore = await importActual(() => import("../../src/query/store"));
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
@@ -79,14 +79,13 @@ describe.skipIf(!RUN_BUDGETS)(
   "perf budgets — boot and reflow [data.perf.gates]",
   () => {
     let h: HeadlessHost | null = null;
-    let duck: CountedDuck | null = null;
+    let store: CountedStore | null = null;
     afterEach(() => {
       h?.dispose();
       h = null;
     });
     afterAll(async () => {
       printTable();
-      await duck?.handle.close();
     });
 
     // ── W6: 200 reflow events on a record-flow chain ──────────────────────────
@@ -120,7 +119,7 @@ describe.skipIf(!RUN_BUDGETS)(
         // comparison. Wave 2 (engine) compares values in place.
         keyAllocs: 0,
         fingerprints: 0,
-        duckQueries: 0,
+        storeQueries: 0,
       },
       { hostCalls: 5 },
     );
@@ -128,8 +127,8 @@ describe.skipIf(!RUN_BUDGETS)(
       h = await openDataHost();
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      duck ??= await bootCountedDuck();
-      const s = await sessionOver(host, engine, duck);
+      store = bootCountedStore(engine);
+      const s = await sessionOver(host, engine, store);
       await s.registerCsvSource("products_w6", productCsv(200));
       s.addQuery(
         "q1",
@@ -196,7 +195,7 @@ describe.skipIf(!RUN_BUDGETS)(
       );
       engine.reset();
       work.reset();
-      duck.reset();
+      store.reset();
       const t0 = performance.now();
       for (let i = 1; i <= 200; i++) {
         // Grow frame A by one point per event (a drag-resize's stream).
@@ -214,7 +213,7 @@ describe.skipIf(!RUN_BUDGETS)(
       const ms = performance.now() - t0;
       sub.dispose();
       const snap = work.snapshot();
-      const m = measure(snap, engine, duck, null);
+      const m = measure(snap, engine, store, null);
       // Behaviour: the burst re-paginated ONCE, over the settled chain, and that
       // flow places all 200.
       expect(flows.length).toBe(1);
@@ -258,9 +257,13 @@ describe.skipIf(!RUN_BUDGETS)(
     // first READY session, so activation pays nothing else for them.
     // Panel UX pass: −2 — the Data ▸ Sources… and Dataset catalog… menu rows
     // are gone (the host's Data menu raises those panels by name).
+    // The data door (extensions ADR 343): +2 — supports("data@1") and
+    // data.serve; the service answers only when another bundle asks.
+    // Record templates and pagination (PM-0015 L4): +2 — contribute.panel
+    // twice; both panels read the engine only once it runs.
     const W7: Measured = onLabelled(
       {
-        hostCalls: 39,
+        hostCalls: 43,
         hostReads: 2,
         mutates: 0,
         mutationOps: 0,
@@ -272,14 +275,14 @@ describe.skipIf(!RUN_BUDGETS)(
         stabilizeCalls: 0,
         keyAllocs: 0,
         fingerprints: 0,
-        duckQueries: 0,
+        storeQueries: 0,
       },
-      { hostCalls: 40, hostReads: 4 },
+      { hostCalls: 44, hostReads: 4 },
     );
     it("W7 activates without booting either engine [data.perf.gates]", async () => {
       h = await openRealHost();
       let work: WorkLog | null = null;
-      const boots = { engine: 0, duck: 0 };
+      const boots = { engine: 0, store: 0 };
       mock.module("../../src/engine", () => ({
         ...actualEngine,
         bootEngine: async () => {
@@ -287,11 +290,11 @@ describe.skipIf(!RUN_BUDGETS)(
           throw new Error("activate must not boot the engine");
         },
       }));
-      mock.module("../../src/query/duckdb", () => ({
-        ...actualDuckdb,
-        bootDuckDB: async () => {
-          boots.duck += 1;
-          throw new Error("activate must not boot DuckDB");
+      mock.module("../../src/query/store", () => ({
+        ...actualStore,
+        storeHandle: () => {
+          boots.store += 1;
+          throw new Error("activate must not open the query store");
         },
       }));
       const { activate } = await import("../../src/activate");
@@ -308,9 +311,9 @@ describe.skipIf(!RUN_BUDGETS)(
       await settle();
       const snap = work!.snapshot();
       const m = measure(snap, null, null, null);
-      // Behaviour: four React panels and the "Data objects" schema panel, the
+      // Behaviour: six React panels and the "Data objects" schema panel, the
       // commands and the importer registered, no engine booted.
-      expect(h.panelsContributed().length).toBe(5);
+      expect(h.panelsContributed().length).toBe(7);
       expect(h.schemaPanelsContributed().map((p) => p.id)).toEqual([
         "media.paged.data.panel.objects",
       ]);
@@ -320,16 +323,16 @@ describe.skipIf(!RUN_BUDGETS)(
       expect(
         h.contributions.filter((c) => c.kind === "command").length,
       ).toBeGreaterThanOrEqual(7);
-      expect(boots).toEqual({ engine: 0, duck: 0 });
+      expect(boots).toEqual({ engine: 0, store: 0 });
 
-      // The first command's price: boot the data-js wasm and DuckDB (trended).
+      // The first command's price: boot the data-js wasm, its query store
+      // inside it (trended).
       let t1 = performance.now();
-      await bootCountedEngine();
+      const booted = await bootCountedEngine();
       const engineMs = performance.now() - t1;
       t1 = performance.now();
-      const fresh = await bootCountedDuck();
-      const duckMs = performance.now() - t1;
-      await fresh.handle.close();
+      await bootCountedStore(booted).handle.tables();
+      const storeMs = performance.now() - t1;
       report(
         "W7.cold-boot",
         m,
@@ -339,7 +342,7 @@ describe.skipIf(!RUN_BUDGETS)(
           bytesOut: 0,
           detail: {
             engineBootMs: Math.round(engineMs),
-            duckBootMs: Math.round(duckMs),
+            storeBootMs: Math.round(storeMs),
           },
         },
         snap,

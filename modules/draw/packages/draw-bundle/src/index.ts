@@ -69,7 +69,11 @@ export {
 // Trace and exported for the conformance spec. The user-facing Group /
 // Ungroup COMMANDS are the host's now (`paged.object.*`) — see
 // commands/group.ts.
-export { groupMutationFor, ungroupMutationFor } from "./commands/group";
+export {
+  clipGroupMutationFor,
+  groupMutationFor,
+  ungroupMutationFor,
+} from "./commands/group";
 // Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
 // binding driver, exported for the conformance spec.
 export {
@@ -305,6 +309,19 @@ export {
   outlineTableOf,
   contributeCreateOutlinesCommands,
 } from "./commands/create-outlines";
+// Object ▸ Rasterize (extensions ADR 338) — the batch, the parameters and
+// what a selection removes, exported for the conformance spec.
+export {
+  RASTERIZE_COMMAND_ID,
+  RASTERIZE_DEFAULTS,
+  applyRasterize,
+  contributeRasterizeCommand,
+  pngDataUri,
+  rasterizeBatchFor,
+  rasterizeParamsFrom,
+  removalOf,
+  type RasterizeParams,
+} from "./commands/rasterize";
 export { rawTextOutlines, type TextOutlinesWire } from "./raw-wire";
 export {
   PATHFINDER_PRESETS,
@@ -476,6 +493,7 @@ export {
   REPEAT_CLIP_HANDLE,
   REPEAT_LIVE_NOTE,
   REPEAT_CLIP_NOTE,
+  CLIP_GROUP_FEATURE,
   repeatParamsFrom,
   repeatPlacementsFor,
   radialCenterOfDraft,
@@ -1167,6 +1185,7 @@ export {
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
   WIDTH_PROFILE_SECTION_NOTE,
+  RASTERIZE_SECTION_NOTE,
 } from "./panels/path-options-panel";
 // Illustrator Phase 3 (§16.2) — BLENDS v1: the three SPACING MODES
 // (Smooth Color derives its count from the colour distance, Specified

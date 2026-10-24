@@ -48,6 +48,8 @@ import { useStrings } from "@paged-media/strings";
 
 import { Icon } from "../icons";
 import { FIELD } from "./messages";
+import { BindPopover, type BindTarget } from "./bind-popover";
+import { useDataService } from "../state/data-door";
 import { useRegistries } from "../state/registries-context";
 import { useCanvasClient } from "../state/canvas-client-context";
 import {
@@ -252,6 +254,11 @@ export function useBindToData(
   const { commands } = useRegistries();
   const readLabels = useElementLabels();
   const [notice, setNotice] = useState<BindNotice | null>(null);
+  // Editor ADR 292: with a bundle serving the document's data (data@1), the
+  // bind popover binds here; without one the request goes to a bundle's
+  // bindProperty command, or the notice says nothing can bind yet.
+  const service = useDataService();
+  const [popover, setPopover] = useState<BindTarget | null>(null);
 
   // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const open = useCallback(async () => {
@@ -288,13 +295,13 @@ export function useBindToData(
             resolveBindTarget(
               depsFor(host.element as ElementId | null),
               host.address,
-              { write: command !== null },
+              { write: command !== null || service !== null },
             ),
           )
         : null) ??
       (
         await resolveBindTarget(depsFor(field.elementOf(address)), address, {
-          write: command !== null,
+          write: command !== null || service !== null,
         })
       ).selector;
     const request: BindRequest = {
@@ -302,6 +309,10 @@ export function useBindToData(
       path,
       schema: JSON.stringify(field.row),
     };
+    if (service) {
+      setPopover({ selector: target, path, label: path });
+      return;
+    }
     const bad = checkArgs(BIND_PROPERTY_ARGS, request);
     if (bad || !command) {
       setNotice({ ...request, reason: bad, command: null });
@@ -313,9 +324,16 @@ export function useBindToData(
     } catch (err) {
       setNotice({ ...request, reason: String(err), command });
     }
-  }, [model, client, field, commands, readLabels, path, scopeOf]);
+  }, [model, client, field, commands, readLabels, path, scopeOf, service]);
 
-  return { open, notice, close: () => setNotice(null) };
+  return {
+    open,
+    notice,
+    close: () => setNotice(null),
+    service,
+    popover,
+    closePopover: () => setPopover(null),
+  };
 }
 
 export function BindNoticeDialog({
@@ -508,6 +526,13 @@ export function ObjectFieldFrame({
         />
       )}
       <BindNoticeDialog notice={bind.notice} onClose={bind.close} />
+      {bind.service && (
+        <BindPopover
+          service={bind.service}
+          target={bind.popover}
+          onClose={bind.closePopover}
+        />
+      )}
     </div>
   );
 }

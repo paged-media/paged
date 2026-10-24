@@ -188,6 +188,7 @@ fn a_drag_on_a_locked_item_or_its_group_is_refused_at_begin() {
     let g = m
         .apply_mutation(&Mutation::CreateGroup {
             member_ids: vec![a.clone(), b.clone()],
+            clip: false,
         })
         .expect("group")
         .created_id

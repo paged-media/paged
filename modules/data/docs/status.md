@@ -14,10 +14,28 @@ under [Releases](#releases).
 
 [PM-0015](../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) (2026-10-24) makes
 data a platform layer. Bindings move into the engine's model and the data crates into
-`engine/core/crates`. Modules and extensions reach data through a `data@1` door. Turso replaces
-DuckDB-WASM, and transforms and asset actions run in the engine's script interpreter. None of
-that has shipped. What is below is the module as it is. The first measured step is
-[`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md).
+`engine/core/crates`. Modules and extensions reach data through a `data@1` door, and
+transforms and asset actions run in the engine's script interpreter. On `main`:
+
+- the measured spike ([`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md)) and the
+  engine swap: the query store is Turso inside the data engine
+  ([ADR 561](adr/561-turso-is-the-data-engine.md)), and DuckDB-WASM is gone;
+- the engine-level crates and the session in `engine/core/crates/paged-data-*`; the engine
+  reads a document's binding labels, guards its queries and applies property and variable
+  bindings from the command line (`paged data bindings` / `apply`, core ADR 1014);
+- the `data@1` and `actions@1` doors in the public SDK (extensions ADRs 343, 344), served by
+  this module (`src/data-door.ts`): tables, typed records, row writes, bindings, changes;
+- transforms ([ADR 562](adr/562-transforms-are-javascript-over-tables.md)), JavaScript over
+  tables run in the sandboxed interpreter before the queries, on the engine's action registry
+  (core ADR 1015).
+
+- asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
+  the column's action chain, placed as a data URI;
+- paged.sheet edits a table of the document's data in place through `data@1`.
+
+Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
+binding kinds headless. The record templates library and the pagination inspector that
+editor ADR 291 left to this module are built as its own panels (see Shipped).
 
 ## Shipped
 
@@ -27,41 +45,44 @@ that has shipped. What is below is the module as it is. The first measured step 
   declared in `contributes.partTypes`) after each change and before every save. An imported
   file over 64 KiB is written once as `data/<hash>.csv` and the session names it by hash.
   Opening a document restores its session: the recipe through `DataEngine.load_payload`, the
-  data into DuckDB on DuckDB's first boot, remote sources as inert descriptors (nothing is
+  data into the store when it is first used, remote sources as inert descriptors (nothing is
   fetched on open). The restore checks the document: placed fields are found again, and a
   table whose label no longer names its binding is reported. Opening another document drops
   the previous session first. On a host without container parts the Sources panel says the
   session is not saved.
 - **Sources** (local formats since 2026-10-06). The Data sources panel imports CSV, TSV, JSON
   (an array or newline-delimited), Parquet and Excel `.xlsx` (one worksheet per source; the
-  panel switches worksheet) as one in-memory DuckDB table per source. JSON and Parquet use
-  DuckDB's own readers; XLSX is read by the engine (`data-xlsx`, calamine) with one type per
-  column and handed to DuckDB's `read_json` with that column list. Imported files are saved
+  panel switches worksheet) as one table per source in the engine's query store (ADR 561).
+  Every format is read in Rust (`data-store`): a CSV's delimiter is sniffed (`,` `;` tab
+  `|`), each column typed from its fields — integer, a decimal that keeps its scale
+  (`1234.50`), real, boolean, date, timestamp, else text; a leading zero or a `+` keeps a
+  column text — and the file is also kept as written for Data Merge; JSON keeps its keys in
+  file order and a nested value as its JSON text; Parquet reads snappy, gzip, brotli and lz4
+  pages (not zstd); XLSX keeps `data-xlsx`'s per-column types. Imported files are saved
   with the document like CSV (inline up to 64 KiB, else `data/<hash>.<ext>`). File ▸ Import
   and a drop route `.json`, `.ndjson`, `.jsonl` and `.parquet` to the plugin
   (`contribute.importer`). A remote URL (CSV, TSV, JSON or Parquet) can be added as a
   descriptor; Load calls `fetch` only for an origin the host reports as consented and loads
   the bytes as a table, like an imported file.
-- **Queries** (since 2026-10-06). The Data query panel has a SQL field with DuckDB's
-  diagnostics (error class, line and column in the query as written), filter, sort and group
-  builders that write SQL into it, a preview grid of the first 50 rows as DuckDB prints them,
+- **Queries** (since 2026-10-06; SQLite's dialect since ADR 561). The Data query panel has a
+  SQL field with the store's diagnostics (error class, line and column in the query as
+  written, an unknown column or table located by its name), filter, sort and group builders
+  that write SQL into it, a preview grid of the first 50 rows as a bound field displays them,
   and saving under a query id. Every query, typed or restored from a document, passes a guard
   (`src/query/sql.ts`): a conservative lexer that reads strings, quoted names and comments
-  the way DuckDB does, then an allow-list — exactly one statement with balanced brackets,
-  starting with SELECT, WITH, FROM, VALUES or `(`, no statement keyword anywhere, and every
-  table position a source table, a subquery or `range` / `generate_series` / `unnest`. No
-  file or URL table function and no `'https://…'` or `"file.csv"` table name gets through.
-  The guard asks DuckDB nothing. The engine adds `SET lock_configuration = true` at boot, so
-  no statement can change a DuckDB setting. A failing query is a diagnostic for that query;
-  the refresh carries on with the others. The first guard parsed with DuckDB's
-  `json_serialize_sql`, which lives in the json extension: DuckDB autoloaded it from
-  extensions.duckdb.org (the json and parquet extensions now ship in `bin/duckdb-ext/`
-  and load same-origin), the editor's CSP refused that, and the worker trapped on every
-  refresh. `test/duckdb-browser.spec.ts` runs the shipped worker in headless Chromium under
-  the editor's headers (CI: `REQUIRE_REAL_BROWSER=1`), and both lanes prove the same
-  security matrix (`test/guard-matrix.ts`). `enable_external_access = false` was measured
-  and not used: it is global and one-way, and it also refuses DuckDB's readers over the
-  registered import buffers, so every import after the first query would fail.
+  the way SQLite does, then an allow-list — exactly one statement with balanced brackets,
+  starting with SELECT, WITH, FROM, VALUES or `(`, no statement keyword anywhere (PRAGMA,
+  ATTACH and VACUUM included), and every table position a source table, a subquery or
+  `generate_series` / `json_each` / `json_tree`. No file or URL table function and no
+  `'https://…'` table name gets through. The guard asks the engine nothing. The store runs
+  every user query on a `query_only` connection, so a write that got past the guard would
+  still fail (that mode alone is not enough: a reader can lift it with PRAGMA, which the
+  guard refuses). A failing query is a diagnostic for that query; the refresh carries on with
+  the others. `test/store-browser.spec.ts` runs the shipped engine in headless Chromium under
+  the editor's headers (CI: `REQUIRE_REAL_BROWSER=1`), and both lanes prove the same security
+  matrix (`test/guard-matrix.ts`). The store answers as SQLite does on 24 of 25 oracle cases
+  (`paged-data-store/tests/sqlite-sql`); an ordered aggregate (`group_concat(… ORDER BY …)`) is the one
+  Turso 0.8.3 does not run.
 - **Refresh policy** (since 2026-10-06, `src/refresh.ts`). Each source has one: manual; on open
   (the queries re-run when the document opens, and a remote source is fetched again only with
   a remembered grant); every N seconds (at least 15) for a remote source, only while its
@@ -80,7 +101,7 @@ that has shipped. What is below is the module as it is. The first measured step 
   one back-to-front batch, which is one undo step, and skips pinned and overridden fields; "What changed?" lists the bindings whose resolved
   content differs from the previous report; a stepper previews the bindings against record N.
   Record N is the Nth row as the query delivers it when the query defines that order (an
-  `ORDER BY`, or a scan of one table, which DuckDB keeps in insertion order: an imported
+  `ORDER BY`, or a scan of one table, which the store delivers in insertion order: an imported
   file's row order, as Data Merge numbers it), and the Nth by content when it does not (a
   join, a grouping, a set operation), so a re-delivery in another order changes nothing
   (`data-query` `result_order_is_defined`). An unindexed binding shows record 1. The
@@ -122,12 +143,12 @@ that has shipped. What is below is the module as it is. The first measured step 
   overview lists the plugin's own objects (sources, queries, bindings, data sets,
   variables), shows the picked item's property rows, which the host renders as property
   fields, and opens the panel that owns each kind.
-- **The engines load through the host's module door** where the host offers one
-  (`host.modules` where `modules@1`; `hostWasm` in `src/bin-url.ts`). The data engine and DuckDB ask
-  the host where it serves their declared wasm and fetch it with its Subresource Integrity
-  hash; with no door, no answer, a 404 or a mismatch they load from the package's own
-  `bin/`. The DuckDB worker and JS API always load from `bin/`. The publish workflow stamps
-  each wasm's sha384 into the published manifest.
+- **The engine loads through the host's module door** where the host offers one
+  (`host.modules` where `modules@1`; `hostWasm` in `src/bin-url.ts`). The data engine — the
+  query store inside it, 10.9 MiB — asks the host where it serves its declared wasm and
+  fetches it with its Subresource Integrity hash; with no door, no answer, a 404 or a
+  mismatch it loads from the package's own `bin/`. The publish workflow stamps the wasm's
+  sha384 into the published manifest.
 - **The binding language**: 42 functions, arithmetic, comparison and `&`, with errors as
   values. The image and barcode bindings of the panel take an expression; so do all
   bindings defined through the session or in a batch job.
@@ -140,6 +161,24 @@ that has shipped. What is below is the module as it is. The first measured step 
   a `resizeFrame` or a drag of a chain frame's handles; the second needs a host that reports
   a gesture's reflow (core v0.71.13 through plugin-sdk 0.2.58). On an older host a handle
   resize re-paginates nothing; a move never does. No panel calls these yet.
+- **Record templates** (the Record templates panel, `src/record-templates.ts`; 2026-10-24). A
+  record template is the cell a record flow repeats: lines of a label and an expression, at a
+  line height. The panel lists the document's templates with the flows using each; "New from
+  selection" reads the selected text frames written as for Data Merge (each line one template
+  line, `<<field>>` a field reference, other text kept as text; a `<<name>>` that is not a
+  field name stays literal and is said); a rename moves the flows using the template; a
+  delete is refused while a flow uses it; the preview fills a template with record N of a
+  query (the engine's `preview_template`, in the order the stepper numbers records). The
+  library is saved with the session.
+- **Record flow pagination** (the Record flow pagination panel). A flow's template and its
+  line height, group by, repeated and continued group headers and a group footer (`{count}`,
+  and a sum, average, minimum or maximum of one field) are inline controls written at once.
+  The summary beside them is the engine's pagination of the flow over the start page's margin
+  box, one frame per page, as lowering places it: records placed of the total, records per
+  page, headers repeated as continued, overflow, a record taller than a page. A flow's own
+  repeated/continued header options now reach the paginator (before, every caller paginated
+  with both on). Not offered, because the engine has none: keep-together of a group, a break
+  before a group, per-group footers other than one aggregate row, the header height (16 pt).
 - **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.
@@ -222,8 +261,8 @@ Not done:
   writes another property (a stroke weight) needs its permission in the field's grants, and a
   write to an item the template does not open is refused. A text variable and a picture are
   not module fields: they are text and image fields of their frames. `paged template check`
-  still reports the query's derived `recordCount` as a difference after a record field is
-  filled (it compares derived rows).
+  compares stored rows only, so a filled record field's derived `recordCount` is no
+  difference.
 
 - **Catalogues** ([ADR 560](adr/560-template-fields-are-binding-targets.md), plan F8;
   `src/catalogue.ts`). A template's own text, picture and visibility fields are binding
@@ -241,9 +280,15 @@ Not done:
   author's page policy opens the template page (`{ "allow": ["document.pages"] }`): the
   engine asks `document.pages` of the page removed or duplicated, and the copies inherit
   the grant; the first run is an author's (it marks the template page with this plugin's
-  page label). Not yet: a page whose stories hold a table, an anchored object or a footnote
-  cannot be copied; module fields are not catalogue targets; the editor's Template panel
-  has no control for the page grant.
+  page label). The Template panel's "This page" section sets the page grant. Two limits stay,
+  with their reasons: a page whose stories hold a table, an anchored object or a footnote
+  cannot be copied, because the engine's `duplicatePage` refuses a story holding an object
+  with an id of its own (a copy would put that id in the document twice; re-minting those ids
+  is engine work, shared with `duplicateElements` and snippet paste, core
+  `paged-mutate/src/apply/duplicate_page.rs`); and module fields are not catalogue targets,
+  because the engine's catalogue plan (`plan_catalogue`) types each value by a core field
+  kind and has no type for a module's value, which the data@1 binding work is redesigning
+  (the catalogue's targets follow it there).
 
 - **Inspection commands** (plan G4). Typed, read-only: `previewQuery { sql, limit }`,
   `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the
@@ -270,8 +315,9 @@ query, expr }` (an expression property binding, which `apply` writes with the se
   undo together. A change no write carried takes no undo step: `session.json` records the
   version the label named when it was written (`base`), and a reopen reads `session.json`
   while the label still names that base, else the version the label names. An undo that
-  takes the label back reloads the version it names without rebooting either engine (DuckDB
-  keeps its tables; a source whose saved data differs is loaded again). Data parts are then
+  takes the label back reloads the version it names without rebooting the engine (the store
+  keeps its tables through `load_payload`; a source whose saved data differs is loaded
+  again). Data parts are then
   never collected (an undo can bring back a session that names them), and old versions are
   kept. Verified on the v0.69.0 engine (`test/protocol69-real-core.spec.ts`); the count
   budgets carry a protocol-69 variant (`onLabelled`, `test/perf/harness.ts`): a write from
@@ -360,32 +406,25 @@ query, expr }` (an expression property binding, which `apply` writes with the se
   exact data origins at build time (`PAGED_DATA_ORIGINS`); only those are reachable, and still only after consent. The public
   build lists none. The consent dialog says when an origin stays blocked, and the failed fetch
   says so on the source.
-- **DuckDB was not in the npm package.** Every version up to 0.1.0-canary.9 shipped without
-  `bin/duckdb-engine.wasm`. The publish workflow now runs `scripts/vendor-duckdb.sh` and
-  refuses a tarball without it (`scripts/pubcheck.sh`, `scripts/pubcheck.mjs`). The bundle now
-  loads DuckDB from the package's own `bin/` (one variant, eh: `duckdb-engine.wasm`, its worker,
-  `duckdb-browser.mjs`, and DuckDB's json + parquet extensions in `bin/duckdb-ext/`), so a host serves the installed package rather than a checkout of
-  this repo ([ADR 015](adr/015-duckdb-wasm-vendored.md)). 0.1.0-canary.10 is the first
-  published version that ships it.
 - **Smaller gaps.** The column list is built with an empty metadata sidecar, so every column
   shows as undocumented. The variable-library XML was not checked against the application whose
   format it follows ([ADR 557](adr/557-variables-and-data-sets.md)).
 - **Tests gate CI since 2026-10-05.** A failing Rust or TypeScript test fails its job, both
-  lanes run on pull requests, the TypeScript lane typechecks, vendors DuckDB and runs with
-  `REQUIRE_REAL_ENGINE=1` and `REQUIRE_REAL_DUCKDB=1`, and the coverage gate requires every
+  lanes run on pull requests, the TypeScript lane typechecks and runs with
+  `REQUIRE_REAL_ENGINE=1` (the store is inside the engine), and the coverage gate requires every
   registry-mapped test to have run and passed. Publishing waits for both lanes on the same
   commit, runs the tests again, and fails when the package's inputs changed since the
   published version without a version bump (`scripts/package-hash.mjs`). When this round of work
   started there were 204 Rust tests (one skipped: the oracle skeleton) and 112 TypeScript
   tests in 22 files, of which one file booted the real engine and none the real DuckDB. At
   `9077269` (by grep) there are 293 Rust `#[test]` functions plus property tests and 52
-  TypeScript test files; 10 spec files run against the real core host and 11 against real
-  DuckDB, one of them in headless Chromium (`test/duckdb-browser.spec.ts`). The InDesign
-  Data Merge recordings and native DuckDB results are replayed in CI
+  TypeScript test files; 10 spec files run against the real core host and 11 against the
+  real store, one of them in headless Chromium (`test/store-browser.spec.ts`). The InDesign
+  Data Merge recordings and native SQLite results are replayed in CI
   ([`design/oracles.md`](design/oracles.md)).
 
 - **Performance is measured and pinned since 2026-10-05.** Count budgets are pinned:
-  - Bundle side, against the real core host, the real data-js wasm and real DuckDB:
+  - Bundle side, against the real core host and the real data-js wasm with its store:
     `packages/data-bundle/test/perf/`.
   - Engine side: `data-conformance/tests/perf_counts.rs`, through the `perf-counters`
     feature. The shipped wasm exports `perfCounters()`.
@@ -430,6 +469,7 @@ the document label has since been released.
 ## Gaps found in step 6
 
 Measured on 2026-10-05 against DuckDB-WASM 1.29.0 (engine v1.1.1), the shipped EH variant.
+DuckDB is gone since ADR 561; the rows stay as the record of why.
 
 | Gap                                                                                                                                                                                                                                                                                                          | Class                                    | Effect here                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -404,6 +404,49 @@
 
 # ── minmax family ────────────────────────────────────────────
 
+- id: band.take
+  rust_path: families::band::BAND_TAKE
+  state_row: image.kernel.family-t0
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: exact, value: 0 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "elementary pointwise algebra / no reference reading"
+    - "out = b; through the ABI mask it is mix(a, b, m), the layer fold's masked hand-over (a knockout's hole, a mix through opacity × coverage)"
+  tests:
+    rust: ["image-conformance/tests/it/family_band.rs"]
+
+- id: band.fade_neutral
+  rust_path: families::band::BAND_FADE_NEUTRAL
+  state_row: image.kernel.family-t0
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 2 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "elementary pointwise algebra / no reference reading"
+    - "premultiplied rgb·fill + neutral·alpha·(1 − fill): the layer fold's fill opacity on Photoshop's eight special blend modes, where fill moves the source toward the mode's neutral colour (it blends to the backdrop unchanged) instead of fading it; Adobe documents that fill and opacity differ on those modes, the neutral-colour model is ours (no Photoshop recording yet)"
+  tests:
+    rust: ["image-conformance/tests/it/family_band.rs"]
+
+- id: band.blend_if
+  rust_path: families::band::BAND_BLEND_IF
+  state_row: image.kernel.family-t0
+  class: point
+  mip_exact: true
+  gpu_tolerance: { kind: channel_eps_f16, value: 4 }
+  oracle: none
+  status: implemented
+  provenance:
+    - "Photoshop's Blend If (layer blending ranges), from Adobe's user guide: per gray/red/green/blue of This Layer and Underlying Layer a black and a white slider, each splittable into a ramp; the coverage is the product of every ramp"
+    - "a ramp is clamp(v·k + o, 0, 1) on the unpremultiplied value, k and o encoded by the caller (an unsplit slider is a one-level step, a split one a slope from the low to the high half); gray = 0.3 r + 0.59 g + 0.11 b"
+    - "output splatted to rgba so the fold binds it as the next blend's @group(2) mask (only .r is read)"
+  tests:
+    rust: ["image-conformance/tests/it/family_band.rs"]
+
 - id: math.min
   rust_path: families::minmax::MATH_MIN
   state_row: image.kernel.family-t0

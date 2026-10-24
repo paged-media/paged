@@ -139,7 +139,9 @@ function chordParams(d: readonly Vec2[], first: number, last: number) {
   for (let i = first + 1; i <= last; i++)
     u.push(u[u.length - 1]! + len(sub(d[i]!, d[i - 1]!)));
   const total = u[u.length - 1]!;
-  return total > 0 ? u.map((x) => x / total) : u.map((_, i) => i / (u.length - 1));
+  return total > 0
+    ? u.map((x) => x / total)
+    : u.map((_, i) => i / (u.length - 1));
 }
 
 function generate(
@@ -290,9 +292,7 @@ export function fitCubics(
   const t1 =
     tHat1 && len(tHat1) > 0 ? tHat1 : unit(sub(points[1]!, points[0]!));
   const t2 =
-    tHat2 && len(tHat2) > 0
-      ? tHat2
-      : unit(sub(points[n - 2]!, points[n - 1]!));
+    tHat2 && len(tHat2) > 0 ? tHat2 : unit(sub(points[n - 2]!, points[n - 1]!));
   const out: Cubic[] = [];
   fitCubic(points, 0, n - 1, t1, t2, tolerance * tolerance, out, 0);
   return out;
@@ -409,7 +409,10 @@ export function simplifyContour(
   const breaks: number[] = [];
   for (let i = 0; i < n; i++) {
     const end = !closed && (i === 0 || i === n - 1);
-    if (end || (threshold > 0 && interiorAngleAt(anchors, closed, i) <= threshold))
+    if (
+      end ||
+      (threshold > 0 && interiorAngleAt(anchors, closed, i) <= threshold)
+    )
       breaks.push(i);
   }
   const cubics: Cubic[] = [];
@@ -419,14 +422,24 @@ export function simplifyContour(
     const tin = incoming(anchors, true, 0);
     const tout = outgoing(anchors, true, 0);
     const smooth = unit(add(tin, tout));
-    const run = fitRun(anchors, true, 0, segs, tol, samples, len(smooth) ? smooth : tout);
+    const run = fitRun(
+      anchors,
+      true,
+      0,
+      segs,
+      tol,
+      samples,
+      len(smooth) ? smooth : tout,
+    );
     cubics.push(...run);
   } else {
     const runs = closed ? breaks.length : breaks.length - 1;
     for (let r = 0; r < runs; r++) {
       const from = breaks[r]!;
       const to = r + 1 < breaks.length ? breaks[r + 1]! : breaks[0]! + n;
-      cubics.push(...fitRun(anchors, closed, from, to - from, tol, samples, null));
+      cubics.push(
+        ...fitRun(anchors, closed, from, to - from, tol, samples, null),
+      );
     }
   }
   if (closed && cubics.length === 1) cubics.splice(0, 1, ...halve(cubics[0]!));

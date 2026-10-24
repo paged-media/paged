@@ -48,13 +48,22 @@ import { useEffect, useState } from "react";
 import {
   CatalogRegistryProvider,
   CompositionRenderer,
+  useBindingProviderHost,
   useCockpitActions,
   useCanvasClient,
   useObjectBindings,
   useDocumentMeta,
+  useProviderProperty,
+  writeSelectionProperty,
+  type ProvidedProperty,
 } from "@paged-media/shell";
-import { ColorMixer, type MixerValue } from "@paged-media/ui";
-import type { ColorPreview, SwatchSpec, Value } from "@paged-media/client";
+import { ColorMixer, hexToRgb, type MixerValue } from "@paged-media/ui";
+import type {
+  ColorPreview,
+  SwatchColorSpec,
+  SwatchSpec,
+  Value,
+} from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 import { colorComposition } from "./color.composition";
@@ -64,7 +73,23 @@ const M = defineMessages("app.colorPanel", {
   noSelection: "No selection — Apply sets the document default fill.",
   openColorWheel: "Open color wheel",
   newSwatch: "New swatch",
+  fillWell: "Fill",
+  strokeWell: "Stroke",
+  rawWells:
+    "The fill and stroke wells are this content's own colours (in an image: the foreground and background). A swatch click sets the fill, Alt-click the stroke.",
 });
+
+/** The current selection, as a provider target (module-level: the hook
+ *  keys on it). */
+const SELECTION = { kind: "selection", scope: "element" } as const;
+
+/** A provider's RAW colour answer for a well (`swatchColor`), or null —
+ *  the edit context's colour is not a document swatch (WP4.10). */
+function rawColour(p: ProvidedProperty): SwatchColorSpec | null {
+  if (p.source !== "provider" || p.read.kind !== "value") return null;
+  const v = p.read.value as Value;
+  return v.type === "swatchColor" ? v.value : null;
+}
 
 const FILL_BINDING = {
   value: { scope: "element" as const, path: "frameFillColor" },
@@ -78,6 +103,137 @@ function unwrapColorRef(v: Value | null): string | null {
 }
 
 export function ColorPanel() {
+  const fillOwn = useProviderProperty("frameFillColor", SELECTION);
+  const strokeOwn = useProviderProperty("frameStrokeColor", SELECTION);
+  const rawFill = rawColour(fillOwn);
+  if (rawFill) {
+    return <RawColourWells fill={rawFill} stroke={rawColour(strokeOwn)} />;
+  }
+  return <DocumentColourPanel />;
+}
+
+/**
+ * WP4.10 — the Color panel over an edit context whose colours are its own
+ * (paged.image's foreground / background): two wells, the mixer on the
+ * active one, every commit written to the owner as an RGB colour. A CMYK
+ * or Lab edit is resolved through the document's colour management
+ * (`colorCompute`) to the RGB the owner stores; no document swatch is
+ * minted for it, because the colour is not the document's.
+ */
+function RawColourWells({
+  fill,
+  stroke,
+}: {
+  fill: SwatchColorSpec;
+  stroke: SwatchColorSpec | null;
+}) {
+  const strings = useStrings();
+  const client = useCanvasClient();
+  const host = useBindingProviderHost();
+  const [well, setWell] = useState<"fill" | "stroke">("fill");
+  const current = well === "stroke" && stroke ? stroke : fill;
+  const seed = JSON.stringify(current);
+  const [mix, setMix] = useState<{ seed: string; value: MixerValue }>(() => ({
+    seed,
+    value: specToMixer(current),
+  }));
+  // Follow the owner when its colour changed elsewhere (a sample, a swap).
+  const shown = mix.seed === seed ? mix.value : specToMixer(current);
+
+  const write = async (v: MixerValue) => {
+    if (!host) return;
+    let rgb: number[] | null = v.space === "RGB" ? v.value : null;
+    if (!rgb) {
+      const c = await client.colorCompute({
+        space: v.space,
+        value: v.value,
+        tint: v.tint < 100 ? v.tint : null,
+      });
+      rgb = hexToRgb(c.rgbHex);
+    }
+    if (!rgb) return;
+    await writeSelectionProperty(
+      host,
+      well === "fill" ? "frameFillColor" : "frameStrokeColor",
+      "element",
+      {
+        type: "swatchColor",
+        value: { space: "RGB", value: rgb.map(Math.round), model: "Process" },
+      } as Value,
+    );
+  };
+
+  const chip = (c: SwatchColorSpec | null) =>
+    c && c.space.toUpperCase() === "RGB"
+      ? `rgb(${c.value.slice(0, 3).join(",")})`
+      : "transparent";
+
+  return (
+    <div
+      className="p-3 flex flex-col gap-3"
+      data-color-panel="ready"
+      data-target="edit-context"
+    >
+      <div className="flex items-center gap-2" role="group">
+        {(["fill", "stroke"] as const).map((w) => (
+          <button
+            key={w}
+            type="button"
+            data-color-well={w}
+            aria-pressed={well === w}
+            disabled={w === "stroke" && !stroke}
+            onClick={() => setWell(w)}
+            className="flex items-center gap-1 text-xs px-2 py-1 rounded border border-input"
+            style={{
+              background: well === w ? "var(--chrome-slot-active)" : undefined,
+            }}
+          >
+            <span
+              className="inline-block w-4 h-4 rounded border border-input"
+              style={{ background: chip(w === "fill" ? fill : stroke) }}
+              data-color-well-chip={w}
+            />
+            {strings.t(w === "fill" ? M.fillWell : M.strokeWell)}
+          </button>
+        ))}
+      </div>
+      <ColorMixer
+        value={shown}
+        showTint={false}
+        onChange={(next) => setMix({ seed, value: next })}
+        onCommit={(next) => {
+          setMix({ seed, value: next });
+          void write(next);
+        }}
+      />
+      <div
+        className="text-[11px]"
+        style={{ color: "var(--pg-muted-fg)" }}
+        data-color-raw-note
+      >
+        {strings.t(M.rawWells)}
+      </div>
+    </div>
+  );
+}
+
+function specToMixer(c: SwatchColorSpec): MixerValue {
+  const space = c.space.toUpperCase();
+  return {
+    space:
+      space === "CMYK"
+        ? "CMYK"
+        : space === "LAB"
+          ? "LAB"
+          : space === "GRAY"
+            ? "Gray"
+            : "RGB",
+    value: [...c.value],
+    tint: 100,
+  };
+}
+
+function DocumentColourPanel() {
   const cockpitActions = useCockpitActions();
   const strings = useStrings();
   const client = useCanvasClient();

@@ -140,6 +140,7 @@ fn nested_create_tree_transform_hit_dissolve_roundtrip() {
                 ElementId::Group("g1".to_string()),
                 ElementId::Rectangle("topA".to_string()),
             ],
+            clip: false,
         })
         .expect("create nested group");
     let outer_id = match outcome.created_id {
