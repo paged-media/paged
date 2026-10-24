@@ -271,6 +271,30 @@
   oracle_tolerance: none (no scalar reference in image-kernels)
   gpu_tolerance_measured: 0
 
+- id: morph.dilate_r
+  fixture: image-conformance/fixtures/vips/morph.dilate_r.v
+  vips: "vips rank A T1 5 5 24 && vips extract_area T1 O 2 2 60 60"
+  oracle_tolerance: none (no scalar reference in image-kernels)
+  gpu_tolerance_measured: 0
+
+- id: morph.erode_r
+  fixture: image-conformance/fixtures/vips/morph.erode_r.v
+  vips: "vips rank A T1 5 5 0 && vips extract_area T1 O 2 2 60 60"
+  oracle_tolerance: none (no scalar reference in image-kernels)
+  gpu_tolerance_measured: 0
+
+- id: rank.median_r
+  fixture: image-conformance/fixtures/vips/rank.median_r.v
+  vips: "vips rank A T1 5 5 12 && vips extract_area T1 O 2 2 60 60"
+  oracle_tolerance: none (no scalar reference in image-kernels)
+  gpu_tolerance_measured: 0
+
+- id: conv.box_r
+  fixture: image-conformance/fixtures/vips/conv.box_r.v
+  vips: "vips conv A T1 box5.mat --precision float && vips extract_area T1 O 2 2 60 60"
+  oracle_tolerance: none (no scalar reference in image-kernels)
+  gpu_tolerance_measured: 47e-5
+
 - id: adjust.exposure
   fixture: image-conformance/fixtures/vips/adjust.exposure.v
   vips: "vips linear A O 1.4142135623730951 1.4142135623730951 1.4142135623730951 1 0 0 0 0"

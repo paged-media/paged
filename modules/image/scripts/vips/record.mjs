@@ -385,6 +385,36 @@ export const ROWS = [
       ["extract_area", "T1", "O", "1", "1", "62", "62"],
     ],
   })),
+  // The runtime-radius forms at r = 2 (a 5×5 neighbourhood, so 60×60
+  // of the 64×64 stimulus has a full window): rank index 24 is the max,
+  // 0 the min, 12 the median of 25.
+  ...[
+    ["morph.dilate_r", "24"],
+    ["morph.erode_r", "0"],
+    ["rank.median_r", "12"],
+  ].map(([id, idx]) => ({
+    id,
+    in: ["unit"],
+    params: { radius: 2 },
+    out: [60, 60],
+    steps: [
+      ["rank", "A", "T1", "5", "5", idx],
+      ["extract_area", "T1", "O", "2", "2", "60", "60"],
+    ],
+  })),
+  {
+    id: "conv.box_r",
+    in: ["unit"],
+    params: { radius: 2 },
+    out: [60, 60],
+    files: {
+      "box5.mat": "5 5 25 0\n" + Array(5).fill("1 1 1 1 1").join("\n") + "\n",
+    },
+    steps: [
+      ["conv", "A", "T1", "box5.mat", "--precision", "float"],
+      ["extract_area", "T1", "O", "2", "2", "60", "60"],
+    ],
+  },
   // ── adjust (opaque stimulus: alpha 1, so premultiplied = straight) ──
   {
     id: "adjust.exposure",

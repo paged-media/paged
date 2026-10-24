@@ -59,6 +59,7 @@ pub mod mip;
 pub mod paths;
 pub mod pixels;
 pub mod psd_vector_mask;
+pub mod readouts;
 pub mod region_filter;
 pub mod retouch;
 pub mod saveback;
@@ -2102,6 +2103,170 @@ mod wasm {
         apply_point_kernel(handle, &RANK_MEDIAN3, MorphParams::new().as_bytes()).await
     }
 
+    /// NOISE — Median / OTHER — Maximum / Minimum AT A RADIUS (`kind`
+    /// "median" | "max" | "min"); `round` picks a disc over the square.
+    /// Radius 1 square runs the 3×3 kernels (the cheapest exact form);
+    /// above it `rank.median_r` (radius ≤ 10) and `morph.dilate_r` /
+    /// `morph.erode_r` (≤ 32). A radius past the bound is REJECTED, not
+    /// clamped: asking for more is asking for a different filter.
+    #[wasm_bindgen]
+    pub async fn apply_rank_radius(
+        handle: u32,
+        kind: &str,
+        radius: u32,
+        round: bool,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::morph::{
+            MorphParams, MorphRadiusParams, MEDIAN_MAX_RADIUS, MORPH_DILATE, MORPH_DILATE_R,
+            MORPH_ERODE, MORPH_ERODE_R, MORPH_MAX_RADIUS, RANK_MEDIAN3, RANK_MEDIAN_R,
+        };
+        let (fixed, wide, bound) = match kind {
+            "median" => (&RANK_MEDIAN3, &RANK_MEDIAN_R, MEDIAN_MAX_RADIUS),
+            "max" => (&MORPH_DILATE, &MORPH_DILATE_R, MORPH_MAX_RADIUS),
+            "min" => (&MORPH_ERODE, &MORPH_ERODE_R, MORPH_MAX_RADIUS),
+            other => {
+                return Err(JsValue::from_str(&format!(
+                    "unknown rank filter \"{other}\" (median | max | min)"
+                )))
+            }
+        };
+        if radius > u32::from(bound) {
+            return Err(JsValue::from_str(&format!(
+                "{kind} radius {radius} is above the kernel's bound of {bound} px"
+            )));
+        }
+        if radius == 1 && !round {
+            return apply_point_kernel(handle, fixed, MorphParams::new().as_bytes()).await;
+        }
+        let params = MorphRadiusParams::new(radius, round);
+        apply_point_kernel(handle, wide, params.as_bytes()).await
+    }
+
+    /// BLUR — Box Blur: the mean of the (2r+1)² square (`conv.box_r`,
+    /// radius ≤ 32; above it is rejected). Radius 0 is the identity.
+    #[wasm_bindgen]
+    pub async fn apply_box_blur(handle: u32, radius: u32) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::conv::{ConvBoxRadiusParams, BOX_MAX_RADIUS, CONV_BOX_R};
+        if radius > u32::from(BOX_MAX_RADIUS) {
+            return Err(JsValue::from_str(&format!(
+                "box blur radius {radius} is above the kernel's bound of {BOX_MAX_RADIUS} px"
+            )));
+        }
+        let params = ConvBoxRadiusParams::new(radius);
+        apply_point_kernel(handle, &CONV_BOX_R, params.as_bytes()).await
+    }
+
+    /// BLUR — Surface Blur: an edge-preserving mean (`conv.surface`,
+    /// radius ≤ 16). `threshold` is in channel units (levels / 255);
+    /// 0 is the identity.
+    #[wasm_bindgen]
+    pub async fn apply_surface_blur(
+        handle: u32,
+        radius: u32,
+        threshold: f32,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::conv::{ConvSurfaceParams, CONV_SURFACE, SURFACE_MAX_RADIUS};
+        if radius > u32::from(SURFACE_MAX_RADIUS) {
+            return Err(JsValue::from_str(&format!(
+                "surface blur radius {radius} is above the kernel's bound of \
+                 {SURFACE_MAX_RADIUS} px"
+            )));
+        }
+        let params = ConvSurfaceParams::new(radius, threshold);
+        apply_point_kernel(handle, &CONV_SURFACE, params.as_bytes()).await
+    }
+
+    /// OTHER — High Pass: the image minus its Gaussian blur of σ
+    /// `radius_px` (≤ 32/3), re-centred on 50 % grey (`conv.high_pass`).
+    #[wasm_bindgen]
+    pub async fn apply_high_pass(handle: u32, radius_px: f32) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::conv::{ConvHighPassParams, CONV_HIGH_PASS};
+        let params = ConvHighPassParams::new(radius_px);
+        apply_point_kernel(handle, &CONV_HIGH_PASS, params.as_bytes()).await
+    }
+
+    /// NOISE — Add Noise (`gen.add_noise`): `amount` 0 is the identity;
+    /// `gaussian` picks the bell over the uniform distribution, `mono`
+    /// one draw for R, G and B. `seed` makes it repeatable (the dialog
+    /// keeps one seed per session, so a preview and its OK agree).
+    #[wasm_bindgen]
+    pub async fn apply_add_noise(
+        handle: u32,
+        seed: u32,
+        amount: f32,
+        gaussian: bool,
+        mono: bool,
+    ) -> Result<DecodedHandle, JsValue> {
+        use image_kernels::families::gen::{GenAddNoiseParams, GEN_ADD_NOISE};
+        let params = GenAddNoiseParams::new(seed, amount, gaussian, mono);
+        apply_point_kernel(handle, &GEN_ADD_NOISE, params.as_bytes()).await
+    }
+
+    /// BLUR — Average: fill the selection (everything without one) with
+    /// the active layer's average colour under it. The mean is a CPU
+    /// readout (`readouts::coverage_mean`, like the histogram); the fill
+    /// is the `gen.solid` kernel through the ordinary fill landing.
+    #[wasm_bindgen]
+    pub async fn apply_average(handle: u32) -> Result<DecodedHandle, JsValue> {
+        let (img, ctx, sel, layered) = fill_prelude(handle)?;
+        let rgba = img.rgba.to_rgba8();
+        let color = crate::readouts::coverage_mean(&rgba, img.width, img.height, sel.as_deref())
+            .ok_or_else(|| JsValue::from_str("nothing is selected to average"))?;
+        let spec = FillSpec::Solid { color };
+        let out = fill_rgba8(&ctx, &img, &spec, sel)
+            .await
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        land_fill(img.width, img.height, out, layered).await
+    }
+
+    /// Curves ▸ Auto: per-channel black and white points of the bound
+    /// image (the composite) clipped at `clip` (0.001 = 0.1 %) — six
+    /// numbers `[rb, rw, gb, gw, bb, bw]` in `[0, 1]`. A readout: the
+    /// curve is built from them glue-side.
+    #[wasm_bindgen]
+    pub fn auto_contrast_levels(handle: u32, clip: f64) -> Result<Vec<f32>, JsValue> {
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        let lv = crate::readouts::auto_contrast_levels(&img.rgba.to_rgba8(), clip);
+        Ok(lv.iter().flatten().copied().collect())
+    }
+
+    /// Image ▸ Trim's rectangle over the bound image (the composite):
+    /// `by` ∈ transparent | top-left | bottom-right. Returns `[x, y, w,
+    /// h]`, or `[]` when the trim would leave nothing.
+    #[wasm_bindgen]
+    pub fn trim_rect(handle: u32, by: &str) -> Result<Vec<u32>, JsValue> {
+        let by = crate::readouts::TrimBy::from_wire(by).ok_or_else(|| {
+            JsValue::from_str(&format!(
+                "unknown trim basis \"{by}\" (transparent | top-left | bottom-right)"
+            ))
+        })?;
+        let img = IMAGES
+            .with(|m| m.borrow().get(&handle).cloned())
+            .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+        Ok(
+            crate::readouts::trim_rect(&img.rgba.to_rgba8(), img.width, img.height, by)
+                .map(|(x, y, w, h)| vec![x, y, w, h])
+                .unwrap_or_default(),
+        )
+    }
+
+    /// The ppi a PNG or JPEG declares (`pHYs`, JFIF density), or
+    /// undefined. Metadata only — read on open for Image Size.
+    #[wasm_bindgen]
+    pub fn read_ppi(bytes: &[u8]) -> Option<f32> {
+        crate::readouts::read_ppi(bytes)
+    }
+
+    /// `bytes` (an encoded PNG or JPEG) declaring `ppi`; any other format
+    /// comes back unchanged. The exporters call it with Image Size's
+    /// resolution.
+    #[wasm_bindgen]
+    pub fn stamp_ppi(bytes: &[u8], ppi: f32) -> js_sys::Uint8Array {
+        js_sys::Uint8Array::from(&crate::readouts::stamp_ppi(bytes, ppi)[..])
+    }
+
     /// OTHER — Maximum (`kind` "max", grey dilation) or Minimum ("min",
     /// grey erosion), 3×3.
     #[wasm_bindgen]
@@ -2891,9 +3056,9 @@ mod wasm {
     //     comment predicted.
     //   * The journal is a PIXEL log: add / remove / reorder / rename /
     //     opacity / blend / visibility are NOT undoable.
-    //   * A crop, resize or straighten changes the EXTENT, so it
-    //     registers a new handle and the stack is re-opened over the
-    //     result — i.e. those commits FLATTEN the stack.
+    //   * Canvas operations (crop, straighten, Image Size, rotate, trim)
+    //     run over the stack in place on the same handle
+    //     (`layers_canvas_op`), so they keep the layers.
 
     struct LayerDoc {
         /// The engine-held image this stack composites into.
@@ -3472,8 +3637,10 @@ mod wasm {
     /// `transform_canvas_gpu`). `op` is "rotate-cw", "rotate-ccw",
     /// "rotate-180", "flip-h", "flip-v", "canvas" (`width`, `height` and
     /// the anchors), "crop" (`x`, `y`, `width`, `height`; `degrees` ≠ 0
-    /// straightens first) or "resample" (`width`, `height`, `filter` ∈
-    /// nearest | mitchell | lanczos3). Unused arguments are ignored.
+    /// straightens first), "resample" (`width`, `height`, `filter` ∈
+    /// nearest | mitchell | lanczos3) or "rotate" (`degrees`, positive
+    /// clockwise: the canvas grows to the rotated bounds). Unused
+    /// arguments are ignored.
     ///
     /// The bound image takes the new extent and the composite IN PLACE —
     /// the handle stays. Its mip pyramid goes; the selection is dropped
@@ -3521,6 +3688,10 @@ mod wasm {
                 height,
                 degrees,
             },
+            // Image ▸ Image Rotation ▸ Arbitrary (positive = clockwise);
+            // a quarter or half turn is the exact op.
+            "rotate" => CanvasOp::rotation(degrees)
+                .ok_or_else(|| JsValue::from_str("a whole turn leaves the canvas as it is"))?,
             "resample" => CanvasOp::Resample {
                 width,
                 height,
@@ -3533,13 +3704,16 @@ mod wasm {
             other => {
                 return Err(JsValue::from_str(&format!(
                     "unknown canvas operation \"{other}\" (rotate-cw | rotate-ccw | \
-                     rotate-180 | flip-h | flip-v | canvas | crop | resample)"
+                     rotate-180 | flip-h | flip-v | canvas | crop | resample | rotate)"
                 )))
             }
         };
         let deselect = matches!(
             op,
-            CanvasOp::Crop { .. } | CanvasOp::Straighten { .. } | CanvasOp::Resample { .. }
+            CanvasOp::Crop { .. }
+                | CanvasOp::Straighten { .. }
+                | CanvasOp::Resample { .. }
+                | CanvasOp::RotateArbitrary { .. }
         );
         let ctx = GPU.with(|g| g.borrow().clone());
         with_stack_async(|mut doc| async move {
