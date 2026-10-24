@@ -66,6 +66,7 @@ fn as_is(bytes: &[u8]) -> ExportPlan {
                 hidden: s.hidden,
                 notes: notes_of(s),
                 content_edited: false,
+                ..SlidePlan::default()
             })
             .collect(),
     }
@@ -196,9 +197,11 @@ fn edited_content_and_foreign_pages_are_reported() {
         hidden: false,
         notes: None,
         content_edited: false,
+        ..SlidePlan::default()
     });
     let out = export(&bytes, &plan).unwrap();
-    assert_eq!(out.diagnostics.len(), 2, "{:?}", out.diagnostics);
+    assert_eq!(out.diagnostics.len(), 1, "{:?}", out.diagnostics);
+    assert_eq!(out.not_exported.len(), 1, "{:?}", out.not_exported);
 }
 
 /// Every part of a package, by name.
