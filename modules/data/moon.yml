@@ -36,6 +36,8 @@ fileGroups:
     - "/engine/core/crates/paged-data-*/**/*.rs"
     - "/engine/core/crates/paged-data-*/Cargo.toml"
     - "/engine/core/crates/paged-data-core/functions/*.yaml"
+    - "/engine/core/crates/paged-action/**/*.rs"
+    - "/engine/core/crates/paged-action/Cargo.toml"
 
 tasks:
   js-test:
