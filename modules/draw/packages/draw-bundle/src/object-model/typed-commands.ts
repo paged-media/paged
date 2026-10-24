@@ -70,6 +70,9 @@ import {
   PATH_TYPE_ALIGNMENTS,
 } from "../commands/text-on-path";
 import type { TraceOptions } from "../trace-engine";
+import { TRACE_PRESET_IDS } from "../commands/trace-presets";
+import { RECOLOR_MODES } from "../commands/recolor";
+import { HARMONY_RULES } from "@paged-media/draw-geometry";
 import {
   BOOL,
   COLOR,
@@ -171,7 +174,7 @@ const POLAR_GRID: Record<keyof PolarGridParams, ValueType> = {
   radials: INT,
 };
 const TRACE: Record<keyof TraceOptions, ValueType> = {
-  mode: enumOf(["color", "bw"]),
+  mode: enumOf(["color", "bw", "centerline"]),
   pathMode: enumOf(["spline", "polygon"]),
   colorPrecision: INT,
   filterSpeckle: INT,
@@ -185,6 +188,13 @@ const TRACE: Record<keyof TraceOptions, ValueType> = {
   maxRegions: INT,
   maxTracePixels: INT,
   stacked: BOOL,
+  maxColors: INT,
+  grayscale: BOOL,
+};
+/** The trace's preset and live flag (WP6.6) beside its options. */
+const TRACE_EXTRA: Fields = {
+  preset: enumOf(TRACE_PRESET_IDS),
+  live: BOOL,
 };
 const CAP = enumOf(["butt", "round", "square"]);
 const JOIN = enumOf(["miter", "round", "bevel"]);
@@ -526,8 +536,30 @@ export const TWINS: readonly TwinSpec[] = [
     { ...T, all: BOOL },
     { result: { kind: "list", of: TEXT } },
   ),
-  // Image trace — the full option set.
-  twin("imageTrace", { ...T, ...TRACE }),
+  // Image trace — the full option set, a preset and the live flag; the
+  // re-trace takes the same (options it does not name keep the record's),
+  // and the "…" raiser none.
+  twin("imageTrace", { ...T, ...TRACE, ...TRACE_EXTRA }),
+  twin("retraceImage", { ...T, ...TRACE, ...TRACE_EXTRA }),
+  twin("imageTraceOptions", {}),
+  // Recolor Artwork (WP6.5) — the request as data; the colour map as a
+  // list of { from: swatch id, to: hex or swatch id }.
+  twin("recolorArtwork", {
+    ...T,
+    mode: enumOf(RECOLOR_MODES),
+    rule: enumOf(HARMONY_RULES),
+    base: TEXT,
+    rotate: DEG,
+    recolorNeutrals: BOOL,
+    count: INT,
+    colorGroup: TEXT,
+    map: {
+      kind: "list",
+      of: { kind: "struct", fields: { from: TEXT, to: TEXT } },
+    },
+  }),
+  twin("recolorArtworkOptions", {}),
+  twin("applyGuideColor", { ...T, hex: TEXT, stroke: BOOL }),
 ];
 
 /** The args schema of a twin. */
