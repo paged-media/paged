@@ -20,15 +20,14 @@
 // opacity masks; clip/invert masks") over the C-28 protocol-58 ops.
 //
 // ====================================================================
-// READ THIS FIRST — THE MASK IS NOT VISIBLE ON CANVAS.
+// READ THIS FIRST — THE MASK RENDERS ON CANVAS AND IN PDF ALIKE.
 // ====================================================================
-// The engine honours the mask in the CPU rasterizer and in PDF EXPORT.
-// It does NOT honour it in the Vello/WebGPU backend the editor canvas
-// draws through, because Vello's `push_layer` takes a SHAPE, not a
-// coverage buffer — there is nowhere to hand it a continuous alpha
-// field. So today, applying a mask makes the mask ARTWORK disappear
-// (it leaves the page's z-order — that part IS visible) and the masked
-// artwork is modulated on screen exactly as it is in the exported PDF.
+// The engine honours the mask in the CPU rasterizer, in the Vello/WebGPU
+// backend the editor canvas draws through (a luminosity mask through
+// `Scene::push_luminance_mask_layer`, an alpha mask by `DestIn`) and in
+// PDF export. Applying a mask takes the mask ARTWORK out of the page's
+// z-order, and the masked artwork is modulated on screen exactly as it
+// is in the exported PDF.
 //
 // HISTORY, kept because it is the more useful part: this module shipped
 // with the opposite claim in three user-reachable places — the command

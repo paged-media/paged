@@ -22,9 +22,10 @@ wasm-bindgen surface). The built artifact lands in
 `packages/draw-bundle/wasm/`, which is BOTH the manifest-relative path
 declared under `capabilities.wasm[]` and the path `src/trace-engine.ts`
 imports — one copy, so the manifest/package drift that bit paged.image
-cannot happen here. `scripts/build-wasm.sh` builds it; the artifact is
-COMMITTED so a fresh checkout tests and typechecks with no Rust
-toolchain.
+cannot happen here. `scripts/build-wasm.sh` (`moon run draw:wasm`) builds
+it; the artifact is BUILD OUTPUT, gitignored since the monorepo
+(`packages/draw-bundle/wasm/trace_js*`), and CI builds it before the
+specs that boot it.
 
 `draw-bundle` is past "skeleton" — `activate(host)` contributes a full
 toolset via `contributeTool` (the Add/Delete/Convert anchor editors in
@@ -157,13 +158,12 @@ stroke panel raised, Esc pops out). The bundle drives end-to-end through the rea
 the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
-and stroke through the bundle. The three TS packages carry 2 652 passing
-tests (vitest then, bun test since B7) against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
-skipped — 27 of them the InDesign round-trip generator, which runs only
-with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
-page-only cases of the spread-space fake engine, 1 the older-engine
-Create Outlines refusal) and typecheck clean; the two crates carry 26 `cargo test` (draw-trace 22,
-trace-js 4).
+and stroke through the bundle. The three TS packages run under `bun test`
+against the in-tree engine wasm (`@paged-media/canvas-wasm`, `workspace:*`)
+and typecheck clean; the crates run under `cargo nextest`. `moon run
+draw:test` runs both and prints the counts; the skipped specs are opt-in
+lanes (the InDesign round-trip generator behind `PAGED_ROUNDTRIP_WRITE`,
+the real SVG corpus, and fake-engine cases).
 
 **ONE SHARED KERNEL, AND ONLY ONE.** §16.2 (blend spines) and §16.3
 (objects on a path) landed together, so the "is there a common placement
@@ -239,13 +239,15 @@ used. That is the argument against writing the next one.
 
 Two honesty facts these rows carry, and neither may be softened:
 
-- **An opacity mask does NOT render on canvas.** Core honours it in the
-  CPU rasterizer and in PDF export, but NOT in the Vello/WebGPU backend
-  the editor draws through (`push_layer` takes a shape, not a coverage
-  buffer). So there is deliberately no panel, no overlay and no preview:
-  the command TITLE carries the gap (the `pattern.ts` precedent), the
-  success log repeats it, and `OPACITY_MASK_CANVAS_NOTE`'s wording is
-  pinned by a conformance test.
+- **An opacity mask renders on canvas and in PDF alike.** This bullet
+  used to say the opposite: that the Vello/WebGPU backend could not
+  honour a mask because `push_layer` takes a shape. The premise was
+  false: core's Vello path draws a luminosity mask through
+  `Scene::push_luminance_mask_layer` and an alpha mask by `DestIn`
+  (`engine/core/crates/paged-gpu/src/vello_rs.rs`), matching the CPU
+  rasterizer. `OPACITY_MASK_CANVAS_NOTE` says so, and its wording is
+  pinned by `test/headless/opacity-mask.spec.ts` (it must name canvas,
+  PDF and byte-for-byte, and must not say UNMASKED or EXPORT ONLY).
 - **Type on a Path FLOWS AN EXISTING STORY.** No wire op mints a bare
   story (`insertTextFrame` mints one BOUND to its frame, and a flowed
   story is refused), so the attach resolves a FREE story — empty frame
@@ -275,8 +277,8 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   UPDATE 2026-10-04: `k` now belongs to the Live Paint Bucket, its
   canonical key; the host's working Eyedropper holds `i` and paged.image
   took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
-  (`shift+d`) stay where they are. Free now: `shift+o` and `shift+z`
-  (which reads as an undo variant and stays a trap).
+  (`shift+d`) stay where they are. Free now: `shift+o` only; paged.image
+  has since taken `shift+z` for its raster type tool.
 
 **`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-
@@ -577,7 +579,7 @@ else on nesting:
 bun install && bun run test && bun run typecheck
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
-# The Rust half (only needed when crates/ changes — the artifact is committed)
+# The Rust half (the wasm is build output: run build-wasm.sh before specs that boot it)
 moon run draw:test        # Rust (nextest + doctests) and the TS tests, from anywhere
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace     # the Rust tests without Moon

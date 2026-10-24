@@ -1,8 +1,7 @@
 # Status
 
-What `paged.image` ships and what it does not, read from the code at commit `f7d21e5`
-(`@paged-media/image` 0.1.0-canary.16), with the changes of 2026-10-04 noted where they
-landed. How the parts fit is in
+What `paged.image` ships and what it does not, read from the code on `main`, 2026-10-24, at
+`@paged-media/image` 0.1.0-canary.21 (manifest version 0.1.0). How the parts fit is in
 [`architecture.md`](architecture.md).
 
 ## Shipped
@@ -29,13 +28,16 @@ landed. How the parts fit is in
   scratches, offset, lens blur, reduce noise, smart sharpen, selective colour, median,
   maximum and minimum (3×3), colour lookup from a `.cube` file, shape blur; gradient (foreground
   to background), noise, solid, pattern and content-aware fills; Define pattern; the paint
-  bucket; a gradient tool (drag the line); red-eye removal.
+  bucket; a gradient tool (drag the line) in five geometries, linear, radial, angular,
+  reflected and diamond (a tool option and the colour section's choice); red-eye removal.
 - **Selection.** Rectangle and ellipse marquee, lasso, polygonal lasso, magic wand and
   quick selection, combined by add, subtract and intersect; select all, deselect, invert,
   feather; expand, contract, border and smooth; wand and bucket tolerance and contiguity;
   a channel as selection; selection to path and path to selection.
 - **Colour.** Foreground and background colour, swap, black and white, a picker; Alt-click
-  with a paint tool samples the image.
+  with a paint tool or the bucket samples the composite, a 3×3 average. The session's
+  eyedropper (`sampleColor`, `glue/src/color-state.ts`) takes a point, 3×3 or 5×5 sample into
+  the foreground or the background.
 - **Paint, retouch, type.** Brush, pencil, eraser, clone stamp and healing brush on the
   active layer; dodge and burn by tonal range (shadows, midtones, highlights) with an
   exposure, and the sponge (saturate or desaturate at the brush's flow) — filter strokes
@@ -54,7 +56,9 @@ landed. How the parts fit is in
   (convert, re-render at a scale); bake the chain into a layer. One undo list covers pixel
   edits and every change to the stack ([ADR 463](adr/463-one-undo-list.md)); in the
   `rasterImage` context, entered by double-clicking an ingested frame, the host's undo
-  reaches it and the host's Layers panel shows this stack.
+  reaches it and the host's Layers panel shows this stack. The Image panel's history list
+  shows every step, oldest first, with the current position marked; a click walks the journal
+  to that step.
 - **Commit and reopen.** "Commit image edits to the document" stores the layers in the
   document's parts and puts their composite in the frame, as one document undo step;
   reopening the frame restores the layers ([ADR 462](adr/462-sessions-persist-in-parts.md)).
@@ -66,6 +70,19 @@ landed. How the parts fit is in
   writer reproduces the input bytes (`image-psd/tests/it/roundtrip.rs`). A session with more
   than one layer exports as a layered PSD (pixel layers, masks, groups, opacity, blend,
   visibility, clipping); with adjustment layers it is flattened, and says so.
+- **Panels, menu, shortcuts, language.** Beside the "Image" panel, an "Image properties"
+  schema panel shows the selected frame's layer stack as property rows the host renders over
+  `host.objects` (a layer list, then the picked layer's mask, adjustment and smart-object
+  fields; `glue/src/panels/properties-panel.ts`). In the `rasterImage` context the bundle
+  answers the host's Layers panel (the raster stack, groups as tree rows) and, while the type
+  tool is in hand, the host's Character panel, whose raster-type settings are writable
+  (`glue/src/binding-provider/`). A top-level `Image` menu carries the commands; the
+  selection-to-path pair sits in `Edit` (`glue/src/menu.ts`). Tool shortcuts: crop `shift+x`,
+  rectangle and ellipse marquee `y` / `shift+y`, lasso `shift+l` (the polygonal lasso shares
+  it), magic wand `shift+w`, brush `q`, pencil `shift+f`, eraser `shift+e`, clone stamp
+  `shift+t`, healing brush `j`, raster type `shift+z`; the other tools share a slot and have
+  none (`glue/src/activate.ts`). The bundle's strings have a German translation
+  (`glue/locales/de.json`).
 - **Save-back and tiles.** "Apply to file" encodes the adjusted result as PSD, PNG or JPEG
   and "Save the adjusted file" hands it to the host's save door; three exporters offer the
   same formats. "Serve image tiles to the renderer" claims the frame's image resource.
@@ -83,6 +100,10 @@ frame keeps its previous image until a GPU realm re-composites it.
   none is computed). The typed `rotateCw`, `rotateCcw`, `rotate180`, `flipHorizontal` and
   `flipVertical` take an optional `image`; `cropImage` and `canvasSize` are new. A stack
   holding a smart object is refused (its source re-renders on the GPU).
+- **A typed `replaceLayerPixels`** `{ layer, source }` replaces a pixel layer's pixels from
+  an asset (a data: URL, or the address of a page item whose placed image supplies them),
+  placed as is and centred, in one undo step; it is the layer kind's `pixelSource` row
+  (`object-model/contribute.ts`, `image-objects.ts`).
 - **A typed `applyAdjustment`** `{ image, name?, params }` adds one adjustment layer with
   the given parameters, named, in one undo step.
 - **A filter on a region.** The typed `filterRegion`
@@ -165,9 +186,9 @@ the baked image), beside the module's own label on the frame.
   rendering-intent control. Kernels receive encoded values.
 - **Depth.** A 16-bit RGB or RGBA PNG decoded on the main thread is held at 16 bits. The
   decode worker returns RGBA8, a 16-bit PSD is reduced to 8 bits, and a 16-bit greyscale
-  PNG is refused (`image-js/src/ingest.rs:585-606`). `layers_open` (`image-js/src/lib.rs:2550`)
-  and the panel's chain (`image-js/src/ingest.rs:1109`) take the held buffer as four bytes
-  per pixel; `LayerStack::from_image_px`, which keeps the depth, is called only by tests.
+  PNG is refused (`image-js/src/ingest.rs:812-831`; the PSD composite at `:745-765`).
+  `layers_open` (`image-js/src/lib.rs:3015`) and the panel's chain (`adjust_rgba8`,
+  `image-js/src/ingest.rs:1376`) take the held buffer as four bytes per pixel; `LayerStack::from_image_px`, which keeps the depth, is called only by tests.
   The scene-layer item, tiles and PSD save-back are 8-bit. A curve is a 256-entry table.
 - **PSD.** The composite decode takes 8- and 16-bit RGB, greyscale or CMYK, raw or RLE (not
   16-bit RLE); other modes and depths are refused, and a transparent document's white-matted

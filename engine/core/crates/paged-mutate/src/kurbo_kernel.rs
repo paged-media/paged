@@ -32,8 +32,9 @@
 //!     offset opens (bevel from exact per-segment parallels, miter and
 //!     round from the stroker's two sides at `2·|delta|`), every
 //!     candidate resolved through the flo_curves boolean kernel.
-//!     Open-path offset is deliberately deferred (engine validates
-//!     closed-only).
+//!     An open path, or one of several subpaths, is not offset here:
+//!     the apply arm sends it to [`outline_stroke`] at `2·|delta|` with
+//!     a butt cap, a closed two-sided band (ADR 004, amendment §2).
 //!   - [`nearest_point_on_path`] — closest point on the path's
 //!     cubics (B-06): collapses the third TS copy of `closestTOnCubic`
 //!     once exposed as a worker query.
