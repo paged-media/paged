@@ -523,3 +523,111 @@ describe("paged.draw tools through the gesture DSL — live constructs", () => {
     await oneUndoStep(r, before);
   });
 });
+
+describe("paged.draw tools through the gesture DSL — WP6.1 part 2 [plugin-draw.tool-wave-3]", () => {
+  it("Reflect: a click sets the axis point, a drag reflects the selection across the axis, as one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.reflect");
+    const { r, g } = rig([A]);
+    await arm(r, g, `${T}.reflect`);
+    const before = r.picture();
+    await g.click([350, 200]).settle();
+    expect(r.sent()).toEqual([]);
+    await slowDrag(g, [350, 210], [350, 280]);
+    expect(paths(r.leaves())).toEqual(["frameTransform"]);
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.reflect`, [A], [350, 210], [350, 280]);
+  });
+
+  it("Reshape: dragging an anchor writes the reshaped table in one framePath batch, one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.reshape");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.reshape`);
+    const before = r.picture();
+    await slowDrag(g, [250, 650], [250, 600]);
+    await g.settle(); // the commit waits on the path read the press made
+    expect(paths(r.leaves())).toEqual(["framePath", "frameBounds"]);
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.reshape`, [], [250, 650], [250, 600]);
+  });
+
+  it("Shaper: a drawn triangle becomes one closed three-corner path, one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.shaper");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.shaper`);
+    const before = r.picture();
+    await g
+      .drag({
+        from: [600, 100],
+        to: [601, 103],
+        via: [
+          [680, 230],
+          [520, 230],
+          [600, 100],
+        ],
+        steps: 12,
+      })
+      .settle();
+    const insert = r.leaves().find((m) => m.op === "insertPath") as {
+      args: { anchors: unknown[]; open: boolean };
+    };
+    expect(insert.args.anchors).toHaveLength(3);
+    expect(insert.args.open).toBe(false);
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.shaper`, [], [600, 100], [680, 230]);
+  });
+
+  it("Path Eraser: a drag across the line splits it — the far piece inserted, the line rewritten — one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.pathEraser");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.pathEraser`);
+    const before = r.picture();
+    await g.drag({ from: [490, 250], to: [510, 250], steps: 4 }).settle();
+    const ops = leafOps(r.leaves());
+    expect(ops[0]).toBe("insertPath");
+    expect(paths(r.leaves())).toContain("framePath");
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.pathEraser`, [], [490, 250], [510, 250]);
+  });
+
+  it("Join: a scrub over an open path's two ends closes it, one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.join");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.join`);
+    const before = r.picture();
+    await g.drag({ from: [95, 498], to: [405, 498], steps: 8 }).settle();
+    expect(leafOps(r.leaves())).toEqual(["closePath"]);
+    expect(r.steps()).toBe(1);
+    await r.undo();
+    expect(r.picture()).toBe(before);
+    await cancelCommitsNothing(`${T}.join`, [], [95, 498], [405, 498]);
+  });
+
+  it("Star: a drag inserts a closed 2·points path, one undo step; Escape commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.star");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.star`);
+    const before = r.picture();
+    await g.drag({ from: [600, 600], to: [600, 560], steps: 4 }).settle();
+    const insert = r.leaves().find((m) => m.op === "insertPath") as {
+      args: { anchors: unknown[]; open: boolean };
+    };
+    expect(insert.args.anchors).toHaveLength(10);
+    expect(insert.args.open).toBe(false);
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.star`, [], [600, 600], [600, 560]);
+  });
+
+  it("Flare: two drags insert the flare's parts grouped in one batch, one undo step; Escape in the first drag commits nothing", async () => {
+    covers("tool:media.paged.draw.tool.flare");
+    const { r, g } = rig([]);
+    await arm(r, g, `${T}.flare`);
+    const before = r.picture();
+    await g.drag({ from: [450, 600], to: [480, 600], steps: 4 }).settle();
+    expect(r.sent()).toEqual([]);
+    await g.drag({ from: [500, 700], to: [520, 720], steps: 4 }).settle();
+    expect(r.sent()).toHaveLength(1);
+    expect(leafOps(r.leaves()).at(-1)).toBe("createGroup");
+    await oneUndoStep(r, before);
+    await cancelCommitsNothing(`${T}.flare`, [], [450, 600], [480, 600]);
+  });
+});

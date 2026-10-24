@@ -54,6 +54,7 @@ import {
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
+import { covers } from "@paged-media/test-kit";
 
 const RECT = {
   kind: "rectangle",
@@ -408,5 +409,33 @@ describe("draw conformance — Select-same WP6.1 criteria and Global Edit [plugi
     } finally {
       await h.host.document.undo();
     }
+  });
+
+  it("each WP6.1 criterion and Global Edit run as typed COMMANDS: each answers the selection it made", async () => {
+    const C = "media.paged.draw.command";
+    const run = async (name: string, args: Record<string, unknown> = {}) => {
+      const r = (await h.objects.invoke(`${C}.${name}`, {
+        targets: [`polygon:${String(POLY.id)}`],
+        ...args,
+      })) as string[];
+      return r.map((a) => a.split(":").at(-1)!).sort();
+    };
+    covers("command:media.paged.draw.command.selectSameOpacity");
+    expect(await run("selectSameOpacity")).toContain(String(POLY.id));
+    covers("command:media.paged.draw.command.selectSameBlendMode");
+    expect(await run("selectSameBlendMode")).toContain(String(POLY.id));
+    covers("command:media.paged.draw.command.selectSameAppearance");
+    expect(await run("selectSameAppearance")).toContain(String(POLY.id));
+    covers("command:media.paged.draw.command.selectSameShapeKind");
+    expect(await run("selectSameShapeKind")).toEqual([String(POLY.id)]);
+    covers("command:media.paged.draw.command.selectSameGraphicStyle");
+    // No style link: the reference alone, or nothing (as above).
+    expect((await run("selectSameGraphicStyle")).length).toBeLessThanOrEqual(1);
+    covers("command:media.paged.draw.command.selectSameSymbolInstance");
+    expect((await run("selectSameSymbolInstance")).length).toBeLessThanOrEqual(1);
+    covers("command:media.paged.draw.command.globalEdit");
+    expect(await run("globalEdit", { tolerance: 0.5, anySize: false })).toEqual([
+      String(POLY.id),
+    ]);
   });
 });

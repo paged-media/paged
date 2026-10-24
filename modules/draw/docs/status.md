@@ -29,8 +29,28 @@ canary added is under [Releases](#releases).
   Builder, Corner Radius (on rotated and transformed shapes too), Eyedropper, Lasso Select
   (by intersection, or by centre), Live Paint Bucket and Live Paint Selection, Type on a
   Path, Repeat, Knife, and Scissors at any point on a path.
-- **Tool options.** Paintbrush, Blob Brush, Eraser, Width and Lasso Select publish
-  their settings to the host's tool-options popover.
+- **WP6.1 tools (keyless, in the host's flyouts).** In the Transform flyout: **Reflect**
+  (a click sets the axis point, a drag turns the axis with a live preview and reflects the
+  selection, Alt at release reflects a copy, Shift snaps to 45°; Alt+click opens the Path
+  Options Reflect section about that point) and **Reshape** (press on a path, on an anchor or
+  on a segment, where an anchor is added, and drag: the contour follows with a cosine falloff
+  along the path, the radius a tool option). In the Pencil flyout: **Shaper** (a freehand
+  line, rectangle, ellipse, triangle or regular polygon is recognised and drawn clean; a
+  scribble over overlapping shapes merges the regions it crosses, or punches out the one
+  region it stays inside, through the Shape Builder's commit), **Path Eraser** (removes the
+  part of a stroke the drag covers; a closed path opens, the far pieces become separate
+  paths painted like it, a path erased whole is deleted) and **Join** (a scrub over the gap
+  between two open ends joins them with a straight segment, over one path's two ends closes
+  it, over the overhangs of two crossing paths trims both at the crossing and joins them
+  there). In the Shape flyout: **Star** (Radius 1 to the pointer, Radius 2 by a ratio, Arrow
+  Up and Down change the points during the drag, a click opens the Star section at that
+  centre) and **Flare** (two drags: size, then the rings' end; centre, halo, rays and rings
+  as one group). Each is one undo step. The pure halves are draw-geometry (`simplify-fit`,
+  `path-locate`, `path-erase`, `reshape`, `star`, `shaper`) and draw-tools (`ScrubMachine`,
+  `ReflectMachine`, `ReshapeMachine`, `StarMachine`, `FlareMachine`).
+- **Tool options.** Paintbrush, Blob Brush, Eraser, Width, Lasso Select, Reshape (falloff
+  radius) and Star (points, Radius 2 as a percentage) publish their settings to the host's
+  tool-options popover.
 - **Snapping.** Curvature asks the engine through `host.document.snapPoint`: the point
   snaps against every visible element's anchors, centres and outlines, the page, ruler
   guides and the grid, with the session's tolerance. It uses the snapper the host's Pen
@@ -56,7 +76,7 @@ canary added is under [Releases](#releases).
   and text frames; Select same fill, stroke, stroke weight (with a tolerance), opacity,
   blending mode, appearance, graphic style, symbol instance or shape kind, and Global Edit
   (select every object of the same shape, optionally at any size); Insert arc,
-  spiral, rectangular grid and polar grid; Reflect (horizontal, vertical, a typed axis, and
+  spiral, rectangular grid, polar grid, star and flare; Reflect (horizontal, vertical, a typed axis, and
   a copy) and Transform again; a dash editor; a width profile (start, middle and end widths)
   that replaces each selected open path with its outline. Parameters are typed in a Path
   Options panel, which the menu's "…" entries open. Reflect writes a group's transform in the frame of the
@@ -82,7 +102,14 @@ canary added is under [Releases](#releases).
   The paths land where the image is displayed: the trace follows the image's own placement
   in its frame, and only the part the frame shows is traced.
 - **SVG.** An importer for `.svg` files and an exporter for the selection.
-- **Menu.** 90 commands have menu entries on a host that offers the menu door.
+- **Simplify with a live preview.** While the Path Options Simplify section is open, the
+  simplified selection is drawn dashed over the canvas with its anchor counts, following
+  every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
+  as corners; with one set, Simplify writes exactly the previewed fit (`framePath`), with
+  none it is the engine's `simplifyPath` as before and the preview is the same fit, which can
+  keep a slightly different number of anchors (the panel says so). A simplify never adds
+  anchors.
+- **Menu.** 92 menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -130,11 +157,15 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
   checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
   `doc > plugin:media.paged.draw/repeat` select.
-- **Typed commands.** 102 of the 112 commands have a typed twin with the same id; the ten
+- **Typed commands.** 117 of the 127 commands have a typed twin with the same id; ten
   Path Options "…" commands, which only raise a panel, are the untyped remainder. The
   Knife, Scissors and Shape Builder, tools before, are commands too, their gesture given as
   data: `knife { page, cut }`, `scissorsAt { point, tolerance }` and
   `shapeBuild { path, mode }` act on their `targets` as the tool would, in one undo step,
+  and so are the WP6.1 tools: `joinScrub { page, path, tolerance }`,
+  `pathErase { page, path, width }`, `reshapeAt { point, to, radius, tolerance }`,
+  `shaperStroke { page, path }`, `insertStar` and `insertFlare` (every parameter);
+  `simplifyPath` takes `cornerAngle` and the Reflect commands a page-space `pivot`,
   and a cut that does nothing fails with its reason (`commands/cut-commands.ts`). A
   scripted Shape Builder refuses ovals (the tool reads them through stand-ins).
 - **Width profile.** `widthProfile { targets, widths }` is the Width tool's bake with the
@@ -250,6 +281,19 @@ panel of these rows. The fields:
 
 ## Limits of what is shipped
 
+- **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one
+  the engine simplifies and no engine door answers its result before writing. Join welds
+  through the engine's `joinPaths`, which joins the two paths' own coordinates, so paths
+  with different transforms are refused by name, only open single-contour paths take part,
+  and a gap is closed with a straight segment (no extension along the paths' tangents). The
+  Path Eraser skips compound paths and erases a fixed 10 px band. Reshape's falloff is
+  measured along the anchor polygon. Star, Flare and the Shaper's shapes are plain paths, not
+  live shapes (that is WP6.2); a flare is artwork, not a re-editable flare object, painted
+  white (`Color/Paper`) with opacity and a radial gradient feather on the halo, in Normal
+  blending and without Illustrator's tints. The Shaper's scribble acts on polygons and
+  rectangles (ovals take part only through the Shape Builder tool). A click with Star or
+  Flare, and an Alt+click with Reflect, open their Path Options section; on a host that
+  cannot raise a panel they insert or reflect with the last-used values instead.
 - **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
   objects on a path and live-paint fills it feeds, in the edit's undo step (above). Symbol
   instances do not follow a changed definition until Redefine or Reset. A script's edits are
