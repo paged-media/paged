@@ -408,7 +408,7 @@ impl CanvasOp {
     /// area). `(w, h)` is the INPUT extent. Exact ops only; the
     /// resampling ops have no single source pixel and answer `None`
     /// (they never reach the CPU remap).
-    fn source(&self, x: u32, y: u32, w: u32, h: u32) -> Option<(u32, u32)> {
+    pub(crate) fn source(&self, x: u32, y: u32, w: u32, h: u32) -> Option<(u32, u32)> {
         match *self {
             CanvasOp::RotateCw => Some((y, h - 1 - x)),
             CanvasOp::RotateCcw => Some((w - 1 - y, x)),

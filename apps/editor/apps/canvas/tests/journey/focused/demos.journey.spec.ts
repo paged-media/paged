@@ -32,7 +32,7 @@ test.describe("journey · embedding demos", () => {
     page,
   }) => {
     await page.goto("/demos/index.html");
-    await expect(page.locator("main.gallery a")).toHaveCount(12);
+    await expect(page.locator("main.gallery a")).toHaveCount(14);
   });
 
   test("business card: fill a field, Submit hands the values to the host @feat:editor-shell.solo-mode @level:happy", async ({
@@ -214,5 +214,83 @@ test.describe("journey · embedding demos", () => {
     await expect(right.locator('[data-field-input="name"]')).toHaveValue(
       "Grace Example",
     );
+  });
+  test("price list: module fields fill through their modules, the rest is refused @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/price-list.html");
+    await ready(page);
+    const values = page.locator("[data-demo-values]");
+    await expect(values).toContainText('"offer": "Figs"', { timeout: 30_000 });
+
+    // paged.sheet: a cell (a choice) and a range (a table).
+    await page.locator('[data-field-input="offer"]').selectOption("Pears");
+    await expect(values).toContainText('"offer": "Pears"', { timeout: 15_000 });
+    const price = page.locator('[data-field-cell="prices:3:1"]');
+    await price.fill("7.25");
+    await price.blur();
+    await expect(values).toContainText('"7.25"', { timeout: 15_000 });
+
+    // paged.doc: the bookmarked paragraph of the placed Word document.
+    const note = page.locator('[data-field-input="note"]');
+    await note.fill("Prices per kilogram.");
+    await note.press("Enter");
+    await expect(values).toContainText('"note": "Prices per kilogram."', {
+      timeout: 15_000,
+    });
+
+    // paged.draw: the band's fill, one of the template's swatches.
+    await page
+      .locator('[data-field-input="accent"]')
+      .selectOption({ label: "Berry" });
+    await expect(values).toContainText("Berry", { timeout: 15_000 });
+    await expect(page.locator("[data-field-problem]")).toHaveCount(0);
+
+    // Outside the fields the engine refuses the filler.
+    await page.locator("[data-demo-try-title]").click();
+    await expect(page.locator("[data-demo-refusal]")).toContainText("refused", {
+      timeout: 15_000,
+    });
+  });
+
+  test("print-ready PDF: the checks list findings, an error blocks the export, a PDF/X-4 comes out @feat:editor-shell.solo-mode @level:happy", async ({
+    page,
+  }) => {
+    await page.goto("/demos/print-pdf.html");
+    await ready(page);
+    const verdict = page.locator("[data-demo-verdict]");
+    await page.locator("[data-demo-check]").click();
+    await expect(verdict).toContainText("ready to print", { timeout: 30_000 });
+
+    // A name too long for its line: listed as an error, and Submit exports
+    // nothing.
+    const name = page.locator('[data-field-input="name"]');
+    await expect(name).toBeVisible({ timeout: 15_000 });
+    await name.fill("Maximiliane Alexandra Rosenkranz");
+    await name.press("Enter");
+    const submit = page.locator('[data-region-command="paged.host.submit"]');
+    await submit.click();
+    await expect(
+      page.locator('[data-demo-findings] [data-demo-finding="error"]'),
+    ).toContainText("Name does not fit", { timeout: 30_000 });
+    await expect(page.locator("[data-demo-pdf]")).toContainText("Not exported");
+
+    await name.fill("Grace Example");
+    await name.press("Enter");
+    await submit.click();
+    const link = page.getByText("Download business-card.pdf");
+    await expect(link).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator("[data-demo-pdf]")).toContainText("PDF/X-4");
+    const pdf = await link.evaluate(async (a) => {
+      const bytes = new Uint8Array(
+        await (await fetch((a as HTMLAnchorElement).href)).arrayBuffer(),
+      );
+      let text = "";
+      for (const b of bytes) text += String.fromCharCode(b);
+      return text;
+    });
+    expect(pdf.startsWith("%PDF-")).toBe(true);
+    expect(pdf).toContain("/OutputIntent");
+    expect(pdf).toContain("GTS_PDFX");
   });
 });

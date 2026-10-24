@@ -117,7 +117,11 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
       args({ mode: "editable" }),
     );
     expect(validateValue(IMPORT_PDF_RESULT_TYPE, out)).toBeNull();
-    expect(out).toEqual({ mode: "editable", pageCount: sourcePages });
+    expect(out).toEqual({
+      mode: "editable",
+      pageCount: sourcePages,
+      sourcePageCount: sourcePages,
+    });
     expect(await h.objects.query("page")).toHaveLength(sourcePages);
     // (The headless engine has no fonts registered, so its PDF carries no
     // text to reconstruct; the editable text path is extract.test.ts's.)
@@ -128,8 +132,10 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
     const out = (await h.objects.invoke(
       IMPORT_PDF_COMMAND,
       args({ maxPages: 1 }),
-    )) as { pageCount: number };
+    )) as { pageCount: number; sourcePageCount: number };
     expect(out.pageCount).toBe(1);
+    // The pages left out are counted, never silent.
+    expect(out.sourcePageCount).toBe(sourcePages);
     expect(await h.objects.query("page")).toHaveLength(1);
   }, 60_000);
 
@@ -178,7 +184,11 @@ describe("[plugin-pdf.typed-commands] partial args: struct defaults and optional
   it("opens a PDF from { bytes } alone — every page, mode auto", async () => {
     covers("command:media.paged.pdf.importPdf");
     const out = await h.objects.invoke(IMPORT_PDF_COMMAND, { bytes: pdf });
-    expect(out).toEqual({ mode: "editable", pageCount: sourcePages });
+    expect(out).toEqual({
+      mode: "editable",
+      pageCount: sourcePages,
+      sourcePageCount: sourcePages,
+    });
   }, 60_000);
 
   it("opens a PDF from { bytes, maxPages }", async () => {

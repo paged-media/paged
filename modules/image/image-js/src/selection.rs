@@ -39,6 +39,8 @@ use std::sync::Arc;
 
 use image_gpu::{CombineMode, SelectionCoverage};
 
+use crate::layers::CanvasOp;
+
 /// The image a selection is bound to (dims fix the coverage field).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoundImage {
@@ -107,6 +109,69 @@ impl SessionSelection {
                 false
             }
         }
+    }
+
+    /// Carry the selection along a canvas operation that moves every pixel
+    /// to another place without resampling it (a quarter turn or a flip):
+    /// the coverage is remapped with the pixels and re-bound to `handle` at
+    /// the new extent. `at(x, y)` names the OLD pixel the new pixel `(x, y)`
+    /// comes from. With no explicit selection only the binding changes.
+    pub fn follow_remap(
+        &mut self,
+        handle: u32,
+        width: u32,
+        height: u32,
+        at: impl Fn(u32, u32) -> (u32, u32),
+    ) {
+        let Some(old) = self.coverage.take() else {
+            self.bind(handle, width, height);
+            return;
+        };
+        let (ow, oh) = (old.width(), old.height());
+        let src = old.data();
+        let mut data = vec![0u8; width as usize * height as usize];
+        for y in 0..height {
+            for x in 0..width {
+                let (sx, sy) = at(x, y);
+                if sx < ow && sy < oh {
+                    data[(y * width + x) as usize] = src[(sy * ow + sx) as usize];
+                }
+            }
+        }
+        self.bound = Some(BoundImage {
+            handle,
+            width,
+            height,
+        });
+        self.coverage = SelectionCoverage::from_data(width, height, data).map(Arc::new);
+        self.revision += 1;
+    }
+
+    /// Re-bind after the canvas operation `op` left the image `handle` at
+    /// `width` × `height`: a quarter turn or a flip carries the selection
+    /// along with the pixels ([`Self::follow_remap`]), every other
+    /// operation re-binds by the [`Self::bind`] rule (a changed extent
+    /// drops it; the caller clears it first for a crop or a resample).
+    pub fn follow_canvas_op(&mut self, op: &CanvasOp, handle: u32, width: u32, height: u32) {
+        let moves = matches!(
+            op,
+            CanvasOp::RotateCw
+                | CanvasOp::RotateCcw
+                | CanvasOp::Rotate180
+                | CanvasOp::FlipHorizontal
+                | CanvasOp::FlipVertical
+        );
+        let Some(old) = self.bound.filter(|_| moves) else {
+            self.bind(handle, width, height);
+            return;
+        };
+        // The pixel map the layers moved by (`CanvasOp::source`), over the
+        // extent the selection was bound at.
+        let (ow, oh) = (old.width, old.height);
+        let op = *op;
+        self.follow_remap(handle, width, height, move |x, y| {
+            op.source(x, y, ow, oh).unwrap_or((u32::MAX, u32::MAX))
+        });
     }
 
     /// The coverage, when an explicit selection exists.
@@ -370,6 +435,60 @@ pub fn modify_coverage(cov: &SelectionCoverage, op: ModifyOp, radius: f32) -> Se
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one selected pixel of a 3×2 selection after `op`, and the
+    /// extent it is bound at.
+    fn moved(op: CanvasOp, at: (u32, u32), extent: (u32, u32)) -> (u32, u32, Vec<u8>) {
+        let mut s = SessionSelection::new();
+        s.bind(7, 3, 2);
+        let mut data = vec![0u8; 6];
+        data[(at.1 * 3 + at.0) as usize] = 255;
+        s.apply_coverage(&data, CombineMode::Replace).unwrap();
+        s.follow_canvas_op(&op, 7, extent.0, extent.1);
+        let b = s.bound().unwrap();
+        (b.width, b.height, s.coverage().unwrap().data().to_vec())
+    }
+
+    #[test]
+    fn a_quarter_turn_or_flip_carries_the_selection_with_the_pixels() {
+        // Top-left pixel of a 3×2 image: clockwise it lands top-right of
+        // the 2×3 result, counter-clockwise bottom-left.
+        assert_eq!(
+            moved(CanvasOp::RotateCw, (0, 0), (2, 3)),
+            (2, 3, vec![0, 255, 0, 0, 0, 0])
+        );
+        assert_eq!(
+            moved(CanvasOp::RotateCcw, (0, 0), (2, 3)),
+            (2, 3, vec![0, 0, 0, 0, 255, 0])
+        );
+        assert_eq!(
+            moved(CanvasOp::Rotate180, (0, 0), (3, 2)),
+            (3, 2, vec![0, 0, 0, 0, 0, 255])
+        );
+        assert_eq!(
+            moved(CanvasOp::FlipHorizontal, (0, 1), (3, 2)),
+            (3, 2, vec![0, 0, 0, 0, 0, 255])
+        );
+        assert_eq!(
+            moved(CanvasOp::FlipVertical, (2, 0), (3, 2)),
+            (3, 2, vec![0, 0, 0, 0, 0, 255])
+        );
+    }
+
+    #[test]
+    fn a_canvas_resize_drops_the_selection() {
+        let mut s = SessionSelection::new();
+        s.bind(7, 3, 2);
+        s.select_all().unwrap();
+        let op = CanvasOp::Resize {
+            width: 4,
+            height: 2,
+            anchor_x: 0,
+            anchor_y: 0,
+        };
+        s.follow_canvas_op(&op, 7, 4, 2);
+        assert!(s.coverage().is_none());
+    }
 
     fn rect_shape(w: u32, h: u32) -> SelectionCoverage {
         SelectionCoverage::rasterize_rect(w, h, 1.0, 1.0, 2.0, 2.0)

@@ -128,8 +128,24 @@ export interface ImageCodec {
  *  to use. Absent headless. */
 export type SelectionSource = (
   frameId: string,
+  /** The stored revision the frame shows now (its marker's record; null
+   *  when it carries none): a selection the session kept is used only on
+   *  the revision it was made on, or one a canvas operation it followed
+   *  made from it. */
+  record: string | null,
 ) =>
   { width: number; height: number; coverage: Uint8Array } | { refused: string };
+
+/** A canvas operation committed on a frame through the object model, from
+ *  stored revision `from` to `to`: the session carries the selection it
+ *  kept for the frame along, as its canvas operations carry the live one
+ *  (`coverageAfterCanvasOp`). Absent headless. */
+export type SelectionFollow = (
+  frameId: string,
+  from: string | null,
+  to: string,
+  ops: readonly CanvasOp[],
+) => void;
 
 const MASK_KEYS = ["polygons", "ops", "fillRule", "alpha", "feather"];
 
@@ -584,7 +600,10 @@ export function createImageObjects(
   host: BundleHost,
   codec: () => Promise<ImageCodec>,
   selection?: SelectionSource,
+  selectionFollow?: SelectionFollow,
 ): ImageObjects {
+  /** The canvas operations a planned state took, in order. */
+  const canvasOpsOf = new WeakMap<FrameState, CanvasOp[]>();
   const counters: ImageObjectCounters = {
     treeReads: 0,
     placedReads: 0,
@@ -1195,7 +1214,7 @@ export function createImageObjects(
         throw new Refused(
           "there is no editor session here, so no selection; pass the selection as `mask` (polygons or an alpha mask)",
         );
-      const live = selection(s.frame.frameId);
+      const live = selection(s.frame.frameId, s.marker?.record ?? null);
       if ("refused" in live) throw new Refused(live.refused);
       const cov = coverageAt(live, W, H);
       out.alpha = out.alpha
@@ -1458,6 +1477,9 @@ export function createImageObjects(
     const why = canvasOpProblem(s.stack, op);
     if (why) throw new Refused(why);
     applyCanvasOp(s.stack, op);
+    const ops = canvasOpsOf.get(s) ?? [];
+    ops.push(op);
+    canvasOpsOf.set(s, ops);
   }
 
   function newLayer(s: FrameState, kind: "pixels" | "adjustment"): PgilLayer {
@@ -1572,6 +1594,13 @@ export function createImageObjects(
     const parts: PartChange[] = [];
     const mutations: Array<{ op: string; args: Record<string, unknown> }> = [];
     const labels: Array<{ frame: Frame; value: string }> = [];
+    /** The canvas operations to carry the kept selections along. */
+    const follows: Array<{
+      frameId: string;
+      from: string | null;
+      to: string;
+      ops: CanvasOp[];
+    }> = [];
     const have = new Set(await host.parts.list("px/"));
     const c = await codec();
     for (const { base, next } of planned) {
@@ -1621,6 +1650,14 @@ export function createImageObjects(
         await sha256HexPrefix(recordBytes, 16),
       );
       parts.push({ path, bytes: recordBytes });
+      const ops = canvasOpsOf.get(next);
+      if (ops)
+        follows.push({
+          frameId: next.frame.frameId,
+          from: base.marker?.record ?? null,
+          to: path,
+          ops,
+        });
       const marker: ImageMarker = {
         owns: "pixels",
         rev,
@@ -1656,6 +1693,15 @@ export function createImageObjects(
     // The canonical item address (`rectangle:<id>`), never the `frame:`
     // alias: the frame's element id carries its kind.
     const hostAddress = fromElementId(first.frame.elementId);
+    // Once the write committed, the session's kept selections follow its
+    // canvas operations (it writes nothing, so the step stays as it is).
+    const followUp =
+      selectionFollow && follows.length > 0
+        ? async () => {
+            for (const f of follows)
+              selectionFollow(f.frameId, f.from, f.to, f.ops);
+          }
+        : undefined;
     return mutations.length > 0
       ? {
           kind: "both",
@@ -1664,6 +1710,7 @@ export function createImageObjects(
           host: hostAddress,
           labelKey: LABEL_KEY,
           labelValue: first.value,
+          ...(followUp ? { followUp } : {}),
         }
       : {
           kind: "state",
@@ -1671,6 +1718,7 @@ export function createImageObjects(
           host: hostAddress,
           labelKey: LABEL_KEY,
           labelValue: first.value,
+          ...(followUp ? { followUp } : {}),
         };
   }
 

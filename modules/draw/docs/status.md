@@ -67,7 +67,8 @@ canary added is under [Releases](#releases).
   by the host as property fields. The `vectorGraphic` edit context raises it. The nine
   feature panels (Appearance, Graphic styles, Symbols, Live paint, Pattern, Repeat, Blend,
   Objects on path, Path options) open with one sentence on what they are for, keep their
-  longer note in a collapsed "About" section, show an action's refusal in the panel, and
+  longer note in a collapsed "About" section (the five recipe panels' notes say what
+  "Update automatically" does for them), show an action's refusal in the panel, and
   ask for a second click before deleting a graphic style or a symbol.
 - **Path commands.** Outline stroke, Offset (with miter, round or bevel joins and a miter
   limit), Simplify, Join, Close, Average endpoints, Reverse path direction;
@@ -227,7 +228,11 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   followed too: a run is one undo step and its reply names it (`document.mutate.amend@2`,
   engine ADR 1004 amendment), so the rebuild joins the script's step; a rebuild that loses the
   race to the script's next write is retried on the script's reply, and a run that called
-  `paged.undo()` is only fingerprinted. The recipe record a rebuild writes is a container
+  `paged.undo()` is only fingerprinted. A recipe's own command that moves the recipe's
+  sources while it rebuilds (Objects on a Path's Update moves the objects it is made from)
+  notes its step (`commands/recipe-steps.ts`): the automatic update takes that recipe's new
+  fingerprint from it and does not place the objects a second time in the same step.
+  The recipe record a rebuild writes is a container
   part, outside the step, as every command-lane recipe write is
   (`commands/recipe-auto-update.ts`).
 - **A recipe parameter write rebuilds the artwork in the same undo step.** The write commits
@@ -304,6 +309,24 @@ panel of these rows. The fields:
 - Path Options: its sections are the args of the path-op and insert-shape typed commands, a
   command form rather than property fields.
 
+## Actions
+
+On a host with `actions@1` (extensions ADR 344, PM-0015) the bundle registers two pure steps
+over an asset (`src/actions.ts`; manifest `capabilities.actions.register`). Neither edits the
+document; Image Trace and Recolor Artwork remain the commands that do.
+
+| Id                         | In → out      | What it does                                                                                                         |
+| -------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `media.paged.draw/trace`   | asset → asset | a raster picture traced to SVG (`image/svg+xml`) at the picture's pixel size; the trace kernel's options by name     |
+| `media.paged.draw/recolor` | asset → asset | an SVG's solid fills and strokes reduced to `count`, moved to a harmony (`rule`, `base`, `rotate`) or mapped (`map`) |
+
+The trace runs the trace wasm in a `host.workers` worker when the host has one. Its decode is
+the platform's (`io/raster-decode.ts`), so it runs where `createImageBitmap` and
+`OffscreenCanvas` exist and refuses with the decoder's sentence elsewhere (Node, the headless
+host); a picture over `maxTracePixels` is traced downsampled. Decoding in the engine instead
+waits for `paged-raster` (PM-0014). The recolour writes draw-geometry's SVG flattening: one
+path per shape, solid paints only. Recolouring a raster is pixel work and is not registered.
+
 ## Limits of what is shipped
 
 - **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one
@@ -320,13 +343,15 @@ panel of these rows. The fields:
   Flare, and an Alt+click with Reflect, open their Path Options section; on a host that
   cannot raise a panel they insert or reflect with the last-used values instead.
 - **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
-  objects on a path and live-paint fills it feeds, in the edit's undo step (above). Symbol
-  instances do not follow a changed definition until Redefine or Reset. A script's edits are
-  followed unless the run called `paged.undo()` / `paged.redo()` or an edit split it (run
-  `updateLinkedRecipes` then). Recipe and library
-  writes made by a COMMAND are not undoable (a make or update records the ids its own batch
-  minted, so the recipe can only be written after it); writes through the object model are
-  (below). Both need a host with `storage.parts@1`.
+  objects on a path and live-paint fills it feeds, in the edit's undo step (above). A symbol's
+  definition is stored artwork, not a page item, so nothing edits it but Redefine, which
+  rebuilds every instance. Two cases stay by design, each because there is no step to join:
+  a script run that called `paged.undo()` / `paged.redo()` or that an edit split carries no
+  step (engine ADR 1004 amendment), so it is only fingerprinted and `updateLinkedRecipes`
+  rebuilds it; and recipe and library writes made by a COMMAND are container parts, which
+  are outside every undo step (extensions ADR 337, consequences) — a make or update records
+  the ids its own batch minted, so the record can only be written after the batch. Writes
+  through the object model are undoable (below). Both need a host with `storage.parts@1`.
 - **Undo steps.** Almost every command is one batch and one undo step, however many items
   it creates or rebuilds (pattern, symbols, live paint, blend, repeat, compound path, brush
   strokes, SVG import, image trace and re-trace, recolour). A clipped repeat takes two.
@@ -360,7 +385,9 @@ panel of these rows. The fields:
   redefine read it from the instance. Create Outlines reads it from the text frame, so on an
   engine that reports no origin its glyphs with holes land off by it there.
 - **Tools.** Width (and `widthProfile`) replaces the path with its outline; the profile is not
-  kept as an editable stroke. Eyedropper samples properties, not
+  kept as an editable stroke, because neither the engine's stroke model nor IDML has a
+  variable-width stroke (a stroke is one weight), so the only faithful result on the page and
+  in every export is the outline. Eyedropper samples properties, not
   pixels. Measure's snap and the gradient annotator's stops use raw engine requests outside
   the host doors. Only Curvature snaps among this bundle's own tools.
 - **Opacity mask and type on a path.** Options cannot be edited in place; release or detach

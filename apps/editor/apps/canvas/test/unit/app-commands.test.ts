@@ -147,6 +147,17 @@ describe("View toggles flip the store their overlay reads", () => {
   });
 });
 
+test("show data markers flips its own flag [editor-shell.data-panel]", async () => {
+  covers("command:paged.view.toggleDataMarkers");
+  const { registry, scope } = harness();
+  expect(getViewToggle(scope, "dataMarkers")).toBe(false);
+  await registry.invoke("paged.view.toggleDataMarkers");
+  expect(getViewToggle(scope, "dataMarkers")).toBe(true);
+  expect(getViewToggle(scope, "textThreads")).toBe(false);
+  await registry.invoke("paged.view.toggleDataMarkers");
+  expect(getViewToggle(scope, "dataMarkers")).toBe(false);
+});
+
 describe("Help opens the documentation in a new, unlinked tab", () => {
   const openedBy = async (id: string) => {
     const opened: unknown[][] = [];

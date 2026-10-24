@@ -2965,8 +2965,10 @@ function chainRecordStamp(
       widths: [...t.widths],
     })),
   };
+  // The sheet's name is part of the key: a renamed sheet re-stamps the
+  // record (a later session finds the chain by that name).
   return {
-    key: `${head} ${JSON.stringify(record)}`,
+    key: `${head} ${sheetName()} ${JSON.stringify(record)}`,
     op: () => ({
       op: "setPluginMetadata",
       args: {
@@ -3000,7 +3002,22 @@ async function stampChainRecord(
   prevKey: string | undefined,
 ): Promise<string | undefined> {
   if (!stamp || stamp.key === prevKey) return prevKey;
-  if (seq === undefined || !host.supports(AMEND_FEATURE)) return prevKey;
+  if (seq === undefined) {
+    // The pass wrote nothing, yet the record changed: only the sheet's
+    // name can (a rename). That write is the page's refresh of the rename,
+    // a step of its own as every page refresh after a workbook edit is.
+    if (prevKey === undefined) return prevKey;
+    const r = await host.document.mutate(stamp.op());
+    if (!r.applied) {
+      host.log.debug(
+        "chain-lower: the renamed chain record was not stamped",
+        r,
+      );
+      return prevKey;
+    }
+    return stamp.key;
+  }
+  if (!host.supports(AMEND_FEATURE)) return prevKey;
   const r = await host.document.mutate(stamp.op(), { amend: seq });
   if (!r.applied) {
     host.log.debug("chain-lower: the chain record was not stamped", r);
@@ -3243,6 +3260,8 @@ export async function adoptChain(
   range: string | readonly string[],
   storyId: string,
   record: ChainRecord,
+  /** The sheet name the record was stamped with (the binding's). */
+  sheetName: string,
 ): Promise<ChainLowerResult | null> {
   const chain = await resolveChain(host, storyId);
   if (chain.length === 0) return null;
@@ -3281,7 +3300,7 @@ export async function adoptChain(
     pages,
     tableIds: tables.map((t) => t.tableId),
     tables,
-    recordKey: `${chain[0]!.frameId} ${JSON.stringify({
+    recordKey: `${chain[0]!.frameId} ${sheetName} ${JSON.stringify({
       ...(areas.length > 1 ? { areas } : {}),
       repeatHeaderRows: record.repeatHeaderRows,
       tables: record.tables,
@@ -3296,8 +3315,9 @@ export const CHAIN_REFLOW_DEBOUNCE_MS = 150;
  *  on demand (`refresh()`, after workbook edits), always REPLACING the
  *  placement's own tables rather than adding new ones. */
 export interface ChainSubscription extends Disposable {
-  /** Re-paginate now (serialised behind any pass in flight). */
-  refresh(): Promise<ChainLowerResult | null>;
+  /** Re-paginate now (serialised behind any pass in flight). With the
+   *  sheet's name, when it was renamed: the record is re-stamped with it. */
+  refresh(sheetName?: string): Promise<ChainLowerResult | null>;
   /** The latest pass (null before the first). */
   current(): ChainLowerResult | null;
   /** Resolves when the pass in flight (if any) has finished. */
@@ -3327,14 +3347,16 @@ export function subscribeChainReflow(
   opts?: ChainOptions & { from?: ChainLowerResult | null; debounceMs?: number },
 ): ChainSubscription {
   let last: ChainLowerResult | null = opts?.from ?? null;
-  // The chain's record names the sheet: read once, not on every pass.
+  // The chain's record names the sheet: read once, and again by a refresh
+  // that is handed the name (a renamed sheet re-stamps the record, so the
+  // chain is still found on reopen).
   let sheetName = opts?.sheetName;
   try {
     sheetName ??= engine.listSheets().find((x) => x.id === sheet)?.name;
   } catch {
     // Read again by the pass that needs it.
   }
-  const passOpts = sheetName ? { ...opts, sheetName } : opts;
+  const passOpts = () => (sheetName ? { ...opts, sheetName } : opts);
   let chainFrameIds = new Set<string>(last?.chain.map((c) => c.frameId) ?? []);
   if (chainFrameIds.size === 0) {
     void resolveChain(host, chainStoryId).then((chain) => {
@@ -3346,7 +3368,8 @@ export function subscribeChainReflow(
   let inflight: Promise<ChainLowerResult | null> = Promise.resolve(last);
   let disposed = false;
 
-  const run = (): Promise<ChainLowerResult | null> => {
+  const run = (renamed?: string): Promise<ChainLowerResult | null> => {
+    if (renamed) sheetName = renamed;
     inflight = inflight.then(async () => {
       if (disposed) return last;
       const chain = await resolveChain(host, chainStoryId);
@@ -3359,7 +3382,7 @@ export function subscribeChainReflow(
         chainStoryId,
         chain,
         last?.tables ?? [],
-        passOpts,
+        passOpts(),
         last?.recordKey,
       );
       chainFrameIds = new Set(last.chain.map((c) => c.frameId));
@@ -3381,7 +3404,7 @@ export function subscribeChainReflow(
   });
 
   return {
-    refresh: run,
+    refresh: (name?: string) => run(name),
     current: () => last,
     idle: () => inflight,
     dispose() {

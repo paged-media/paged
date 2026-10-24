@@ -165,6 +165,39 @@ describe("host.data — the data door (extensions ADR 343) [plugin-platform.data
       host(SHEET, backend).data.write("products", []),
     ).rejects.toThrow(/does not offer write/);
   });
+
+  it("placements name the page items a binding lands in, read role; absent means refused [editor-shell.data-panel]", async () => {
+    const backend = createDataRegistry();
+    const fake = products();
+    const handle = host(SERVER, backend).data.serve(fake);
+    const sheet = host(SHEET, backend);
+    const b = await sheet.data.bind({
+      target: "rectangle:u1",
+      path: "frameOpacity",
+      query: "products",
+      expr: "price",
+    });
+    await sheet.data.bind({
+      target: "rectangle[label=price]",
+      path: "frameOpacity",
+      query: "products",
+      expr: "price",
+    });
+    const reader = host(READER, backend);
+    expect(await reader.data.placements()).toEqual([
+      { binding: b.id, address: "rectangle:u1", status: "linked" },
+    ]);
+    await expect(
+      host(manifest("com.example.none", {})).data.placements(),
+    ).rejects.toThrow(/capabilities\.data\.read|supports/);
+    handle.dispose();
+
+    const { placements: _p, ...without } = products();
+    host(SERVER, backend).data.serve(without);
+    await expect(reader.data.placements()).rejects.toThrow(
+      /does not offer placements/,
+    );
+  });
 });
 
 const PAINTER = manifest("media.paged.image", { actions: { register: true } });

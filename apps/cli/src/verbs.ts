@@ -60,6 +60,7 @@ import {
   type CliSession,
   type SessionOptions,
 } from "./session";
+import { withModuleContentDrawn } from "./module-content";
 import { exporterArgs, pdfCommand, typedPdf } from "./pdf";
 import { describeType, parseCliValue } from "./values";
 import { defaultLibrary } from "./mcp/library";
@@ -779,7 +780,9 @@ const exportVerb: Verb = {
         ...(pages !== undefined ? { pages } : {}),
         options,
       });
-      const r = await typedPdf(s, typed, given);
+      const { value: r, notes } = await withModuleContentDrawn(s, () =>
+        typedPdf(s, typed, given),
+      );
       writeOutput(path, r.bytes);
       return {
         json: {
@@ -790,8 +793,12 @@ const exportVerb: Verb = {
           bytes: r.bytes.byteLength,
           ...(r.pageCount !== undefined ? { pageCount: r.pageCount } : {}),
           diagnostics: r.findings,
+          ...(notes.length ? { notes } : {}),
         },
-        text: `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
+        text: [
+          `wrote ${path} (pdf via ${typed.id}, ${r.bytes.byteLength} bytes)`,
+          ...notes,
+        ].join("\n"),
       };
     }
 

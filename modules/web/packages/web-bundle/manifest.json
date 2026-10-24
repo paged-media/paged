@@ -194,6 +194,17 @@
               "summary": "The custom properties the css lane declares."
             },
             {
+              "path": "page",
+              "type": {
+                "kind": "number",
+                "integer": true
+              },
+              "nullable": true,
+              "access": "derived",
+              "title": "Page",
+              "summary": "The 1-based number of the page the frame is on: what {{frame.page}} renders as (null when the frame is on no page)."
+            },
+            {
               "path": "diagnostics",
               "type": {
                 "kind": "list",

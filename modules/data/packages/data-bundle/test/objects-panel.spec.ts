@@ -140,12 +140,14 @@ describe("Data objects panel (property rows) [data.object-model]", () => {
     }
   });
 
-  it("is declared in the manifest beside the four React panels", () => {
+  it("is declared in the manifest beside the six React panels", () => {
     expect(manifest.contributes.panels).toEqual([
       "media.paged.data.panel.sources",
       "media.paged.data.panel.bindings",
       "media.paged.data.panel.dataset",
       "media.paged.data.panel.query",
+      "media.paged.data.panel.templates",
+      "media.paged.data.panel.pagination",
       OBJECTS_PANEL_ID,
     ]);
   });
