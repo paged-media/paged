@@ -1412,6 +1412,122 @@ test.describe.serial("plugin menus — paged.draw", () => {
     );
   });
 
+  test("Object/Insert star… — raises Path Options, where the star is set up", async () => {
+    covers("menu:Object/Insert star…");
+    await expectGreyedAndInert(bare, "Object/Insert star…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert star…",
+      "media.paged.draw.command.insertStarOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Object/Insert flare… — raises Path Options, where the flare is set up", async () => {
+    covers("menu:Object/Insert flare…");
+    await expectGreyedAndInert(bare, "Object/Insert flare…");
+    const out = await clickEntry(
+      live,
+      "Object/Insert flare…",
+      "media.paged.draw.command.insertFlareOptions",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.draw.panel.pathOptions" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
+  test("Edit/Select same/Opacity — runs selectSameOpacity", async () => {
+    covers("menu:Edit/Select same/Opacity");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Opacity");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Opacity",
+      "media.paged.draw.command.selectSameOpacity",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Blending mode — runs selectSameBlendMode", async () => {
+    covers("menu:Edit/Select same/Blending mode");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Blending mode");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Blending mode",
+      "media.paged.draw.command.selectSameBlendMode",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Appearance — runs selectSameAppearance", async () => {
+    covers("menu:Edit/Select same/Appearance");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Appearance");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Appearance",
+      "media.paged.draw.command.selectSameAppearance",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Graphic style — runs selectSameGraphicStyle", async () => {
+    covers("menu:Edit/Select same/Graphic style");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Graphic style");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Graphic style",
+      "media.paged.draw.command.selectSameGraphicStyle",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Symbol instance — runs selectSameSymbolInstance", async () => {
+    covers("menu:Edit/Select same/Symbol instance");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Symbol instance");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Symbol instance",
+      "media.paged.draw.command.selectSameSymbolInstance",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Shape kind — runs selectSameShapeKind", async () => {
+    covers("menu:Edit/Select same/Shape kind");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Shape kind");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Shape kind",
+      "media.paged.draw.command.selectSameShapeKind",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
+  test("Edit/Select same/Geometry (Global Edit) — runs globalEdit", async () => {
+    covers("menu:Edit/Select same/Geometry (Global Edit)");
+    // It changes the selection, not the document; select-same is the draw suite's concern.
+    await expectGreyedAndInert(bare, "Edit/Select same/Geometry (Global Edit)");
+    const out = await clickEntry(
+      live,
+      "Edit/Select same/Geometry (Global Edit)",
+      "media.paged.draw.command.globalEdit",
+    );
+    expect(out.shell).toEqual([]);
+  });
+
   test("Draw/Image trace… — runs imageTrace; the selection holds no placed image to trace, so it changes nothing", async () => {
     covers("menu:Draw/Image trace…");
     await expectGreyedAndInert(bare, "Draw/Image trace…");

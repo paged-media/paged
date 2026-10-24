@@ -64,6 +64,7 @@ import {
   PATH_OPTION_SECTION_TITLES,
   SELECT_SAME_TOLERANCE_NOTE,
   WIDTH_PROFILE_SECTION_NOTE,
+  SIMPLIFY_PREVIEW_ENGINE_NOTE,
 } from "../../src";
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../../src/menu";
 import { pathItem } from "../fixtures/build-idml";
@@ -432,6 +433,35 @@ describe("Path options panel — rendered against the engine", () => {
       expect((await tableOf(WOB)).anchors).toHaveLength(2);
       await drive(() => h.host.document.undo(), panel.work);
       expect(shapeOf(await tableOf(WOB))).toEqual(shapeOf(before));
+    });
+
+    it("SIMPLIFY PREVIEW: editing the values draws the result before anything is written; a CORNER ANGLE writes it in one batch [plugin-draw.tool-wave-3]", async () => {
+      const panel = await mountPanel(h, makePathOptionsPanel);
+      await drive(() => h.host.selection.set([WOB]), panel.work);
+      await panel.click(header("simplify"));
+      panel.reset();
+      panel.change(field("simplify.tolerance"), "20");
+      await drive(() => Promise.resolve(), panel.work);
+      await drive(() => Promise.resolve(), panel.work);
+      expect(panel.get("[data-draw-pathopts-simplify-preview]").textContent).toMatch(
+        /7 → 2/,
+      );
+      expect(h.overlayLayers().some((l) => l.shapes.length === 1)).toBe(true);
+      expect(panel.work.mutations).toEqual([]);
+      expect(panel.get("[data-draw-pathopts-simplify-note]").textContent).toBe(
+        t(SIMPLIFY_PREVIEW_ENGINE_NOTE),
+      );
+      // A corner angle: the TS fit, written as framePath + frameBounds.
+      panel.change(field("simplify.cornerAngle"), "120");
+      await panel.click(apply("simplify"));
+      expect(panel.work.mutations).toEqual([{ op: "batch", ops: 2 }]);
+      expect((await tableOf(WOB)).anchors.length).toBeLessThan(7);
+      await drive(() => h.host.document.undo(), panel.work);
+      expect((await tableOf(WOB)).anchors).toHaveLength(7);
+      // Closing the section clears the preview.
+      await panel.click(header("offset"));
+      await drive(() => Promise.resolve(), panel.work);
+      expect(h.overlayLayers().every((l) => l.shapes.length === 0)).toBe(true);
     });
 
     it("WIDTH PROFILE: the three widths typed are the profile sent; the open path becomes its outline, ONE undo restores", async () => {
@@ -875,6 +905,8 @@ describe("Path options panel — rendered against the engine", () => {
         "Object/Insert spiral…",
         "Object/Insert rectangular grid…",
         "Object/Insert polar grid…",
+        "Object/Insert star…",
+        "Object/Insert flare…",
         "Edit/Select same/Stroke weight within…",
         "Draw/Image trace…",
       ]);

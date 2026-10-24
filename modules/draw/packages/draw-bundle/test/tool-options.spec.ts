@@ -353,3 +353,61 @@ describe("paged.draw tool options, no engine — Lasso Select", () => {
     ).toEqual(["ub"]);
   });
 });
+
+describe("paged.draw tool options, no engine — Star and Reshape [plugin-draw.tool-wave-3]", () => {
+  const starDrag = (g: GestureDsl) =>
+    g.drag({ from: [500, 600], to: [500, 560], steps: 4 });
+  const radii = (r: UnitRig) =>
+    inserted(r)!.args.anchors.map((a) =>
+      Math.hypot(a.anchor[0]! - 500, a.anchor[1]! - 600),
+    );
+
+  it("points: the star a drag starts with has that many tips", async () => {
+    covers("setting:media.paged.draw.tool.star.points");
+    const base = await withOptions(`${T}.star`, [], {}, starDrag);
+    expect(inserted(base)!.args.anchors).toHaveLength(10);
+    const eight = await withOptions(`${T}.star`, [], { points: 8 }, starDrag);
+    expect(inserted(eight)!.args.anchors).toHaveLength(16);
+  });
+
+  it("radius2: the valleys sit at that percentage of Radius 1", async () => {
+    covers("setting:media.paged.draw.tool.star.radius2");
+    const base = radii(await withOptions(`${T}.star`, [], {}, starDrag));
+    expect(base[1]).toBeCloseTo(20, 6);
+    const deep = radii(
+      await withOptions(`${T}.star`, [], { radius2: 25 }, starDrag),
+    );
+    expect(deep[0]).toBeCloseTo(40, 6);
+    expect(deep[1]).toBeCloseTo(10, 6);
+  });
+
+  it("radius: a small falloff moves only the dragged anchor; a wide one carries its neighbours", async () => {
+    covers("setting:media.paged.draw.tool.reshape.radius");
+    const pull = (g: GestureDsl) =>
+      g
+        .down([250, 650])
+        .settle()
+        .move([250, 630])
+        .settle()
+        .up([250, 610])
+        .settle()
+        .settle();
+    const table = (r: UnitRig) =>
+      (
+        r.leaves().find(
+          (m) => (m as { args?: { path?: string } }).args?.path === "framePath",
+        ) as { args: { value: { value: { anchors: { anchor: number[] }[] } } } }
+      ).args.value.value.anchors.map((a) => a.anchor);
+    // The neighbours are 212 pt away along the path: past the 72 pt
+    // default, inside 400.
+    const wide = table(
+      await withOptions(`${T}.reshape`, [], { radius: 400 }, pull),
+    );
+    expect(wide[0]![1]).toBeLessThan(500);
+    const tight = table(
+      await withOptions(`${T}.reshape`, [], { radius: 1 }, pull),
+    );
+    expect(tight[0]).toEqual([100, 500]);
+    expect(tight[1]).toEqual([250, 610]);
+  });
+});

@@ -78,6 +78,9 @@ const M = defineMessages("draw.toolOptions", {
   selectObjects: "Select objects",
   touched: "Touched by the lasso",
   centre: "Centre inside the lasso",
+  reshapeRadius: "Falloff along the path",
+  points: "Points",
+  radius2: "Radius 2",
 });
 
 type OptionValue = number | boolean | string;
@@ -385,6 +388,51 @@ export const LASSO_OPTIONS = defineToolOptions({
   ],
 });
 
+/** Reshape — how far along the path the drag reaches (pt; the cosine
+ *  falloff of draw-geometry `reshapeTable`). */
+export const RESHAPE_OPTIONS = defineToolOptions({
+  toolId: "media.paged.draw.tool.reshape",
+  fields: [
+    {
+      kind: "number",
+      key: "radius",
+      label: M.reshapeRadius,
+      min: 1,
+      max: 2000,
+      step: 1,
+      unit: "pt",
+      default: 72,
+    },
+  ],
+});
+
+/** Star — the points a drag starts with and Radius 2 as a percentage of
+ *  Radius 1 (Illustrator's dialog defaults: 5 points, 50 %). */
+export const STAR_OPTIONS = defineToolOptions({
+  toolId: "media.paged.draw.tool.star",
+  fields: [
+    {
+      kind: "number",
+      key: "points",
+      label: M.points,
+      min: 3,
+      max: 1000,
+      step: 1,
+      default: 5,
+    },
+    {
+      kind: "number",
+      key: "radius2",
+      label: M.radius2,
+      min: 1,
+      max: 1000,
+      step: 1,
+      unit: "%",
+      default: 50,
+    },
+  ],
+});
+
 /** Every tool that declares options, by tool id — what `tools.ts`
  *  attaches to the contribution and what the spec walks. */
 export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
@@ -393,4 +441,6 @@ export const TOOL_OPTIONS: readonly ToolOptionsDef[] = [
   ERASER_OPTIONS,
   WIDTH_OPTIONS,
   LASSO_OPTIONS,
+  RESHAPE_OPTIONS,
+  STAR_OPTIONS,
 ];

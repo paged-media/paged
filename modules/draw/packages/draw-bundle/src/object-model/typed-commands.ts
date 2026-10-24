@@ -64,6 +64,7 @@ import type {
   SpiralParams,
 } from "../commands/insert-shapes";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
+import type { FlareParams, StarParams } from "../commands/star-flare";
 import {
   FLIP_PATH_EFFECTS,
   PATH_TYPE_ALIGNMENTS,
@@ -117,6 +118,26 @@ const titleOf = (id: string): string => {
 };
 
 /** Every field of a params interface, typed (exhaustive by construction). */
+const STAR: Record<keyof StarParams, ValueType> = {
+  cx: LEN,
+  cy: LEN,
+  radius1: LEN,
+  radius2: LEN,
+  points: INT,
+  rotationDeg: DEG,
+};
+const FLARE: Record<keyof FlareParams, ValueType> = {
+  cx: LEN,
+  cy: LEN,
+  centreRadius: LEN,
+  haloScale: NUM,
+  rays: INT,
+  rayLength: LEN,
+  rings: INT,
+  endX: LEN,
+  endY: LEN,
+  ringRadius: LEN,
+};
 const ARC: Record<keyof ArcParams, ValueType> = {
   cx: LEN,
   cy: LEN,
@@ -225,7 +246,7 @@ export const TWINS: readonly TwinSpec[] = [
     miterLimit: NUM,
   }),
   twin("offsetPath", { ...T, delta: LEN, join: JOIN, miterLimit: NUM }),
-  twin("simplifyPath", { ...T, tolerance: LEN }),
+  twin("simplifyPath", { ...T, tolerance: LEN, cornerAngle: DEG }),
   // Endpoints / direction / outlines / transform.
   ...[
     "joinEndpoints",
@@ -235,8 +256,8 @@ export const TWINS: readonly TwinSpec[] = [
     "createOutlines",
     "transformAgain",
   ].map(sel),
-  twin("reflectHorizontal", { ...T, copy: BOOL }),
-  twin("reflectVertical", { ...T, copy: BOOL }),
+  twin("reflectHorizontal", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
+  twin("reflectVertical", { ...T, copy: BOOL, angleDeg: DEG, pivot: POINT }),
   // Pathfinder (boolean + region) and compound paths.
   ...[
     "pathfinderUnite",
@@ -468,6 +489,35 @@ export const TWINS: readonly TwinSpec[] = [
     path: { kind: "list", of: POINT },
     mode: enumOf(["keep", "remove"]),
   }),
+  // WP6.1 part 2 — the Join / Path Eraser / Reshape / Shaper gestures as
+  // data (page pt), and the Star / Flare inserts with every parameter.
+  twin("joinScrub", {
+    ...T,
+    page: TEXT,
+    path: { kind: "list", of: POINT },
+    tolerance: LEN,
+  }),
+  twin("pathErase", {
+    ...T,
+    page: TEXT,
+    path: { kind: "list", of: POINT },
+    width: LEN,
+  }),
+  twin("reshapeAt", {
+    ...T,
+    point: POINT,
+    to: POINT,
+    radius: LEN,
+    tolerance: LEN,
+  }),
+  twin("shaperStroke", { ...T, page: TEXT, path: { kind: "list", of: POINT } }),
+  twin("insertStar", { ...STAR, page: TEXT }),
+  twin("insertFlare", { ...FLARE, page: TEXT }),
+  // Their "…" raisers are typed too (no arguments: they raise the Path
+  // Options section, or insert the last-used one where no panel can be
+  // raised) — the untyped baseline is a ratchet that does not grow.
+  twin("insertStarOptions", {}),
+  twin("insertFlareOptions", {}),
   // The width profile (the Width tool's bake, its profile as data) and the
   // rebuild of the recipes a changed source feeds.
   twin("widthProfile", { ...T, widths: { kind: "list", of: LEN } }),
