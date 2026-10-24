@@ -10,6 +10,15 @@ work, with file and line references and its outcome at the end, is
 under [Releases](#releases).
 "The session" below is the object returned by `createSession`, which the package exports.
 
+## Direction
+
+[PM-0015](../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) (2026-10-24) makes
+data a platform layer. Bindings move into the engine's model and the data crates into
+`engine/core/crates`. Modules and extensions reach data through a `data@1` door. Turso replaces
+DuckDB-WASM, and transforms and asset actions run in the engine's script interpreter. None of
+that has shipped. What is below is the module as it is. The first measured step is
+[`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md).
+
 ## Shipped
 
 - **The session is saved with the document** (since 2026-10-05). Sources, queries,
