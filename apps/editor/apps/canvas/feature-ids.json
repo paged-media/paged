@@ -3,7 +3,7 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 402,
+    "command": 404,
     "keybinding": 88,
     "menu": 295,
     "panel": 122,
@@ -1926,6 +1926,16 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.object.transformEach",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.object.transformEachDialog",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.object.ungroup",
       "kind": "command",
       "owner": "editor"
@@ -3666,7 +3676,7 @@
       "owner": "editor"
     },
     {
-      "id": "menu:Object/Transform",
+      "id": "menu:Object/Transform/Transform each…",
       "kind": "menu",
       "owner": "editor"
     },
