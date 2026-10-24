@@ -246,7 +246,7 @@ describe("draw conformance — the link index", () => {
     expect(await index.cached("flaky", flaky)).toBe("ok");
   });
 
-  it("WHAT A WALK CANNOT SEE: an element nested by pasteInto is read by id", async () => {
+  it("an element nested by pasteInto is in the walk now (engine ADR 1010), its frame too", async () => {
     await stamp(CHILD, "nested");
     const nest = await h.host.document.mutate(
       pasteIntoMutationFor(RECT, CHILD) as Mutation,
@@ -255,16 +255,14 @@ describe("draw conformance — the link index", () => {
 
     const index = linkIndex(host);
     const snapshot = await index.snapshot();
-    // B-18, measured: the container reports no children.
-    expect(snapshot.leaves).toHaveLength(LEAVES - 1);
-    expect(snapshot.leaves.some((l) => l.id.id === CHILD.id)).toBe(false);
-    // …and the element still answers its own link BY ID.
+    // The tree lists the child under its frame; both are leaves.
+    expect(snapshot.leaves).toHaveLength(LEAVES);
+    expect(snapshot.leaves.some((l) => l.id.id === CHILD.id)).toBe(true);
+    expect(snapshot.leaves.some((l) => l.id.id === RECT.id)).toBe(true);
+    // …and its link comes off the walk, with no read of its own.
     work.reset();
     expect((await index.envelopeOf(CHILD))?.data.tag).toBe("nested");
-    expect(work.count("document.getMetadata")).toBe(1);
-    // Once per revision, like everything else.
-    await index.envelopeOf(CHILD);
-    expect(work.count("document.getMetadata")).toBe(1);
+    expect(work.count("document.getMetadata")).toBe(0);
 
     await h.host.document.undo(); // the nesting
     await h.host.document.undo(); // the stamp

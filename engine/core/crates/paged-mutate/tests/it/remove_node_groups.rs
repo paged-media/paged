@@ -110,6 +110,7 @@ fn group(doc: &mut Document, members: &[NodeId]) -> String {
                 item_transform: None,
                 opacity: None,
                 blend_mode: None,
+                clip: false,
             },
         },
     )
@@ -665,6 +666,7 @@ fn dissolving_an_empty_group_from_a_file_is_undoable() {
             corner_radius: Some(12.0),
             corner_option: Some("RoundedCorner".to_string()),
             corners: Default::default(),
+            clip: false,
         });
         spread.frames_in_order.insert(1, FrameRef::Group(index));
     }

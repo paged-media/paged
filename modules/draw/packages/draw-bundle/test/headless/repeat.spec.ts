@@ -113,6 +113,7 @@ import {
   MAKE_RADIAL_REPEAT_COMMAND_ID,
   REPEAT_CLIP_HANDLE,
   REPEAT_CLIP_NOTE,
+  CLIP_GROUP_FEATURE,
   REPEAT_COMMAND_IDS,
   REPEAT_DEFAULTS,
   REPEAT_FEATURE,
@@ -146,8 +147,8 @@ function commandFor(h: HeadlessHost, id: string): CommandContribution {
   return rec.value as CommandContribution;
 }
 
-/** Leaf ids in TREE order. NOTE what this does NOT see: a pasted-in
- *  child. That absence is one of the assertions below, not an oversight. */
+/** Leaf ids in TREE order. Since engine ADR 1010 the tree lists a
+ *  pasted-in child under its frame, so a frame holding one is no leaf. */
 async function leafIds(h: HeadlessHost): Promise<string[]> {
   const out: string[] = [];
   const walk = (nodes: { id?: { id?: unknown }; children?: unknown[] }[]) => {
@@ -166,15 +167,20 @@ const sortedLeafIds = async (h: HeadlessHost) => (await leafIds(h)).sort();
 /** The one group node in the tree (or null) plus its member ids. */
 async function groupShape(
   h: HeadlessHost,
-): Promise<{ id: string; members: string[] } | null> {
-  let found: { id: string; members: string[] } | null = null;
+): Promise<{ id: string; members: string[]; clip: boolean } | null> {
+  let found: { id: string; members: string[]; clip: boolean } | null = null;
   const walk = (
-    nodes: { id?: { kind?: string; id?: unknown }; children?: unknown[] }[],
+    nodes: {
+      id?: { kind?: string; id?: unknown };
+      children?: unknown[];
+      clip?: boolean;
+    }[],
   ) => {
     for (const node of nodes) {
       if (node.id?.kind === "group" && typeof node.id.id === "string") {
         found = {
           id: node.id.id,
+          clip: node.clip === true,
           members: ((node.children ?? []) as { id?: { id?: unknown } }[])
             .map((c) => c.id?.id)
             .filter((id): id is string => typeof id === "string"),
@@ -423,11 +429,45 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       });
     });
 
-    it("a CLIPPED plan mints the clip frame first, clears its stroke, and emits NO group", () => {
+    it("a CLIP-GROUP plan inserts the clip frame AFTER the copies and makes one clip group of them, in the same batch", () => {
       const ops = opsOf(
         repeatBatchFor({
           plan: { ...SQUARE_PLAN, clipRect: [0, 0, 792, 612] },
           sourceEnvelopes: [null],
+          clipGroup: true,
+        }),
+      );
+      const frameAt = ops.findIndex(
+        (o) =>
+          o.op === "bindCreated" &&
+          (o.args as { handle: string }).handle === REPEAT_CLIP_HANDLE,
+      );
+      const copyAt = ops.findIndex(
+        (o) =>
+          o.op === "bindCreated" &&
+          (o.args as { handle: string }).handle === repeatHandle(0, 0),
+      );
+      expect(copyAt).toBeGreaterThan(0);
+      expect(frameAt).toBeGreaterThan(copyAt);
+      expect(ops.at(-1)).toEqual({
+        op: "createGroup",
+        args: {
+          memberIds: [
+            handleRef(repeatHandle(0, 0)),
+            handleRef(REPEAT_CLIP_HANDLE),
+          ],
+          clip: true,
+        },
+      });
+      expect(ops.filter((o) => o.op === "createGroup")).toHaveLength(1);
+    });
+
+    it("a PASTE-INTO clipped plan mints the clip frame first, clears its stroke, and emits NO group", () => {
+      const ops = opsOf(
+        repeatBatchFor({
+          plan: { ...SQUARE_PLAN, clipRect: [0, 0, 792, 612] },
+          sourceEnvelopes: [null],
+          clipGroup: false,
         }),
       );
       expect(ops[0].op).toBe("insertPath");
@@ -729,9 +769,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     // It comes off the engine's reply now (`commands/minted.ts`). A batch
     // can apply and the ids still be wrong, so make, a clipped make and an
     // update run through every lane of that seam, and each must leave the
-    // SAME document. (A clipped repeat's instances are invisible to the
-    // tree, so its picture is the tree, the clip frame and the source —
-    // its recipe names instances no picture can rename, and is left out.)
+    // SAME document.
     for (const [name, setup, run, undoSteps, trees, parts] of [
       [
         "make",
@@ -756,9 +794,11 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
             startDeg: -90,
             clip: true,
           }),
-        2,
+        // A clip group (engine ADR 1010): one batch, and every instance
+        // in the tree, so the recipe is part of the picture too.
+        1,
         0,
-        [],
+        [REPEAT_PART],
       ],
       [
         "update",
@@ -864,7 +904,8 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
 
     // ------------------------------------------------------ clipping
 
-    it("CLIPPING — 2 undo steps, NO group, and the instances leave the scene tree", async () => {
+    it("CLIPPING — ONE undo step, ONE clip group of the instances under the clip frame, everything in the tree", async () => {
+      expect(h.host.supports(CLIP_GROUP_FEATURE)).toBe(true);
       await h.host.selection.set([INNER]);
       const made = await applyMakeRepeat(h.host, "radial", {
         count: 4,
@@ -873,59 +914,28 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         clip: true,
       });
       expect(made).toHaveLength(3);
-
-      // CONSEQUENCE 1 — no group. `pasteInto` refuses a grouped child,
-      // so clip and group are mutually exclusive.
-      expect(await groupShape(h)).toBeNull();
-
-      // CONSEQUENCE 2 — the instances are INVISIBLE to the tree, and
-      // still answer geometry AND metadata by id.
-      const visible = await leafIds(h);
-      for (const id of made) expect(visible).not.toContain(id.id);
-      for (const id of made) {
-        expect(await h.host.document.elementGeometry([id])).toHaveLength(1);
-        expect(
-          repeatInstanceOf(await h.host.document.getMetadata(id))?.repeat,
-        ).toBe("rep-1");
-      }
-      // The clip FRAME is in the tree (only its children are not) and
-      // carries its own link.
       const record = findRepeatRecord(
         await readRepeatLibrary(h.host),
         "rep-1",
       )!;
       expect(record.clipFrame).not.toBeNull();
-      expect(visible).toContain(record.clipFrame!.id);
-      expect(
-        repeatClipOf(
-          await h.host.document.getMetadata(poly(record.clipFrame!.id)),
-        )?.repeat,
-      ).toBe("rep-1");
-      // …and the recipe is the ONLY index of the hidden instances,
-      // which is why `repeatLinks` reads it back.
-      expect(record.instances).toHaveLength(3);
+      // The instances and the clip frame are ONE clip group, the frame on
+      // top (its last member); the source stays outside it.
+      const group = await groupShape(h);
+      expect(group?.clip).toBe(true);
+      expect(group?.members).toEqual([
+        ...made.map((id) => String(id.id)),
+        record.clipFrame!.id,
+      ]);
+      expect(group?.members).not.toContain(INNER.id);
+      // Every instance is in the tree and carries its link.
+      const visible = await leafIds(h);
+      for (const id of made) expect(visible).toContain(id.id);
       const links = await repeatLinks(h.host, "rep-1");
       expect(links.instances.map((i) => i.id.id).sort()).toEqual(
         made.map((i) => i.id).sort(),
       );
-
-      // CONSEQUENCE 3 — `deleteFrame` REFUSES a pasted-in child, with
-      // the engine's own sentence.
-      const refused = await h.host.document.mutate({
-        op: "deleteFrame",
-        args: { frameId: String(made[0].id) },
-      } as Mutation);
-      expect(refused.applied).toBe(false);
-      expect(JSON.stringify(refused)).toContain(
-        "pasted into a container — release it before removing",
-      );
-
-      // TWO undo steps — the build, then the clip. Measured, not
-      // claimed: the FIRST undo un-clips (the instances come back into
-      // the tree), the SECOND removes them.
-      await h.host.document.undo();
-      const unclipped = await leafIds(h);
-      for (const id of made) expect(unclipped).toContain(id.id);
+      // ONE undo step removes all of it.
       await h.host.document.undo();
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
@@ -938,20 +948,18 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         radiusPt: 120,
         startDeg: -90,
       });
-      expect(await groupShape(h)).not.toBeNull();
+      expect((await groupShape(h))?.clip).toBe(false);
       const clipped = await applyUpdateRepeat(h.host, { clip: true });
       expect(clipped).toHaveLength(2);
-      // The old group is gone with its members; the new instances are
-      // nested (invisible to the tree) and the old ids answer nothing.
-      expect(await groupShape(h)).toBeNull();
+      // The old group is gone with its members; the new instances are a
+      // clip group, and the old ids answer nothing.
+      expect((await groupShape(h))?.clip).toBe(true);
       for (const id of plain) {
         expect(await h.host.document.elementGeometry([id])).toHaveLength(0);
       }
-      const visible = await leafIds(h);
-      for (const id of clipped) expect(visible).not.toContain(id.id);
 
-      // clipped → unclipped: the old nested instances need `releaseFrom`
-      // before `deleteFrame`, in the SAME batch as the new inserts.
+      // clipped → unclipped: the clip group is dissolved, its instances
+      // and frame deleted, in the SAME batch as the new inserts.
       const back = await applyUpdateRepeat(h.host, { clip: false });
       expect(back).toHaveLength(2);
       const now = await leafIds(h);
@@ -959,45 +967,13 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       for (const id of clipped) {
         expect(await h.host.document.elementGeometry([id])).toHaveLength(0);
       }
-      // No orphan clip frame is left behind.
       expect(
         findRepeatRecord(await readRepeatLibrary(h.host), "rep-1")!.clipFrame,
       ).toBeNull();
       expect(now).toHaveLength(PRISTINE.length + 2);
-      expect(await groupShape(h)).not.toBeNull();
+      expect((await groupShape(h))?.clip).toBe(false);
 
-      await undoTo(h, 4); // back, clip(2), build
-      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
-    });
-
-    it("CONSEQUENCE 4 — FIXED in 0.65: deleting a container takes its children WITH it (it used to orphan them); Release still drops it last", async () => {
-      await h.host.selection.set([INNER]);
-      await applyMakeRepeat(h.host, "radial", {
-        count: 3,
-        radiusPt: 120,
-        startDeg: -90,
-        clip: true,
-      });
-      const record = findRepeatRecord(
-        await readRepeatLibrary(h.host),
-        "rep-1",
-      )!;
-      const child = poly(record.instances[0].id);
-      // What used to be the hazard: drop the container on its own. On
-      // 0.64 the child left every tree and STILL answered geometry — an
-      // orphan nothing could enumerate or delete. Core's delete fix
-      // (canvas-wasm 0.65.0) removes the nested children with their
-      // container, so nothing is orphaned and ONE undo brings both back.
-      const dropped = await h.host.document.mutate({
-        op: "deleteFrame",
-        args: { frameId: record.clipFrame!.id },
-      } as Mutation);
-      expect(dropped.applied).toBe(true);
-      expect(await leafIds(h)).not.toContain(child.id);
-      expect(await h.host.document.elementGeometry([child])).toHaveLength(0);
-      await h.host.document.undo(); // the delete — container and child back
-      expect(await h.host.document.elementGeometry([child])).toHaveLength(1);
-      await undoTo(h, 2); // the clip, the build
+      await undoTo(h, 3); // back, clip, build
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1010,20 +986,19 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         clip: true,
       });
       const generation = await repeatGenerationOf(h.host, "rep-1");
-      expect(generation.clipped).toBe(true);
+      expect(generation.clipped).toBe(false); // nothing is pasted in
+      expect(generation.group).not.toBeNull(); // the clip group
       expect(generation.instances).toHaveLength(3);
       expect(await applyReleaseRepeat(h.host, {})).toBe(3);
-      // Nothing is left behind — not the instances, not the frame, and
-      // no orphan (the geometry door is the check that would catch one).
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       for (const id of made) {
         expect(await h.host.document.elementGeometry([id])).toHaveLength(0);
       }
-      await undoTo(h, 3); // release, clip, build
+      await undoTo(h, 2); // release, build
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
-    it("EXPANDING a clipped repeat keeps the nesting — the nesting IS the clip", async () => {
+    it("EXPANDING a clipped repeat keeps the clip group — the group IS the clip", async () => {
       await h.host.selection.set([INNER]);
       const made = await applyMakeRepeat(h.host, "radial", {
         count: 3,
@@ -1032,14 +1007,12 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         clip: true,
       });
       expect(await applyExpandRepeat(h.host, {})).toBe(true);
-      // Still nested (still invisible to the tree, still real)…
-      expect(await leafIds(h)).not.toContain(made[0].id);
+      expect((await groupShape(h))?.clip).toBe(true);
       expect(await h.host.document.elementGeometry([made[0]])).toHaveLength(1);
-      // …and no longer tracked.
       expect(
         repeatInstanceOf(await h.host.document.getMetadata(made[0])),
       ).toBeNull();
-      await undoTo(h, 3); // expand, clip, build
+      await undoTo(h, 2); // expand, build
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
 
@@ -1300,7 +1273,7 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     });
     afterAll(() => h?.dispose());
 
-    it("CLIPPING degrades OFF (with a warning) rather than hiding artwork forever", async () => {
+    it("CLIPPING still clips, by a clip group: nothing is hidden, so no recipe is needed to find it", async () => {
       await h.host.selection.set([INNER]);
       const made = await applyMakeRepeat(h.host, "radial", {
         count: 3,
@@ -1309,22 +1282,96 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         clip: true,
       });
       expect(made).toHaveLength(2);
-      // Built UNCLIPPED: the instances are in the tree, and there is a
-      // group (which a clipped repeat could not have had).
       const visible = await leafIds(h);
       for (const id of made) expect(visible).toContain(id.id);
-      expect(await groupShape(h)).not.toBeNull();
+      expect((await groupShape(h))?.clip).toBe(true);
       expect(
-        warnings.some(
-          (w) =>
-            w.includes("clipping needs the `.paged` container writer") &&
-            w.includes("INVISIBLE to document.tree()"),
+        warnings.some((w) =>
+          w.includes("clipping needs the `.paged` container writer"),
         ),
-      ).toBe(true);
-      // …and the repeat is still expandable/releasable through its
-      // LINKS — only the parameters were lost.
+      ).toBe(false);
+      // …and the repeat is still releasable through its LINKS — only the
+      // parameters were lost.
       expect((await readRepeatLibrary(h.host)).repeats).toEqual([]);
       expect(await applyReleaseRepeat(h.host, { repeatId: "rep-1" })).toBe(2);
+      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+    });
+  });
+
+  describe("the paste-into lane: a host without clip groups", () => {
+    let h: HeadlessHost;
+    const warnings: string[] = [];
+
+    beforeAll(async () => {
+      h = await openHost();
+      await h.load(F6_RING_PAIR.bytes());
+      h.loadBundle(drawBundle);
+      const supports = h.host.supports.bind(h.host);
+      (h.host as { supports: (f: string) => boolean }).supports = (
+        f: string,
+      ) => (f === CLIP_GROUP_FEATURE ? false : supports(f));
+      (h.host.log as { warn: (m: string) => void }).warn = (m: string) => {
+        warnings.push(m);
+      };
+    });
+    afterAll(() => h?.dispose());
+
+    beforeEach(async () => {
+      await h.host.selection.set([]);
+      await writeRepeatLibrary(h.host, {
+        v: REPEAT_LIBRARY_VERSION,
+        repeats: [],
+      });
+    });
+
+    it("CLIPPING — 2 undo steps, NO group, the instances pasted into the clip frame (listed under it since engine ADR 1010)", async () => {
+      await h.host.selection.set([INNER]);
+      const made = await applyMakeRepeat(h.host, "radial", {
+        count: 4,
+        radiusPt: 120,
+        startDeg: -90,
+        clip: true,
+      });
+      expect(made).toHaveLength(3);
+      expect(await groupShape(h)).toBeNull();
+      const record = findRepeatRecord(
+        await readRepeatLibrary(h.host),
+        "rep-1",
+      )!;
+      const frame = poly(record.clipFrame!.id);
+      expect(await h.host.document.parentOf(made[0]!)).toEqual(frame);
+      // `deleteFrame` REFUSES a pasted-in child, with the engine's words.
+      const refused = await h.host.document.mutate({
+        op: "deleteFrame",
+        args: { frameId: String(made[0].id) },
+      } as Mutation);
+      expect(refused.applied).toBe(false);
+      expect(JSON.stringify(refused)).toContain(
+        "pasted into a container — release it before removing",
+      );
+      // TWO undo steps — the build, then the clip.
+      await h.host.document.undo();
+      expect(await h.host.document.parentOf(made[0]!)).toBeNull();
+      await h.host.document.undo();
+      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+    });
+
+    it("RELEASING a pasted-in repeat releases, removes, and drops the frame last, in one step", async () => {
+      await h.host.selection.set([INNER]);
+      const made = await applyMakeRepeat(h.host, "radial", {
+        count: 3,
+        radiusPt: 120,
+        startDeg: -90,
+        clip: true,
+      });
+      const generation = await repeatGenerationOf(h.host, "rep-1");
+      expect(generation.clipped).toBe(true);
+      expect(await applyReleaseRepeat(h.host, {})).toBe(2);
+      expect(await sortedLeafIds(h)).toEqual(PRISTINE);
+      for (const id of made) {
+        expect(await h.host.document.elementGeometry([id])).toHaveLength(0);
+      }
+      await undoTo(h, 3); // release, clip, build
       expect(await sortedLeafIds(h)).toEqual(PRISTINE);
     });
   });
@@ -1377,8 +1424,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(REPEAT_LIVE_NOTE).toContain("Update does");
       expect(REPEAT_LIVE_NOTE).toContain("ONE polyline");
       expect(REPEAT_LIVE_NOTE).toContain("rebuilt once, on release");
+      expect(REPEAT_CLIP_NOTE).toContain("CLIP GROUP");
+      expect(REPEAT_CLIP_NOTE).toContain("ONE undo step");
       expect(REPEAT_CLIP_NOTE).toContain("NO GROUP");
-      expect(REPEAT_CLIP_NOTE).toContain("INVISIBLE");
       expect(REPEAT_CLIP_NOTE).toContain("deleteFrame REFUSES");
       expect(REPEAT_CLIP_NOTE).toContain("orphaned");
       // The panel repeats both AND states the undo arithmetic.
@@ -1386,12 +1434,8 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
       expect(t(REPEAT_PANEL_NOTE)).toContain(
         "editing the original rebuilds the copies in the same undo step",
       );
-      expect(t(REPEAT_PANEL_NOTE)).toContain(
-        "a clipped repeat cannot be grouped",
-      );
-      expect(t(REPEAT_PANEL_NOTE)).toContain(
-        "one undo step, or two when it is clipped",
-      );
+      expect(t(REPEAT_PANEL_NOTE)).toContain("(a clipping mask)");
+      expect(t(REPEAT_PANEL_NOTE)).toContain("one undo step, clipped or not");
     });
 
     it("registers the Repeat Options panel", () => {

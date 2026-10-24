@@ -69,7 +69,11 @@ export {
 // Trace and exported for the conformance spec. The user-facing Group /
 // Ungroup COMMANDS are the host's now (`paged.object.*`) — see
 // commands/group.ts.
-export { groupMutationFor, ungroupMutationFor } from "./commands/group";
+export {
+  clipGroupMutationFor,
+  groupMutationFor,
+  ungroupMutationFor,
+} from "./commands/group";
 // Phase 2d — the v1 declarative FILL panel (B-03 consumer) + its
 // binding driver, exported for the conformance spec.
 export {
@@ -489,6 +493,7 @@ export {
   REPEAT_CLIP_HANDLE,
   REPEAT_LIVE_NOTE,
   REPEAT_CLIP_NOTE,
+  CLIP_GROUP_FEATURE,
   repeatParamsFrom,
   repeatPlacementsFor,
   radialCenterOfDraft,

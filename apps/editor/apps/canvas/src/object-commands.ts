@@ -127,53 +127,44 @@
 //     undo step per engine round trip — see `nudgeSelection` for what
 //     that means under key repeat.
 //
-// MAKE / RELEASE CLIPPING MASK joined last, over B-18's `pasteInto` /
-// `releaseFrom`, which no editor source called. Illustrator's rule: with
+// MAKE / RELEASE CLIPPING MASK joined last. Illustrator's rule: with
 // two or more objects selected the TOPMOST is the clipping path and the
-// rest become its content. Four more measured facts:
+// rest become its content. Four measured facts:
 //
-// 10. ONE CONTAINER TAKES SEVERAL CHILDREN, each its own `pasteInto`;
-//     they paint in the order they were pasted, clipped by the
-//     container's outline. The container must be a rectangle, an ellipse
-//     or a path (a text frame / line answers "cannot host a Rectangle
-//     child"; a group id is not even mapped — `Mutation::PasteInto`).
-//     The content must be single page items: a group is unmapped the
-//     same way, and a grouped item is refused ("B-18: a grouped item
-//     cannot be pasted into a frame (ungroup first)"). A container that
-//     sits inside a group is accepted. See `clipPlan`.
+// 10. A CLIPPING MASK IS A CLIP GROUP (engine ADR 1010). `createGroup
+//     { memberIds, clip: true }` groups the selection and makes its
+//     top-most member the clipping path: the others paint inside its
+//     outline, and the path paints nothing of its own. The path must be
+//     a rectangle, an ellipse or a path (the engine refuses anything
+//     else, and a path that holds pasted-in content); the content may be
+//     anything a group may hold, groups included. One op, one undo step.
+//     Up to engine ADR 1010 Make pasted each content item into the path
+//     (B-18), which refused groups and grouped items.
 //
-// 11. NESTED CONTENT IS INVISIBLE TO EVERY ENUMERATING READ. The scene
-//     tree drops it, `requestGroupLeaves` on the container answers `[]`,
-//     `elementProperties` lists nothing, the hit-tester never reports it
-//     — while `elementGeometry`, `moveFrame` and `releaseFrom` all still
-//     answer for it BY ID. Nothing on the wire lists a container's
-//     content (engine-findings §15). So the host keeps its own index:
-//     Make stamps the content's ids on the container as plugin metadata
-//     (`OBJECT_METADATA_KEY`) IN THE SAME BATCH, which keeps the index
-//     and the nesting in step through undo and redo. Release, Delete and
-//     Nudge read it. Content nested by anything else — an InDesign
-//     paste-into, a script, paged.draw's repeats — carries no index and
-//     cannot be found from here.
+// 11. THE TREE LISTS WHAT A FRAME HOLDS. Since engine ADR 1010 the scene
+//     tree lists a container's pasted-in children under it, and marks a
+//     clip group's row `clip: true` (its last child is the path). So
+//     Release, Edit contents, Delete and Nudge read the tree; the object
+//     layer kept its own index of pasted-in content before, because no
+//     read listed it.
 //
-// 12. A RELEASED ITEM LANDS AT THE FRONT. The wire's `releaseFrom` has no
-//     slot argument; the engine appends to the spread's list. So Release
-//     follows each one with a `reorderElement { index }` that puts it
-//     directly BENEATH the clipping path, in the order it held inside —
-//     Illustrator's Release. Where the clipping path is inside a group
-//     the content lands beneath that group instead: a reorder cannot
-//     reparent (fact 2). See `releasePlan`.
+// 12. RELEASE DISSOLVES THE CLIP GROUP: its members come back in place,
+//     in order, the former path on top (Illustrator's Release). Content
+//     pasted into a frame (InDesign's paste-into, a script, an older
+//     editor's clipping mask) is released with `releaseFrom`, which has
+//     no slot argument — the engine appends to the spread's list — so
+//     each one is followed by a `reorderElement { index }` that puts it
+//     directly BENEATH its frame, in the order it held inside. Where the
+//     frame is inside a group the content lands beneath that group
+//     instead: a reorder cannot reparent (fact 2). See `releasePlan`.
 //
-// 13. A CONTAINER'S CONTENT DOES NOT MOVE WITH IT. Nested children keep
-//     spread-space transforms, so `moveFrame` on the container — and the
-//     engine's own drag — move the MASK over content that stays where it
-//     was (§16). So Nudge moves each indexed child by the same step. The
-//     drag is the engine's, and stays §16. Delete releases and removes
-//     each indexed child before the container, in the same batch (one
-//     undo re-nests it). Up to 0.64 that was the only way the content
-//     went with its container (§12: the engine popped it back out); 0.65
-//     removes nested content with its container itself (core 65ee6a1),
-//     so the explicit form is now simply the same batch spelled out, and
-//     content nested by anything else goes with its container too.
+// 13. A FRAME'S PASTED-IN CONTENT DOES NOT MOVE WITH IT. Nested children
+//     keep spread-space transforms, so `moveFrame` on the container — and
+//     the engine's own drag — move the MASK over content that stays where
+//     it was (§16). So Nudge moves each child by the same step (a group
+//     child by its own `setGroupTransform`). A clip group is a group and
+//     moves whole. Delete leaves the content to the engine, which removes
+//     it with its container (0.65+; a pasted-in group too since ADR 1010).
 
 import type {
   CommandContribution,
@@ -201,6 +192,7 @@ const M = defineMessages("app.objectCommands", {
   delete: "Delete",
   makeClippingMask: "Make clipping mask",
   releaseClippingMask: "Release clipping mask",
+  editClippingContents: "Edit clipping mask contents",
   lock: "Lock",
   unlockAllOnSpread: "Unlock all on spread",
   hide: "Hide",
@@ -230,10 +222,8 @@ const M = defineMessages("app.objectCommands", {
     "{item} is not a free object on the page (it may already be inside a clipping path).",
   clipTopmost:
     "the topmost object, {item}, cannot be a clipping path — the engine clips only by a rectangle, an ellipse or a path. Bring one of those to the front of the selection.",
-  clipGroup:
-    "{item} cannot be clipped: the engine pastes single objects into a frame, never a group. Ungroup it first.",
   clipGrouped:
-    "{item} is inside {group}, and the engine cannot paste a grouped object into a frame. Ungroup first.",
+    "{item} is inside {group}; a clipping mask groups objects of one level. Select {group} instead, or ungroup it first.",
   noDocument: "no document loaded",
   lockedNode: "{node} is locked — unlock it to {action}",
   notPermitted: "the template does not permit {permission} on {target}",
@@ -251,17 +241,11 @@ const M = defineMessages("app.objectCommands", {
   positionUnreadable: "the selection's position could not be read",
   treeUnreadableTopmost:
     "the document structure could not be read, so the topmost object could not be found.",
-  clipIndexUnreadable:
-    "what {item} already clips could not be read, so its index would have been lost.",
   selectClipPath:
-    "select a clipping path — a rectangle, an ellipse or a path that holds clipped content.",
+    "select a clipping mask — a clip group, something inside one, or a frame that holds pasted-in content.",
   clipsUnreadable:
     "what the selection clips could not be read, so nothing was released.",
-  noIndexOne:
-    "{items} holds no content this editor clipped. Content pasted in elsewhere — by InDesign, a script or a plugin — cannot be found: the engine has no read that lists what is inside a frame.",
-  noIndexOther:
-    "{items} hold no content this editor clipped. Content pasted in elsewhere — by InDesign, a script or a plugin — cannot be found: the engine has no read that lists what is inside a frame.",
-  releasedPartly: "Released what could be found; {rest}",
+  noClipContent: "{items} clips nothing.",
 });
 
 // The words of this file's menu rows; the shell's menu bar shows each
@@ -279,8 +263,10 @@ defineMessages("menu", {
   "Nudge up": "Nudge up",
   "Nudge down": "Nudge down",
   Delete: "Delete",
-  "Make clipping mask": "Make clipping mask",
-  "Release clipping mask": "Release clipping mask",
+  "Clipping mask": "Clipping mask",
+  Make: "Make",
+  Release: "Release",
+  "Edit contents": "Edit contents",
   Lock: "Lock",
   "Unlock all on spread": "Unlock all on spread",
   Hide: "Hide",
@@ -320,11 +306,8 @@ export const PAGED_OBJECT_HIDE = "paged.object.hide";
 export const PAGED_OBJECT_SHOW_ALL_ON_SPREAD = "paged.object.showAllOnSpread";
 export const PAGED_OBJECT_RELEASE_CLIPPING_MASK =
   "paged.object.releaseClippingMask";
-
-/** The plugin-metadata key the object layer keeps its clipping index
- *  under (fact 11). The engine reserves `x-paged:<owner>`; the host's
- *  object layer is the owner. */
-export const OBJECT_METADATA_KEY = "x-paged:paged.object";
+export const PAGED_OBJECT_EDIT_CLIPPING_CONTENTS =
+  "paged.object.editClippingContents";
 
 /** One arrow press, in points — InDesign's default cursor-key
  *  increment. */
@@ -421,6 +404,7 @@ const VERB_KEYS: Readonly<Record<string, string>> = {
   Delete: M.delete,
   "Make clipping mask": M.makeClippingMask,
   "Release clipping mask": M.releaseClippingMask,
+  "Edit clipping mask contents": M.editClippingContents,
   Lock: M.lock,
   Hide: M.hide,
   "Unlock all on spread": M.unlockAllOnSpread,
@@ -457,6 +441,7 @@ export interface ObjectCommandHandlers {
   nudge: (direction: NudgeDirection, large: boolean) => void | Promise<void>;
   makeClippingMask: () => void | Promise<void>;
   releaseClippingMask: () => void | Promise<void>;
+  editClippingContents: () => void | Promise<void>;
   lock: () => void | Promise<void>;
   unlockAllOnSpread: () => void | Promise<void>;
   hide: () => void | Promise<void>;
@@ -752,9 +737,9 @@ export type DeletePlan =
  * absent from the tree by design and refused with the reason
  * ("release it before removing").
  *
- *  · A CLIPPING PATH goes with its content (fact 13). `clipContent`
- *    maps a container's key to the nested items the object layer's
- *    index lists for it (`clipContentIndex`); each is released and
+ *  · A FRAME goes with its pasted-in content (fact 13). `clipContent`
+ *    maps a container's key to the nested items it holds, when a caller
+ *    wants them spelled out; each is released and
  *    removed BEFORE the container, deepest first, so the engine never
  *    sees a delete of a nested item and one undo re-nests every one of
  *    them. Without the map the container is deleted alone, and the
@@ -976,75 +961,63 @@ const CLIP_PATH_KINDS: ReadonlySet<string> = new Set([
   "polygon",
 ]);
 
-/** Can this page item be a clipping path — hold pasted-in content? */
+/** Can this page item be a clipping path? */
 export function canClipBy(id: ElementId): id is PageItemId {
   return isPageItem(id) && CLIP_PATH_KINDS.has(id.kind);
 }
 
-/** The content a container's object-layer index lists, read off its
- *  property snapshot — or `[]` when it carries no index (fact 11).
- *  Tolerant of anything malformed: an unreadable index is no index. */
-export function clipContentOf(props: ElementProperties | null): PageItemId[] {
-  for (const entry of props?.entries ?? []) {
-    const value = entry.value;
-    if (entry.path !== "pluginMetadata" || value?.type !== "pluginMetadata") {
-      continue;
-    }
-    if (value.value.key !== OBJECT_METADATA_KEY || !value.value.value) continue;
-    try {
-      const parsed = JSON.parse(value.value.value) as {
-        data?: { clipContent?: unknown };
-      };
-      const list = parsed.data?.clipContent;
-      if (!Array.isArray(list)) return [];
-      return list.filter(
-        (id): id is PageItemId =>
-          id != null &&
-          typeof id === "object" &&
-          isPageItem(id as ElementId) &&
-          (id as ElementId).kind !== "group",
-      );
-    } catch {
-      return [];
-    }
-  }
-  return [];
+/** The ids of a tree node's direct children. */
+function childIds(node: SceneTreeNode): PageItemId[] {
+  return (node.children ?? [])
+    .map((c) => c.id)
+    .filter((id): id is PageItemId => id != null && isPageItem(id));
 }
 
-/** The write that sets (or, for an empty list, clears) a container's
- *  clipping index. It rides the SAME batch as the nesting it describes,
- *  so undo restores both together. */
-export function clipIndexMutation(
+/** What a frame holds pasted in (fact 11): its tree row's children. A
+ *  group's row lists members, not pasted-in content, so it holds none. */
+export function pastedInContentOf(
+  roots: readonly SceneTreeNode[],
   container: PageItemId,
-  content: readonly PageItemId[],
-): Mutation {
-  return {
-    op: "setPluginMetadata",
-    args: {
-      elementId: container,
-      key: OBJECT_METADATA_KEY,
-      value:
-        content.length === 0
-          ? null
-          : JSON.stringify({
-              v: 1,
-              data: {
-                clipContent: content.map((id) => ({
-                  kind: id.kind,
-                  id: id.id,
-                })),
-              },
-            }),
-    },
-  };
+): PageItemId[] {
+  if (!canClipBy(container)) return [];
+  const place = treePlaces(roots).get(elementKey(container));
+  return place ? childIds(place.node) : [];
+}
+
+/** A clip group a selected id names (fact 10): the group itself when it
+ *  clips, else the innermost clip group around it. */
+export function clipGroupFor(
+  roots: readonly SceneTreeNode[],
+  id: ElementId,
+): PageItemId | null {
+  const places = treePlaces(roots);
+  const place = places.get(elementKey(id));
+  if (!place) return null;
+  if (place.node.clip === true && isPageItem(id)) return id;
+  for (const g of [...place.groups].reverse()) {
+    if (places.get(elementKey(g))?.node.clip === true && isPageItem(g)) {
+      return g;
+    }
+  }
+  return null;
+}
+
+/** A clip group's content: its members but the top-most one, which is
+ *  the clipping path (fact 10). */
+export function clipGroupContent(
+  roots: readonly SceneTreeNode[],
+  group: PageItemId,
+): { path: PageItemId | null; content: PageItemId[] } {
+  const place = treePlaces(roots).get(elementKey(group));
+  const members = place ? childIds(place.node) : [];
+  return { path: members.at(-1) ?? null, content: members.slice(0, -1) };
 }
 
 /** What `clipPlan` hands the runner. */
 export type ClipPlan =
   | {
       ok: true;
-      /** The ONE batch: a `pasteInto` per content item, back to front,
-       *  then the index write. */
+      /** The ONE op: `createGroup { clip: true }` over the selection. */
       ops: Mutation[];
       /** The topmost selected object — the clipping path. */
       clip: PageItemId;
@@ -1054,26 +1027,21 @@ export type ClipPlan =
   | { ok: false; reason: string };
 
 /**
- * Turn a selection into the batch that makes a clipping mask of it.
+ * Turn a selection into the op that makes a clipping mask of it (fact
+ * 10): one clip group of the selection, whose topmost member clips.
  *
  * TOPMOST is the renderer's order: layer first (`layerZ`, higher paints
  * later — absent means one layer), then the paint walk of the scene
- * tree (`zSlots` rank). The content is pasted BACK TO FRONT, because
- * the container paints its children in the order they were pasted —
- * so the stack keeps its relative order inside the mask.
+ * tree (`zSlots` rank). The engine orders a group's members by stacking
+ * order itself; the plan names them back to front all the same.
  *
- * `existing` is what the clipping path already holds (its index,
- * filtered to what is still nested): pasting more content into a mask
- * keeps the old content listed.
- *
- * Every refusal here is one the engine would make anyway, or a state it
- * cannot express, said in words a user can act on and BEFORE the wire.
+ * Every refusal here is one the engine would make anyway, said in words
+ * a user can act on and BEFORE the wire.
  */
 export function clipPlan(
   selection: readonly ElementId[],
   roots: readonly SceneTreeNode[],
   options: {
-    existing?: readonly PageItemId[];
     layerZ?: ReadonlyMap<string, number>;
   } = {},
 ): ClipPlan {
@@ -1096,7 +1064,7 @@ export function clipPlan(
   const places = treePlaces(roots);
   const slots = zSlots(roots);
   for (const id of targets) {
-    if (!places.has(elementKey(id))) {
+    if (!places.has(elementKey(id)) || !slots.has(elementKey(id))) {
       return {
         ok: false,
         reason: t(M.clipNotFree, { item: describeElement(id) }),
@@ -1118,13 +1086,7 @@ export function clipPlan(
       reason: t(M.clipTopmost, { item: describeElement(clip) }),
     };
   }
-  for (const item of content) {
-    if (item.kind === "group") {
-      return {
-        ok: false,
-        reason: t(M.clipGroup, { item: describeElement(item) }),
-      };
-    }
+  for (const item of ordered) {
     const parent = places.get(elementKey(item))!.groups.at(-1);
     if (parent) {
       return {
@@ -1137,18 +1099,13 @@ export function clipPlan(
     }
   }
 
-  const ops: Mutation[] = content.map((childId) => ({
-    op: "pasteInto" as const,
-    args: { containerId: clip, childId },
-  }));
-  const kept = (options.existing ?? []).filter(
-    (id) => !content.some((c) => elementKey(c) === elementKey(id)),
-  );
-  ops.push(clipIndexMutation(clip, [...kept, ...content]));
+  const ops: Mutation[] = [
+    { op: "createGroup", args: { memberIds: ordered, clip: true } },
+  ];
   return { ok: true, ops, clip, content };
 }
 
-/** One clipping path and the content Release pops out of it. */
+/** One frame and the pasted-in content Release pops out of it. */
 export interface ClipRelease {
   container: PageItemId;
   content: readonly PageItemId[];
@@ -1157,8 +1114,8 @@ export interface ClipRelease {
 /**
  * The batch that releases clipping masks (fact 12): every `releaseFrom`
  * first, then a `reorderElement { index }` per released item that puts
- * it directly beneath its clipping path — or beneath the outermost group
- * holding the path — in the order it held inside, then the index clears.
+ * it directly beneath its frame — or beneath the outermost group holding
+ * the frame — in the order it held inside.
  *
  * The indices are computed by REPLAYING the batch against the spread's
  * list as the engine will hold it at each step: a release appends, an
@@ -1181,7 +1138,6 @@ export function releasePlan(
 
   const releaseOps: Mutation[] = [];
   const reorderOps: Mutation[] = [];
-  const indexOps: Mutation[] = [];
   const anchored: Array<{ anchor: string; bucket: string; child: PageItemId }> =
     [];
   for (const { container, content } of releases) {
@@ -1199,7 +1155,6 @@ export function releasePlan(
         });
       }
     }
-    indexOps.push(clipIndexMutation(container, []));
   }
   for (const { anchor, bucket, child } of anchored) {
     const list = lists.get(bucket)!;
@@ -1211,7 +1166,7 @@ export function releasePlan(
       args: { elementId: child, to: { index } },
     });
   }
-  return [...releaseOps, ...reorderOps, ...indexOps];
+  return [...releaseOps, ...reorderOps];
 }
 
 /** The engine's own sentence for a refused mutation, or null when it
@@ -1416,33 +1371,14 @@ export async function deleteSelection(deps: ObjectCommandDeps): Promise<void> {
     return;
   }
 
-  let plan = deletePlan(selection, roots);
+  const plan = deletePlan(selection, roots);
   if (!plan.ok) {
     deps.report("error", refused("Delete", plan.reason));
     return;
   }
-  // Fact 13 — a clipping path goes with what it clips. The first plan
-  // names every leaf that will go; the index read is only for those that
-  // can clip, and a second plan folds their content in. An index that
-  // cannot be read is no reason to refuse any more: since engine 0.65 a
-  // container's delete takes its content along by itself (up to 0.64 the
-  // content popped back out, so this refused).
-  const clipPaths = plan.removed.filter(canClipBy);
-  if (clipPaths.length > 0) {
-    let index = new Map<string, PageItemId[]>();
-    try {
-      index = await clipContentIndex(deps.client, clipPaths, roots);
-    } catch {
-      /* the plain plan: the engine removes the content with its container. */
-    }
-    if (index.size > 0) {
-      plan = deletePlan(selection, roots, index);
-      if (!plan.ok) {
-        deps.report("error", refused("Delete", plan.reason));
-        return;
-      }
-    }
-  }
+  // Fact 13 — a frame's pasted-in content goes with it: the engine
+  // removes it with its container (0.65+), a pasted-in group too (engine
+  // ADR 1010), and one undo puts it back inside.
   if (plan.ops.length === 0) return;
 
   const reply = await deps.client.mutate(asOneMutation(plan.ops));
@@ -1816,23 +1752,25 @@ export async function translationPlan(
         args: { groupId: group.id, transform: translated(own, lx, ly) },
       });
     }
-    // Fact 13 — what is clipped inside a moving clipping path moves by
-    // the same step, or the mask would slide over content that stayed.
-    // A group's `setGroupTransform` rebases its MEMBERS, and nested
-    // content is no member, so clipping paths inside a group count too.
-    if (groups.length > 0) roots ??= await client.sceneTree();
+    // Fact 13 — what is pasted into a moving frame moves by the same
+    // step, or the mask would slide over content that stayed. A group's
+    // `setGroupTransform` rebases its MEMBERS, and pasted-in content is
+    // no member, so frames inside a group count too.
+    if (groups.length > 0 || leaves.some(canClipBy)) {
+      roots ??= await client.sceneTree();
+    }
     const containers = [
       ...leaves.filter(canClipBy),
       ...clipPathsInside(groups, roots),
     ];
-    if (containers.length > 0) {
-      const index = await clipContentIndex(client, containers, roots);
-      const moving = new Set(leaves.map(elementKey));
-      const content = clippedContent(index, containers).filter(
+    if (containers.length > 0 && roots) {
+      const moving = new Set(targets.map(elementKey));
+      const content = clippedContent(roots, containers).filter(
         (id) => !moving.has(elementKey(id)),
       );
-      if (content.length > 0) {
-        for (const item of await client.elementGeometry(content)) {
+      const contentLeaves = content.filter((id) => id.kind !== "group");
+      if (contentLeaves.length > 0) {
+        for (const item of await client.elementGeometry(contentLeaves)) {
           if (!isPageItem(item.id)) continue;
           ops.push({
             op: "moveFrame",
@@ -1842,6 +1780,15 @@ export async function translationPlan(
             },
           });
         }
+      }
+      // A pasted-in group's frame is spread space (engine ADR 1010).
+      for (const group of content.filter((id) => id.kind === "group")) {
+        const own = ownTransformOf(await client.elementProperties(group));
+        if (own === undefined) continue;
+        ops.push({
+          op: "setGroupTransform",
+          args: { groupId: group.id, transform: translated(own, dx, dy) },
+        });
       }
     }
   } catch (err) {
@@ -1900,70 +1847,30 @@ function clipPathsInside(
   return out;
 }
 
-/** Everything `index` says is clipped inside `containers`, at any
- *  depth (a clipping path can itself be content), each item once. */
+/** Everything pasted into `containers`, at any depth (a frame can
+ *  itself be content, inside a frame or inside a pasted-in group), each
+ *  item once, read off the tree (fact 11). A pasted-in group is listed,
+ *  not its members: it moves whole. */
 export function clippedContent(
-  index: ReadonlyMap<string, readonly PageItemId[]>,
+  roots: readonly SceneTreeNode[],
   containers: readonly PageItemId[],
 ): PageItemId[] {
   const out: PageItemId[] = [];
   const seen = new Set<string>();
   const visit = (container: PageItemId) => {
-    for (const child of index.get(elementKey(container)) ?? []) {
+    for (const child of pastedInContentOf(roots, container)) {
       const key = elementKey(child);
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(child);
-      visit(child);
+      if (child.kind === "group") {
+        clipPathsInside([child], roots).forEach(visit);
+      } else {
+        visit(child);
+      }
     }
   };
   containers.forEach(visit);
-  return out;
-}
-
-/**
- * Read the object layer's clipping index for `candidates` and every
- * clipping path nested inside them (fact 11), keyed by container.
- *
- * An index entry counts only while it is STILL NESTED: absent from the
- * scene tree (a nested item is the one thing the tree never lists) and
- * still answering `elementGeometry` (it exists). Anything else — an item
- * a script released, one that no longer exists — is dropped here, so a
- * stale index can never put a `releaseFrom` the engine would refuse into
- * a batch that would then roll back whole.
- *
- * Reads the tree only when some container actually lists content, so a
- * nudge of a plain rectangle costs one property read and nothing more.
- * Throws when a read fails; each caller decides what that means.
- */
-async function clipContentIndex(
-  client: TranslationClient,
-  candidates: readonly PageItemId[],
-  roots: readonly SceneTreeNode[] | null,
-): Promise<Map<string, PageItemId[]>> {
-  const out = new Map<string, PageItemId[]>();
-  let inTree: Set<string> | null = roots
-    ? new Set(treePlaces(roots).keys())
-    : null;
-  const queue = candidates.filter(canClipBy);
-  const visited = new Set<string>();
-  for (let container = queue.shift(); container; container = queue.shift()) {
-    const key = elementKey(container);
-    if (visited.has(key)) continue;
-    visited.add(key);
-    const listed = clipContentOf(await client.elementProperties(container));
-    if (listed.length === 0) continue;
-    inTree ??= new Set(treePlaces(await client.sceneTree()).keys());
-    const hidden = listed.filter((id) => !inTree!.has(elementKey(id)));
-    if (hidden.length === 0) continue;
-    const exists = new Set(
-      (await client.elementGeometry(hidden)).map((g) => elementKey(g.id)),
-    );
-    const nested = hidden.filter((id) => exists.has(elementKey(id)));
-    if (nested.length === 0) continue;
-    out.set(key, nested);
-    queue.push(...nested.filter(canClipBy));
-  }
   return out;
 }
 
@@ -1999,15 +1906,14 @@ async function layerPositions(
 
 /**
  * Make clipping mask — Illustrator's rule: the TOPMOST selected object
- * becomes the clipping path and the rest its content, in ONE batch and
- * so one undo step. Afterwards the clipping path is selected (the
- * content is invisible to selection while nested — fact 11).
+ * becomes the clipping path and the rest its content, as ONE clip group
+ * and so one undo step (fact 10). Afterwards the clip group is selected.
  *
  * Refused, with the reason, before the wire: fewer than two objects, a
- * topmost object that cannot clip, a group or a grouped object as
- * content (`clipPlan`). Refused by the engine, verbatim: anything else
- * (two spreads, a stale id) — the batch is atomic, so nothing is half
- * clipped.
+ * topmost object that cannot clip, an object inside a group
+ * (`clipPlan`). Refused by the engine, verbatim: anything else (two
+ * spreads, a path that holds pasted-in content, a stale id) — nothing is
+ * half clipped.
  */
 export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
   if (blockedByEditContext(deps, "Make clipping mask")) return;
@@ -2025,57 +1931,57 @@ export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
     return;
   }
   const layerZ = await layerPositions(deps, selection);
-  let plan = clipPlan(selection, roots, { layerZ });
+  const plan = clipPlan(selection, roots, { layerZ });
   if (!plan.ok) {
     deps.report("error", refused("Make clipping mask", plan.reason));
     return;
   }
-  // A clipping path that already holds content keeps it listed.
-  const clip = plan.clip;
-  let existing: PageItemId[];
-  try {
-    existing =
-      (await clipContentIndex(deps.client, [clip], roots)).get(
-        elementKey(clip),
-      ) ?? [];
-  } catch {
-    deps.report(
-      "error",
-      refused(
-        "Make clipping mask",
-        t(M.clipIndexUnreadable, { item: describeElement(clip) }),
-      ),
-    );
-    return;
-  }
-  if (existing.length > 0) {
-    plan = clipPlan(selection, roots, { layerZ, existing });
-    if (!plan.ok) {
-      deps.report("error", refused("Make clipping mask", plan.reason));
-      return;
-    }
-  }
-
   const reply = await deps.client.mutate(asOneMutation(plan.ops));
   const refusal = refusalOf(reply);
   if (refusal) {
     deps.report("error", refused("Make clipping mask", refusal));
     return;
   }
-  await deps.setSelection([plan.clip]);
+  if (reply.kind === "mutationApplied" && reply.payload.createdId) {
+    await deps.setSelection([reply.payload.createdId]);
+  }
+}
+
+/** What the selection names to release or edit: the clip groups it
+ *  holds or sits in, and the frames it selects that hold pasted-in
+ *  content, each once. */
+function clippingTargets(
+  roots: readonly SceneTreeNode[],
+  selection: readonly ElementId[],
+): { groups: PageItemId[]; frames: ClipRelease[]; empty: PageItemId[] } {
+  const groups: PageItemId[] = [];
+  const frames: ClipRelease[] = [];
+  const empty: PageItemId[] = [];
+  const seen = new Set<string>();
+  for (const id of selection) {
+    if (!isPageItem(id)) continue;
+    const group = clipGroupFor(roots, id);
+    if (group) {
+      if (!seen.has(elementKey(group))) groups.push(group);
+      seen.add(elementKey(group));
+      continue;
+    }
+    if (!canClipBy(id) || seen.has(elementKey(id))) continue;
+    seen.add(elementKey(id));
+    const content = pastedInContentOf(roots, id);
+    if (content.length > 0) frames.push({ container: id, content });
+    else empty.push(id);
+  }
+  return { groups, frames, empty };
 }
 
 /**
- * Release clipping mask — pop the content out of every selected
- * clipping path, in ONE batch and one undo step, each item landing
- * directly beneath its clipping path in the order it held inside
- * (`releasePlan`). Afterwards the released content and the former
- * clipping paths are selected, as Illustrator leaves them.
- *
- * Finds the content through the object layer's own index (fact 11).
- * A clipping path with no index — content pasted in by InDesign, a
- * script or a plugin — is reported, not guessed at: nothing on the wire
- * lists what is inside a frame (engine-findings §15).
+ * Release clipping mask — in ONE batch and one undo step: every clip
+ * group the selection holds or sits in is dissolved (its members stay in
+ * place, the former path on top), and every selected frame's pasted-in
+ * content pops out beneath it, in order (`releasePlan`, fact 12).
+ * Afterwards the released objects are selected, as Illustrator leaves
+ * them.
  */
 export async function releaseClippingMask(
   deps: ObjectCommandDeps,
@@ -2083,23 +1989,10 @@ export async function releaseClippingMask(
   if (blockedByEditContext(deps, "Release clipping mask")) return;
   const selection = [...deps.getSelection()];
   if (!selection.some(isPageItem)) return;
-  const containers: PageItemId[] = [];
-  const seen = new Set<string>();
-  for (const id of selection) {
-    if (!canClipBy(id) || seen.has(elementKey(id))) continue;
-    seen.add(elementKey(id));
-    containers.push(id);
-  }
-  if (containers.length === 0) {
-    deps.report("error", refused("Release clipping mask", t(M.selectClipPath)));
-    return;
-  }
 
   let roots: SceneTreeNode[];
-  let index: Map<string, PageItemId[]>;
   try {
     roots = await deps.client.sceneTree();
-    index = await clipContentIndex(deps.client, containers, roots);
   } catch {
     deps.report(
       "error",
@@ -2107,37 +2000,81 @@ export async function releaseClippingMask(
     );
     return;
   }
-  const releases: ClipRelease[] = [];
-  const empty: PageItemId[] = [];
-  for (const container of containers) {
-    const content = index.get(elementKey(container));
-    if (content && content.length > 0) releases.push({ container, content });
-    else empty.push(container);
-  }
-  const noIndex = (ids: PageItemId[]) =>
-    t(ids.length === 1 ? M.noIndexOne : M.noIndexOther, {
-      items: ids.map(describeElement).join(", "),
-    });
-  if (releases.length === 0) {
-    deps.report("error", refused("Release clipping mask", noIndex(empty)));
+  const { groups, frames, empty } = clippingTargets(roots, selection);
+  if (groups.length === 0 && frames.length === 0) {
+    deps.report(
+      "error",
+      refused(
+        "Release clipping mask",
+        empty.length > 0
+          ? t(M.noClipContent, {
+              items: empty.map(describeElement).join(", "),
+            })
+          : t(M.selectClipPath),
+      ),
+    );
     return;
   }
-
-  const reply = await deps.client.mutate(
-    asOneMutation(releasePlan(releases, roots)),
-  );
+  const released: ElementId[] = [];
+  for (const group of groups) {
+    released.push(...groupMembersOf(roots, group.id));
+  }
+  const ops: Mutation[] = [
+    ...groups.map((group) => ({
+      op: "dissolveGroup" as const,
+      args: { groupId: group.id },
+    })),
+    ...releasePlan(frames, roots),
+  ];
+  const reply = await deps.client.mutate(asOneMutation(ops));
   const refusal = refusalOf(reply);
   if (refusal) {
     deps.report("error", refused("Release clipping mask", refusal));
     return;
   }
   await deps.setSelection([
-    ...releases.flatMap((r) => r.content),
-    ...releases.map((r) => r.container),
+    ...released,
+    ...frames.flatMap((r) => r.content),
+    ...frames.map((r) => r.container),
   ]);
-  if (empty.length > 0) {
-    deps.report("info", t(M.releasedPartly, { rest: noIndex(empty) }));
+}
+
+/**
+ * Edit clipping mask contents — Illustrator's Edit Contents: select
+ * what the mask clips, leaving the clipping path out, so the content can
+ * be moved, restyled or deleted inside the mask. For a clip group that
+ * is its members but the top-most; for a frame, its pasted-in content.
+ * Selects; writes nothing.
+ */
+export async function editClippingContents(
+  deps: ObjectCommandDeps,
+): Promise<void> {
+  if (blockedByEditContext(deps, "Edit clipping mask contents")) return;
+  const selection = [...deps.getSelection()];
+  if (!selection.some(isPageItem)) return;
+  let roots: SceneTreeNode[];
+  try {
+    roots = await deps.client.sceneTree();
+  } catch {
+    deps.report(
+      "error",
+      refused("Edit clipping mask contents", t(M.treeUnreadable)),
+    );
+    return;
   }
+  const { groups, frames } = clippingTargets(roots, selection);
+  const content: PageItemId[] = [
+    ...groups.flatMap((g) => clipGroupContent(roots, g).content),
+    ...frames.flatMap((f) => f.content),
+  ];
+  if (content.length === 0) {
+    deps.report(
+      "error",
+      refused("Edit clipping mask contents", t(M.selectClipPath)),
+    );
+    return;
+  }
+  await deps.setSelection(content);
 }
 
 // ------------------------------------------------------------ commands
@@ -2391,6 +2328,13 @@ export function buildObjectCommands(
       handler: () => handlers.releaseClippingMask(),
     },
     {
+      id: PAGED_OBJECT_EDIT_CLIPPING_CONTENTS,
+      title: t(M.editClippingContents),
+      category: "Object",
+      when: onSelectedObjects,
+      handler: () => handlers.editClippingContents(),
+    },
+    {
       id: PAGED_OBJECT_LOCK,
       title: t(M.lock),
       category: "Object",
@@ -2541,17 +2485,25 @@ export const OBJECT_MENU_ITEMS: MenuItemContribution[] = [
     when: objectVerbApplies,
   },
   // 28–29: the last free pair below the 30s (see the nudge note above).
+  // Illustrator's Object ▸ Clipping Mask submenu (engine ADR 1010).
   {
-    path: "Object/Make clipping mask",
+    path: "Object/Clipping mask/Make",
     command: PAGED_OBJECT_MAKE_CLIPPING_MASK,
     order: 28,
     group: "clip",
     when: notInsideAnEditContext,
   },
   {
-    path: "Object/Release clipping mask",
+    path: "Object/Clipping mask/Release",
     command: PAGED_OBJECT_RELEASE_CLIPPING_MASK,
-    order: 29,
+    order: 28.1,
+    group: "clip",
+    when: notInsideAnEditContext,
+  },
+  {
+    path: "Object/Clipping mask/Edit contents",
+    command: PAGED_OBJECT_EDIT_CLIPPING_CONTENTS,
+    order: 28.2,
     group: "clip",
     when: notInsideAnEditContext,
   },
