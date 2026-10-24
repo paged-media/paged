@@ -120,12 +120,7 @@ import {
   notePluginLoaded,
 } from "../journal-sink";
 import { createGuardedLoader } from "../plugin-load-guard";
-import {
-  ALIGN_ARGS,
-  ALIGN_COMMAND,
-  runAlign,
-  type AlignKind,
-} from "../align-plan";
+import { buildTransformCommands } from "../transform-commands";
 import { cameraCentredOn, cameraForPage } from "../plugin-pages";
 import { applyProfile } from "../profiles/apply";
 import { profileFromSearch } from "../profiles/from-url";
@@ -159,6 +154,11 @@ import {
   GLOBAL_LIGHT_MENU_ITEMS,
   GlobalLightDialog,
 } from "../panels/global-light-dialog";
+import {
+  buildTransformEachDialogCommands,
+  TRANSFORM_EACH_MENU_ITEMS,
+  TransformEachDialog,
+} from "../panels/transform-each-dialog";
 import {
   OPEN_AS_TEMPLATE_COMMANDS,
   OPEN_AS_TEMPLATE_MENU_ITEMS,
@@ -704,7 +704,6 @@ const M = defineMessages("app.main", {
   saveAsIdml: "Save As IDML",
   savePaged: "Save (.paged)",
   fileFailed: "{what} failed — {message}",
-  alignObjects: "Align objects",
   askClaude: "Ask Claude",
   defaultFontUnavailable:
     "The default font is unavailable — text in documents with missing " +
@@ -1349,21 +1348,21 @@ function CanvasAppIntegration() {
       },
       newPage: freshInsert((p) => addPage(p, insertReport)),
     });
-    // ADR 323 — Align / Distribute as a TYPED command over
-    // `host.objects` (align-plan.ts): declared args, one batch = one undo.
-    const alignCommands = [
-      {
-        id: ALIGN_COMMAND,
-        title: t(M.alignObjects),
-        category: "Object",
-        args: ALIGN_ARGS,
-        handler: (_paged: unknown, payload?: unknown) =>
-          runAlign(
-            instance.services.objects.registry,
-            payload as { kind: AlignKind; targets: string[] },
-          ),
-      },
-    ];
+    // ADR 323 — Align / Distribute and Transform Each as TYPED commands
+    // (transform-commands.ts): declared args, one batch = one undo.
+    // WP4.4 — Object ▸ Transform ▸ Transform each… opens its dialog over
+    // the selection's addresses.
+    const transformEachDialogCommands = buildTransformEachDialogCommands(
+      (paged) =>
+        ((paged as PagedEditor | null)?.selection.elementSelection ?? []).map(
+          (id) => instance.services.objects.addressOfElement(id),
+        ),
+    );
+    const alignCommands = buildTransformCommands(
+      instance.services.objects.registry,
+      (address) =>
+        instance.services.objects.model.elementIdOf?.(address) ?? null,
+    );
     // ADR 221 — every Claude entry point opens the AI Assistant panel;
     // the palette's "Ask Claude" row also runs the request there.
     setAssistantOpener(
@@ -1405,6 +1404,7 @@ function CanvasAppIntegration() {
       ...insertCommands,
       ...alignCommands,
       ...GLOBAL_LIGHT_COMMANDS,
+      ...transformEachDialogCommands,
       ...OPEN_AS_TEMPLATE_COMMANDS,
       SELECT_ALL_COMMAND,
       // ADR 323 §4 — the typed core commands' menu / palette doors.
@@ -1418,6 +1418,7 @@ function CanvasAppIntegration() {
       ...INSERT_MENU_ITEMS,
       ...CORE_COMMAND_MENU_ITEMS,
       ...GLOBAL_LIGHT_MENU_ITEMS,
+      ...TRANSFORM_EACH_MENU_ITEMS,
       ...OPEN_AS_TEMPLATE_MENU_ITEMS,
       ...COCKPIT_MENU_SEAMS,
     ]
@@ -1630,6 +1631,7 @@ function CanvasAppRoot() {
       <SecretPromptDialog controller={instance.services.secrets.controller} />
       <CoreCommandDialog />
       <GlobalLightDialog />
+      <TransformEachDialog />
       <OpenAsTemplateDialog />
       {/* The live-demo playground UI and the docs' iframe scripting bridge:
           the page entry's tools (they drive the page's `__canvas`), only in
