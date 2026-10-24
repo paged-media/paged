@@ -27,8 +27,8 @@
 //!
 //! ## Two layers, one logic
 //!
-//! - [`core::DataSession`] — plain Rust, native-typed. The full engine lives
-//!   here, so `data-conformance` exercises it WITHOUT a wasm runtime.
+//! - [`core::DataSession`] — plain Rust, native-typed, in the engine crate
+//!   `paged-data-session`. The full engine lives there, so `data-conformance` exercises it WITHOUT a wasm runtime.
 //! - `DataEngine` (below) — `#[cfg(target_arch = "wasm32")]` only, because
 //!   `JsValue`-returning `#[wasm_bindgen]` methods compile only for wasm32. A
 //!   forwarding shim with NO logic of its own.
@@ -44,9 +44,9 @@
 //! (`data-store`, ADR 561) is behind the `store_*` methods, and a refresh
 //! delivers a query's rows to the session without them leaving the wasm.
 
-pub mod columns;
-pub mod core;
-pub mod review;
+// The session moved into the engine (`paged-data-session`, PM-0015); its
+// modules keep their paths here, so `data_js::core::DataSession` still names it.
+pub use data_session::{columns, core, labels, review};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {

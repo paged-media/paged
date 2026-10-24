@@ -758,3 +758,68 @@ fn template_check() {
         .code(1)
         .golden("paged template check", "changed-outside-the-fields");
 }
+
+/// A document whose rectangle carries paged.data's label (a property and a
+/// variable binding, a source and two queries, one the guard refuses), and
+/// the source's file.
+fn data_fixture(tag: &str) -> Fx {
+    let fx = Fx::new(tag);
+    fx.blank("blank.paged");
+    fx.write("author.js", crate::data_cli::AUTHOR);
+    fx.run(&["script", "blank.paged", "author.js", "-o", "bound.paged"])
+        .code(0);
+    fx.write("products.csv", "name,opacity\nAda,40\nGrace,75\n");
+    fx
+}
+
+#[test]
+fn data_group() {
+    covers!("cli:paged data");
+    let fx = Fx::new("data");
+    fx.help("paged data");
+    fx.run(&["data"])
+        .code(2)
+        .golden("paged data", "usage-no-subcommand");
+}
+
+#[test]
+fn data_bindings() {
+    covers!("cli:paged data bindings");
+    let fx = data_fixture("data-bindings");
+    fx.help("paged data bindings");
+    fx.run(&["data", "bindings"])
+        .code(2)
+        .golden("paged data bindings", "usage-no-document");
+    fx.run(&["data", "bindings", "missing.paged"])
+        .code(1)
+        .golden("paged data bindings", "input-missing-file");
+    fx.run(&["data", "bindings", "bound.paged"])
+        .code(0)
+        .golden("paged data bindings", "text");
+}
+
+#[test]
+fn data_apply() {
+    covers!("cli:paged data apply");
+    let fx = data_fixture("data-apply");
+    fx.help("paged data apply");
+    fx.run(&["data", "apply"])
+        .code(2)
+        .golden("paged data apply", "usage-no-document");
+    fx.run(&["data", "apply", "bound.paged", "--source", "nope"])
+        .code(1)
+        .golden("paged data apply", "input-bad-source");
+    fx.run(&[
+        "data",
+        "apply",
+        "bound.paged",
+        "--source",
+        "products=products.csv",
+        "--record",
+        "1",
+        "-o",
+        "grace.paged",
+    ])
+    .code(0)
+    .golden("paged data apply", "record-1");
+}

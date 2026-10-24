@@ -15,17 +15,17 @@ name = "coverage-gate"
 path = "src/bin/coverage_gate.rs"
 
 [dependencies]
-data-core = { path = "../data-core" }
-data-expr = { path = "../data-expr" }
-data-sources = { path = "../data-sources" }
-data-query = { path = "../data-query" }
-data-bind = { path = "../data-bind" }
-data-lower = { path = "../data-lower" }
-data-barcode = { path = "../data-barcode" }
-data-dataset = { path = "../data-dataset" }
-data-automation = { path = "../data-automation" }
+paged-data-core = { path = "../../../engine/core/crates/paged-data-core" }
+paged-data-expr = { path = "../../../engine/core/crates/paged-data-expr" }
+paged-data-sources = { path = "../../../engine/core/crates/paged-data-sources" }
+paged-data-query = { path = "../../../engine/core/crates/paged-data-query" }
+paged-data-bind = { path = "../../../engine/core/crates/paged-data-bind" }
+paged-data-lower = { path = "../../../engine/core/crates/paged-data-lower" }
+paged-data-barcode = { path = "../../../engine/core/crates/paged-data-barcode" }
+paged-data-dataset = { path = "../../../engine/core/crates/paged-data-dataset" }
+paged-data-automation = { path = "../../../engine/core/crates/paged-data-automation" }
 data-js = { path = "../data-js" }
-data-store = { path = "../data-store" }
+paged-data-store = { path = "../../../engine/core/crates/paged-data-store" }
 serde.workspace = true
 serde_norway.workspace = true
 serde_json.workspace = true

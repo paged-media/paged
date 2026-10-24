@@ -16,7 +16,7 @@ publish = false
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-data-core = { path = "../../data-core" }
+paged-data-core = { path = "../../../../engine/core/crates/paged-data-core" }
 # MIT. Default features off (no encryption, SIMD, autovacuum or full-text
 # search); 0.8.3 builds only with `fs` (core paths call `Database::open_file`)
 # and `uuid` (incremental/dbsp.rs), so both stay on although the store is
