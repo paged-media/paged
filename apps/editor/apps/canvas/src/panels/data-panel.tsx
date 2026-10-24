@@ -42,6 +42,7 @@ import type {
 } from "@paged-media/plugin-api";
 import { color, font, radius, space, status } from "@paged-media/panel-kit";
 import {
+  DATA_FIELD_DRAG_TYPE,
   elementOfPlacement,
   useCanvasClient,
   useCockpitActions,
@@ -66,7 +67,8 @@ const M = defineMessages("app.dataPanel", {
   startTitle: "Put data in the document",
   step1: "Import a source: a CSV, JSON, Parquet or Excel file, or a URL.",
   step2: "Write a query over it: the records a binding reads.",
-  step3: "Bind: right-click any property and choose Bind to data…",
+  step3:
+    "Place: drag a field header onto a text or graphic frame, or right-click any property and choose Bind to data…",
   openSources: "Open Sources",
   openQuery: "Open Query",
   noService:
@@ -107,6 +109,7 @@ const M = defineMessages("app.dataPanel", {
   fieldStale: "the data changed since it was placed",
   fieldError: "a binding reading it failed",
   selectHint: "double-click to select where it is placed",
+  dragHint: "drag onto a text or graphic frame to place it",
 });
 
 const ROW_H = 22;
@@ -606,11 +609,24 @@ function Grid({
                 type="button"
                 role="columnheader"
                 data-data-header={f.name}
+                // Editor ADR 291, drag to place: a query's field goes onto a
+                // frame (the viewport hit-tests the drop and places it).
+                draggable={table.kind === "query"}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    DATA_FIELD_DRAG_TYPE,
+                    JSON.stringify({ query: table.name, field: f.name }),
+                  );
+                  e.dataTransfer.setData("text/plain", f.name);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 data-bound={n > 0 ? (b?.tone ?? "none") : undefined}
                 title={
                   n > 0
-                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })} · ${cue} · ${t(M.selectHint)}`
-                    : t(M.sortHint)
+                    ? `${t(M.sortHint)} · ${t(M.bound, { count: n })} · ${cue} · ${t(M.selectHint)}${table.kind === "query" ? ` · ${t(M.dragHint)}` : ""}`
+                    : table.kind === "query"
+                      ? `${t(M.sortHint)} · ${t(M.dragHint)}`
+                      : t(M.sortHint)
                 }
                 aria-sort={
                   s < 0 ? "none" : keys[s]!.desc ? "descending" : "ascending"

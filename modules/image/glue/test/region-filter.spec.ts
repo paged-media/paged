@@ -35,7 +35,10 @@ import {
   contributeImageObjectModel,
   engineCodec,
 } from "../src/object-model/contribute";
-import type { SelectionSource } from "../src/object-model/image-objects";
+import type {
+  SelectionFollow,
+  SelectionSource,
+} from "../src/object-model/image-objects";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
@@ -204,7 +207,10 @@ lane("filterRegion, headless (the CPU twins)", () => {
 
 /** The object model alone with `selection` standing in for the editor
  *  session's live selection. */
-function withSelection(selection: SelectionSource) {
+function withSelection(
+  selection: SelectionSource,
+  selectionFollow?: SelectionFollow,
+) {
   return defineBundle({
     manifest: manifestJson as PluginManifest,
     activate(host: BundleHost) {
@@ -214,6 +220,7 @@ function withSelection(selection: SelectionSource) {
         engineCodec(),
         undefined,
         selection,
+        selectionFollow,
       );
       return {
         dispose: () => (om?.objects.dispose(), om?.handle.dispose()),
@@ -421,6 +428,48 @@ lane("filterRegion with a mask, headless", () => {
         selection: true,
       }),
     ).rejects.toThrow(/nothing is selected in the editor/);
+  });
+
+  it("a canvas operation committed on the frame is handed to the session, which answers for the revision it made", async () => {
+    // The kept selection is asked for the revision the frame shows; the
+    // session is told which revision a flip made from which.
+    const follows: Array<[string, string | null, string, unknown]> = [];
+    const asked: Array<string | null> = [];
+    const h = await imageDoc(
+      withSelection(
+        (_frameId, record) => {
+          asked.push(record);
+          return {
+            width: W,
+            height: H,
+            coverage: new Uint8Array(W * H).fill(255),
+          };
+        },
+        (frameId, from, to, ops) => follows.push([frameId, from, to, ops]),
+      ),
+    );
+    const flipped = await h.objects.batch([
+      {
+        op: "set",
+        address: `${P}/image/${FRAME}`,
+        path: "transform",
+        value: "flipHorizontal",
+      } as never,
+    ]);
+    expect(flipped.reason ?? "").toBe("");
+    expect(follows).toHaveLength(1);
+    const [frameId, from, to, ops] = follows[0]!;
+    expect(frameId).toBe(FRAME);
+    expect(to).not.toBe(from);
+    expect(ops).toEqual([{ kind: "flipHorizontal" }]);
+    await h.objects.invoke(FILTER, {
+      layer: L,
+      params: INVERT,
+      selection: true,
+    });
+    expect(asked).toEqual([to]);
+    h.dispose();
+    live = null;
   });
 
   it("selection: true maps a selection made on the same image at another size, and refuses another crop", async () => {

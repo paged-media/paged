@@ -34,7 +34,8 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 - paged.sheet edits a table of the document's data in place through `data@1`.
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
-binding kinds headless.
+binding kinds headless. The record templates library and the pagination inspector that
+editor ADR 291 left to this module are built as its own panels (see Shipped).
 
 ## Shipped
 
@@ -160,6 +161,24 @@ binding kinds headless.
   a `resizeFrame` or a drag of a chain frame's handles; the second needs a host that reports
   a gesture's reflow (core v0.71.13 through plugin-sdk 0.2.58). On an older host a handle
   resize re-paginates nothing; a move never does. No panel calls these yet.
+- **Record templates** (the Record templates panel, `src/record-templates.ts`; 2026-10-24). A
+  record template is the cell a record flow repeats: lines of a label and an expression, at a
+  line height. The panel lists the document's templates with the flows using each; "New from
+  selection" reads the selected text frames written as for Data Merge (each line one template
+  line, `<<field>>` a field reference, other text kept as text; a `<<name>>` that is not a
+  field name stays literal and is said); a rename moves the flows using the template; a
+  delete is refused while a flow uses it; the preview fills a template with record N of a
+  query (the engine's `preview_template`, in the order the stepper numbers records). The
+  library is saved with the session.
+- **Record flow pagination** (the Record flow pagination panel). A flow's template and its
+  line height, group by, repeated and continued group headers and a group footer (`{count}`,
+  and a sum, average, minimum or maximum of one field) are inline controls written at once.
+  The summary beside them is the engine's pagination of the flow over the start page's margin
+  box, one frame per page, as lowering places it: records placed of the total, records per
+  page, headers repeated as continued, overflow, a record taller than a page. A flow's own
+  repeated/continued header options now reach the paginator (before, every caller paginated
+  with both on). Not offered, because the engine has none: keep-together of a group, a break
+  before a group, per-group footers other than one aggregate row, the header height (16 pt).
 - **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.

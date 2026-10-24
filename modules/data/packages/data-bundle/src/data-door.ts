@@ -47,6 +47,12 @@ export interface DataDoorDeps {
   syncStatusOf(id: string): string | null;
   /** The page items each binding is placed in, by ADR 131 address. */
   placements(): Promise<readonly { binding: string; address: string }[]>;
+  /** Place a field on a page item (`kind:id`), the panel's drag to place. */
+  place(
+    target: string,
+    query: string,
+    field: string,
+  ): Promise<{ binding: string; kind: string }>;
   /** Read the data again and lower every binding (the panel's Update). */
   refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
@@ -235,6 +241,13 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     },
     async refresh() {
       await deps.refresh();
+    },
+    async place(target, query, field) {
+      if (!queryOf(query))
+        throw new Error(
+          `no query "${query}" (a placed field reads a query's records)`,
+        );
+      return deps.place(target, query, field);
     },
     async placements() {
       const out: DataPlacement[] = [];

@@ -1239,7 +1239,12 @@ Per module:
   command stays for a host without it; `modules/draw/docs/status.md`). Since the ADRs'
   amendments a script's edits are followed too (a run is one step its reply names), a typed
   recipe parameter write rebuilds its artwork in the same step (`ObjectWrite.followUp`),
-  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox.
+  `mutateWithBytes` takes `amend`, and the recipe panels carry the on/off checkbox. The
+  leftovers are closed (2026-10-24): an Objects on a Path Update, which moves its own sources,
+  notes its step so the automatic update does not place the objects a second time in it, and
+  every recipe panel's note says what the automatic update does; what stays (a script run
+  that names no step, recipe records outside undo, the width profile as an outline) is
+  inherent and `status.md` says why.
 - **image:** done. Crop, rotate, flip and canvas size take a named image (`cropImage`,
   `canvasSize`, the quarter turns and flips with an `image`); a typed `applyAdjustment`; the
   session-only commands refuse headless with `unmapped:` instead of doing nothing. Filters with a
@@ -1256,7 +1261,12 @@ alpha?, feather? }` (polygons in image pixels, filled together by an even–odd 
   canvas is the same image at another size; another crop or no selection is refused with the
   reason, as it is headless. A kept selection is set back into the engine when its frame's
   image reopens and is the live selection again. A Playwright spec makes a marquee selection and checks that only
-  its pixels change and one undo restores them (`modules/image/docs/status.md`).
+  its pixels change and one undo restores them (`modules/image/docs/status.md`). The leftovers
+  (2026-10-24, image ADR 465 amendment of that day): a kept selection belongs to the stored
+  revision it was made on, follows a quarter turn or flip committed on its frame (the editor's
+  own turns and flips now carry the live selection too) and is refused, with the reason, on a
+  revision it was not carried to. What stays is by rule: another crop's offset is unknown, and
+  a selection is session state, never written to the document (ADR 460).
 - **sheet:** done. Typed `importCsv`, `mergeCells` / `unmergeCells`, `setBorders`,
   `setColumnWidth` and `setRowHeight`; a typed `place { source: range | name | printArea, ref,
 chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a defined name
@@ -1274,6 +1284,13 @@ chain?, repeatHeaderRows, sizing, box?, view?, print? }` that places a range, a 
   chain's first pagination and every area of a print area are one batch on a host with in-batch
   handles); `apps/cli/test/cli-sheet.spec.ts` runs
   placement, a view and chart delete through `paged-node invoke` (`modules/sheet/docs/status.md`).
+  The leftovers (2026-10-24, sheet ADR 522 amendment 2): a chart placed by the version that
+  recorded its box but not its art follows a move made before reopening; a renamed sheet's
+  placed tables and chains are re-stamped with the new name and found again on reopen. Left,
+  with the reason in `status.md`: a first pagination on a host that cannot amend (none in this
+  repository) keeps no record until its first refresh, a chartsheet's chart stays in the file
+  (deleting it is deleting the sheet), and an older version sees charts renumbered after a
+  delete (it counts chart parts).
 - **data:** done. `paged-node apply`, `merge` and `generate` drive paged.data through its typed
   commands only: `importSource` (a file's bytes as a source), a `query` object, `previewQuery`,
   `defineBinding` (the session binding kinds), `defineProperty` (a `property` binding with an

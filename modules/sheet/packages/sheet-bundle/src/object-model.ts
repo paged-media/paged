@@ -1061,6 +1061,8 @@ export function contributeObjectModel(
             if (!e.renameSheet)
               throw new Refuse("engine wasm predates rename_sheet");
             e.renameSheet(sid, String(v));
+            // The placed tables' bindings still name the sheet `id`.
+            bridge.sheetRenamed(sid, id);
           };
         }
         if (path === "freezeRows" || path === "freezeCols") {

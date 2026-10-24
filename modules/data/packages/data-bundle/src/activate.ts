@@ -44,6 +44,8 @@ import { makeSourcesPanel } from "./panels/sources-panel";
 import { makeBindingsPanel } from "./panels/bindings-panel";
 import { makeDatasetPanel } from "./panels/dataset-panel";
 import { makeQueryPanel } from "./panels/query-panel";
+import { makeTemplatesPanel } from "./panels/templates-panel";
+import { makePaginationPanel } from "./panels/pagination-panel";
 import { contributeObjectModel } from "./object-model";
 import {
   dataObjectsPanel,
@@ -55,6 +57,8 @@ const SOURCES_PANEL_ID = "media.paged.data.panel.sources";
 const BINDINGS_PANEL_ID = "media.paged.data.panel.bindings";
 const DATASET_PANEL_ID = "media.paged.data.panel.dataset";
 const QUERY_PANEL_ID = "media.paged.data.panel.query";
+const TEMPLATES_PANEL_ID = "media.paged.data.panel.templates";
+const PAGINATION_PANEL_ID = "media.paged.data.panel.pagination";
 const IMPORTER_ID = "media.paged.data.importer.table";
 
 /** The file types File ▸ Import and a drop route to this plugin.
@@ -135,6 +139,24 @@ export function activate(host: BundleHost): BundleHandle {
     title: t(M.queryPanel),
     icon: "ui-filter",
     component: makeQueryPanel(host, session),
+    defaultDock: "right",
+  });
+
+  // Record templates and a record flow's pagination (PM-0015 L4; editor ADR
+  // 291 left them to this module).
+  contributePanel(host, {
+    id: TEMPLATES_PANEL_ID,
+    title: t(M.templatesPanel),
+    icon: "ui-component",
+    component: makeTemplatesPanel(host, session),
+    defaultDock: "right",
+  });
+
+  contributePanel(host, {
+    id: PAGINATION_PANEL_ID,
+    title: t(M.paginationPanel),
+    icon: "panel-pages",
+    component: makePaginationPanel(host, session),
     defaultDock: "right",
   });
 

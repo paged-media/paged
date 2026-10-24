@@ -663,6 +663,47 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
 
+    // W0 — what the import shows simplified rather than drops.
+    let held = doc.held;
+    if held.tracked_changes > 0 {
+        let mut msg = format!(
+            "{} tracked change(s) shown as accepted; review them in Word. Insertions \
+             show as plain text, deletions are not shown, formatting changes show \
+             the new formatting; the markup is kept in the .docx on save, and an \
+             edit that reaches it is refused",
+            held.tracked_changes
+        );
+        if held.deleted_marks_kept > 0 {
+            msg.push_str(&format!(
+                ". {} paragraph(s) whose mark is a tracked deletion stay paragraphs of \
+                 their own (accepting would join each to the next)",
+                held.deleted_marks_kept
+            ));
+        }
+        ctx.diagnostics.push(Diagnostic::warning(msg, 3));
+    }
+    if held.hidden_runs > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} hidden run(s) not shown (Word's hidden text, as with hidden text \
+                 turned off); they are kept in the .docx on save",
+                held.hidden_runs
+            ),
+            3,
+        ));
+    }
+    if held.content_controls > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} content control(s) kept as plain content: their text shows, the \
+                 controls stay in the .docx on save, and an edit of text inside one \
+                 is refused",
+                held.content_controls
+            ),
+            3,
+        ));
+    }
+
     if ctx.hyperlinks > 0 {
         let styled_only = ctx.hyperlinks - ctx.clickable_links;
         let mut msg = format!(
@@ -2811,6 +2852,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2867,6 +2909,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             })
         };
@@ -2934,6 +2977,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2970,6 +3014,7 @@ mod tests {
                     mark_half_pts: None,
                     source_para_ord: 0,
                     source_cell: None,
+                    held: Default::default(),
                     bookmarks: Vec::new(),
                 }],
                 grid_span: 1,
@@ -2984,6 +3029,7 @@ mod tests {
                 column_widths: vec![2000],
                 rows,
                 cell_margins: docx_core::CellMargins::default(),
+                content_control_rows: false,
             }));
             let l = lower(&doc);
             match &l.story.blocks[0] {
@@ -3014,6 +3060,7 @@ mod tests {
                 mark_half_pts: size,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -3096,6 +3143,7 @@ mod tests {
             mark_half_pts: None,
             source_para_ord: 0,
             source_cell: None,
+            held: Default::default(),
             bookmarks: Vec::new(),
         }));
 
@@ -3256,6 +3304,7 @@ mod tests {
                 right: Some(60),
                 ..Default::default()
             },
+            content_control_rows: false,
         }));
         let l = lower(&doc);
         let LoweredBlock::Table(t) = &l.story.blocks[0] else {

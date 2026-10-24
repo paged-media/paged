@@ -1319,7 +1319,8 @@ export function activate(host: BundleHost): BundleHandle {
     untyped,
     undefined,
     () => session.state().source !== null,
-    (frameId) => session.liveSelection(frameId),
+    (frameId, record) => session.liveSelection(frameId, record),
+    (frameId, from, to, ops) => session.followCanvasOps(frameId, from, to, ops),
   );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).

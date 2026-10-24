@@ -168,10 +168,54 @@ pub struct CellParaAction {
     pub append_runs: Vec<Vec<u8>>,
 }
 
-/// Are we inside a table cell? (The body-paragraph counters must ignore cell
-/// content, and vice versa.)
-fn in_cell(stack: &[Vec<u8>]) -> bool {
-    stack.iter().any(|n| n.as_slice() == b"tc")
+/// Whether the open elements end in `names` (the last one being the parent
+/// of the element at hand).
+fn ends_with(stack: &[Vec<u8>], names: &[&[u8]]) -> bool {
+    stack.len() >= names.len()
+        && stack[stack.len() - names.len()..]
+            .iter()
+            .zip(names)
+            .all(|(a, b)| a.as_slice() == *b)
+}
+
+/// The element at hand is a direct child of a BODY paragraph (`body › p`).
+/// Only those children carry the run and wrapper ordinals the import
+/// records: a paragraph inside a content control, a text box or a cell is
+/// not one, and its runs must not shift the body paragraph's counts.
+fn at_body_para(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"body", b"p"])
+}
+
+/// The element at hand is a direct child of a hyperlink / fldSimple that is
+/// itself a direct child of a body paragraph.
+fn at_body_wrapper(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"body", b"p", b"hyperlink"])
+        || ends_with(stack, &[b"body", b"p", b"fldSimple"])
+}
+
+/// The element at hand is a direct child of a CELL paragraph (`tc › p`).
+fn at_cell_para(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"tc", b"p"])
+}
+
+/// As [`at_body_wrapper`], inside a cell paragraph.
+fn at_cell_wrapper(stack: &[Vec<u8>]) -> bool {
+    ends_with(stack, &[b"tc", b"p", b"hyperlink"]) || ends_with(stack, &[b"tc", b"p", b"fldSimple"])
+}
+
+/// The element at hand sits at body level: a child of `<w:body>`, or of the
+/// content of a body-level block content control (`body › (sdt ›
+/// sdtContent)*`). A table there is one the import counts; one in a text box
+/// or a note is not.
+fn at_body_level(stack: &[Vec<u8>]) -> bool {
+    let Some(i) = stack.iter().position(|n| n.as_slice() == b"body") else {
+        return false;
+    };
+    let rest = &stack[i + 1..];
+    rest.len().is_multiple_of(2)
+        && rest
+            .chunks(2)
+            .all(|c| c[0].as_slice() == b"sdt" && c[1].as_slice() == b"sdtContent")
 }
 
 /// Run-edits-only convenience over [`patch_document_xml_full`] (tests).
@@ -281,11 +325,16 @@ pub fn patch_document_xml_cols(
     let mut open_cell_para: Option<CellParaAction> = None;
     // Column locator: the `<w:gridCol>` index inside the open `<w:tblGrid>`.
     let mut gc_ord: i64 = -1;
-    // `<w:tbl>` nesting depth. A NESTED table's rows/cells sit under their own
-    // `<w:tbl>`, so without this they would be counted against the OUTER table
-    // and an edit aimed at an outer row would land inside the nested one.
-    // Only depth 1 (a body-level table) is addressed.
-    let mut tbl_depth: i32 = 0;
+    // The open `<w:tbl>`s, each marked addressable or not. A NESTED table's
+    // rows/cells sit under their own `<w:tbl>`, so without this they would be
+    // counted against the OUTER table and an edit aimed at an outer row would
+    // land inside the nested one. Only a body-level table with no table open
+    // around it (`top`) is addressed; a table in a text box is not.
+    let mut tbls: Vec<bool> = Vec::new();
+    let top = |tbls: &[bool]| tbls == [true];
+    // Targets the pass met, so one it never met is reported, not dropped.
+    let mut met_runs = vec![false; targets.len()];
+    let mut met_cells = vec![false; cells.len()];
 
     loop {
         // The byte offset of the `<` that begins the event we are about to read
@@ -325,7 +374,7 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // Increment 3 — wrapper elements whose runs carry their own address.
-                if parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if at_body_para(&stack) {
                     if ln == b"hyperlink" {
                         hl_ord += 1;
                         wrap_run_ord = -1;
@@ -337,13 +386,15 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // A `<w:r>` inside an open wrapper resolves on the wrapper path.
-                if ln == b"r" && open_wrapper.is_some() && parent != Some(b"p".as_ref()) {
+                if ln == b"r" && open_wrapper.is_some() && at_body_wrapper(&stack) {
                     wrap_run_ord += 1;
-                    if let Some(t) = targets.iter().find(|t| {
+                    if let Some(i) = targets.iter().position(|t| {
                         t.wrapper == open_wrapper
                             && t.para_ord as i64 == p_ord
                             && t.run_ord as i64 == wrap_run_ord
                     }) {
+                        met_runs[i] = true;
+                        let t = &targets[i];
                         patch_run(
                             &mut reader,
                             src,
@@ -357,13 +408,18 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // Increment 3 — replace a targeted paragraph's `<w:pPr>`.
-                if ln == b"pPr" && parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if ln == b"pPr" && at_body_para(&stack) {
                     if let Some((_, pt)) = open_para.as_ref() {
                         if let Some(ppr) = pt.new_ppr.clone() {
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
                             out.extend_from_slice(&src[cursor..event_start]);
-                            out.extend_from_slice(&ppr);
+                            // Keep what the edit does not own (numbering,
+                            // borders, line spacing, the section's sectPr …).
+                            out.extend_from_slice(&crate::rpr::merge_ppr(
+                                Some(&src[event_start..end]),
+                                &ppr,
+                            ));
                             cursor = end;
                             ppr_done = true;
                             continue;
@@ -372,16 +428,17 @@ pub fn patch_document_xml_cols(
                 }
                 // --- table-cell locator path (tbl → tr → tc → p → r) ---
                 if ln == b"tbl" {
-                    tbl_depth += 1;
-                    if tbl_depth == 1 {
+                    let addressable = tbls.is_empty() && at_body_level(&stack);
+                    if addressable {
                         tbl_ord += 1;
                         tr_ord = -1;
                     }
+                    tbls.push(addressable);
                 }
-                if ln == b"tblGrid" && parent == Some(b"tbl".as_ref()) && tbl_depth == 1 {
+                if ln == b"tblGrid" && parent == Some(b"tbl".as_ref()) && top(&tbls) {
                     gc_ord = -1;
                 }
-                if ln == b"tr" && parent == Some(b"tbl".as_ref()) && tbl_depth == 1 {
+                if ln == b"tr" && parent == Some(b"tbl".as_ref()) && top(&tbls) {
                     tr_ord += 1;
                     tc_ord = -1;
                     open_row = rows.get(&(tbl_ord as u32, tr_ord as u32)).cloned();
@@ -399,7 +456,7 @@ pub fn patch_document_xml_cols(
                         }
                     }
                 }
-                if ln == b"tc" && parent == Some(b"tr".as_ref()) && tbl_depth == 1 {
+                if ln == b"tc" && parent == Some(b"tr".as_ref()) && top(&tbls) {
                     tc_ord += 1;
                     cp_ord = -1;
                     // Column ops: the grid is uniform here (guarded upstream), so
@@ -437,7 +494,7 @@ pub fn patch_document_xml_cols(
                         }
                     }
                 }
-                if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && top(&tbls) {
                     cp_ord += 1;
                     cr_ord = -1;
                     c_hl_ord = -1;
@@ -463,7 +520,7 @@ pub fn patch_document_xml_cols(
                     }
                 }
                 // A cell paragraph's wrappers, and the runs inside the open one.
-                if parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1 {
+                if at_cell_para(&stack) && top(&tbls) {
                     if ln == b"hyperlink" {
                         c_hl_ord += 1;
                         c_wrap_run_ord = -1;
@@ -477,12 +534,11 @@ pub fn patch_document_xml_cols(
                 }
                 if ln == b"r"
                     && open_cell_wrapper.is_some()
-                    && parent != Some(b"p".as_ref())
-                    && in_cell(&stack)
-                    && tbl_depth == 1
+                    && at_cell_wrapper(&stack)
+                    && top(&tbls)
                 {
                     c_wrap_run_ord += 1;
-                    if let Some(ct) = cells.iter().find(|c| {
+                    if let Some(i) = cells.iter().position(|c| {
                         c.wrapper == open_cell_wrapper
                             && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
@@ -490,6 +546,8 @@ pub fn patch_document_xml_cols(
                             && c.para as i64 == cp_ord
                             && c.run_ord as i64 == c_wrap_run_ord
                     }) {
+                        met_cells[i] = true;
+                        let ct = &cells[i];
                         let t = ResolvedTarget {
                             para_ord: 0,
                             run_ord: 0,
@@ -514,10 +572,9 @@ pub fn patch_document_xml_cols(
                         continue;
                     }
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) && in_cell(&stack) && tbl_depth == 1
-                {
+                if ln == b"r" && at_cell_para(&stack) && top(&tbls) {
                     cr_ord += 1;
-                    if let Some(ct) = cells.iter().find(|c| {
+                    if let Some(i) = cells.iter().position(|c| {
                         c.wrapper.is_none()
                             && c.table_ord as i64 == tbl_ord
                             && c.row as i64 == tr_ord
@@ -525,6 +582,8 @@ pub fn patch_document_xml_cols(
                             && c.para as i64 == cp_ord
                             && c.run_ord as i64 == cr_ord
                     }) {
+                        met_cells[i] = true;
+                        let ct = &cells[i];
                         let t = ResolvedTarget {
                             para_ord: 0,
                             run_ord: 0,
@@ -549,7 +608,7 @@ pub fn patch_document_xml_cols(
                         continue;
                     }
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) && !in_cell(&stack) {
+                if ln == b"r" && at_body_para(&stack) {
                     r_ord += 1;
                     // A pending pPr insert + prepends land before the first run.
                     if let Some((_, pt)) = open_para.as_ref() {
@@ -572,7 +631,13 @@ pub fn patch_document_xml_cols(
                             prepended = true;
                         }
                     }
-                    if let Some(t) = find_target(targets, p_ord, r_ord) {
+                    if let Some(i) = targets.iter().position(|t| {
+                        t.wrapper.is_none()
+                            && t.para_ord as i64 == p_ord
+                            && t.run_ord as i64 == r_ord
+                    }) {
+                        met_runs[i] = true;
+                        let t = &targets[i];
                         let run_start = event_start;
                         if t.delete {
                             let _ = reader.read_to_end(QName(&name));
@@ -610,7 +675,7 @@ pub fn patch_document_xml_cols(
             Ok(Event::Empty(e)) => {
                 let ln = local_name(e.name().as_ref()).to_vec();
                 let parent = stack.last().map(Vec::as_slice);
-                if ln == b"gridCol" && parent == Some(b"tblGrid".as_ref()) && tbl_depth == 1 {
+                if ln == b"gridCol" && parent == Some(b"tblGrid".as_ref()) && top(&tbls) {
                     gc_ord += 1;
                     if let Some(action) = columns.get(&(tbl_ord as u32)) {
                         let end = reader.buffer_position() as usize;
@@ -638,11 +703,35 @@ pub fn patch_document_xml_cols(
                     fld_ord = -1;
                     open_wrapper = None;
                 }
-                if ln == b"r" && parent == Some(b"p".as_ref()) {
-                    r_ord += 1; // an empty `<w:r/>` has no text/rPr to patch
+                // An empty `<w:r/>` has no text/rPr to patch, but it counts,
+                // as it does in the import; so does an empty wrapper.
+                if ln == b"r" {
+                    if at_body_para(&stack) {
+                        r_ord += 1;
+                    } else if at_body_wrapper(&stack) && open_wrapper.is_some() {
+                        wrap_run_ord += 1;
+                    } else if at_cell_para(&stack) && top(&tbls) {
+                        cr_ord += 1;
+                    } else if at_cell_wrapper(&stack) && open_cell_wrapper.is_some() && top(&tbls) {
+                        c_wrap_run_ord += 1;
+                    }
+                }
+                if at_body_para(&stack) {
+                    if ln == b"hyperlink" {
+                        hl_ord += 1;
+                    } else if ln == b"fldSimple" {
+                        fld_ord += 1;
+                    }
+                }
+                if at_cell_para(&stack) && top(&tbls) {
+                    if ln == b"hyperlink" {
+                        c_hl_ord += 1;
+                    } else if ln == b"fldSimple" {
+                        c_fld_ord += 1;
+                    }
                 }
                 // An empty cell paragraph (`<w:p/>`) counts like any other.
-                if ln == b"p" && parent == Some(b"tc".as_ref()) && tbl_depth == 1 {
+                if ln == b"p" && parent == Some(b"tc".as_ref()) && top(&tbls) {
                     cp_ord += 1;
                     cr_ord = -1;
                     open_cell_para = None;
@@ -683,17 +772,23 @@ pub fn patch_document_xml_cols(
                 let ln = local_name(e.name().as_ref()).to_vec();
                 stack.pop();
                 if ln == b"tbl" {
-                    tbl_depth -= 1;
+                    tbls.pop();
                 }
+                // Only the wrapper that opened closes it (one nested in a
+                // content control or another wrapper never opened one).
                 if ln == b"hyperlink" || ln == b"fldSimple" {
-                    open_wrapper = None;
-                    open_cell_wrapper = None;
+                    if at_body_para(&stack) {
+                        open_wrapper = None;
+                    }
+                    if at_cell_para(&stack) {
+                        open_cell_wrapper = None;
+                    }
                 }
                 // A cell paragraph closes: its appended runs go before its
                 // `</w:p>`, the paragraphs queued after it after.
                 if ln == b"p"
                     && stack.last().map(Vec::as_slice) == Some(b"tc".as_ref())
-                    && tbl_depth == 1
+                    && top(&tbls)
                 {
                     if let Some(a) = open_cell_para.take() {
                         out.extend_from_slice(&src[cursor..event_start]);
@@ -741,6 +836,17 @@ pub fn patch_document_xml_cols(
     }
 
     out.extend_from_slice(&src[cursor..]);
+    // A target the pass never met is not silently dropped.
+    for (t, met) in targets.iter().zip(&met_runs) {
+        if !met {
+            refusals.push(format!("{}: its run is not in the document part", t.label));
+        }
+    }
+    for (c, met) in cells.iter().zip(&met_cells) {
+        if !met {
+            refusals.push(format!("{}: its run is not in the document part", c.label));
+        }
+    }
     (out, refusals)
 }
 
@@ -999,12 +1105,6 @@ pub fn clone_cell_paragraph(
     }
     out.extend_from_slice(b"</w:p>");
     Some(out)
-}
-
-fn find_target(targets: &[ResolvedTarget], p: i64, r: i64) -> Option<&ResolvedTarget> {
-    targets
-        .iter()
-        .find(|t| t.wrapper.is_none() && t.para_ord as i64 == p && t.run_ord as i64 == r)
 }
 
 /// What a run child is to the run's text.

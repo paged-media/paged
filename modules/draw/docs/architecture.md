@@ -160,9 +160,14 @@ inverse. See [ADR 354](adr/354-multi-paint-bakes-to-a-group.md).
 **Recipes.** Graphic styles, symbols, live paint, pattern fields, repeats, blends and
 objects on a path have no object in the engine. Each is a recipe stored with the document
 plus ordinary page items stamped with a link to it. The result changes when a command
-(Update, Regenerate, Redefine) rebuilds it, not when a source is edited. Objects on a Path
-is the exception in kind: it inserts nothing and writes one `frameTransform` per selected
-object. See [ADR 356](adr/356-live-constructs-are-recipes.md).
+(Update, Regenerate, Redefine) rebuilds it, and, for pattern, repeat, blend, objects on a
+path and live paint, when a source is edited: on a host that can amend an undo step the
+automatic update (`commands/recipe-auto-update.ts`, engine ADR 1004) rebuilds the recipes an
+edit changed the sources of inside that edit's step. A command that moves its own recipe's
+sources while rebuilding it (Objects on a Path's Update) notes the step
+(`commands/recipe-steps.ts`), so the automatic update does not place them a second time.
+Objects on a Path is the exception in kind: it inserts nothing and writes one
+`frameTransform` per selected object. See [ADR 356](adr/356-live-constructs-are-recipes.md).
 
 **Image trace.** `commands/image-trace.ts` fetches the placed image's original bytes with
 `host.assets.getPlacedImage`, decodes them with the browser's `createImageBitmap` and
