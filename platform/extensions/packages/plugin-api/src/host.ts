@@ -2159,6 +2159,198 @@ export interface DataProvidersSurface {
   onDidChange(id: string, listener: (revision: string) => void): Disposable;
 }
 
+// ------------------------------------------------------------ data (data@1)
+//
+// The DATA door (extensions ADR 343, PM-0015): the document's data as a
+// platform layer. One bundle SERVES it (paged.data in the editor: its
+// sources, queries and bindings over the engine's store); every other bundle
+// READS tables and records, WRITES rows (paged.sheet edits a table) and BINDS
+// object properties, without knowing who serves. The host only routes and
+// fans out changes. The record shape is the provider shape above, so a
+// consumer of `dataProviders@1` reads `data@1` with the same code.
+
+/** One table of the document's data: an imported source or a query. */
+export interface DataTableInfo {
+  name: string;
+  kind: "source" | "query";
+  schema: ProviderSchema;
+  rowCount: number;
+  /** An opaque content etag; it changes whenever the rows do. */
+  revision: string;
+  /** Whether `write` accepts edits to it (a source table, not a query). */
+  writable: boolean;
+}
+
+/** A window of a table's rows (`offset` from 0, at most `limit`). */
+export interface DataRange {
+  offset?: number;
+  limit?: number;
+}
+
+/** One edit of a table's rows. `row` is the 0-based row of the table as
+ *  `records` returned it at the revision the edit was made against. */
+export type DataRowEdit =
+  | { op: "set"; row: number; field: string; value: unknown }
+  | { op: "insert"; values: Readonly<Record<string, unknown>> }
+  | { op: "delete"; row: number };
+
+/** What a write left behind. */
+export interface DataWriteResult {
+  revision: string;
+  rowCount: number;
+}
+
+/** A binding of one object property to data: `target` is an address or a
+ *  selector (ADR 131), `path` a property path of it (ADR 132), `expr` an
+ *  expression of the binding language over `query`'s fields. */
+export interface DataBindingSpec {
+  target: string;
+  path: string;
+  query: string;
+  expr: string;
+}
+
+/** A defined binding. */
+export interface DataBindingInfo extends DataBindingSpec {
+  id: string;
+}
+
+/** A table whose rows changed. */
+export interface DataChange {
+  table: string;
+  revision: string;
+}
+
+/** What a serving bundle implements (`host.data.serve`). Members it leaves
+ *  out are refused for every consumer with the reason. */
+export interface DataService {
+  tables(): Promise<readonly DataTableInfo[]> | readonly DataTableInfo[];
+  records(table: string, range?: DataRange): Promise<ProviderRecordSet>;
+  /** One query over the tables, checked by the service's own guard. */
+  query?(sql: string): Promise<ProviderRecordSet>;
+  write?(
+    table: string,
+    edits: readonly DataRowEdit[],
+  ): Promise<DataWriteResult>;
+  bind?(spec: DataBindingSpec): Promise<DataBindingInfo>;
+  unbind?(id: string): Promise<void>;
+  bindings?(): Promise<readonly DataBindingInfo[]>;
+}
+
+/** The handle a serving bundle holds. */
+export interface DataServiceHandle {
+  /** Announce changed rows; every `onDidChange` listener hears it. */
+  changed(change: DataChange): void;
+  /** Stop serving; consumers' calls are refused again. */
+  dispose(): void;
+}
+
+export interface DataSurface {
+  /** SERVE side (`capabilities.data.serve`). One service at a time: a
+   *  second `serve` while one is live throws. */
+  serve(service: DataService): DataServiceHandle;
+  /** Whether a service is live (calls below reject when not). */
+  available(): boolean;
+  /** READ side (`capabilities.data.read`). */
+  tables(): Promise<readonly DataTableInfo[]>;
+  records(table: string, range?: DataRange): Promise<ProviderRecordSet>;
+  query(sql: string): Promise<ProviderRecordSet>;
+  /** WRITE side (`capabilities.data.write`). */
+  write(table: string, edits: readonly DataRowEdit[]): Promise<DataWriteResult>;
+  /** BIND side (`capabilities.data.bind`). */
+  bind(spec: DataBindingSpec): Promise<DataBindingInfo>;
+  unbind(id: string): Promise<void>;
+  bindings(): Promise<readonly DataBindingInfo[]>;
+  /** Fires when a table's rows change (`read`). */
+  onDidChange(listener: (change: DataChange) => void): Disposable;
+}
+
+// ------------------------------------------------------ actions (actions@1)
+//
+// The ACTIONS door (extensions ADR 344, PM-0015): named, typed, PURE steps
+// any bundle registers and any bundle runs, alone or chained. An action
+// computes; it never edits the document (a command may apply its result in
+// one undo step). A result is cached under the hash of its input and of the
+// chain with its parameters, so running it again computes nothing.
+
+/** What an action takes and gives. `asset` is bytes (`Uint8Array`) with a
+ *  media type, `table` a `ProviderRecordSet`, `selection` a snapshot of
+ *  addresses, `value` any JSON value. */
+export type ActionValueKind = "asset" | "table" | "selection" | "value";
+
+/** An asset as actions pass it. */
+export interface ActionAsset {
+  bytes: Uint8Array;
+  mediaType: string;
+}
+
+/** What `run` hands an action besides its input. */
+export interface ActionContext {
+  /** Aborted when the caller gives up. */
+  readonly signal?: AbortSignal;
+}
+
+/** An action as its bundle registers it. */
+export interface ActionDefinition {
+  /** Unique across bundles: `<bundle id>/<name>` by convention. */
+  id: string;
+  title: string;
+  input: ActionValueKind;
+  output: ActionValueKind;
+  /** The parameters' defaults; also what a picker shows. */
+  params?: Readonly<Record<string, unknown>>;
+  /** Runs only where its host can (an npm-backed action in paged-node). */
+  headlessOnly?: boolean;
+  run(
+    input: unknown,
+    params: Readonly<Record<string, unknown>>,
+    context: ActionContext,
+  ): Promise<unknown> | unknown;
+}
+
+/** A registered action (no code). */
+export interface ActionInfo {
+  id: string;
+  title: string;
+  input: ActionValueKind;
+  output: ActionValueKind;
+  params: Readonly<Record<string, unknown>>;
+  headlessOnly: boolean;
+}
+
+/** One step of a chain. */
+export interface ActionStep {
+  action: string;
+  params?: Readonly<Record<string, unknown>>;
+}
+
+/** What a run gave. `key` is the cache key (input hash + chain hash). */
+export interface ActionRunResult {
+  output: unknown;
+  key: string;
+  cached: boolean;
+}
+
+export interface ActionsSurface {
+  /** `capabilities.actions.register`. An id already registered throws. */
+  register(definition: ActionDefinition): Disposable;
+  /** Every registered action, or those taking `input`. */
+  list(input?: ActionValueKind): readonly ActionInfo[];
+  /** `capabilities.actions.run`. */
+  run(
+    action: string,
+    input: unknown,
+    params?: Readonly<Record<string, unknown>>,
+    context?: ActionContext,
+  ): Promise<ActionRunResult>;
+  /** Each step's output is the next step's input; the kinds must agree. */
+  runChain(
+    steps: readonly ActionStep[],
+    input: unknown,
+    context?: ActionContext,
+  ): Promise<ActionRunResult>;
+}
+
 // ---------------------------------------------------------- diagnostics
 
 export interface Diagnostic {
@@ -2378,6 +2570,17 @@ export interface BundleHost {
    *  no shared registry, `discover()` is empty + `register()` is a no-op and
    *  `supports("dataProviders@1")` is false (the honest no-registry posture). */
   readonly dataProviders: DataProvidersSurface;
+  /** The DATA door (extensions ADR 343): the document's tables, records and
+   *  bindings, served by one bundle and read, written and bound by any,
+   *  gated on `capabilities.data`. Always present; when the host wires no
+   *  data backend every call rejects and `supports("data@1")` is false. */
+  readonly data: DataSurface;
+  /** The ACTIONS door (extensions ADR 344): named pure steps registered by
+   *  any bundle and run, alone or chained, by any, with their results
+   *  cached; gated on `capabilities.actions`. Always present; when the host
+   *  wires no action registry `register` throws, `list` is empty and
+   *  `supports("actions@1")` is false. */
+  readonly actions: ActionsSurface;
   readonly diagnostics: DiagnosticsSurface;
   /** ADR 025 — the local flight recorder. Probe `supports("journal@1")`
    *  before relying on it reaching a buffer; calling it is always safe. */

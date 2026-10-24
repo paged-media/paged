@@ -885,44 +885,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-automation"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "data-query",
- "serde",
-]
-
-[[package]]
-name = "data-barcode"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "rqrr",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "data-bind"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "data-expr",
- "data-query",
- "serde",
- "thiserror",
-]
-
-[[package]]
 name = "data-cli"
 version = "0.0.0"
 dependencies = [
- "data-automation",
- "data-core",
  "data-js",
- "data-lower",
  "data-script",
+ "paged-data-automation",
+ "paged-data-core",
+ "paged-data-lower",
  "serde",
  "serde_json",
 ]
@@ -932,17 +902,17 @@ name = "data-conformance"
 version = "0.0.0"
 dependencies = [
  "criterion",
- "data-automation",
- "data-barcode",
- "data-bind",
- "data-core",
- "data-dataset",
- "data-expr",
  "data-js",
- "data-lower",
- "data-query",
- "data-sources",
- "data-store",
+ "paged-data-automation",
+ "paged-data-barcode",
+ "paged-data-bind",
+ "paged-data-core",
+ "paged-data-dataset",
+ "paged-data-expr",
+ "paged-data-lower",
+ "paged-data-query",
+ "paged-data-sources",
+ "paged-data-store",
  "proptest",
  "rqrr",
  "serde",
@@ -951,82 +921,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "data-core"
-version = "0.0.0"
-dependencies = [
- "compact_str",
- "paged-fmt",
- "serde",
- "serde_json",
- "serde_norway",
- "smallvec",
- "thiserror",
-]
-
-[[package]]
-name = "data-dataset"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "quick-xml",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "data-expr"
-version = "0.0.0"
-dependencies = [
- "compact_str",
- "data-core",
- "paged-fmt",
- "serde",
- "serde_norway",
- "smallvec",
- "thiserror",
-]
-
-[[package]]
 name = "data-js"
 version = "0.0.0"
 dependencies = [
  "console_error_panic_hook",
- "data-automation",
- "data-barcode",
- "data-bind",
- "data-core",
- "data-dataset",
- "data-expr",
- "data-lower",
- "data-query",
- "data-sources",
- "data-store",
- "data-xlsx",
  "js-sys",
+ "paged-data-bind",
+ "paged-data-core",
+ "paged-data-lower",
+ "paged-data-query",
+ "paged-data-session",
+ "paged-data-store",
  "serde",
  "serde-wasm-bindgen",
- "serde_json",
- "thiserror",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "data-lower"
-version = "0.0.0"
-dependencies = [
- "data-barcode",
- "data-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "data-query"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "smallvec",
- "thiserror",
 ]
 
 [[package]]
@@ -1034,46 +942,11 @@ name = "data-script"
 version = "0.0.0"
 dependencies = [
  "boa_engine",
- "data-automation",
- "data-core",
  "data-js",
+ "paged-data-automation",
+ "paged-data-core",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "data-sources"
-version = "0.0.0"
-dependencies = [
- "data-core",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "data-store"
-version = "0.0.0"
-dependencies = [
- "bytes",
- "csv",
- "data-core",
- "data-xlsx",
- "js-sys",
- "parquet",
- "serde",
- "serde_json",
- "thiserror",
- "turso_core",
- "turso_parser",
-]
-
-[[package]]
-name = "data-xlsx"
-version = "0.0.0"
-dependencies = [
- "calamine",
- "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -2053,6 +1926,142 @@ checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "paged-data-automation"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "paged-data-query",
+ "serde",
+]
+
+[[package]]
+name = "paged-data-barcode"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-bind"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "paged-data-expr",
+ "paged-data-query",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-core"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "paged-fmt",
+ "serde",
+ "serde_norway",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-dataset"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "quick-xml",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-expr"
+version = "0.0.0"
+dependencies = [
+ "compact_str",
+ "paged-data-core",
+ "paged-fmt",
+ "serde",
+ "serde_norway",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-lower"
+version = "0.0.0"
+dependencies = [
+ "paged-data-barcode",
+ "paged-data-core",
+ "serde",
+]
+
+[[package]]
+name = "paged-data-query"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "smallvec",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-session"
+version = "0.0.0"
+dependencies = [
+ "paged-data-automation",
+ "paged-data-barcode",
+ "paged-data-bind",
+ "paged-data-core",
+ "paged-data-dataset",
+ "paged-data-expr",
+ "paged-data-lower",
+ "paged-data-query",
+ "paged-data-sources",
+ "paged-data-store",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-sources"
+version = "0.0.0"
+dependencies = [
+ "paged-data-core",
+ "serde",
+ "thiserror",
+]
+
+[[package]]
+name = "paged-data-store"
+version = "0.0.0"
+dependencies = [
+ "bytes",
+ "csv",
+ "js-sys",
+ "paged-data-core",
+ "paged-data-xlsx",
+ "parquet",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "turso_core",
+ "turso_parser",
+]
+
+[[package]]
+name = "paged-data-xlsx"
+version = "0.0.0"
+dependencies = [
+ "calamine",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

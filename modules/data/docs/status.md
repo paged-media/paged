@@ -65,7 +65,7 @@ built yet.
   the others. `test/store-browser.spec.ts` runs the shipped engine in headless Chromium under
   the editor's headers (CI: `REQUIRE_REAL_BROWSER=1`), and both lanes prove the same security
   matrix (`test/guard-matrix.ts`). The store answers as SQLite does on 24 of 25 oracle cases
-  (`conformance/sqlite-sql`); an ordered aggregate (`group_concat(… ORDER BY …)`) is the one
+  (`paged-data-store/tests/sqlite-sql`); an ordered aggregate (`group_concat(… ORDER BY …)`) is the one
   Turso 0.8.3 does not run.
 - **Refresh policy** (since 2026-10-06, `src/refresh.ts`). Each source has one: manual; on open
   (the queries re-run when the document opens, and a remote source is fetched again only with

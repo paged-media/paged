@@ -5,6 +5,7 @@
 
 mod authoring_chain;
 mod cli_surface;
+mod data_cli;
 mod engine_serve;
 mod golden;
 mod golden_document;

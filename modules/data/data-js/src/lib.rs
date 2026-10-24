@@ -27,8 +27,8 @@
 //!
 //! ## Two layers, one logic
 //!
-//! - [`core::DataSession`] — plain Rust, native-typed. The full engine lives
-//!   here, so `data-conformance` exercises it WITHOUT a wasm runtime.
+//! - [`core::DataSession`] — plain Rust, native-typed, in the engine crate
+//!   `paged-data-session`. The full engine lives there, so `data-conformance` exercises it WITHOUT a wasm runtime.
 //! - `DataEngine` (below) — `#[cfg(target_arch = "wasm32")]` only, because
 //!   `JsValue`-returning `#[wasm_bindgen]` methods compile only for wasm32. A
 //!   forwarding shim with NO logic of its own.
@@ -44,9 +44,9 @@
 //! (`data-store`, ADR 561) is behind the `store_*` methods, and a refresh
 //! delivers a query's rows to the session without them leaving the wasm.
 
-pub mod columns;
-pub mod core;
-pub mod review;
+// The session moved into the engine (`paged-data-session`, PM-0015); its
+// modules keep their paths here, so `data_js::core::DataSession` still names it.
+pub use data_session::{columns, core, labels, review};
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -771,6 +771,42 @@ mod wasm {
                 .map_err(|e| store_error(&e))?;
             // JSON-compatible: a SQL NULL crosses as `null`, not `undefined`.
             to_js_json(&out)
+        }
+
+        /// A window of a source table in the provider shape (the data
+        /// door's `records`, extensions ADR 343):
+        /// `{schema: {fields}, columns, rowCount}`. `limit` 0 means all.
+        pub fn store_records(
+            &mut self,
+            table: &str,
+            offset: usize,
+            limit: usize,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_records(table, offset, (limit > 0).then_some(limit))
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// A query's rows in the provider shape (the data door's `query`;
+        /// the bundle's guard has checked `sql`).
+        pub fn store_query_records(&mut self, sql: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_query_records(sql)
+                .map_err(|e| store_error(&e))?;
+            to_js_json(&out)
+        }
+
+        /// Apply row edits (`[{op: "set", row, field, value} | {op:
+        /// "insert", values} | {op: "delete", row}]`) to a source table in
+        /// one transaction (the data door's `write`). Returns the row count.
+        pub fn store_edit(&mut self, table: &str, edits: JsValue) -> Result<usize, JsValue> {
+            let edits: Vec<data_store::RowEdit> = from_js(edits)?;
+            self.session
+                .store_edit(table, &edits)
+                .map_err(|e| store_error(&e))
         }
     }
 

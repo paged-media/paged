@@ -2750,3 +2750,31 @@ over the frame's content box while the context is active on it (editor ADR 281).
   `host.document.styleProperties(collection, styleId)` (resolved through `BasedOn`) and
   `host.document.swatchDisplay(ids)` (display colours after colour management, CMYK, gamut);
   probes `document.styleProperties@1`, `document.swatchDisplay@1`.
+
+## 25. The data and actions doors (ADRs 343, 344 — `data@1`, `actions@1`; PM-0015)
+
+**Why two doors, not one.** Data is the document's state that one module owns (paged.data's
+sources, queries, store and bindings); actions are stateless steps any module may offer. So
+`host.data` has a SERVE side, one service per editor, while `host.actions` is a registry with
+no owner. Both are cross-bundle, so each has a shared backend the editor builds once and
+injects (`createDataRegistry`, `createActionRegistry`), as `dataProviders` has. The per-bundle
+capability gates (`capabilities.data.{serve, read, write, bind}`, `capabilities.actions.{register,
+run}`) live in the surfaces (`doors-data-actions.ts`).
+
+**The record shape is the provider shape.** `records` and `query` answer a `ProviderRecordSet`,
+so a `dataProviders@1` consumer reads `data@1` with the same code, and paged.sheet's
+range-as-dataset and sheet-from-dataset paths carry over.
+
+**The host routes, the service decides.** The host checks the role and whether a service is
+live; whatever the service leaves out (`write` on a read-only one) is refused with that reason.
+The SQL guard is the service's (paged.data runs its own; the engine's CLI the same rules in Rust,
+core ADR 1014), never the host's.
+
+**Actions are cached by content, not by call.** `hash(input) . hash(chain)` over canonical forms
+(bytes as they are, JSON with sorted keys), each step's parameters merged over its defaults. A
+chain's kinds are checked before anything runs. The cache is the registry's (256 entries, LRU),
+so two bundles running the same chain share the result; `actionKey` lets a caller keep its own
+(an asset column's bytes).
+
+**Tests.** The harness injects both backends; `fakeDataService` serves in-memory tables and
+answers `SELECT * FROM <table>` only, refusing other SQL rather than imitating it.

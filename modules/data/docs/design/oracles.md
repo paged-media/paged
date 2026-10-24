@@ -13,11 +13,11 @@ reference tool. Where we disagree with the reference today, the test pins the di
 a numbered defect. A pinned defect stays green while the defect exists and fails the day the
 behaviour changes, so the fix and the pin change land in the same commit.
 
-| Lane       | Reference                            | Recorded in                                    | Replayed by                                                                                     |
-| ---------- | ------------------------------------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| SQLite SQL | `sqlite3` CLI 3.51.0                 | `conformance/sqlite-sql/recorded/results.json` | `data-store/tests/sqlite_oracle.rs`                                                             |
-| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`   | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-store.spec.ts` |
-| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                            | `data-conformance/tests/it/oracle_props.rs`                                                     |
+| Lane       | Reference                            | Recorded in                                                                  | Replayed by                                                                                     |
+| ---------- | ------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SQLite SQL | `sqlite3` CLI 3.51.0                 | `engine/core/crates/paged-data-store/tests/sqlite-sql/recorded/results.json` | `data-store/tests/sqlite_oracle.rs`                                                             |
+| Data Merge | InDesign 2025 (20.0.1)               | `conformance/indesign-merge/recorded/*.json`                                 | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-store.spec.ts` |
+| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record)                                                          | `data-conformance/tests/it/oracle_props.rs`                                                     |
 
 ## 1. SQLite SQL lane
 
@@ -25,7 +25,7 @@ behaviour changes, so the fix and the pin change land in the same commit.
 answer SQLite gives? The store's path is `data-store` `Store::query` → `data_core::RecordSet`,
 the result every binding reads.
 
-**Fixtures.** `conformance/sqlite-sql/cases.json`: a setup (two tables, one of UTF-8 names and
+**Fixtures.** `engine/core/crates/paged-data-store/tests/sqlite-sql/cases.json`: a setup (two tables, one of UTF-8 names and
 cities, one of prices with NULLs) and 25 queries:
 
 - Types and values: integers, integer division and modulo, floats with 1e300 and rounding,
@@ -59,7 +59,7 @@ both as SQLite does, and the lane pins that.
 3.50's dialect):
 
 ```sh
-SQLITE3=/path/to/sqlite3 node conformance/sqlite-sql/record.mjs
+SQLITE3=/path/to/sqlite3 node ../../engine/core/crates/paged-data-store/tests/sqlite-sql/record.mjs
 ```
 
 A Turso upgrade is replayed against the recording; a changed answer is a finding to read, not

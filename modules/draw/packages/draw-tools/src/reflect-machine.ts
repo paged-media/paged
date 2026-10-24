@@ -110,33 +110,52 @@ export class ReflectMachine {
         return this.snapshot(null, null);
       case "move": {
         if (!this.press) return this.snapshot(null, null);
-        if (!this.dragging && dist(this.press, event.point) >= this.options.clickTolerance)
+        if (
+          !this.dragging &&
+          dist(this.press, event.point) >= this.options.clickTolerance
+        )
           this.dragging = true;
         const pivot = this.currentPivot();
         if (this.dragging && pivot && dist(pivot, event.point) > 0)
-          this.angle = axisAngleOf(pivot, event.point, event.modifiers?.shift ?? false);
+          this.angle = axisAngleOf(
+            pivot,
+            event.point,
+            event.modifiers?.shift ?? false,
+          );
         return this.snapshot(null, null);
       }
       case "up": {
         if (!this.press) return this.snapshot(null, null);
         const wasDrag =
-          this.dragging || dist(this.press, event.point) >= this.options.clickTolerance;
+          this.dragging ||
+          dist(this.press, event.point) >= this.options.clickTolerance;
         this.press = null;
         this.dragging = false;
         if (!wasDrag) {
           this.angle = null;
           this.pivot = [event.point[0], event.point[1]];
-          return this.snapshot(null, event.modifiers?.alt ? [...this.pivot] : null);
+          return this.snapshot(
+            null,
+            event.modifiers?.alt ? [...this.pivot] : null,
+          );
         }
         const pivot = this.currentPivot();
         if (!pivot || dist(pivot, event.point) === 0) {
           this.angle = null;
           return this.snapshot(null, null);
         }
-        const angleDeg = axisAngleOf(pivot, event.point, event.modifiers?.shift ?? false);
+        const angleDeg = axisAngleOf(
+          pivot,
+          event.point,
+          event.modifiers?.shift ?? false,
+        );
         this.angle = null;
         return this.snapshot(
-          { pivot: [pivot[0], pivot[1]], angleDeg, copy: event.modifiers?.alt ?? false },
+          {
+            pivot: [pivot[0], pivot[1]],
+            angleDeg,
+            copy: event.modifiers?.alt ?? false,
+          },
           null,
         );
       }

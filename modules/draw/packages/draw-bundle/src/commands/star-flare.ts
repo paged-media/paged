@@ -59,7 +59,11 @@ import {
   type AnchorTable,
 } from "@paged-media/draw-geometry";
 
-import { batchMutationFor, bindCreatedMutationFor, handleElementId } from "./batch-handles";
+import {
+  batchMutationFor,
+  bindCreatedMutationFor,
+  handleElementId,
+} from "./batch-handles";
 import { groupMutationFor } from "./group";
 import { resolveTargetPage } from "../io/svg";
 import { graphicPaintFor, withGraphicPaint } from "../handlers/graphic-default";
@@ -156,7 +160,10 @@ export function flareParamsFrom(payload?: Payload): FlareParams {
   return {
     cx: num(payload?.cx, d.cx),
     cy: num(payload?.cy, d.cy),
-    centreRadius: Math.max(0.5, Math.abs(num(payload?.centreRadius, d.centreRadius))),
+    centreRadius: Math.max(
+      0.5,
+      Math.abs(num(payload?.centreRadius, d.centreRadius)),
+    ),
     haloScale: Math.max(1, num(payload?.haloScale, d.haloScale)),
     rays: count(payload?.rays, d.rays, 0, FLARE_MAX_RAYS),
     rayLength: Math.abs(num(payload?.rayLength, d.rayLength)),
@@ -190,7 +197,9 @@ export async function applyInsertStar(
     withGraphicPaint(insertPathMutationFor(page, table.anchors, false), paint),
   );
   if (!outcome.applied) {
-    host.log.warn(`insertStar rejected by engine: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `insertStar rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
     return null;
   }
   const id = outcome.createdId ?? null;
@@ -205,7 +214,8 @@ export const FLARE_PAPER = "Color/Paper";
 export const FLARE_RAY_OPACITY = 60;
 export const FLARE_RING_OPACITY = 25;
 /** The handles the parts are named by. */
-export const flareHandle = (part: string, i = 0): string => `flare-${part}-${i}`;
+export const flareHandle = (part: string, i = 0): string =>
+  `flare-${part}-${i}`;
 
 const prop = (elementId: ElementId, path: string, value: unknown): Mutation =>
   ({
@@ -229,8 +239,16 @@ export function flareBatchFor(pageId: string, p: FlareParams): Mutation {
   });
   const ops: Mutation[] = [];
   const members: ElementId[] = [];
-  const add = (table: AnchorTable, open: boolean, handle: string, paint: Mutation[] | ((id: ElementId) => Mutation[])) => {
-    ops.push(insertPathMutationFor(pageId, table.anchors, open), bindCreatedMutationFor(handle));
+  const add = (
+    table: AnchorTable,
+    open: boolean,
+    handle: string,
+    paint: Mutation[] | ((id: ElementId) => Mutation[]),
+  ) => {
+    ops.push(
+      insertPathMutationFor(pageId, table.anchors, open),
+      bindCreatedMutationFor(handle),
+    );
     const id = handleElementId(handle);
     ops.push(...(typeof paint === "function" ? paint(id) : paint));
     members.push(id);
@@ -282,7 +300,9 @@ export async function applyInsertFlare(
   const p = flareParamsFrom(payload);
   const outcome = await host.document.mutate(flareBatchFor(page, p));
   if (!outcome.applied) {
-    host.log.warn(`insertFlare rejected by engine: ${JSON.stringify(outcome.error)}`);
+    host.log.warn(
+      `insertFlare rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
     return 0;
   }
   return 2 + p.rays + p.rings;
@@ -307,14 +327,22 @@ export function contributeStarFlareCommands(
       title: M.star,
       category: "Insert",
       handler: (_paged, payload) =>
-        applyInsertStar(host, (payload as Payload) ?? lastUsed.star?.(), page(payload)),
+        applyInsertStar(
+          host,
+          (payload as Payload) ?? lastUsed.star?.(),
+          page(payload),
+        ),
     }),
     registerCommand(host, {
       id: INSERT_FLARE_COMMAND_ID,
       title: M.flare,
       category: "Insert",
       handler: (_paged, payload) =>
-        applyInsertFlare(host, (payload as Payload) ?? lastUsed.flare?.(), page(payload)),
+        applyInsertFlare(
+          host,
+          (payload as Payload) ?? lastUsed.flare?.(),
+          page(payload),
+        ),
     }),
   ];
   return {

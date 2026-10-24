@@ -85,7 +85,12 @@ describe("simplifyAnchorTable — the Simplify preview's fit [plugin-draw.tool-w
   });
 
   it("the interior angle is 180 straight on, 90 at a square corner", () => {
-    const sq = [corner([0, 0]), corner([10, 0]), corner([10, 10]), corner([0, 10])];
+    const sq = [
+      corner([0, 0]),
+      corner([10, 0]),
+      corner([10, 10]),
+      corner([0, 10]),
+    ];
     expect(interiorAngleAt(sq, true, 1)).toBeCloseTo(90, 6);
     const line = [corner([0, 0]), corner([10, 0]), corner([20, 0])];
     expect(interiorAngleAt(line, false, 1)).toBeCloseTo(180, 6);
@@ -96,7 +101,8 @@ describe("simplifyAnchorTable — the Simplify preview's fit [plugin-draw.tool-w
     // A dense V: two straight arms meeting at (100, 100) at ~53°.
     const anchors: AnchorTriple[] = [];
     for (let i = 0; i <= 20; i++) anchors.push(corner([i * 5, 100 - i * 10]));
-    for (let i = 1; i <= 20; i++) anchors.push(corner([100 + i * 5, -100 + i * 10]));
+    for (let i = 1; i <= 20; i++)
+      anchors.push(corner([100 + i * 5, -100 + i * 10]));
     const t: AnchorTable = { anchors, subpathStarts: [0], subpathOpen: [true] };
     const tip: P = [100, -100];
     const kept = simplifyAnchorTable(t, { tolerance: 2, cornerAngleDeg: 90 });
@@ -117,7 +123,11 @@ describe("simplifyAnchorTable — the Simplify preview's fit [plugin-draw.tool-w
       const a = (i / 64) * Math.PI * 2;
       anchors.push(corner([100 + 50 * Math.cos(a), 100 + 50 * Math.sin(a)]));
     }
-    const t: AnchorTable = { anchors, subpathStarts: [0], subpathOpen: [false] };
+    const t: AnchorTable = {
+      anchors,
+      subpathStarts: [0],
+      subpathOpen: [false],
+    };
     const out = simplifyAnchorTable(t, { tolerance: 0.5, cornerAngleDeg: 30 });
     expect(out.subpathOpen).toEqual([false]);
     expect(out.anchors.length).toBeGreaterThanOrEqual(2);
@@ -128,33 +138,55 @@ describe("simplifyAnchorTable — the Simplify preview's fit [plugin-draw.tool-w
     const inDir = [a0.anchor[0] - a0.left[0], a0.anchor[1] - a0.left[1]];
     const outDir = [a0.right[0] - a0.anchor[0], a0.right[1] - a0.anchor[1]];
     const cross = inDir[0]! * outDir[1]! - inDir[1]! * outDir[0]!;
-    expect(Math.abs(cross) / (Math.hypot(inDir[0]!, inDir[1]!) * Math.hypot(outDir[0]!, outDir[1]!))).toBeLessThan(1e-6);
+    expect(
+      Math.abs(cross) /
+        (Math.hypot(inDir[0]!, inDir[1]!) * Math.hypot(outDir[0]!, outDir[1]!)),
+    ).toBeLessThan(1e-6);
   });
 
   it("a single segment between two corners is kept verbatim", () => {
     const sq: AnchorTable = {
-      anchors: [corner([0, 0]), corner([10, 0]), corner([10, 10]), corner([0, 10])],
+      anchors: [
+        corner([0, 0]),
+        corner([10, 0]),
+        corner([10, 10]),
+        corner([0, 10]),
+      ],
       subpathStarts: [0],
       subpathOpen: [false],
     };
     const out = simplifyAnchorTable(sq, { tolerance: 1, cornerAngleDeg: 100 });
-    expect(out.anchors.map((a) => a.anchor)).toEqual(sq.anchors.map((a) => a.anchor));
+    expect(out.anchors.map((a) => a.anchor)).toEqual(
+      sq.anchors.map((a) => a.anchor),
+    );
   });
 
   it("never ADDS anchors: a square re-fitted without its corners stays the square", () => {
     const sq: AnchorTable = {
-      anchors: [corner([0, 0]), corner([100, 0]), corner([100, 100]), corner([0, 100])],
+      anchors: [
+        corner([0, 0]),
+        corner([100, 0]),
+        corner([100, 100]),
+        corner([0, 100]),
+      ],
       subpathStarts: [0],
       subpathOpen: [false],
     };
     const out = simplifyAnchorTable(sq, { tolerance: 1, cornerAngleDeg: 60 });
-    expect(out.anchors.map((a) => a.anchor)).toEqual(sq.anchors.map((a) => a.anchor));
+    expect(out.anchors.map((a) => a.anchor)).toEqual(
+      sq.anchors.map((a) => a.anchor),
+    );
   });
 
   it("every contour of a compound table keeps its own open flag", () => {
     const w = wave(40);
     const t: AnchorTable = {
-      anchors: [...w.anchors, ...wave(40).anchors.map((a) => corner([a.anchor[0], a.anchor[1] + 200]))],
+      anchors: [
+        ...w.anchors,
+        ...wave(40).anchors.map((a) =>
+          corner([a.anchor[0], a.anchor[1] + 200]),
+        ),
+      ],
       subpathStarts: [0, 41],
       subpathOpen: [true, false],
     };

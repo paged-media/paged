@@ -110,7 +110,12 @@ export function createStarHandler(
     }
     if (snap.star && page) {
       const t = starPath(snap.star);
-      host.overlay.setToolPreview({ pageId: page, anchors: [...t.anchors], close: true, dashed: true });
+      host.overlay.setToolPreview({
+        pageId: page,
+        anchors: [...t.anchors],
+        close: true,
+        dashed: true,
+      });
     }
   };
 
@@ -134,13 +139,23 @@ export function createStarHandler(
     },
     onPointerMove(e) {
       if (!machine || !e.pagePoint || e.pageId !== pageId) return;
-      sync(machine.handle({ type: "move", point: e.pagePoint, modifiers: { shift: e.modifiers.shift } }));
+      sync(
+        machine.handle({
+          type: "move",
+          point: e.pagePoint,
+          modifiers: { shift: e.modifiers.shift },
+        }),
+      );
     },
     onPointerUp(e) {
       if (!machine) return;
       sync(
         e.pagePoint && e.pageId === pageId
-          ? machine.handle({ type: "up", point: e.pagePoint, modifiers: { shift: e.modifiers.shift } })
+          ? machine.handle({
+              type: "up",
+              point: e.pagePoint,
+              modifiers: { shift: e.modifiers.shift },
+            })
           : machine.handle({ type: "key", key: "Escape" }),
       );
     },
@@ -170,7 +185,10 @@ export function flareParamsOfGesture(
     ringRadius: base.ringRadius * scale,
     ...(g.end
       ? { endX: g.end[0], endY: g.end[1] }
-      : { endX: g.centre[0] + (base.endX - base.cx), endY: g.centre[1] + (base.endY - base.cy) }),
+      : {
+          endX: g.centre[0] + (base.endX - base.cx),
+          endY: g.centre[1] + (base.endY - base.cy),
+        }),
   };
 }
 
@@ -213,7 +231,10 @@ export function createFlareHandler(
   const sync = (snap: FlareSnapshot) => {
     const page = pageId;
     if (snap.commit && page) {
-      const params = flareParamsOfGesture(snap.commit, lastUsedPathOptions(host).flare);
+      const params = flareParamsOfGesture(
+        snap.commit,
+        lastUsedPathOptions(host).flare,
+      );
       reset();
       void applyInsertFlare(host, { ...params }, page)
         .then(() => options.onFlare?.(params))
@@ -256,7 +277,9 @@ export function createFlareHandler(
     onPointerDown(e: CanvasPointerEvent) {
       if (e.button !== 0 || !e.pageId || !e.pagePoint) return;
       if (!machine) {
-        machine = new FlareMachine({ clickTolerance: host.viewport.pxToPt(CLICK_PX) });
+        machine = new FlareMachine({
+          clickTolerance: host.viewport.pxToPt(CLICK_PX),
+        });
         pageId = e.pageId;
       }
       if (e.pageId !== pageId) return;
@@ -271,7 +294,8 @@ export function createFlareHandler(
       sync(machine.handle({ type: "up", point: e.pagePoint }));
     },
     onKey(e: KeyboardEvent) {
-      if (machine && e.key === "Escape") sync(machine.handle({ type: "key", key: "Escape" }));
+      if (machine && e.key === "Escape")
+        sync(machine.handle({ type: "key", key: "Escape" }));
     },
   };
 }

@@ -46,8 +46,13 @@ export const MODULES = {
     walk: true,
     crateDirs: ["src"],
     crateFiles: ["build.rs", "Cargo.toml"],
-    // data-core + data-expr build.rs read them.
-    extra: [{ dir: "registry/functions", ext: ".yaml" }],
+    // paged-data-core + paged-data-expr build.rs read them (PM-0015).
+    extra: [
+      {
+        dir: "../../engine/core/crates/paged-data-core/functions",
+        ext: ".yaml",
+      },
+    ],
     rootFiles: CARGO_WORKSPACE,
   },
   image: {

@@ -17,16 +17,24 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Info (paged.info): the document-meta readout. Read-only, so its tests
-// are the states and the model it follows; it has no controls.
+// Info (paged.info): the cursor, the selection, the colour under the
+// cursor and the document meta. Read-only, so its tests are the states
+// and the model it follows; it has no controls.
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
+import { CANVAS_POINTER } from "@paged-media/shell";
+import { setDocumentUnit } from "@paged-media/ui";
+
 import { InfoPanel } from "../../src/panels/info-panel";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
+import { shapesScene } from "./fixtures";
 
-afterEach(unmountAll);
+afterEach(() => {
+  unmountAll();
+  setDocumentUnit("pt");
+});
 
 const mount = (document?: "none" | "blank") =>
   mountPanel(InfoPanel, { id: "paged.info", document });
@@ -46,6 +54,9 @@ describe("Info panel", () => {
     covers("panel:paged.info");
     const h = await mount("none");
     expect(rows(h)).toEqual({
+      "Cursor X": "—",
+      "Cursor Y": "—",
+      "Cursor page": "—",
       Document: "—",
       Pages: "0",
       "Active page": "—",
@@ -108,5 +119,88 @@ describe("Info panel", () => {
       args: { afterPageId: h.handle!.pageIds[0], masterId: null },
     } as never);
     expect(rows(h).Dirty).toBe("yes");
+  });
+
+  test("the cursor reads page-relative, in the document's ruler units", async () => {
+    covers("panel:paged.info");
+    const h = await mount("blank");
+    const pageId = h.handle!.pageIds[0]!;
+    await h.act(() =>
+      h.scope.get(CANVAS_POINTER).set({
+        pageId,
+        pagePoint: [72, 144],
+        docPoint: [72, 144],
+      }),
+    );
+    expect(rows(h)).toMatchObject({
+      "Cursor X": "72 pt",
+      "Cursor Y": "144 pt",
+      "Cursor page": "Page 1",
+    });
+    await h.act(() => setDocumentUnit("in"));
+    expect(rows(h)).toMatchObject({ "Cursor X": "1 in", "Cursor Y": "2 in" });
+    // Off the canvas: dashes, never the last position.
+    await h.act(() => h.scope.get(CANVAS_POINTER).set(null));
+    expect(rows(h)["Cursor X"]).toBe("—");
+  });
+
+  test("the selection reads its X/Y/W/H and angle; several read their box", async () => {
+    covers("panel:paged.info");
+    const h = await mountPanel(InfoPanel, {
+      id: "paged.info",
+      scene: shapesScene,
+    });
+    expect(
+      h.root.querySelector('[data-info-note="no-selection"]'),
+    ).not.toBeNull();
+    // rect: [top, left, bottom, right] = [400, 72, 500, 200]
+    await h.select([h.scene.rect]);
+    expect(rows(h)).toMatchObject({
+      "Selection X": "72 pt",
+      "Selection Y": "400 pt",
+      "Selection W": "128 pt",
+      "Selection H": "100 pt",
+      "Selection angle": "0°",
+    });
+    // + the oval [400, 300, 500, 400]: one box 72..400 × 400..500.
+    await h.select([h.scene.rect, h.scene.oval]);
+    expect(rows(h)).toMatchObject({
+      "Selection X": "72 pt",
+      "Selection W": "328 pt",
+      "Selection H": "100 pt",
+      "Selection items": "2",
+    });
+    await h.select([h.scene.rect]);
+    await h.mutate({
+      op: "setElementProperty",
+      args: {
+        elementId: h.scene.rect,
+        path: "frameRotationAngle",
+        value: { type: "length", value: 30 },
+      },
+    } as never);
+    await h.select([h.scene.rect]);
+    expect(rows(h)["Selection angle"]).toBe("30°");
+    expect(rows(h)["Selection W"]).toBe("128 pt");
+  });
+
+  test("the colour section says what it cannot read, and never invents CMYK", async () => {
+    covers("panel:paged.info");
+    const h = await mount("blank");
+    expect(h.root.querySelector('[data-info-note="outside"]')).not.toBeNull();
+    // The test DOM has no image decoder: the sample is reported
+    // unavailable rather than guessed.
+    await h.act(() =>
+      h.scope.get(CANVAS_POINTER).set({
+        pageId: h.handle!.pageIds[0]!,
+        pagePoint: [10, 10],
+        docPoint: [10, 10],
+      }),
+    );
+    await h.settle();
+    expect(
+      h.root.querySelector('[data-info-note="unavailable"]'),
+    ).not.toBeNull();
+    expect(rows(h).CMYK).toBeUndefined();
   });
 });
