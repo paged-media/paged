@@ -789,6 +789,30 @@ mod wasm {
             to_js_json(&out)
         }
 
+        /// Define (or redefine) a transform (data ADR 562):
+        /// `{id, inputs, source, params?}`.
+        pub fn define_transform(&mut self, def: JsValue) -> Result<(), JsValue> {
+            let def: data_session::core::TransformDef = from_js(def)?;
+            self.session.define_transform(def);
+            Ok(())
+        }
+
+        /// Remove a transform and its derived table.
+        pub fn remove_transform(&mut self, id: &str) -> bool {
+            self.session.remove_transform(id)
+        }
+
+        /// The transforms, in run order.
+        pub fn transforms(&self) -> Result<JsValue, JsValue> {
+            to_js_json(&self.session.transforms())
+        }
+
+        /// Run every transform in order (before the queries refresh):
+        /// `[{transform, outcome: {Ok: rows} | {Err: message}}]`.
+        pub fn run_transforms(&mut self) -> Result<JsValue, JsValue> {
+            to_js_json(&self.session.run_transforms())
+        }
+
         /// A query's rows in the provider shape (the data door's `query`;
         /// the bundle's guard has checked `sql`).
         pub fn store_query_records(&mut self, sql: &str) -> Result<JsValue, JsValue> {

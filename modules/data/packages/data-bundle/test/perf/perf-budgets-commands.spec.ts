@@ -169,6 +169,8 @@ describe.skipIf(!RUN_BUDGETS)(
     // binding lowered before and swap it inside its own frame.
     // Settled before counting (the setup's debounced save no longer lands in
     // the command): -1 parts.write.
+    // Transforms (data ADR 562): +1 wasm call, run_transforms before the
+    // queries refresh (none defined here, so it computes nothing).
     const W1_LOWER: Measured = onLabelled(
       {
         hostCalls: 7,
@@ -177,7 +179,7 @@ describe.skipIf(!RUN_BUDGETS)(
         mutationOps: 1506,
         undoSteps: 1,
         placeholdersRead: 0,
-        wasmCalls: 4,
+        wasmCalls: 5,
         cellsIn: 0,
         resolves: 1,
         // 1 → 0: a scan of one table (`SELECT … FROM products_w1`) is numbered as DuckDB
@@ -572,6 +574,7 @@ describe.skipIf(!RUN_BUDGETS)(
     // createTextVariable rides the same batch before its instance: +20
     // mutationOps (41 → 61), still ONE mutate and ONE undo step; +1 hostCalls,
     // the text-variable query that tells a new definition from an existing one.
+    // Transforms (data ADR 562): +1 wasm call, run_transforms in the refresh.
     const W5: Measured = onTextVariables(
       onLabelled(
         {
@@ -581,7 +584,7 @@ describe.skipIf(!RUN_BUDGETS)(
           mutationOps: 40,
           undoSteps: 1,
           placeholdersRead: 0,
-          wasmCalls: 21,
+          wasmCalls: 22,
           cellsIn: 0,
           resolves: 20,
           stabilizeCalls: 0,

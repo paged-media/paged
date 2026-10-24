@@ -30,3 +30,19 @@
   title: Raw Arrow-IPC decode in Rust (so the boundary takes IPC, not JSON)
   spec: plugin-data data-query (base-idea §6.1 — the M1 seam)
   status: planned
+
+- id: data.transforms
+  title: Transforms — JavaScript over tables, stored in the recipe, run sandboxed before the queries (ADR 562)
+  spec: paged-data-session run_transforms over paged-action's JS actions (core ADR 1015)
+  status: implemented
+  provenance:
+    [
+      "a transform is (tables, params) => rows; its rows go through the store's JSON reader, so key order is column order and types are inferred as an import infers them",
+      "bare Boa context (no host functions, loop and recursion budget, fixed clock); a failure is reported and its table left out",
+    ]
+  tests:
+    rust:
+      - "engine:paged-data-session/tests/transforms.rs::a_transform_joins_two_tables_into_a_derived_table__feat__data_transforms"
+      - "engine:paged-data-session/tests/transforms.rs::transforms_round_trip_with_the_recipe__feat__data_transforms"
+      - "engine:paged-data-session/tests/transforms.rs::a_failing_transform_is_reported_and_reaches_nothing__feat__data_transforms"
+    vitest: ["packages/data-bundle/test/data-door-real-core.spec.ts"]
