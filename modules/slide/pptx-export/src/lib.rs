@@ -448,9 +448,15 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
             (part, next_id, rid)
         };
 
+        // Untouched parts keep their bytes: the slide is rewritten only
+        // when its hidden flag changed, its relationships only when a
+        // notes relationship was retargeted or added (ADR 711).
         let mut slide_xml = text(&pkg, src)?;
-        slide_xml = set_hidden(&slide_xml, s.hidden);
+        if orig.hidden.get(src).copied().unwrap_or(false) != s.hidden {
+            slide_xml = set_hidden(&slide_xml, s.hidden);
+        }
         let mut srels = rels(&pkg, src);
+        let mut srels_changed = false;
         let src_dir = part_dir(src).to_string();
         let dir = part_dir(&part).to_string();
 
@@ -478,16 +484,24 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
                     let p = format!("{}/notesSlide{next_notes}.xml", part_dir(&notes_src));
                     added_types.push((p.clone(), CT_NOTES));
                     srels.items[i].target = relative(&dir, &p);
+                    srels_changed = true;
                     p
                 };
-                // The notes slide points back at its slide.
-                let mut nrels = rels(&pkg, &notes_src);
-                for r in &mut nrels.items {
-                    if r.rel_type == REL_SLIDE {
-                        r.target = relative(part_dir(&notes_part), &part);
+                // The notes slide points back at its slide; a notes slide
+                // whose slide kept its part keeps its relationships' bytes.
+                if first {
+                    if let Some(b) = pkg.part(&rels_part_name(&notes_src)) {
+                        out_parts.insert(rels_part_name(&notes_part), b.to_vec());
                     }
+                } else {
+                    let mut nrels = rels(&pkg, &notes_src);
+                    for r in &mut nrels.items {
+                        if r.rel_type == REL_SLIDE {
+                            r.target = relative(part_dir(&notes_part), &part);
+                        }
+                    }
+                    out_parts.insert(rels_part_name(&notes_part), write_rels(&nrels));
                 }
-                out_parts.insert(rels_part_name(&notes_part), write_rels(&nrels));
                 out_parts.insert(notes_part, notes_xml.into_bytes());
             }
             None if want.is_some() => match &notes_master {
@@ -521,6 +535,7 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
                         target: relative(&dir, &p),
                         target_mode: None,
                     });
+                    srels_changed = true;
                     out_parts.insert(rels_part_name(&p), write_rels(&nrels));
                     out_parts.insert(p, new_notes_xml(want.as_deref().unwrap_or("")).into_bytes());
                 }
@@ -532,7 +547,11 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
         }
         // A duplicate's own relationships resolve from its own folder; its
         // folder is its source's, so targets stay as they are.
-        out_parts.insert(rels_part_name(&part), write_rels(&srels));
+        let srels_bytes = match pkg.part(&rels_part_name(src)) {
+            Some(b) if !srels_changed => b.to_vec(),
+            _ => write_rels(&srels),
+        };
+        out_parts.insert(rels_part_name(&part), srels_bytes);
         out_parts.insert(part.clone(), slide_xml.into_bytes());
         written.push((part, id, rid, src.to_string()));
     }
@@ -558,16 +577,23 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
     }
 
     // presentation.xml: the slide list in document order, sections kept
-    // contiguous.
+    // contiguous. The same slides in the same order keep its bytes.
+    let same_list = written.len() == orig.slides.len()
+        && written
+            .iter()
+            .zip(&orig.slides)
+            .all(|((p, id, rid, _), (op, oid, orid))| p == op && id == oid && rid == orid);
     let mut pres = text(&pkg, &orig.presentation)?;
     let list: String = written
         .iter()
         .map(|(_, id, rid, _)| format!(r#"<p:sldId id="{id}" r:id="{rid}"/>"#))
         .collect();
-    if let (Some(a), Some(b)) = (pres.find("<p:sldIdLst>"), pres.find("</p:sldIdLst>")) {
-        pres.replace_range(a + "<p:sldIdLst>".len()..b, &list);
+    if !same_list {
+        if let (Some(a), Some(b)) = (pres.find("<p:sldIdLst>"), pres.find("</p:sldIdLst>")) {
+            pres.replace_range(a + "<p:sldIdLst>".len()..b, &list);
+        }
+        pres = rewrite_sections(&pres, &orig, &written);
     }
-    pres = rewrite_sections(&pres, &orig, &written);
 
     let mut ct = text(&pkg, "[Content_Types].xml")?;
     let removed_parts: BTreeSet<String> = removed
@@ -588,7 +614,7 @@ pub fn export(original: &[u8], plan: &ExportPlan) -> Result<Exported, String> {
         }
         let bytes = if name == orig.presentation {
             pres.clone().into_bytes()
-        } else if name == pres_rels {
+        } else if name == pres_rels && !same_list {
             write_rels(&prels)
         } else if let Some(b) = out_parts.remove(name) {
             b

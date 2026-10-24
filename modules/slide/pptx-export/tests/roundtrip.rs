@@ -200,3 +200,42 @@ fn edited_content_and_foreign_pages_are_reported() {
     let out = export(&bytes, &plan).unwrap();
     assert_eq!(out.diagnostics.len(), 2, "{:?}", out.diagnostics);
 }
+
+/// Every part of a package, by name.
+fn parts(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let pkg = paged_ooxml::opc::OpcPackage::read(bytes).unwrap();
+    pkg.file_names()
+        .map(|n| (n.to_string(), pkg.part(n).unwrap().to_vec()))
+        .collect()
+}
+
+/// The parts whose bytes differ between two packages (added, removed or
+/// changed).
+fn changed_parts(a: &[u8], b: &[u8]) -> Vec<String> {
+    let (a, b) = (parts(a), parts(b));
+    let names: std::collections::BTreeSet<&String> = a.keys().chain(b.keys()).collect();
+    names
+        .into_iter()
+        .filter(|n| a.get(*n) != b.get(*n))
+        .cloned()
+        .collect()
+}
+
+#[test]
+fn hiding_one_slide_rewrites_that_slide_part_alone() {
+    for name in ["text", "placeholders", "tables", "geometry"] {
+        let bytes = fixture(name);
+        let base = as_is(&bytes);
+        for i in 0..base.slides.len() {
+            let mut plan = base.clone();
+            plan.slides[i].hidden = !plan.slides[i].hidden;
+            let out = export(&bytes, &plan).unwrap();
+            assert_eq!(
+                changed_parts(&bytes, &out.bytes),
+                vec![plan.slides[i].source_part.clone()],
+                "{name}: hiding slide {}",
+                i + 1
+            );
+        }
+    }
+}
