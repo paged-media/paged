@@ -56,7 +56,10 @@ describe("recogniseShape — the Shaper over recorded strokes [plugin-draw.tool-
     expect(rot.kind).toBe("rectangle");
     const [a, b] = rot.table!.anchors.map((x) => x.anchor);
     const deg = (Math.atan2(b![1] - a![1], b![0] - a![0]) * 180) / Math.PI;
-    expect(Math.abs(Math.abs(deg % 90) - 30) < 4 || Math.abs(Math.abs(deg % 90) - 60) < 4).toBe(true);
+    expect(
+      Math.abs(Math.abs(deg % 90) - 30) < 4 ||
+        Math.abs(Math.abs(deg % 90) - 60) < 4,
+    ).toBe(true);
   });
 
   it("a triangle has three corners; five and six corners are regular polygons", () => {
@@ -79,7 +82,10 @@ describe("recogniseShape — the Shaper over recorded strokes [plugin-draw.tool-
   });
 
   it("a back-and-forth scrub is a SCRIBBLE; an open hook and a twitch are nothing", () => {
-    expect(recogniseShape(S.scribble!)).toEqual({ kind: "scribble", table: null });
+    expect(recogniseShape(S.scribble!)).toEqual({
+      kind: "scribble",
+      table: null,
+    });
     expect(recogniseShape(S.openHook!)).toBeNull();
     expect(recogniseShape(S.tiny!)).toBeNull();
   });

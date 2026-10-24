@@ -105,7 +105,8 @@ export class ReshapeMachine {
         return this.snapshot(null);
       }
       case "move":
-        if (this.base && this.index !== null && this.start) this.track(event.point);
+        if (this.base && this.index !== null && this.start)
+          this.track(event.point);
         return this.snapshot(null);
       case "up": {
         if (!this.base || this.index === null || !this.start) {
@@ -114,7 +115,8 @@ export class ReshapeMachine {
         }
         this.track(event.point);
         this.done = true;
-        const moved = event.point[0] !== this.start[0] || event.point[1] !== this.start[1];
+        const moved =
+          event.point[0] !== this.start[0] || event.point[1] !== this.start[1];
         return this.snapshot(moved || this.inserted ? this.current : null);
       }
       case "key":
@@ -126,7 +128,12 @@ export class ReshapeMachine {
 
   private track(point: Vec2): void {
     const delta: Vec2 = [point[0] - this.start![0], point[1] - this.start![1]];
-    this.current = reshapeTable(this.base!, this.index!, delta, this.options.radius);
+    this.current = reshapeTable(
+      this.base!,
+      this.index!,
+      delta,
+      this.options.radius,
+    );
   }
 
   private snapshot(commit: AnchorTable | null): ReshapeSnapshot {
