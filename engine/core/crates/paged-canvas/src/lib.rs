@@ -68,6 +68,7 @@ pub mod snap;
 pub mod snap_point;
 pub mod snapshot;
 pub mod template;
+pub mod view;
 
 pub use camera::{Camera, CameraLayout, CameraSabLayout, CAMERA_SAB_BYTES};
 pub use channel::{
@@ -90,6 +91,7 @@ pub use hit::HitTestResult;
 pub use mutate::{AppliedText, TextOp, TextOpError};
 pub use selection::{ContentSelection, Side, TextCellAddr};
 pub use snap::{SnapAxis, SnapLine};
+pub use view::{ViewMode, ViewSettings};
 
 /// Phase 3 Item 4 — one rect-per-line in page-local coords for a
 /// content selection range. Defined in the root so the channel

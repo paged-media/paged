@@ -246,7 +246,22 @@ fn render_snapshot_inner(
         SnapshotSize::WidthPx(w) => (w as f32) / page.width_pt * 72.0,
         SnapshotSize::Dpi(d) => d,
     };
-    let img = render_built_page(page, dpi, paged_compose::Color::WHITE);
+    // v77 (editor ADR 287) — the tile loop (a width-sized render) draws
+    // the screen, so it draws in the session's view mode; a dpi-sized
+    // render feeds the fidelity suites and draws the page as built.
+    let view = match size {
+        SnapshotSize::WidthPx(_) => model.view_settings(),
+        SnapshotSize::Dpi(_) => crate::view::ViewSettings {
+            mode: crate::view::ViewMode::OverprintPreview,
+        },
+    };
+    let opts = view.raster_options(
+        page.width_pt,
+        page.height_pt,
+        dpi,
+        paged_compose::Color::WHITE,
+    );
+    let img = paged_gpu::rasterize(&page.list, &opts);
 
     Ok(Snapshot {
         page_id: page_id.clone(),

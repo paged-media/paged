@@ -108,6 +108,9 @@ pub struct WorkerCore {
     /// v67 — the session's snapping preferences. Kept here as well as on
     /// the model so they survive `LoadDocument` / `NewBlankDocument`.
     pub snap_settings: paged_canvas::snap_point::SnapSettings,
+    /// v77 — the screen's view settings (editor ADR 287); they survive
+    /// document loads like the snap settings.
+    pub view_settings: paged_canvas::view::ViewSettings,
     /// v75 — the session's role and overrides; like the snap settings it
     /// survives document loads (engine ADR 1000).
     pub session_policy: paged_template::SessionPolicy,
@@ -274,6 +277,7 @@ impl WorkerCore {
             export_sessions: std::collections::HashMap::new(),
             next_export_session: 1,
             snap_settings: Default::default(),
+            view_settings: Default::default(),
             session_policy: Default::default(),
             script_sessions: std::collections::BTreeMap::new(),
             next_script_session: 1,
@@ -364,6 +368,7 @@ impl WorkerCore {
                 match CanvasModel::load(doc_id, bytes.as_slice(), opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
                         let handle = model.handle();
                         self.model = Some(model);
@@ -398,6 +403,7 @@ impl WorkerCore {
                 match CanvasModel::new_blank(doc_id, width_pt, height_pt, opts) {
                     Ok(mut model) => {
                         model.set_snap_settings(self.snap_settings);
+                        model.set_view_settings(self.view_settings);
                         model.set_session_policy(self.session_policy.clone());
                         let handle = model.handle();
                         self.model = Some(model);
@@ -879,6 +885,7 @@ impl WorkerCore {
                         x_target: None,
                         y_target: None,
                         segment_target: None,
+                        angle_target: None,
                         lines: Vec::new(),
                         tolerance_pt: 0.0,
                     },
@@ -949,6 +956,13 @@ impl WorkerCore {
                     m.set_snap_settings(settings);
                 }
                 WorkerToMainKind::SnapSettingsApplied { settings }
+            }
+            MainToWorkerKind::SetViewSettings { settings } => {
+                self.view_settings = settings;
+                if let Some(m) = self.model.as_mut() {
+                    m.set_view_settings(settings);
+                }
+                WorkerToMainKind::ViewSettingsApplied { settings }
             }
             MainToWorkerKind::RequestNearestPathPoint { id, point } => {
                 let result = self

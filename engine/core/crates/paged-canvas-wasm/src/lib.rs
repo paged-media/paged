@@ -35,6 +35,7 @@
 //! parsed messages into [`dispatch::WorkerCore`].
 
 pub mod dispatch;
+pub mod scene_cache;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -94,20 +95,10 @@ mod wasm {
         scene_cache: SceneCache,
     }
 
-    /// LRU page-scene cache. Keys are page indices into
-    /// `model.built().pages`; values are owned `vello::Scene`s built
-    /// by `SurfacePresenter::build_page_scene`. Eviction policy: when
-    /// the entry count exceeds `max_entries`, drop the least-recently
-    /// accessed entry. Touch-on-get keeps the most-recently presented
-    /// pages resident.
+    /// The page-scene cache, keyed by page and view (editor ADR 287;
+    /// [`crate::scene_cache`]).
     #[cfg(feature = "gpu")]
-    struct SceneCache {
-        entries: std::collections::HashMap<usize, paged_gpu::VelloScene>,
-        /// Page indices in LRU order; front = most recent, back =
-        /// next to evict. Bounded length matches `entries.len()`.
-        order: std::collections::VecDeque<usize>,
-        max_entries: usize,
-    }
+    type SceneCache = crate::scene_cache::SceneCache<paged_gpu::VelloScene>;
 
     #[cfg(feature = "gpu")]
     const DEFAULT_SCENE_CACHE_PAGES: usize = 200;
@@ -127,68 +118,6 @@ mod wasm {
     /// (`tests/it/no_async_exports.rs` keeps it that way.)
     #[cfg(feature = "gpu")]
     type GpuSlot = std::rc::Rc<std::cell::RefCell<Option<paged_gpu::SurfacePresenter>>>;
-
-    #[cfg(feature = "gpu")]
-    impl SceneCache {
-        fn new(max_entries: usize) -> Self {
-            Self {
-                entries: std::collections::HashMap::new(),
-                order: std::collections::VecDeque::new(),
-                max_entries: max_entries.max(1),
-            }
-        }
-
-        fn clear(&mut self) {
-            self.entries.clear();
-            self.order.clear();
-        }
-
-        /// Phase 4 Step 3 — drop the cached scenes for `pages` only.
-        /// Other pages keep their cached Vello scene so the next
-        /// `presentFrame` skips rebuilding them. Empty `pages` is a
-        /// no-op (the caller already knows there's nothing to dirty).
-        fn invalidate_pages(&mut self, pages: &[usize]) {
-            for &p in pages {
-                if self.entries.remove(&p).is_some() {
-                    if let Some(pos) = self.order.iter().position(|&k| k == p) {
-                        self.order.remove(pos);
-                    }
-                }
-            }
-        }
-
-        fn touch(&mut self, key: usize) {
-            if let Some(pos) = self.order.iter().position(|&k| k == key) {
-                self.order.remove(pos);
-            }
-            self.order.push_front(key);
-        }
-
-        fn get(&mut self, key: usize) -> Option<&paged_gpu::VelloScene> {
-            if self.entries.contains_key(&key) {
-                self.touch(key);
-                self.entries.get(&key)
-            } else {
-                None
-            }
-        }
-
-        fn insert(&mut self, key: usize, value: paged_gpu::VelloScene) {
-            self.entries.insert(key, value);
-            self.touch(key);
-            while self.entries.len() > self.max_entries {
-                if let Some(victim) = self.order.pop_back() {
-                    self.entries.remove(&victim);
-                } else {
-                    break;
-                }
-            }
-        }
-
-        fn len(&self) -> usize {
-            self.entries.len()
-        }
-    }
 
     #[wasm_bindgen]
     impl CanvasWorker {
@@ -241,14 +170,7 @@ mod wasm {
         #[cfg(feature = "gpu")]
         #[wasm_bindgen(js_name = setSceneCacheBudget)]
         pub fn set_scene_cache_budget(&mut self, max_entries: usize) {
-            self.scene_cache.max_entries = max_entries.max(1);
-            while self.scene_cache.entries.len() > self.scene_cache.max_entries {
-                if let Some(victim) = self.scene_cache.order.pop_back() {
-                    self.scene_cache.entries.remove(&victim);
-                } else {
-                    break;
-                }
-            }
+            self.scene_cache.set_max_entries(max_entries);
         }
 
         /// Protocol version constant; the JS side compares against
@@ -629,7 +551,14 @@ mod wasm {
         /// Render the visible pages at the current camera into the
         /// bound surface. Camera operates in CSS pixels; the
         /// presenter applies `dpr` internally as we bake it into the
-        /// per-page transforms below.
+        /// per-page transforms below. `rotation` (radians, clockwise on
+        /// screen) turns the view about the document origin (editor ADR
+        /// 287, Rotate View): surface = `dpr · (scale · R(rotation) · doc +
+        /// (tx, ty))`.
+        ///
+        /// The session's view mode picks each page's scene (Preview,
+        /// Outline, Overprint Preview — [`crate::scene_cache::SceneView`])
+        /// and Pixel Preview's two-pass present.
         ///
         /// Returns `false` if the surface presenter isn't initialised
         /// or no document is loaded — the worker falls back to its
@@ -642,7 +571,9 @@ mod wasm {
             tx: f32,
             ty: f32,
             dpr: f32,
+            rotation: f32,
         ) -> Result<bool, JsValue> {
+            use crate::scene_cache::SceneView;
             let mut presenter = self.presenter.borrow_mut();
             let Some(presenter) = presenter.as_mut() else {
                 return Ok(false);
@@ -655,66 +586,99 @@ mod wasm {
             let Some(model) = self.core.model.as_ref() else {
                 return Ok(false);
             };
+            let mode = model.view_settings().mode;
 
-            // Per-page transform: doc-space (pt) → surface-space
-            // (device px). The page's origin in doc space is the
-            // cumulative y from stacked layout; the camera adds its
-            // pan + scale; dpr brings CSS px → device px.
-            //
-            // Two-pass approach so the scene cache can borrow mut
-            // immutably for present_scenes: pass 1 builds + caches,
-            // pass 2 reads cache + builds the (scene, transform) list.
+            // Document space (pt) → surface (device px). Pages stack
+            // down the document's y axis; the camera adds its pan, scale
+            // and rotation; dpr brings CSS px → device px.
             const PAGE_GAP_PT: f32 = 24.0;
             let k = scale * dpr;
+            let rotation = if rotation.is_finite() { rotation } else { 0.0 };
+            let (sin, cos) = rotation.sin_cos();
+            let camera = [k * cos, k * sin, -k * sin, k * cos, tx * dpr, ty * dpr];
+            let apply = |m: [f32; 6], x: f32, y: f32| {
+                (m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+            };
             let viewport_w = presenter.width() as f32;
             let viewport_h = presenter.height() as f32;
 
-            // Pass 1: ensure every visible page has a cached scene.
-            // Visibility = surface-space bbox intersects [0..vw, 0..vh].
-            // Below-visibility-threshold pages don't get touched, so
-            // their cache entries become LRU candidates.
+            // Pass 1: ensure every visible page has a cached scene for
+            // this view. Visibility = the page's surface-space bbox
+            // intersects [0..vw, 0..vh]. Pages below the threshold aren't
+            // touched, so their cache entries become LRU candidates.
             let mut y_pt = 0.0_f32;
-            let mut visible_indices: Vec<usize> = Vec::new();
+            let mut visible: Vec<(usize, SceneView, f32)> = Vec::new();
             for (idx, built_page) in model.built().pages.iter().enumerate() {
-                let surface_top = ty * dpr + y_pt * k;
-                let surface_bottom = surface_top + built_page.height_pt * k;
-                let surface_left = tx * dpr;
-                let surface_right = surface_left + built_page.width_pt * k;
-                let visible = surface_right > 0.0
-                    && surface_left < viewport_w
-                    && surface_bottom > 0.0
-                    && surface_top < viewport_h;
-                if visible {
-                    visible_indices.push(idx);
-                    if self.scene_cache.get(idx).is_none() {
-                        let scene = paged_gpu::SurfacePresenter::build_page_scene(
-                            &built_page.list,
-                            built_page.width_pt,
-                            built_page.height_pt,
-                        );
-                        self.scene_cache.insert(idx, scene);
+                let corners = [
+                    apply(camera, 0.0, y_pt),
+                    apply(camera, built_page.width_pt, y_pt),
+                    apply(camera, built_page.width_pt, y_pt + built_page.height_pt),
+                    apply(camera, 0.0, y_pt + built_page.height_pt),
+                ];
+                let min_x = corners.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+                let max_x = corners
+                    .iter()
+                    .map(|p| p.0)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let min_y = corners.iter().map(|p| p.1).fold(f32::INFINITY, f32::min);
+                let max_y = corners
+                    .iter()
+                    .map(|p| p.1)
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let is_visible =
+                    max_x > 0.0 && min_x < viewport_w && max_y > 0.0 && min_y < viewport_h;
+                if is_visible {
+                    let overprints = mode == paged_canvas::ViewMode::OverprintPreview
+                        && built_page.list.commands.iter().any(|c| {
+                            matches!(
+                                c,
+                                paged_compose::DisplayCommand::FillPathOverprint { .. }
+                                    | paged_compose::DisplayCommand::StrokePathOverprint { .. }
+                            )
+                        });
+                    let view = SceneView::for_page(mode, overprints, k);
+                    if self.scene_cache.get((idx, view)).is_none() {
+                        let scene = build_view_scene(built_page, view);
+                        self.scene_cache.insert((idx, view), scene);
                     }
+                    visible.push((idx, view, y_pt));
                 }
                 y_pt += built_page.height_pt + PAGE_GAP_PT;
             }
 
-            // Pass 2: build the (scene, transform) list. The cache
-            // entries are guaranteed present for every visible page
-            // after pass 1.
-            let mut pages: Vec<(&paged_gpu::VelloScene, [f32; 6])> = Vec::new();
-            let mut y_pt = 0.0_f32;
-            for (idx, built_page) in model.built().pages.iter().enumerate() {
-                if visible_indices.contains(&idx) {
-                    let transform = [k, 0.0, 0.0, k, tx * dpr, ty * dpr + y_pt * k];
-                    if let Some(scene) = self.scene_cache.entries.get(&idx) {
-                        pages.push((scene, transform));
-                    }
-                }
-                y_pt += built_page.height_pt + PAGE_GAP_PT;
-            }
-
-            // Linear-RGB background matching the CPU path (#e5e7eb).
+            // Pass 2: the (scene, transform) list. Every visible page's
+            // entry is present after pass 1.
             let bg = paged_compose::Color::rgba(0.831, 0.851, 0.871, 1.0);
+            let compose =
+                |m: [f32; 6], y: f32| [m[0], m[1], m[2], m[3], m[2] * y + m[4], m[3] * y + m[5]];
+            let pixel = mode.pixel_preview();
+            let mut pages: Vec<(&paged_gpu::VelloScene, [f32; 6])> = Vec::new();
+            for &(idx, view, y) in &visible {
+                if let Some(scene) = self.scene_cache.entries.get(&(idx, view)) {
+                    let placement = if pixel {
+                        [1.0, 0.0, 0.0, 1.0, 0.0, y]
+                    } else {
+                        compose(camera, y)
+                    };
+                    pages.push((scene, placement));
+                }
+            }
+            if pixel {
+                match presenter.present_scenes_pixel(&pages, camera, bg) {
+                    Ok(true) => return Ok(true),
+                    Ok(false) => {
+                        // Below 1 px/pt there is nothing to enlarge:
+                        // present the vector scenes instead.
+                        for (entry, &(_, _, y)) in pages.iter_mut().zip(visible.iter()) {
+                            entry.1 = compose(camera, y);
+                        }
+                    }
+                    Err(e) => {
+                        web_sys::console::warn_1(&format!("presentFrame: {e}").into());
+                        return Ok(false);
+                    }
+                }
+            }
             match presenter.present_scenes(&pages, bg) {
                 Ok(()) => Ok(true),
                 Err(e) => {
@@ -1034,6 +998,48 @@ mod wasm {
             let width_px = ((page.width_pt * dpi / 72.0).ceil() as u32).max(1);
             let height_px = ((page.height_pt * dpi / 72.0).ceil() as u32).max(1);
             presenter.submit_readback(&scene, width_px, height_px).ok()
+        }
+    }
+
+    /// Build page `page`'s screen scene for `view` (editor ADR 287).
+    #[cfg(feature = "gpu")]
+    fn build_view_scene(
+        page: &paged_canvas::BuiltPage,
+        view: crate::scene_cache::SceneView,
+    ) -> paged_gpu::VelloScene {
+        use crate::scene_cache::SceneView;
+        match view {
+            SceneView::Knockout => paged_gpu::SurfacePresenter::build_page_scene(
+                &page.list,
+                page.width_pt,
+                page.height_pt,
+            ),
+            SceneView::Outline(_) => paged_gpu::SurfacePresenter::build_page_scene_view(
+                &page.list,
+                page.width_pt,
+                page.height_pt,
+                paged_gpu::RasterView::Outline,
+                view.scale().unwrap_or(1.0),
+            ),
+            SceneView::OverprintRaster(_) => {
+                // The Vello lane draws overprints as knockouts; the CPU
+                // lane simulates them. Rasterise at the scale bucket,
+                // capped so a deep zoom does not ask for a giant page.
+                const MAX_SIDE_PX: f32 = 4096.0;
+                let longest = page.width_pt.max(page.height_pt).max(1.0);
+                let px_per_pt = view.scale().unwrap_or(1.0).min(MAX_SIDE_PX / longest);
+                let mut opts = paged_gpu::RasterOptions::new(page.width_pt, page.height_pt);
+                opts.dpi = 72.0 * px_per_pt;
+                let (w, h) = opts.pixel_size();
+                let img = paged_gpu::rasterize(&page.list, &opts);
+                paged_gpu::SurfacePresenter::build_raster_page_scene(
+                    img.into_raw(),
+                    w,
+                    h,
+                    page.width_pt,
+                    page.height_pt,
+                )
+            }
         }
     }
 

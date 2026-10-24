@@ -6,3 +6,4 @@
 mod svg_reference;
 mod vello_effects;
 mod vello_image_atlas;
+mod view_parity;

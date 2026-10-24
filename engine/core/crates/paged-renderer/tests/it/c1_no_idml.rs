@@ -157,6 +157,7 @@ fn c1_render_a_composition_with_no_idml() {
         dpi: 72.0,
         background: Color::WHITE,
         snap_glyph_origins: false,
+        ..RasterOptions::new(0.0, 0.0)
     };
     let img = rasterize(&list, &opts);
 

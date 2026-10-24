@@ -724,7 +724,24 @@ export type WorkerToMain = WorkerToMainKind & {
 //   Rides v76 too (ADR 1004 amendment): `ScriptResult.appliedSeq`, the one
 //   undo step a script run ended in (a run is one step now), so its change
 //   can be amended; the `mutateWithBytesDirect` lane's amending twin.
-pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
+// v77 — view modes and snapping v2 (editor ADR 287):
+//   - `SetViewSettings { settings }` → `ViewSettingsApplied { settings }`:
+//     the screen's mode (Preview, Outline, Overprint Preview, Pixel
+//     Preview). Preview draws overprints as knockouts on both lanes (the
+//     GPU screen always did; the CPU tiles simulated them), Overprint
+//     Preview simulates them. A raster-time rewrite: no build depends on
+//     it.
+//   - `SnapSettings` gains `pixel`, `gridEvery` / `gridSubdivisions`,
+//     `angles`, `spacing` and `rotate` (serde-default fields); `SnapSource`
+//     gains `pixel`, `angle`, `intersection` and `spacing`; `SnapLine`
+//     gains the optional `kind`, `from`, `to`, `angle` and `distance`;
+//     `SnapPointResult` gains `angleTarget` and `intersectionTarget`.
+//   - Gestures: translate snaps rotated members through their oriented
+//     box, equal spacing and pixels; scale snaps the dragged handle;
+//     rotate snaps to 0/45/90 and the neighbours' angles.
+//   - The camera SAB's spare slot (offset 12) carries the view rotation.
+//   A new message kind an older worker cannot answer, hence the bump.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(77);
 
 /// A per-run script budget on the wire (v63). Every field is optional
 /// and falls back to the engine's default, so a caller overrides only
@@ -1326,6 +1343,11 @@ pub enum MainToWorkerKind {
     SetSnapSettings {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 (editor ADR 287) — how the screen draws the document: Preview,
+    /// Outline, Overprint Preview or Pixel Preview. Survives document
+    /// loads; not saved, not undoable, no rebuild; exports, snapshots and
+    /// separations never see it. Reply: `ViewSettingsApplied`.
+    SetViewSettings { settings: crate::view::ViewSettings },
     /// v75 — the session's role and the host's overrides, against which
     /// the document's template policy is applied (editor
     /// `docs/composable-editor.md` §7). Survives document loads; not saved,
@@ -2177,6 +2199,8 @@ pub enum WorkerToMainKind {
     SnapSettingsApplied {
         settings: crate::snap_point::SnapSettings,
     },
+    /// v77 — `SetViewSettings` reply: the settings now in force.
+    ViewSettingsApplied { settings: crate::view::ViewSettings },
     /// v75 — `SetSessionPolicy` reply: the policy now in force.
     SessionPolicyApplied {
         policy: paged_template::SessionPolicy,
@@ -4849,8 +4873,8 @@ mod tests {
     /// release commitment, not a detail — the protocol-governance
     /// record exists because nine bumps once shipped untagged.
     #[test]
-    fn protocol_version_is_v76() {
-        assert_eq!(PROTOCOL_VERSION.0, 76);
+    fn protocol_version_is_v77() {
+        assert_eq!(PROTOCOL_VERSION.0, 77);
     }
 
     /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the

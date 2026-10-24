@@ -1918,6 +1918,44 @@ fn snap_settings_survive_a_load_and_switch_snapping_off() {
     );
 }
 
+/// v77 (editor ADR 287) — the view settings are session state: they
+/// survive a load, reach the model, and change no build.
+#[test]
+#[allow(non_snake_case)]
+fn view_settings_survive_a_load_and_rebuild_nothing__feat__the_renderer_view_modes() {
+    let mut core = WorkerCore::new();
+    let (reply, effect) = roundtrip_with_effect(
+        &mut core,
+        &serde_json::json!({
+            "seq": 1,
+            "protocol": protocol(),
+            "kind": "setViewSettings",
+            "payload": { "settings": { "mode": "outline" } }
+        }),
+    );
+    assert_eq!(reply["kind"], "viewSettingsApplied", "{reply}");
+    assert_eq!(reply["payload"]["settings"]["mode"], "outline");
+    assert!(matches!(effect, CacheEffect::None));
+    let loaded = roundtrip(&mut core, &load_msg(2));
+    assert_eq!(loaded["kind"], "documentLoaded");
+    let model = core.model.as_ref().expect("loaded");
+    assert_eq!(model.view_settings().mode, paged_canvas::ViewMode::Outline);
+    let generation = model.built().pages[0].layout_generation;
+    let reply = roundtrip(
+        &mut core,
+        &serde_json::json!({
+            "seq": 3,
+            "protocol": protocol(),
+            "kind": "setViewSettings",
+            "payload": { "settings": {} }
+        }),
+    );
+    assert_eq!(reply["payload"]["settings"]["mode"], "preview");
+    let model = core.model.as_ref().expect("loaded");
+    assert_eq!(model.view_settings().mode, paged_canvas::ViewMode::Preview);
+    assert_eq!(model.built().pages[0].layout_generation, generation);
+}
+
 #[test]
 fn request_snap_point_without_a_document_answers_the_point() {
     let mut core = WorkerCore::new();

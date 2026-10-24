@@ -368,7 +368,7 @@ pub struct PathId(pub u32);
 /// Owns all path-segment data and hands out `PathId`s. Uses a caller-
 /// supplied cache key for interning, so (glyph_id, font_id, size)
 /// combinations share outlines across the command stream.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PathBuffer {
     paths: Vec<PathData>,
     /// Cache key → PathId. Callers are responsible for making the key
@@ -1581,7 +1581,7 @@ pub struct CellKey {
 }
 
 /// Concept 3 — the per-list glyph capture (see [`GlyphRunEntry`]).
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GlyphRunTable {
     pub entries: Vec<GlyphRunEntry>,
     /// The paragraph the producer is emitting now (ADR 182): every entry
@@ -1639,7 +1639,7 @@ impl LinkRegionTable {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct DisplayList {
     pub paths: PathBuffer,
     pub commands: Vec<DisplayCommand>,

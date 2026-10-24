@@ -41,7 +41,8 @@
 //! `ExportElements`; 42 of 73 with `paged template`, which sends
 //! `SetSessionPolicy` and `SetTemplateFields`; 42 of 75 with v76's two
 //! template-ingest kinds, which the Node CLI sends; 42 of 76 with ADR
-//! 1004's `AmendMutation`, which only a live session sends); what
+//! 1004's `AmendMutation`, which only a live session sends; 42 of 77 with
+//! v77's `SetViewSettings`, which only a live canvas has a use for); what
 //! remains is almost entirely the first kind.
 //!
 //! **What this gate cannot see.** It counts message KINDS, and
@@ -150,10 +151,12 @@ const UNREACHED: &[(&str, &str)] = &[
      "the Node CLI's `paged-node template ingest` sends these through the same worker core; the Rust CLI's `paged template` has no ingest yet"),
     ("AmendMutation",
      "a follow-up write joins the undo step of the edit that provoked it (engine ADR 1004): a module's reaction inside a live session; a subcommand is one write and exits, so no later write has an edit to join"),
+    ("SetViewSettings",
+     "the screen's view mode (editor ADR 287) changes only how a live canvas draws: every render the CLI makes is an export, a snapshot or a separation, which draw the document as built and never see a view"),
 ];
 
 /// Pinned so the list cannot grow quietly.
-const UNREACHED_COUNT: usize = 34;
+const UNREACHED_COUNT: usize = 35;
 
 /// Every `kind` the wire accepts, read out of serde's own error rather
 /// than kept as a list here — the same trick `wire_vocabulary.rs` uses
@@ -287,9 +290,9 @@ fn every_reason_is_a_reason() {
 
 /// The headline in the module doc, pinned against the code.
 #[test]
-fn the_cli_reaches_42_of_76() {
+fn the_cli_reaches_42_of_77() {
     assert_eq!(kinds_the_cli_sends().len(), 42);
-    assert_eq!(every_kind().len(), 76);
+    assert_eq!(every_kind().len(), 77);
 }
 
 /// The second axis, started (ADR 132): the CLI's own source names
