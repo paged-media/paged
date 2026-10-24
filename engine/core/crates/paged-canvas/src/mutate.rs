@@ -432,6 +432,12 @@ fn normalize_paragraph_breaks(text: &str) -> std::borrow::Cow<'_, str> {
     std::borrow::Cow::Owned(text.replace("\r\n", "\n").replace(['\r', '\u{2029}'], "\n"))
 }
 
+/// The content length `text` takes once inserted: its UTF-8 bytes, each
+/// paragraph return one `\n` (template fields, engine ADR 1016).
+pub(crate) fn normalized_len(text: &str) -> u32 {
+    normalize_paragraph_breaks(text).len() as u32
+}
+
 /// `text` inserted at story byte `offset`, each `\n` a paragraph break.
 fn insert_segments(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32, text: &str) {
     let segments: Vec<&str> = text.split('\n').collect();

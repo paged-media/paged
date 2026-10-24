@@ -43,6 +43,10 @@ use crate::policy::{Constraints, FieldDef, TemplateFieldKind};
 pub const LABEL_ATTRIBUTE: &str = "label";
 pub const MAX_LENGTH_ATTRIBUTE: &str = "maxLength";
 pub const REQUIRED_ATTRIBUTE: &str = "required";
+/// A text field's allowed character styles, comma-separated (engine ADR 1016).
+pub const ALLOWED_STYLES_ATTRIBUTE: &str = "allowedStyles";
+/// A text field's breaks: `none`, `line` or `paragraph` (engine ADR 1016).
+pub const BREAKS_ATTRIBUTE: &str = "breaks";
 
 /// What else besides XML tags becomes a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, Tsify)]
@@ -240,9 +244,22 @@ fn field_of(name: String, kind: TemplateFieldKind, attributes: &[(String, String
             .is_some_and(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "yes")),
         constraints: Constraints {
             max_length: attr(MAX_LENGTH_ATTRIBUTE).and_then(|v| v.parse().ok()),
+            allowed_styles: attr(ALLOWED_STYLES_ATTRIBUTE)
+                .map(|v| {
+                    v.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            breaks: attr(BREAKS_ATTRIBUTE).and_then(|v| {
+                serde_json::from_value(serde_json::Value::String(v.to_ascii_lowercase())).ok()
+            }),
             ..Default::default()
         },
         module: None,
+        members: vec![],
     }
 }
 
@@ -495,7 +512,7 @@ pub fn derive_fields(doc: &Document, opts: DeriveOptions) -> Derivation {
 }
 
 /// The XML attributes that state a field's metadata (`label`, `maxLength`,
-/// `required`), as the writer puts them on the field's element; absent
+/// `required`, `allowedStyles`, `breaks`), as the writer puts them on the field's element; absent
 /// metadata has no attribute.
 pub fn field_attributes(field: &FieldDef) -> Vec<(String, Option<String>)> {
     vec![
@@ -507,6 +524,19 @@ pub fn field_attributes(field: &FieldDef) -> Vec<(String, Option<String>)> {
         (
             REQUIRED_ATTRIBUTE.to_string(),
             field.required.then(|| "true".to_string()),
+        ),
+        (
+            ALLOWED_STYLES_ATTRIBUTE.to_string(),
+            (!field.constraints.allowed_styles.is_empty())
+                .then(|| field.constraints.allowed_styles.join(",")),
+        ),
+        (
+            BREAKS_ATTRIBUTE.to_string(),
+            field.constraints.breaks.and_then(|b| {
+                serde_json::to_value(b)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+            }),
         ),
     ]
 }
@@ -524,9 +554,13 @@ mod tests {
                 ("label".into(), "Your headline".into()),
                 ("maxLength".into(), "40".into()),
                 ("required".into(), "TRUE".into()),
+                ("allowedStyles".into(), "Bold, Italic".into()),
+                ("breaks".into(), "Line".into()),
                 ("other".into(), "x".into()),
             ],
         );
+        assert_eq!(f.constraints.allowed_styles, ["Bold", "Italic"]);
+        assert_eq!(f.constraints.breaks, Some(crate::policy::TextBreaks::Line));
         assert_eq!(f.label.as_deref(), Some("Your headline"));
         assert_eq!(f.constraints.max_length, Some(40));
         assert!(f.required);

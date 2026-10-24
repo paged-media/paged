@@ -50,6 +50,7 @@ import { useStrings } from "@paged-media/strings";
 
 import { FORM, problemText } from "./messages";
 import { ModuleFieldControl } from "./module-field";
+import { StyledTextControl, type Breaks, type StyledRun } from "./styled-text";
 
 const IMAGE_TYPES = [
   ".jpg",
@@ -86,6 +87,12 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   const label = field.label ?? field.name;
   const max = field.constraints?.maxLength ?? null;
   const text = draft ?? current;
+  // Engine ADR 1016: a text field with allowed styles or breaks is written
+  // as styled runs, through the control that offers exactly those.
+  const allowedStyles = field.constraints?.allowedStyles ?? [];
+  const breaks = (field.constraints?.breaks ?? null) as Breaks | null;
+  const styled =
+    field.kind === "text" && (allowedStyles.length > 0 || breaks !== null);
 
   const set = async (value: TemplateFieldValue["value"]) => {
     setMessage(null);
@@ -133,7 +140,59 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   };
 
   let control: ReactElement;
-  switch (field.kind) {
+  switch (styled ? "styled" : field.kind) {
+    case "styled": {
+      const runs: StyledRun[] =
+        row.value?.kind === "runs"
+          ? (row.value.runs as StyledRun[])
+          : current
+            ? [{ text: current }]
+            : [];
+      control = (
+        <StyledTextControl
+          name={field.name}
+          runs={runs}
+          allowed={allowedStyles}
+          breaks={breaks}
+          maxLength={max}
+          onCommit={(next) => void set({ kind: "runs", runs: next } as never)}
+        />
+      );
+      break;
+    }
+    case "alternates": {
+      const members = row.members ?? [];
+      control = (
+        <div
+          role="radiogroup"
+          aria-label={label}
+          data-field-alternates={field.name}
+          style={{ display: "flex", gap: space[1], flexWrap: "wrap" }}
+        >
+          {members.map((m) => (
+            <button
+              key={m.name}
+              type="button"
+              role="radio"
+              aria-checked={m.visible}
+              data-field-alternate={m.name}
+              data-active={m.visible ? "" : undefined}
+              disabled={!m.elementId}
+              style={{
+                fontWeight: m.visible ? 700 : 400,
+                outline: m.visible ? "2px solid var(--pg-primary)" : undefined,
+              }}
+              onClick={() =>
+                void set({ kind: "alternate", member: m.name } as never)
+              }
+            >
+              {m.name}
+            </button>
+          ))}
+        </div>
+      );
+      break;
+    }
     case "text":
     case "variable": {
       const multiline = (field.constraints?.maxLines ?? 1) > 1;
@@ -226,6 +285,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
             {field.required ? " *" : ""}
           </span>
           {max !== null &&
+          !styled &&
           (field.kind === "text" || field.kind === "variable") ? (
             <span
               data-field-count={field.name}

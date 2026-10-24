@@ -52,6 +52,7 @@ import {
 import { useStrings } from "@paged-media/strings";
 
 import { PANEL, PREFLIGHT, findingText } from "./messages";
+import { styleName, type Breaks } from "./styled-text";
 
 const KEY = "x-paged:template";
 
@@ -85,8 +86,15 @@ interface ItemPolicy {
     help?: string;
     group?: string;
     required?: boolean;
-    constraints?: { maxLength?: number; maxLines?: number; fit?: string };
+    constraints?: {
+      maxLength?: number;
+      maxLines?: number;
+      fit?: string;
+      allowedStyles?: string[];
+      breaks?: Breaks;
+    };
     module?: { kind: string; grants?: string[]; def?: unknown };
+    members?: string[];
   };
   allow?: string[];
   deny?: string[];
@@ -118,6 +126,14 @@ export function tagOps(
     attribute("label", field.label),
     attribute("maxLength", field.constraints?.maxLength?.toString()),
     attribute("required", field.required ? "true" : undefined),
+    // Engine ADR 1016: what a styled text field takes.
+    attribute(
+      "allowedStyles",
+      field.constraints?.allowedStyles?.length
+        ? field.constraints.allowedStyles.join(",")
+        : undefined,
+    ),
+    attribute("breaks", field.constraints?.breaks),
   ];
 }
 
@@ -248,6 +264,16 @@ function FieldEditor({
     field?.constraints?.maxLength?.toString() ?? "",
   );
   const [allow, setAllow] = useState<readonly string[]>(policy?.allow ?? []);
+  const [allowedStyles, setAllowedStyles] = useState<readonly string[]>(
+    field?.constraints?.allowedStyles ?? [],
+  );
+  const [breaks, setBreaks] = useState<Breaks | "">(
+    field?.constraints?.breaks ?? "",
+  );
+  const characterStyles =
+    useCollection<{ selfId: string; name?: string | null }>(
+      "characterStyles",
+    ) ?? [];
 
   const write = async (value: string | null): Promise<string | null> => {
     const reply = await client.mutate({
@@ -274,8 +300,14 @@ function FieldEditor({
         ...(group ? { group } : {}),
         ...(required ? { required } : {}),
         constraints:
-          kind === "text" && maxLength
-            ? { maxLength: Number(maxLength) }
+          kind === "text"
+            ? {
+                ...(maxLength ? { maxLength: Number(maxLength) } : {}),
+                ...(allowedStyles.length
+                  ? { allowedStyles: [...allowedStyles] }
+                  : {}),
+                ...(breaks ? { breaks } : {}),
+              }
             : kind === "image"
               ? { fit: "fill-proportionally" }
               : {},
@@ -376,6 +408,60 @@ function FieldEditor({
         ? row(
             strings.t(PANEL.longestText),
             text(maxLength, setMaxLength, "maxLength", "number"),
+          )
+        : null}
+      {kind === "text" ? (
+        <fieldset
+          data-template-edit="allowedStyles"
+          style={{ border: 0, padding: 0, display: "grid", gap: 2 }}
+        >
+          <legend style={{ fontSize: 11.5, fontWeight: 600 }}>
+            {strings.t(PANEL.allowedStyles)}
+          </legend>
+          {characterStyles.length === 0 ? (
+            <span style={{ color: "var(--pg-muted-fg)", fontSize: 11.5 }}>
+              {strings.t(PANEL.noCharacterStyles)}
+            </span>
+          ) : null}
+          {characterStyles
+            .filter((c) => !c.selfId.includes("[No character style]"))
+            .map((c) => {
+              const id = c.name ?? styleName(c.selfId);
+              return (
+                <label key={c.selfId} style={{ fontSize: 11.5 }}>
+                  <input
+                    type="checkbox"
+                    data-template-style={id}
+                    checked={allowedStyles.includes(id)}
+                    onChange={(e) =>
+                      setAllowedStyles(
+                        e.currentTarget.checked
+                          ? [...allowedStyles, id]
+                          : allowedStyles.filter((x) => x !== id),
+                      )
+                    }
+                  />{" "}
+                  {id}
+                </label>
+              );
+            })}
+        </fieldset>
+      ) : null}
+      {kind === "text"
+        ? row(
+            strings.t(PANEL.breaks),
+            <select
+              data-template-edit="breaks"
+              value={breaks}
+              onChange={(e) => setBreaks(e.currentTarget.value as Breaks | "")}
+            >
+              <option value="">{strings.t(PANEL.breaksAny)}</option>
+              <option value="none">{strings.t(PANEL.breaksNone)}</option>
+              <option value="line">{strings.t(PANEL.breaksLine)}</option>
+              <option value="paragraph">
+                {strings.t(PANEL.breaksParagraph)}
+              </option>
+            </select>,
           )
         : null}
       {kind === "module"
@@ -536,6 +622,154 @@ function PageGrant({ version }: { version: unknown }): ReactElement | null {
   );
 }
 
+interface DocumentPolicy {
+  defaults?: string[];
+  order?: string[];
+  alternates?: Record<string, NonNullable<ItemPolicy["field"]>>;
+  [key: string]: unknown;
+}
+
+/** Engine ADR 1016: the selected items become the alternates of one field.
+ *  Each keeps its name (an unnamed one is named after the field), the first
+ *  stays shown and the rest are hidden; one batch, one undo step. */
+function AlternatesMaker({
+  ids,
+  version,
+}: {
+  ids: readonly ElementId[];
+  version: unknown;
+}): ReactElement {
+  const strings = useStrings();
+  const client = useCanvasClient();
+  const model = useObjectModel();
+  const raw = useLabel("doc", version);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const make = async () => {
+    const field = name.trim();
+    if (!field) return setMessage(strings.t(PANEL.needsName));
+    const current = parse<DocumentPolicy>(raw) ?? {};
+    const members: string[] = [];
+    const ops: unknown[] = [];
+    for (const [i, id] of ids.entries()) {
+      const address = model?.addressOf(id) ?? null;
+      const got = address
+        ? await model?.objects.get(address, "itemName")
+        : undefined;
+      const had =
+        got && got.kind === "value" && typeof got.value === "string"
+          ? got.value.trim()
+          : "";
+      const member = had || `${field}-${i + 1}`;
+      members.push(member);
+      if (!had)
+        ops.push({
+          op: "setElementProperty",
+          args: {
+            elementId: id,
+            path: "itemName",
+            value: { type: "text", value: member },
+          },
+        });
+      ops.push({
+        op: "setElementProperty",
+        args: {
+          elementId: id,
+          path: "elementVisible",
+          value: { type: "bool", value: i === 0 },
+        },
+      });
+    }
+    const next: DocumentPolicy = {
+      ...current,
+      alternates: {
+        ...(current.alternates ?? {}),
+        [field]: { name: field, kind: "alternates", members },
+      },
+      order: [...(current.order ?? []).filter((n) => n !== field), field],
+    };
+    ops.push({
+      op: "setDocumentMetadata",
+      args: { key: KEY, value: envelope(next) },
+    });
+    const reply = await client.mutate({
+      op: "batch",
+      args: { ops },
+    } as never);
+    setMessage(
+      reply.kind === "mutationFailed" ? refusalText(reply.payload.error) : null,
+    );
+  };
+  return (
+    <section
+      data-template-alternates-maker
+      style={{ display: "grid", gap: space[2] }}
+    >
+      <h3 style={{ margin: 0, fontSize: 12 }}>
+        {strings.t(PANEL.alternates)}
+      </h3>
+      <label style={{ display: "grid", gap: space[1], fontSize: 11.5 }}>
+        <span style={{ fontWeight: 600 }}>
+          {strings.t(PANEL.alternatesName)}
+        </span>
+        <FieldInput
+          value={name}
+          data-template-alternates-name
+          onChange={(e) => setName(e.currentTarget.value)}
+        />
+      </label>
+      <button
+        type="button"
+        data-template-make-alternates
+        onClick={() => void make()}
+      >
+        {strings.t(PANEL.makeAlternates)}
+      </button>
+      <StatusLine tone="error" attr="data-template-alternates-problem">
+        {message}
+      </StatusLine>
+    </section>
+  );
+}
+
+/** Removes an alternates field; its members stay as they are. */
+function RemoveAlternates({
+  field,
+  version,
+}: {
+  field: string;
+  version: unknown;
+}): ReactElement {
+  const strings = useStrings();
+  const client = useCanvasClient();
+  const raw = useLabel("doc", version);
+  const remove = async () => {
+    const current = parse<DocumentPolicy>(raw) ?? {};
+    const alternates = { ...(current.alternates ?? {}) };
+    delete alternates[field];
+    await client.mutate({
+      op: "setDocumentMetadata",
+      args: {
+        key: KEY,
+        value: envelope({
+          ...current,
+          alternates,
+          order: (current.order ?? []).filter((n) => n !== field),
+        }),
+      },
+    } as never);
+  };
+  return (
+    <button
+      type="button"
+      data-template-remove-alternates={field}
+      onClick={() => void remove()}
+    >
+      {strings.t(PANEL.removeAlternates)}
+    </button>
+  );
+}
+
 /** What is wrong with the template before anyone fills it (plan F3). */
 function Problems(): ReactElement | null {
   const strings = useStrings();
@@ -619,8 +853,16 @@ export function TemplatePanel(): ReactElement {
               <li key={r.field.name} data-template-field-row={r.field.name}>
                 {r.field.label ?? r.field.name}{" "}
                 <span style={{ color: "var(--pg-muted-fg)" }}>
-                  {r.field.module?.kind ?? r.field.kind}
+                  {r.field.kind === "alternates"
+                    ? `${strings.t(PANEL.kindAlternates)}: ${(r.field.members ?? []).join(" | ")}`
+                    : (r.field.module?.kind ?? r.field.kind)}
                 </span>
+                {role === "author" && r.field.kind === "alternates" ? (
+                  <>
+                    {" "}
+                    <RemoveAlternates field={r.field.name} version={rows} />
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -641,9 +883,13 @@ export function TemplatePanel(): ReactElement {
                 onDone={setMessage}
               />
             </NamedAs>
+          ) : elementSelection.length > 1 ? (
+            <AlternatesMaker ids={elementSelection} version={rows} />
           ) : (
             <div style={{ color: "var(--pg-muted-fg)", fontSize: 11.5 }}>
               {strings.t(PANEL.selectOne)}
+              <br />
+              {strings.t(PANEL.alternatesHint)}
             </div>
           )}
           <StatusLine tone="error" attr="data-template-problem">

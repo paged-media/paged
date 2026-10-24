@@ -47,6 +47,9 @@ orientation only.
 | G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
 | G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
 | H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
+| Decision 5: text ranges are placeholder runs | Done: no code; the concept and engine ADR 1016 say so | concept §7.3, §12 |
+| Decision 6: styled field values | Done: `allowedStyles` and `breaks` on a text field, `runs` values, the form's styled control, the Template panel's editors, CLI fill and check | engine ADR 1016, `panels/template/styled-text.tsx` |
+| Decision 7: frame alternates | Done: `alternates` fields in the document policy, the form's picker, Make alternates field, the overlay names the shown member, IDML round trip | engine ADR 1016 |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
 
 Corrections to the plan found while building:
@@ -1380,6 +1383,7 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 | A template policy lives in labels, and operations are checked against it | engine       | 1000    | C1, C3, C4 |
 | The session has a role; three doors; typed refusals                      | engine       | 1001    | C2, C5, C6 |
 | The XML structure is model data and is written                           | engine       | 1002    | C10        |
+| Styled field values and alternates                                       | engine       | 1016    | decisions 6, 7 |
 | Template fields are binding targets                                      | modules/data | 560     | F8         |
 | A fourth public package                                                  | repository   | PM-0013 | E8         |
 

@@ -38,12 +38,13 @@ mod resolve;
 
 pub use derive::{
     derive_fields, field_attributes, Derivation, DeriveOptions, DerivedField, DerivedFrom,
-    DerivedTarget, SkippedTag, LABEL_ATTRIBUTE, MAX_LENGTH_ATTRIBUTE, REQUIRED_ATTRIBUTE,
+    DerivedTarget, SkippedTag, ALLOWED_STYLES_ATTRIBUTE, BREAKS_ATTRIBUTE, LABEL_ATTRIBUTE,
+    MAX_LENGTH_ATTRIBUTE, REQUIRED_ATTRIBUTE,
 };
 pub use permission::{Override, PermSet, Permission, Role, SessionPolicy};
 pub use policy::{
     Constraints, DocumentPolicy, FieldDef, ItemPolicy, ModuleField, OverflowRule, PolicyProblem,
-    TemplateFieldKind, TEMPLATE_KEY,
+    TemplateFieldKind, TextBreaks, TEMPLATE_KEY,
 };
 pub use preflight::{preflight, FindingSeverity, TemplateFinding};
-pub use resolve::{story_of_run, PolicyIndex};
+pub use resolve::{allowed_character_style, alternate_members, story_of_run, PolicyIndex};

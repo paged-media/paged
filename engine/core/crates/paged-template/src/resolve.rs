@@ -45,6 +45,10 @@ pub struct PolicyIndex {
     /// in, by frame `Self` (engine ADR 1002): filling a run is editing
     /// its story's text.
     run_grants: HashMap<String, PermSet>,
+    /// The items that are members of an alternates field, by `Self`, and
+    /// the field's name (engine ADR 1016): showing or hiding them is
+    /// filling the field.
+    members: HashMap<String, String>,
 }
 
 impl PolicyIndex {
@@ -85,11 +89,20 @@ impl PolicyIndex {
             }
         }
         let run_grants = run_grants(doc, document.as_ref());
+        let mut members = HashMap::new();
+        for field in document.iter().flat_map(|d| d.alternates.values()) {
+            for (_, id) in alternate_members(doc, field) {
+                if let Some(id) = id {
+                    members.entry(id).or_insert_with(|| field.name.clone());
+                }
+            }
+        }
         (
             PolicyIndex {
                 document,
                 items,
                 run_grants,
+                members,
             },
             problems,
         )
@@ -123,7 +136,31 @@ impl PolicyIndex {
             .document
             .iter()
             .flat_map(|d| d.runs.iter().map(|(id, f)| (id.as_str(), f)));
-        items.chain(variables).chain(runs)
+        let alternates = self
+            .document
+            .iter()
+            .flat_map(|d| d.alternates.iter().map(|(name, f)| (name.as_str(), f)));
+        items.chain(variables).chain(runs).chain(alternates)
+    }
+
+    /// Whether the item `self_id` takes part in a field: it is one, or it
+    /// is a member of an alternates field. Renaming it is the author's.
+    pub fn is_field_item(&self, self_id: &str) -> bool {
+        self.items.get(self_id).is_some_and(|p| p.field.is_some())
+            || self.members.contains_key(self_id)
+    }
+
+    /// The alternates field the item `self_id` is a member of.
+    pub fn alternates_of(&self, self_id: &str) -> Option<&str> {
+        self.members.get(self_id).map(String::as_str)
+    }
+
+    /// The text field on the item `self_id`, if it is one.
+    pub fn text_field(&self, self_id: &str) -> Option<&FieldDef> {
+        self.items
+            .get(self_id)
+            .and_then(|p| p.field.as_ref())
+            .filter(|f| f.kind == crate::policy::TemplateFieldKind::Text)
     }
 
     /// The run fields, by placeholder key.
@@ -153,6 +190,9 @@ impl PolicyIndex {
         }
         if let Some(grants) = self_id.and_then(|id| self.run_grants.get(id)) {
             set = set.union(*grants);
+        }
+        if self_id.is_some_and(|id| self.members.contains_key(id)) {
+            set = set.union(crate::policy::TemplateFieldKind::Alternates.grants());
         }
         if let Some(policy) = self_id.and_then(|id| self.items.get(id)) {
             set = set
@@ -205,6 +245,50 @@ impl PolicyIndex {
         }
         session.apply_overrides(set)
     }
+}
+
+/// The members of an alternates field, in its order: each name and the
+/// `Self` of the document item that carries it (the first, in spread order,
+/// when several do; `None` when none does). Parent pages are not searched:
+/// their items are scenery.
+pub fn alternate_members(doc: &Document, field: &FieldDef) -> Vec<(String, Option<String>)> {
+    field
+        .members
+        .iter()
+        .map(|name| {
+            let id = doc.spreads.iter().find_map(|s| {
+                let names = &s.spread.item_names;
+                let mut ids: Vec<&String> = names
+                    .iter()
+                    .filter(|(_, n)| *n == name)
+                    .map(|(id, _)| id)
+                    .collect();
+                ids.sort();
+                ids.first().map(|id| (*id).clone())
+            });
+            (name.clone(), id)
+        })
+        .collect()
+}
+
+/// The character style `wanted` names (by id or name), as its
+/// `CharacterStyle/…` id, when `allowed` lists it (by id or name) and the
+/// document defines it (engine ADR 1016).
+pub fn allowed_character_style(doc: &Document, allowed: &[String], wanted: &str) -> Option<String> {
+    let matches = |key: &str, def: &paged_model::CharacterStyleDef| {
+        def.self_id == key
+            || def.name.as_deref() == Some(key)
+            || def.self_id.strip_prefix("CharacterStyle/") == Some(key)
+    };
+    let def = doc
+        .styles
+        .character_styles
+        .values()
+        .find(|d| matches(wanted, d))?;
+    allowed
+        .iter()
+        .any(|a| matches(a, def))
+        .then(|| def.self_id.clone())
 }
 
 /// The story a run field stands in: the story holding the template
@@ -262,6 +346,7 @@ mod tests {
             required: false,
             constraints: Default::default(),
             module: None,
+            members: vec![],
         }
     }
 
@@ -289,6 +374,7 @@ mod tests {
             }),
             items,
             run_grants: HashMap::new(),
+            members: HashMap::new(),
         }
     }
 
@@ -386,6 +472,7 @@ mod tests {
             document: None,
             items,
             run_grants: HashMap::new(),
+            members: HashMap::new(),
         };
         let set = ix.effective(&session(Role::Filler), Some("sheet"));
         assert!(set.has(P::Select) && set.has(P::DocumentMetadata) && set.has(P::TextEdit));

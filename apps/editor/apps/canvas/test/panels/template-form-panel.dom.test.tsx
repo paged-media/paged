@@ -206,4 +206,147 @@ describe("Template form", () => {
       registered.dispose();
     }
   });
+
+  // Engine ADR 1016: a text field written in the styles its author allows.
+  test("a styled field offers exactly its styles and writes runs", async () => {
+    covers("panel:paged.template.form");
+    const h = await mount();
+    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    for (const name of ["Bold", "Italic", "Caps"])
+      await h.mutate({
+        op: "createCharacterStyle",
+        args: { selfId: `CharacterStyle/${name}`, name },
+      } as never);
+    const made = await h.mutate({
+      op: "insertTextFrame",
+      args: { pageId: h.handle!.pageIds[0], bounds: [100, 40, 160, 300] },
+    } as never);
+    const id = (made as { payload: { createdId: unknown } }).payload.createdId;
+    await h.mutate({
+      op: "setPluginMetadata",
+      args: {
+        elementId: id,
+        key: "x-paged:template",
+        value: JSON.stringify({
+          v: 1,
+          data: {
+            field: {
+              name: "headline",
+              kind: "text",
+              constraints: { allowedStyles: ["Bold", "Italic"], breaks: "none" },
+            },
+          },
+        }),
+      },
+    } as never);
+    const storyId = (await h.client.templateFields())[0]!.storyId!;
+    await h.mutate({
+      op: "insertText",
+      args: { storyId, offset: 0, text: "Ada Lovelace" },
+    } as never);
+    await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+    await h.settle();
+    const box = h.root.querySelector<HTMLElement>(
+      '[data-field-styled="headline"]',
+    )!;
+    expect(box.textContent).toBe("Ada Lovelace");
+    const styles = [...h.root.querySelectorAll("[data-field-style]")].map(
+      (b) => b.getAttribute("data-field-style"),
+    );
+    expect(styles).toEqual(["Bold", "Italic"]);
+
+    // Enter makes no break in a one-line field.
+    const enter = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    await h.act(async () => {
+      box.dispatchEvent(enter);
+    });
+    expect(enter.defaultPrevented).toBe(true);
+    expect(box.querySelector("br")).toBeNull();
+
+    // "Lovelace" selected and set in Bold: the value is written as runs.
+    const text = box.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 4);
+    range.setEnd(text, 12);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    await h.click(h.root.querySelector('[data-field-style="Bold"]')!);
+    await h.settle();
+    const [row] = await h.client.templateFields();
+    expect(row!.value).toEqual({
+      kind: "runs",
+      runs: [{ text: "Ada " }, { text: "Lovelace", style: "Bold" }],
+    });
+    expect(h.root.querySelector("[data-field-problem]")).toBeNull();
+  });
+
+  // Engine ADR 1016: an alternates field shows the member the filler picks.
+  test("an alternates field picks one member in one step", async () => {
+    covers("panel:paged.template.form");
+    const h = await mount();
+    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    for (const [i, name] of ["left", "right"].entries()) {
+      const made = await h.mutate({
+        op: "insertFrame",
+        args: {
+          pageId: h.handle!.pageIds[0],
+          bounds: [100, 40 + i * 100, 160, 120 + i * 100],
+        },
+      } as never);
+      const id = (made as { payload: { createdId: unknown } }).payload
+        .createdId;
+      await h.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: id,
+          path: "itemName",
+          value: { type: "text", value: name },
+        },
+      } as never);
+      if (i > 0)
+        await h.mutate({
+          op: "setElementProperty",
+          args: {
+            elementId: id,
+            path: "elementVisible",
+            value: { type: "bool", value: false },
+          },
+        } as never);
+    }
+    await h.mutate({
+      op: "setDocumentMetadata",
+      args: {
+        key: "x-paged:template",
+        value: JSON.stringify({
+          v: 1,
+          data: {
+            alternates: {
+              layout: {
+                name: "layout",
+                kind: "alternates",
+                members: ["left", "right"],
+              },
+            },
+          },
+        }),
+      },
+    } as never);
+    await h.client.setSessionPolicy({ role: "filler", overrides: [] });
+    await h.settle();
+    const left = h.root.querySelector('[data-field-alternate="left"]')!;
+    expect(left.getAttribute("aria-checked")).toBe("true");
+    await h.click(h.root.querySelector('[data-field-alternate="right"]')!);
+    await h.settle();
+    const [row] = await h.client.templateFields();
+    expect(row!.value).toEqual({ kind: "alternate", member: "right" });
+    expect(row!.members?.map((m) => [m.name, m.visible])).toEqual([
+      ["left", false],
+      ["right", true],
+    ]);
+  });
 });

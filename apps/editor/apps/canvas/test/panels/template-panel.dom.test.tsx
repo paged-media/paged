@@ -220,4 +220,68 @@ describe("Template panel", () => {
     } as never);
     expect(opened.kind).toBe("mutationApplied");
   });
+
+  // Engine ADR 1016: what a styled text field allows, and alternates made
+  // from a selection.
+  test("an author allows styles and breaks, and makes alternates", async () => {
+    covers("panel:paged.template");
+    const h = await mount();
+    await h.client.setSessionPolicy({ role: "author", overrides: [] });
+    await h.mutate({
+      op: "createCharacterStyle",
+      args: { selfId: "CharacterStyle/Bold", name: "Bold" },
+    } as never);
+    const page = h.handle!.pageIds[0];
+    const made = await h.mutate({
+      op: "insertTextFrame",
+      args: { pageId: page, bounds: [100, 40, 160, 300] },
+    } as never);
+    const text = (made as unknown as { payload: { createdId: never } }).payload
+      .createdId;
+    await h.settle();
+    await h.select([text]);
+    await until(h, '[data-template-style="Bold"]');
+    const name = q<HTMLInputElement>(h, '[data-template-edit="name"]')!;
+    await h.act(async () => {
+      await h.user.clear(name);
+      await h.user.type(name, "headline");
+    });
+    await h.click(q(h, '[data-template-style="Bold"]')!);
+    const breaks = q<HTMLSelectElement>(h, '[data-template-edit="breaks"]')!;
+    await h.act(async () => {
+      await h.user.selectOptions(breaks, "line");
+    });
+    await h.click(q(h, "[data-template-save]")!);
+    await h.settle();
+    const [row] = await h.client.templateFields();
+    expect(row?.field.constraints).toMatchObject({
+      allowedStyles: ["Bold"],
+      breaks: "line",
+    });
+
+    const ids: never[] = [];
+    for (const x of [40, 160]) {
+      const f = await h.mutate({
+        op: "insertFrame",
+        args: { pageId: page, bounds: [200, x, 260, x + 100] },
+      } as never);
+      ids.push(
+        (f as unknown as { payload: { createdId: never } }).payload.createdId,
+      );
+    }
+    await h.select(ids);
+    await until(h, "[data-template-alternates-maker]");
+    const field = q<HTMLInputElement>(h, "[data-template-alternates-name]")!;
+    await h.act(async () => {
+      await h.user.type(field, "layout");
+    });
+    await h.click(q(h, "[data-template-make-alternates]")!);
+    await h.settle();
+    expect(q(h, "[data-template-alternates-problem]")).toBeNull();
+    const rows = await h.client.templateFields();
+    const layout = rows.find((r) => r.field.name === "layout");
+    expect(layout?.field.members).toEqual(["layout-1", "layout-2"]);
+    expect(layout?.value).toEqual({ kind: "alternate", member: "layout-1" });
+    await until(h, '[data-template-field-row="layout"]');
+  });
 });

@@ -89,6 +89,7 @@ fn field(name: &str, kind: TemplateFieldKind) -> FieldDef {
         required: false,
         constraints: Default::default(),
         module: None,
+        members: vec![],
     }
 }
 

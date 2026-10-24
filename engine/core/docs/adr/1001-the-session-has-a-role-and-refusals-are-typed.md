@@ -94,3 +94,9 @@ Evidence: `crates/paged-canvas/tests/it/template_fields.rs` (form order and valu
 fills the form in one undo step; unfit values refuse everything; replaced text keeps its
 style; the template survives IDML and `.paged` round trips) and the dispatch test
 `the_session_policy_survives_a_load_and_unfit_field_values_are_refused`.
+
+## Amendment — 2026-10-24: two more value kinds
+
+`setTemplateFields` takes `runs` (styled text) and `alternate` values, and a `templateFields`
+row of an alternates field lists its `members`; typed text holding a break its field does not
+take is refused at the text door: [ADR 1016](1016-styled-field-values-and-alternates.md).

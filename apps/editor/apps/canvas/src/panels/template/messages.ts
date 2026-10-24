@@ -32,6 +32,8 @@ export const FORM = defineMessages("templateForm", {
   noModuleReads: "No module reads this field.",
   moduleNotLoaded: "The module this field belongs to is not loaded.",
   noModuleWrites: "No module writes this field.",
+  styles: "Character styles",
+  writeIn: "Write in {style}",
 });
 
 /** The engine's reasons a value does not fit its field (paged-canvas
@@ -46,6 +48,11 @@ const PROBLEMS = defineMessages("templateProblem", {
   notYet: "This kind of field cannot be filled in yet.",
   wrongKind: "The value does not fit the field.",
   throughModule: "This field is filled in through its module.",
+  styleNotAllowed: "The field does not allow this character style.",
+  noLineBreaks: "The field takes no line breaks.",
+  noParagraphBreaks: "The field takes no paragraph breaks.",
+  noSuchAlternate: "The field offers no alternate of this name.",
+  alternateGone: "An alternate of the field is no longer in the document.",
 });
 
 const ENGINE_WORDS: Readonly<Record<string, string>> = {
@@ -58,6 +65,11 @@ const ENGINE_WORDS: Readonly<Record<string, string>> = {
   "this kind of field cannot be set yet": PROBLEMS.notYet,
   "the value does not fit the field's kind": PROBLEMS.wrongKind,
   "a module field is set through its module": PROBLEMS.throughModule,
+  "the field does not allow this character style": PROBLEMS.styleNotAllowed,
+  "the field takes no line breaks": PROBLEMS.noLineBreaks,
+  "the field takes no paragraph breaks": PROBLEMS.noParagraphBreaks,
+  "no alternate has this name": PROBLEMS.noSuchAlternate,
+  "an alternate is not in the document": PROBLEMS.alternateGone,
 };
 
 /** An engine problem in the reader's words; a module's own sentence stays
@@ -84,6 +96,15 @@ export const PREFLIGHT = defineMessages("templatePreflight", {
     "“{field}” is on a parent page, where no filler reaches it.",
   linkMissing: "“{field}” shows a picture that is not in the package.",
   marker: "This field has a problem: {message}",
+  styleUnknown:
+    "“{field}” allows a character style the document does not define.",
+  stylesOnNonText:
+    "“{field}” lists character styles, but only a text field is written in styles.",
+  alternatesTooFew:
+    "“{field}” offers fewer than two alternates, so there is nothing to choose.",
+  alternateMissing:
+    "“{field}” offers an alternate that no item on a document page is named after.",
+  alternateNotOne: "“{field}” does not show exactly one of its alternates.",
 });
 
 /** A finding in the reader's words: its code's message, else the engine's. */
@@ -149,4 +170,18 @@ export const PANEL = defineMessages("templatePanel", {
   thisPage: "This page",
   pageCopies:
     "A filler may copy this page and remove its copies (the pages of a catalogue)",
+  allowedStyles: "Character styles a filler may use",
+  noCharacterStyles: "The document defines no character styles.",
+  breaks: "Breaks",
+  breaksAny: "Any",
+  breaksNone: "None: one line",
+  breaksLine: "Line breaks",
+  breaksParagraph: "Line and paragraph breaks",
+  alternates: "Alternates",
+  alternatesHint:
+    "Select two or more items to offer them as alternates: a filler shows one and the others are hidden.",
+  alternatesName: "Field name",
+  makeAlternates: "Make alternates field",
+  removeAlternates: "Remove",
+  kindAlternates: "Alternates",
 });

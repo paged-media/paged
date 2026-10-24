@@ -29,8 +29,12 @@
 //! A field swaps content, not design: a text field's new text is inserted
 //! before the old and the old deleted, so it takes the first run's
 //! character and paragraph style; a picture takes the field's fit.
+//!
+//! Engine ADR 1016: a text field's value may also be styled runs, in the
+//! character styles its author allows and with the breaks the author
+//! allows, and an alternates field's value is the member shown.
 
-use paged_template::{FieldDef, PolicyIndex, TemplateFieldKind};
+use paged_template::{FieldDef, PolicyIndex, TemplateFieldKind, TextBreaks};
 use serde::{Deserialize, Serialize};
 use tsify_next::Tsify;
 
@@ -53,6 +57,135 @@ pub enum FieldValue {
     Image { uri: String },
     /// A `visibility` field.
     Visible { visible: bool },
+    /// A `text` field's value as styled runs (engine ADR 1016): each run's
+    /// text in one of the field's allowed character styles, or in the
+    /// frame's own; break markers between them.
+    Runs { runs: Vec<StyledRun> },
+    /// An `alternates` field's choice: the member shown, by item name.
+    Alternate { member: String },
+}
+
+/// A break between the runs of a styled value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum RunBreak {
+    /// A forced line break (U+2028), inside the paragraph.
+    Line,
+    /// A paragraph break.
+    Paragraph,
+}
+
+/// One part of a styled value: text, in a character style or the frame's
+/// own, or a break.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(untagged)]
+pub enum StyledRun {
+    Break {
+        #[serde(rename = "break")]
+        kind: RunBreak,
+    },
+    Text {
+        text: String,
+        /// A character style the field allows, by id or name; absent, the
+        /// frame's own style.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        style: Option<String>,
+    },
+}
+
+/// One member of an alternates field, as the field lists it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct AlternateMember {
+    /// The item's name, the member's name in the field.
+    pub name: String,
+    /// The item, when a document page carries one of that name.
+    pub element_id: Option<ElementId>,
+    pub visible: bool,
+}
+
+/// A styled value flattened: the text to insert (paragraph breaks as `\n`,
+/// line breaks as U+2028) and the character ranges to style, in the
+/// contiguous character space `ApplyStyle` counts in (no paragraph
+/// separators).
+struct Flat {
+    text: String,
+    styled: Vec<(u32, u32, String)>,
+}
+
+fn flatten(runs: &[StyledRun]) -> Flat {
+    let mut text = String::new();
+    let mut at = 0u32;
+    let mut styled = Vec::new();
+    for run in runs {
+        match run {
+            StyledRun::Break {
+                kind: RunBreak::Paragraph,
+            } => text.push('\n'),
+            StyledRun::Break {
+                kind: RunBreak::Line,
+            } => {
+                text.push('\u{2028}');
+                at += 1;
+            }
+            StyledRun::Text { text: t, style } => {
+                text.push_str(t);
+                // A paragraph break holds no character in this space.
+                let n = t
+                    .chars()
+                    .filter(|c| !matches!(c, '\n' | '\r' | '\u{2029}'))
+                    .count() as u32;
+                if let Some(style) = style {
+                    styled.push((at, at + n, style.clone()));
+                }
+                at += n;
+            }
+        }
+    }
+    Flat { text, styled }
+}
+
+/// A story's paragraphs as `ContentSelection` counts them: UTF-8 bytes of
+/// the runs and one `\n` between paragraphs.
+fn content_len(paragraphs: &[paged_model::Paragraph]) -> u32 {
+    let bytes: usize = paragraphs
+        .iter()
+        .flat_map(|p| p.runs.iter())
+        .map(|r| r.text.len())
+        .sum();
+    (bytes + paragraphs.len().saturating_sub(1)) as u32
+}
+
+/// Adds `text` in `style` to `out`, its line breaks as break markers, and
+/// joins it to the run before when that run has the same style.
+fn push_styled(out: &mut Vec<StyledRun>, text: &str, style: Option<String>) {
+    for (i, part) in text.split('\u{2028}').enumerate() {
+        if i > 0 {
+            out.push(StyledRun::Break {
+                kind: RunBreak::Line,
+            });
+        }
+        if part.is_empty() {
+            continue;
+        }
+        if let Some(StyledRun::Text {
+            text: last,
+            style: last_style,
+        }) = out.last_mut()
+        {
+            if *last_style == style {
+                last.push_str(part);
+                continue;
+            }
+        }
+        out.push(StyledRun::Text {
+            text: part.to_string(),
+            style: style.clone(),
+        });
+    }
 }
 
 /// One field and the value to give it.
@@ -90,6 +223,9 @@ pub struct TemplateFieldSummary {
     pub value: Option<FieldValue>,
     /// The story overflows its frames.
     pub overset: bool,
+    /// An alternates field's members, in its order (engine ADR 1016).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<AlternateMember>,
 }
 
 fn element_of(node: &paged_mutate::NodeId) -> Option<ElementId> {
@@ -109,12 +245,69 @@ impl CanvasModel {
     fn story_text(&self, story_id: &str) -> Option<String> {
         let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
         let mut text = String::new();
-        for para in &story.story.paragraphs {
+        for (i, para) in story.story.paragraphs.iter().enumerate() {
+            if i > 0 {
+                text.push('\n');
+            }
             for run in &para.runs {
                 text.push_str(&run.text);
             }
         }
         Some(text)
+    }
+
+    /// A text field's story as styled runs (engine ADR 1016): a run in one
+    /// of `allowed`'s styles is named by the field's own spelling of it,
+    /// any other run is in the frame's style.
+    fn story_runs(&self, story_id: &str, allowed: &[String]) -> Vec<StyledRun> {
+        let mut out = Vec::new();
+        for (i, para) in self.story_paragraphs(story_id).iter().enumerate() {
+            if i > 0 {
+                out.push(StyledRun::Break {
+                    kind: RunBreak::Paragraph,
+                });
+            }
+            for run in &para.runs {
+                let style = run.character_style.as_deref().and_then(|id| {
+                    allowed
+                        .iter()
+                        .find(|a| {
+                            paged_template::allowed_character_style(
+                                &self.scene,
+                                std::slice::from_ref(*a),
+                                id,
+                            )
+                            .is_some()
+                        })
+                        .cloned()
+                });
+                push_styled(&mut out, &run.text, style);
+            }
+        }
+        out
+    }
+
+    /// An alternates field's members, as the document holds them.
+    fn alternate_members(&self, field: &FieldDef) -> Vec<AlternateMember> {
+        paged_template::alternate_members(&self.scene, field)
+            .into_iter()
+            .map(|(name, id)| {
+                let element_id = id
+                    .as_deref()
+                    .and_then(|id| self.resolve_frame_node_id(id))
+                    .as_ref()
+                    .and_then(element_of);
+                let visible = element_id
+                    .as_ref()
+                    .and_then(|e| self.visible_of(e))
+                    .unwrap_or(false);
+                AlternateMember {
+                    name,
+                    element_id,
+                    visible,
+                }
+            })
+            .collect()
     }
 
     /// A run field's story, and its placeholder run (offset and display
@@ -229,8 +422,22 @@ impl CanvasModel {
         let mut rows: Vec<TemplateFieldSummary> = index
             .fields()
             .map(|(target_id, field)| {
+                let members = if field.kind == TemplateFieldKind::Alternates {
+                    self.alternate_members(field)
+                } else {
+                    Vec::new()
+                };
                 let node = self.resolve_frame_node_id(target_id);
-                let element_id = node.as_ref().and_then(element_of);
+                // An alternates field is drawn on the member it shows.
+                let element_id = if field.kind == TemplateFieldKind::Alternates {
+                    members
+                        .iter()
+                        .find(|m| m.visible)
+                        .or(members.first())
+                        .and_then(|m| m.element_id.clone())
+                } else {
+                    node.as_ref().and_then(element_of)
+                };
                 let run = (field.kind == TemplateFieldKind::TextRun)
                     .then(|| self.run_field(target_id))
                     .flatten();
@@ -240,10 +447,25 @@ impl CanvasModel {
                     _ => None,
                 };
                 let value = match field.kind {
+                    // A field written in styles reads as runs, so a value
+                    // read back fills the same document (`template check`).
+                    TemplateFieldKind::Text if !field.constraints.allowed_styles.is_empty() => {
+                        story_id.as_deref().map(|s| FieldValue::Runs {
+                            runs: self.story_runs(s, &field.constraints.allowed_styles),
+                        })
+                    }
                     TemplateFieldKind::Text => story_id
                         .as_deref()
                         .and_then(|s| self.story_text(s))
                         .map(|text| FieldValue::Text { text }),
+                    TemplateFieldKind::Alternates => {
+                        members
+                            .iter()
+                            .find(|m| m.visible)
+                            .map(|m| FieldValue::Alternate {
+                                member: m.name.clone(),
+                            })
+                    }
                     TemplateFieldKind::Variable => self
                         .scene
                         .designmap
@@ -275,6 +497,7 @@ impl CanvasModel {
                     element_id,
                     story_id,
                     value,
+                    members,
                 }
             })
             .collect();
@@ -314,10 +537,7 @@ impl CanvasModel {
             };
             let c = &row.field.constraints;
             match (row.field.kind, value) {
-                (
-                    TemplateFieldKind::Text | TemplateFieldKind::Variable,
-                    FieldValue::Text { text },
-                ) => {
+                (TemplateFieldKind::Variable, FieldValue::Text { text }) => {
                     let len = text.chars().count() as u32;
                     if row.field.required && text.trim().is_empty() {
                         problem("required");
@@ -327,44 +547,103 @@ impl CanvasModel {
                         problem("longer than the field allows");
                         continue;
                     }
-                    if row.field.kind == TemplateFieldKind::Variable {
-                        let Ok(address) =
-                            paged_wire::Address::parse(&format!("textVariable:{}", row.target_id))
-                        else {
-                            problem("the field's variable cannot be addressed");
-                            continue;
-                        };
-                        ops.push(Mutation::Set {
-                            address,
-                            path: "textVariable.contents".into(),
-                            value: paged_mutate::Value::Text(text.clone()),
+                    let Ok(address) =
+                        paged_wire::Address::parse(&format!("textVariable:{}", row.target_id))
+                    else {
+                        problem("the field's variable cannot be addressed");
+                        continue;
+                    };
+                    ops.push(Mutation::Set {
+                        address,
+                        path: "textVariable.contents".into(),
+                        value: paged_mutate::Value::Text(text.clone()),
+                    });
+                }
+                (
+                    TemplateFieldKind::Text,
+                    value @ (FieldValue::Text { .. } | FieldValue::Runs { .. }),
+                ) => {
+                    let flat = match value {
+                        FieldValue::Runs { runs } => flatten(runs),
+                        FieldValue::Text { text } => Flat {
+                            text: text.clone(),
+                            styled: Vec::new(),
+                        },
+                        _ => unreachable!("matched above"),
+                    };
+                    let len = flat.text.chars().count() as u32;
+                    if row.field.required && flat.text.trim().is_empty() {
+                        problem("required");
+                        continue;
+                    }
+                    if c.max_length.is_some_and(|max| len > max) {
+                        problem("longer than the field allows");
+                        continue;
+                    }
+                    // Engine ADR 1016: only the breaks and the character
+                    // styles the author allows.
+                    let found = TextBreaks::of_text(&flat.text);
+                    if c.breaks.is_some_and(|takes| found > takes) {
+                        problem(if found == TextBreaks::Paragraph {
+                            "the field takes no paragraph breaks"
+                        } else {
+                            "the field takes no line breaks"
                         });
+                        continue;
+                    }
+                    let mut styles = Vec::new();
+                    for (start, end, style) in &flat.styled {
+                        match paged_template::allowed_character_style(
+                            &self.scene,
+                            &c.allowed_styles,
+                            style,
+                        ) {
+                            Some(id) => styles.push((*start, *end, id)),
+                            None => break,
+                        }
+                    }
+                    if styles.len() != flat.styled.len() {
+                        problem("the field does not allow this character style");
                         continue;
                     }
                     let Some(story) = row.story_id.clone() else {
                         problem("the field's frame holds no story");
                         continue;
                     };
-                    let old = self
-                        .story_text(&story)
-                        .map_or(0, |t| t.chars().count() as u32);
+                    // `InsertText` and `DeleteRange` count UTF-8 bytes and
+                    // one `\n` per paragraph break.
+                    let old = content_len(self.story_paragraphs(&story));
+                    let new = crate::mutate::normalized_len(&flat.text);
                     // Insert first, then delete the old text after it: the
                     // new text takes the style of the text it replaces.
-                    if len > 0 {
+                    if new > 0 {
                         ops.push(Mutation::InsertText {
                             story_id: story.clone(),
                             offset: 0,
-                            text: text.clone(),
+                            text: flat.text.clone(),
                             cell: None,
                         });
                     }
                     if old > 0 {
                         ops.push(Mutation::DeleteRange {
-                            story_id: story,
-                            start: len,
-                            end: len + old,
+                            story_id: story.clone(),
+                            start: new,
+                            end: new + old,
                             cell: None,
                         });
+                    }
+                    for (start, end, style) in styles {
+                        if end > start {
+                            ops.push(Mutation::ApplyStyle {
+                                story_id: story.clone(),
+                                start,
+                                end,
+                                style,
+                                scope: paged_mutate::operation::StyleScope::Character,
+                                cell: None,
+                                paragraph: None,
+                            });
+                        }
                     }
                 }
                 (TemplateFieldKind::Image, FieldValue::Image { uri }) => {
@@ -441,6 +720,25 @@ impl CanvasModel {
                                 });
                             }
                         }
+                    }
+                }
+                (TemplateFieldKind::Alternates, FieldValue::Alternate { member }) => {
+                    if !row.field.members.contains(member) {
+                        problem("no alternate has this name");
+                        continue;
+                    }
+                    if row.members.iter().any(|m| m.element_id.is_none()) {
+                        problem("an alternate is not in the document");
+                        continue;
+                    }
+                    // Every member is set, the chosen one shown and the
+                    // rest hidden: one step, whatever showed before.
+                    for m in &row.members {
+                        ops.push(Mutation::SetElementProperty {
+                            element_id: m.element_id.clone().expect("checked above"),
+                            path: paged_mutate::PropertyPath::ElementVisible,
+                            value: paged_mutate::Value::Bool(&m.name == member),
+                        });
                     }
                 }
                 (TemplateFieldKind::Choice | TemplateFieldKind::Data, _) => {

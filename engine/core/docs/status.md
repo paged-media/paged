@@ -9,6 +9,11 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 
 ## Shipped
 
+- **Templates.** A document's policy in labels makes it a template (ADR 1000): fields of every
+  kind, permissions checked for a filler at every door (ADR 1001), fields from XML tags and tags
+  written back (ADR 1002), text fields written in the character styles and with the breaks
+  their author allows, and alternates that show one of several frames (ADR 1016). `paged
+  template fields | fill | check` run the same messages headlessly.
 - **Two engine npm packages per release tag** (PM-0008, amendment 3). `@paged-media/paged`
   (`packages/paged`: the files of the private workspace package `canvas-wasm`, with the
   `./introspect` and `./repo` entries, and the `paged` bin, `paged mcp` included) and

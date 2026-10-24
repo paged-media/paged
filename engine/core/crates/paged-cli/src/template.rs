@@ -61,21 +61,47 @@ pub fn fields(doc: &Path, opts: &DocumentOptions, json_out: bool) -> Result<()> 
         println!("no fields");
     } else {
         for r in &rows {
+            let detail = describe(&r.field);
             println!(
-                "{}\t{}\t{}",
+                "{}\t{}\t{}{}",
                 r.field.name,
                 serde_json::to_value(r.field.kind)?
                     .as_str()
                     .unwrap_or_default(),
-                serde_json::to_string(&r.value)?
+                serde_json::to_string(&r.value)?,
+                if detail.is_empty() {
+                    String::new()
+                } else {
+                    format!("\t{detail}")
+                }
             );
         }
     }
     Ok(())
 }
 
+/// What a field takes beyond its kind (engine ADR 1016): a text field's
+/// allowed styles and breaks, an alternates field's members.
+fn describe(field: &paged_template::FieldDef) -> String {
+    let c = &field.constraints;
+    let mut parts = Vec::new();
+    if !c.allowed_styles.is_empty() {
+        parts.push(format!("styles: {}", c.allowed_styles.join(", ")));
+    }
+    if let Some(b) = c.breaks {
+        let b = serde_json::to_value(b).unwrap_or_default();
+        parts.push(format!("breaks: {}", b.as_str().unwrap_or_default()));
+    }
+    if !field.members.is_empty() {
+        parts.push(format!("alternates: {}", field.members.join(" | ")));
+    }
+    parts.join("; ")
+}
+
 /// The values a `--values` argument names: a JSON list of `{name, value}`,
-/// or an object of name → text | boolean | value, inline or in a file.
+/// or an object of name → text | boolean | runs (a list of `{text, style?}`
+/// and `{break}`) | value, inline or in a file. A text given to an
+/// alternates field names the member to show.
 pub fn read_values(arg: &str) -> Result<Vec<TemplateFieldValue>> {
     let text = if arg.trim_start().starts_with(['[', '{']) {
         arg.to_string()
@@ -91,6 +117,11 @@ pub fn read_values(arg: &str) -> Result<Vec<TemplateFieldValue>> {
                 let value: FieldValue = match v {
                     Value::String(text) => FieldValue::Text { text },
                     Value::Bool(visible) => FieldValue::Visible { visible },
+                    Value::Array(_) => FieldValue::Runs {
+                        runs: serde_json::from_value(v).with_context(|| {
+                            format!("{name}: runs are {{text, style?}} or {{break}}")
+                        })?,
+                    },
                     other => serde_json::from_value(other)?,
                 };
                 Ok(TemplateFieldValue { name, value })
@@ -100,8 +131,34 @@ pub fn read_values(arg: &str) -> Result<Vec<TemplateFieldValue>> {
     }
 }
 
+/// `values` as their fields take them: a text given to an alternates field
+/// names the member to show (engine ADR 1016).
+fn as_fields_take(
+    session: &Session,
+    values: Vec<TemplateFieldValue>,
+) -> Result<Vec<TemplateFieldValue>> {
+    let rows = fields_of(session)?;
+    Ok(values
+        .into_iter()
+        .map(|v| {
+            let alternates = rows.iter().any(|r| {
+                r.field.name == v.name
+                    && r.field.kind == paged_template::TemplateFieldKind::Alternates
+            });
+            match v.value {
+                FieldValue::Text { text } if alternates => TemplateFieldValue {
+                    name: v.name,
+                    value: FieldValue::Alternate { member: text },
+                },
+                _ => v,
+            }
+        })
+        .collect())
+}
+
 /// Fills `values` in a filler session; an error names what was refused.
 fn fill_session(session: &mut Session, values: Vec<TemplateFieldValue>) -> Result<()> {
+    let values = as_fields_take(session, values)?;
     let policy = paged_template::SessionPolicy {
         role: paged_template::Role::Filler,
         overrides: vec![],

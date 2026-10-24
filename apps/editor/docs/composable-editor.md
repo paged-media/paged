@@ -429,6 +429,7 @@ an author can tell a field that is still tag-driven from one that paged edited.
 | Kind         | Target                                          | Value                        | Written by                                                                                                     |
 | ------------ | ----------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `text`       | a whole text frame's story                      | plain or lightly styled text | the existing text mutations, scoped to the story                                                               |
+| `alternates` | several items (variant frames), by name          | the member shown             | `ElementVisible` on every member, the chosen one shown and the rest hidden, in one step                         |
 | `text-run`   | a placeholder run inside a story                | plain text                   | `Operation::SetFieldValue` on a `PlaceholderField` (`paged-model`, `FieldKind::Placeholder`)                   |
 | `variable`   | a custom text variable, wherever it is inserted | plain text                   | the text-variable operations (`TextVariable`, `CreateTextVariable`, `InsertField`)                             |
 | `image`      | a graphic frame                                 | an image (bytes or URI)      | `Operation::ReplaceImageBytes` / `PlaceImage`, then a fit ([ADR 257](adr/257-indesigns-fits-and-page-keys.md)) |
@@ -441,6 +442,21 @@ the frame's paragraph and character styles; an `image` field takes the picture a
 frame's fit. Changing formatting is a separate permission (`text.style`, `image.crop`) that
 the author grants deliberately. That keeps the design intent intact for most templates,
 where the end user should not pick colours or point sizes.
+
+**Lightly styled text** (decided on 2026-10-24, engine
+[ADR 1016](../../../engine/core/docs/adr/1016-styled-field-values-and-alternates.md)): the author
+lists the character styles a `text` field allows (`constraints.allowedStyles`, for example Bold
+and Italic) and the breaks it takes (`constraints.breaks`: `none`, `line` or `paragraph`). The
+value is then a list of runs, `[{ text, style? } | { break }]`; a run without a style keeps the
+frame's own. The form offers a button per allowed style and Enter only where breaks are allowed,
+and the engine refuses any other style or break, whoever sends it. Such a field grants applying
+its allowed character styles and nothing else of `text.style`.
+
+**Alternates** (decided on 2026-10-24, ADR 1016): an `alternates` field groups variant frames
+under one choice. It lives in the document's policy and names its members by item name; the
+filler picks one, the engine shows it and hides the others in one undo step, and each member is
+granted being shown or hidden and nothing more. In IDML the members stay ordinary page items,
+the others hidden.
 
 A `variable` field fills every place the variable is inserted. A headline that repeats on the
 front and back of a card is one field, not two.
@@ -936,13 +952,13 @@ Taken on 2026-10-21, with the implementation plan
    editor shows a template as a template and offers "Edit template" explicitly.
 5. **Permission granularity in text.** A placeholder run is the range mechanism: a field limited
    to part of a story is a placeholder run (from XML tags or Make field on a selection). No
-   second mechanism.
+   second mechanism. No code was needed; engine ADR 1016 records it.
 6. **Field values with style.** The author lists the character styles a text field allows (for
    example Bold and Italic) and whether it takes line and paragraph breaks. The form offers
    exactly those; the value is written as runs in the allowed styles, and nothing else is
-   accepted.
+   accepted. Built: engine ADR 1016, §7.3.
 7. **Choice fields over frames.** Authors can group variant frames (alternates) under one
    choice field; the filler picks one and the others are hidden. Alternates round-trip as
-   hidden items in IDML.
+   hidden items in IDML. Built: engine ADR 1016, §7.3.
 8. **Licensing for embedders.** It follows the repository's licence terms and is outside the
    scope of this paper.

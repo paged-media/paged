@@ -664,6 +664,109 @@ fn template_fixture(tag: &str) -> Fx {
     fx
 }
 
+/// Engine ADR 1016: a text field written in the styles and breaks its
+/// author allows, and an alternates field choosing one of two frames.
+const STYLED_AUTHOR: &str = r#"
+const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
+const pages = parse(paged.pages());
+paged.createCharacterStyle({ selfId: "CharacterStyle/Bold", name: "Bold" });
+paged.createCharacterStyle({ selfId: "CharacterStyle/Italic", name: "Italic" });
+const before = new Set(parse(paged.stories()).map((s) => s.selfId));
+const frame = paged.insertTextFrame(pages[0].selfId, [72, 72, 200, 300]);
+const story = parse(paged.stories()).map((s) => s.selfId).find((s) => !before.has(s));
+paged.insertText(story, 0, "Old title");
+paged.setPluginMetadata(String(frame), "x-paged:template",
+  JSON.stringify({ v: 1, data: { field: { name: "headline", kind: "text",
+    constraints: { allowedStyles: ["Bold"], breaks: "none" } } } }));
+const left = paged.insertFrame(pages[0].selfId, [300, 72, 360, 200]);
+const right = paged.insertFrame(pages[0].selfId, [300, 220, 360, 340]);
+const prop = (id, path, value) => ({ op: "setElementProperty",
+  args: { elementId: { kind: "rectangle", id: String(id) }, path, value } });
+paged.batch([
+  prop(left, "itemName", { type: "text", value: "left" }),
+  prop(right, "itemName", { type: "text", value: "right" }),
+  prop(right, "elementVisible", { type: "bool", value: false }),
+]);
+paged.setDocumentMetadata("x-paged:template", JSON.stringify({ v: 1, data: {
+  alternates: { layout: { name: "layout", kind: "alternates", members: ["left", "right"] } } } }));
+"#;
+
+#[test]
+fn template_styled_values_and_alternates() {
+    let fx = Fx::new("template-styled");
+    fx.blank("blank.paged");
+    fx.write("author.js", STYLED_AUTHOR);
+    fx.run(&[
+        "script",
+        "blank.paged",
+        "author.js",
+        "--role",
+        "author",
+        "-o",
+        "t.paged",
+    ])
+    .code(0);
+    let fields = fx.run(&["template", "fields", "t.paged"]).code(0);
+    assert!(
+        fields.stdout.contains("styles: Bold; breaks: none"),
+        "{}",
+        fields.stdout
+    );
+    assert!(
+        fields.stdout.contains("alternates: left | right"),
+        "{}",
+        fields.stdout
+    );
+    fx.run(&[
+        "template",
+        "fill",
+        "t.paged",
+        "--values",
+        r#"{"headline":[{"text":"Ada "},{"text":"Lovelace","style":"Bold"}],"layout":"right"}"#,
+        "-o",
+        "filled.paged",
+    ])
+    .code(0);
+    let got = fx
+        .run(&["template", "fields", "filled.paged", "--json"])
+        .code(0)
+        .json();
+    let value = |name: &str| {
+        got["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["field"]["name"] == name)
+            .map(|f| f["value"].clone())
+            .unwrap()
+    };
+    assert_eq!(
+        value("headline"),
+        serde_json::json!({ "kind": "runs", "runs": [
+            { "text": "Ada " }, { "text": "Lovelace", "style": "Bold" }
+        ] })
+    );
+    assert_eq!(
+        value("layout"),
+        serde_json::json!({ "kind": "alternate", "member": "right" })
+    );
+    fx.run(&["template", "check", "t.paged", "filled.paged"])
+        .code(0);
+    for refused in [
+        r#"{"headline":[{"text":"Ada","style":"Italic"}]}"#,
+        r#"{"headline":"two\nlines"}"#,
+        r#"{"layout":"middle"}"#,
+    ] {
+        let r = fx
+            .run(&[
+                "template", "fill", "t.paged", "--values", refused, "-o", "no.paged",
+            ])
+            .code(1);
+        assert!(r.stderr.contains("do not fit"), "{}", r.stderr);
+    }
+    assert!(!fx.exists("no.paged"));
+}
+
 #[test]
 fn template_group() {
     covers!("cli:paged template");
