@@ -7,7 +7,7 @@ engine**, at `engine/core` in the monorepo `paged-media/paged` (it was the
 
 ## What this is
 
-Pixel-faithful Adobe IDML renderer in Rust. A 31-crate workspace (plus three
+Pixel-faithful Adobe IDML renderer in Rust. A 32-crate workspace (plus three
 spikes; `Cargo.toml` lists the members) that parses
 IDML packages, lays out text with InDesign-calibrated Knuth-Plass, emits a
 versioned display list, rasterises through Vello: `vello_cpu` on the CPU
@@ -96,6 +96,9 @@ docs/reference/idml-coverage.json`; its tests fail when the committed file
   `StoryEmitter` per-story state. `paged-inspect` CLI.
 - `crates/paged-color/` — the CMS: lcms2 on native, qcms (pure Rust) on wasm32; the naive
   CMYK conversion is the fallback on both when no CMYK profile is configured.
+- `crates/paged-raster/` — raster probe/decode/encode (ADR 1005): TIFF through `tiff`,
+  the web formats through `image`; CMYK/Lab through paged-color. The renderer and
+  paged-gpu's wasm32 raster-time decode both call `decode_rgba8`.
 - `crates/paged-fidelity/` — ΔE2000 + SSIM diff library + `paged-diff` CLI.
   Reference is positional arg #1, candidate #2.
 - `crates/paged-mutate/`, `paged-introspect/`, `paged-canvas/`,
