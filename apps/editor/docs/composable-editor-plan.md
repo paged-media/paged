@@ -46,7 +46,7 @@ orientation only.
 | G1, G2 module field kinds, routing               | Done                                                                                                                                    | extensions ADR 335, engine ADR 1000 amendment                                       |
 | G3 field kinds of every module                   | Done, `pdf.page` included (a placed PDF shows the page the document names, engine ADR 1003)                                             | each module's `template-fields.ts`                                                  |
 | G4 coverage gaps                                 | Done: CLI imports and bytes, typed commands per module, headless module content; what stays by design is listed in G4                   |                                                                                     |
-| H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
+| H demos                                          | Done: a gallery of thirteen pages (module fields and PDF/X-4 included), journeys                                                        | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
 
 Corrections to the plan found while building:
