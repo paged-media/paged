@@ -776,15 +776,13 @@ mod tests {
     use crate::display_list::{BlendMode, Color, DropShadow, Paint, PathData};
 
     fn unit_rect(list: &mut DisplayList) -> PathId {
-        list.paths.push_anon(PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: 1.0, y: 0.0 },
-                PathSegment::LineTo { x: 1.0, y: 1.0 },
-                PathSegment::LineTo { x: 0.0, y: 1.0 },
-                PathSegment::Close,
-            ],
-        })
+        list.paths.push_anon(PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 0.0 },
+            PathSegment::LineTo { x: 1.0, y: 1.0 },
+            PathSegment::LineTo { x: 0.0, y: 1.0 },
+            PathSegment::Close,
+        ]))
     }
 
     fn begin(bounds: Rect) -> DisplayCommand {

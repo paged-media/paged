@@ -6651,6 +6651,7 @@ impl CanvasModel {
     /// drop is loud rather than silent.
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        out.extend(crate::export_losses::fill_rule_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7269,6 +7270,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(f.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(f.fill_rule.as_str().into())),
+                            },
                             // C-24 — a text frame's outline is stroked
                             // inside / centred / outside like any other
                             // closed shape, and the stroke's share insets
@@ -7623,6 +7629,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(f.stroke_weight)),
+                            },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(f.fill_rule.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
@@ -8064,6 +8075,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(p.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(p.fill_rule.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameOpacity,
                                 value: Some(Value::Length(p.opacity)),
@@ -8245,6 +8261,11 @@ impl CanvasModel {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(l.stroke_weight)),
                             },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(l.fill_rule.as_str().into())),
+                            },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,
                                 value: Some(Value::Text(
@@ -8413,6 +8434,11 @@ impl CanvasModel {
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeWeight,
                                 value: Some(Value::Length(o.stroke_weight)),
+                            },
+                            // Engine ADR 1006 — the rule the outline fills by.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillRule,
+                                value: Some(Value::Text(o.fill_rule.as_str().into())),
                             },
                             PropertyEntry {
                                 path: PropertyPath::FrameStrokeType,

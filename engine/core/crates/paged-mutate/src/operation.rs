@@ -1583,6 +1583,15 @@ pub enum PropertyPath {
     /// Paint-only (`frame_style`): the frame's fit re-resolves against
     /// the page's size on the next build.
     FramePdfPage,
+
+    // ---- engine ADR 1006 — the fill rule ----------------------------
+    /// The rule the frame's outline fills and clips by: `Value::Text`
+    /// `"NonZero"` (IDML's rule, the default) or `"EvenOdd"`; `""` clears
+    /// to `"NonZero"`. On a TextFrame, Rectangle, Oval, Polygon or
+    /// GraphicLine. No IDML attribute carries it: the IDML export re-winds
+    /// an even-odd outline whose contours do not cross and reports the
+    /// rest as lost. Paint-only (`frame_style`).
+    FrameFillRule,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -1959,6 +1968,7 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteRuleOn => "document.footnoteRuleOn",
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
+            PropertyPath::FrameFillRule => "frame.fillRule",
         }
     }
 }
