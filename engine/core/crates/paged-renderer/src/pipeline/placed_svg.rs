@@ -31,8 +31,9 @@
 //! gradient that reflects or repeats, a focal radial gradient, a gradient
 //! whose stops differ in opacity (the list interpolates premultiplied),
 //! a dash offset, a
-//! nested SVG image, an even-odd shape whose contours cross, and a clip
-//! path of several shapes that are not single contours. [`prepare`]
+//! nested SVG image, and a clip path of several shapes that are not
+//! single contours. An even-odd fill, whose contours may cross, is drawn
+//! by the list's own even-odd rule (engine ADR 1006). [`prepare`]
 //! returns `None` for those, and the caller decodes the raster. A stroke
 //! or a radial gradient under a skew or an uneven scale draws the raster
 //! too, decided per placement in [`draw`] (the list strokes one width and
@@ -41,9 +42,11 @@
 use std::sync::Arc;
 
 use paged_compose::{
-    BlendMode, Color, DashPattern, DisplayCommand, DisplayList, GradientStop, LineCap, LineJoin,
-    LinearGradient, Paint, PathData, PathSegment, RadialGradient, Rect, Stroke, Transform,
+    BlendMode, Color, DashPattern, DisplayCommand, DisplayList, FillRule, GradientStop, LineCap,
+    LineJoin, LinearGradient, Paint, PathData, PathSegment, RadialGradient, Rect, Stroke,
+    Transform,
 };
+use paged_model::winding::signed_area;
 
 /// A placed SVG prepared for the display list.
 #[derive(Debug)]
@@ -492,7 +495,7 @@ fn map_path(path: &PathData, t: &Transform) -> PathData {
             PathSegment::Close => PathSegment::Close,
         })
         .collect();
-    PathData { segments }
+    PathData::new(segments).with_fill_rule(path.fill_rule)
 }
 
 /// The page-space box of a canvas-space rectangle, a point wider on
@@ -537,15 +540,13 @@ fn transform(t: usvg::Transform) -> Transform {
 }
 
 fn rect_path(x0: f32, y0: f32, x1: f32, y1: f32) -> PathData {
-    PathData {
-        segments: vec![
-            PathSegment::MoveTo { x: x0, y: y0 },
-            PathSegment::LineTo { x: x1, y: y0 },
-            PathSegment::LineTo { x: x1, y: y1 },
-            PathSegment::LineTo { x: x0, y: y1 },
-            PathSegment::Close,
-        ],
-    }
+    PathData::new(vec![
+        PathSegment::MoveTo { x: x0, y: y0 },
+        PathSegment::LineTo { x: x1, y: y0 },
+        PathSegment::LineTo { x: x1, y: y1 },
+        PathSegment::LineTo { x: x0, y: y1 },
+        PathSegment::Close,
+    ])
 }
 
 /// `path` with `t` applied to its points (an affine map takes a Bézier
@@ -582,7 +583,7 @@ fn path_data(path: &usvg::tiny_skia_path::Path, t: &Transform) -> PathData {
             S::Close => PathSegment::Close,
         })
         .collect();
-    PathData { segments }
+    PathData::new(segments)
 }
 
 /// sRGB-encoded `c` (0..255) in linear light, as the list composites.
@@ -686,10 +687,16 @@ impl Walk {
             // lane draws.
             0 => return None,
             1 => shapes.pop()?,
-            // The union of single contours, each turned the same way.
+            // The union of single contours, each turned the same way:
+            // one path has one rule, so an even-odd shape among several
+            // is first turned into its non-zero equivalent.
             _ => {
                 let mut segments = Vec::new();
                 for shape in shapes {
+                    let shape = match shape.fill_rule {
+                        FillRule::EvenOdd => even_odd_as_non_zero(&shape)?,
+                        FillRule::NonZero => shape,
+                    };
                     let contours = contours(&shape.segments);
                     if contours.len() != 1 {
                         return None;
@@ -701,7 +708,7 @@ impl Walk {
                         segments.extend_from_slice(c);
                     }
                 }
-                PathData { segments }
+                PathData::new(segments)
             }
         };
         self.ops.push(Op::PushClip(path));
@@ -742,11 +749,10 @@ impl Walk {
             }
             None => None,
         };
-        // Fill and stroke share one path; an even-odd fill turns its
-        // contours so the list's non-zero rule fills the same area,
-        // which leaves the outline (and the stroke along it) unchanged.
+        // Fill and stroke share one path; the path carries the fill's
+        // rule, which a stroke ignores.
         let path = match &fill {
-            Some((_, usvg::FillRule::EvenOdd)) => even_odd_as_non_zero(&local)?,
+            Some((_, usvg::FillRule::EvenOdd)) => local.with_fill_rule(FillRule::EvenOdd),
             _ => local,
         };
         self.ops.push(Op::Shape(Box::new(Shape {
@@ -845,9 +851,9 @@ fn stroke(s: &usvg::Stroke) -> Option<Stroke> {
     Some(out)
 }
 
-/// A clip path's shapes, each in canvas space and in the list's non-zero
-/// rule. `None` for what the list cannot clip by: a nested clip path on
-/// one of its children.
+/// A clip path's shapes, each in canvas space and carrying its fill rule.
+/// `None` for what the list cannot clip by: a nested clip path on one of
+/// its children.
 fn clip_shapes(group: &usvg::Group, ts: Transform, out: &mut Vec<PathData>) -> Option<()> {
     for node in group.children() {
         match node {
@@ -857,7 +863,7 @@ fn clip_shapes(group: &usvg::Group, ts: Transform, out: &mut Vec<PathData>) -> O
                 };
                 let path = path_data(p.data(), &ts);
                 out.push(match fill.rule() {
-                    usvg::FillRule::EvenOdd => even_odd_as_non_zero(&path)?,
+                    usvg::FillRule::EvenOdd => path.with_fill_rule(FillRule::EvenOdd),
                     usvg::FillRule::NonZero => path,
                 });
             }
@@ -875,11 +881,13 @@ fn clip_shapes(group: &usvg::Group, ts: Transform, out: &mut Vec<PathData>) -> O
 
 // ── Even-odd as non-zero ─────────────────────────────────────────────
 //
-// The display list fills and clips non-zero. Contours that neither cross
-// themselves nor each other fill the same area under both rules once
-// every contour turns the way its nesting depth says: even depths one
-// way, odd depths the other, so each hole cancels the area around it.
-// Contours that cross are left to the raster lane.
+// A path fills by its own rule, but a clip of several shapes is one path
+// with one rule: each even-odd shape in it is turned into its non-zero
+// equivalent first. Contours that neither cross themselves nor each other
+// fill the same area under both rules once every contour turns the way
+// its nesting depth says: even depths one way, odd depths the other, so
+// each hole cancels the area around it. Contours that cross are left to
+// the raster lane.
 
 /// The contours of `segments`, each starting at its `MoveTo`.
 fn contours(segments: &[PathSegment]) -> Vec<&[PathSegment]> {
@@ -950,18 +958,6 @@ fn flatten(contour: &[PathSegment]) -> Vec<(f32, f32)> {
     pts
 }
 
-/// Twice the signed area of the closed polygon `pts` (positive turns
-/// clockwise in a y-down space).
-fn signed_area(pts: &[(f32, f32)]) -> f32 {
-    let n = pts.len();
-    (0..n)
-        .map(|i| {
-            let (a, b) = (pts[i], pts[(i + 1) % n]);
-            a.0 * b.1 - b.0 * a.1
-        })
-        .sum()
-}
-
 /// `contour` traced the other way round, closed.
 fn reversed(contour: &[PathSegment]) -> Vec<PathSegment> {
     let Some(&PathSegment::MoveTo { x: x0, y: y0 }) = contour.first() else {
@@ -1009,113 +1005,24 @@ fn reversed(contour: &[PathSegment]) -> Vec<PathSegment> {
     out
 }
 
-/// True when segments `a0→a1` and `b0→b1` cross (touching ends excluded).
-fn cross(a0: (f32, f32), a1: (f32, f32), b0: (f32, f32), b1: (f32, f32)) -> bool {
-    let orient = |p: (f32, f32), q: (f32, f32), r: (f32, f32)| {
-        (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0)
-    };
-    let (d1, d2) = (orient(b0, b1, a0), orient(b0, b1, a1));
-    let (d3, d4) = (orient(a0, a1, b0), orient(a0, a1, b1));
-    ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0))
-        && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
-}
-
-/// The edge budget of the crossing test; a shape with more is left to
-/// the raster lane.
-const MAX_EDGES: usize = 20_000;
-
-/// True when any two edges of `polys` (closed polygons) cross, adjacent
-/// edges of one polygon aside. A sweep over the edges sorted by their
-/// left end.
-fn any_crossing(polys: &[Vec<(f32, f32)>]) -> Option<bool> {
-    struct Edge {
-        poly: usize,
-        idx: usize,
-        a: (f32, f32),
-        b: (f32, f32),
-        x0: f32,
-        x1: f32,
-    }
-    let mut edges = Vec::new();
-    for (pi, pts) in polys.iter().enumerate() {
-        let n = pts.len();
-        for i in 0..n {
-            let (a, b) = (pts[i], pts[(i + 1) % n]);
-            edges.push(Edge {
-                poly: pi,
-                idx: i,
-                a,
-                b,
-                x0: a.0.min(b.0),
-                x1: a.0.max(b.0),
-            });
-        }
-    }
-    if edges.len() > MAX_EDGES {
-        return None;
-    }
-    edges.sort_by(|p, q| p.x0.total_cmp(&q.x0));
-    for i in 0..edges.len() {
-        let e = &edges[i];
-        for f in &edges[i + 1..] {
-            if f.x0 > e.x1 {
-                break;
-            }
-            if e.poly == f.poly {
-                let n = polys[e.poly].len();
-                let (i, j) = (e.idx, f.idx);
-                if (i + 1) % n == j || (j + 1) % n == i {
-                    continue;
-                }
-            }
-            if cross(e.a, e.b, f.a, f.b) {
-                return Some(true);
-            }
-        }
-    }
-    Some(false)
-}
-
-/// Even-odd point-in-polygon.
-fn inside(p: (f32, f32), pts: &[(f32, f32)]) -> bool {
-    let n = pts.len();
-    let mut c = false;
-    for i in 0..n {
-        let (a, b) = (pts[i], pts[(i + 1) % n]);
-        if (a.1 > p.1) != (b.1 > p.1) && p.0 < (b.0 - a.0) * (p.1 - a.1) / (b.1 - a.1) + a.0 {
-            c = !c;
-        }
-    }
-    c
-}
-
 /// `path` (filled even-odd) as a path the non-zero rule fills the same,
 /// or `None` when its contours cross.
 fn even_odd_as_non_zero(path: &PathData) -> Option<PathData> {
     let contours = contours(&path.segments);
     let polys: Vec<Vec<(f32, f32)>> = contours.iter().map(|c| flatten(c)).collect();
-    if any_crossing(&polys)? {
-        return None;
-    }
+    let turns = paged_model::winding::non_zero_turns(&polys)?;
     let mut segments = Vec::new();
-    for (i, (c, pts)) in contours.iter().zip(&polys).enumerate() {
-        let area = signed_area(pts);
-        if pts.len() < 3 || area == 0.0 {
+    for ((c, pts), turn) in contours.iter().zip(&polys).zip(turns) {
+        if pts.len() < 3 || signed_area(pts) == 0.0 {
             continue;
         }
-        let depth = polys
-            .iter()
-            .enumerate()
-            .filter(|(j, other)| *j != i && other.len() >= 3 && inside(pts[0], other))
-            .count();
-        let want_positive = depth % 2 == 0;
-        if (area > 0.0) == want_positive {
-            segments.extend_from_slice(c);
-        } else {
+        if turn {
             segments.extend(reversed(c));
+        } else {
+            segments.extend_from_slice(c);
         }
     }
-    Some(PathData { segments })
+    Some(PathData::new(segments))
 }
 
 #[cfg(test)]
@@ -1135,7 +1042,7 @@ mod tests {
         // Both squares clockwise: non-zero would fill the hole.
         let mut segments = square(0.0, 0.0, 10.0, true);
         segments.extend(square(3.0, 3.0, 4.0, true));
-        let out = even_odd_as_non_zero(&PathData { segments }).unwrap();
+        let out = even_odd_as_non_zero(&PathData::new(segments)).unwrap();
         let cs = contours(&out.segments);
         assert_eq!(cs.len(), 2);
         let a0 = signed_area(&flatten(cs[0]));
@@ -1147,7 +1054,7 @@ mod tests {
     fn crossing_contours_are_refused() {
         let mut segments = square(0.0, 0.0, 10.0, true);
         segments.extend(square(5.0, 5.0, 10.0, true));
-        assert!(even_odd_as_non_zero(&PathData { segments }).is_none());
+        assert!(even_odd_as_non_zero(&PathData::new(segments)).is_none());
     }
 
     #[test]

@@ -52,8 +52,11 @@ import type {
   Value,
 } from "@paged-media/plugin-api";
 
+import { simplifyAnchorTable } from "@paged-media/draw-geometry";
+
 import { registerCommand } from "../command-registry";
-import { oneBatchFor } from "./batch-handles";
+import { batchMutationFor, oneBatchFor } from "./batch-handles";
+import { readEditablePath, rewritePathOps, tableOfRead } from "./path-rewrite";
 import { defineMessages } from "@paged-media/strings";
 
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
@@ -83,6 +86,8 @@ export type StrokeJoinToken = "miter" | "round" | "bevel";
 export const DEFAULT_OUTLINE_WIDTH_PT = 1;
 export const DEFAULT_OFFSET_DELTA_PT = 6;
 export const DEFAULT_SIMPLIFY_TOLERANCE_PT = 1;
+/** Simplify's corner angle: 0 keeps no corners — the engine's own op. */
+export const DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG = 0;
 export const DEFAULT_MITER_LIMIT = 4;
 
 export interface OutlineStrokeParams {
@@ -308,19 +313,57 @@ export async function applyOffsetPath(
   );
 }
 
-/** Simplify Path: default tolerance 1 pt, payload `{ tolerance? }`. */
+/** Simplify Path: default tolerance 1 pt, payload `{ tolerance?,
+ *  cornerAngle? }`.
+ *
+ *  TWO LANES. With no corner angle (0, the default — and what every
+ *  caller before WP6.1 sent) it is the engine's `simplifyPath`, exactly as
+ *  before. The wire op has no corner field, so a CORNER ANGLE (degrees,
+ *  0–180: anchors at least that sharp stay sharp) is applied by
+ *  draw-geometry's `simplifyAnchorTable` — the fit the Path Options
+ *  preview draws — and written as each path's new table (`framePath` +
+ *  `frameBounds`, `./path-rewrite.ts`). Either lane is ONE batch for the
+ *  whole selection: one undo step. */
 export async function applySimplifyPath(
   host: BundleHost,
   payload?: PathOpPayload,
 ): Promise<void> {
   const tolerance = num(payload?.tolerance) ?? DEFAULT_SIMPLIFY_TOLERANCE_PT;
-  await commitEach(
-    host,
-    SIMPLIFY_PATH_COMMAND_ID,
-    pathTargets(host, SIMPLIFY_PATH_COMMAND_ID).map((id) =>
-      simplifyPathMutationFor(id, tolerance),
-    ),
-  );
+  const cornerAngle = clampCornerAngle(num(payload?.cornerAngle));
+  const targets = pathTargets(host, SIMPLIFY_PATH_COMMAND_ID);
+  if (cornerAngle <= 0) {
+    await commitEach(
+      host,
+      SIMPLIFY_PATH_COMMAND_ID,
+      targets.map((id) => simplifyPathMutationFor(id, tolerance)),
+    );
+    return;
+  }
+  const ops: Mutation[] = [];
+  for (const id of targets) {
+    const read = await readEditablePath(host, id);
+    if (!read || read.anchors.length < 3) continue;
+    const { table } = tableOfRead(read);
+    ops.push(
+      ...(rewritePathOps(
+        id,
+        simplifyAnchorTable(table, { tolerance, cornerAngleDeg: cornerAngle }),
+      ) as Mutation[]),
+    );
+  }
+  if (ops.length === 0) return;
+  const outcome = await host.document.mutate(batchMutationFor(ops));
+  if (!outcome.applied) {
+    host.log.warn(
+      `${SIMPLIFY_PATH_COMMAND_ID} rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
+  }
+}
+
+/** The corner angle a payload asks for, clamped to 0–180 (0 = none). */
+export function clampCornerAngle(v: number | undefined): number {
+  if (v === undefined) return DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG;
+  return Math.min(180, Math.max(0, v));
 }
 
 /** Where Offset Path / Simplify take their parameters when run with NO

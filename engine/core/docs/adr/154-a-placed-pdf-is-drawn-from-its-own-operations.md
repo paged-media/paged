@@ -1,6 +1,6 @@
 # ADR 154 — A placed PDF is drawn from its own drawing operations
 
-- **Status:** Accepted 2026-10-14.
+- **Status:** Accepted 2026-10-14; amended 2026-10-24 (even-odd, [ADR 1006](1006-fill-rule-is-a-native-property.md)).
 - **Scope:**
   - `paged-renderer`: `pipeline/placed_pdf.rs` (the interpreter device), `pipeline/images.rs`
     (`Placed::{Raster, Pdf}`), a `hayro-interpret` dependency.
@@ -100,8 +100,8 @@ Each of these is drawn as stated, and recorded in `status.md`:
 - **CMYK goes through hayro's RGB conversion**, not the document's CMYK profile, so a placed
   CMYK colour can differ from the same colour set in the document. Needs component access from
   the interpreter.
-- **Even-odd fills and clips (`f*`, `W*`) are filled non-zero.** The display list has one fill
-  rule. A compound path whose subpaths wind the same way loses its holes.
+- ~~**Even-odd fills and clips (`f*`, `W*`) are filled non-zero.**~~ Closed 2026-10-24, see the
+  amendment below.
 - **Patterns and shadings paint mid-grey.**
 - **Soft masks on transparency groups are ignored**; the group's opacity and blend apply.
 - **Stencil images (`ImageMask`) and Type 3 glyphs are skipped.**
@@ -109,3 +109,11 @@ Each of these is drawn as stated, and recorded in `status.md`:
   crop box is used.
 - **EPS is not interpreted.** An Illustrator EPS that carries PDF-compatible data could take
   this path later (plan item D-11b).
+
+## Amendment — 2026-10-24: `f*` and `W*` are even-odd
+
+[ADR 1006](1006-fill-rule-is-a-native-property.md) gives the display list a fill rule per
+path. `ListDevice` sets it from hayro's: a path drawn `f*` or `B*` fills even-odd (its stroke,
+if any, ignores the rule), and a `W*` clip clips even-odd, on both rasterizers and in the PDF
+export (`f*`, `W* n`). A compound path whose subpaths wind the same way keeps its holes
+(`placed_pdf_page.rs`, `a_placed_pdf_fills_and_clips_even_odd__feat__frames_paths_fill_rule_even_odd`).

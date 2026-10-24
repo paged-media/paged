@@ -75,6 +75,15 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.knife",
       // Scissors at any point — the same flyout, keyless likewise.
       "media.paged.draw.tool.scissorsAnyPoint",
+      // WP6.1 part 2 — keyless, in the host's transform / pencil / shape
+      // flyouts.
+      "media.paged.draw.tool.reflect",
+      "media.paged.draw.tool.reshape",
+      "media.paged.draw.tool.shaper",
+      "media.paged.draw.tool.pathEraser",
+      "media.paged.draw.tool.join",
+      "media.paged.draw.tool.star",
+      "media.paged.draw.tool.flare",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -108,6 +117,8 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.insertSpiralOptions",
       "media.paged.draw.command.insertRectGridOptions",
       "media.paged.draw.command.insertPolarGridOptions",
+      "media.paged.draw.command.insertStarOptions",
+      "media.paged.draw.command.insertFlareOptions",
       "media.paged.draw.command.selectSameStrokeWeightOptions",
       "media.paged.draw.command.joinEndpoints",
       "media.paged.draw.command.closePath",
@@ -204,6 +215,13 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.knife",
       "media.paged.draw.command.scissorsAt",
       "media.paged.draw.command.shapeBuild",
+      // WP6.1 part 2 — the new tools' gestures as data, and Star / Flare.
+      "media.paged.draw.command.joinScrub",
+      "media.paged.draw.command.pathErase",
+      "media.paged.draw.command.reshapeAt",
+      "media.paged.draw.command.shaperStroke",
+      "media.paged.draw.command.insertStar",
+      "media.paged.draw.command.insertFlare",
       "media.paged.draw.command.widthProfile",
       "media.paged.draw.command.updateLinkedRecipes",
       "media.paged.draw.command.selectSameFill",

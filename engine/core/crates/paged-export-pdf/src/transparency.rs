@@ -489,7 +489,7 @@ pub fn emit_gradient_feather(
     // shares the page's /Resources (written by ref at page finish).
     let mut mask = Content::new();
     crate::path::emit_path(&mut mask, &page_path);
-    mask.clip_nonzero();
+    crate::path::clip(&mut mask, &page_path);
     mask.end_path();
     if let Some(m) = elliptical {
         mask.save_state();
@@ -536,7 +536,7 @@ pub fn emit_gradient_feather(
     content.set_parameters(Name(gs_name.as_bytes()));
     content.set_fill_cmyk(0.0, 0.0, 0.0, 0.0);
     crate::path::emit_path(content, &page_path);
-    content.fill_nonzero();
+    crate::path::fill(content, &page_path);
     content.restore_state();
 }
 
@@ -597,15 +597,13 @@ mod tests {
     }
 
     fn rect_path(w: f32, h: f32) -> PathData {
-        PathData {
-            segments: vec![
-                PathSegment::MoveTo { x: 0.0, y: 0.0 },
-                PathSegment::LineTo { x: w, y: 0.0 },
-                PathSegment::LineTo { x: w, y: h },
-                PathSegment::LineTo { x: 0.0, y: h },
-                PathSegment::Close,
-            ],
-        }
+        PathData::new(vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: w, y: 0.0 },
+            PathSegment::LineTo { x: w, y: h },
+            PathSegment::LineTo { x: 0.0, y: h },
+            PathSegment::Close,
+        ])
     }
 
     #[test]
@@ -644,7 +642,7 @@ mod tests {
 
     #[test]
     fn blurred_alpha_stamp_rejects_empty_paths() {
-        let empty = PathData { segments: vec![] };
+        let empty = PathData::new(vec![]);
         let ident = Transform([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
         assert!(blurred_alpha_stamp(&empty, &ident, 4.0, 72.0).is_none());
     }

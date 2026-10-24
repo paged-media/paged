@@ -263,6 +263,7 @@ pub(super) fn container_clip_geometry(
                 &rect.subpath_open,
                 super::shapes::uniform_corner(&rect.corners),
             )
+            .with_fill_rule(crate::module::list_fill_rule(rect.fill_rule))
         } else {
             let r = Rect {
                 x: rect.bounds.left,
@@ -317,6 +318,7 @@ pub(super) fn container_clip_geometry(
                 &poly.subpath_open,
                 super::shapes::uniform_corner(&poly.corners),
             )
+            .with_fill_rule(crate::module::list_fill_rule(poly.fill_rule))
         };
         return Some((path, poly.item_transform));
     }
@@ -5625,12 +5627,10 @@ impl<'a> StoryEmitter<'a> {
         let before = page.list.commands.len();
         for &gutter in gutters {
             let x = gutter + rule.offset;
-            let path_id = page.list.paths.push_anon(PathData {
-                segments: vec![
-                    PathSegment::MoveTo { x, y: top },
-                    PathSegment::LineTo { x, y: bottom },
-                ],
-            });
+            let path_id = page.list.paths.push_anon(PathData::new(vec![
+                PathSegment::MoveTo { x, y: top },
+                PathSegment::LineTo { x, y: bottom },
+            ]));
             paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, paint, transform);
         }
         if rule.overprint {
@@ -5645,7 +5645,13 @@ impl<'a> StoryEmitter<'a> {
         // `<GeometryPathType>` — so an oval clips to its curve and a
         // compound path keeps its hole (W1.10), rather than the old
         // anchors-only single-contour diamond.
-        type ClipRecord = (usize, usize, usize, paged_text::FrameShape);
+        type ClipRecord = (
+            usize,
+            usize,
+            usize,
+            paged_text::FrameShape,
+            paged_compose::FillRule,
+        );
         let mut per_page: HashMap<usize, Vec<ClipRecord>> = HashMap::new();
         for (i, frame) in self.chain.iter().enumerate() {
             let Some((start, end)) = self.frame_cmd_ranges[i] else {
@@ -5658,23 +5664,27 @@ impl<'a> StoryEmitter<'a> {
                 continue;
             };
             let page_idx = self.chain_pages[i];
-            per_page
-                .entry(page_idx)
-                .or_default()
-                .push((i, start, end, shape));
+            per_page.entry(page_idx).or_default().push((
+                i,
+                start,
+                end,
+                shape,
+                crate::module::list_fill_rule(frame.fill_rule),
+            ));
         }
         for (page_idx, mut entries) in per_page {
             entries.sort_by_key(|a| std::cmp::Reverse(a.1));
-            for (frame_idx, start, end, shape) in entries {
+            for (frame_idx, start, end, shape, fill_rule) in entries {
                 let page = &mut pages[page_idx];
                 // Build a closed clip path: one MoveTo/LineTo*/Close
                 // sub-path per contour. Coordinates are in spread
                 // coords; the clip transform below maps to page coords.
-                // The rasterizer fills with NonZero, so a hole contour
-                // authored with opposite winding (IDML's convention)
-                // carves the interior — its flattened ring preserves
-                // that winding.
-                let mut path = PathData::default();
+                // The clip fills by the frame's rule: under NonZero a
+                // hole contour authored with opposite winding (IDML's
+                // convention) carves the interior — its flattened ring
+                // preserves that winding; under EvenOdd any inner
+                // contour does (engine ADR 1006).
+                let mut path = PathData::default().with_fill_rule(fill_rule);
                 for contour in shape.contours() {
                     let Some(&(x, y)) = contour.first() else {
                         continue;

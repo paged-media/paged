@@ -112,7 +112,19 @@ pub(crate) struct ResolvedFrame<'a> {
     /// choice between [`paged_compose::DisplayCommand::StrokePath`] and
     /// [`paged_compose::DisplayCommand::StrokePathOverprint`].
     pub overprint_stroke: bool,
+    /// Engine ADR 1006 — the rule the frame's outline fills and clips
+    /// by, carried on the outline's `PathData`. Only a path geometry can
+    /// tell the rules apart; a box or an ellipse is one simple contour.
+    pub fill_rule: paged_compose::FillRule,
     pub geometry: Geometry<'a>,
+}
+
+/// The display list's spelling of a model fill rule.
+pub(crate) fn list_fill_rule(rule: paged_model::FillRule) -> paged_compose::FillRule {
+    match rule {
+        paged_model::FillRule::NonZero => paged_compose::FillRule::NonZero,
+        paged_model::FillRule::EvenOdd => paged_compose::FillRule::EvenOdd,
+    }
 }
 
 /// Per-shape geometry. Modules that need to emit a primitive consult
@@ -370,6 +382,7 @@ impl<'a> ResolvedFrame<'a> {
             applied_object_style: frame.applied_object_style.as_deref(),
             overprint_fill: frame.overprint_fill,
             overprint_stroke: frame.overprint_stroke,
+            fill_rule: list_fill_rule(frame.fill_rule),
             geometry,
         }
     }
@@ -424,6 +437,7 @@ impl<'a> ResolvedFrame<'a> {
             applied_object_style: rect.applied_object_style.as_deref(),
             overprint_fill: rect.overprint_fill,
             overprint_stroke: rect.overprint_stroke,
+            fill_rule: list_fill_rule(rect.fill_rule),
             geometry,
         }
     }
@@ -469,6 +483,7 @@ impl<'a> ResolvedFrame<'a> {
             applied_object_style: oval.applied_object_style.as_deref(),
             overprint_fill: oval.overprint_fill,
             overprint_stroke: oval.overprint_stroke,
+            fill_rule: list_fill_rule(oval.fill_rule),
             geometry: Geometry::Oval {
                 rect: rect_from_bounds(oval.bounds),
             },
@@ -529,6 +544,7 @@ impl<'a> ResolvedFrame<'a> {
             applied_object_style: poly.applied_object_style.as_deref(),
             overprint_fill: poly.overprint_fill,
             overprint_stroke: poly.overprint_stroke,
+            fill_rule: list_fill_rule(poly.fill_rule),
             geometry,
         }
     }
@@ -583,6 +599,7 @@ impl<'a> ResolvedFrame<'a> {
             applied_object_style: line.applied_object_style.as_deref(),
             overprint_fill: false,
             overprint_stroke: line.overprint_stroke,
+            fill_rule: list_fill_rule(line.fill_rule),
             geometry: Geometry::Line {
                 p0: (bounds.left, bounds.top),
                 p1: (bounds.right, bounds.bottom),
@@ -658,6 +675,7 @@ mod tests {
             anchors,
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: paged_model::FillRule::NonZero,
         }
     }
 
@@ -724,6 +742,7 @@ mod tests {
             anchors,
             subpath_starts: Vec::new(),
             subpath_open: Vec::new(),
+            fill_rule: paged_model::FillRule::NonZero,
             effects: None,
             gradient_fill_angle: None,
             gradient_fill_length: None,

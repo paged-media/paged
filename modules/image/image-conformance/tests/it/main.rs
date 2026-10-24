@@ -32,6 +32,7 @@ mod family_minmax;
 mod family_morph;
 mod family_relational;
 mod family_resample;
+mod filters_radius;
 mod golden_expansion;
 mod gpu_module_kernels;
 mod oracle_photoshop;
