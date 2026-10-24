@@ -16,6 +16,8 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   only previews the file.
   Each image starts with the panel at identity; values set on one image do not carry over
   to the next.
+  The PSD reader is the engine's `paged-psd` (WP1.2), so the canvas draws a placed PSD or
+  PSB's merged composite before this module opens it, decoded the same way.
 - **Adjustments.** The "Image" panel has a histogram and a re-runnable chain: exposure,
   brightness, contrast, saturation, temperature and tint, levels (composite and per
   channel), tone curves (composite and per channel), Hue/Saturation (master, six colour
@@ -67,7 +69,7 @@ What `paged.image` ships and what it does not, read from the code on `main`, 202
   anchor over all layers; a Move tool and nudges for the selected pixels or the layer.
 - **PSD.** A PSD whose layers the model reproduces opens as layers. Layers of the retained
   file can be renamed, removed and given another opacity before export. With no edit the
-  writer reproduces the input bytes (`image-psd/tests/it/roundtrip.rs`). A session with more
+  writer reproduces the input bytes (`engine/core/crates/paged-psd/tests/it/roundtrip.rs`). A session with more
   than one layer exports as a layered PSD (pixel layers, masks, groups, opacity, blend,
   visibility, clipping); with adjustment layers it is flattened, and says so.
 - **Panels, menu, shortcuts, language.** Beside the "Image" panel, an "Image properties"
@@ -199,7 +201,7 @@ the baked image), beside the module's own label on the frame.
   clipping, user masks, vector masks (drawn from their paths the way Photoshop draws them — a
   17×15 sample grid per pixel, per-component combine / subtract / intersect / exclude, even-odd
   or non-zero, invert — and multiplied with the user mask; on a fill/shape layer the stored
-  pixels already are the shape; `image-psd/src/vector_mask.rs`), mask density and feather (a
+  pixels already are the shape; `engine/core/crates/paged-psd/src/vector_mask.rs`), mask density and feather (a
   Gaussian of that sigma), fill opacity; smart objects as their stored render, accepted only
   where the file's merged composite agrees inside each one's footprint (a stale render, as on a
   corpus mock-up, opens flattened); text layers blended in a gamma space as Photoshop's are
@@ -211,14 +213,15 @@ the baked image), beside the module's own label on the frame.
   adjustment layers (Photo Filter and Brightness/Contrast differ from Photoshop's), a group vector
   mask or a feathered shape mask opens flattened; artboards import (members cut to the
   artboard, its background beneath them), and says which (`PsdFile::layer_import_blockers` lists
-  every reason; `image-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
+  every reason; `engine/core/crates/paged-psd/src/layer_pixels.rs`). A CMYK file's layers are converted to sRGB
   one by one and blended in RGB, which Photoshop does not do (it blends the inks), so a CMYK
   file opens flattened when a layer, group or overlay uses a mode other than Normal or Multiply
   (measured 9.9–50 ΔE00 p95 off on synthetic tiles), when it has no real merged data, or when
   its RGB flatten is more than 8 levels off the converted composite on over 1 % of the pixels or
   more than 2 levels off on over 5 % (a tint: Multiply over pale stock).
-  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not read, so such a file
-  opens flattened. Across the 157-file private corpus, 76 files open as layers and are measured
+  Layers Photoshop writes for a 16-bit document (the `Lr16` block) are not imported, so such a
+  file opens flattened (paged-psd reads their records, `PsdFile::layer_list`, which the import
+  does not use yet). Across the 157-file private corpus, 76 files open as layers and are measured
   against Photoshop's composite (3 did on 2026-10-04), all but one within 1.5 % of pixels more
   than 2 levels off; the rest open flattened, the commonest reasons being smart objects the
   composite does not vouch for (26, most of them Multiply smart objects in CMYK documents, which

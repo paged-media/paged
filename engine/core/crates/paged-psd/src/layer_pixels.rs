@@ -148,7 +148,7 @@ pub struct LayerPlate {
     pub rgba: Vec<u8>,
     /// The rectangle `rgba` covers, in canvas pixels; `None` = the whole
     /// canvas.
-    pub rect: Option<image_core::Region>,
+    pub rect: Option<paged_pixel::Region>,
     /// The record's `clipping` byte: this layer is CLIPPED to the one
     /// below it. Carried across because the consumer models clipping —
     /// it did not when this importer was written, and the refusal that
@@ -235,12 +235,12 @@ pub struct MaskPlate {
     /// pixel layer's mask is kept at its plate's rectangle (ADR 464):
     /// outside it the layer is transparent, so its mask changes nothing
     /// there.
-    pub rect: Option<image_core::Region>,
+    pub rect: Option<paged_pixel::Region>,
 }
 
 impl MaskPlate {
     /// The canvas-extent mask cut to `rect` (inside the `cw`-wide canvas).
-    pub fn crop(self, cw: u32, rect: image_core::Region) -> MaskPlate {
+    pub fn crop(self, cw: u32, rect: paged_pixel::Region) -> MaskPlate {
         if self.rect.is_some() {
             return self;
         }
@@ -305,7 +305,7 @@ pub struct GroupPlate {
 /// An artboard: a rectangle of the canvas and its background.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Artboard {
-    pub rect: image_core::Region,
+    pub rect: paged_pixel::Region,
     /// `None` = transparent; else the RGB colour (white, black or the
     /// artboard's own).
     pub background: Option<[u8; 3]>,
@@ -336,7 +336,7 @@ fn artboard_of(layer: &LayerRecord, cw: u32, ch: u32) -> Result<Option<Artboard>
         n(b"Rght").clamp(0, i64::from(cw)),
         n(b"Btom").clamp(0, i64::from(ch)),
     );
-    let region = image_core::Region::new(
+    let region = paged_pixel::Region::new(
         x0 as i32,
         y0 as i32,
         (x1 - x0).max(0) as u32,
@@ -369,12 +369,12 @@ fn artboard_of(layer: &LayerRecord, cw: u32, ch: u32) -> Result<Option<Artboard>
 
 /// `px` (covering `r`) cut to `to`, which lies inside `r`.
 fn crop_rgba(
-    r: image_core::Region,
+    r: paged_pixel::Region,
     px: &[u8],
-    to: image_core::Region,
-) -> (image_core::Region, Vec<u8>) {
+    to: paged_pixel::Region,
+) -> (paged_pixel::Region, Vec<u8>) {
     if to.w == 0 || to.h == 0 {
-        return (image_core::Region::new(0, 0, 0, 0), Vec::new());
+        return (paged_pixel::Region::new(0, 0, 0, 0), Vec::new());
     }
     let mut out = Vec::with_capacity(to.w as usize * to.h as usize * 4);
     for y in to.y..to.y + to.h as i32 {
@@ -385,15 +385,15 @@ fn crop_rgba(
 }
 
 /// `a ∩ b` (an empty region when they do not meet).
-fn intersect(a: image_core::Region, b: image_core::Region) -> image_core::Region {
+fn intersect(a: paged_pixel::Region, b: paged_pixel::Region) -> paged_pixel::Region {
     let x0 = a.x.max(b.x);
     let y0 = a.y.max(b.y);
     let x1 = (a.x + a.w as i32).min(b.x + b.w as i32);
     let y1 = (a.y + a.h as i32).min(b.y + b.h as i32);
     if x1 <= x0 || y1 <= y0 {
-        image_core::Region::new(0, 0, 0, 0)
+        paged_pixel::Region::new(0, 0, 0, 0)
     } else {
-        image_core::Region::new(x0, y0, (x1 - x0) as u32, (y1 - y0) as u32)
+        paged_pixel::Region::new(x0, y0, (x1 - x0) as u32, (y1 - y0) as u32)
     }
 }
 
@@ -786,7 +786,7 @@ impl PsdFile {
             // An adjustment has no pixels of its own (its channels hold
             // an empty rect or a mask): an empty rectangle.
             // The enclosing ARTBOARDS' rectangle: what the layer is cut to.
-            let mut clip: Option<image_core::Region> = None;
+            let mut clip: Option<paged_pixel::Region> = None;
             let mut cur = group;
             while let Some(gi) = cur {
                 if let Some(a) = groups[gi].artboard {
@@ -795,7 +795,7 @@ impl PsdFile {
                 cur = groups[gi].parent;
             }
             let (rect, rgba) = if adjustment.is_some() {
-                (image_core::Region::new(0, 0, 0, 0), Vec::new())
+                (paged_pixel::Region::new(0, 0, 0, 0), Vec::new())
             } else {
                 let (r, px) = self.layer_bounded_rgba8(layer, cw, ch, ink_to_rgba8)?;
                 match clip {
@@ -1473,7 +1473,7 @@ impl PsdFile {
         cw: u32,
         ch: u32,
         ink_to_rgba8: Option<InkToRgba8<'_>>,
-    ) -> Result<(image_core::Region, Vec<u8>)> {
+    ) -> Result<(paged_pixel::Region, Vec<u8>)> {
         let cmyk = self.header.color_mode == ColorMode::Cmyk;
         if cmyk && ink_to_rgba8.is_none() {
             return Err(PsdError::Unsupported(
@@ -1489,7 +1489,7 @@ impl PsdFile {
         let y0 = i64::from(layer.top).clamp(0, i64::from(ch));
         let x1 = i64::from(layer.right).clamp(0, i64::from(cw));
         let y1 = i64::from(layer.bottom).clamp(0, i64::from(ch));
-        let rect = image_core::Region::new(
+        let rect = paged_pixel::Region::new(
             x0 as i32,
             y0 as i32,
             (x1 - x0).max(0) as u32,
@@ -1498,7 +1498,7 @@ impl PsdFile {
         if plane_len == 0 || rect.w == 0 || rect.h == 0 {
             // A degenerate rect contributes nothing — an empty layer is
             // a legal, meaningful PSD layer.
-            return Ok((image_core::Region::new(0, 0, 0, 0), Vec::new()));
+            return Ok((paged_pixel::Region::new(0, 0, 0, 0), Vec::new()));
         }
         let mut canvas = vec![0u8; rect.w as usize * rect.h as usize * 4];
         let (cw, ch) = (rect.w, rect.h);

@@ -1,0 +1,27 @@
+[package]
+name = "paged-psd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "PSD/PSB structural parse, PSD-faithful layer model, preservation-invariant writer, merged-composite decode. Plain data: no engine dependencies beyond paged-pixel."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-pixel = { path = "../paged-pixel" }
+thiserror = { workspace = true }
+# ZIP channel inflate (compression 2/3) — M1 `rendered` decode-on-demand.
+# Pure-Rust DEFLATE; verbatim `ChannelData.bytes` stays canonical.
+miniz_oxide = "0.9"
+
+[dev-dependencies]
+# Round-trip / model tests consume the INDEPENDENT fixture builder from
+# modules/image's image-conformance? No: the engine never depends on a
+# module, and conformance dev-depends on this crate. The fixtures are built
+# in image-conformance's own tests; paged-psd/tests keeps self-contained
+# byte-level cases (framing, padding, packbits) and `tests/it/support.rs`'s
+# small composite builder, which paged-raster and paged-renderer reuse
+# through the `test-support` feature.

@@ -11,7 +11,7 @@ description = "paged.image Engine A â€” demand-driven streaming pipeline (spec Â
 workspace = true
 
 [dependencies]
-image-core = { path = "../image-core" }
+image-core = { workspace = true }
 image-kernels = { path = "../image-kernels" }
 image-gpu = { path = "../image-gpu" }
 image-codecs = { path = "../image-codecs" }

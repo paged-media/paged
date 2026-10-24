@@ -64,7 +64,10 @@ Rules for every code change in this repo:
   AMENDED (ADR 466, PM-0014): the TypeScript rule stands (plugin SDK
   only); the Rust crates MAY path-depend on `engine/core/crates` for
   raster codecs, PSD, pixel types, colour and kernels. `image-core` and
-  `image-psd` are planned to move there as `paged-pixel`/`paged-psd`.
+  `image-psd` live there since WP1.2 as `paged-pixel`/`paged-psd`
+  (`engine/core/crates/`); this workspace keeps their old names through
+  `package` aliases in `Cargo.toml`, so `use image_core::…` and
+  `use image_psd::…` are unchanged. Their tests run in the engine's CI.
 - **GPU-ONLY EXECUTION (§6/§9).** One production backend: WGSL compute
   via wgpu. No CPU kernel path ships. The scalar Rust reference twins are
   TEST-ONLY (`image-kernels` feature `reference`, enabled solely by
@@ -117,7 +120,8 @@ Rules for every code change in this repo:
 manifest/            plugin manifest (media.paged.image) + panel prototypes
 glue/                the bundle: defineBundle + activate(host) + React panel
 registry/            build-consumed kernel/PSD/codec metadata (see above)
-image-core/          frozen types: PixelFormat, Tile/TileMap, Region, slices
+(engine) paged-pixel  frozen types: PixelFormat, Tile/TileMap, Region, slices
+                     (`image-core` here; engine/core/crates/paged-pixel)
 image-kernels/       KernelDef + WGSL ABI + kernel_family! (T0 families)
 image-gpu/           wgpu device, tile pool, residency, dispatch, WGSL assembly
 image-pipeline/      Engine A: lazy DAG, demand-driven ROI, op cache, sinks
@@ -126,7 +130,8 @@ image-graph/         Engine B: tiled buffer graph — store, eval, tile cache,
                      bounded, tile-granular, scoped per buffer)
 image-cms/           CmsEngine trait; qcms display backend (D-11: hybrid)
 image-codecs/        ImageSource/ImageTarget/ByteSource + adapters
-image-psd/           PSD/PSB model + parser + preservation writer
+(engine) paged-psd    PSD/PSB model + parser + preservation writer
+                     (`image-psd` here; engine/core/crates/paged-psd)
 image-js/            wasm-bindgen surface (the bundle's compute artifact) +
                      the LAYER GRAPH (layers.rs: the pixel-layer stack, its
                      compose.* fold, and the journal-backed undo)
