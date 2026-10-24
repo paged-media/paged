@@ -1226,15 +1226,25 @@ export function createCoreObjectsV70(
       return (current ?? []).map((n) => n.address);
     },
 
-    async commit(mutations) {
+    async commit(mutations, opts) {
       if (mutations.length === 0)
         return { applied: true, createdId: null, pageIds: [] };
       const m =
         mutations.length === 1
           ? mutations[0]!
           : ({ op: "batch", args: { ops: mutations } } as MutationInput);
+      const label = opts?.label?.trim() ? opts.label : undefined;
       try {
         const reply = await client().mutate(m as never);
+        // Engine ADR 1016 — the commit's one step takes the caller's name
+        // (best effort: `labelStep` names it only while it is the top).
+        if (label !== undefined && reply.kind === "mutationApplied")
+          await client()
+            .send({
+              kind: "labelStep",
+              payload: { appliedSeq: reply.payload.appliedSeq, label },
+            })
+            .catch(() => undefined);
         if (reply.kind === "mutationApplied") {
           const p = reply.payload;
           return {

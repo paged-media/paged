@@ -2813,3 +2813,41 @@ so two bundles running the same chain share the result; `actionKey` lets a calle
 
 **Tests.** The harness injects both backends; `fakeDataService` serves in-memory tables and
 answers `SELECT * FROM <table>` only, refusing other SQL rather than imitating it.
+
+## 26. Named undo steps and the History panel (engine ADR 1016, editor ADR 285 — `document.undoLog@1`)
+
+Every step of the document's undo timeline has a name, and a bundle can read the timeline,
+move along it, and name the steps it makes (protocol 77).
+
+- **Naming a step.** `document.mutate(m, { label })`, `mutateWithBytes(m, bytes, { label })`
+  and `host.objects.set(…, { label })` / `host.objects.batch(ops, { label })` name the one undo
+  step the write makes, in the caller's words ("Add caption"). The host sends the write as it
+  always did and names its step right after (the engine's `labelStep`), so a write that loses
+  a race to another keeps the default name. With `{ amend, label }` the amended step is
+  renamed; without `label` it keeps its name. A blank label keeps the engine's default, which
+  is derived from the op ("Insert text frame", "Change fill", "Move", "Multiple changes"; a
+  gesture by its kind).
+- **Reading the timeline.** `document.undoLog({ limit })` answers `UndoLog`: `undo` (oldest
+  first, the last is what an undo reverts) and `redo` (next redo first), each
+  `UndoLogStep { appliedSeq, label, key }`, plus `undoLen`, `redoLen` and the engine's
+  `depth`. `key` is the derivation key of a default (`moveFrame`, `set:frame.fillColor`,
+  `gesture:rotate`), `null` for a caller's label: a host translates the keys it knows. A read
+  (`capabilities.document.read`).
+- **Moving along it.** `document.undoTo(appliedSeq)` / `redoTo(appliedSeq)` move down to /
+  up to and including that step in one engine round trip; `false` when the step is not on
+  that log (nothing moved). Write doors (`capabilities.document.write`), like `undo` /
+  `redo`.
+- **An edit context's own history.** `EditContextContribution.historySteps?()` returns the
+  context's own list (`EditContextHistory { undo, redo, step(delta) }`, oldest first, next
+  redo first) while it is active, and `onDidChangeHistory?(listener)` (returns the
+  unsubscribe) says when it changed. The host's History panel lists it instead of the
+  document's timeline; a click calls `step(-n)` to undo `n` steps or `step(n)` to redo.
+  `supports("editContext.historySteps@1")` is true when the host's panel reads it (the
+  `editContextHistorySteps` host option).
+- **Probes.** `document.undoLog@1` (static: the worker handshake refuses an engine older than
+  the pinned protocol), `editContext.historySteps@1` (dynamic).
+- **Not in this door.** Snapshot restore (`restoreTo`, one new undo step) and the history
+  depth are the editor's (editor ADR 285); a bundle that needs them asks.
+- **Additivity.** Three `DocumentSurface` members, `label` on `MutateOptions` and `MutateWithBytesOptions`, the
+  `UndoLog` / `UndoLogStep` / `EditContextHistory` types, two optional edit-context members,
+  one host option and two flags. An older host ignores `label` and lacks the three doors.

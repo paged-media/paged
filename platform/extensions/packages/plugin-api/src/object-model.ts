@@ -642,6 +642,8 @@ export interface ObjectsSurface {
     address: Address,
     opts?: { content?: boolean },
   ): Promise<Record<string, ObjectValue>>;
+  /** `opts.label` names the undo step (engine ADR 1016; probe
+   *  `supports("document.undoLog@1")`, an older host ignores it). */
   set(
     address: Address,
     path: PropertyPathName,
@@ -649,7 +651,8 @@ export interface ObjectsSurface {
     opts?: { label?: string },
   ): Promise<ObjectWriteResult>;
   /** All-or-nothing: validated and planned before anything applies; core
-   *  ops and plugin plans land as ONE engine batch = one undo step. */
+   *  ops and plugin plans land as ONE engine batch = one undo step, named
+   *  `opts.label` when given (engine ADR 1016). */
   batch(
     ops: readonly ObjectOp[],
     opts?: { label?: string },

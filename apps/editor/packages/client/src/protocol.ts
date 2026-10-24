@@ -195,6 +195,7 @@ export type {
   GradientStopSpec,
   ColorGroupSpec,
   TocEntry,
+  UndoLogEntryWire,
   Value,
   WordBounds,
   WorkerError,

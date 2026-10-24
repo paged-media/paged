@@ -1287,6 +1287,23 @@ export function activate(host: BundleHost): BundleHandle {
       // The Edit menu reads "Undo <step>".
       undoLabel: () => session.state().history?.undoLabel ?? null,
       redoLabel: () => session.state().history?.redoLabel ?? null,
+      // Editor ADR 285 — the host's History panel lists the image's own
+      // journal while the context is active (pixel steps, which the
+      // document's timeline does not see), and a click walks it.
+      historySteps: () => {
+        const h = session.state().history;
+        if (!h) return null;
+        return {
+          undo: h.undoSteps,
+          redo: h.redoSteps,
+          step: (delta: number) =>
+            delta < 0 ? session.undoSteps(-delta) : session.redoSteps(delta),
+        };
+      },
+      onDidChangeHistory: (listener: () => void) => {
+        const sub = session.onDidChange(listener);
+        return () => sub.dispose();
+      },
       type: "rasterImage",
       entry: "doubleClick",
       // Claimed by OUR OWN METADATA, never by kind. The candidate is a
