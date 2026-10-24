@@ -185,6 +185,7 @@ function fakeSession(shown: GridScene = scene) {
       style: null,
       sizePt: 9,
     }),
+    pictureBytes: () => null,
     documentFontFace: async (family, style) => {
       calls.push(["face", family, style]);
       return null;

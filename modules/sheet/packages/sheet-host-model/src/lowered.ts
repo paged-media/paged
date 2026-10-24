@@ -289,6 +289,27 @@ export interface LoweredContent {
     hPt: number;
     prims: unknown[];
   }[];
+  /** W2.3 — the pictures anchored in this content's cells (tracks and
+   *  frame pages), each at its anchor cell plus an offset, with the image as
+   *  a `data:` URI. The page places them over the table like data bars (an
+   *  image frame each, refreshed with the table). */
+  pictures?: LoweredPicture[];
+}
+
+/** W2.3 — one picture placed over a page table (see
+ *  {@link LoweredContent.pictures}). */
+export interface LoweredPicture {
+  id: string;
+  row: number;
+  col: number;
+  /** The top-left inside the anchor cell (pt). */
+  dx: number;
+  dy: number;
+  wPt: number;
+  hPt: number;
+  inCell: boolean;
+  /** The image (`data:<type>;base64,…`). */
+  uri: string;
 }
 
 /** The `index` of a frame page's printed heading row and heading column

@@ -226,9 +226,68 @@ export interface GridScene {
   /** Sparklines in the visible cells (sheet ADR 519): each cell's box and
    *  the chart primitives drawn in it (origin the box's top-left). */
   sparklines?: GridSparkline[];
+  /** W2.3 — one clickable rect per visible linked cell. */
+  links?: GridLink[];
+  /** W2.3 — the pictures that show in the viewport. */
+  pictures?: GridPicture[];
   /** Wave 5 — the target of a fill-handle drag in progress (drawn as an
    *  outline). Absent/null when no drag. Session-side, never from Rust. */
   fillPreview?: GridSelection | null;
+}
+
+/** W2.3 — a clickable hyperlink rect (viewport-local pt; mirrors Rust
+ *  `sheet_grid::GridLink`). */
+export interface GridLink {
+  row: number;
+  col: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  url?: string;
+  location?: string;
+  tooltip?: string;
+}
+
+/** W2.3 — a picture in a grid viewport (mirrors Rust
+ *  `sheet_grid::GridPicture`): its media part (the bytes come from the
+ *  session) and its box; an image in a cell is fitted into the box. */
+export interface GridPicture {
+  id: string;
+  media: string;
+  contentType: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  inCell: boolean;
+}
+
+/** The hyperlink under a viewport-local point, or null. */
+export function linkAt(
+  scene: Pick<GridScene, "links">,
+  x: number,
+  y: number,
+): GridLink | null {
+  return (
+    scene.links?.find(
+      (l) => x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h,
+    ) ?? null
+  );
+}
+
+/** The box a picture is drawn in: its own, or for an image in a cell the
+ *  largest box of the image's aspect ratio centred in the cell. */
+export function pictureBox(
+  p: GridPicture,
+  natural?: { width: number; height: number },
+): [number, number, number, number] {
+  if (!p.inCell || !natural || natural.width <= 0 || natural.height <= 0)
+    return [p.x, p.y, p.w, p.h];
+  const k = Math.min(p.w / natural.width, p.h / natural.height);
+  const w = natural.width * k;
+  const h = natural.height * k;
+  return [p.x + (p.w - w) / 2, p.y + (p.h - h) / 2, w, h];
 }
 
 /** What a sheet frame asks the engine for (ADR 510; mirrors Rust

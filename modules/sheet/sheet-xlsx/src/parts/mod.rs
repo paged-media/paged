@@ -30,6 +30,7 @@ pub mod data_validation;
 pub mod external_link;
 pub mod freeze;
 pub mod metadata;
+pub mod pictures;
 pub mod protection;
 pub mod shared_strings;
 pub mod sparkline;

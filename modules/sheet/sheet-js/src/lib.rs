@@ -321,7 +321,7 @@ mod wasm {
             let spec: crate::core::TracksSpec = serde_wasm_bindgen::from_value(spec)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let lowered = self.session.get_tracks_page(sheet, spec).map_err(map_err)?;
-            to_js(&lowered)
+            page_to_js(&self.session, sheet, &lowered)
         }
 
         /// The page table of a frame (ADR 510): `{topRow, leftCol, widthPt,
@@ -331,7 +331,7 @@ mod wasm {
             let spec: crate::core::FramePageSpec = serde_wasm_bindgen::from_value(spec)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             let lowered = self.session.get_frame_page(sheet, spec).map_err(map_err)?;
-            to_js(&lowered)
+            page_to_js(&self.session, sheet, &lowered)
         }
 
         /// Wave 5 — the re-enterable INPUT text of every cell in `range`
@@ -802,6 +802,75 @@ mod wasm {
             to_js(&r)
         }
 
+        // ── W2.3: hyperlinks, notes, pictures (sheet ADR 526) ───────────
+
+        /// The sheet's hyperlinks: `[{sheet, range, url?, location?,
+        /// display?, tooltip?}]`.
+        pub fn list_hyperlinks(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            to_js(&self.session.list_hyperlinks(sheet).map_err(map_err)?)
+        }
+
+        /// Link `range` to `{url?, location?, display?, tooltip?}`.
+        pub fn set_hyperlink(
+            &mut self,
+            sheet: u16,
+            range: &str,
+            link: JsValue,
+        ) -> Result<(), JsValue> {
+            let link = serde_wasm_bindgen::from_value(link)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session
+                .set_hyperlink(sheet, range, link)
+                .map_err(map_err)
+        }
+
+        /// Remove every link touching `range`; returns how many.
+        pub fn remove_hyperlinks(&mut self, sheet: u16, range: &str) -> Result<u32, JsValue> {
+            self.session
+                .remove_hyperlinks(sheet, range)
+                .map_err(map_err)
+        }
+
+        /// Make the sheet's links exactly `links` (a `list_hyperlinks`
+        /// result; undo).
+        pub fn restore_hyperlinks(&mut self, sheet: u16, links: JsValue) -> Result<(), JsValue> {
+            let links = serde_wasm_bindgen::from_value(links)
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            self.session
+                .restore_hyperlinks(sheet, links)
+                .map_err(map_err)
+        }
+
+        /// Set (add or replace) the note of a cell.
+        pub fn set_note(
+            &mut self,
+            sheet: u16,
+            row: u32,
+            col: u32,
+            author: &str,
+            text: &str,
+        ) -> Result<(), JsValue> {
+            self.session
+                .set_note(sheet, row, col, author, text)
+                .map_err(map_err)
+        }
+
+        /// Delete the note of a cell; `false` when it has none.
+        pub fn delete_note(&mut self, sheet: u16, row: u32, col: u32) -> Result<bool, JsValue> {
+            self.session.delete_note(sheet, row, col).map_err(map_err)
+        }
+
+        /// The sheet's pictures in sheet points: `[{id, sheet, name, descr?,
+        /// media, contentType, x, y, w, h, inCell, row, col}]`.
+        pub fn list_pictures(&self, sheet: u16) -> Result<JsValue, JsValue> {
+            to_js(&self.session.list_pictures(sheet).map_err(map_err)?)
+        }
+
+        /// The bytes of a picture's media part.
+        pub fn picture_bytes(&self, media: &str) -> Result<Vec<u8>, JsValue> {
+            self.session.picture_bytes(media).map_err(map_err)
+        }
+
         // ── W2.5: conditional-format authoring (sheet ADR 523) ──────────
 
         /// The sheet's conditional-format rules, highest priority first:
@@ -1199,6 +1268,24 @@ mod wasm {
 
     /// Serialise a serde value to a `JsValue` (camelCase shapes are decided in
     /// the serde derives, matching the TS contract).
+    /// A page lowering with the pictures in its cells (W2.3): the content's
+    /// fields plus `pictures` (omitted when none).
+    fn page_to_js(
+        session: &crate::core::SheetSession,
+        sheet: u16,
+        content: &sheet_lower::LoweredContent,
+    ) -> Result<JsValue, JsValue> {
+        let pictures = session.page_pictures(sheet, content);
+        if pictures.is_empty() {
+            return to_js(content);
+        }
+        use serde::Serialize;
+        let ser = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        crate::core::annotations::PageContent { content, pictures }
+            .serialize(&ser)
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
     pub(crate) fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
         serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
     }

@@ -283,6 +283,20 @@ each published canary added is under [Releases](#releases).
   sets 2006 lacks, custom icons) and appends a `<dxf>` the style sheet does not have. Excel 16
   opens what Paged writes after authoring styles and conditional formats of every kind without
   a repair and keeps every rule (the open-check lane: `w2-styles`, `w2-cf`).
+- **Hyperlinks, notes and pictures** (W2.3, ADR 526). Hyperlinks are listed, set and removed
+  per range (`list_hyperlinks`, `set_hyperlink`, `remove_hyperlinks`; engine facade and session,
+  one undo step each): the worksheet's `<hyperlinks>` is rewritten with its external
+  relationships, a new link's cells take Excel's Hyperlink style, and the grid carries one
+  clickable rect per visible linked cell (`linkAt`). Notes are set and deleted (`set_note`,
+  `delete_note`) in the comments part and the VML drawing together, creating or removing the
+  parts as needed; the note of a cell with a threaded comment is refused (threads stay
+  preserved). Drawing pictures and images in cells are read (`list_pictures`, `picture_bytes`),
+  drawn in the grid (decoded once per surface, an image in a cell fitted into it) and placed
+  over a page table as image frames, refreshed with it. Excel 16 opens the results without a
+  repair (open-check: `w2-annotations-new`, `w2-annotations-edit`, `w2-notes-delete`). Not
+  built: a clickable link on the page (the wire's `insertHyperlink` has no table-cell
+  qualifier), the click behaviour in the grid, picture authoring, pictures on a paginated
+  chain.
 - **Excel named styles in the document's styles** (P7, ADR 524). "Use document styles" and a
   table from Excel named styles (Normal for the un-named cells) to document paragraph, character
   and cell styles, kept in a `styles.xml` extension and folded into every resolved cell style in

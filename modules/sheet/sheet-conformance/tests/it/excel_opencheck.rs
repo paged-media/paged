@@ -105,6 +105,50 @@ fn scenarios() -> Vec<(&'static str, &'static str, Step)> {
     // conditional formats of every kind (2006 blocks + the x14 extension).
     v.push(("w2-styles", "03-styles.xlsx", w2_styles));
     v.push(("w2-cf", "20-condfmt-all.xlsx", w2_cf));
+    // W2.3: hyperlinks and notes authored on a plain workbook, and beside
+    // the notes, threaded comment and picture of an existing one.
+    v.push(("w2-annotations-new", "01-minimal.xlsx", |s| {
+        s.set_cell(0, 4, 0, "paged.media").unwrap();
+        s.set_hyperlink(
+            0,
+            "A5",
+            sheet_js::core::annotations::HyperlinkArg {
+                url: Some("https://paged.media/?a=1&b=2".into()),
+                tooltip: Some("Open".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_hyperlink(
+            0,
+            "B5:C6",
+            sheet_js::core::annotations::HyperlinkArg {
+                location: Some("Sheet1!A1".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        s.set_note(0, 0, 0, "Paged", "A note written by Paged")
+            .unwrap();
+        s.set_note(0, 6, 3, "Reviewer", "Second <note> & more")
+            .unwrap();
+    }));
+    v.push(("w2-annotations-edit", "16-structure.xlsx", |s| {
+        s.set_note(0, 2, 1, "Paged", "Count checked").unwrap();
+        s.set_note(0, 6, 5, "Paged", "New note").unwrap();
+        s.set_hyperlink(
+            0,
+            "A1",
+            sheet_js::core::annotations::HyperlinkArg {
+                url: Some("mailto:office@example.com".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }));
+    v.push(("w2-notes-delete", "16-structure.xlsx", |s| {
+        s.delete_note(0, 2, 1).unwrap();
+    }));
     // W2.6–W2.8 and ADR 517: what Paged authors, Excel must open unrepaired.
     v.push(("w2-table-create", "01-minimal.xlsx", |s| {
         fill_sales(s);
@@ -651,6 +695,7 @@ fn inventory(bytes: &[u8]) -> String {
     let mut dv = 0;
     let mut notes = 0;
     let mut tables = 0;
+    let mut hl = 0;
     // Every conditional-format rule of the full model (x14 included).
     let cfr: usize = doc
         .cf_models
@@ -671,6 +716,7 @@ fn inventory(bytes: &[u8]) -> String {
         });
         dv += doc.data_validations_of(i).map_or(0, |d| d.rules.len());
         notes += doc.comments_of(i).map_or(0, |c| c.comments.len());
+        hl += doc.hyperlinks_of(i).len();
         tables += s.model().sheets[i as usize].tables.len();
     }
     // Every non-empty cell value of every sheet, as displayed.
@@ -719,7 +765,7 @@ fn inventory(bytes: &[u8]) -> String {
     let wbp = usize::from(doc.workbook_protection().is_some_and(|w| w.lock_structure));
     let states: String = sheets.iter().map(|x| &x.state[..1]).collect();
     format!(
-        "cf={cf} cfr={cfr} dv={dv} tables={tables} notes={notes} cells={cells} digest={digest:016x}{charts} prot={prot} wbp={wbp} af={af} outline={hidden} states={states}"
+        "cf={cf} cfr={cfr} dv={dv} tables={tables} notes={notes} hl={hl} cells={cells} digest={digest:016x}{charts} prot={prot} wbp={wbp} af={af} outline={hidden} states={states}"
     )
 }
 

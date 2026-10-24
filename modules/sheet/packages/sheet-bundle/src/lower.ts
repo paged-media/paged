@@ -78,6 +78,7 @@ import {
   tableRefreshOps,
   tableDataBarOps,
   tableDiagonalOps,
+  tablePictureOps,
   cellRotationOps,
   needsRotationStyles,
   cellAlignApplies,
@@ -562,7 +563,9 @@ async function barOps(
   // W2.2: diagonal borders are drawn page lines beside the bars (their
   // colours are the table's own cell-stroke mints).
   const diagonals = tableDiagonalOps(content, at.widths, at.pageId, at.origin);
-  if (!bars && sparks.length === 0) return diagonals;
+  // W2.3: the pictures over the table.
+  const pictures = tablePictureOps(content, at.widths, at.pageId, at.origin);
+  if (!bars && sparks.length === 0) return [...diagonals, ...pictures];
   const known = await readKnownSwatchIds(host);
   return [
     ...(bars
@@ -570,6 +573,7 @@ async function barOps(
       : []),
     ...sparklineOps(content, at, known),
     ...diagonals,
+    ...pictures,
   ];
 }
 
@@ -621,7 +625,10 @@ export function sparklineOps(
   return ops;
 }
 
-const isPolygon = (id: ElementId) => id.kind === "polygon";
+/** The page art a table's refresh replaces: drawn paths (bars, icons,
+ *  sparklines, diagonals) and picture frames (W2.3). */
+const isPolygon = (id: ElementId) =>
+  id.kind === "polygon" || id.kind === "rectangle";
 
 /** The elements an applied batch minted (`MutationOutcome.minted`, in mint
  *  order), filtered by `keep`. Empty when the batch was refused. */
@@ -2378,7 +2385,8 @@ export async function refreshLoweredTable(
   if (
     oldBars.length > 0 ||
     (next.databars ?? []).length > 0 ||
-    (next.sparklines ?? []).length > 0
+    (next.sparklines ?? []).length > 0 ||
+    (next.pictures ?? []).length > 0
   ) {
     const at = await frameOrigin(host, info.frameId);
     if (at) drawn = await barOps(host, next, { ...at, widths: nextWidths });
