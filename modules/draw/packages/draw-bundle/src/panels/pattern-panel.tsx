@@ -59,6 +59,7 @@ import {
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
+import { RecipeAutoUpdateToggle } from "./recipe-auto-update-toggle";
 import { PanelIntro, tokenLabel } from "./panel-parts";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
@@ -236,6 +237,7 @@ export function makePatternPanel(host: BundleHost): {
           summary={s.t(PATTERN_SUMMARY)}
           attr="data-draw-pattern-intro"
         />
+        <RecipeAutoUpdateToggle host={host} panel="pattern" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             {s.t(M.heading)} ({fields.length})

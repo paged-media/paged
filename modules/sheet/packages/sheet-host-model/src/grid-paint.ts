@@ -29,6 +29,7 @@ import {
   colPos,
   DEFAULT_GRID_SVG_OPTIONS,
   fillHandleRect,
+  pictureBox,
   rowAt,
   selectionRect,
   type GridScene,
@@ -74,6 +75,14 @@ export interface PaintContext {
   closePath?(): void;
   /** Rotated text (W2.2; without it rotated text is drawn upright). */
   rotate?(angle: number): void;
+  /** Pictures (W2.3; without it pictures are not drawn). */
+  drawImage?(
+    image: CanvasImageSource,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): void;
   /** Gradient fills (W2.2; without them the mean colour is drawn). */
   createLinearGradient?(
     x0: number,
@@ -151,6 +160,11 @@ export interface PaintOptions {
   partialCol?: number | null;
   grid?: Partial<GridSvgOptions>;
   heading?: Partial<HeadingStyle>;
+  /** W2.3 — the decoded image of a picture's media part, when it is ready
+   *  (a picture without one is not drawn yet). */
+  pictureImage?: (
+    media: string,
+  ) => (CanvasImageSource & { width: number; height: number }) | undefined;
 }
 
 /** One text box to draw: a cell or a merged area. */
@@ -737,6 +751,24 @@ export function paintGridScene(
       ctx.lineTo(fz.frozenWidthPt, cellH);
     }
     ctx.stroke();
+  }
+
+  // Pictures over the cells (W2.3): drawing pictures at their anchor,
+  // images in cells fitted into the cell.
+  if (ctx.drawImage && options.pictureImage) {
+    for (const p of scene.pictures ?? []) {
+      const img = options.pictureImage(p.media);
+      if (!img) continue;
+      const [x, y, w, hh] = pictureBox(p, img);
+      ctx.save();
+      if (p.inCell) {
+        ctx.beginPath();
+        ctx.rect(p.x, p.y, p.w, p.h);
+        ctx.clip();
+      }
+      ctx.drawImage(img, x, y, w, hh);
+      ctx.restore();
+    }
   }
 
   // The partly visible track past the print edge (it does not reach the page).

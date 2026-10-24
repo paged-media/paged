@@ -59,6 +59,7 @@ import {
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
+import { RecipeAutoUpdateToggle } from "./recipe-auto-update-toggle";
 import { PanelIntro, tokenLabel } from "./panel-parts";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
@@ -259,6 +260,7 @@ export function makeRepeatPanel(host: BundleHost): {
           summary={s.t(REPEAT_SUMMARY)}
           attr="data-draw-repeat-intro"
         />
+        <RecipeAutoUpdateToggle host={host} panel="repeat" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             {s.t(M.heading)} ({records.length})

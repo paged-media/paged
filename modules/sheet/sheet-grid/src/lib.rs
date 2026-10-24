@@ -110,6 +110,52 @@ pub struct GridScene {
     /// supplies them.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sparklines: Vec<GridSparkline>,
+    /// The hyperlinks over visible cells (W2.3): one clickable rect per
+    /// visible cell box of a linked range (viewport-local pt). Empty unless
+    /// the caller supplies them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<GridLink>,
+    /// The pictures that show in the viewport (W2.3): drawing pictures at
+    /// their anchor, images in cells fitted into the cell. Empty unless the
+    /// caller supplies them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pictures: Vec<GridPicture>,
+}
+
+/// One clickable hyperlink rect in a grid viewport (viewport-local pt).
+#[derive(serde::Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GridLink {
+    pub row: u32,
+    pub col: u32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    /// The external target, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The place in the workbook, when it has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<String>,
+}
+
+/// One picture drawn in a grid viewport: its media part (the bytes come
+/// from the session by that name) and its box (viewport-local pt). An image
+/// in a cell is fitted into the box keeping its aspect ratio.
+#[derive(serde::Serialize, Debug, PartialEq, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GridPicture {
+    pub id: String,
+    pub media: String,
+    pub content_type: String,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+    pub in_cell: bool,
 }
 
 /// One sparkline drawn in a grid viewport: its cell, the cell's box in
@@ -1051,6 +1097,8 @@ pub fn grid_scene_cf(
         comments,
         databars,
         sparklines: Vec::new(),
+        links: Vec::new(),
+        pictures: Vec::new(),
         icons,
         merges,
     }

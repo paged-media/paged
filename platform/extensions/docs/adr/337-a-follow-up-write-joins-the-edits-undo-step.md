@@ -49,3 +49,29 @@ an explicit update command.
 - [ADR 305](305-doors-always-present.md) — the flag is how a bundle learns the option is there.
 - [ADR 012](012-k1-modal-session-undo-coalescing.md) — coalescing a modal session's writes, the
   other way several writes become one step.
+
+## Amendment — 2026-10-23: bytes, scripts and object writes
+
+Core half: [ADR 1004, amendment of 2026-10-23](../../../../engine/core/docs/adr/1004-a-follow-up-write-can-join-the-step-that-provoked-it.md#amendment--2026-10-23-scripts-and-the-binary-lane).
+The flag `document.mutate.amend@2` says the host does all three below; `@1` stays.
+
+- **`mutateWithBytes(m, bytes, { amend })`** joins the step as `mutate`'s option does. The SDK
+  takes the editor's optional `PagedEditor.amendWithBytes` (canvas-wasm `amendWithBytesDirect`;
+  the editor client's `amendWithBytes`, the headless worker's `amendWithBytes` op), and on a host
+  without it splices `Array.from(bytes)` into the slot and sends `amendMutation`.
+- **A script run's change carries its step.** `DocumentChangeEvent.appliedSeq` is present on a
+  `scriptResult` when the reply names the run's one step; it is absent when the run moved the
+  history or an edit split it. A listener that rebuilds on edits now follows scripts too.
+- **An object write can carry a follow-up.** `ObjectWrite.followUp(step)` (`ObjectFollowUp`)
+  runs after the registry's commit with the step's `appliedSeq`, writes with
+  `mutate(…, { amend })` and answers the step's number from then on; the registry runs every
+  planner's follow-up in order, reports the final number in `outcome.appliedSeq` (and to a
+  script's tracked view), and logs a follow-up that throws without undoing the commit. This is
+  how a write whose consequences can only be planned after it committed — a recipe parameter and
+  the artwork rebuilt from it, which mints the ids the recipe records — stays one undo step.
+
+### Consequences
+
+- paged.draw's typed recipe parameter writes rebuild their artwork in the write's step, and its
+  automatic update follows a script's edits.
+- plugin-sdk / plugin-api 0.74.3-canary.15.

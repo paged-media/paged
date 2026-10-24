@@ -514,8 +514,10 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
 
   // ── D · Modification and Navigation tools ────────────────────
   // STUB — an editorial Note is a story-level annotation. The engine
-  // has no Note in its model and no wire op to create one, so this is
-  // engine-blocked rather than unbuilt. No shortcut to reserve.
+  // models notes and has the wire ops (`insertNote`, `editNote`,
+  // `deleteNote`, `convertNoteToText`; engine ADR 172), so this tool is
+  // no longer engine-blocked: it awaits its gesture handler. No shortcut
+  // to reserve.
   {
     id: "paged.tool.note",
     title: "Note",

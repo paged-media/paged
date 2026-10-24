@@ -54,7 +54,7 @@ import {
   type WorkerToMainKindLike,
 } from "@paged-media/test-kit";
 
-import { drawBundle } from "../../src";
+import { drawBundle, setRecipeAutoUpdate } from "../../src";
 
 export const META_KEY = "x-paged:media.paged.draw";
 const STATS = { hits: 0, misses: 0, len: 0, capacity: 0, rebuildMs: 0 };
@@ -584,6 +584,11 @@ export function unitRig(
         }
       : {}),
   });
+  // The automatic recipe update rebuilds in the background after a commit
+  // (a timer, not the command's own promise), so in a rig that counts a
+  // command's exact writes it is a race: off here. Its own spec runs it on
+  // the engine (test/headless/recipe-auto-update.spec.ts).
+  setRecipeAutoUpdate(host, false);
   drawBundle.activate(host);
 
   let mark = fake.mutations().length;

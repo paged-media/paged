@@ -58,6 +58,7 @@ import {
 import type { WorkbookSession } from "../session";
 import type { DataToolsApi } from "../data-tools";
 import { DataCards } from "./data-cards";
+import { usePictureImages } from "./picture-images";
 import { useDocStyleLooks, withDocumentStyles } from "./doc-style-looks";
 import {
   REF_COLORS,
@@ -77,6 +78,7 @@ export type FrameSurfaceSession = Pick<
   | "pasteAtSelection"
   | "frameView"
   | "setFrameSheet"
+  | "pictureBytes"
   | "documentFontFace"
   | "documentTextDefault"
   | "documentSwatchColors"
@@ -656,6 +658,9 @@ function SheetFrameSurfaceView({
     // (The suggestion list only shows while an edit is open.)
   }, [edit]);
 
+  // W2.3 — the pictures' decoded images (a repaint when one arrives).
+  const pictures = usePictureImages(scene, session.pictureBytes);
+
   // The grid, at screen resolution, and the formula's reference boxes.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -685,6 +690,7 @@ function SheetFrameSurfaceView({
       rowHeadingWidthPt: headW,
       widthPt: props.widthPt,
       heightPt: props.heightPt,
+      pictureImage: pictures.imageOf,
     });
     // The other areas of a multi-area selection (the current one is the
     // scene's own selection).
@@ -794,6 +800,7 @@ function SheetFrameSurfaceView({
     }
   }, [
     scene,
+    pictures,
     headH,
     props.presentation,
     props.frameBoxPt.widthPt,

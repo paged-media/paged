@@ -104,6 +104,9 @@ pub enum Allow {
     DeleteRows,
     Sort,
     AutoFilter,
+    InsertHyperlinks,
+    /// Notes and pictures (`objects`: protected when set).
+    EditObjects,
 }
 
 impl Allow {
@@ -118,6 +121,8 @@ impl Allow {
             Allow::DeleteRows => p.allow_delete_rows,
             Allow::Sort => p.allow_sort,
             Allow::AutoFilter => p.allow_auto_filter,
+            Allow::InsertHyperlinks => p.allow_insert_hyperlinks,
+            Allow::EditObjects => !p.objects,
         }
     }
 
@@ -132,6 +137,8 @@ impl Allow {
             Allow::DeleteRows => "delete rows",
             Allow::Sort => "sort",
             Allow::AutoFilter => "filter",
+            Allow::InsertHyperlinks => "insert hyperlinks",
+            Allow::EditObjects => "edit objects",
         }
     }
 }

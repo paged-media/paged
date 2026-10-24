@@ -105,6 +105,8 @@ plugin platform has.
 
 _Status note (2026-10-02): this section predates the implementation; see [ADR 460](adr/460-document-is-not-the-store.md) (edits live in the plugin session and leave through save-back, not as document Operations) and, in plugin-sdk, [ADR 315](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/315-isolation-contract.md) (the isolation contract) and [ADR 319](https://github.com/paged-media/paged/blob/main/platform/extensions/docs/adr/319-trust-line.md) (first-party bundles run in-process; the glue here is a TypeScript bundle, not Boa-side script)._
 
+_Amended 2026-10-24 by [ADR 466](adr/466-core-raster-crates-are-shared.md) ([PM-0014](../../../docs/adr/PM-0014-capability-layering.md)): item 1 holds for the TypeScript glue (plugin SDK only); the Rust crates may path-depend on `engine/core` crates for raster codecs, PSD, pixel types, colour and kernels._
+
 1. **Zero core contact.** No imports from `core/` or `editor/` internals, no
    patched Paged builds, no feature flags inside Paged existing for this
    plugin. CI builds against _published_ SDK canaries only; a build that

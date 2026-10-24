@@ -22,15 +22,14 @@
 //! (`relationships/comments`). The part holds an `<authors>` table + a
 //! `<commentList>` of `<comment ref authorId>` with rich `<text>` runs.
 //!
-//! ## Preserve-first (spec §10.2), display read-only
+//! ## Preserve-first (spec §10.2), the display model read-only
 //!
-//! The `commentsN.xml` part + its companion `vmlDrawing*.vml` stay OPAQUE OPC
-//! parts (never promoted), so they re-emit BYTE-IDENTICAL on round-trip. This
+//! An untouched `commentsN.xml` part + its companion `vmlDrawing*.vml` stay
+//! OPAQUE OPC parts, so they re-emit BYTE-IDENTICAL on round-trip. This
 //! module ADDITIVELY parses the comment list into a read-only model so the grid
-//! can show an indicator + the panel can list comment text on hover. AUTHORING
-//! is preserve-first (T0): we read + display, we never rewrite the part. The
-//! parse is read-only derived state (the same discipline as the chart/cf
-//! models).
+//! can show an indicator + the panel can list comment text on hover. Notes
+//! are authored by [`crate::comment_edit`] (sheet ADR 526), which writes the
+//! comment and its VML shape together and re-parses this model.
 //!
 //! Threaded comments (the modern `xl/threadedComments/*` parts + persons) are
 //! ALSO preserved opaquely; v0 reads the legacy `<comments>` list (the

@@ -1925,6 +1925,16 @@ pub struct CanvasModel {
     /// `applied_log`, cleared by an undo and a redo. An entry a redo put
     /// back, or one an undo uncovered, is never amendable.
     amend_anchor: Option<u64>,
+    /// Engine ADR 1004 (amendment 2026-10-23) — `(folded, amended)`: the
+    /// seq an amend gave a step, and the seq the step had before. A script
+    /// session reported the seq of a host commit made while it waited; when
+    /// a follow-up write amended that commit before the script resumed, the
+    /// fold must still know the step for the script's own. Newest last,
+    /// capped at [`AMEND_ORIGINS_CAP`].
+    amend_origins: Vec<(u64, u64)>,
+    /// How many undos and redos ran (engine ADR 1004 amendment): a run
+    /// of writes that moved the history is not one step an amend may join.
+    history_moves: u64,
     /// Phase 4 Step 1 — persistent per-paragraph layout cache.
     /// Installed on every rebuild via `paged_text::cache::with_layout_cache`
     /// so unchanged paragraphs short-circuit Knuth-Plass on
@@ -2389,6 +2399,25 @@ fn line_setting_entries(
 /// cap to each child as it logged, mid-batch).
 pub const MAX_APPLIED_LOG: usize = 10_000;
 
+/// Every seq a step numbered `applied_seq` was known by, newest first
+/// (see [`CanvasModel::amend_lineage`]).
+fn lineage(origins: &[(u64, u64)], applied_seq: u64) -> Vec<u64> {
+    let mut out = vec![applied_seq];
+    let mut seq = applied_seq;
+    // Newest first: an amend of an amended step was recorded later.
+    for &(folded, amended) in origins.iter().rev() {
+        if folded == seq {
+            out.push(amended);
+            seq = amended;
+        }
+    }
+    out
+}
+
+/// How many amend renumberings the model remembers (engine ADR 1004
+/// amendment): enough for every step a waiting script can have committed.
+const AMEND_ORIGINS_CAP: usize = 256;
+
 /// One entry in the applied / redo logs.
 ///
 /// Phase B — generalized to hold both text edits (legacy `TextOp`
@@ -2679,6 +2708,8 @@ impl CanvasModel {
             applied_log: Vec::new(),
             redo_log: Vec::new(),
             amend_anchor: None,
+            amend_origins: Vec::new(),
+            history_moves: 0,
             layout_cache,
             story_pages,
             // Perf-S — cache populated by the initial build_document
@@ -5946,6 +5977,7 @@ impl CanvasModel {
     pub fn undo(&mut self) -> Option<UndoOutcome> {
         let rec = self.applied_log.pop()?;
         self.amend_anchor = None;
+        self.history_moves += 1;
         let mut invalidation = Invalidation::Everything;
         let affected_story_id = match &rec.kind {
             LoggedMutation::Text { op: _, inverse } => {
@@ -6006,6 +6038,7 @@ impl CanvasModel {
     pub fn redo(&mut self) -> Option<UndoOutcome> {
         let rec = self.redo_log.pop()?;
         self.amend_anchor = None;
+        self.history_moves += 1;
         let mut invalidation = Invalidation::Everything;
         let (new_kind, affected_story_id) = match &rec.kind {
             LoggedMutation::Text { op, inverse: _ } => {
@@ -6089,7 +6122,8 @@ impl CanvasModel {
     /// a run: it is never swallowed into the script's step, and the
     /// script's writes on either side of it stay separate steps, so undo
     /// still reverses edits in the order they were made. Returns how many
-    /// records were folded away.
+    /// records were folded away. A step a follow-up write amended (engine
+    /// ADR 1004) is claimed by any seq it was known by.
     pub fn group_undo_runs_since(&mut self, mark: u64, is_own: impl Fn(u64) -> bool) -> usize {
         let start = self
             .applied_log
@@ -6115,7 +6149,12 @@ impl CanvasModel {
             }
         };
         for rec in tail {
-            if is_own(rec.applied_seq) {
+            // A step a follow-up write amended carries the amend's seq; it
+            // is the script's own when any seq it was known by is.
+            let own = lineage(&self.amend_origins, rec.applied_seq)
+                .into_iter()
+                .any(&is_own);
+            if own {
                 run.push(rec);
             } else {
                 flush(&mut self.applied_log, &mut run);
@@ -6161,6 +6200,15 @@ impl CanvasModel {
             return;
         }
         let records: Vec<AppliedRecord> = self.applied_log.drain(base - 1..).collect();
+        if let Some(first) = records.first() {
+            if first.applied_seq != applied_seq {
+                self.amend_origins.push((applied_seq, first.applied_seq));
+                if self.amend_origins.len() > AMEND_ORIGINS_CAP {
+                    let excess = self.amend_origins.len() - AMEND_ORIGINS_CAP;
+                    self.amend_origins.drain(..excess);
+                }
+            }
+        }
         let mut children = Vec::new();
         for rec in records {
             match rec.kind {
@@ -6176,6 +6224,39 @@ impl CanvasModel {
         self.applied_log.push(AppliedRecord { applied_seq, kind });
         self.redo_log.clear();
         self.amend_anchor = Some(applied_seq);
+    }
+
+    /// How many undos and redos have run on this model (engine ADR 1004
+    /// amendment): a script compares it before and after, and a run that
+    /// moved the history reports no step to amend.
+    pub fn history_moves(&self) -> u64 {
+        self.history_moves
+    }
+
+    /// Engine ADR 1004 (amendment 2026-10-23) — every seq the step now
+    /// numbered `applied_seq` was known by: itself, then the seq it had
+    /// before each amend, oldest last. A step never amended answers itself.
+    pub fn amend_lineage(&self, applied_seq: u64) -> Vec<u64> {
+        lineage(&self.amend_origins, applied_seq)
+    }
+
+    /// Engine ADR 1004 (amendment 2026-10-23) — the step a run of writes
+    /// that began after `mark` ended in, when it is ONE step a follow-up
+    /// write may still join: the only undo entry logged after `mark`, at
+    /// the top of the log, put there by a forward write with no undo or
+    /// redo since. `None` otherwise (nothing logged, several steps, a
+    /// history move). A script reply reports it, so the change it made can
+    /// be amended as an edit's can.
+    pub fn sole_step_since(&self, mark: u64) -> Option<u64> {
+        let top = self.applied_log.last()?;
+        if self.amend_anchor != Some(top.applied_seq) || top.applied_seq <= mark {
+            return None;
+        }
+        let below = self.applied_log.len().checked_sub(2);
+        if below.is_some_and(|i| self.applied_log[i].applied_seq > mark) {
+            return None;
+        }
+        Some(top.applied_seq)
     }
 
     /// Engine ADR 1004 — apply `mutation` as part of the undo entry

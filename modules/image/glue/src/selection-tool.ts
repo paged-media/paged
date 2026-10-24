@@ -125,8 +125,8 @@ export function makeSelectionGesture(
       const mode = modeFromModifiers(e.modifiers);
       const point = pageToImage(e.pagePoint);
       if (kind === "wand") {
-        // Click tool: commit immediately (tolerance = the documented v0
-        // default; see selection-machine.ts).
+        // Click tool: commit immediately, with the tolerance and
+        // contiguity the tool options carry.
         if (machine.wand(point, mode)) session.refreshSelection();
       } else if (kind === "polygon") {
         // POLYGONAL LASSO is click-driven, not drag-driven: each press

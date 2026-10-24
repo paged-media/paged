@@ -71,6 +71,7 @@ import {
   Refusal,
   useActionFeedback,
 } from "@paged-media/panel-kit";
+import { RecipeAutoUpdateToggle } from "./recipe-auto-update-toggle";
 import { PanelIntro, tokenLabel } from "./panel-parts";
 import { defineMessages, t, useStrings } from "@paged-media/strings";
 
@@ -322,6 +323,7 @@ export function makeBlendPanel(host: BundleHost): {
         data-draw-blend-active={active ?? ""}
       >
         <PanelIntro summary={s.t(BLEND_SUMMARY)} attr="data-draw-blend-intro" />
+        <RecipeAutoUpdateToggle host={host} panel="blend" />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             {s.t(M.heading)} ({records.length})

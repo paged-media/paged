@@ -1,9 +1,10 @@
 # Status
 
-What `paged.draw` ships and what it does not, read from the code on `main` at
-`@paged-media/draw` 0.1.0-canary.20 (published; manifest version 0.5.0). The bundle declares
-`@paged-media/plugin-api` and `@paged-media/plugin-sdk` `>=0.2.55-canary.0` as peers; its
-tests run against `@paged-media/canvas-wasm` 0.71.8. Every shipped item is registered by
+What `paged.draw` ships and what it does not, read from the code on `main`, 2026-10-24, at
+`@paged-media/draw` 0.1.0-canary.20 (a private workspace package; manifest version 0.5.0). The
+bundle takes `@paged-media/plugin-api` and `@paged-media/plugin-sdk` from the workspace as peers;
+its tests run against the in-tree `@paged-media/canvas-wasm` (`0.<protocol>.0-dev`, built by
+`moon run core:wasm-pkg`). Every shipped item is registered by
 `activate(host)`. How the parts fit is in [`architecture.md`](architecture.md); what each
 canary added is under [Releases](#releases).
 
@@ -159,14 +160,23 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   fingerprint moved; it runs once per commit, never per pointer move. When the edit is no
   longer the last step by the time the rebuild writes, the engine refuses it and the log says
   to run Update linked recipes. It needs `supports("document.mutate.amend@1")`; it is on by
-  default, and the bundle's storage key `recipes.autoUpdate` set to `false` turns it off
-  (`setRecipeAutoUpdate`; there is no settings panel). A script run is not followed by a
-  rebuild (its reply carries no step to join), and the recipe record a rebuild writes is a
-  container part, outside the step, as every command-lane recipe write is
+  default. The checkbox "Update automatically when a source changes" at the top of the
+  Pattern, Repeat, Blend, Objects on path and Live paint panels turns it off and on (the
+  bundle's storage key `recipes.autoUpdate`, `setRecipeAutoUpdate`; one per-user setting, so
+  every panel shows the same value; hidden on a host that cannot amend). A script's edits are
+  followed too: a run is one undo step and its reply names it (`document.mutate.amend@2`,
+  engine ADR 1004 amendment), so the rebuild joins the script's step; a rebuild that loses the
+  race to the script's next write is retried on the script's reply, and a run that called
+  `paged.undo()` is only fingerprinted. The recipe record a rebuild writes is a container
+  part, outside the step, as every command-lane recipe write is
   (`commands/recipe-auto-update.ts`).
-- **A recipe write changes the recipe, not the artwork.** The artwork follows on the typed
-  update command (`updateRepeat`, `updateBlend`, `editPatternField`, `regenerateLivePaint`,
-  `updateObjectsOnPath`): two undo steps, because an update mints new ids.
+- **A recipe parameter write rebuilds the artwork in the same undo step.** The write commits
+  the parameters (the document label), and its follow-up (`ObjectWrite.followUp`, extensions
+  ADR 337 amendment) runs the recipe's update with every mutation amending that step: one undo
+  restores the old parameters and the old artwork. A name write rebuilds nothing. With the
+  automatic update off, or on a host that cannot amend, the write changes the recipe only and
+  the artwork follows on the typed update command (`updateRepeat`, `updateBlend`,
+  `editPatternField`, `regenerateLivePaint`, `updateObjectsOnPath`) as a step of its own.
 - **Two libraries in one batch are refused**: they share the one document label.
 
 ### Template fields
@@ -238,8 +248,9 @@ panel of these rows. The fields:
 
 - **What updates itself.** Editing a source rebuilds the patterns, repeats, blends,
   objects on a path and live-paint fills it feeds, in the edit's undo step (above). Symbol
-  instances do not follow a changed definition until Redefine or Reset, and a script's edits
-  are not followed (run `updateLinkedRecipes`). Recipe and library
+  instances do not follow a changed definition until Redefine or Reset. A script's edits are
+  followed unless the run called `paged.undo()` / `paged.redo()` or an edit split it (run
+  `updateLinkedRecipes` then). Recipe and library
   writes made by a COMMAND are not undoable (a make or update records the ids its own batch
   minted, so the recipe can only be written after it); writes through the object model are
   (below). Both need a host with `storage.parts@1`.
