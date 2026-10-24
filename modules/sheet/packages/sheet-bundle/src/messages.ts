@@ -423,6 +423,19 @@ export const DATASETS = defineMessages("sheet.datasets", {
   use: "Use",
   honesty:
     "A sheet made from a dataset is a snapshot saved with the document; choose Update when a newer revision is available.",
+  tablesKicker: "Document data",
+  tablesEmpty:
+    "No tables. Import a source in paged.data, and its tables appear here to edit.",
+  edit: "Edit",
+  view: "View",
+  editTitle:
+    "Open this table as the workbook; edits to its cells are written back to the table",
+  viewTitle:
+    "Open this derived table as the workbook; change it through its source tables",
+  derived: " · derived",
+  editing: " · editing",
+  tablesHonesty:
+    "A table edited here is the document's data: a changed cell is written to the table, and bindings over it update at the next refresh.",
 });
 
 /** Template field kinds and their refusals. */
