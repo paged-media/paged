@@ -15,6 +15,7 @@ import type {
   DataBindingSpec,
   DataChange,
   DataEvaluation,
+  DataPipelineStep,
   DataPlacement,
   DataRowEdit,
   DataService,
@@ -22,7 +23,7 @@ import type {
   ProviderRecordSet,
 } from "@paged-media/plugin-api";
 
-import { checkQuery, trimSql } from "./query/sql";
+import { checkQuery, tablesRead, trimSql } from "./query/sql";
 import type { QueryHandle } from "./query/store";
 
 /** What the door needs of the session. */
@@ -32,6 +33,24 @@ export interface DataDoorDeps {
   queries(): readonly { id: string; sql: string }[];
   /** The transforms' derived tables (data ADR 562), in run order. */
   transforms(): readonly string[];
+  /** The transforms as the engine keeps them (data ADR 562), in run order. */
+  transformDefs(): readonly {
+    id: string;
+    inputs: readonly string[];
+    source: string;
+    params?: Record<string, unknown>;
+  }[];
+  /** A transform's or a query's outcome at the last run: its rows, or why
+   *  it gave none. Undefined before it ran. */
+  lastRun(id: string): { rowCount?: number; error?: string } | undefined;
+  /** Define or replace a transform; the reason when refused, else null. */
+  defineTransform(def: {
+    id: string;
+    inputs: string[];
+    source: string;
+    params?: Record<string, unknown>;
+  }): Promise<string | null>;
+  removeTransform(id: string): Promise<boolean>;
   addPropertyBinding(
     id: string,
     spec: DataBindingSpec,
@@ -248,6 +267,86 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
           `no query "${query}" (a placed field reads a query's records)`,
         );
       return deps.place(target, query, field);
+    },
+    async pipeline() {
+      const d = await store();
+      const steps: DataPipelineStep[] = [];
+      const count = async (name: string) =>
+        Number(
+          (
+            await d.queryRecords(
+              `SELECT count(*) AS n FROM "${name.replace(/"/g, '""')}"`,
+            )
+          ).columns[0]?.[0] ?? 0,
+        );
+      const sources = deps.sourceNames();
+      for (const id of sources) {
+        try {
+          steps.push({
+            id,
+            kind: "source",
+            inputs: [],
+            rowCount: await count(id),
+          });
+        } catch (err) {
+          steps.push({
+            id,
+            kind: "source",
+            inputs: [],
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+      const transforms = deps.transformDefs();
+      for (const t of transforms) {
+        const run = deps.lastRun(t.id);
+        steps.push({
+          id: t.id,
+          kind: "transform",
+          inputs: [...t.inputs],
+          source: t.source,
+          ...(t.params && Object.keys(t.params).length > 0
+            ? { params: { ...t.params } }
+            : {}),
+          ...(run?.rowCount !== undefined ? { rowCount: run.rowCount } : {}),
+          ...(run?.error !== undefined ? { error: run.error } : {}),
+        });
+      }
+      // What a query reads: the tables its FROM and JOIN items name that
+      // are tables of the store (a CTE's own name is not).
+      const known = new Set([...sources, ...transforms.map((t) => t.id)]);
+      for (const q of deps.queries()) {
+        const run = deps.lastRun(q.id);
+        const refused = checkQuery(q.sql);
+        steps.push({
+          id: q.id,
+          kind: "query",
+          inputs: tablesRead(q.sql).filter((t) => known.has(t)),
+          sql: q.sql,
+          ...(run?.rowCount !== undefined ? { rowCount: run.rowCount } : {}),
+          ...(refused
+            ? { error: refused.message }
+            : run?.error !== undefined
+              ? { error: run.error }
+              : {}),
+        });
+      }
+      return steps;
+    },
+    async defineTransform(def) {
+      const refused = await deps.defineTransform({
+        id: def.id,
+        inputs: [...def.inputs],
+        source: def.source,
+        ...(def.params ? { params: { ...def.params } } : {}),
+      });
+      if (refused) throw new Error(refused);
+      door.touched(def.id);
+    },
+    async removeTransform(id) {
+      const removed = await deps.removeTransform(id);
+      if (removed) door.touched(id);
+      return removed;
     },
     async placements() {
       const out: DataPlacement[] = [];

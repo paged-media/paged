@@ -179,6 +179,17 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   repeated/continued header options now reach the paginator (before, every caller paginated
   with both on). Not offered, because the engine has none: keep-together of a group, a break
   before a group, per-group footers other than one aggregate row, the header height (16 pt).
+- **The pipeline** (2026-10-24; the Data panel's Pipeline view, editor ADR 291, over
+  [ADR 562](adr/562-transforms-are-javascript-over-tables.md)). The data door serves
+  `pipeline()`: each source, transform and query in refresh order, with the tables it reads
+  (a query's FROM and JOIN tables, read by the guard's own walk, `tablesRead` in
+  `src/query/sql.ts`), a transform's source and parameters, a query's SQL, and the rows or the
+  error of its last run (a guard refusal included). `defineTransform` refuses with the reason
+  (a name that is not a table name, or is a source's or a query's; an empty source; an input
+  that is not a source or a transform running before it; parameters that are not an object),
+  and a transform defined through the door runs at once, so its step shows its rows or its
+  error before the queries are refreshed. A define or a remove is announced as a change of the
+  transform's table.
 - **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.
