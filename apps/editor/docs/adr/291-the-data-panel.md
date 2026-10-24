@@ -107,3 +107,16 @@ Query), place (drag a field header onto a frame, or right-click any property).
   parameters as JSON and its source in the code editor) and applied; the service's refusal is
   shown inline. **New transform** makes one, and Remove (with `removeTransform`) drops it. The
   view is `apps/canvas/src/panels/data-pipeline.tsx`.
+- Amended 2026-10-24: **picture columns** (data ADR 563). When the service offers
+  `assetColumns` and `setAssetColumn`, a query table's toolbar has "Picture column…" and a
+  right-click on a field header opens it for that field (`apps/canvas/src/panels/data-asset-column.tsx`).
+  It sets the base URL a relative reference resolves against and builds the column's chain from
+  the registered actions (`actions@1`, extensions ADR 344) that take an asset and give one: add,
+  reorder, remove, and each step's parameters as fields over the action's defaults, or as a JSON
+  object when it declares none. An action in a saved chain that is not registered now is kept
+  and said so. Save hands the column to the service, which refuses an unknown query or field;
+  Clear undeclares it; an asset column's header carries a "picture" mark with its step count.
+  The editor's surfaces read the action registry through the shell's actions store
+  (`setRegisteredActionsSource`, `useRegisteredActions`), which the app points at the one shared
+  registry. The registry announces no registrations, so the store reads the list at each render
+  and keeps it while it is unchanged. The pipeline view stays for later.

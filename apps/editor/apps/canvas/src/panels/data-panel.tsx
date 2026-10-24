@@ -65,6 +65,12 @@ import {
   type SortKey,
 } from "./data-grid-model";
 import { DataPipeline, offersPipeline, PipelineToggle } from "./data-pipeline";
+import {
+  AssetColumnEditor,
+  AssetColumnMarker,
+  PictureColumnToggle,
+  useAssetColumns,
+} from "./data-asset-column";
 
 const M = defineMessages("app.dataPanel", {
   startTitle: "Put data in the document",
@@ -320,6 +326,9 @@ function Grid({
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(300);
   const scroller = useRef<HTMLDivElement | null>(null);
+  // Data ADR 563: the field whose picture column editor is open.
+  const assets = useAssetColumns(service, table);
+  const [picture, setPicture] = useState<string | null>(null);
 
   const fields = table.schema.fields;
   const visible = fields.filter((f) => !hidden.has(f.name));
@@ -458,7 +467,30 @@ function Grid({
         >
           {t(M.columns)}
         </button>
+        {assets && fields.length > 0 && (
+          <PictureColumnToggle
+            open={picture !== null}
+            onToggle={() =>
+              setPicture(
+                picture !== null
+                  ? null
+                  : ([...assets.keys()][0] ?? fields[0]!.name),
+              )
+            }
+          />
+        )}
       </div>
+      {assets && picture !== null && (
+        <AssetColumnEditor
+          key={`${picture}:${assets.has(picture)}`}
+          service={service}
+          table={table}
+          field={picture}
+          column={assets.get(picture)}
+          onField={setPicture}
+          onClose={() => setPicture(null)}
+        />
+      )}
       {showColumns && (
         <div
           data-data-columns=""
@@ -640,6 +672,11 @@ function Grid({
                   if (e.detail > 1) return;
                   setSort(nextSort(sort, f.name, e.shiftKey));
                 }}
+                onContextMenu={(e) => {
+                  if (!assets) return;
+                  e.preventDefault();
+                  setPicture(f.name);
+                }}
                 onDoubleClick={() => {
                   if (n === 0) return;
                   void selectPlaced(
@@ -680,6 +717,9 @@ function Grid({
                 >
                   {f.ty}
                 </span>
+                {assets?.has(f.name) && (
+                  <AssetColumnMarker column={assets.get(f.name)!} />
+                )}
                 {s >= 0 && (
                   <span
                     style={muted}
