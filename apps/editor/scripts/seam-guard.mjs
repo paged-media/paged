@@ -74,20 +74,6 @@ const SEAMS = [
       "waits on a constrain CONVENTION (which dimension leads, and how it interacts with the reference point), not on a wire op — there is nothing for the engine to ship that would resolve it",
   },
   {
-    text: "Page — awaiting engine support",
-    op: "alignToPage",
-  },
-  {
-    text: "Margins — awaiting engine support",
-    op: "alignToMargins",
-  },
-  {
-    // The Align panel's third scope; a message since E10, so the quoted
-    // text now reads as a seam string, as Page and Margins do.
-    text: "Spread — awaiting engine support",
-    op: "alignToSpread",
-  },
-  {
     text: "{hint} — awaiting engine support",
     reason:
       "the Pathfinder panel's per-op hints: a MESSAGE with a {hint} parameter, so the seam text is per-row and the op it waits on differs by row. The individual ops are covered by the capability matrix through pathfinder-panel's own spec rather than by a string match here",

@@ -5,14 +5,15 @@
 // nor a GPU.
 //
 // The format is the engine's (image-js/src/layers_persist.rs): a compact
-// manifest plus the buffers it names by slot. Versions 1–3 are read;
-// version 3 is written. `writePgil(readPgil(m, b))` reproduces the
+// manifest plus the buffers it names by slot. Versions 1–4 are read;
+// version 4 is written (fill layers, typed adjustment layers, the
+// Photoshop-parity properties and layer comps). `writePgil(readPgil(m, b))` reproduces the
 // engine's own export byte for byte, including the slot order — the
 // object-model spec proves that against the real wasm, so a drift in
 // either codec fails there rather than in a document.
 
 const MAGIC = [0x50, 0x47, 0x49, 0x4c]; // "PGIL"
-export const PGIL_VERSION = 3;
+export const PGIL_VERSION = 4;
 
 export interface PgilRect {
   x: number;
@@ -34,9 +35,82 @@ export interface PgilGroup {
   maskEnabled: boolean;
   /** Canvas-sized coverage, one byte per pixel. */
   mask: Uint8Array | null;
+  /** The colour label (0 none … 7 gray). */
+  color: number;
 }
 
-export type PgilLayerKind = "pixels" | "adjustment" | "smart";
+export type PgilLayerKind = "pixels" | "adjustment" | "smart" | "fill";
+
+/** A TYPED adjustment layer's payload (kind code 4): `Adjustment::values`
+ *  of `kind`, a Color Lookup's cube and look name. */
+export interface PgilTyped {
+  kind: string;
+  values: Float32Array;
+  blob: Float32Array;
+  label: string;
+}
+
+/** A FILL layer's payload (kind code 3): `FillSource::values` of `kind`,
+ *  a pattern's tile (straight RGBA8) and name, and whether its render is
+ *  due. */
+export interface PgilFill {
+  kind: string;
+  values: Float32Array;
+  tile: Uint8Array | null;
+  tileWidth: number;
+  tileHeight: number;
+  name: string;
+  stale: boolean;
+}
+
+/** The Photoshop-parity properties (version 4's per-layer block). */
+export interface PgilExt {
+  fillOpacity: number;
+  /** 0 none, 1 shallow, 2 deep. */
+  knockout: number;
+  /** Bits: 1 transparency, 2 position, 4 all. */
+  locks: number;
+  color: number;
+  link: number | null;
+  /** Blend If's 32 sliders, or null. */
+  blendIf: Uint8Array | null;
+  /** Bytes a later version appended (kept as they are). */
+  tail: Uint8Array;
+}
+
+/** A layer comp's record of one layer. */
+export interface PgilCompEntry {
+  id: number;
+  visible: boolean;
+  pixels: Uint8Array | null;
+  depth: 8 | 16;
+  rect: PgilRect | null;
+  appearance: {
+    opacity: number;
+    fillOpacity: number;
+    blend: string;
+    knockout: number;
+    blendIf: Uint8Array | null;
+  } | null;
+}
+
+export interface PgilComp {
+  id: number;
+  name: string;
+  /** Bits: 1 visibility, 2 position, 4 appearance. */
+  flags: number;
+  entries: PgilCompEntry[];
+}
+
+export const DEFAULT_EXT: Readonly<PgilExt> = {
+  fillOpacity: 1,
+  knockout: 0,
+  locks: 0,
+  color: 0,
+  link: null,
+  blendIf: null,
+  tail: new Uint8Array(0),
+};
 
 export interface PgilSmart {
   width: number;
@@ -67,9 +141,13 @@ export interface PgilLayer {
   mask: Uint8Array | null;
   /** A bounded mask's rectangle and the coverage outside it. */
   maskRect: (PgilRect & { outside: number }) | null;
-  /** An adjustment layer's `AdjustParams::to_wire` block. */
+  /** A CHAIN adjustment layer's `AdjustParams::to_wire` block. */
   adjust: Float32Array | null;
+  /** A typed adjustment layer (an `adjustment` with no `adjust` block). */
+  typed: PgilTyped | null;
+  fill: PgilFill | null;
   smart: PgilSmart | null;
+  ext: PgilExt;
 }
 
 export interface PgilStack {
@@ -81,6 +159,7 @@ export interface PgilStack {
   groups: PgilGroup[];
   /** Bottom-first. */
   layers: PgilLayer[];
+  comps: PgilComp[];
 }
 
 class Reader {
@@ -111,6 +190,16 @@ class Reader {
     const at = this.need(n);
     return this.b.subarray(at, at + n);
   };
+  f32s = () => {
+    const n = this.u32();
+    const out = new Float32Array(n);
+    for (let k = 0; k < n; k++) out[k] = this.f32();
+    return out;
+  };
+  /** A length-prefixed block, read as a manifest of its own. */
+  block = () => new Reader(this.bytes(this.u32()));
+  rest = () => this.bytes(this.b.length - this.at);
+  blendIf = () => (this.u8() === 0 ? null : this.bytes(32).slice());
 }
 
 class Writer {
@@ -136,6 +225,16 @@ class Writer {
     this.raw(b);
   };
   done = () => Uint8Array.from(this.chunks);
+  f32s = (v: ArrayLike<number>) => {
+    this.u32(v.length);
+    for (let k = 0; k < v.length; k++) this.f32(v[k]!);
+  };
+  blendIf = (b: Uint8Array | null) => {
+    if (b) {
+      this.u8(1);
+      this.raw(b);
+    } else this.u8(0);
+  };
 }
 
 /** Decode a manifest and resolve its slots against `buffers`. Throws a
@@ -179,6 +278,11 @@ export function readPgil(
       const slot = opt(r.i64());
       mask = slot === null ? null : buf(slot);
     }
+    let color = 0;
+    if (version >= 4) {
+      const e = r.block();
+      color = Math.min(7, e.u8());
+    }
     groups.push({
       id,
       name,
@@ -189,6 +293,7 @@ export function readPgil(
       parent,
       maskEnabled,
       mask,
+      color,
     });
   }
   const layers: PgilLayer[] = [];
@@ -230,6 +335,8 @@ export function readPgil(
     const mask = maskSlot === null ? null : buf(maskSlot);
     let kind: PgilLayerKind;
     let adjust: Float32Array | null = null;
+    let typed: PgilTyped | null = null;
+    let fill: PgilFill | null = null;
     let smart: PgilSmart | null = null;
     if (kindCode === 0) kind = "pixels";
     else if (kindCode === 1) {
@@ -243,7 +350,46 @@ export function readPgil(
         sh = r.u32(),
         scale = r.f32();
       smart = { width: sw, height: sh, scale, source: buf(r.u32()) };
+    } else if (kindCode === 3 && version >= 4) {
+      kind = "fill";
+      const fk = r.str();
+      const values = r.f32s();
+      const tileSlot = opt(r.i64());
+      const tileWidth = r.u32(),
+        tileHeight = r.u32();
+      const fname = r.str();
+      const stale = r.u8() !== 0;
+      fill = {
+        kind: fk,
+        values,
+        tile: tileSlot === null ? null : buf(tileSlot),
+        tileWidth,
+        tileHeight,
+        name: fname,
+        stale,
+      };
+    } else if (kindCode === 4 && version >= 4) {
+      kind = "adjustment";
+      typed = {
+        kind: r.str(),
+        values: r.f32s(),
+        blob: r.f32s(),
+        label: r.str(),
+      };
     } else throw new Error(`layer manifest: layer kind ${kindCode}`);
+    let ext: PgilExt = { ...DEFAULT_EXT };
+    if (version >= 4) {
+      const e = r.block();
+      ext = {
+        fillOpacity: e.f32(),
+        knockout: e.u8(),
+        locks: e.u8(),
+        color: e.u8(),
+        link: opt(e.i64()),
+        blendIf: e.blendIf(),
+        tail: e.rest().slice(),
+      };
+    }
     layers.push({
       id,
       name,
@@ -262,13 +408,54 @@ export function readPgil(
       mask,
       maskRect,
       adjust,
+      typed,
+      fill,
       smart,
+      ext,
     });
   }
-  return { version, width, height, active, nextId, groups, layers };
+  const comps: PgilComp[] = [];
+  if (version >= 4) {
+    for (let n = r.u32(), i = 0; i < n; i++) {
+      const id = r.u32();
+      const name = r.str();
+      const flags = r.u8();
+      const entries: PgilCompEntry[] = [];
+      for (let m = r.u32(), k = 0; k < m; k++) {
+        const lid = r.u32();
+        const visible = r.u8() !== 0;
+        const slot = opt(r.i64());
+        const depth = r.u8() === 16 ? 16 : 8;
+        const x = r.i32(),
+          y = r.i32(),
+          w = r.u32(),
+          h = r.u32();
+        const appearance =
+          r.u8() === 0
+            ? null
+            : {
+                opacity: r.f32(),
+                fillOpacity: r.f32(),
+                blend: r.str(),
+                knockout: r.u8(),
+                blendIf: r.blendIf(),
+              };
+        entries.push({
+          id: lid,
+          visible,
+          pixels: slot === null ? null : buf(slot),
+          depth,
+          rect: x >= 0 ? { x, y, w, h } : null,
+          appearance,
+        });
+      }
+      comps.push({ id, name, flags, entries });
+    }
+  }
+  return { version, width, height, active, nextId, groups, layers, comps };
 }
 
-/** Encode a stack as the engine's version-3 export: the manifest first,
+/** Encode a stack as the engine's version-4 export: the manifest first,
  *  then the buffers, slots assigned in the engine's order (group masks,
  *  then per layer: pixels, mask, smart source). */
 export function writePgil(stack: PgilStack): Uint8Array[] {
@@ -292,6 +479,8 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
     w.i64(g.parent ?? -1);
     w.u8(g.maskEnabled ? 1 : 0);
     w.i64(g.mask ? slot(g.mask) : -1);
+    w.u32(1);
+    w.u8(g.color);
   }
   w.u32(stack.layers.length);
   for (const l of stack.layers) {
@@ -304,7 +493,17 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
     w.u8(l.clipped ? 1 : 0);
     w.i64(l.group ?? -1);
     w.u8(l.maskEnabled ? 1 : 0);
-    w.u8(l.kind === "pixels" ? 0 : l.kind === "adjustment" ? 1 : 2);
+    w.u8(
+      l.kind === "pixels"
+        ? 0
+        : l.kind === "adjustment"
+          ? l.typed
+            ? 4
+            : 1
+          : l.kind === "smart"
+            ? 2
+            : 3,
+    );
     w.u8(l.depth);
     w.u32(slot(l.pixels));
     if (l.rect) {
@@ -333,7 +532,12 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       w.u32(0);
       w.u8(0);
     }
-    if (l.kind === "adjustment") {
+    if (l.kind === "adjustment" && l.typed) {
+      w.str(l.typed.kind);
+      w.f32s(l.typed.values);
+      w.f32s(l.typed.blob);
+      w.str(l.typed.label);
+    } else if (l.kind === "adjustment") {
       const a = l.adjust ?? new Float32Array(0);
       w.u32(a.length);
       for (const v of a) w.f32(v);
@@ -343,6 +547,58 @@ export function writePgil(stack: PgilStack): Uint8Array[] {
       w.u32(s.height);
       w.f32(s.scale);
       w.u32(slot(s.source));
+    } else if (l.kind === "fill") {
+      const f = l.fill!;
+      w.str(f.kind);
+      w.f32s(f.values);
+      w.i64(f.tile ? slot(f.tile) : -1);
+      w.u32(f.tile ? f.tileWidth : 0);
+      w.u32(f.tile ? f.tileHeight : 0);
+      w.str(f.name);
+      w.u8(f.stale ? 1 : 0);
+    }
+    const e = new Writer();
+    e.f32(l.ext.fillOpacity);
+    e.u8(l.ext.knockout);
+    e.u8(l.ext.locks);
+    e.u8(l.ext.color);
+    e.i64(l.ext.link ?? -1);
+    e.blendIf(l.ext.blendIf);
+    e.raw(l.ext.tail);
+    const eb = e.done();
+    w.u32(eb.length);
+    w.raw(eb);
+  }
+  w.u32(stack.comps.length);
+  for (const c of stack.comps) {
+    w.u32(c.id);
+    w.str(c.name);
+    w.u8(c.flags);
+    w.u32(c.entries.length);
+    for (const e of c.entries) {
+      w.u32(e.id);
+      w.u8(e.visible ? 1 : 0);
+      w.i64(e.pixels ? slot(e.pixels) : -1);
+      w.u8(e.depth);
+      if (e.pixels && e.rect) {
+        w.i32(e.rect.x);
+        w.i32(e.rect.y);
+        w.u32(e.rect.w);
+        w.u32(e.rect.h);
+      } else {
+        w.i32(-1);
+        w.i32(-1);
+        w.u32(0);
+        w.u32(0);
+      }
+      if (e.appearance) {
+        w.u8(1);
+        w.f32(e.appearance.opacity);
+        w.f32(e.appearance.fillOpacity);
+        w.str(e.appearance.blend);
+        w.u8(e.appearance.knockout);
+        w.blendIf(e.appearance.blendIf);
+      } else w.u8(0);
     }
   }
   return [w.done(), ...buffers];
@@ -359,7 +615,14 @@ export function clonePgil(s: PgilStack): PgilStack {
       rect: l.rect ? { ...l.rect } : null,
       maskRect: l.maskRect ? { ...l.maskRect } : null,
       adjust: l.adjust ? l.adjust.slice() : null,
+      typed: l.typed ? { ...l.typed, values: l.typed.values.slice() } : null,
+      fill: l.fill ? { ...l.fill, values: l.fill.values.slice() } : null,
       smart: l.smart ? { ...l.smart } : null,
+      ext: { ...l.ext },
+    })),
+    comps: s.comps.map((c) => ({
+      ...c,
+      entries: c.entries.map((e) => ({ ...e })),
     })),
   };
 }
@@ -397,8 +660,12 @@ export function stackFromImage(
         mask: null,
         maskRect: null,
         adjust: null,
+        typed: null,
+        fill: null,
         smart: null,
+        ext: { ...DEFAULT_EXT },
       },
     ],
+    comps: [],
   };
 }

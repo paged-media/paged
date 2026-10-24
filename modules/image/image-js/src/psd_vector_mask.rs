@@ -745,6 +745,7 @@ mod tests {
                 text: false,
                 adjustment: None,
                 color_overlay: None,
+                record: usize::MAX,
             }
         };
         let user = |enabled| MaskPlate {

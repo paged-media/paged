@@ -48,6 +48,7 @@ fn plate(name: &str, rgb: [u8; 3], opacity: u8, key: &[u8; 4], clipped: bool) ->
         text: false,
         adjustment: None,
         color_overlay: None,
+        record: usize::MAX,
     }
 }
 
