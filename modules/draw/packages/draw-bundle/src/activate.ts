@@ -234,6 +234,7 @@ import { makeImageTracePanel } from "./panels/image-trace-panel";
 import { makeRecolorPanel } from "./panels/recolor-panel";
 import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
+import { registerDrawActions } from "./actions";
 import { contributeDrawObjectModel } from "./object-model";
 import {
   drawPropertiesPanel,
@@ -738,11 +739,15 @@ export function activate(host: BundleHost): BundleHandle {
       `${layersProviderHandle ? 1 : 0} binding providers ` +
       `(apiVersion ${manifest.apiVersion})`,
   );
+  // PM-0015 — tracing and recolouring as actions (actions@1, extensions
+  // ADR 344), for data's asset columns and scripts.
+  const actionsSub = registerDrawActions(host);
   // The contributions tear down structurally via the host; the binding
   // subscriptions are allocated OUTSIDE a facade-tracked registration,
   // so dispose them (and the command groups) here.
   return {
     dispose() {
+      actionsSub?.dispose();
       // ADR 023 — disposing the provider handle removes the provider
       // WITHOUT touching the edit context it borrowed activation from.
       // That separation is what makes phase D a migration with a
