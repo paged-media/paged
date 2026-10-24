@@ -68,6 +68,7 @@ named; the published artifact is the SDK.
 | `paged-scene`                                | `Document::open`; cascade resolution, frame-for-story, frame chaining                                                                            |
 | `paged-text`                                 | shaping (rustybuzz), Knuth–Plass compose, multi-font layout, hyphenation, tabs                                                                   |
 | `paged-color`                                | ICC transforms (lcms2 native; naive fallback on wasm32)                                                                                          |
+| `paged-raster`                               | raster probe, decode and encode: TIFF through `tiff`, the web formats through `image`; CMYK and Lab through paged-color                          |
 | `paged-compose`                              | display list, transforms, glyph cache, gradient/image pools                                                                                      |
 | `paged-gpu`                                  | `PathRasterizer` trait; CPU (`vello_cpu`) + Vello backends, one mapping                                                                          |
 | `paged-renderer`                             | top-level `pipeline::build` / `render`; the `paged-inspect` CLI                                                                                  |
