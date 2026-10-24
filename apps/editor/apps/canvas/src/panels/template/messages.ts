@@ -34,6 +34,12 @@ export const FORM = defineMessages("templateForm", {
   noModuleWrites: "No module writes this field.",
   styles: "Character styles",
   writeIn: "Write in {style}",
+  takePhoto: "Take photo",
+  choosePicture: "Choose picture",
+  tapAField: "Tap a field on the page to fill it in.",
+  allFields: "All fields",
+  hideFields: "Hide fields",
+  done: "Done",
 });
 
 /** The engine's reasons a value does not fit its field (paged-canvas

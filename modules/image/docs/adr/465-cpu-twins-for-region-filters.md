@@ -167,6 +167,26 @@ rule and by op, an alpha mask from `@path`, `selection: true` refused), and
 `apps/editor/apps/canvas/tests/plugin-surface/image-filter-selection.spec.ts` (a marquee selection
 in the running editor: only its pixels change, one undo restores them).
 
+## Amendment, 2026-10-24 — a kept selection follows its frame's revisions
+
+A kept selection was matched to the canvas by size alone, so one kept before a flip (or a
+quarter turn of a square image) was laid over the mirrored pixels. Now each kept selection
+names the stored revision it was made on (the frame's marker record, null for none; the
+session reads it when the frame opens and takes it from each commit). The object model hands
+`selection` the revision the frame shows and, once a canvas operation committed
+(`ObjectWrite.followUp`), tells the session which revision it made from which
+(`SelectionFollow`): a quarter turn or flip carries the selection along exactly
+(`coverageAfterCanvasOp`, the pixel map `canvas-ops.ts` moves the layers by), a crop or canvas
+resize drops it, as the editor's own canvas operations do. The old revision keeps its
+selection, so an undo finds it again; a revision the selection was not carried to is refused
+("the image … has changed since its selection was made"). The editor's own quarter turns and
+flips carry the live selection the same way (`SessionSelection::follow_canvas_op`, over
+`CanvasOp::source`), where it used to stay over other pixels (a flip) or drop (a turn).
+
+What stays: another aspect is still refused (a crop's offset is not recorded anywhere the
+selection could be mapped by), and a selection is never written to the document (ADR 460: it
+is session state; a reopened document has none).
+
 ## Related
 
 - [ADR 450](450-gpu-only-kernels.md) — the rule this is an exception to

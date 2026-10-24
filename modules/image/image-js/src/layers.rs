@@ -142,7 +142,18 @@ const MAX_GROUP_DEPTH: usize = 8;
 
 // The GPU-resident fold (the composite's implementation).
 mod fold;
+// Typed adjustments, fill layers, blending options, locks, comps.
+pub mod kinds;
+pub use kinds::*;
+// A fill layer's render (the `gen.*` kernels).
+mod fill_render;
+pub use fill_render::render_fill;
+// The Layer menu's verbs (merges, via copy/cut, comps, align, links).
+mod verbs;
+pub use verbs::{AlignEdge, Axis};
 pub mod mask;
+#[cfg(test)]
+mod parity_tests;
 pub use mask::{BoundedMask, LayerMask};
 
 /// The default name of the layer an ingested image becomes.
@@ -160,10 +171,11 @@ pub const BACKGROUND_LAYER_NAME: &str = "Background";
 pub enum LayerKind {
     /// Canvas-extent pixels of its own.
     Pixels,
-    /// No pixels — the adjust chain, run over the backdrop beneath.
-    /// Boxed because `AdjustParams` is much larger than a discriminant
-    /// and every pixel layer would otherwise pay for it.
-    Adjustment(Box<AdjustParams>),
+    /// No pixels — ONE adjustment ([`Adjustment`], or a stored chain),
+    /// run over the backdrop beneath. Boxed because an adjustment is much
+    /// larger than a discriminant and every pixel layer would otherwise
+    /// pay for it.
+    Adjustment(Box<Adjustment>),
     /// A SMART OBJECT: the layer's pixels are a cached RENDER of
     /// preserved source bytes at a scale, not the source itself.
     ///
@@ -177,6 +189,10 @@ pub enum LayerKind {
     /// opacity, blend, visibility and the mask keep meaning exactly what
     /// they mean for every other layer.
     Smart(Box<SmartSource>),
+    /// A FILL LAYER: its pixels are the render of a colour, gradient or
+    /// pattern ([`FillLayer`]); like a smart object it composites as
+    /// pixels and re-renders from its source when that changes.
+    Fill(Box<FillLayer>),
 }
 
 /// The preserved original behind a smart object, plus the scale its
@@ -408,7 +424,7 @@ impl CanvasOp {
     /// area). `(w, h)` is the INPUT extent. Exact ops only; the
     /// resampling ops have no single source pixel and answer `None`
     /// (they never reach the CPU remap).
-    fn source(&self, x: u32, y: u32, w: u32, h: u32) -> Option<(u32, u32)> {
+    pub(crate) fn source(&self, x: u32, y: u32, w: u32, h: u32) -> Option<(u32, u32)> {
         match *self {
             CanvasOp::RotateCw => Some((y, h - 1 - x)),
             CanvasOp::RotateCcw => Some((w - 1 - y, x)),
@@ -517,6 +533,9 @@ pub struct Layer {
     /// is the ordinary blend. Set by the layered PSD import on text
     /// layers (`compose.normal_gamma`).
     pub blend_gamma: Option<f32>,
+    /// Fill opacity, blend-if, knockout, the further locks, the colour
+    /// label and the link (`kinds`).
+    pub ext: LayerExt,
 }
 
 impl Layer {
@@ -545,14 +564,88 @@ impl Layer {
             && self.opacity >= 1.0
             && std::ptr::eq(self.blend, &COMPOSE_NORMAL)
             && self.live_mask().is_none()
+            && self.ext.fill_opacity >= 1.0
+            && self.live_blend_if().is_none()
+            && self.fill().is_none_or(|f| !f.stale)
     }
 
     /// Does this layer carry pixels of its own?
     pub fn is_pixels(&self) -> bool {
         // A smart object's CACHED RENDER is pixels as far as the fold is
         // concerned; what makes it smart is where those pixels came from
-        // and that they can be regenerated, not how they composite.
-        matches!(self.kind, LayerKind::Pixels | LayerKind::Smart(_))
+        // and that they can be regenerated, not how they composite. A fill
+        // layer's render is the same.
+        matches!(
+            self.kind,
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_)
+        )
+    }
+
+    /// The fill layer's source and render state.
+    pub fn fill(&self) -> Option<&FillLayer> {
+        match &self.kind {
+            LayerKind::Fill(f) => Some(f),
+            _ => None,
+        }
+    }
+
+    /// The adjustment when this is an adjustment layer.
+    pub fn adjustment(&self) -> Option<&Adjustment> {
+        match &self.kind {
+            LayerKind::Adjustment(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// The blending ranges that actually do something.
+    pub fn live_blend_if(&self) -> Option<&BlendIf> {
+        self.ext.blend_if.as_deref().filter(|b| !b.is_open())
+    }
+
+    /// The kind's wire name (the panel's readout): `pixels`, `smart`,
+    /// `fill` or `adjustment`.
+    pub fn kind_name(&self) -> &'static str {
+        match self.kind {
+            LayerKind::Pixels => "pixels",
+            LayerKind::Smart(_) => "smart",
+            LayerKind::Fill(_) => "fill",
+            LayerKind::Adjustment(_) => "adjustment",
+        }
+    }
+
+    /// Are this layer's PIXELS editable — not locked (image pixels, or
+    /// all), and pixels of its own rather than a fill's or smart object's
+    /// render? The refusal says why.
+    pub fn pixels_editable(&self) -> Result<(), IngestError> {
+        if self.locked || self.ext.locks.all {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" is locked",
+                self.name
+            )));
+        }
+        Ok(())
+    }
+
+    /// May this layer be moved?
+    pub fn position_editable(&self) -> Result<(), IngestError> {
+        if self.ext.locks.position || self.ext.locks.all {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" has its position locked",
+                self.name
+            )));
+        }
+        Ok(())
+    }
+
+    /// May this layer's blending properties change (Lock All forbids it)?
+    pub fn appearance_editable(&self) -> Result<(), IngestError> {
+        if self.ext.locks.all {
+            return Err(IngestError::Unsupported(format!(
+                "layer \"{}\" is locked (Lock All)",
+                self.name
+            )));
+        }
+        Ok(())
     }
 
     /// The preserved source behind a smart object.
@@ -563,13 +656,17 @@ impl Layer {
         }
     }
 
-    /// The adjust parameters when this is an adjustment layer.
+    /// The stored adjust CHAIN when this is a chain-shaped adjustment
+    /// layer (a typed one answers [`adjustment`](Self::adjustment)).
     pub fn adjust_params(&self) -> Option<&AdjustParams> {
         match &self.kind {
-            LayerKind::Adjustment(p) => Some(p),
-            // A smart object contributes PIXELS (its cached render), not
-            // a transform of the backdrop — so it has no adjust params.
-            LayerKind::Pixels | LayerKind::Smart(_) => None,
+            LayerKind::Adjustment(a) => match a.as_ref() {
+                Adjustment::Chain(p) => Some(p),
+                _ => None,
+            },
+            // A smart object or fill layer contributes PIXELS (its render),
+            // not a transform of the backdrop — so it has no adjust params.
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => None,
         }
     }
 
@@ -692,6 +789,30 @@ fn is_fully_transparent(rgba: &[u8]) -> bool {
     rgba.as_chunks::<4>().0.iter().all(|t| t[3] == 0)
 }
 
+/// `new` with the alpha of `old` inside `damage` (Lock Transparent
+/// Pixels): the colour an edit painted stays, its coverage does not.
+fn keep_alpha(
+    old: &crate::pixels::Pixels,
+    new: crate::pixels::Pixels,
+    damage: Region,
+    width: u32,
+) -> crate::pixels::Pixels {
+    let bpp = new.bytes_per_pixel();
+    let (a0, a1) = if bpp == 4 { (3, 4) } else { (6, 8) };
+    let mut out = new.raw().to_vec();
+    let src = old.raw();
+    for y in damage.y.max(0) as usize..(damage.y.max(0) as usize + damage.h as usize) {
+        for x in damage.x.max(0) as usize..(damage.x.max(0) as usize + damage.w as usize) {
+            let at = (y * width as usize + x) * bpp;
+            if at + bpp > out.len() || at + bpp > src.len() {
+                continue;
+            }
+            out[at + a0..at + a1].copy_from_slice(&src[at + a0..at + a1]);
+        }
+    }
+    crate::pixels::Pixels::from_raw(Arc::from(out.into_boxed_slice()), new.depth())
+}
+
 /// The undo/redo readout the panel shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HistoryStats {
@@ -759,6 +880,8 @@ pub struct LayerGroup {
     pub mask: Option<Arc<SelectionCoverage>>,
     /// A disabled mask is kept, not applied.
     pub mask_enabled: bool,
+    /// The group's colour label (an index into [`COLOR_LABELS`]).
+    pub color: u8,
 }
 
 impl LayerGroup {
@@ -820,6 +943,9 @@ pub struct LayerStack {
     /// checkpoint below the active layer, the last result). Keyed by
     /// identity, so it needs no invalidation — see `fold`.
     fold: std::sync::Mutex<fold::FoldCache>,
+    /// LAYER COMPS, in the panel's order. Document state: in every
+    /// snapshot (an edit to a comp is an undo step) and persisted.
+    comps: Vec<LayerComp>,
 }
 
 /// Most structure steps kept (the journal bounds the pixel ones).
@@ -835,6 +961,7 @@ struct Snapshot {
     groups: Vec<LayerGroup>,
     active: usize,
     next_id: u32,
+    comps: Vec<LayerComp>,
 }
 
 /// One undo step.
@@ -913,6 +1040,7 @@ impl LayerStack {
                 group: None,
                 clipped: false,
                 blend_gamma: None,
+                ext: LayerExt::default(),
             }],
             active: 0,
             next_id: 2,
@@ -923,6 +1051,7 @@ impl LayerStack {
             structure_generation: 0,
             edit_mask: false,
             fold: Default::default(),
+            comps: Vec::new(),
         })
     }
 
@@ -932,6 +1061,19 @@ impl LayerStack {
     /// falls back to `normal` (the file's own bytes are preserved
     /// regardless, and the panel names the layer so the user can see it).
     pub fn from_psd_plates(import: &image_psd::LayerImport) -> Result<LayerStack, IngestError> {
+        Self::from_psd_plates_with(import, None)
+    }
+
+    /// [`from_psd_plates`](Self::from_psd_plates) reading more of each
+    /// plate's layer RECORD (`records` is the file's
+    /// `layer_mask.layers`): its own opacity and its FILL opacity apart,
+    /// Blend If, knockout, the locks, the colour label, and a fill layer's
+    /// colour or gradient (`crate::psd_layer_ext`). Without the records a
+    /// plate's opacity carries the fill folded in, as the import made it.
+    pub fn from_psd_plates_with(
+        import: &image_psd::LayerImport,
+        records: Option<&[image_psd::model::LayerRecord]>,
+    ) -> Result<LayerStack, IngestError> {
         let (width, height) = (import.width, import.height);
         if import.layers.is_empty() {
             return Err(IngestError::Unsupported(
@@ -979,6 +1121,7 @@ impl LayerStack {
                     )
                 }),
                 mask_enabled: plate.mask.as_ref().is_none_or(|m| m.enabled),
+                color: 0,
             })
             .collect();
         let mut layers: Vec<Layer> = Vec::with_capacity(n_layers);
@@ -1026,9 +1169,10 @@ impl LayerStack {
                     group: Some(group_id(g)),
                     clipped: false,
                     blend_gamma: None,
+                    ext: LayerExt::default(),
                 });
             }
-            let adjustment = plate.adjustment.as_ref().map(psd_adjust_params);
+            let adjustment = plate.adjustment.as_ref().map(psd_adjustment);
             // The user and vector masks fold into the layer's one mask
             // (`psd_vector_mask::plate_mask`).
             let mask = crate::psd_vector_mask::plate_mask(plate, width, height);
@@ -1048,12 +1192,28 @@ impl LayerStack {
             } else {
                 plate.name.clone()
             };
+            let record = records.and_then(|r| r.get(plate.record));
+            let ext = record
+                .map(crate::psd_layer_ext::record_ext)
+                .unwrap_or_default();
+            // With the record, opacity and fill opacity are kept apart (the
+            // plate folds them, which is the same picture outside the
+            // special modes the import declines).
+            let opacity = match record {
+                Some(r) => f32::from(r.opacity) / 255.0,
+                None => plate.opacity as f32 / 255.0,
+            };
+            // A FILL layer (a colour or gradient that is not a shape) keeps
+            // its source; its stored pixels are Photoshop's render of it.
+            let fill = record
+                .filter(|_| adjustment.is_none() && !import.converted_from_cmyk && !plate.smart)
+                .and_then(crate::psd_layer_ext::fill_source);
             layers.push(Layer {
                 id: layers.len() as u32 + 1,
                 name: name.clone(),
                 visible: !plate.hidden,
-                locked: false,
-                opacity: plate.opacity as f32 / 255.0,
+                locked: record.is_some_and(crate::psd_layer_ext::pixels_locked),
+                opacity,
                 blend: psd_blend_kernel(&plate.blend_key),
                 // At its BOUNDS (ADR 464): an adjustment keeps an empty
                 // rectangle, a pixel layer its record's.
@@ -1073,9 +1233,13 @@ impl LayerStack {
                 )?,
                 // A smart object's stored render arrives as pixels: the
                 // source is not rendered here (`smart_renders_agree`).
-                kind: match adjustment {
-                    Some(params) => LayerKind::Adjustment(Box::new(params)),
-                    None => LayerKind::Pixels,
+                kind: match (adjustment, fill) {
+                    (Some(a), _) => LayerKind::Adjustment(Box::new(a)),
+                    (None, Some(source)) => LayerKind::Fill(Box::new(FillLayer {
+                        source,
+                        stale: false,
+                    })),
+                    (None, None) => LayerKind::Pixels,
                 },
                 mask_enabled: mask.as_ref().is_none_or(|m| m.enabled),
                 // At the plate's rectangle when the import cut it there
@@ -1094,6 +1258,7 @@ impl LayerStack {
                     && &plate.blend_key == b"norm"
                     && !import.converted_from_cmyk)
                     .then_some(TEXT_BLEND_GAMMA),
+                ext,
             });
             // COLOR OVERLAY: Photoshop draws it over the layer's content —
             // and over the layers CLIPPED to it, which it covers (measured:
@@ -1121,6 +1286,7 @@ impl LayerStack {
                     group: plate.group.map(group_id),
                     clipped: true,
                     blend_gamma: None,
+                    ext: LayerExt::default(),
                 });
             }
         }
@@ -1143,6 +1309,7 @@ impl LayerStack {
             structure_generation: 0,
             edit_mask: false,
             fold: Default::default(),
+            comps: Vec::new(),
         };
         if let Some(deep) = stack
             .groups
@@ -1191,6 +1358,13 @@ impl LayerStack {
         Arc::from(vec![0u8; (self.width as usize) * (self.height as usize) * 4].into_boxed_slice())
     }
 
+    /// A layer to change in place — for the crate's tests, which keep the
+    /// stack's invariants themselves.
+    #[cfg(test)]
+    pub(crate) fn layer_at_mut(&mut self, index: usize) -> Option<&mut Layer> {
+        self.layers.get_mut(index)
+    }
+
     fn fresh_id(&mut self) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
@@ -1207,20 +1381,41 @@ impl LayerStack {
     /// This is what makes the 15 reachable §14.1 adjustments
     /// non-destructive: the same `AdjustParams` the panel already builds,
     /// evaluated in the fold instead of written into a layer.
+    ///
+    /// The chain is stored as its TYPED layer when it has one stage
+    /// ([`Adjustment::from_chain`]), as a chain otherwise.
     pub fn add_adjustment(&mut self, name: &str, params: AdjustParams) -> usize {
+        self.add_adjustment_layer(name, Adjustment::from_chain(params), None)
+    }
+
+    /// Insert an adjustment layer of one typed [`Adjustment`] above the
+    /// active layer, in the active layer's group when `group` says so
+    /// (`Some(group)`), and make it active. An empty `name` takes the
+    /// kind's own (Photoshop's "Levels 1").
+    pub fn add_adjustment_layer(
+        &mut self,
+        name: &str,
+        adjustment: Adjustment,
+        group: Option<Option<u32>>,
+    ) -> usize {
         let id = self.fresh_id();
         let at = self.active + 1;
         let pixels = self.transparent();
+        let name = if name.is_empty() {
+            match adjustment {
+                Adjustment::Chain(_) => format!("Adjustment {id}"),
+                ref a => self.numbered(a.default_layer_name()),
+            }
+        } else {
+            name.to_string()
+        };
+        let group = group.unwrap_or(None);
         self.layers.insert(
             at,
             Layer {
-                kind: LayerKind::Adjustment(Box::new(params)),
+                kind: LayerKind::Adjustment(Box::new(adjustment)),
                 id,
-                name: if name.is_empty() {
-                    format!("Adjustment {id}")
-                } else {
-                    name.to_string()
-                },
+                name,
                 visible: true,
                 locked: false,
                 opacity: 1.0,
@@ -1228,9 +1423,10 @@ impl LayerStack {
                 rgba: crate::pixels::Pixels::from_rgba8(pixels).into(),
                 mask: None,
                 mask_enabled: true,
-                group: None,
+                group,
                 clipped: false,
                 blend_gamma: None,
+                ext: LayerExt::default(),
             },
         );
         self.active = at;
@@ -1270,8 +1466,39 @@ impl LayerStack {
         // address the old extent and must not be reachable across it.
         self.recorded(op.label(), None, |s| {
             s.transform_canvas_unrecorded(op);
+            s.after_canvas_op(op);
             Ok(())
         })
+    }
+
+    /// What a canvas op owes the layers that are not plain pixels: a
+    /// fill layer re-renders at the new extent (its gradient turning and
+    /// mirroring with a rotate or flip, as Photoshop's does), and a
+    /// layer comp's recorded positions — pixels at the old extent — are
+    /// dropped (its visibility and appearance still apply).
+    fn after_canvas_op(&mut self, op: CanvasOp) {
+        for layer in &mut self.layers {
+            if let LayerKind::Fill(f) = &mut layer.kind {
+                f.stale = true;
+                if let FillSource::Gradient(g) = &mut f.source {
+                    let (a, (ox, oy)) = (g.angle, g.offset);
+                    (g.angle, g.offset) = match op {
+                        CanvasOp::RotateCw => (a - 90.0, (-oy, ox)),
+                        CanvasOp::RotateCcw => (a + 90.0, (oy, -ox)),
+                        CanvasOp::Rotate180 => (a + 180.0, (-ox, -oy)),
+                        CanvasOp::FlipHorizontal => (180.0 - a, (-ox, oy)),
+                        CanvasOp::FlipVertical => (-a, (ox, -oy)),
+                        _ => (a, (ox, oy)),
+                    };
+                    g.angle = (g.angle + 180.0).rem_euclid(360.0) - 180.0;
+                }
+            }
+        }
+        for comp in &mut self.comps {
+            for e in &mut comp.entries {
+                e.pixels = None;
+            }
+        }
     }
 
     /// Every [`CanvasOp`], the resampling ones included: Image Size
@@ -1410,6 +1637,7 @@ impl LayerStack {
             s.groups = groups;
             s.width = ow;
             s.height = oh;
+            s.after_canvas_op(op);
             Ok(())
         })
     }
@@ -1579,12 +1807,38 @@ impl LayerStack {
             )));
         }
         match &mut layer.kind {
-            LayerKind::Adjustment(p) => {
-                **p = params;
+            LayerKind::Adjustment(a) => {
+                **a = match a.as_ref() {
+                    // A typed layer edited through the chain keeps its type
+                    // when the chain is still one of its own.
+                    Adjustment::Chain(_) => Adjustment::Chain(params),
+                    _ => Adjustment::from_chain(params),
+                };
                 Ok(())
             }
-            LayerKind::Pixels | LayerKind::Smart(_) => Err(IngestError::Unsupported(format!(
-                "layer {index} holds pixels, not an adjustment"
+            LayerKind::Pixels | LayerKind::Smart(_) | LayerKind::Fill(_) => Err(
+                IngestError::Unsupported(format!("layer {index} holds pixels, not an adjustment")),
+            ),
+        }
+    }
+
+    /// Replace an adjustment layer's adjustment by `adjustment` (any
+    /// kind: Photoshop's Properties can only retune, but a typed layer
+    /// changing kind is the same one-field edit).
+    pub fn set_adjustment_typed(
+        &mut self,
+        index: usize,
+        adjustment: Adjustment,
+    ) -> Result<(), IngestError> {
+        let layer = self.layer_mut(index)?;
+        layer.appearance_editable()?;
+        match &mut layer.kind {
+            LayerKind::Adjustment(a) => {
+                **a = adjustment;
+                Ok(())
+            }
+            _ => Err(IngestError::Unsupported(format!(
+                "layer {index} is not an adjustment layer"
             ))),
         }
     }
@@ -1593,7 +1847,19 @@ impl LayerStack {
     pub fn is_adjustment(&self, index: usize) -> bool {
         self.layers
             .get(index)
-            .is_some_and(|l| l.adjust_params().is_some())
+            .is_some_and(|l| l.adjustment().is_some())
+    }
+
+    /// `base` numbered past every layer already called `base N` — how
+    /// Photoshop names new layers ("Levels 1", "Levels 2").
+    pub(crate) fn numbered(&self, base: &str) -> String {
+        let n = self
+            .layers
+            .iter()
+            .filter_map(|l| l.name.strip_prefix(base)?.trim().parse::<u32>().ok())
+            .max()
+            .unwrap_or(0);
+        format!("{base} {}", n + 1)
     }
 
     pub fn add(&mut self, name: &str) -> usize {
@@ -1621,6 +1887,7 @@ impl LayerStack {
                 group: None,
                 clipped: false,
                 blend_gamma: None,
+                ext: LayerExt::default(),
             },
         );
         self.active = at;
@@ -1638,6 +1905,11 @@ impl LayerStack {
             Layer {
                 id,
                 name: format!("{} copy", src.name),
+                // A copy is not linked to its original (Photoshop's).
+                ext: LayerExt {
+                    link: None,
+                    ..src.ext.clone()
+                },
                 // `..src` carries the mask too: duplicating a masked
                 // layer must duplicate its mask, or the copy would
                 // silently reveal what the original hides.
@@ -1729,7 +2001,9 @@ impl LayerStack {
     }
 
     pub fn set_opacity(&mut self, index: usize, opacity: f32) -> Result<(), IngestError> {
-        self.layer_mut(index)?.opacity = opacity.clamp(0.0, 1.0);
+        let layer = self.layer_mut(index)?;
+        layer.appearance_editable()?;
+        layer.opacity = opacity.clamp(0.0, 1.0);
         Ok(())
     }
 
@@ -1854,12 +2128,7 @@ impl LayerStack {
             )));
         }
         let active = &self.layers[self.active];
-        if active.locked {
-            return Err(IngestError::Unsupported(format!(
-                "layer \"{}\" is locked",
-                active.name
-            )));
-        }
+        active.pixels_editable()?;
         let Some(old) = active.mask.as_ref() else {
             return Err(IngestError::Unsupported(format!(
                 "layer \"{}\" has no mask to edit",
@@ -1963,6 +2232,7 @@ impl LayerStack {
             parent,
             mask: None,
             mask_enabled: true,
+            color: 0,
         });
         for l in &mut self.layers[lo..=hi] {
             l.group = Some(id);
@@ -2264,7 +2534,9 @@ impl LayerStack {
                 "unknown blend mode \"{name}\" (a compose.* kernel name)"
             ))
         })?;
-        self.layer_mut(index)?.blend = k;
+        let layer = self.layer_mut(index)?;
+        layer.appearance_editable()?;
+        layer.blend = k;
         Ok(())
     }
 
@@ -2299,15 +2571,16 @@ impl LayerStack {
             )));
         }
         let active = &self.layers[self.active];
-        if active.locked {
-            return Err(IngestError::Unsupported(format!(
-                "layer \"{}\" is locked",
-                active.name
-            )));
-        }
+        active.pixels_editable()?;
         let clipped = damage
             .intersect(Region::new(0, 0, self.width, self.height))
             .unwrap_or(Region::new(0, 0, 0, 0));
+        // LOCK TRANSPARENT PIXELS: the edit keeps every pixel's alpha.
+        let pixels = if active.ext.locks.transparency && active.rgba.depth() == pixels.depth() {
+            keep_alpha(active.rgba.canvas(), pixels, clipped, self.width)
+        } else {
+            pixels
+        };
         // A layer and the edit landing on it must agree on depth, or
         // the journal would snapshot tiles in one geometry and restore
         // them in another. Refuse rather than silently narrow.
@@ -2341,7 +2614,7 @@ impl LayerStack {
     /// this BEFORE doing GPU work so a refusal is instant and honest.
     pub fn active_is_editable(&self) -> Result<(), IngestError> {
         let a = self.active();
-        if a.locked {
+        if a.locked || a.ext.locks.all {
             return Err(IngestError::Unsupported(format!(
                 "layer \"{}\" is locked — unlock it to paint on it",
                 a.name
@@ -2381,6 +2654,30 @@ impl LayerStack {
         Ok(out)
     }
 
+    /// [`recorded`](Self::recorded) for a verb that may find nothing to
+    /// do: `f` answers whether it changed anything, and an answer of
+    /// `false` records no step (an Align that moves nothing is not an
+    /// undo step).
+    pub fn recorded_if_changed(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Self) -> Result<bool, IngestError>,
+    ) -> Result<bool, IngestError> {
+        let before = self.snapshot();
+        let changed = f(self)?;
+        if changed {
+            self.steps.push(Step::Structure {
+                label: label.to_string(),
+                merge_key: None,
+                other: Box::new(before),
+            });
+            self.undone.clear();
+            self.structure_generation += 1;
+            self.enforce_step_bound();
+        }
+        Ok(changed)
+    }
+
     fn snapshot(&self) -> Snapshot {
         Snapshot {
             width: self.width,
@@ -2389,6 +2686,7 @@ impl LayerStack {
             groups: self.groups.clone(),
             active: self.active,
             next_id: self.next_id,
+            comps: self.comps.clone(),
         }
     }
 
@@ -2399,6 +2697,7 @@ impl LayerStack {
         self.groups = s.groups;
         self.active = s.active;
         self.next_id = s.next_id;
+        self.comps = s.comps;
     }
 
     /// The journal bounds its own entries (and clears itself when one
@@ -2624,6 +2923,13 @@ impl LayerStack {
     /// path applies (see the module docs) — the doors use it so a
     /// GPU-less realm still gets its one-layer document.
     pub fn composite_is_trivial(&self) -> bool {
+        if self
+            .layers
+            .iter()
+            .any(|l| l.enabled() && l.fill().is_some_and(|f| f.stale))
+        {
+            return false;
+        }
         let mut plates = self.plates_indexed(None).into_iter();
         match (plates.next(), plates.next()) {
             (None, _) => true,
@@ -2656,6 +2962,16 @@ impl LayerStack {
     /// The contributing layers by index, each with its plate: canvas-sized,
     /// or a bounded layer's own rectangle and pixels (ADR 464).
     fn plates_indexed(&self, override_active: Option<&Arc<[u8]>>) -> Vec<(usize, Plate)> {
+        self.plates_indexed_with(override_active, &[])
+    }
+
+    /// [`plates_indexed`](Self::plates_indexed) with some layers' pixels
+    /// replaced (`fresh`: a stale fill layer's render for this composite).
+    fn plates_indexed_with(
+        &self,
+        override_active: Option<&Arc<[u8]>>,
+        fresh: &[(usize, Arc<[u8]>)],
+    ) -> Vec<(usize, Plate)> {
         self.layers
             .iter()
             .enumerate()
@@ -2663,10 +2979,15 @@ impl LayerStack {
                 if !l.enabled() {
                     return None;
                 }
+                let renewed = fresh.iter().find(|(f, _)| *f == i).map(|(_, px)| px);
                 // An OWNED `Arc` rather than a borrow: `Pixels` hands
                 // out a clone of its handle, not a reference into
                 // itself. The clone is a refcount bump, not a copy.
                 let plate = match (override_active, l.rgba.bounded()) {
+                    _ if renewed.is_some() => Plate {
+                        px: Arc::clone(renewed.expect("checked")),
+                        rect: None,
+                    },
                     (Some(o), _) if i == self.active => Plate {
                         px: Arc::clone(o),
                         rect: None,
@@ -2706,7 +3027,8 @@ impl LayerStack {
         ctx: Option<&GpuContext>,
         override_active: Option<&Arc<[u8]>>,
     ) -> Result<Arc<[u8]>, IngestError> {
-        let plates = self.plates_indexed(override_active);
+        let fresh = self.stale_fill_renders(ctx).await?;
+        let plates = self.plates_indexed_with(override_active, &fresh);
         crate::counters::bump(|c| c.composites += 1);
 
         match plates.as_slice() {
@@ -2733,6 +3055,62 @@ impl LayerStack {
         self.composite_resident(ctx, &plates).await
     }
 
+    /// Every visible fill layer whose render is stale, rendered now (for
+    /// one composite; [`refresh_fills`](Self::refresh_fills) keeps them).
+    async fn stale_fill_renders(
+        &self,
+        ctx: Option<&GpuContext>,
+    ) -> Result<Vec<(usize, Arc<[u8]>)>, IngestError> {
+        let mut out = Vec::new();
+        for (i, l) in self.layers.iter().enumerate() {
+            let Some(f) = l.fill().filter(|f| f.stale && l.enabled()) else {
+                continue;
+            };
+            let ctx = ctx.ok_or_else(|| {
+                IngestError::Unsupported(
+                    "rendering a fill layer is GPU-only (the gen.* kernels) — call init_gpu first"
+                        .into(),
+                )
+            })?;
+            out.push((
+                i,
+                render_fill(ctx, self.width, self.height, &f.source).await?,
+            ));
+        }
+        Ok(out)
+    }
+
+    /// Render every stale fill layer into its pixels (not an undo step:
+    /// the render follows from the source the step already changed).
+    /// Answers whether anything was rendered; GPU-only when there is.
+    pub async fn refresh_fills(&mut self, ctx: Option<&GpuContext>) -> Result<bool, IngestError> {
+        let (w, h) = (self.width, self.height);
+        let mut any = false;
+        for i in 0..self.layers.len() {
+            let Some(src) = self.layers[i]
+                .fill()
+                .filter(|f| f.stale)
+                .map(|f| f.source.clone())
+            else {
+                continue;
+            };
+            let ctx = ctx.ok_or_else(|| {
+                IngestError::Unsupported(
+                    "rendering a fill layer is GPU-only (the gen.* kernels) — call init_gpu first"
+                        .into(),
+                )
+            })?;
+            let px = render_fill(ctx, w, h, &src).await?;
+            let l = &mut self.layers[i];
+            l.rgba = crate::pixels::Pixels::from_rgba8(px).into();
+            if let LayerKind::Fill(f) = &mut l.kind {
+                f.stale = false;
+            }
+            any = true;
+        }
+        Ok(any)
+    }
+
     /// The fold as it ran before it became resident: every blend its own
     /// upload, dispatch and readback. Kept, test-only, as the reference
     /// the resident fold is proven byte-equal against.
@@ -2757,6 +3135,21 @@ impl LayerStack {
         }
 
         crate::counters::bump(|c| c.layers_folded += plates.len() as u64);
+        // The reference predates the Photoshop-parity properties; it is
+        // the proof of the resident fold's caching, not of them, so a
+        // stack that uses one is refused rather than folded wrong.
+        if let Some((l, _)) = plates.iter().find(|(l, _)| {
+            l.ext.fill_opacity < 1.0
+                || l.live_blend_if().is_some()
+                || l.ext.knockout != Knockout::None
+                || l.adjustment().is_some_and(|a| a.to_chain().is_none())
+        }) {
+            return Err(IngestError::Unsupported(format!(
+                "the reference fold does not model layer \"{}\"'s fill opacity, blend-if, \
+                 knockout or direct adjustment",
+                l.name
+            )));
+        }
         let ctx = ctx.ok_or_else(|| {
             IngestError::Unsupported(
                 "compositing layers is GPU-only — call init_gpu first (the blend \
@@ -2873,7 +3266,8 @@ impl LayerStack {
             } else {
                 None
             };
-            if let Some(params) = layer.adjust_params() {
+            if let Some(params) = layer.adjustment().and_then(|a| a.to_chain()) {
+                let params = &params;
                 // STAYS IN f16. This used to unpremultiply, drop to
                 // 8-bit, adjust, and lift back — quantizing the backdrop
                 // TWICE per adjustment layer. Three stacked adjustments
@@ -3283,39 +3677,6 @@ pub(crate) fn with_opacity(
 /// an approximation — 19–40 levels on anti-aliased edges become 2–7.
 pub const TEXT_BLEND_GAMMA: f32 = 1.55;
 
-/// One Levels record as a 256-entry table: the input range normalised,
-/// raised to 1/gamma, mapped onto the output range.
-fn levels_lut(r: &image_psd::adjustment::LevelsRecord) -> [u8; 256] {
-    let (ib, iw) = (f64::from(r.in_black), f64::from(r.in_white));
-    let (ob, ow) = (f64::from(r.out_black), f64::from(r.out_white));
-    let g = (f64::from(r.gamma_x100) / 100.0).max(0.01);
-    let mut lut = [0u8; 256];
-    for (x, slot) in lut.iter_mut().enumerate() {
-        let t = ((x as f64 - ib) / (iw - ib).max(1.0)).clamp(0.0, 1.0);
-        *slot = (ob + t.powf(1.0 / g) * (ow - ob)).round().clamp(0.0, 255.0) as u8;
-    }
-    lut
-}
-
-/// Photoshop's Exposure as a table: the code decoded to light with a 2.2
-/// power, scaled by 2^exposure, offset, raised to 1/gamma, re-encoded.
-/// Measured on a Photoshop-written layer (exposure 0.4, offset −0.03,
-/// gamma 1.2): within 1 level.
-fn exposure_lut(exposure: f32, offset: f32, gamma: f32) -> [u8; 256] {
-    let (e, o, g) = (
-        f64::from(exposure),
-        f64::from(offset),
-        f64::from(gamma).max(0.01),
-    );
-    let mut lut = [0u8; 256];
-    for (x, slot) in lut.iter_mut().enumerate() {
-        let light = (x as f64 / 255.0).powf(2.2) * e.exp2() + o;
-        let v = light.max(0.0).powf(1.0 / g).min(1.0).powf(1.0 / 2.2);
-        *slot = (v * 255.0).round().clamp(0.0, 255.0) as u8;
-    }
-    lut
-}
-
 /// A PSD mask plate as a layer mask: bounded at its rectangle, or
 /// canvas-sized.
 fn psd_layer_mask(
@@ -3357,85 +3718,60 @@ fn bounded_pixels(
         })
 }
 
-/// A PSD adjustment layer as the adjust chain's parameters. Only what
-/// `image_psd::adjustment::Adjustment::unmodelled` lets through reaches
-/// here, so every field it reads has a counterpart.
-pub fn psd_adjust_params(adj: &image_psd::adjustment::Adjustment) -> AdjustParams {
-    use image_psd::adjustment::Adjustment;
-    let mut p = AdjustParams::default();
-    let lut = |pts: &[(u8, u8)]| {
-        let pts: Vec<(f32, f32)> = pts
-            .iter()
-            .map(|&(i, o)| (f32::from(i) / 255.0, f32::from(o) / 255.0))
-            .collect();
-        // Photoshop's Curves is a natural cubic spline (`curve_lut_natural`).
-        image_core::curve_lut_natural(&pts)
-    };
+/// A PSD adjustment layer as a TYPED adjustment layer, field for field.
+/// Only what `image_psd::adjustment::Adjustment::unmodelled` lets through
+/// reaches here, so every field it reads has a counterpart; the typed
+/// layer lowers onto the adjust chain exactly as the import always did
+/// ([`Adjustment::to_chain`]: natural-spline curves, Levels and an
+/// Exposure offset/gamma as tables).
+pub fn psd_adjustment(adj: &image_psd::adjustment::Adjustment) -> Adjustment {
+    use image_psd::adjustment::Adjustment as Psd;
     match adj {
-        Adjustment::Curves { curves } => {
-            p.curve_lut = curves[0].as_deref().map(lut);
-            if curves[1..].iter().any(Option::is_some) {
-                let id = lut(&[(0, 0), (255, 255)]);
-                p.curve_rgb = Some(Box::new(
-                    [1, 2, 3].map(|c| curves[c].as_deref().map_or(id, lut)),
-                ));
-            }
-        }
-        // Levels as TABLES, the way Photoshop applies them: each channel's
-        // record first, then the composite's — so a per-channel OUTPUT
-        // range, which the levels stages have no field for, is exact too.
-        // Measured on Photoshop-written layers: within 2 levels (channel
-        // then composite; the other order is 13 off).
-        Adjustment::Levels { records, .. } => {
-            p.curve_lut = Some(levels_lut(&records[0]));
-            if records[1..].iter().any(|r| !r.is_identity()) {
-                p.curve_rgb = Some(Box::new([1, 2, 3].map(|c| levels_lut(&records[c]))));
-            }
-        }
-        // Plain exposure is the exposure stage (it agrees with Photoshop
-        // within 2 levels); an offset or gamma becomes a table.
-        Adjustment::Exposure {
+        Psd::Curves { curves } => Adjustment::Curves {
+            curves: std::array::from_fn(|c| curves[c].clone().unwrap_or_default()),
+        },
+        Psd::Levels { records, .. } => Adjustment::Levels {
+            records: records.map(|r| {
+                [
+                    f32::from(r.in_black),
+                    f32::from(r.in_white),
+                    f32::from(r.gamma_x100) / 100.0,
+                    f32::from(r.out_black),
+                    f32::from(r.out_white),
+                ]
+            }),
+        },
+        Psd::Exposure {
             exposure,
             offset,
             gamma,
-        } => {
-            if *offset == 0.0 && *gamma == 1.0 {
-                p.exposure_ev = *exposure;
-            } else {
-                p.curve_lut = Some(exposure_lut(*exposure, *offset, *gamma));
-            }
-        }
-        Adjustment::Invert => p.invert = true,
-        Adjustment::HueSaturation {
+        } => Adjustment::Exposure {
+            exposure: *exposure,
+            offset: *offset,
+            gamma: *gamma,
+        },
+        Psd::Invert => Adjustment::Invert,
+        Psd::HueSaturation {
             colorized,
             colorize,
             master,
             ranges,
             ..
         } => {
-            let hsl = |t: &[i16; 3]| {
-                [
-                    f32::from(t[0]),
-                    f32::from(t[1]) / 100.0,
-                    f32::from(t[2]) / 100.0,
-                    0.0,
-                ]
-            };
-            p.hue_sat.master = hsl(master);
-            for (k, r) in ranges.iter().enumerate() {
-                p.hue_sat.ranges[k] = hsl(r);
-            }
-            if *colorized {
-                p.hue_sat.colorize = [
-                    1.0,
-                    f32::from(colorize[0]).rem_euclid(360.0),
-                    f32::from(colorize[1]) / 100.0,
-                    f32::from(colorize[2]) / 100.0,
-                ];
+            let hsl = |t: &[i16; 3]| t.map(f32::from);
+            Adjustment::HueSaturation {
+                colorize: *colorized,
+                colorize_hsl: hsl(colorize),
+                master: hsl(master),
+                ranges: ranges.map(|r| hsl(&r)),
             }
         }
     }
-    p
+}
+
+/// [`psd_adjustment`] as the adjust chain it evaluates to.
+pub fn psd_adjust_params(adj: &image_psd::adjustment::Adjustment) -> AdjustParams {
+    psd_adjustment(adj).to_chain().unwrap_or_default()
 }
 
 /// Levels (over white) beyond which a pixel of a smart object's
@@ -3958,7 +4294,9 @@ mod tests {
         };
         s.set_adjustment(a, p.clone()).expect("edit");
         match &s.layers[a].kind {
-            LayerKind::Adjustment(q) => assert_eq!(q.exposure_ev, -1.0),
+            LayerKind::Adjustment(q) => {
+                assert_eq!(q.to_chain().expect("a chain kind").exposure_ev, -1.0)
+            }
             _ => panic!("still an adjustment layer"),
         }
         assert!(
@@ -5000,6 +5338,7 @@ mod tests {
             text: false,
             adjustment: None,
             color_overlay: None,
+            record: usize::MAX,
             name: name.to_string(),
             blend_key: *key,
             opacity,
@@ -5046,6 +5385,7 @@ mod tests {
                 text: false,
                 adjustment: None,
                 color_overlay: None,
+                record: usize::MAX,
                 name: "short".into(),
                 blend_key: *b"norm",
                 opacity: 255,

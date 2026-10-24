@@ -33,6 +33,8 @@ import * as bridge from "virtual:paged-editor/iframe";
 export type {
   BridgedMethod,
   ConnectConfig,
+  EditorError,
+  EditorErrorCode,
   EditorEvent,
   FieldInput,
   FieldValue,

@@ -42,8 +42,12 @@ import {
 } from "@paged-media/panel-kit";
 import {
   chooseFiles,
+  touchTargetStyle,
   useCanvasClient,
   useCollection,
+  useCompactLayout,
+  useSelection,
+  useTouchSized,
 } from "@paged-media/shell";
 
 import { useStrings } from "@paged-media/strings";
@@ -72,9 +76,77 @@ function fileName(uri: string): string {
   }
 }
 
+/** Whether an engine id names the same item: the two replies that carry
+ *  ids spell their keys in a different order. */
+function sameElement(a: unknown, b: unknown): boolean {
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  const x = a as { kind?: unknown; id?: unknown };
+  const y = b as { kind?: unknown; id?: unknown };
+  return x.kind === y.kind && JSON.stringify(x.id) === JSON.stringify(y.id);
+}
+
+/** A picture input as a button (editor ADR 294): `capture` makes a phone
+ *  offer its camera; without it, the phone's library and files. */
+function PictureInput({
+  field,
+  capture,
+  label,
+  touch,
+  onFile,
+}: {
+  field: string;
+  capture: boolean;
+  label: string;
+  touch: boolean;
+  onFile: (file: File) => void;
+}): ReactElement {
+  return (
+    <label
+      data-field-picture-input={capture ? "camera" : "library"}
+      style={{
+        ...touchTargetStyle(touch),
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: `0 ${space[3]}px`,
+        borderRadius: "var(--radius-md)",
+        border: "1px solid var(--pg-border)",
+        background: capture ? "var(--pg-primary)" : "transparent",
+        color: capture ? "var(--pg-primary-fg)" : "var(--pg-fg)",
+        cursor: "pointer",
+        fontWeight: 600,
+      }}
+    >
+      {label}
+      <input
+        type="file"
+        accept="image/*"
+        {...(capture ? { capture: "environment" } : {})}
+        data-field-file={field}
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          opacity: 0,
+          overflow: "hidden",
+        }}
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          e.currentTarget.value = "";
+          if (file) onFile(file);
+        }}
+      />
+    </label>
+  );
+}
+
 function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   const client = useCanvasClient();
   const strings = useStrings();
+  // A fill shape on a phone or tablet: touch-sized controls, and a
+  // picture comes from the camera or the library (editor ADR 294).
+  const touch = useTouchSized();
+  const touchStyle = touchTargetStyle(touch);
   const { field } = row;
   const current =
     row.value?.kind === "text"
@@ -125,9 +197,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
     void set({ kind: "text", text: draft });
   };
 
-  const replacePicture = async () => {
-    const [file] = await chooseFiles({ accept: IMAGE_TYPES });
-    if (!file) return;
+  const placePicture = async (file: File) => {
     setMessage(null);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const reply = await client.mutateWithBytes(
@@ -137,6 +207,11 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
     );
     if (reply.kind === "mutationFailed")
       setMessage(refusalText(reply.payload.error));
+  };
+
+  const replacePicture = async () => {
+    const [file] = await chooseFiles({ accept: IMAGE_TYPES });
+    if (file) await placePicture(file);
   };
 
   let control: ReactElement;
@@ -200,6 +275,8 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
         value: text,
         maxLength: max ?? undefined,
         "data-field-input": field.name,
+        // 16 px keeps a phone from zooming the page into the field.
+        style: touch ? { ...touchStyle, fontSize: 16 } : undefined,
         onChange: (e: { currentTarget: { value: string } }) =>
           setDraft(e.currentTarget.value),
         onBlur: commitText,
@@ -219,7 +296,14 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
     }
     case "image":
       control = (
-        <div style={{ display: "flex", gap: space[2], alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: space[2],
+            alignItems: "center",
+          }}
+        >
           <span
             data-field-picture={field.name}
             style={{
@@ -231,13 +315,32 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
           >
             {current ? fileName(current) : strings.t(FORM.noPicture)}
           </span>
-          <button
-            type="button"
-            data-field-replace={field.name}
-            onClick={() => void replacePicture()}
-          >
-            {strings.t(FORM.replace)}
-          </button>
+          {touch ? (
+            <>
+              <PictureInput
+                field={field.name}
+                capture
+                label={strings.t(FORM.takePhoto)}
+                touch={touch}
+                onFile={(file) => void placePicture(file)}
+              />
+              <PictureInput
+                field={field.name}
+                capture={false}
+                label={strings.t(FORM.choosePicture)}
+                touch={touch}
+                onFile={(file) => void placePicture(file)}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              data-field-replace={field.name}
+              onClick={() => void replacePicture()}
+            >
+              {strings.t(FORM.replace)}
+            </button>
+          )}
         </div>
       );
       break;
@@ -247,6 +350,7 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
         <input
           type="checkbox"
           data-field-input={field.name}
+          style={touch ? { width: 24, height: 24, margin: 10 } : undefined}
           checked={visible}
           onChange={(e) =>
             void set({ kind: "visible", visible: e.currentTarget.checked })
@@ -314,31 +418,19 @@ function FieldRow({ row }: { row: TemplateFieldSummary }): ReactElement {
   );
 }
 
-/** The template form: one row per field, grouped by the author's groups. */
-export function TemplateFormPanel(): ReactElement {
-  const strings = useStrings();
-  const rows = useCollection<TemplateFieldSummary>("templateFields");
-  if (rows === null) return <div style={{ padding: space[3] }} />;
-  if (rows.length === 0) {
-    return (
-      <div
-        data-template-form-empty
-        style={{ padding: space[3], color: "var(--pg-muted-fg)" }}
-      >
-        {strings.t(FORM.empty)}
-      </div>
-    );
-  }
+/** The rows of a form, under the author's group headings. */
+function FieldGroups({
+  rows,
+}: {
+  rows: readonly TemplateFieldSummary[];
+}): ReactElement {
   const groups = new Map<string, TemplateFieldSummary[]>();
   for (const row of rows) {
     const g = row.field.group ?? "";
     groups.set(g, [...(groups.get(g) ?? []), row]);
   }
   return (
-    <div
-      data-template-form
-      style={{ display: "grid", gap: space[3], padding: space[3] }}
-    >
+    <>
       {[...groups].map(([group, members]) => (
         <section key={group} style={{ display: "grid", gap: space[3] }}>
           {group ? (
@@ -351,6 +443,113 @@ export function TemplateFormPanel(): ReactElement {
           ))}
         </section>
       ))}
+    </>
+  );
+}
+
+const sheetButton = {
+  padding: `0 ${space[3]}px`,
+  borderRadius: "var(--radius-md)",
+  border: "1px solid var(--pg-border)",
+  background: "transparent",
+  color: "var(--pg-fg)",
+  font: "inherit",
+  fontWeight: 600,
+  cursor: "pointer",
+} as const;
+
+/**
+ * The form as a sheet under the canvas (the `template-fill` preset on a
+ * phone, editor ADR 294): the field tapped on the page, with Done to put
+ * it away, or every field when asked for.
+ */
+function FieldSheet({
+  rows,
+}: {
+  rows: readonly TemplateFieldSummary[];
+}): ReactElement {
+  const strings = useStrings();
+  const { elementSelection, setElementSelection } = useSelection();
+  const [all, setAll] = useState(false);
+  const active = rows.find((row) =>
+    elementSelection.some((id) => sameElement(id, row.elementId)),
+  );
+  const shown = all ? rows : active ? [active] : [];
+  const touch = touchTargetStyle(true);
+  return (
+    <div
+      data-template-form
+      data-template-form-sheet={active ? active.field.name : ""}
+      style={{ display: "grid", gap: space[3], padding: space[3] }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: space[2],
+        }}
+      >
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            color: shown.length ? "var(--pg-fg)" : "var(--pg-muted-fg)",
+            fontSize: 14,
+          }}
+        >
+          {shown.length ? null : strings.t(FORM.tapAField)}
+        </span>
+        <button
+          type="button"
+          data-sheet-all
+          aria-expanded={all}
+          style={{ ...sheetButton, ...touch }}
+          onClick={() => setAll(!all)}
+        >
+          {strings.t(all ? FORM.hideFields : FORM.allFields)}
+        </button>
+        {active || all ? (
+          <button
+            type="button"
+            data-sheet-done
+            style={{ ...sheetButton, ...touch }}
+            onClick={() => {
+              setAll(false);
+              setElementSelection([]);
+            }}
+          >
+            {strings.t(FORM.done)}
+          </button>
+        ) : null}
+      </div>
+      {shown.length ? <FieldGroups rows={shown} /> : null}
+    </div>
+  );
+}
+
+/** The template form: one row per field, grouped by the author's groups. */
+export function TemplateFormPanel(): ReactElement {
+  const strings = useStrings();
+  const rows = useCollection<TemplateFieldSummary>("templateFields");
+  const sheet = useCompactLayout() === "field-sheet";
+  if (rows === null) return <div style={{ padding: space[3] }} />;
+  if (rows.length === 0) {
+    return (
+      <div
+        data-template-form-empty
+        style={{ padding: space[3], color: "var(--pg-muted-fg)" }}
+      >
+        {strings.t(FORM.empty)}
+      </div>
+    );
+  }
+  if (sheet) return <FieldSheet rows={rows} />;
+  return (
+    <div
+      data-template-form
+      style={{ display: "grid", gap: space[3], padding: space[3] }}
+    >
+      <FieldGroups rows={rows} />
     </div>
   );
 }

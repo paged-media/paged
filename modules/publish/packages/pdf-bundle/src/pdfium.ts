@@ -311,6 +311,25 @@ export async function rasterizePdf(
   }
 }
 
+/** How many pages the PDF has, or null when PDFium cannot open it. */
+export async function pdfPageCount(bytes: Uint8Array): Promise<number | null> {
+  const f = await loadPdfium();
+  if (!f) return null;
+  const buf = f.malloc(bytes.length);
+  f.M.HEAPU8.set(bytes, buf);
+  const doc = f.LoadMemDocument(buf, bytes.length, 0);
+  if (!doc) {
+    f.free(buf);
+    return null;
+  }
+  try {
+    return f.PageCount(doc);
+  } finally {
+    f.CloseDoc(doc);
+    f.free(buf);
+  }
+}
+
 /** Encode RGBA pixels to PNG bytes through a canvas (OffscreenCanvas when
  *  available — worker-safe — else a DOM `<canvas>`). Uses `createImageData` +
  *  `.data.set` rather than the `ImageData` constructor to sidestep the

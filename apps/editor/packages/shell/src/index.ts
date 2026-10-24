@@ -130,9 +130,14 @@ export { CANVAS_POINTER, type CanvasPointer } from "./state/canvas-pointer";
 // surfaces; the app points it at the shared backend.
 export {
   setDataDoorSource,
+  setDataDropHandler,
   useDataService,
   useDataRevision,
+  useDataFieldDrop,
+  DATA_FIELD_DRAG_TYPE,
   type DataDoorSource,
+  type DataFieldDrag,
+  type DataFieldDropHandler,
 } from "./state/data-door";
 export {
   ALIGN_SCOPE,
@@ -981,6 +986,11 @@ export {
   filterByRegion,
   resolveProfile,
   validateProfile,
+  createIdAliases,
+  deprecationWarning,
+  migrateProfileIds,
+  type IdAliases,
+  type IdDeprecation,
   applyRegionEdit,
   excludedBy,
   globMatches,
@@ -988,6 +998,7 @@ export {
   matchIndices,
   type BundleSelection,
   type CanvasFurniture,
+  type CompactLayout,
   type EditorProfile,
   type ItemMatcher,
   type ProfileMode,
@@ -1012,6 +1023,15 @@ export {
   type ChromeOverride,
   type ChromeRegions,
 } from "./state/chrome-regions";
+export {
+  COMPACT_MAX_WIDTH_PX,
+  TOUCH_TARGET_PX,
+  isCompactWidth,
+  touchTargetStyle,
+  useCompactLayout,
+  useEditorWidth,
+  useTouchSized,
+} from "./state/compact";
 export {
   CHROME_FEATURES,
   FEATURE_KINDS,

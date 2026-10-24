@@ -93,6 +93,8 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
 | [291](291-the-data-panel.md) | The Data panel: the document's data as a grid, over the data door | Accepted 2026-10-24 |
 | [292](292-the-bind-popover.md) | The bind popover: field, rules, map or expression on any property field | Accepted 2026-10-24 |
+| [293](293-a-template-opened-as-a-document-says-so.md) | A template opened as a document says so, and offers "Edit template" | Accepted 2026-10-24 |
+| [294](294-the-fill-presets-on-phones-and-tablets.md) | The fill presets on phones and tablets | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

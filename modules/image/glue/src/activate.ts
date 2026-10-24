@@ -55,6 +55,7 @@ import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
+import { adjustmentKindLabel } from "./panels/sections/layer-parity";
 import { makeCropGesture } from "./crop-tool";
 import { makeMoveGesture } from "./move-tool";
 import { makeBucketGesture } from "./bucket-tool";
@@ -123,6 +124,30 @@ const CMD = defineMessages("image.command", {
   imageSize: "Image size…",
   trim: "Trim…",
   rotateArbitrary: "Rotate canvas by an arbitrary angle…",
+  newFillSolid: "New fill layer: solid colour",
+  newFillGradient: "New fill layer: gradient",
+  newFillPattern: "New fill layer: pattern",
+  newAdjustment: "New adjustment layer: {kind}",
+  blendingOptions: "Blending options of the active layer…",
+  rasterizeLayer: "Rasterize the active layer",
+  layerViaCopy: "Layer via copy",
+  layerViaCut: "Layer via cut",
+  mergeDown: "Merge down",
+  mergeVisible: "Merge visible",
+  mergeGroup: "Merge the active layer's group",
+  stampVisible: "Stamp visible",
+  flattenImage: "Flatten image",
+  alignLeft: "Align layers: left edges",
+  alignHCenter: "Align layers: horizontal centres",
+  alignRight: "Align layers: right edges",
+  alignTop: "Align layers: top edges",
+  alignVCenter: "Align layers: vertical centres",
+  alignBottom: "Align layers: bottom edges",
+  distributeHorizontal: "Distribute layers: horizontal centres",
+  distributeVertical: "Distribute layers: vertical centres",
+  linkLayers: "Link the active layer with the layer below",
+  unlinkLayer: "Unlink the active layer",
+  newLayerComp: "New layer comp",
 });
 
 const TOOL = defineMessages("image.tool", {
@@ -839,6 +864,108 @@ export function activate(host: BundleHost): BundleHandle {
       },
     });
   }
+  // LAYER ▸ New Fill Layer / New Adjustment Layer and the Layer menu's
+  // verbs (Photoshop parity, WP5.3). Each is one undo step in the image's
+  // own history; the tables are literal so every command id reads as
+  // written.
+  for (const [suffix, title, run] of [
+    ["newFillSolid", CMD.newFillSolid, () => session.addFillLayer("solid")],
+    [
+      "newFillGradient",
+      CMD.newFillGradient,
+      () => session.addFillLayer("gradient"),
+    ],
+    [
+      "newFillPattern",
+      CMD.newFillPattern,
+      () => session.addFillLayer("pattern"),
+    ],
+    [
+      "blendingOptions",
+      CMD.blendingOptions,
+      () => session.openBlendingOptions(),
+    ],
+    [
+      "rasterizeLayer",
+      CMD.rasterizeLayer,
+      () => session.rasterizeLayer(session.state().layers.active),
+    ],
+    ["layerViaCopy", CMD.layerViaCopy, () => session.layerViaCopy()],
+    ["layerViaCut", CMD.layerViaCut, () => session.layerViaCut()],
+    ["mergeDown", CMD.mergeDown, () => session.mergeDown()],
+    ["mergeVisible", CMD.mergeVisible, () => session.mergeVisible()],
+    ["mergeGroup", CMD.mergeGroup, () => session.mergeGroup()],
+    ["stampVisible", CMD.stampVisible, () => session.stampVisible()],
+    ["flattenImage", CMD.flattenImage, () => session.flattenImage()],
+    ["alignLeft", CMD.alignLeft, () => session.alignLayers("left")],
+    ["alignHCenter", CMD.alignHCenter, () => session.alignLayers("hcenter")],
+    ["alignRight", CMD.alignRight, () => session.alignLayers("right")],
+    ["alignTop", CMD.alignTop, () => session.alignLayers("top")],
+    ["alignVCenter", CMD.alignVCenter, () => session.alignLayers("vcenter")],
+    ["alignBottom", CMD.alignBottom, () => session.alignLayers("bottom")],
+    [
+      "distributeHorizontal",
+      CMD.distributeHorizontal,
+      () => session.distributeLayers("horizontal"),
+    ],
+    [
+      "distributeVertical",
+      CMD.distributeVertical,
+      () => session.distributeLayers("vertical"),
+    ],
+    [
+      "linkLayers",
+      CMD.linkLayers,
+      () => {
+        const a = session.state().layers.active;
+        return a > 0 ? session.linkLayers([a - 1, a]) : false;
+      },
+    ],
+    [
+      "unlinkLayer",
+      CMD.unlinkLayer,
+      () => session.unlinkLayer(session.state().layers.active),
+    ],
+    ["newLayerComp", CMD.newLayerComp, () => session.newLayerComp()],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(title),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void run();
+      },
+    });
+  }
+  for (const [suffix, kind] of [
+    ["newAdjustmentBrightnessContrast", "brightnessContrast"],
+    ["newAdjustmentLevels", "levels"],
+    ["newAdjustmentCurves", "curves"],
+    ["newAdjustmentExposure", "exposure"],
+    ["newAdjustmentVibrance", "vibrance"],
+    ["newAdjustmentHueSaturation", "hueSaturation"],
+    ["newAdjustmentColorBalance", "colorBalance"],
+    ["newAdjustmentBlackWhite", "blackWhite"],
+    ["newAdjustmentPhotoFilter", "photoFilter"],
+    ["newAdjustmentChannelMixer", "channelMixer"],
+    ["newAdjustmentColorLookup", "colorLookup"],
+    ["newAdjustmentInvert", "invert"],
+    ["newAdjustmentPosterize", "posterize"],
+    ["newAdjustmentThreshold", "threshold"],
+    ["newAdjustmentGradientMap", "gradientMap"],
+    ["newAdjustmentSelectiveColor", "selectiveColor"],
+  ] as const) {
+    command({
+      id: `media.paged.image.command.${suffix}`,
+      title: t(CMD.newAdjustment, { kind: adjustmentKindLabel(kind) }),
+      category: "Image",
+      handler: () => {
+        host.shell.openPanel(PANEL_ID);
+        void session.addAdjustmentLayerOf(kind);
+      },
+    });
+  }
   command({
     id: "media.paged.image.command.commitImage",
     title: t(CMD.commitImageEditsToTheDocument),
@@ -1319,7 +1446,8 @@ export function activate(host: BundleHost): BundleHandle {
     untyped,
     undefined,
     () => session.state().source !== null,
-    (frameId) => session.liveSelection(frameId),
+    (frameId, record) => session.liveSelection(frameId, record),
+    (frameId, from, to, ops) => session.followCanvasOps(frameId, from, to, ops),
   );
   // ADR 323 — the layer stack's properties as host-rendered PropertyFields
   // (a schema panel of property rows; needs the object model + bindings).

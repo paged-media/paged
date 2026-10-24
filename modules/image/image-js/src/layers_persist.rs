@@ -39,6 +39,24 @@
 //! length + UTF-8. Versions 1 (no group masks) and 2 (no layer
 //! rectangles: every layer canvas-sized) are still read.
 //!
+//! Version 4 (Photoshop layer parity) adds, all length-prefixed so a later
+//! version can append: per group, after its mask, u32 n + {u8 colour
+//! label}; two more layer kinds, 3 FILL {str kind, u32 n + n f32
+//! (`FillSource::values`), i64 tile slot, u32 tile width, u32 tile height,
+//! str name, u8 stale} and 4 TYPED ADJUSTMENT {str kind, u32 n + n f32
+//! (`Adjustment::values`), u32 m + m f32 (a Color Lookup's cube), str
+//! label} (kind 1 is now a multi-stage CHAIN; an older manifest's chain
+//! opens as its typed layer when it has one stage, `Adjustment::from_chain`);
+//! per layer, after its kind, u32 n + {f32 fill opacity, u8 knockout,
+//! u8 lock bits, u8 colour label, i64 link (−1 none), u8 blend-if
+//! present, 32 u8 sliders when present}; and after the layers the LAYER
+//! COMPS: u32 count, per comp {u32 id, str name, u8 flags (1 visibility,
+//! 2 position, 4 appearance), u32 entries, per entry {u32 layer id, u8
+//! visible, i64 pixel slot (−1: none), u8 depth, i32 x, i32 y, u32 w,
+//! u32 h (x = −1: canvas-sized), u8 appearance present, then f32
+//! opacity, f32 fill opacity, str blend, u8 knockout, u8 blend-if
+//! present, 32 u8}}.
+//!
 //! The history is not persisted: a reopened stack starts with none.
 
 use std::sync::Arc;
@@ -47,11 +65,14 @@ use image_core::SampleDepth;
 use image_gpu::SelectionCoverage;
 use image_graph::journal::TileJournal;
 
-use super::{Layer, LayerGroup, LayerKind, LayerStack, SmartSource};
+use super::{
+    Adjustment, BlendIf, CompAppearance, CompEntry, FillLayer, FillSource, Knockout, Layer,
+    LayerComp, LayerExt, LayerGroup, LayerKind, LayerLocks, LayerStack, SmartSource,
+};
 use crate::ingest::{AdjustParams, IngestError};
 
 const MAGIC: &[u8; 4] = b"PGIL";
-const VERSION: u32 = 3;
+const VERSION: u32 = 4;
 
 struct W(Vec<u8>);
 
@@ -128,6 +149,36 @@ fn blend(name: &str) -> Result<&'static image_kernels::KernelDef, IngestError> {
         .ok_or_else(|| IngestError::Decode(format!("layer manifest: unknown blend \"{name}\"")))
 }
 
+fn write_blend_if(w: &mut W, b: Option<&BlendIf>) {
+    match b {
+        Some(b) => {
+            w.u8(1);
+            w.0.extend_from_slice(&b.to_bytes());
+        }
+        None => w.u8(0),
+    }
+}
+
+fn read_blend_if(r: &mut R<'_>) -> Result<Option<Box<BlendIf>>, IngestError> {
+    if r.u8()? == 0 {
+        return Ok(None);
+    }
+    let b: [u8; 32] = r.take(32)?.try_into().expect("32 bytes");
+    Ok(Some(Box::new(BlendIf::from_bytes(&b))))
+}
+
+/// A length-prefixed block: its bytes, read as their own manifest so a
+/// later version's longer block is read for what this one knows.
+fn block<'a>(r: &mut R<'a>) -> Result<R<'a>, IngestError> {
+    let n = r.u32()? as usize;
+    let at = r.at;
+    r.take(n)?;
+    Ok(R {
+        b: &r.b[at..at + n],
+        at: 0,
+    })
+}
+
 impl LayerStack {
     /// The stack as a manifest plus the buffers it refers to by slot.
     pub fn export(&self) -> (Vec<u8>, Vec<Arc<[u8]>>) {
@@ -139,7 +190,7 @@ impl LayerStack {
     /// opens. Fields the version lacks are left out (and so is what they
     /// carried: group masks before 2, bounds and the text gamma before 3,
     /// bounded layers and masks then written at canvas size).
-    fn export_with(&self, version: u32) -> (Vec<u8>, Vec<Arc<[u8]>>) {
+    pub(super) fn export_with(&self, version: u32) -> (Vec<u8>, Vec<Arc<[u8]>>) {
         let mut w = W(Vec::new());
         let mut buffers: Vec<Arc<[u8]>> = Vec::new();
         let mut slot = |b: Arc<[u8]>| -> u32 {
@@ -169,6 +220,10 @@ impl LayerStack {
                     .map(|m| slot(Arc::from(m.data().to_vec().into_boxed_slice())));
                 w.i64(mask.map_or(-1, i64::from));
             }
+            if version >= 4 {
+                w.u32(1);
+                w.u8(g.color);
+            }
         }
         w.u32(self.layers.len() as u32);
         for l in &self.layers {
@@ -181,10 +236,15 @@ impl LayerStack {
             w.u8(l.clipped as u8);
             w.i64(l.group.map_or(-1, i64::from));
             w.u8(l.mask_enabled as u8);
-            w.u8(match l.kind {
+            w.u8(match &l.kind {
                 LayerKind::Pixels => 0,
+                LayerKind::Adjustment(a) if matches!(**a, Adjustment::Chain(_)) => 1,
+                LayerKind::Adjustment(_) if version >= 4 => 4,
                 LayerKind::Adjustment(_) => 1,
                 LayerKind::Smart(_) => 2,
+                LayerKind::Fill(_) if version >= 4 => 3,
+                // An older reader takes a fill layer's render as pixels.
+                LayerKind::Fill(_) => 0,
             });
             w.u8(if l.rgba.is_16bit() { 16 } else { 8 });
             // A bounded layer is stored as it lives — expanding it here
@@ -245,12 +305,52 @@ impl LayerStack {
             }
             match &l.kind {
                 LayerKind::Pixels => {}
-                LayerKind::Adjustment(p) => {
-                    let block = p.to_wire();
+                LayerKind::Fill(_) if version < 4 => {}
+                LayerKind::Adjustment(a) if version < 4 || matches!(**a, Adjustment::Chain(_)) => {
+                    // An older reader takes a typed layer as the chain it
+                    // evaluates to (a direct kind as the identity chain).
+                    let block = a.to_chain().unwrap_or_default().to_wire();
                     w.u32(block.len() as u32);
                     for v in block {
                         w.f32(v);
                     }
+                }
+                LayerKind::Adjustment(a) => {
+                    w.str(a.kind_name());
+                    let values = a.values();
+                    w.u32(values.len() as u32);
+                    for v in values {
+                        w.f32(v);
+                    }
+                    let blob = a.blob().unwrap_or(&[]);
+                    w.u32(blob.len() as u32);
+                    for v in blob {
+                        w.f32(*v);
+                    }
+                    w.str(a.label());
+                }
+                LayerKind::Fill(f) => {
+                    w.str(f.source.kind_name());
+                    let values = f.source.values();
+                    w.u32(values.len() as u32);
+                    for v in values {
+                        w.f32(v);
+                    }
+                    match &f.source {
+                        FillSource::Pattern(p) => {
+                            w.i64(i64::from(slot(Arc::clone(&p.tile))));
+                            w.u32(p.width);
+                            w.u32(p.height);
+                            w.str(&p.name);
+                        }
+                        _ => {
+                            w.i64(-1);
+                            w.u32(0);
+                            w.u32(0);
+                            w.str("");
+                        }
+                    }
+                    w.u8(u8::from(f.stale));
                 }
                 LayerKind::Smart(src) => {
                     w.u32(src.width);
@@ -258,6 +358,75 @@ impl LayerStack {
                     w.f32(src.scale);
                     let s = slot(Arc::clone(&src.rgba));
                     w.u32(s);
+                }
+            }
+            if version >= 4 {
+                let mut e = W(Vec::new());
+                e.f32(l.ext.fill_opacity);
+                e.u8(l.ext.knockout.code());
+                e.u8(l.ext.locks.bits());
+                e.u8(l.ext.color);
+                e.i64(l.ext.link.map_or(-1, i64::from));
+                write_blend_if(&mut e, l.ext.blend_if.as_deref());
+                w.u32(e.0.len() as u32);
+                w.0.extend_from_slice(&e.0);
+            }
+        }
+        if version >= 4 {
+            w.u32(self.comps.len() as u32);
+            for c in &self.comps {
+                w.u32(c.id);
+                w.str(&c.name);
+                w.u8(u8::from(c.visibility)
+                    | u8::from(c.position) << 1
+                    | u8::from(c.appearance) << 2);
+                w.u32(c.entries.len() as u32);
+                for e in &c.entries {
+                    w.u32(e.id);
+                    w.u8(u8::from(e.visible));
+                    match &e.pixels {
+                        Some(px) => {
+                            let (buf, rect) = match px.bounded() {
+                                Some(b) => (b.px.raw_arc(), Some(b.rect)),
+                                None => (px.raw_arc(), None),
+                            };
+                            w.i64(i64::from(slot(buf)));
+                            w.u8(if px.is_16bit() { 16 } else { 8 });
+                            match rect {
+                                Some(r) => {
+                                    w.i32(r.x);
+                                    w.i32(r.y);
+                                    w.u32(r.w);
+                                    w.u32(r.h);
+                                }
+                                None => {
+                                    w.i32(-1);
+                                    w.i32(-1);
+                                    w.u32(0);
+                                    w.u32(0);
+                                }
+                            }
+                        }
+                        None => {
+                            w.i64(-1);
+                            w.u8(8);
+                            w.i32(-1);
+                            w.i32(-1);
+                            w.u32(0);
+                            w.u32(0);
+                        }
+                    }
+                    match &e.appearance {
+                        Some(a) => {
+                            w.u8(1);
+                            w.f32(a.opacity);
+                            w.f32(a.fill_opacity);
+                            w.str(a.blend.id);
+                            w.u8(a.knockout.code());
+                            write_blend_if(&mut w, a.blend_if.as_deref());
+                        }
+                        None => w.u8(0),
+                    }
                 }
             }
         }
@@ -318,6 +487,12 @@ impl LayerStack {
             } else {
                 (true, None)
             };
+            let color = if version >= 4 {
+                let mut e = block(&mut r)?;
+                e.u8().unwrap_or(0).min(7)
+            } else {
+                0
+            };
             groups.push(LayerGroup {
                 id,
                 name,
@@ -328,6 +503,7 @@ impl LayerStack {
                 parent,
                 mask,
                 mask_enabled,
+                color,
             });
         }
         let mut layers = Vec::new();
@@ -410,7 +586,39 @@ impl LayerStack {
                     for _ in 0..n {
                         block.push(r.f32()?);
                     }
-                    LayerKind::Adjustment(Box::new(AdjustParams::from_wire(&block)?))
+                    let chain = AdjustParams::from_wire(&block)?;
+                    // MIGRATION: before version 4 every adjustment layer
+                    // was a chain; one stage opens as its typed layer.
+                    LayerKind::Adjustment(Box::new(if version < 4 {
+                        Adjustment::from_chain(chain)
+                    } else {
+                        Adjustment::Chain(chain)
+                    }))
+                }
+                3 if version >= 4 => {
+                    let kind = r.str()?;
+                    let values = f32s(&mut r)?;
+                    let tile_slot = u32::try_from(r.i64()?).ok();
+                    let (tw, th) = (r.u32()?, r.u32()?);
+                    let tile_name = r.str()?;
+                    let stale = r.u8()? != 0;
+                    let tile = match tile_slot {
+                        Some(slot) => Some((buffer(slot)?, tw, th)),
+                        None => None,
+                    };
+                    LayerKind::Fill(Box::new(FillLayer {
+                        source: FillSource::from_wire(&kind, &values, tile, &tile_name)?,
+                        stale,
+                    }))
+                }
+                4 if version >= 4 => {
+                    let kind = r.str()?;
+                    let values = f32s(&mut r)?;
+                    let blob = f32s(&mut r)?;
+                    let label = r.str()?;
+                    LayerKind::Adjustment(Box::new(Adjustment::from_wire(
+                        &kind, &values, &blob, &label,
+                    )?))
                 }
                 2 => {
                     let (sw, sh, scale) = (r.u32()?, r.u32()?, r.f32()?);
@@ -433,6 +641,19 @@ impl LayerStack {
                     )))
                 }
             };
+            let ext = if version >= 4 {
+                let mut e = block(&mut r)?;
+                LayerExt {
+                    fill_opacity: e.f32()?.clamp(0.0, 1.0),
+                    knockout: Knockout::from_code(e.u8()?),
+                    locks: LayerLocks::from_bits(e.u8()?),
+                    color: e.u8()?.min(7),
+                    link: u32::try_from(e.i64()?).ok(),
+                    blend_if: read_blend_if(&mut e)?,
+                }
+            } else {
+                LayerExt::default()
+            };
             layers.push(Layer {
                 kind,
                 id,
@@ -447,7 +668,79 @@ impl LayerStack {
                 mask_enabled,
                 clipped,
                 blend_gamma,
+                ext,
             });
+        }
+        let mut comps = Vec::new();
+        if version >= 4 {
+            for _ in 0..r.u32()? {
+                let id = r.u32()?;
+                let name = r.str()?;
+                let flags = r.u8()?;
+                let mut entries = Vec::new();
+                for _ in 0..r.u32()? {
+                    let layer = r.u32()?;
+                    let visible = r.u8()? != 0;
+                    let px_slot = u32::try_from(r.i64()?).ok();
+                    let depth = match r.u8()? {
+                        16 => SampleDepth::U16,
+                        _ => SampleDepth::U8,
+                    };
+                    let (x, y, rw, rh) = (r.i32()?, r.i32()?, r.u32()?, r.u32()?);
+                    let pixels = match px_slot {
+                        Some(slot) => {
+                            let px = crate::pixels::Pixels::from_raw(buffer(slot)?, depth);
+                            Some(if x >= 0 {
+                                crate::pixels::Bounded::new(
+                                    image_core::Region::new(x, y, rw, rh),
+                                    px,
+                                    width,
+                                    height,
+                                )
+                                .map(crate::pixels::LayerPixels::Bounded)
+                                .ok_or_else(|| {
+                                    IngestError::Decode(format!(
+                                        "layer comp \"{name}\": a recorded rectangle does not fit"
+                                    ))
+                                })?
+                            } else {
+                                if px.len() != n_px * px.bytes_per_pixel() {
+                                    return Err(IngestError::Decode(format!(
+                                        "layer comp \"{name}\": recorded pixels are mis-sized"
+                                    )));
+                                }
+                                px.into()
+                            })
+                        }
+                        None => None,
+                    };
+                    let appearance = if r.u8()? != 0 {
+                        Some(CompAppearance {
+                            opacity: r.f32()?.clamp(0.0, 1.0),
+                            fill_opacity: r.f32()?.clamp(0.0, 1.0),
+                            blend: blend(&r.str()?)?,
+                            knockout: Knockout::from_code(r.u8()?),
+                            blend_if: read_blend_if(&mut r)?,
+                        })
+                    } else {
+                        None
+                    };
+                    entries.push(CompEntry {
+                        id: layer,
+                        visible,
+                        pixels,
+                        appearance,
+                    });
+                }
+                comps.push(LayerComp {
+                    id,
+                    name,
+                    visibility: flags & 1 != 0,
+                    position: flags & 2 != 0,
+                    appearance: flags & 4 != 0,
+                    entries,
+                });
+            }
         }
         if layers.is_empty() || active >= layers.len() {
             return Err(IngestError::Decode(
@@ -468,8 +761,17 @@ impl LayerStack {
             structure_generation: 0,
             edit_mask: false,
             fold: Default::default(),
+            comps,
         })
     }
+}
+
+fn f32s(r: &mut R<'_>) -> Result<Vec<f32>, IngestError> {
+    let n = r.u32()? as usize;
+    if n > r.b.len() {
+        return Err(IngestError::Decode("layer manifest is truncated".into()));
+    }
+    (0..n).map(|_| r.f32()).collect()
 }
 
 #[cfg(test)]
@@ -534,8 +836,8 @@ mod tests {
         // Adjustment parameters survive exactly (to_wire ∘ from_wire).
         match (&s.layers[2].kind, &back.layers[2].kind) {
             (LayerKind::Adjustment(a), LayerKind::Adjustment(b)) => {
-                assert_eq!(a.to_wire(), b.to_wire());
-                assert_eq!(b.posterize, Some(5.0));
+                assert_eq!(a.values(), b.values());
+                assert_eq!(b.to_chain().expect("a chain").posterize, Some(5.0));
             }
             _ => panic!("layer 2 is the adjustment"),
         }

@@ -45,6 +45,7 @@ import { MenuBar, prettyKey } from "./MenuBar";
 import { notifyPalette } from "./CommandPalette";
 import { useEditorScope } from "../state/editor-scope";
 import { useChromeRegions } from "../state/chrome-regions";
+import { useCompactLayout } from "../state/compact";
 import { RegionItems } from "./RegionItems";
 import { HEADER } from "./messages";
 
@@ -57,8 +58,14 @@ export interface HeaderProps {
 export function Header({ onFile, headerExtras, status }: HeaderProps) {
   const chrome = useChromeRegions();
   const headerRegion = chrome.region("header");
+  // A fill shape on a phone (editor ADR 294): the header grows to hold
+  // touch-sized buttons and keeps its sides close.
+  const compact = useCompactLayout() !== null;
   return (
-    <header style={headerStyle}>
+    <header
+      data-header-compact={compact ? "" : undefined}
+      style={compact ? compactHeaderStyle : headerStyle}
+    >
       <div
         style={{
           display: "flex",
@@ -89,7 +96,17 @@ export function Header({ onFile, headerExtras, status }: HeaderProps) {
       </div>
 
       <div
-        style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}
+        style={
+          compact
+            ? {
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                minWidth: 0,
+                overflowX: "auto",
+              }
+            : { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }
+        }
       >
         <FileDrop onFile={onFile} hidden />
         {/* A profile that lists the header's items replaces this cluster
@@ -346,4 +363,12 @@ const headerStyle: React.CSSProperties = {
   flexShrink: 0,
   position: "relative",
   zIndex: 30,
+};
+
+const compactHeaderStyle: React.CSSProperties = {
+  ...headerStyle,
+  height: "auto",
+  minHeight: 52,
+  padding: "4px 8px",
+  gap: 8,
 };

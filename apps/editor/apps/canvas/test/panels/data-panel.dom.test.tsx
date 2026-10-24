@@ -24,7 +24,7 @@
 // a binding reads marked in their headers.
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { covers } from "@paged-media/test-kit";
 
 import type {
@@ -35,7 +35,11 @@ import type {
   ProviderRecordSet,
 } from "@paged-media/plugin-api";
 import { createDataRegistry } from "@paged-media/plugin-sdk";
-import { createEditorScope, setDataDoorSource } from "@paged-media/shell";
+import {
+  createEditorScope,
+  DATA_FIELD_DRAG_TYPE,
+  setDataDoorSource,
+} from "@paged-media/shell";
 
 import { DataPanel } from "../../src/panels/data-panel";
 import { shapesScene } from "./fixtures";
@@ -366,5 +370,45 @@ describe("Data panel", () => {
         address,
       ),
     ).toEqual([address(h.scene.locked)]);
+  });
+
+  test("a query's field header drags out as a field to place [editor-shell.data-panel]", async () => {
+    covers("panel:paged.data");
+    const { scope } = serve([{ ...TABLE, kind: "query", writable: false }]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    const header = h.root.querySelector(
+      "[data-data-header='sku']",
+    ) as HTMLElement;
+    expect(header.getAttribute("draggable")).toBe("true");
+    expect(header.title).toContain("drag onto a text or graphic frame");
+    const data: Record<string, string> = {};
+    const dataTransfer = {
+      setData: (type: string, value: string) => void (data[type] = value),
+    };
+    fireEvent.dragStart(header, { dataTransfer });
+    expect(JSON.parse(data[DATA_FIELD_DRAG_TYPE]!)).toEqual({
+      query: "products",
+      field: "sku",
+    });
+  });
+
+  test("a source table's headers do not drag", async () => {
+    const { scope } = serve([TABLE]);
+    const h = await mountPanel(DataPanel, {
+      id: "paged.data",
+      document: "none",
+      scope,
+    });
+    await settle();
+    expect(
+      h.root
+        .querySelector("[data-data-header='sku']")
+        ?.getAttribute("draggable"),
+    ).toBe("false");
   });
 });

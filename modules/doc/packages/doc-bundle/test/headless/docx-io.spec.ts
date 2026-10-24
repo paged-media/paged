@@ -335,6 +335,70 @@ describe.skipIf(!docxPresent)(
       expect(errors).toEqual([]);
     });
 
+    it("a placed Word document saves rows added and removed on the canvas", async () => {
+      covers("exporter:media.paged.doc.exporter.docx");
+      const bytes = fixture("price-table.docx");
+      const engine = await DocEngine.boot();
+      let ir;
+      try {
+        engine.loadDocx(bytes);
+        ir = engine.lowered();
+      } finally {
+        engine.dispose();
+      }
+      const placed = await placeEmbedded(host, ir, bytes, "price-table.docx");
+      const storyId = placed!.storyId!;
+      const [word] = await host.objects.query(`story:${storyId} > table`);
+      const tableId = word!.replace(/^table:/, "");
+      // A row added above "Apples" and typed into: four rows now.
+      for (const m of [
+        { op: "insertTableRow", args: { storyId, tableId, at: 1 } },
+        {
+          op: "insertText",
+          args: {
+            storyId,
+            offset: 0,
+            text: "Pears",
+            cell: { tableId, row: 1, col: 0 },
+          },
+        },
+      ]) {
+        const r = await host.document.mutate(m as never);
+        expect(r.applied).toBe(true);
+      }
+      const out = await exporter.export();
+      expect(out).not.toBeNull();
+      const back = await DocEngine.boot();
+      try {
+        back.loadDocx(out!.bytes);
+        const table = back
+          .lowered()
+          .story.blocks.find((b) => b.kind === "table");
+        expect(
+          table?.kind === "table"
+            ? table.cells.map((c) =>
+                c.paragraphs
+                  .map((p) => p.runs.map((r) => r.text).join(""))
+                  .join("\n"),
+              )
+            : [],
+        ).toEqual([
+          "Item",
+          "Price",
+          "Pears",
+          "",
+          "Apples",
+          "1.20",
+          "Line one\nLine two",
+          "For «Name»",
+        ]);
+      } finally {
+        back.dispose();
+      }
+      expect(host.diagnostics.get("media.paged.doc/save-back")).toEqual([]);
+      expect(errors).toEqual([]);
+    });
+
     it("with no Word document open there is nothing to export", async () => {
       covers("exporter:media.paged.doc.exporter.docx");
       expect(await exporter.export()).toBeNull();

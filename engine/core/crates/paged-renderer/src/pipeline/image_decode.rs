@@ -16,13 +16,15 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Raster / vector image decoding: format sniffing (JPEG, SVG, EPS),
+//! Raster / vector image decoding: format sniffing (JPEG, SVG),
 //! DCT-scaled JPEG decode for oversized rasters, SVG rasterisation,
 //! and lazy dimension peeking. RGBA conversion lives in
-//! [`super::image_convert`]. A TIFF and a PSD/PSB decode through
-//! `paged-raster`, the same call paged-gpu makes at raster time on wasm32,
-//! so a CMYK or Lab TIFF and a CMYK PSD convert through paged-color with
-//! their embedded profile. A PSD/PSB draws its merged composite.
+//! [`super::image_convert`]. TIFF, PSD/PSB, DNG, AVIF, JPEG XL, Radiance
+//! HDR, OpenEXR and an EPS's preview decode through `paged-raster`, the
+//! same call paged-gpu makes at raster time on wasm32, so a CMYK or Lab
+//! TIFF and a CMYK PSD convert through paged-color with their embedded
+//! profile. A PSD/PSB draws its merged composite, an EPS its TIFF or EPSI
+//! preview (engine ADR 1005).
 
 use super::*;
 
@@ -36,21 +38,18 @@ use super::*;
 /// 300dpi for any frame up to ~13.6" on the longest edge.
 const DECODE_MAX_RASTER_PX: u32 = 4096;
 
-/// Detect PostScript / EPS magic in the first few bytes of a resolved
-/// image buffer. EPS streams start with `%!PS-Adobe` (or `%!PS`); the
-/// `image` crate can't decode them, so the caller falls back to the
-/// missing-image placeholder rather than emit nothing (P-14).
-fn is_eps_magic(bytes: &[u8]) -> bool {
-    bytes.starts_with(b"%!PS")
+/// An Encapsulated PostScript file: PostScript text, or the DOS EPS
+/// binary container. Only its preview is drawn (no interpreter).
+pub(super) fn is_eps(bytes: &[u8]) -> bool {
+    paged_raster::sniff(bytes) == Some(paged_raster::Format::Eps)
 }
 
 /// Decode raw image bytes to RGBA8. Routes oversized JPEGs through
 /// `jpeg-decoder`'s DCT scaling so we never materialise a multi-
 /// hundred-MB RGBA8 buffer; everything else (PNG / WebP / small JPEGs)
 /// goes through `image::load_from_memory`. Returns `None` for any
-/// decode or buffer-shape failure — including EPS / PostScript
-/// streams, which would need a Ghostscript sidecar to rasterise
-/// (deferred, see `docs/plan.md` Phase 4).
+/// decode or buffer-shape failure — including an EPS without a TIFF or
+/// EPSI preview, which would need a PostScript interpreter.
 pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedImage> {
     paged_compose::perf::count(|c| c.pipeline_image_decodes += 1);
     // wasm32 has a hard 4 GB address-space cap. Eagerly decoding
@@ -80,7 +79,8 @@ pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedI
 /// for the pixel decode. Only the wasm32 path defers decode this way.
 #[cfg(target_arch = "wasm32")]
 fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
-    if is_eps_magic(bytes) {
+    // An EPS without a preview it can draw fails here, not at raster time.
+    if is_eps(bytes) && paged_raster::probe(bytes).is_err() {
         return None;
     }
     // SVGs always go through the eager path even on wasm32: usvg's
@@ -206,10 +206,6 @@ pub(super) fn decode_image_bytes_with_target_max(
     bytes: &[u8],
     max_px: u32,
 ) -> Option<paged_compose::DecodedImage> {
-    if is_eps_magic(bytes) {
-        tracing::warn!("EPS / PostScript image detected; emitting missing-image placeholder");
-        return None;
-    }
     if is_svg_magic(bytes) {
         return decode_svg_bytes(bytes, max_px);
     }
@@ -246,19 +242,18 @@ pub(super) fn decode_image_bytes_with_target_max(
 }
 
 /// The formats `paged-raster` reads itself rather than through `image`:
-/// TIFF, and PSD/PSB (whose merged composite it decodes through
-/// paged-psd; `image` reads no PSD).
+/// TIFF, PSD/PSB (its merged composite, through paged-psd), an EPS's
+/// preview, DNG, AVIF, JPEG XL, Radiance HDR and OpenEXR
+/// (`paged_raster::reads_natively`).
 fn reads_through_raster(bytes: &[u8]) -> bool {
-    matches!(
-        paged_raster::sniff(bytes),
-        Some(paged_raster::Format::Tiff | paged_raster::Format::Psd)
-    )
+    paged_raster::sniff(bytes).is_some_and(paged_raster::reads_natively)
 }
 
-/// A TIFF or PSD/PSB through `paged-raster`, shrunk to `max_px` and
-/// converted with paged-color. `None` lets the caller try the `image`
-/// crate, the decoder TIFFs used before (it reads no PSD, so a PSD it
-/// cannot decode stays undecoded: a Lab, indexed or ZIP composite).
+/// A raster `paged-raster` reads, shrunk to `max_px` and converted with
+/// paged-color. `None` lets the caller try the `image` crate, the decoder
+/// TIFFs used before (it reads none of the others, so one this crate
+/// cannot decode stays undecoded: a PSD's Lab, indexed or ZIP composite,
+/// an EPS without a preview).
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 fn decode_raster(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
     let img = match paged_raster::decode(

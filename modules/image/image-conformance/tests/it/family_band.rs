@@ -24,9 +24,10 @@
 use image_conformance::harness::{assert_within, parity, RefTile};
 use image_conformance::Px;
 use image_kernels::families::band::{
-    band_broadcast_alpha, band_copy, band_extract, band_set_alpha, BandBroadcastAlphaParams,
-    BandCopyParams, BandExtractParams, BandSetAlphaParams, BAND_BROADCAST_ALPHA, BAND_COPY,
-    BAND_EXTRACT, BAND_SET_ALPHA,
+    band_blend_if, band_broadcast_alpha, band_copy, band_extract, band_fade_neutral,
+    band_set_alpha, band_take, BandBlendIfParams, BandBroadcastAlphaParams, BandCopyParams,
+    BandExtractParams, BandFadeNeutralParams, BandSetAlphaParams, BandTakeParams, BAND_BLEND_IF,
+    BAND_BROADCAST_ALPHA, BAND_COPY, BAND_EXTRACT, BAND_FADE_NEUTRAL, BAND_SET_ALPHA, BAND_TAKE,
 };
 
 /// A gradient where the four channels carry visibly distinct values —
@@ -140,4 +141,92 @@ fn band_broadcast_alpha_edge_parity() {
         Some(r) => assert_within(r, &BAND_BROADCAST_ALPHA),
         None => eprintln!("SKIP: no GPU adapter"),
     }
+}
+
+/// A second tile, so a binary kernel cannot pass by reading `a` twice.
+fn other_tile(w: u32, h: u32) -> RefTile {
+    RefTile::from_fn(w, h, |x, y| {
+        let a = (y + 1) as f32 / h as f32;
+        Px([
+            a * ((x * 7 % w) as f32 / w as f32),
+            a * 0.5,
+            a * ((w - 1 - x) as f32 / w as f32),
+            a,
+        ])
+    })
+}
+
+#[test]
+fn band_take_parity() {
+    let a = gradient_tile(image_core::TILE, image_core::TILE);
+    let b = other_tile(image_core::TILE, image_core::TILE);
+    match parity(&BAND_TAKE, band_take, &[&a, &b], &BandTakeParams::new()) {
+        Some(r) => assert_within(r, &BAND_TAKE),
+        None => eprintln!("SKIP: no GPU adapter"),
+    }
+}
+
+#[test]
+fn band_fade_neutral_parity() {
+    let a = other_tile(image_core::TILE, image_core::TILE);
+    for (neutral, fill) in [(0.0, 0.4), (1.0, 0.25), (0.5, 0.7), (0.5, 1.0), (1.0, 0.0)] {
+        let p = BandFadeNeutralParams::new(neutral, fill);
+        match parity(&BAND_FADE_NEUTRAL, band_fade_neutral, &[&a], &p) {
+            Some(r) => assert_within(r, &BAND_FADE_NEUTRAL),
+            None => {
+                eprintln!("SKIP: no GPU adapter");
+                return;
+            }
+        }
+    }
+}
+
+/// The fade's two ends: fill 1 is the identity, fill 0 is the neutral at
+/// the texel's own alpha.
+#[test]
+fn band_fade_neutral_ends_are_the_source_and_the_neutral() {
+    let px = Px([0.2, 0.4, 0.1, 0.5]);
+    let same = band_fade_neutral(px, Px([0.0; 4]), &BandFadeNeutralParams::new(1.0, 1.0));
+    assert_eq!(same, px);
+    let grey = band_fade_neutral(px, Px([0.0; 4]), &BandFadeNeutralParams::new(0.5, 0.0));
+    assert_eq!(grey, Px([0.25, 0.25, 0.25, 0.5]));
+}
+
+/// Every ramp open (k = 0, o = 1): the coverage is one everywhere.
+fn open_ramps() -> BandBlendIfParams {
+    let mut p = BandBlendIfParams::new(
+        0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0,
+    );
+    p._abi_pad = 0;
+    p
+}
+
+#[test]
+fn band_blend_if_parity() {
+    let a = gradient_tile(image_core::TILE, image_core::TILE);
+    let b = other_tile(image_core::TILE, image_core::TILE);
+    let open = open_ramps();
+    // This Layer's gray from 64 (split to 128); Underlying red under 200.
+    let mut cut = open;
+    cut.slk0 = 255.0 / 65.0;
+    cut.slo0 = -63.0 / 65.0;
+    cut.dhk1 = -255.0;
+    cut.dho1 = 201.0;
+    for p in [open, cut] {
+        match parity(&BAND_BLEND_IF, band_blend_if, &[&a, &b], &p) {
+            Some(r) => assert_within(r, &BAND_BLEND_IF),
+            None => {
+                eprintln!("SKIP: no GPU adapter");
+                return;
+            }
+        }
+    }
+}
+
+#[test]
+fn band_blend_if_open_ramps_cover_everything() {
+    let p = open_ramps();
+    let c = band_blend_if(Px([0.1, 0.9, 0.3, 1.0]), Px([0.0, 0.0, 0.0, 0.0]), &p);
+    assert_eq!(c, Px([1.0; 4]));
 }

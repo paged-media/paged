@@ -57,6 +57,12 @@ declare module "virtual:paged-editor/iframe" {
   export const BRIDGED_METHODS: readonly BridgedMethod[];
 }
 
+declare module "virtual:paged-editor/errors" {
+  type EditorError = import("./types").EditorError;
+  export function assertEmbeddable(isolated?: unknown): void;
+  export function isEditorError(value: unknown): value is EditorError;
+}
+
 declare module "virtual:paged-editor/presets" {
   type EditorProfile = import("./types").EditorProfile;
   export const PRESETS: Readonly<Record<string, EditorProfile>>;

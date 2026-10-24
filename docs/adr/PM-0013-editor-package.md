@@ -131,3 +131,52 @@ the token. The three existing packages keep publishing through OIDC in that run.
 paged.data's engine is one wasm (data ADR 561, [PM-0015](PM-0015-data-and-actions-are-platform-layers.md)):
 there is no DuckDB, no worker and no extension directory in `dist/bin/`. The data engine is
 still hosted, as item 6 says.
+
+## Amendment 2 (2026-10-24): no degraded mode, and ids leave through a deprecation window
+
+Two of the composable editor's open questions were decided on 2026-10-24
+([concept §12](../../apps/editor/docs/composable-editor.md), items 1 and 2). Both are promises of
+this package to its hosts.
+
+### No degraded mode without cross-origin isolation
+
+`createEditor` and `mountEditor` on a page that is not cross-origin isolated
+(`crossOriginIsolated !== true`) load nothing, mount nothing and reject with an `EditorError`
+whose `code` is `notCrossOriginIsolated`. Its message names both ways out: the page's own headers
+(COOP `same-origin`, COEP `credentialless` or `require-corp`), and the iframe path
+(`connectEditor` from `./iframe`, the editor's `embed.html` on its own deployment, which sends its
+own headers; the host page sends COOP `same-origin` and COEP `credentialless`, which asks nothing
+of the page's other resources, and the iframe allows `cross-origin-isolated`). `connectEditor`
+rejects with the same code when the frame cannot be isolated. There is no single-threaded
+fallback: the engine shares memory with its worker. `isEditorError(value)` tells the error apart
+structurally, so it holds for one that crossed a frame. The check is in the editor
+(`apps/canvas/src/embed/errors.ts`), and the package's entry runs it before it loads the editor.
+
+### Ids leave through a deprecation window
+
+`feature-ids.json` is the public list of the ids a profile and `handle.features` name (commands,
+panels, tools, menus, keybindings, chrome). An id leaves it only through a deprecation:
+
+1. **An alias for a window.** `apps/editor/apps/canvas/deprecated-ids.json` lists each old id with
+   its replacement (or null when nothing replaces it), the release that deprecated it
+   (`deprecatedIn`) and the first release without the alias (`removeIn`), at least two minor
+   releases later. The package's `feature-ids.json` mirrors the list as `deprecated`.
+2. **An old id keeps working.** The editor reads an old id in a host's profile (its feature
+   switches, panels, regions and region edits, and its modes' slots) and in `handle.features` as
+   its replacement; one with no replacement is ignored. It reports each old id once per editor:
+   a console warning and an `idDeprecated` event on the handle, delivered to every listener, also
+   for ids met before it subscribed.
+3. **A guard holds it.** `apps/editor/scripts/feature-ids.mjs` treats the committed
+   `feature-ids.json` as the ledger. Writing or checking it fails when an id disappears without a
+   deprecation entry; when an entry is removed before its window ends; when an entry outlives its
+   window (the tree's version, `0.<protocol>.0-dev`, names the release it builds, and that
+   release is `removeIn` or later: the alias goes in the release `removeIn` names, no later);
+   and when an old id is still live, a replacement is not, or a window is shorter than two minor
+   releases. The release runs the same check against the tag's version
+   (`--check --release <version>`).
+4. **The release notes list them.** `bun apps/editor/scripts/feature-ids.mjs --release-notes`
+   prints the deprecations as a Markdown table; a release's notes carry it, with the aliases that
+   release removes ([the runbook](../migration/npm-release-runbook.md)). The package README says
+   where a host finds them.
+
+Presets are the editor's own and never name an old id (`profile-presets-guard.mjs`).

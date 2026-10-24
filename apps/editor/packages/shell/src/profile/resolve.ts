@@ -61,11 +61,12 @@ export function baseProfile(): ResolvedProfile {
     panels: "all",
     modes: "all",
     regions: baseRegions(),
-    canvas: { titleBar: true, rulers: true, thumbnails: true },
+    canvas: { titleBar: true, rulers: true, thumbnails: true, preview: false },
     documentSizePt: null,
     storageScope: "",
     features: {},
     role: "editor",
+    compact: null,
   };
 }
 
@@ -111,6 +112,7 @@ function applyLayer(
     storageScope: layer.storageScope ?? into.storageScope,
     features: { ...into.features, ...layer.features },
     role: layer.role ?? into.role,
+    compact: layer.compact === undefined ? into.compact : layer.compact,
   };
 }
 

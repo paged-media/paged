@@ -37,6 +37,10 @@ What the editor ships and what it does not, read from the code at commit `6d098e
   contexts appear in the same chrome.
 - **Solo mode.** `?solo=<name>` for six profiles: `paged.draw`, `paged.image`,
   `paged.sheet`, `paged.doc`, `paged.web`, `paged.data`.
+- **Phones and tablets.** The `template-fill` and `form` presets work on a phone below 720 px:
+  the field sheet or the form first, 44 px touch targets, one-finger pan, pinch zoom and zoom
+  buttons, and a camera input for a picture field ([ADR 294](adr/294-the-fill-presets-on-phones-and-tablets.md)).
+  The full and focused editors are desktop editors.
 - **Scripting.** A script editor panel runs `paged.*` scripts in the engine's interpreter;
   a REPL panel parses one-line commands (`set`, `insert`, `remove`, `move`, `undo`, `redo`,
   `inspect`) into mutations. An Actions panel records and replays command invocations.

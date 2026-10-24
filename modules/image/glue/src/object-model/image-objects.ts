@@ -88,6 +88,7 @@ import {
 } from "./canvas-ops";
 import {
   clonePgil,
+  DEFAULT_EXT,
   readPgil,
   stackFromImage,
   writePgil,
@@ -128,8 +129,24 @@ export interface ImageCodec {
  *  to use. Absent headless. */
 export type SelectionSource = (
   frameId: string,
+  /** The stored revision the frame shows now (its marker's record; null
+   *  when it carries none): a selection the session kept is used only on
+   *  the revision it was made on, or one a canvas operation it followed
+   *  made from it. */
+  record: string | null,
 ) =>
   { width: number; height: number; coverage: Uint8Array } | { refused: string };
+
+/** A canvas operation committed on a frame through the object model, from
+ *  stored revision `from` to `to`: the session carries the selection it
+ *  kept for the frame along, as its canvas operations carry the live one
+ *  (`coverageAfterCanvasOp`). Absent headless. */
+export type SelectionFollow = (
+  frameId: string,
+  from: string | null,
+  to: string,
+  ops: readonly CanvasOp[],
+) => void;
 
 const MASK_KEYS = ["polygons", "ops", "fillRule", "alpha", "feather"];
 
@@ -354,6 +371,19 @@ const IMAGE_ROWS: PropertySchema[] = [
   },
 ];
 
+/** Photoshop's colour labels, in its order (the manifest's index). */
+const LABELS = [
+  "none",
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "violet",
+  "gray",
+] as const;
+const KNOCKOUTS = ["none", "shallow", "deep"] as const;
+
 const LAYER_ROWS: PropertySchema[] = [
   {
     path: "name",
@@ -394,8 +424,63 @@ const LAYER_ROWS: PropertySchema[] = [
   },
   {
     path: "kind",
-    type: { kind: "enum", members: ["pixels", "adjustment", "smart"] },
+    type: {
+      kind: "enum",
+      members: ["pixels", "adjustment", "smart", "fill"],
+    },
     access: "readOnly",
+  },
+  {
+    path: "fillOpacity",
+    type: { kind: "number", unit: "percent" },
+    range: { min: 0, max: 100 },
+    default: 100,
+    summary:
+      "Fill opacity: the layer's own pixels, apart from its opacity (on the eight special " +
+      "blend modes it acts inside the blend).",
+  },
+  {
+    path: "knockout",
+    type: { kind: "enum", members: ["none", "shallow", "deep"] },
+    default: "none",
+    summary:
+      "Knockout: the layer cuts through the layers beneath it to its group's start (shallow) " +
+      "or to the Background (deep).",
+  },
+  {
+    path: "colorLabel",
+    type: { kind: "enum", members: [...LABELS] },
+    default: "none",
+  },
+  {
+    path: "lockTransparency",
+    type: { kind: "bool" },
+    default: false,
+    summary: "Paint, fills and filters keep every pixel's alpha.",
+  },
+  {
+    path: "lockPosition",
+    type: { kind: "bool" },
+    default: false,
+  },
+  {
+    path: "lockAll",
+    type: { kind: "bool" },
+    default: false,
+    summary: "Pixels, transparency, position and the blending properties.",
+  },
+  {
+    path: "adjustmentKind",
+    type: { kind: "text" },
+    access: "readOnly",
+    summary:
+      "An adjustment layer's kind (levels, curves, … ; chain for a stored chain), else absent.",
+  },
+  {
+    path: "fillKind",
+    type: { kind: "text" },
+    access: "readOnly",
+    summary: "A fill layer's kind (solid, gradient, pattern), else absent.",
   },
   {
     path: "id",
@@ -584,7 +669,10 @@ export function createImageObjects(
   host: BundleHost,
   codec: () => Promise<ImageCodec>,
   selection?: SelectionSource,
+  selectionFollow?: SelectionFollow,
 ): ImageObjects {
+  /** The canvas operations a planned state took, in order. */
+  const canvasOpsOf = new WeakMap<FrameState, CanvasOp[]>();
   const counters: ImageObjectCounters = {
     treeReads: 0,
     placedReads: 0,
@@ -765,6 +853,24 @@ export function createImageObjects(
         return value(l.clipped);
       case "kind":
         return value(l.kind);
+      case "fillOpacity":
+        return value(Math.round(l.ext.fillOpacity * 100 * 1000) / 1000);
+      case "knockout":
+        return value(KNOCKOUTS[l.ext.knockout] ?? "none");
+      case "colorLabel":
+        return value(LABELS[l.ext.color] ?? "none");
+      case "lockTransparency":
+        return value((l.ext.locks & 1) !== 0);
+      case "lockPosition":
+        return value((l.ext.locks & 2) !== 0);
+      case "lockAll":
+        return value((l.ext.locks & 4) !== 0);
+      case "adjustmentKind":
+        return l.kind === "adjustment"
+          ? value(l.typed ? l.typed.kind : "chain")
+          : absent;
+      case "fillKind":
+        return l.fill ? value(l.fill.kind) : absent;
       case "id":
         return value(l.id);
       case "hasMask":
@@ -1071,6 +1177,33 @@ export function createImageObjects(
       case "clipped":
         l.clipped = v as boolean;
         return;
+      case "fillOpacity":
+        l.ext = { ...l.ext, fillOpacity: Math.fround((v as number) / 100) };
+        return;
+      case "knockout": {
+        const k = KNOCKOUTS.indexOf(v as (typeof KNOCKOUTS)[number]);
+        if (k > 0 && l.kind === "adjustment")
+          throw new Refused("knockout needs pixels to cut with");
+        l.ext = { ...l.ext, knockout: Math.max(0, k) };
+        return;
+      }
+      case "colorLabel":
+        l.ext = {
+          ...l.ext,
+          color: Math.max(0, LABELS.indexOf(v as (typeof LABELS)[number])),
+        };
+        return;
+      case "lockTransparency":
+      case "lockPosition":
+      case "lockAll": {
+        const bit =
+          path === "lockTransparency" ? 1 : path === "lockPosition" ? 2 : 4;
+        l.ext = {
+          ...l.ext,
+          locks: (v as boolean) ? l.ext.locks | bit : l.ext.locks & ~bit,
+        };
+        return;
+      }
       case "order": {
         if (s.stack.groups.length > 0)
           throw new Refused(
@@ -1195,7 +1328,7 @@ export function createImageObjects(
         throw new Refused(
           "there is no editor session here, so no selection; pass the selection as `mask` (polygons or an alpha mask)",
         );
-      const live = selection(s.frame.frameId);
+      const live = selection(s.frame.frameId, s.marker?.record ?? null);
       if ("refused" in live) throw new Refused(live.refused);
       const cov = coverageAt(live, W, H);
       out.alpha = out.alpha
@@ -1458,6 +1591,9 @@ export function createImageObjects(
     const why = canvasOpProblem(s.stack, op);
     if (why) throw new Refused(why);
     applyCanvasOp(s.stack, op);
+    const ops = canvasOpsOf.get(s) ?? [];
+    ops.push(op);
+    canvasOpsOf.set(s, ops);
   }
 
   function newLayer(s: FrameState, kind: "pixels" | "adjustment"): PgilLayer {
@@ -1484,7 +1620,10 @@ export function createImageObjects(
       mask: null,
       maskRect: null,
       adjust: kind === "adjustment" ? defaultAdjust() : null,
+      typed: null,
+      fill: null,
       smart: null,
+      ext: { ...DEFAULT_EXT },
     };
     s.stack.layers.push(l);
     s.stack.active = s.stack.layers.length - 1;
@@ -1572,6 +1711,13 @@ export function createImageObjects(
     const parts: PartChange[] = [];
     const mutations: Array<{ op: string; args: Record<string, unknown> }> = [];
     const labels: Array<{ frame: Frame; value: string }> = [];
+    /** The canvas operations to carry the kept selections along. */
+    const follows: Array<{
+      frameId: string;
+      from: string | null;
+      to: string;
+      ops: CanvasOp[];
+    }> = [];
     const have = new Set(await host.parts.list("px/"));
     const c = await codec();
     for (const { base, next } of planned) {
@@ -1621,6 +1767,14 @@ export function createImageObjects(
         await sha256HexPrefix(recordBytes, 16),
       );
       parts.push({ path, bytes: recordBytes });
+      const ops = canvasOpsOf.get(next);
+      if (ops)
+        follows.push({
+          frameId: next.frame.frameId,
+          from: base.marker?.record ?? null,
+          to: path,
+          ops,
+        });
       const marker: ImageMarker = {
         owns: "pixels",
         rev,
@@ -1656,6 +1810,15 @@ export function createImageObjects(
     // The canonical item address (`rectangle:<id>`), never the `frame:`
     // alias: the frame's element id carries its kind.
     const hostAddress = fromElementId(first.frame.elementId);
+    // Once the write committed, the session's kept selections follow its
+    // canvas operations (it writes nothing, so the step stays as it is).
+    const followUp =
+      selectionFollow && follows.length > 0
+        ? async () => {
+            for (const f of follows)
+              selectionFollow(f.frameId, f.from, f.to, f.ops);
+          }
+        : undefined;
     return mutations.length > 0
       ? {
           kind: "both",
@@ -1664,6 +1827,7 @@ export function createImageObjects(
           host: hostAddress,
           labelKey: LABEL_KEY,
           labelValue: first.value,
+          ...(followUp ? { followUp } : {}),
         }
       : {
           kind: "state",
@@ -1671,6 +1835,7 @@ export function createImageObjects(
           host: hostAddress,
           labelKey: LABEL_KEY,
           labelValue: first.value,
+          ...(followUp ? { followUp } : {}),
         };
   }
 

@@ -73,7 +73,7 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "releaseOpacityMask": { args: {"kind":"struct","fields":{"targetId":{"kind":"ref","to":"item"}}}, nullFill: [] },
   "attachTextToPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"},"storyId":{"kind":"ref","to":"story"},"pathTypeAlignment":{"kind":"text","optional":true},"flipPathEffect":{"kind":"text","optional":true},"startBracket":{"kind":"number","optional":true},"endBracket":{"kind":"number","optional":true}}}, nullFill: [] },
   "detachTextFromPath": { args: {"kind":"struct","fields":{"elementId":{"kind":"ref","to":"item"}}}, nullFill: [] },
-  "createGroup": { args: {"kind":"struct","fields":{"memberIds":{"kind":"list","of":{"kind":"ref","to":"item"}}}}, nullFill: [] },
+  "createGroup": { args: {"kind":"struct","fields":{"memberIds":{"kind":"list","of":{"kind":"ref","to":"item"}},"clip":{"kind":"bool","optional":true}}}, nullFill: [] },
   "dissolveGroup": { args: {"kind":"struct","fields":{"groupId":{"kind":"ref","to":"frame"}}}, nullFill: [] },
   "duplicateElements": { args: {"kind":"struct","fields":{"elementIds":{"kind":"list","of":{"kind":"ref","to":"item"}},"offset":{"kind":"point"}}}, nullFill: [] },
   "pasteElements": { args: {"kind":"struct","fields":{"snippet":{"kind":"text"},"pageId":{"kind":"ref","to":"page"},"center":{"kind":"point","optional":true}}}, nullFill: [] },

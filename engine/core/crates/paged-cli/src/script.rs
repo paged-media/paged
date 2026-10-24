@@ -85,6 +85,13 @@ pub struct ScriptOptions {
     /// template's policy, `filler` is bound by it. Default: `editor`.
     #[arg(long, value_parser = ["author", "editor", "filler", "viewer"])]
     pub role: Option<String>,
+    /// A data source's file, repeatable: `--source products=products.csv`.
+    /// The script reads it as `paged.data.*` (tables, records, query,
+    /// evaluate), with the document's binding labels' queries run through
+    /// the query guard, as `paged data apply` runs them. A source the
+    /// labels do not declare is read by the file's extension.
+    #[arg(long = "source", value_name = "ID=FILE")]
+    pub sources: Vec<String>,
 }
 
 /// The CLI's flags as the wire's optional budget. `--timeout none`
@@ -131,7 +138,16 @@ pub fn run(
         }
     }
     let before = session.model()?.current_state_hash();
-    let result = session.run_script(&source, Some(budget(opts)?))?;
+    // PM-0015 — `paged.data.*`: the document's bindings and the given
+    // files, attached for this run only. Neither, and the script's
+    // `paged.data` calls say no data is attached.
+    let budget = budget(opts)?;
+    let result = match crate::data::script_data(&mut session, &opts.sources)? {
+        Some(mut data) => {
+            paged_script::with_data(&mut data, || session.run_script(&source, Some(budget)))?
+        }
+        None => session.run_script(&source, Some(budget))?,
+    };
 
     // The script's own console output first: when it fails, the lines
     // it printed before failing are usually the diagnosis.
