@@ -49,6 +49,7 @@ use sheet_lower::{lower_range, lower_range_styled, CellRange, FrameBox, Page, Vi
 use sheet_parser::{parse, print, print_ooxml, strip_storage_prefixes, ParseCtx, SheetNames};
 use sheet_xlsx::XlsxDocument;
 
+pub mod annotations;
 pub mod cf;
 mod chart_style;
 mod charts;
@@ -308,6 +309,8 @@ pub struct CommentInfo {
     pub col: u32,
     pub author: String,
     pub text: String,
+    /// The cell also carries a threaded comment (its note is kept as it is).
+    pub threaded: bool,
 }
 
 /// A worksheet's DATA-VALIDATION INVENTORY (spec §1.1/§11/T∞ — PRESERVE-ONLY).
@@ -2134,6 +2137,9 @@ impl SheetSession {
             }
         }
 
+        // Hyperlinks and pictures (W2.3).
+        self.add_grid_annotations(sheet, &mut scene);
+
         // Fold in the session's stored selection for THIS sheet (spec §8.1 —
         // selection is engine state the panel requests, not scene-derived).
         // `grid_scene` always returns `selection: None` (Phase A); a selection
@@ -2290,6 +2296,7 @@ impl SheetSession {
             let Some(cs) = self.doc.comments_of(sid) else {
                 continue;
             };
+            let threaded = self.doc.threaded_comment_cells(sid);
             for c in &cs.comments {
                 out.push(CommentInfo {
                     sheet: sid,
@@ -2297,6 +2304,7 @@ impl SheetSession {
                     col: c.col,
                     author: c.author.clone(),
                     text: c.text.clone(),
+                    threaded: threaded.contains(&(c.row, c.col)),
                 });
             }
         }

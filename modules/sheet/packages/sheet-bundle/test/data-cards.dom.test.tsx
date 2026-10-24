@@ -89,6 +89,7 @@ function fakeSession(data: Partial<DataToolsApi> = {}) {
     state: () => ({ activeSheet: 0, gridSelection: scene.selection }) as never,
     setFrameSheet: () => true,
     documentTextDefault: async () => null,
+    pictureBytes: () => null,
     documentFontFace: async () => null,
     documentSwatchColors: async () => new Map(),
     documentStyleRevision: () => 0,

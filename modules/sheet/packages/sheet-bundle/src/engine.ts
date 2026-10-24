@@ -147,6 +147,52 @@ export interface CommentInfo {
   col: number;
   author: string;
   text: string;
+  /** W2.3 — the cell also carries a threaded comment (its note is kept as
+   *  it is; absent from older engine builds). */
+  threaded?: boolean;
+}
+
+/** W2.3 — one hyperlink of a sheet. */
+export interface HyperlinkInfo {
+  sheet: number;
+  /** The cells it covers, A1 (`B2` or `B2:C4`). */
+  range: string;
+  url?: string | null;
+  /** A place in the workbook (`Sheet2!A1`, a defined name). */
+  location?: string | null;
+  display?: string | null;
+  tooltip?: string | null;
+}
+
+/** W2.3 — what a hyperlink points to (a URL or a location, or both). */
+export interface HyperlinkSpec {
+  url?: string;
+  location?: string;
+  display?: string;
+  tooltip?: string;
+}
+
+/** W2.3 — one picture of a sheet, placed in sheet points (the top-left of
+ *  A1 is the origin). */
+export interface PictureInfo {
+  id: string;
+  sheet: number;
+  name: string;
+  descr?: string | null;
+  /** The media part (`pictureBytes` takes it). */
+  media: string;
+  contentType: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** An image placed in a cell (fitted into the cell). */
+  inCell: boolean;
+  row: number;
+  col: number;
+  /** The picture's top-left inside that cell (pt). */
+  dx: number;
+  dy: number;
 }
 
 /** One frame's content box for pagination (the host chain link's content
@@ -618,6 +664,27 @@ export interface SheetEngine
   /** W2.2 — the workbook's Excel named cell styles and the built-ins it can
    *  add. */
   namedStyles?(): NamedStyleInfo[];
+  /** W2.3 — the hyperlinks of a sheet. */
+  listHyperlinks?(sheet: number): HyperlinkInfo[];
+  /** W2.3 — link a range (replaces a link over its first cell; the cells
+   *  take Excel's Hyperlink style). */
+  setHyperlink?(sheet: number, range: string, link: HyperlinkSpec): void;
+  /** W2.3 — remove every link touching a range; returns how many. */
+  removeHyperlinks?(sheet: number, range: string): number;
+  /** W2.3 — make the sheet's links exactly these (undo). */
+  restoreHyperlinks?(sheet: number, links: readonly HyperlinkInfo[]): void;
+  /** W2.3 — set (add or replace) / delete the note of a cell. */
+  setNote?(
+    sheet: number,
+    row: number,
+    col: number,
+    author: string,
+    text: string,
+  ): void;
+  deleteNote?(sheet: number, row: number, col: number): boolean;
+  /** W2.3 — the pictures of a sheet and a picture's bytes. */
+  listPictures?(sheet: number): PictureInfo[];
+  pictureBytes?(media: string): Uint8Array;
   /** W2.5 — the conditional-format rules of a sheet, highest priority
    *  first; `index` is the handle the other calls take until the next
    *  change. */
@@ -1266,6 +1333,20 @@ export interface SheetWasmEngine
   get_style?(sheet: number, row: number, col: number): CellStylePatch;
   get_cell_visual?(sheet: number, row: number, col: number): CellVisualInfo;
   named_styles?(): NamedStyleInfo[];
+  list_hyperlinks?(sheet: number): HyperlinkInfo[];
+  set_hyperlink?(sheet: number, range: string, link: HyperlinkSpec): void;
+  remove_hyperlinks?(sheet: number, range: string): number;
+  restore_hyperlinks?(sheet: number, links: HyperlinkInfo[]): void;
+  set_note?(
+    sheet: number,
+    row: number,
+    col: number,
+    author: string,
+    text: string,
+  ): void;
+  delete_note?(sheet: number, row: number, col: number): boolean;
+  list_pictures?(sheet: number): PictureInfo[];
+  picture_bytes?(media: string): Uint8Array;
   cf_rules?(sheet: number): CfRuleInfo[];
   add_cf_rule?(sheet: number, spec: CfRuleSpec): number;
   update_cf_rule?(sheet: number, index: number, spec: CfRuleSpec): void;
@@ -1496,6 +1577,23 @@ export function wrapEngine(
     getCellVisual: (sheet, row, col) =>
       need("get_cell_visual")(sheet, row, col) as CellVisualInfo,
     namedStyles: () => need("named_styles")() as NamedStyleInfo[],
+    listHyperlinks: (sheet) =>
+      need("list_hyperlinks")(sheet) as HyperlinkInfo[],
+    setHyperlink: (sheet, range, link) => {
+      need("set_hyperlink")(sheet, range, link);
+    },
+    removeHyperlinks: (sheet, range) =>
+      need("remove_hyperlinks")(sheet, range) as number,
+    restoreHyperlinks: (sheet, links) => {
+      need("restore_hyperlinks")(sheet, [...links]);
+    },
+    setNote: (sheet, row, col, author, text) => {
+      need("set_note")(sheet, row, col, author, text);
+    },
+    deleteNote: (sheet, row, col) =>
+      need("delete_note")(sheet, row, col) as boolean,
+    listPictures: (sheet) => need("list_pictures")(sheet) as PictureInfo[],
+    pictureBytes: (media) => need("picture_bytes")(media) as Uint8Array,
     cfRules: (sheet) => need("cf_rules")(sheet) as CfRuleInfo[],
     addCfRule: (sheet, spec) => need("add_cf_rule")(sheet, spec) as number,
     updateCfRule: (sheet, index, spec) => {

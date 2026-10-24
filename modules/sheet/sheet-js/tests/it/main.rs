@@ -4,6 +4,7 @@
 //! its own process. A new test file goes here and gets a `mod` line below.
 
 mod doc_style_map;
+mod w2_annotations;
 mod w2_cf_authoring;
 mod w2_visual;
 mod w5_files;
