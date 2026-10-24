@@ -29,8 +29,12 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
   tables run in the sandboxed interpreter before the queries, on the engine's action registry
   (core ADR 1015).
 
-Not built yet: the Data panel and the bind popover (editor ADRs 291, 292), asset columns (563),
-the sheet editing a table through `data@1`, and the remaining binding kinds headless.
+- asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
+  the column's action chain, placed as a data URI;
+- paged.sheet edits a table of the document's data in place through `data@1`.
+
+Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
+binding kinds headless.
 
 ## Shipped
 

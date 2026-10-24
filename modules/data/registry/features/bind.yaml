@@ -202,3 +202,17 @@
       - "engine:paged-data-session/tests/labels.rs::every_restored_recipe_is_a_session_payload__feat__data_bind_labels_native"
       - "engine:paged-data-session/tests/labels.rs::a_restored_file_source_asks_for_its_file_again__feat__data_bind_labels_native"
     vitest: ["packages/data-bundle/test/labels-conformance.spec.ts"]
+
+- id: data.assets.columns
+  title: Asset columns — fetched for a consented origin, kept by content hash, run through an action chain (ADR 563)
+  spec: plugin-data packages/data-bundle/src/assets.ts
+  status: implemented
+  provenance:
+    [
+      "an image binding over a declared asset column places the asset as a data URI (core ADR 208) after fetch (consented origins only), keep (SHA-256, host.blob) and the column's actions@1 chain",
+      "a reference that cannot be had is reported with its reason and places nothing",
+    ]
+  tests:
+    vitest:
+      - "packages/data-bundle/src/__tests__/assets.test.ts"
+      - "packages/data-bundle/test/asset-columns-real-core.spec.ts"
