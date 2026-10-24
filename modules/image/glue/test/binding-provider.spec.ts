@@ -85,8 +85,8 @@ function boot(opts: { active?: boolean } = {}) {
     // present one are different facts and must not share a test.
     expect(
       registry.activeProviders(),
-      "both providers must be active before a refusal means anything",
-    ).toHaveLength(2);
+      "all three providers must be active before a refusal means anything",
+    ).toHaveLength(3);
   }
   return { registry, fake, handle, bundle };
 }
@@ -102,7 +102,7 @@ describe("the ADR-023 providers reach the registry at all", () => {
 
     registry.setContextActive(PLUGIN, CTX, "u1", true);
     const active = registry.activeProviders();
-    expect(active).toHaveLength(2);
+    expect(active).toHaveLength(3);
 
     // Exiting takes them away again — a stale provider answering for a
     // frame the user has left is the same bug in the other direction.

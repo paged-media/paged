@@ -28,10 +28,15 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 import {
   averageRgba8,
   fromHex,
+  nextSamplerId,
+  sampleWindow,
+  samplerNear,
   swapped,
   toHex,
   DEFAULT_COLORS,
+  SAMPLE_SIZES,
 } from "../src/color-state";
+import { applyToolSettings, toolOptionFields } from "../src/tool-options";
 import { createImageSession } from "../src/session";
 import {
   makeFakeEditor,
@@ -110,6 +115,110 @@ describe("the session's colours", () => {
     expect(session.state().colors.bg).toEqual(avg);
     // Outside the image: nothing.
     expect(session.sampleColor([5, 0])).toBeNull();
+    session.dispose();
+    handle.dispose();
+  });
+});
+
+// WP4.10 — the standalone Eyedropper (sample sizes, current layer or all
+// layers) and the Color Sampler (four fixed points, read live).
+describe("the eyedropper and colour samplers [editor-shell.raster-color-binding]", () => {
+  it("offers Photoshop's sample sizes and clips the window to the image", () => {
+    expect(SAMPLE_SIZES).toEqual([1, 3, 5, 11, 31, 51, 101]);
+    expect(sampleWindow([5, 5], 101, 20, 10)).toEqual({
+      x: 0,
+      y: 0,
+      w: 20,
+      h: 10,
+    });
+    expect(sampleWindow([5, 5], 3, 20, 10)).toEqual({ x: 4, y: 4, w: 3, h: 3 });
+    expect(sampleWindow([25, 5], 1, 20, 10)).toBeNull();
+  });
+
+  it("a large average reads the whole small image", async () => {
+    const { handle, session } = open();
+    expect(await session.importBytes("c.psd", psdBytes())).toBe(true);
+    const c = session.sampleColor([0, 0], 101)!;
+    expect(c.map((v) => Math.round(v * 255))).toEqual([15, 35, 55, 255]);
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("'Current layer' reads the active layer's own pixels; a transparent layer samples nothing", async () => {
+    const { handle, session } = open();
+    expect(await session.importBytes("c.psd", psdBytes())).toBe(true);
+    // The ingest's one layer IS the image.
+    expect(
+      session.readColor([1, 0], 1, "layer")!.map((v) => Math.round(v * 255)),
+    ).toEqual([20, 40, 60, 255]);
+    // A new, empty layer on top becomes the active one.
+    expect(await session.addLayer("Paint")).toBe(true);
+    session.setForeground([1, 0, 0, 1]);
+    expect(session.sampleColor([1, 0], 1, "fg", "layer")).toBeNull();
+    expect(session.state().colors.fg).toEqual([1, 0, 0, 1]);
+    // "All layers" still sees the composite under it.
+    expect(
+      session
+        .sampleColor([1, 0], 1, "fg", "all")!
+        .map((v) => Math.round(v * 255)),
+    ).toEqual([20, 40, 60, 255]);
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("the tool options feed the session; unknown sizes are ignored", () => {
+    const { handle, session } = open();
+    const fields = toolOptionFields({
+      brush: "b",
+      pencil: "p",
+      eraser: "e",
+      wand: "w",
+      bucket: "k",
+      gradient: "g",
+      eyedropper: "i",
+      colorSampler: "s",
+    });
+    expect(fields.i.map((f) => f.key)).toEqual(["sampleSize", "sampleSource"]);
+    expect(fields.s.map((f) => f.key)).toEqual(["sampleSize"]);
+    applyToolSettings(session, "eyedropper", {
+      sampleSize: "11",
+      sampleSource: "layer",
+    });
+    expect(session.state().eyedropper).toEqual({ size: 11, source: "layer" });
+    applyToolSettings(session, "eyedropper", { sampleSize: "7" });
+    expect(session.state().eyedropper.size).toBe(11);
+    session.dispose();
+    handle.dispose();
+  });
+
+  it("places up to four samplers, numbers them, re-reads them, moves and removes them", async () => {
+    const { handle, session } = open();
+    expect(await session.importBytes("c.psd", psdBytes())).toBe(true);
+    expect(session.addColorSampler([0, 0])).toBe(1);
+    expect(session.addColorSampler([1, 0])).toBe(2);
+    expect(session.addColorSampler([1, 0])).toBe(3);
+    expect(session.addColorSampler([0, 0])).toBe(4);
+    expect(session.addColorSampler([0, 0])).toBeNull();
+    expect(session.state().status).toContain("4 colour samplers");
+    // Off the image: refused.
+    expect(session.removeColorSampler(4)).toBe(true);
+    expect(session.addColorSampler([9, 9])).toBeNull();
+    const read = () =>
+      session
+        .state()
+        .samplers.map((s) => [s.id, s.colour?.map((v) => Math.round(v * 255))]);
+    expect(read()).toEqual([
+      [1, [10, 30, 50, 255]],
+      [2, [20, 40, 60, 255]],
+      [3, [20, 40, 60, 255]],
+    ]);
+    // A freed number is reused.
+    expect(nextSamplerId(session.state().samplers)).toBe(4);
+    expect(session.moveColorSampler(2, [0, 0])).toBe(true);
+    expect(read()[1]).toEqual([2, [10, 30, 50, 255]]);
+    expect(samplerNear(session.state().samplers, [1.4, 0.4], 0.5)?.id).toBe(3);
+    session.clearColorSamplers();
+    expect(session.state().samplers).toEqual([]);
     session.dispose();
     handle.dispose();
   });

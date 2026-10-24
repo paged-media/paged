@@ -406,10 +406,17 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
 
   const shown: FieldState = claimed
     ? claimed.read.kind === "value"
-      ? {
-          state: "value",
-          value: (claimed.read.value as { value?: unknown }).value ?? null,
-        }
+      ? rawColourForSwatchField(wire, claimed.read.value)
+        ? // WP4.10 — an edit context whose colour is not a swatch (an
+          // image's foreground) answers a colour path with a RAW colour
+          // (`swatchColor`). A swatch field cannot show one, so it reads
+          // as not a swatch ("—") and still writes: picking a swatch
+          // hands the owner a `colorRef` it resolves itself.
+          { state: "absent" }
+        : {
+            state: "value",
+            value: (claimed.read.value as { value?: unknown }).value ?? null,
+          }
       : claimed.read.kind === "mixed"
         ? { state: "mixed" }
         : { state: "absent" }
@@ -427,6 +434,15 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
     provider: claimed ? claimed.provider : null,
     inferred: !!(row && model?.isInferred?.(row)),
   };
+}
+
+/** Is `value` a raw colour answered for a path whose field is a swatch
+ *  reference? (See `shown` in `useObjectProperty`.) */
+function rawColourForSwatchField(wire: string | null, value: unknown): boolean {
+  return (
+    wire === "colorRef" &&
+    (value as { type?: string } | null)?.type === "swatchColor"
+  );
 }
 
 /** Read the element's IDML name and existing `x-paged:oid` label — the

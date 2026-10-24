@@ -123,6 +123,8 @@
       "media.paged.image.tool.bucket",
       "media.paged.image.tool.gradient",
       "media.paged.image.tool.redEye",
+      "media.paged.image.tool.eyedropper",
+      "media.paged.image.tool.colorSampler",
       "media.paged.image.tool.pencil",
       "media.paged.image.tool.eraser",
       "media.paged.image.tool.clone",

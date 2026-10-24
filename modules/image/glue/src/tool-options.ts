@@ -12,6 +12,7 @@ import type { BundleHost, Disposable } from "@paged-media/plugin-api";
 import { defineMessages, t } from "@paged-media/strings";
 
 import { GRADIENT_KINDS, type GradientKind } from "./engine";
+import { isSampleSize, SAMPLE_SIZES } from "./color-state";
 import { gradientKindLabel } from "./words";
 import type { ToolSettingValue } from "@paged-media/plugin-api";
 import type { ImageSession } from "./session";
@@ -45,6 +46,12 @@ const pct = (key: string, label: string): ToolOptionField => ({
 });
 
 const M = defineMessages("image.toolOptions", {
+  sampleSize: "Sample size",
+  pointSample: "Point sample",
+  average: "{n} by {n} average",
+  sample: "Sample",
+  currentLayer: "Current layer",
+  allLayers: "All layers",
   size: "Size",
   tolerance: "Tolerance",
   contiguous: "Contiguous",
@@ -75,6 +82,17 @@ const wand = (): ToolOptionField[] => [
   { kind: "toggle", key: "contiguous", label: t(M.contiguous) },
 ];
 
+/** WP4.10 — the Eyedropper's and Color Sampler's sample size. */
+const sampleSize = (): ToolOptionField => ({
+  kind: "select",
+  key: "sampleSize",
+  label: t(M.sampleSize),
+  options: SAMPLE_SIZES.map((n) => ({
+    value: String(n),
+    label: n === 1 ? t(M.pointSample) : t(M.average, { n }),
+  })),
+});
+
 /** The fields each tool declares, by tool id, labelled in the editor's
  *  language at the time (the bundle declares them on activation). */
 export function toolOptionFields(ids: {
@@ -84,8 +102,27 @@ export function toolOptionFields(ids: {
   wand: string;
   bucket: string;
   gradient: string;
+  eyedropper?: string;
+  colorSampler?: string;
 }): Record<string, ToolOptionField[]> {
   return {
+    ...(ids.eyedropper
+      ? {
+          [ids.eyedropper]: [
+            sampleSize(),
+            {
+              kind: "select" as const,
+              key: "sampleSource",
+              label: t(M.sample),
+              options: [
+                { value: "layer", label: t(M.currentLayer) },
+                { value: "all", label: t(M.allLayers) },
+              ],
+            },
+          ],
+        }
+      : {}),
+    ...(ids.colorSampler ? { [ids.colorSampler]: [sampleSize()] } : {}),
     [ids.brush]: [
       size(),
       pct("hardness", t(M.hardness)),
@@ -118,11 +155,20 @@ export function toolOptionFields(ids: {
  *  ignored; a value of the wrong type is ignored, not coerced). */
 export function applyToolSettings(
   session: ImageSession,
-  kind: "brush" | "wand" | "gradient",
+  kind: "brush" | "wand" | "gradient" | "eyedropper",
   v: Readonly<Record<string, ToolSettingValue>>,
 ): void {
   const num = (k: string) =>
     typeof v[k] === "number" ? (v[k] as number) : undefined;
+  if (kind === "eyedropper") {
+    const size = Number(v.sampleSize);
+    const o: Parameters<ImageSession["setEyedropperOptions"]>[0] = {};
+    if (isSampleSize(size)) o.size = size;
+    if (v.sampleSource === "layer" || v.sampleSource === "all")
+      o.source = v.sampleSource;
+    if (Object.keys(o).length) session.setEyedropperOptions(o);
+    return;
+  }
   if (kind === "brush") {
     const p: Parameters<ImageSession["setBrushParams"]>[0] = {};
     if (num("size") !== undefined) p.size = Math.max(1, num("size")!);
@@ -148,7 +194,7 @@ export function applyToolSettings(
 export function bindToolSettings(
   host: BundleHost,
   session: ImageSession,
-  tools: Record<string, "brush" | "wand" | "gradient">,
+  tools: Record<string, "brush" | "wand" | "gradient" | "eyedropper">,
 ): Disposable | null {
   if (!host.supports("tools.settings@1")) return null;
   const surface = host.tools;
