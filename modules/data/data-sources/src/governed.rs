@@ -31,7 +31,7 @@
 //! diagnostics** that keep it honest — an undocumented column, a stale sidecar
 //! entry, or a documented type that disagrees with the data is *surfaced*, never
 //! silently papered over (the governance conviction §7 expresses). The byte IO
-//! that fetches the table + the sidecar JSON is the DuckDB/bundle layer; nothing
+//! that fetches the table + the sidecar JSON is the bundle and the store; nothing
 //! here touches the network.
 
 use std::collections::{BTreeMap, BTreeSet};

@@ -18,10 +18,10 @@
 
 //! # data-query — result shaping, ordering, and content hashing (spec §6.1)
 //!
-//! The query/ingest engine itself is **DuckDB-WASM** (MIT, vendored), running
-//! in the bundle realm; it returns **Arrow**, which the TS query layer converts
-//! to a [`data_core::RecordSet`] (the Arrow-aligned interchange — the swappable
-//! seam). This crate is the Rust half of that seam: it
+//! The query/ingest engine itself is the store (`data-store`, Turso, ADR 561),
+//! which reads its rows straight into a [`data_core::RecordSet`] (the
+//! Arrow-aligned interchange — the swappable seam). This crate shapes what
+//! arrives at that seam: it
 //!
 //! - [`shape`]s a raw `RecordSet` per a query's [`ResultShape`]
 //!   (record-stream / single / scalar / grouped);
@@ -32,10 +32,8 @@
 //! - computes content hashes ([`content_hash`], [`stamp`]) for the
 //!   [`ResolveStamp`] invalidation key.
 //!
-//! > **M1 seam:** decoding raw Arrow-IPC *bytes* in Rust (so the wasm boundary
-//! > can take IPC instead of a JSON `RecordSet`) lands with the engine wiring.
-//! > The conversion currently happens in the TS DuckDB layer; this crate's
-//! > contract is the `RecordSet` it produces.
+//! > Results a host materialises itself arrive through the column door or a
+//! > `RecordSet`; this crate's contract is the `RecordSet`, whoever made it.
 
 use data_core::{Query, RecordSet, ResolveStamp, ResultShape, Value};
 
@@ -148,8 +146,8 @@ fn group_by(records: &RecordSet, by: &[String]) -> Vec<Group> {
 // ── Deterministic ordering (spec §6.1) ──────────────────────────────────────
 
 /// Return a stable row permutation ordering the record set by the named keys
-/// (or, when `keys` is empty, by every column left-to-right). DuckDB result
-/// iteration is unordered without `ORDER BY`; this stabilizes it so record
+/// (or, when `keys` is empty, by every column left-to-right). A SQL result
+/// is unordered without `ORDER BY`; this stabilizes it so record
 /// identity is stable across refreshes (the sync-diff precondition, §8).
 ///
 /// The comparison is allocation-free: values compare in place by the same

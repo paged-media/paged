@@ -347,7 +347,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await marginNote(
       ctx,
       pg,
-      "The DuckDB network lane is dormant by consent design — remote " +
+      "The network lane is dormant by consent design — remote " +
         "sources stay inert until their origin is granted, and none is. No " +
         "container part carries the imported data yet: the document travels " +
         "with its metadata envelopes and the lowered native content, and a " +

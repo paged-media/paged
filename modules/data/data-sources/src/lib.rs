@@ -20,7 +20,8 @@
 //!
 //! The source-adapter layer (spec §6.2) and **the only crate touching
 //! network/file capability declarations** (spec §4 rule 2). The actual byte IO
-//! is performed by DuckDB-WASM in the bundle realm; this crate owns the
+//! is performed by the bundle (it fetches) and the store (it reads); this
+//! crate owns the
 //! engine-neutral parts:
 //!
 //! - the [`SourceAdapter`] trait + one ZST adapter per [`SourceKind`], selected
@@ -360,7 +361,7 @@ pub enum AttachError {
 pub struct AttachPlan {
     /// The engine being attached.
     pub engine: data_core::DbEngine,
-    /// The DuckDB alias the attached DB is exposed under (the source id).
+    /// The alias the attached DB is exposed under (the source id).
     pub alias: String,
     /// The non-secret locator (file/OPFS name or host:port/db).
     pub target: String,
@@ -399,7 +400,7 @@ pub fn attach_plan(src: &DataSource) -> Result<AttachPlan, AttachError> {
     })
 }
 
-/// The stable engine name (for diagnostics + the DuckDB attach idiom).
+/// The stable engine name (for diagnostics + the attach idiom).
 fn engine_name(db: data_core::DbEngine) -> &'static str {
     match db {
         data_core::DbEngine::Sqlite => "sqlite",

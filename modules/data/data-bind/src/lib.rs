@@ -272,7 +272,7 @@ pub struct ResolutionEngine {
     bindings: HashMap<BindingId, Binding>,
     templates: HashMap<TemplateRef, Template>,
     placeholders: HashMap<PlaceholderRef, Placeholder>,
-    /// Per-query results delivered by the query engine (DuckDB → RecordSet).
+    /// Per-query results delivered by the query engine (the store → RecordSet).
     results: HashMap<QueryId, RecordSet>,
     results_hash: HashMap<QueryId, u64>,
     /// Per-query, per-column content hashes (by column name) — the
@@ -490,7 +490,7 @@ impl ResolutionEngine {
     /// The physical row that holds RECORD `record` of a query's result — the
     /// numbering tables, record flows, rules and batch plans share. A query
     /// that defines its order (an `ORDER BY`, or a scan of one table, which
-    /// DuckDB delivers in insertion order: [`result_order_is_defined`]) is
+    /// the store delivers in insertion order: [`result_order_is_defined`]) is
     /// numbered as delivered, so record 0 is the first row of an imported
     /// file, as Data Merge numbers it. Any other result is numbered in the
     /// STABILIZED order (every column), so record N is the same row whatever

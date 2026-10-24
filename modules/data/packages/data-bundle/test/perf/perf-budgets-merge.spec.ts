@@ -44,7 +44,7 @@ import { pageElements } from "../../src/merge";
 import { countingHost } from "./counting-host";
 import {
   BUDGET_TIMEOUT_MS,
-  bootCountedDuck,
+  bootCountedStore,
   bootCountedEngine,
   expectBudget,
   LABELLED,
@@ -56,7 +56,7 @@ import {
   RUN_BUDGETS,
   sessionOver,
   undoStepsSince,
-  type CountedDuck,
+  type CountedStore,
   type Measured,
 } from "./harness";
 
@@ -80,7 +80,12 @@ const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 //    elementGeometry, storyContent, elementProperties, hitTest (template and
 //    re-merge plan reads);
 //  · wasm 4: query_record_count, plan_merge, merge_words, merge_overset. The
-//    query already ran (refreshData before the merge): no DuckDB statement.
+//    query already ran (refreshData before the merge).
+//  · store 1: the merge reads the CSV as written (session.ts asWritten, the
+//    way InDesign's Data Merge reads it). Pinned at 0 before ADR 561 only
+//    because the harness's counted DuckDB handle had no
+//    queryColumnsAsWritten, so under the harness the merge fell back to
+//    typed values and the read went uncounted; the product always made it.
 //
 // W8 on protocol 69 (LABELLED, harness.ts), where the merge consumes the
 // whole batch:
@@ -125,7 +130,7 @@ const W8: Measured = onLabelled(
     stabilizeCalls: 0,
     keyAllocs: 0,
     fingerprints: 0,
-    duckQueries: 0,
+    storeQueries: 1,
   },
   {
     hostCalls: 16,
@@ -141,14 +146,13 @@ describe.skipIf(!RUN_BUDGETS)(
   "perf budgets — Data Merge [data.perf.gates]",
   () => {
     let h: HeadlessHost | null = null;
-    let duck: CountedDuck | null = null;
+    let store: CountedStore | null = null;
     afterEach(() => {
       h?.dispose();
       h = null;
     });
     afterAll(async () => {
       printTable();
-      await duck?.handle.close();
     });
 
     it("W8 merges 57 records, two columns, columns first, over 3 pages [data.perf.gates] [data.lower.merge-writer]", async () => {
@@ -156,8 +160,8 @@ describe.skipIf(!RUN_BUDGETS)(
       await h.load(readFileSync(join(LANE, "templates", `${ID}.idml`)));
       const { host, work } = countingHost(h.host);
       const engine = await bootCountedEngine();
-      duck ??= await bootCountedDuck();
-      const s = await sessionOver(host, engine, duck);
+      store = bootCountedStore(engine);
+      const s = await sessionOver(host, engine, store);
       await s.registerCsvSource(
         "lrs",
         readFileSync(join(LANE, "csv", `${ID}.csv`), "utf8"),
@@ -184,12 +188,12 @@ describe.skipIf(!RUN_BUDGETS)(
       };
       work.reset();
       engine.reset();
-      duck.reset();
+      store.reset();
       const t0 = performance.now();
       const r = await s.mergeRecords(options);
       const ms = performance.now() - t0;
       const snap = work.snapshot();
-      const pre = measure(snap, engine, duck, null);
+      const pre = measure(snap, engine, store, null);
 
       // ── behaviour: InDesign's pages and texts ──────────────────────────────
       expect(r.ok, r.diagnostics.join("; ")).toBe(true);

@@ -181,11 +181,10 @@ engine and to other plugins. See the amendment to
 [ADR 014](014-data-provider-arrow-seam.md). This supersedes "one columnar shape end to end, no
 impedance layer" in the first reason and "zero-copy-shaped" in the second consequence.
 
-## Amendment (2026-10-24): to be replaced by Turso
+## Amendment (2026-10-24): superseded by 561
 
-[PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) decides that
-Turso (`turso_core`, MIT, a Rust implementation of SQLite) replaces DuckDB-WASM as the one data
-engine, compiled with the data engine instead of vendored beside it. Until record 561 lands
-with the code, DuckDB-WASM stays the shipped engine and this record describes it. The measured
-spike is [`../design/turso-spike-2026-10.md`](../design/turso-spike-2026-10.md).
+[PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) decided that
+Turso (`turso_core`, MIT, a Rust implementation of SQLite) replaces DuckDB-WASM, compiled into
+the data engine instead of vendored beside it; [ADR 561](561-turso-is-the-data-engine.md)
+records the engine as built. This record describes the module before that.
 

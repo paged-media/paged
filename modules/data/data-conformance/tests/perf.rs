@@ -16,8 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Performance gates (spec §12.5, the Rust-engine half). The DuckDB-WASM query
-//! gate (1M-row CSV → grouped RecordSet < 1.5 s) runs in the worker, not here;
+//! Performance gates (spec §12.5, the Rust-engine half). The store's 1M-row
+//! timings are measured in docs/design/turso-spike-2026-10.md, not here;
 //! these two gate the ENGINE path the spec budgets: resolve + lower a 200-page
 //! record-flow catalog (< 5 s) and an incremental 100-record-delta diff
 //! (< 300 ms). Pure-Rust pagination/diff is millisecond-scale, so the real

@@ -13,31 +13,28 @@ generation. The thesis: a publication is a _projection of governed data_, not a
 hand-assembled artifact. Bound content is COMPILED to native Paged content via
 committed Operations (the content-space / lowering model proven in
 plugin-sheet), so frame ops (scale/rotate/skew/crop/reposition) are honored for
-free. The **query/ingest engine is the MIT-licensed DuckDB-WASM artifact**
-(vendored, not compiled in-tree), kept swappable behind the Arrow seam.
+free. The **query/ingest engine is the store inside the data engine**: Turso
+(`turso_core`, MIT, a Rust SQLite), compiled into `data-js` (`data-store`,
+ADR 561), every file read in Rust, query rows read straight into a
+`RecordSet` — the swappable seam.
 
 Spec (the authority): [`docs/concept.md`](./docs/concept.md).
 SDK gap tracker: the cross-repo RFI `thoughts/docs/paged/plugin-platform/rfi-core-sdk-gaps.md` (D-NN ids in §6; per-plugin BREAKAGE_LOG retired 2026-06-12).
 
 Rust crates (Cargo workspace, top level per spec §4): `data-core` (frozen
 types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
-`data-bind` (resolution/sync engine), `data-lower`, `data-js` (wasm-bindgen
-surface), `data-conformance` (TEST-ONLY), plus the §10 automation lane —
+`data-bind` (resolution/sync engine), `data-lower`, `data-store` (the query
+store and the file readers), `data-xlsx`, `data-js` (wasm-bindgen surface),
+`data-conformance` (TEST-ONLY), plus the §10 automation lane —
 `data-automation` (batch plan/run), `data-cli` (headless native CLI), and
 `data-script` (sandboxed Boa surface). TS packages (`packages/*`, in the root Bun workspace):
 `data-host-model` (pure LoweredContent→Mutation translation) + `data-bundle`
-(manifest + `activate(host)` + three panels [sources/bindings/dataset] + five
-commands + DuckDB-WASM query integration). Vendored MIT engine:
-`vendor/duckdb-wasm/` (fetched by `scripts/vendor-duckdb.sh`, which stages ONE
-variant, eh, into `packages/data-bundle/bin/`, plus DuckDB's json + parquet
-extensions into `bin/duckdb-ext/<engine>/wasm_eh/` — the eh build has neither, and
-`bootDuckDB` points `custom_extension_repository` there so nothing loads from
-extensions.duckdb.org; the runtime loads only `bin/` — except that the two engine
-wasm files (`data-engine`, `duckdb-engine`) are first asked of the host's module
-door (plugin-sdk ADR 326, `hostWasm` in `src/bin-url.ts`): an editor may serve them from the
-first-party module host, with integrity; no door or no answer → `bin/`. The DuckDB
-worker and JS API always load from `bin/`, same-origin (D-05). The Node test lanes
-load the same files with every other URL refused, `test/duckdb-node-ext.ts`).
+(manifest + `activate(host)` + panels + commands + the handle on the engine's
+store, `src/query/store.ts`). ONE wasm artifact, `bin/data_js_bg.wasm` (the store
+inside it, ~11 MiB), first asked of the host's module door (plugin-sdk ADR 326,
+`hostWasm` in `src/bin-url.ts`): an editor may serve it from the first-party
+module host, with integrity; no door or no answer → `bin/`. The spike behind
+the engine is `spikes/turso/` (its own workspace, not built by the module).
 
 **State (the live ledger is the Cockpit feature registry and `docs/status.md`,
 not this prose; the 2026-10-05 analysis is `docs/design/analysis-2026-10-05.md`).**
@@ -64,23 +61,22 @@ The ENGINE is far ahead of what a user can reach from the panels:
   writer) matches all 8 InDesign recordings on real core; record flow writes
   frames (`src/flow-writer.ts`); tables/barcodes re-lower in place
   (`src/relower.ts`). SOURCES + QUERY (wave 6): local import of CSV/TSV/JSON/Parquet/XLSX
-  (XLSX via `data-xlsx`/calamine — DuckDB-WASM 1.29.0 has no offline reader),
-  saved with the document; a Data query panel (SQL + builders + preview);
-  every query passes a lexer allow-list guard (`src/query/sql.ts`: one SELECT over
-  source tables, no file/URL reads; asks DuckDB nothing — `json_serialize_sql`
-  trapped in the browser worker) plus `lock_configuration` at DuckDB boot;
-  `test/duckdb-browser.spec.ts` is the real-browser lane (`REQUIRE_REAL_BROWSER=1`); refresh policies act (`src/refresh.ts`).
+  (all read in Rust by `data-store`; XLSX via `data-xlsx`/calamine), saved with
+  the document; a Data query panel (SQL + builders + preview); every query
+  passes a lexer allow-list guard (`src/query/sql.ts`: one SELECT over source
+  tables, no file/URL reads, no PRAGMA/ATTACH; asks the engine nothing) and runs
+  on the store's `query_only` connection; `test/store-browser.spec.ts` is the
+  real-browser lane (`REQUIRE_REAL_BROWSER=1`); refresh policies act (`src/refresh.ts`).
   Remote sources fetch only consented origins AND only origins the editor
   build lists (editor ADR 218, `PAGED_DATA_ORIGINS`; RFI D-03 residual).
-  Still not built: SQLite/DB-attach execution (sqlite_scanner cannot open
-  DuckDB-WASM's registered files), worker-hosted DuckDB. Merge to a NEW
-  document ships through the host's documents door (editor ADR 219).
+  Still not built: DB-attach execution (`attach_plan` describes one; the
+  store could `ATTACH` a SQLite file now), a worker-hosted engine. Merge to a
+  NEW document ships through the host's documents door (editor ADR 219).
 - DIRECTION (PM-0015, 2026-10-24): data becomes a platform layer — bindings
   in the engine model, the `data-*` crates moving to `engine/core/crates`, a
-  `data@1` door, Turso replacing DuckDB-WASM (compiled in, not vendored),
-  transforms and asset actions in the engine's Boa interpreter. Reserved
-  records 561–563 here. Until 561 lands, DuckDB-WASM stays the shipped engine
-  and the license-boundary rule below describes it.
+  `data@1` door, transforms and asset actions in the engine's Boa
+  interpreter. The engine swap shipped (ADR 561: Turso replaced DuckDB-WASM);
+  records 562–563 are reserved here.
 
 ## Project State & Feature Matrix (cockpit)
 
@@ -113,8 +109,8 @@ Rules for every code change in this repo:
   parsing + evaluation, the function library, formatting, binding resolution,
   sync-state machinery, record-identity diffing, and lowering geometry are the
   `data-*` crates compiled to ONE wasm module (`data-js`). The TS packages are
-  thin glue: bundle lifecycle, panels, the DuckDB-WASM query integration, file
-  input, and translating the engine's already-computed output into host
+  thin glue: bundle lifecycle, panels, the handle on the engine's query store,
+  file input, and translating the engine's already-computed output into host
   mutations. **Never implement a binding/expression operation in TypeScript** —
   if the bundle seems to need one, the missing piece is a `data-js` API.
 - **ISOLATION CONTRACT, superset (§2.1).** Zero core contact AND zero
@@ -134,12 +130,11 @@ Rules for every code change in this repo:
   linked, or redistributed. Such tools are integrated, if at all, ONLY by
   consuming their data _outputs_ (tables + optional metadata sidecars) through
   the standard source adapters (§7) — touching zero engine code. The ONE
-  bundled engine is **MIT DuckDB-WASM** (to be replaced by MIT Turso compiled
-  into the data engine, PM-0015 / record 561), vendored as a prebuilt artifact under
-  `vendor/duckdb-wasm/` (attribution in `SOURCE.md`), never compiled in-tree.
+  data engine is **MIT Turso** (`turso_core`, compiled into `data-js`, ADR 561;
+  a Turso upgrade moves only with the SQLite oracle replayed).
   `deny.toml` [licenses] enforces the permissive-only allow-list; any dependency
   pulling in a non-allow-listed license fails the build (the §16 license-boundary
-  gate). Arrow / ADBC (Apache-2.0) is the permitted interchange substrate.
+  gate). Arrow / ADBC / `parquet` (Apache-2.0) are permitted.
 - **REGISTRY-DRIVEN DISPATCH (§12.2).** The expression function table is
   generated at build time from `registry/functions/*.yaml`
   (`data-core/build.rs` emits the name→id table; `data-expr/build.rs` emits the
@@ -173,7 +168,7 @@ Rules for every code change in this repo:
   factories closing over `BundleHost`; styling = the token layer (`--pg-*`,
   `--status-*`, `--font-mono`, `--space-*`, `--radius-*`).
 - **Reserved seams stay honest.** What the engine can do but a user cannot
-  reach (DB-attach execution, worker-hosted DuckDB) is said so in the manifest,
+  reach (DB-attach execution, a worker-hosted engine) is said so in the manifest,
   the UI, `docs/status.md` and the RFI. Never fake it, and never leave a
   "not yet" message standing after the door exists.
 - **CLEAN-ROOM (§3).** `references/` (any reference engine, IF ever mounted) is
@@ -205,7 +200,7 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Everything (Rust nextest + doctests, then wasm + DuckDB + bun test), from anywhere:
+# Everything (Rust nextest + doctests, then wasm + bun test), from anywhere:
 moon run data:test
 # Rust (the engine) without Moon. CARGO_INCREMENTAL=0 keeps target/ small.
 cargo build --workspace
@@ -221,12 +216,11 @@ cargo deny check
 # wasm artifact (100 MB app wasm budget; lands in packages/data-bundle/bin/).
 # Rebuild after ANY Rust change: test/wasm-fresh.spec.ts fails on a wasm built
 # from other sources (tooling/js/source-hash.mjs, stamped as bin/SOURCE_HASH).
-bash scripts/vendor-duckdb.sh   # the MIT DuckDB-WASM artifact; stages bin/duckdb-engine.wasm
 bash scripts/build-wasm.sh
 
 # TS (the bundle). The contract comes from the workspace (workspace:*, checked
 # repo-wide by tooling/js/check-workspace-deps.mjs); CI runs with
-# REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
+# REQUIRE_REAL_ENGINE=1 (REQUIRE_REAL_BROWSER=1 for the browser lane).
 bun install && bun run typecheck && bun run test
 bun run validate:manifest
 
@@ -234,8 +228,8 @@ bun run validate:manifest
 # published on its own (PM-0008).
 
 # Oracles (docs/design/oracles.md): replays run in the suites above
-# (data-conformance oracle.rs / oracle_props.rs; bun test duckdb-sql-oracle +
-# indesign-merge-duckdb). Re-recording is local only:
-DUCKDB=/path/to/duckdb-v1.1.1 node conformance/duckdb-sql/record.mjs
+# (data-conformance oracle.rs / oracle_props.rs; data-store sqlite_oracle.rs;
+# bun test indesign-merge-store). Re-recording is local only:
+SQLITE3=/path/to/sqlite3 node conformance/sqlite-sql/record.mjs
 bash conformance/indesign-merge/record.sh   # drives InDesign 2025
 ```

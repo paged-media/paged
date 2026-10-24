@@ -1,6 +1,6 @@
 // The query guard's security matrix, shared by the Node lane
 // (test/query-guard.spec.ts) and the real-browser lane
-// (test/duckdb-browser.spec.ts), so both prove the same property.
+// (test/store-browser.spec.ts), so both prove the same property.
 //
 // Fixture tables: `people(name, role)` (2 rows) and `orders(name, qty)`
 // (3 rows), both imported as sources.
@@ -81,6 +81,15 @@ export const REFUSED: [sql: string, why: RegExp][] = [
   ["DROP TABLE people", /only a SELECT query/],
   ["WITH x AS (SELECT 1) DELETE FROM people", /DELETE is not allowed/],
   ["CALL pragma_version()", /only a SELECT query/],
+  // SQLite's own (the store is Turso): the pragma that lifts query_only,
+  // a database written to a file, a pragma read as a table
+  ["PRAGMA query_only = 0", /only a SELECT query/],
+  ["VACUUM INTO 'copy.db'", /only a SELECT query/],
+  ["ATTACH DATABASE 'x.db' AS x", /only a SELECT query/],
+  [
+    "SELECT * FROM pragma_table_info('people')",
+    /pragma_table_info\(\) reads files or URLs/,
+  ],
   // several statements, and lexer tricks
   ["SELECT 1; SELECT 2", /exactly one SELECT/],
   ["SELECT 1; DROP TABLE people", /exactly one SELECT/],
@@ -118,10 +127,9 @@ export const ALLOWED: [sql: string, rows: (string | null)[][]][] = [
     "SELECT name FROM people WHERE name IN (SELECT name FROM orders WHERE qty = 5)",
     [["Grace"]],
   ],
-  ["SELECT * FROM range(3)", [["0"], ["1"], ["2"]]],
+  ["SELECT value FROM generate_series(0, 2)", [["0"], ["1"], ["2"]]],
   [
     "-- a comment; with a semicolon\nSELECT upper(name) FROM people /* ; */ ORDER BY 1",
     [["ADA"], ["GRACE"]],
   ],
-  ["FROM people SELECT name ORDER BY name LIMIT 1", [["Ada"]]],
 ];

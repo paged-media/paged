@@ -32,7 +32,7 @@ pub fn days_from_civil(y: i32, m: u32, d: u32) -> i32 {
 
 /// Civil `(year, month, day)` for a count of days since 1970-01-01.
 ///
-/// Every `i32` day count, DuckDB's whole DATE range included, maps to a year
+/// Every `i32` day count (a DATE range as wide as any engine's) maps to a year
 /// that fits `i32` (the arithmetic itself runs in `i64`).
 pub fn civil_from_days(z: i32) -> (i32, u32, u32) {
     let (y, m, d) = calendar::civil_from_days(z as i64);
@@ -62,7 +62,8 @@ mod tests {
 
     #[test]
     fn data_temporal_civil_from_days_extremes_do_not_overflow() {
-        // DuckDB's DATE max (5881580-07-10) and min (5877642-06-25 BC).
+        // The widest DATE range an engine stores: max (5881580-07-10) and min
+        // (5877642-06-25 BC), DuckDB's.
         assert_eq!(civil_from_days(2_147_483_646), (5_881_580, 7, 10));
         assert_eq!(civil_from_days(-2_147_483_646), (-5_877_641, 6, 25));
         assert_eq!(civil_from_days(i32::MAX).0, 5_881_580);

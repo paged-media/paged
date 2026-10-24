@@ -24,25 +24,7 @@
         "name": "data-engine",
         "path": "bin/data_js_bg.wasm",
         "purpose": "compute",
-        "maxBytes": 8388608
-      },
-      {
-        "name": "duckdb-engine",
-        "path": "bin/duckdb-engine.wasm",
-        "purpose": "engine",
-        "maxBytes": 50331648
-      },
-      {
-        "name": "duckdb-ext-json",
-        "path": "bin/duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
-        "purpose": "engine",
-        "maxBytes": 1048576
-      },
-      {
-        "name": "duckdb-ext-parquet",
-        "path": "bin/duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
-        "purpose": "engine",
-        "maxBytes": 4194304
+        "maxBytes": 16777216
       }
     ],
     "dataProviders": {

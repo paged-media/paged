@@ -32,7 +32,7 @@ console.debug = toStderr;
 
 // The verb's promise alone does not keep the process alive: an await on work
 // no event-loop handle stands for (a large WebAssembly module compiling, as
-// paged.data's DuckDB does on boot) let the runtime find the loop empty and
+// a bundle's engine does on boot) let the runtime find the loop empty and
 // end the process early, with exit code 0, before the verb had written
 // anything. A timer holds the loop open until the verb settles, and a process
 // that ends before it settles says so and fails.

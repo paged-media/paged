@@ -1,20 +1,24 @@
 // The InDesign Data Merge oracle over the SHIPPED query path
 // (docs/design/oracles.md). data-conformance/tests/it/oracle.rs replays the
 // recordings with every CSV field ingested as TEXT, the way Data Merge reads
-// it. Here the same CSVs go the way a user's file goes: registerCsv into the
-// shipped duckdb-wasm (type sniffing and all) → recordset.ts → the data-js
-// record flow; and each merged record's text is compared with what InDesign
-// wrote into its frame. Placement is oracle.rs's job; this lane is text only.
+// it. Here the same CSVs go the way a user's file goes: into the engine's
+// query store (types inferred and all, ADR 561) → the store's rows into the
+// binding session → the data-js record flow; and each merged record's text is
+// compared with what InDesign wrote into its frame. Placement is oracle.rs's
+// job; this lane is text only.
 //
-// GATE: skips without DuckDB or the data-js wasm, fails under
-// REQUIRE_REAL_DUCKDB=1 (duckdb-sql-oracle.spec.ts carries the boot gate).
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+// GATE: skips without the data-js wasm, fails under REQUIRE_REAL_ENGINE=1
+// (store-real.spec.ts carries the gate).
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
-import { ingestColumnBatch } from "../src/engine";
-import { BIN, PKG, tryBootNodeDuckDB } from "./duckdb-node-boot";
+import { loadIntoStore } from "../src/query/import";
+import { storeHandle } from "../src/query/store";
 import { bootEngine } from "./pipeline-parts.mjs";
+import { HAVE_ENGINE } from "./real-engine";
 
+const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LANE = join(PKG, "..", "..", "conformance", "indesign-merge");
 const spec = JSON.parse(readFileSync(join(LANE, "fixtures.json"), "utf8"));
 
@@ -22,19 +26,16 @@ const spec = JSON.parse(readFileSync(join(LANE, "fixtures.json"), "utf8"));
  *  number of records whose text agrees, pinned. A moved count fails; the
  *  commit that moves it updates the pin. */
 const PINS: Record<string, { agree: number; why?: string }> = {
-  "single-record": {
-    agree: 2,
-    why: "DEFECT DM-8: DuckDB sniffs price as DOUBLE, so 1234.50 prints 1234.5",
-  },
-  "multi-record-column": {
-    agree: 6,
-    why: "DEFECT DM-8: price DOUBLE, so 2.50 prints 2.5 and 10.00 prints 10",
-  },
+  // A typed price keeps its written scale (DECIMAL, `1234.50`) and a code
+  // keeps its leading zeros: DM-8 is closed on the typed path too (ADR 561;
+  // DuckDB's sniffer agreed on 81 of 90).
+  "single-record": { agree: 3 },
+  "multi-record-column": { agree: 12 },
   "multi-record-grid": { agree: 7 },
   "long-record-set": { agree: 57 },
   "empty-field-lines": {
-    agree: 1,
-    why: "DEFECT DM-5 the empty field's line is kept; DM-8 1.00 prints 1",
+    agree: 2,
+    why: "DEFECT DM-5 the empty field's line is kept (the record flow's; the merge writer removes it)",
   },
   overset: { agree: 2 },
   "number-text": { agree: 3 },
@@ -57,11 +58,8 @@ function indesignTexts(id: string): Array<{ text: string; overset: boolean }> {
   );
 }
 
-const boot = await tryBootNodeDuckDB();
-const engineBuilt = existsSync(join(BIN, "data_js_bg.wasm"));
-
-describe.skipIf(!boot.duck || !engineBuilt)(
-  "InDesign Data Merge texts over the shipped DuckDB path [data.lower.content]",
+describe.skipIf(!HAVE_ENGINE)(
+  "InDesign Data Merge texts over the shipped store path [data.lower.content]",
   () => {
     for (const fx of spec.fixtures as any[]) {
       const pin = PINS[fx.id];
@@ -73,21 +71,12 @@ describe.skipIf(!boot.duck || !engineBuilt)(
 );
 
 /** What a Data Merge reads (session.ts `asWritten`): the CSV fields as the
- *  file has them. DM-8 is closed here; DM-5 (Remove Blank Lines) is the
- *  record flow's, which the merge writer closes on its own lane. */
-const AS_WRITTEN_PINS: Record<string, { agree: number; why?: string }> = {
-  ...Object.fromEntries(
-    Object.entries(PINS).map(([id, p]) => [id, { agree: p.agree }]),
-  ),
-  "single-record": { agree: 3 },
-  "multi-record-column": { agree: 12 },
-  "empty-field-lines": {
-    agree: 2,
-    why: "DEFECT DM-5 the empty field's line is kept (the record flow's; the merge writer removes it)",
-  },
-};
+ *  file has them. It agrees with InDesign as often as the typed read does
+ *  now; DM-5 (Remove Blank Lines) is the record flow's, which the merge
+ *  writer closes on its own lane. */
+const AS_WRITTEN_PINS = PINS;
 
-describe.skipIf(!boot.duck || !engineBuilt)(
+describe.skipIf(!HAVE_ENGINE)(
   "InDesign Data Merge texts over the merge's as-written read (DM-8 closed) [data.lower.content]",
   () => {
     for (const fx of spec.fixtures as any[]) {
@@ -104,21 +93,8 @@ async function agreeing(
   expected: number,
   read: "typed" | "asWritten",
 ): Promise<void> {
-  const duck = boot.duck!;
   const table = `dm_${fx.id.replace(/-/g, "_")}`;
-  await duck.handle.registerCsv(
-    table,
-    readFileSync(join(LANE, "csv", `${fx.id}.csv`), "utf8"),
-  );
   const sql = `SELECT * FROM ${table}`;
-  const batch =
-    read === "asWritten"
-      ? await duck.handle.queryColumnsAsWritten!(sql, [table])
-      : null;
-  if (read === "asWritten" && !batch) throw new Error(`${table}: no text twin`);
-  const rs = batch
-    ? { row_count: batch.row_count }
-    : await duck.handle.query(sql);
 
   const text = fx.frames.find((f: any) => f.kind === "text");
   const fields = text.lines.map((line: string) => {
@@ -126,6 +102,13 @@ async function agreeing(
     return { label: line.slice(0, at), expr: line.slice(at + 2, -2) };
   });
   const engine = await bootEngine();
+  const store = storeHandle(engine)!;
+  await loadIntoStore(
+    store,
+    table,
+    "csv",
+    readFileSync(join(LANE, "csv", `${fx.id}.csv`)),
+  );
   engine.define_source({
     id: "s",
     kind: { kind: "inlineSeed", table },
@@ -150,9 +133,12 @@ async function agreeing(
     template: "t",
     options: {},
   });
-  if (batch) ingestColumnBatch(engine, "q", batch);
-  else engine.ingest_result("q", rs as never);
-  const chain = Array.from({ length: rs.row_count }, (_, i) => ({
+  const rows =
+    read === "asWritten"
+      ? await store.ingestAsWritten("q", sql, [table])
+      : await store.ingest("q", sql);
+  if (rows === null) throw new Error(`${table}: no as-written twin`);
+  const chain = Array.from({ length: rows }, (_, i) => ({
     frame: `f${i}`,
     page: `p${i}`,
     heightPt: 1e6,
@@ -163,7 +149,7 @@ async function agreeing(
       .filter((b: any) => b.block === "record")
       .map((b: any) => b.cells.join("\n")),
   );
-  expect(ours.length).toBe(rs.row_count);
+  expect(ours.length).toBe(rows);
 
   const theirs = indesignTexts(fx.id);
   const used = new Set<number>();

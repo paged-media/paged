@@ -1,5 +1,5 @@
 // Engine protocol 71 + SDK 0.2.44 against the REAL stack (real core, the real
-// data-js engine, real DuckDB):
+// data-js engine with its query store):
 //
 //   · a variable binding is placed as a CUSTOM TEXT VARIABLE `paged:<id>`
 //     (ADR 559: InDesign keeps it and shows its value), refreshed by ONE `Set`
@@ -34,19 +34,13 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 import { readZip, stripContainerParts, text } from "./zip";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const CSV =
   "sku,name,weight_mm,tint\nA-1,Alpha,2,#ff0000\nB-2,Beta,4,Black\nC-3,Gamma,1,Black\n";
@@ -54,25 +48,15 @@ const CSV2 =
   "sku,name,weight_mm,tint\nA-1,Alpha Two,2,#ff0000\nB-2,Beta,4,Black\nC-3,Gamma,1,Black\n";
 const TV = "textVariable:dTextVariablenpaged:v_name";
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -92,7 +76,7 @@ async function exportPaged(host: BundleHost): Promise<Uint8Array> {
   return Uint8Array.from(reply.payload.bytes!);
 }
 
-// Each case boots the real engine, data-js and DuckDB and exports IDML: under
+// Each case boots the real engine and data-js and exports IDML: under
 // a second each on a quiet machine, but past the 5 s default on a shared
 // 4-core runner when the whole suite runs in parallel (the publish job).
 // (bun's describe takes no options; the file's one block gets 30 s this way.)
@@ -154,7 +138,7 @@ describe.skipIf(!ready && !required)(
     it("a variable binding is a custom text variable; one Set refreshes it, one undo takes it back [data.bind.text-variables]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const { h, host, s } = await open(mod);

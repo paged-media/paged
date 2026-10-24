@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.data result shaping + deterministic ordering + content hashing (spec §6.1). Maps the query engine's output (DuckDB-WASM → Arrow → RecordSet) into the shapes bindings consume, and stabilises record identity for the sync diff. Depends ONLY on data-core. (Raw Arrow-IPC decode in Rust is the M1 seam — see lib docs.)"
+description = "paged.data result shaping + deterministic ordering + content hashing (spec §6.1). Maps the query engine's output (the store's RecordSet) into the shapes bindings consume, and stabilises record identity for the sync diff. Depends ONLY on data-core."
 
 [lints]
 workspace = true

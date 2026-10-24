@@ -1,6 +1,6 @@
 // Update in place and the record-flow writer (campaign Wave 5) against the
-// REAL stack: real core (headless canvas-wasm), the real data-js wasm, real
-// DuckDB. A second lower of the same binding must REPLACE what the first made:
+// REAL stack: real core (headless canvas-wasm), the real data-js wasm with its
+// query store. A second lower of the same binding must REPLACE what the first made:
 //
 // - a table is swapped inside its own frame (same frame id, one table frame);
 // - a barcode's modules are replaced (the module count stays one symbol's);
@@ -26,13 +26,13 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { documentElements } from "../src/relower";
 import {
   BUDGET_TIMEOUT_MS,
-  bootCountedDuck,
+  bootCountedStore,
   bootCountedEngine,
   openDataHost,
   productCsv,
   RUN_BUDGETS,
   sessionOver,
-  type CountedDuck,
+  type CountedStore,
 } from "./perf/harness";
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
@@ -53,20 +53,19 @@ describe.skipIf(!RUN_BUDGETS)(
   "re-lower updates in place, real core [data.lower.relower-in-place]",
   () => {
     let h: HeadlessHost | null = null;
-    let duck: CountedDuck | null = null;
+    let store: CountedStore | null = null;
     afterEach(() => {
       h?.dispose();
       h = null;
     });
     afterAll(async () => {
-      await duck?.handle.close();
     });
 
     async function session(csv: string) {
       h = await openDataHost();
       const engine = await bootCountedEngine();
-      duck ??= await bootCountedDuck();
-      const s = await sessionOver(h.host, engine, duck);
+      store = bootCountedStore(engine);
+      const s = await sessionOver(h.host, engine, store);
       const name = `p${Math.random().toString(36).slice(2, 8)}`;
       await s.registerCsvSource(name, csv);
       s.addQuery("q", `SELECT * FROM ${name}`, "recordStream");

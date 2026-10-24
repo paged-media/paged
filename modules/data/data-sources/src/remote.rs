@@ -23,7 +23,7 @@
 //! validates the descriptor and computes its deterministic
 //! **content-hash invalidation key** — it NEVER fetches. The actual bytes are
 //! supplied by the caller (the bundle realm, edit-time, post-consent), exactly
-//! the seam the file adapter uses (DuckDB reads bundle-supplied bytes; the
+//! the seam the file adapter uses (the store reads bundle-supplied bytes; the
 //! wasm kernel performs no IO).
 //!
 //! Security shape (§11, rfc-credential-store): the descriptor carries NO

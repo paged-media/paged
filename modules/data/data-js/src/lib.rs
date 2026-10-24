@@ -40,12 +40,12 @@
 //! `define_placeholder` / `set_param` / `ingest_result` / `resolve_lowered` /
 //! `sync_state` / `pin` / `mark_overridden` / `relink` / `sync_report` /
 //! `source_manifest` / `authorize_report` / `payload` / `metadata` / `free`.
-//! The query engine itself is the vendored DuckDB-WASM (TS side); it converts
-//! its Arrow result to a `RecordSet` JSON which `ingest_result` decodes.
+//! The sources and the queries over them live in the engine too: the store
+//! (`data-store`, ADR 561) is behind the `store_*` methods, and a refresh
+//! delivers a query's rows to the session without them leaving the wasm.
 
 pub mod columns;
 pub mod core;
-pub mod import;
 pub mod review;
 
 #[cfg(target_arch = "wasm32")]
@@ -114,8 +114,8 @@ mod wasm {
             Ok(())
         }
 
-        /// Deliver a query's result (the DuckDB-WASM Arrow result, converted to
-        /// a `RecordSet` by the TS query layer).
+        /// Deliver a query's result materialised by the host (a `RecordSet`);
+        /// the store's own rows arrive through `store_ingest`.
         pub fn ingest_result(&mut self, query: &str, records: JsValue) -> Result<(), JsValue> {
             self.session
                 .ingest_result(QueryId::from(query), from_js(records)?);
@@ -694,17 +694,100 @@ mod wasm {
         }
     }
 
-    // ── wave 6: file imports DuckDB-WASM cannot read (data-xlsx) ─────────
+    // ── the store (ADR 561): sources and the queries over them ──────────
     #[wasm_bindgen]
     impl DataEngine {
-        /// Read one worksheet of an `.xlsx` (`sheet` absent = the first) as
-        /// `{sheet, sheets, columns: [{name, type}], rows, errorCells, json}`;
-        /// the bundle hands `json` + `columns` to DuckDB's `read_json`.
-        pub fn xlsx_import(&self, bytes: &[u8], sheet: Option<String>) -> Result<JsValue, JsValue> {
-            let out = crate::import::xlsx_import(bytes, sheet.as_deref())
-                .map_err(|e| JsValue::from_str(&e))?;
+        /// Read a file into the store as the source table `name`, replacing
+        /// it. `format`: `csv`, `tsv`, `json`, `parquet` or `xlsx`; `sheet`
+        /// names an XLSX worksheet (absent: the first). Answers
+        /// `{table, columns: [{name, type}], rows, sheet?, sheets?,
+        /// errorCells, asWritten}`.
+        pub fn store_import(
+            &mut self,
+            name: &str,
+            format: &str,
+            bytes: &[u8],
+            sheet: Option<String>,
+        ) -> Result<JsValue, JsValue> {
+            let format = data_store::Format::parse(format).ok_or_else(|| {
+                store_error(&data_store::StoreError::Read(format!(
+                    "\"{format}\" is not a format the store reads"
+                )))
+            })?;
+            let out = self
+                .session
+                .store_import(name, format, bytes, sheet.as_deref())
+                .map_err(|e| store_error(&e))?;
             to_js(&out)
         }
+
+        /// Drop a source's table (and its as-written twin).
+        pub fn store_drop(&mut self, name: &str) -> Result<(), JsValue> {
+            self.session.store_drop(name).map_err(|e| store_error(&e))
+        }
+
+        /// The store's source tables, by name.
+        pub fn store_tables(&mut self) -> Result<Vec<String>, JsValue> {
+            self.session.store_tables().map_err(|e| store_error(&e))
+        }
+
+        /// Run `sql` in the store and deliver its rows as the result of
+        /// `query` — no rows cross the boundary. Answers the row count.
+        pub fn store_ingest(&mut self, query: &str, sql: &str) -> Result<usize, JsValue> {
+            self.session
+                .store_ingest(QueryId::from(query), sql)
+                .map_err(|e| store_error(&e))
+        }
+
+        /// Run `sql` over the CSV `sources` as written and deliver the rows
+        /// as the result of `query`. Answers the row count, or `undefined`
+        /// when no source is kept as written.
+        pub fn store_ingest_as_written(
+            &mut self,
+            query: &str,
+            sql: &str,
+            sources: Vec<String>,
+        ) -> Result<Option<usize>, JsValue> {
+            self.session
+                .store_ingest_as_written(QueryId::from(query), sql, &sources)
+                .map_err(|e| store_error(&e))
+        }
+
+        /// The columns a query produces: `[{name, type}]`.
+        pub fn store_describe(&mut self, sql: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_describe(sql)
+                .map_err(|e| store_error(&e))?;
+            to_js(&out)
+        }
+
+        /// The first `limit` rows of a query as text and its row count:
+        /// `{columns: [{name, type}], rows: (string | null)[][], count}`.
+        pub fn store_preview(&mut self, sql: &str, limit: usize) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .store_preview(sql, limit)
+                .map_err(|e| store_error(&e))?;
+            // JSON-compatible: a SQL NULL crosses as `null`, not `undefined`.
+            to_js_json(&out)
+        }
+    }
+
+    /// A store failure as a JS `Error` whose `message` says what happened and
+    /// whose `kind` (`Parser`, `Catalog`, `ReadOnly`, `Read`, …) and `offset`
+    /// (into the SQL that ran) the query panel points with.
+    fn store_error(e: &data_store::StoreError) -> JsValue {
+        let err = js_sys::Error::new(&e.to_string());
+        let (kind, offset) = match e {
+            data_store::StoreError::Sql(d) => (d.kind.as_str(), d.offset),
+            data_store::StoreError::Read(_) => ("Read", None),
+        };
+        let _ = js_sys::Reflect::set(&err, &"kind".into(), &kind.into());
+        if let Some(at) = offset {
+            let _ = js_sys::Reflect::set(&err, &"offset".into(), &(at as f64).into());
+        }
+        err.into()
     }
 
     impl DataEngine {

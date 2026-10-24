@@ -20,7 +20,7 @@
 // a remote source is INERT until its origin is consented (a document carrying
 // one loads cold — NO fetch on open, NO fetch on an unconsented load), the
 // edit-time fetch happens exactly once post-consent and hands the bytes to the
-// DuckDB query lane like an imported file, and descriptors carry credentialRef
+// query store like an imported file, and descriptors carry credentialRef
 // STRINGS only (rfc-credential-store — embedded user:pass@ is rejected).
 // Engine + DuckDB are mocked (the real-engine join is covered by the Rust
 // conformance suite + the e2e harness).
@@ -35,9 +35,7 @@ import { buildRemoteUrl, validateRemoteUrl } from "../remote";
 
 const defineSourceCalls: unknown[] = [];
 const keyCalls: { source: string; byteLen: number }[] = [];
-const registerCsvCalls: { name: string; text: string }[] = [];
-const registerBufferCalls: string[] = [];
-const execCalls: string[] = [];
+const importCalls: { name: string; format: string; text: string }[] = [];
 
 vi.mock("../engine", () => ({
   ENGINE_NOT_BUILT: "engine not built",
@@ -54,26 +52,29 @@ vi.mock("../engine", () => ({
   }),
 }));
 
-vi.mock("../query/duckdb", () => ({
-  DUCKDB_NOT_VENDORED: "duckdb not vendored",
-  bootDuckDB: async () => ({
-    async registerCsv(name: string, text: string) {
-      registerCsvCalls.push({ name, text });
+vi.mock("../query/store", () => ({
+  STORE_MISSING: "no store",
+  storeHandle: () => ({
+    async importFile(
+      name: string,
+      format: string,
+      bytes: Uint8Array,
+    ) {
+      importCalls.push({ name, format, text: new TextDecoder().decode(bytes) });
+      return { table: name, columns: [], rows: 0, errorCells: 0, asWritten: false };
     },
-    async registerFileBuffer(name: string) {
-      registerBufferCalls.push(name);
+    async importCsv(name: string, text: string) {
+      importCalls.push({ name, format: "csv", text });
+      return { table: name, columns: [], rows: 0, errorCells: 0, asWritten: true };
     },
-    async query() {
+    dropSource() {},
+    tables: () => [],
+    async ingest() {
       throw new Error("unused in this suite");
     },
-    async rows() {
-      return { columns: [], rows: [] };
-    },
-    async exec(sql: string) {
-      execCalls.push(sql);
-    },
-    async dropFile() {},
-    async close() {},
+    ingestAsWritten: () => null,
+    describe: () => [],
+    preview: () => ({ columns: [], rows: [], count: 0 }),
   }),
 }));
 
@@ -120,9 +121,7 @@ const fetchSpy = vi.fn(
 beforeEach(() => {
   defineSourceCalls.length = 0;
   keyCalls.length = 0;
-  registerCsvCalls.length = 0;
-  registerBufferCalls.length = 0;
-  execCalls.length = 0;
+  importCalls.length = 0;
   fetchSpy.mockClear();
   stubGlobal("fetch", fetchSpy);
 });
@@ -178,9 +177,9 @@ describe("remote sources — inert until consent (data.source.remote / data.secu
       "https://api.test/feed.csv?region=eu",
     );
 
-    // Bytes entered the DuckDB lane exactly like an imported file.
-    expect(registerCsvCalls).toEqual([
-      { name: "feed", text: "sku,price\nA,1\n" },
+    // Bytes entered the query store exactly like an imported file.
+    expect(importCalls).toEqual([
+      { name: "feed", format: "csv", text: "sku,price\nA,1\n" },
     ]);
 
     // The engine got the transport-agnostic descriptor + computed the key.
@@ -208,11 +207,9 @@ describe("remote sources — inert until consent (data.source.remote / data.secu
     session.addRemoteSource("feed", "https://api.test/feed.parquet", "parquet");
     await session.requestConsentForRemote("feed");
     await session.loadRemoteSource("feed");
-    expect(registerBufferCalls).toEqual(["paged_src_feed.parquet"]);
-    expect(execCalls).toEqual([
-      `CREATE OR REPLACE TABLE "feed" AS SELECT * FROM read_parquet('paged_src_feed.parquet')`,
+    expect(importCalls.map(({ name, format }) => ({ name, format }))).toEqual([
+      { name: "feed", format: "parquet" },
     ]);
-    expect(registerCsvCalls).toHaveLength(0);
   });
 });
 

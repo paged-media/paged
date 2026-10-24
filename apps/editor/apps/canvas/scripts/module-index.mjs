@@ -195,20 +195,14 @@ export function buildModuleManifest({
 
 /** The error for declared wasm that a workspace package lacks: each file, and
  *  the Moon task that builds it. A module's `wasm` task builds its own engine
- *  (`modules/<name>/…` → `<name>:wasm`); data's DuckDB build is vendored by
- *  `data:duckdb`. */
+ *  (`modules/<name>/…` → `<name>:wasm`). */
 function unbuiltMessage(unbuilt) {
   const lines = unbuilt.map(({ pkg, path }) => `  ${pkg.name}: ${path}`);
   const tasks = new Set();
   for (const { pkg, path } of unbuilt) {
     const m = /\/modules\/([^/]+)\//.exec(toPosix(pkg.root) + "/");
     if (!m) tasks.add(`build ${pkg.name}'s wasm`);
-    else
-      tasks.add(
-        m[1] === "data" && path.includes("duckdb")
-          ? "data:duckdb"
-          : `${m[1]}:wasm`,
-      );
+    else tasks.add(`${m[1]}:wasm`);
   }
   const moon = [...tasks].filter((t) => !t.startsWith("build "));
   const other = [...tasks].filter((t) => t.startsWith("build "));

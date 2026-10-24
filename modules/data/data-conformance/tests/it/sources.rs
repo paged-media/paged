@@ -250,35 +250,30 @@ fn data_source_db_attach_credential_ref_indirection() {
 }
 
 #[test]
-fn data_source_duckdb_engine_purpose() {
-    // D-07b / D-11 — DuckDB-WASM loads first-class via the `engine` wasm purpose
-    // class (the governed 64 MiB ceiling), NOT the 8 MiB compute cap. Assert the
-    // bundle manifest declares it as purpose:"engine" so the plugin-cli size-gate
-    // admits the ~36 MiB artifact (it would REJECT it as compute).
-    let manifest_path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../packages/data-bundle/manifest.json"
-    );
-    let text = std::fs::read_to_string(manifest_path).expect("bundle manifest readable");
+#[allow(non_snake_case)] // `__feat__<id>`: the cockpit test-to-feature join
+fn data_source_one_engine_artifact__feat__data_store_turso() {
+    // ADR 561 — the query store is inside the data engine: the bundle declares
+    // exactly ONE wasm artifact, and the built one (where it is built) is
+    // within the ceiling the manifest declares for it.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../packages/data-bundle");
+    let text =
+        std::fs::read_to_string(format!("{dir}/manifest.json")).expect("bundle manifest readable");
     let manifest: serde_json::Value = serde_json::from_str(&text).expect("manifest is valid JSON");
     let wasm = manifest["capabilities"]["wasm"]
         .as_array()
         .expect("capabilities.wasm is an array");
-    let duckdb = wasm
-        .iter()
-        .find(|a| a["name"] == "duckdb-engine")
-        .expect("a duckdb-engine wasm artifact is declared");
-    assert_eq!(
-        duckdb["purpose"], "engine",
-        "DuckDB must be declared purpose:engine (the 64 MiB ceiling, D-07b) — \
-         NOT compute/codec (the 8 MiB cap)"
-    );
-    // Its self-imposed ceiling must stay within the 64 MiB engine ceiling.
-    let max_bytes = duckdb["maxBytes"].as_u64().expect("maxBytes present");
-    assert!(
-        max_bytes <= 64 * 1024 * 1024,
-        "duckdb-engine maxBytes within the engine ceiling"
-    );
+    let names: Vec<&str> = wasm.iter().filter_map(|a| a["name"].as_str()).collect();
+    assert_eq!(names, ["data-engine"], "one engine, the store inside it");
+    let max_bytes = wasm[0]["maxBytes"].as_u64().expect("maxBytes present");
+    let built = std::path::Path::new(dir).join(wasm[0]["path"].as_str().expect("path"));
+    if let Ok(meta) = std::fs::metadata(&built) {
+        assert!(
+            meta.len() <= max_bytes,
+            "{} is {} bytes, over its declared {max_bytes}",
+            built.display(),
+            meta.len()
+        );
+    }
 }
 
 #[test]

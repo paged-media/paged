@@ -1,5 +1,5 @@
 // Wave 7 against the REAL stack (real core headless host, real data-js
-// engine, real DuckDB), through the loaded bundle:
+// engine with its query store), through the loaded bundle:
 //
 //   · a field's display pattern and its own locale are written into the
 //     document, and survive a save and reopen;
@@ -10,8 +10,8 @@
 //     per-record paragraph rule styles exactly the paragraphs of the records
 //     that fire, with a style read from the document's own collection.
 //
-// Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
-// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1, where a missing piece is a
+// Gate: skips without canvas-wasm or the built data-js wasm, EXCEPT
+// under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1, where a missing piece is a
 // failure.
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
@@ -27,42 +27,26 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 // The same products after a price change of A-1.
 const CSV2 = "sku,price\nA-1,12.5\nB-2,19.99\nC-3,29.99\n";
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
-const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
+const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => {
-      const b = await bootRealDuckDB();
-      if (!b.handle) throw new Error(b.error);
-      return b.handle;
-    },
   }));
   return import("../src/index");
 }
@@ -106,7 +90,7 @@ describe.skipIf(!ready && !required)(
     it("pattern + locale, pin, row diff, accept source, save and reopen [data.bind.sync-review]", async () => {
       expect(
         ready,
-        "real core, DuckDB and the data-js wasm must all be available",
+        "real core and the data-js wasm must both be available",
       ).toBe(true);
       const mod = await loadBundleModule();
       const h1 = await open();

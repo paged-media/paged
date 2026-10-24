@@ -32,19 +32,13 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import {
-  bootRealDuckDB,
-  bootRealEngine,
-  DATA_JS_WASM,
-  REQUIRE_REAL_DUCKDB,
-} from "./real-duckdb";
+import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
 import { stripContainerParts } from "./zip";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
 // patches the loaded module in place (every importer sees the change).
 const actualEngine = await importActual(() => import("../src/engine"));
-const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const LANE = fileURLToPath(
   new URL("../../../conformance/indesign-binding/", import.meta.url),
@@ -57,10 +51,8 @@ const RECORD = process.env.PAGED_RECORD_INDESIGN_FIXTURES === "1";
  *  workspace engine is in; the earlier recordings carry no suffix. */
 const ERA = "71";
 
-const probe = await bootRealDuckDB();
 const ready =
   ENGINE_ANCHOR !== null &&
-  probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
 const recorded = (id: string) => join(LANE, "recorded", `${id}.json`);
 
@@ -68,10 +60,6 @@ async function bundle() {
   mock.module("../src/engine", () => ({
     ...actualEngine,
     bootEngine: (t: number) => bootRealEngine(t),
-  }));
-  mock.module("../src/query/duckdb", () => ({
-    ...actualDuckdb,
-    bootDuckDB: async () => (await bootRealDuckDB()).handle!,
   }));
   return import("../src/index");
 }
@@ -179,7 +167,7 @@ describe.skipIf(!RECORD || !ready)(
   },
 );
 
-describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB))(
+describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE))(
   "replay the InDesign recordings [data.persist.labels]",
   () => {
     it.skipIf(!existsSync(recorded("bound")))(

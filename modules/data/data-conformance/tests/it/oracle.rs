@@ -422,7 +422,7 @@ fn flow_layout(flow: &PaginatedFlow, cap: f64) -> Layout {
 }
 
 /// Our record flow end to end: DataSession over the CSV (every field TEXT,
-/// as Data Merge reads it; an empty field is null, as DuckDB reads it).
+/// as Data Merge reads it; an empty field is null).
 fn session_over_csv(fx: &Fixture) -> DataSession {
     let mut s = DataSession::new(today());
     s.define_query(Query {
@@ -849,7 +849,7 @@ fn pins() -> Vec<Pin> {
             merge: MERGE_FULL,
             flow: sc((2, 3), 1, 3, 3, 0, 3),
             paginator: sc((3, 3), 3, 3, 3, 0, 3),
-            why: "texts agree verbatim over a TEXT ingest (the DuckDB-typed path is DM-8, duckdb-sql-oracle.spec.ts)",
+            why: "texts agree verbatim over a TEXT ingest (the typed path is packages/data-bundle/test/indesign-merge-store.spec.ts)",
         },
         Pin {
             fixture: "image-field",

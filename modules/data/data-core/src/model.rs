@@ -19,8 +19,8 @@
 //! The source / query / result model (spec §5.1, §6). [`DataSource`] is a
 //! connection + scope; [`Query`] is a named, parameterized SQL query;
 //! [`RecordSet`] is the materialized, **Arrow-aligned** columnar result the
-//! query engine produces (DuckDB-WASM → Arrow → `RecordSet`, the swappable
-//! seam, §6.1). The engine stores results columnar (Arrow's shape) and
+//! query engine produces (the store, `data-store`, reads its rows straight into
+//! a `RecordSet`, the swappable seam, §6.1). The engine stores results columnar (Arrow's shape) and
 //! addresses rows by index — the basis for stable record identity in the sync
 //! diff (§8).
 
@@ -46,13 +46,13 @@ pub struct DataSource {
 
 /// The source kinds (spec §6.2). M0 implements `InlineSeed` + `File` *models*;
 /// the byte IO for File/Remote/DbAttach/GovernedExtract is performed by
-/// DuckDB-WASM in the bundle realm. Remote/DbAttach/GovernedExtract are
+/// the bundle (it fetches) and the store (it reads). Remote/DbAttach/GovernedExtract are
 /// constructible-but-capability-gated and unreachable at M0 (`network:false`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SourceKind {
     /// A local file imported as bytes (CSV/TSV/JSON/Parquet/Excel), read by
-    /// DuckDB over the imported bytes. Capability: `file-import` (D-04).
+    /// the store's readers. Capability: `file-import` (D-04).
     File { format: FileFormat, name: String },
     /// An HTTP(S) file or REST/JSON API (CSV/JSON/Parquet over HTTP), described
     /// by `{url, format, params}`. Capability: `network` + per-origin consent
@@ -64,7 +64,7 @@ pub enum SourceKind {
     /// rfc-credential-store), never the secret itself.
     Remote {
         url: String,
-        /// The payload format DuckDB will read; `None` = infer from the URL.
+        /// The payload format the store reads; `None` = infer from the URL.
         #[serde(default)]
         format: Option<FileFormat>,
         /// Extra request/query parameters (deterministically ordered).
@@ -75,7 +75,7 @@ pub enum SourceKind {
         #[serde(default)]
         credential_ref: Option<String>,
     },
-    /// An attached SQLite/Postgres/MySQL database (DuckDB `ATTACH`).
+    /// An attached SQLite/Postgres/MySQL database (an `ATTACH` of the store).
     /// Capability: `network` + credential handling (D-03/D-11). The shape is
     /// DELIBERATELY CREDENTIAL-FREE: `db` is the engine, `target` is the
     /// non-secret locator (a file/OPFS name for SQLite, or `host:port/db`
@@ -94,7 +94,7 @@ pub enum SourceKind {
     /// Postgres/MySQL transport is the headless/napi + proxy lane (a named
     /// deferral, like interactive), never a fake in-browser TCP.
     DbAttach {
-        /// The database engine to attach (drives the DuckDB attach idiom).
+        /// The database engine to attach (drives the attach idiom).
         db: DbEngine,
         /// The non-secret locator: a file/OPFS name (SQLite) or
         /// `host:port/dbname` (Postgres/MySQL) — NEVER carries credentials.
@@ -122,7 +122,7 @@ pub enum SourceKind {
     InlineSeed { table: String },
 }
 
-/// File formats DuckDB reads directly (spec §6.2).
+/// File formats the store reads (spec §6.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FileFormat {
@@ -133,7 +133,7 @@ pub enum FileFormat {
     Excel,
 }
 
-/// Database engines a [`SourceKind::DbAttach`] can attach via DuckDB (D-11).
+/// Database engines a [`SourceKind::DbAttach`] can attach (D-11).
 /// `Sqlite` (file/OPFS-backed) is reachable in the pure-web tier; `Postgres`
 /// / `Mysql` over raw TCP are NOT browser-reachable — their transport is the
 /// headless/napi + proxy lane (the descriptor + credential indirection + the
@@ -234,7 +234,7 @@ pub enum ResultShape {
 }
 
 /// A named, parameterized SQL query over sources (spec §5.1). The SQL is
-/// DuckDB SQL; it references sources as tables/views. Parameters are typed and
+/// SQLite SQL (the store is Turso); it references sources as tables/views. Parameters are typed and
 /// bound at resolve time.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Query {

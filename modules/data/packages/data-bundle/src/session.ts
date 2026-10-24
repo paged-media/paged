@@ -17,7 +17,7 @@
  */
 
 // The in-memory session: the bundle's state machine over the engine
-// (`data-js`) + the query engine (DuckDB-WASM). It holds the binding recipe
+// (`data-js`, with the query store inside it). It holds the binding recipe
 // (sources / queries / binding defs), boots the engines lazily (honest about
 // missing artifacts), runs the resolve → lower → mutate pipeline, and exposes a
 // read-only snapshot the panels render. ZERO binding/expression semantics live
@@ -49,12 +49,7 @@ import {
   type VisibilityTargetKind,
 } from "../../data-host-model/src";
 
-import {
-  bootEngine,
-  ENGINE_NOT_BUILT,
-  ingestColumnBatch,
-  type DataEngineLike,
-} from "./engine";
+import { bootEngine, ENGINE_NOT_BUILT, type DataEngineLike } from "./engine";
 import { hostWasm } from "./bin-url";
 import { t as tr } from "@paged-media/strings";
 import { BINDINGS, SOURCES, STATUS } from "./messages";
@@ -106,23 +101,17 @@ import {
   type RecordsPerPage,
 } from "./merge";
 import { documentElements, planRelower, type RelowerTarget } from "./relower";
-import {
-  bootDuckDB,
-  DUCKDB_NOT_VENDORED,
-  type DuckDBHandle,
-} from "./query/duckdb";
+import { STORE_MISSING, storeHandle, type QueryHandle } from "./query/store";
 import {
   formatOfFile,
-  loadIntoDuckDB,
-  quoteIdent,
+  loadIntoStore,
   sourceNameOf,
   type ImportFormat,
-  type XlsxImport,
 } from "./query/import";
 import {
   checkQuery,
-  diagnoseDuckDBError,
-  previewSql,
+  diagnoseStoreError,
+  trimSql,
   type SqlDiagnostic,
 } from "./query/sql";
 import {
@@ -251,7 +240,7 @@ function engineFit(fit?: IdmlFit): "fit" | "fill" | "crop" {
 /** A read-only snapshot for the panels. */
 export interface SessionState {
   /** Honest status of the engines (the panel renders it, never fakes it). */
-  status: "idle" | "ready" | "engine-missing" | "duckdb-missing" | "error";
+  status: "idle" | "ready" | "engine-missing" | "error";
   message: string;
   sources: string[];
   queries: string[];
@@ -299,7 +288,7 @@ export interface ImportResult {
   error?: string;
 }
 
-/** A query preview: the first rows as DuckDB renders them, or why not. */
+/** A query preview: the first rows as the store renders them, or why not. */
 export interface QueryPreview {
   columns: { name: string; type: string }[];
   rows: (string | null)[][];
@@ -578,7 +567,7 @@ export interface DataSourceSession
   requestConsentForRemote(name: string): Promise<boolean>;
   /** Load a remote source (edit-time fetch, M1): the consent gate runs FIRST
    *  — an unconsented origin returns inert without touching the network. On
-   *  grant: fetch the bytes, hand them to the DuckDB query lane exactly like
+   *  grant: fetch the bytes, hand them to the query store exactly like
    *  an imported file, define the source on the engine, and record the
    *  engine-computed content-hash invalidation key. */
   loadRemoteSource(name: string): Promise<void>;
@@ -599,11 +588,11 @@ export interface DataSourceSession
   ): Promise<ImportResult>;
   /** Read another worksheet of an imported workbook into the same source. */
   selectSheet(source: string, sheet: string): Promise<ImportResult>;
-  /** The columns of a source table (name and DuckDB type), for the query
-   *  builders. Empty when the source is unknown or DuckDB is unavailable. */
+  /** The columns of a source table (name and type), for the query
+   *  builders. Empty when the source is unknown or the engine is missing. */
   describeSource(source: string): Promise<{ name: string; type: string }[]>;
   /** Run a query for a preview of its first `limit` rows (default 50), as
-   *  DuckDB renders the values. Guarded like every query (query/sql.ts);
+   *  the store renders the values. Guarded like every query (query/sql.ts);
    *  nothing is ingested and no binding changes. */
   previewQuery(sql: string, limit?: number): Promise<QueryPreview>;
   /** Define or replace a query after the guard admits it; returns the
@@ -693,7 +682,7 @@ export interface DataSourceSession
     },
     target: RuleTarget,
   ): void;
-  /** Re-run every query through DuckDB and ingest the results (no document
+  /** Re-run every query in the store and ingest the results (no document
    *  writes) — updates sync states. */
   refreshData(): Promise<void>;
   /** §8 change report — "what changed since last sync". Diffs every binding's
@@ -1026,10 +1015,10 @@ export function createSession(
 
   // ── persistence (the `session` container part, persist.ts) ───────────────
   // The imported CSV text per source: the bytes the session saves, so a reopen
-  // can register the source in DuckDB again.
+  // can load the source into the store again.
   const importedCsv = new Map<string, string>();
-  // Restored sources not yet in DuckDB: registered on DuckDB's first boot, so
-  // opening a document never boots DuckDB by itself.
+  // Restored sources not yet in the store: loaded when the store is first
+  // used, so opening a document reads no data by itself.
   const pendingCsv = new Map<string, string>();
   // Where table / record-flow bindings were last lowered (checked on restore).
   const loweredInto = new Map<string, ElementId>();
@@ -1061,7 +1050,10 @@ export function createSession(
   const PERSIST_DEBOUNCE_MS = 250;
 
   let engine: DataEngineLike | null = null;
-  let duck: DuckDBHandle | null = null;
+  // The query store (ADR 561) of `engine`: it lives in the engine, so it goes
+  // when the engine does (`storeOf` says whose it is).
+  let store: QueryHandle | null = null;
+  let storeOf: DataEngineLike | null = null;
   const diagnostics: SessionDiagnostic[] = [];
   const relinkSources: string[] = [];
   const state: SessionState = {
@@ -1127,7 +1119,7 @@ export function createSession(
     sheets?: string[];
   }
   const importedFiles = new Map<string, ImportedFile>();
-  // Restored files not yet in DuckDB (registered on DuckDB's first boot).
+  // Restored files not yet in the store (loaded when it is first used).
   const pendingFiles = new Map<string, ImportedFile>();
   // The file a CSV / TSV source came from (display only).
   const csvFileNames = new Map<
@@ -1439,16 +1431,15 @@ export function createSession(
    * written (no CSV source, a handle without twins) or the query does not
    * run over text, and then says so.
    */
-  async function asWritten(e: DataEngineLike, query: string): Promise<string> {
+  async function asWritten(query: string): Promise<string> {
     const q = queries.get(query);
     const csv = [...importedCsv.keys()];
-    const d = duck as DuckDBHandle | null;
-    if (!q || csv.length === 0 || !d?.queryColumnsAsWritten) return query;
+    if (!q || csv.length === 0) return query;
     try {
-      const batch = await d.queryColumnsAsWritten(q.sql, csv);
-      if (!batch) return query;
+      const d = await ensureStore();
       const id = `${query}${AS_WRITTEN}`;
-      ingestColumnBatch(e, id, batch);
+      if ((await d.ingestAsWritten(id, trimSql(q.sql), csv)) === null)
+        return query;
       return id;
     } catch (err) {
       report({
@@ -1568,21 +1559,20 @@ export function createSession(
       });
       return;
     }
-    // Reload the version without rebooting either engine: an undo must stay
-    // cheap. DuckDB keeps its tables; a source whose saved data differs from
-    // what is loaded is loaded again, the rest is left as it is.
+    // Reload the version without rebooting the engine: an undo must stay
+    // cheap. The store keeps its tables; a source whose saved data differs
+    // from what is loaded is loaded again, the rest is left as it is.
     const loaded = { csv: new Map(importedCsv), files: new Map(importedFiles) };
     await resetState({ keepEngines: true });
     restorePromise = restoreInternal(bytes, true);
     await restorePromise;
-    const kept = duck as DuckDBHandle | null;
-    if (!kept) return;
+    const kept = store as QueryHandle | null;
+    if (!kept || storeOf !== engine) return;
     for (const [name, text] of [...pendingCsv]) {
       pendingCsv.delete(name);
       if (loaded.csv.get(name) === text) continue;
       try {
-        await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
-        await kept.registerCsv(name, text);
+        await kept.importCsv(name, text);
       } catch (err) {
         report({
           level: "error",
@@ -1597,16 +1587,7 @@ export function createSession(
       if (was && was.sheet === f.sheet && sameBytes(was.bytes, f.bytes))
         continue;
       try {
-        const e = f.format === "xlsx" ? await ensureEngine() : null;
-        await kept.exec(`DROP TABLE IF EXISTS ${quoteIdent(name)}`);
-        await loadIntoDuckDB(
-          kept,
-          name,
-          f.format,
-          f.bytes,
-          xlsxReader(e),
-          f.sheet,
-        );
+        await loadIntoStore(kept, name, f.format, f.bytes, f.sheet);
       } catch (err) {
         report({
           level: "error",
@@ -1938,17 +1919,23 @@ export function createSession(
     }
   }
 
-  async function ensureDuck(): Promise<DuckDBHandle> {
-    if (duck) return duck;
-    try {
-      const d = await bootDuckDB({
-        resolveWasm: hostWasm(rawHost),
-        onFallback: (reason) => rawHost.log.warn(reason),
-      });
-      duck = d;
+  /** The query store of the engine (ADR 561): made with it, and on first use
+   *  it takes the sources a restore left pending. */
+  async function ensureStore(): Promise<QueryHandle> {
+    const e = await ensureEngine();
+    if (store && storeOf === e) return store;
+    const d = storeHandle(e);
+    if (!d) {
+      state.status = "engine-missing";
+      state.message = STORE_MISSING;
+      throw new Error(STORE_MISSING);
+    }
+    store = d;
+    storeOf = e;
+    {
       for (const [name, text] of [...pendingCsv]) {
         try {
-          await d.registerCsv(name, text);
+          await d.importCsv(name, text);
           pendingCsv.delete(name);
         } catch (err) {
           report({
@@ -1960,15 +1947,7 @@ export function createSession(
       }
       for (const [name, f] of [...pendingFiles]) {
         try {
-          const e = f.format === "xlsx" ? await ensureEngine() : null;
-          await loadIntoDuckDB(
-            d,
-            name,
-            f.format,
-            f.bytes,
-            xlsxReader(e),
-            f.sheet,
-          );
+          await loadIntoStore(d, name, f.format, f.bytes, f.sheet);
           pendingFiles.delete(name);
         } catch (err) {
           report({
@@ -1979,29 +1958,11 @@ export function createSession(
         }
       }
       return d;
-    } catch (err) {
-      state.status = "duckdb-missing";
-      state.message = err instanceof Error ? err.message : DUCKDB_NOT_VENDORED;
-      throw err;
     }
   }
 
   function sync(): void {
     state.queries = Array.from(queries.keys());
-  }
-
-  /** The data engine's worksheet reader (xlsx imports). */
-  function xlsxReader(
-    e: DataEngineLike | null,
-  ): (bytes: Uint8Array, sheet?: string) => XlsxImport {
-    return (bytes, sheet) => {
-      if (!e || typeof e.xlsx_import !== "function") {
-        throw new Error(
-          "the engine wasm predates the XLSX reader — rebuild scripts/build-wasm.sh",
-        );
-      }
-      return e.xlsx_import(bytes, sheet) as XlsxImport;
-    };
   }
 
   /** Is this source a remote one, a local one, or unknown? */
@@ -2044,8 +2005,9 @@ export function createSession(
   }
 
   /** On open, act on `onOpen` policies: a consented remote source is fetched
-   *  again; when any source asks for it, the queries re-run (this boots
-   *  DuckDB — the user chose it for this document). Never throws. */
+   *  again; when any source asks for it, the queries re-run (this loads the
+   *  data into the store — the user chose it for this document). Never
+   *  throws. */
   async function applyOnOpen(): Promise<void> {
     const onOpen = [...refreshPolicies]
       .filter(([, p]) => p.policy === "onOpen")
@@ -2084,9 +2046,9 @@ export function createSession(
 
       // Hand the bytes to the query lane exactly like an imported file: the
       // source becomes a table named after it, whatever its format.
-      const d = await ensureDuck();
+      const d = await ensureStore();
       const e = await ensureEngine();
-      await loadIntoDuckDB(d, name, r.format, bytes, xlsxReader(e));
+      await loadIntoStore(d, name, r.format, bytes);
 
       // Define the descriptor on the engine + record the content-hash
       // invalidation key (computed in Rust; the engine never fetches).
@@ -2136,7 +2098,7 @@ export function createSession(
   /** Drop everything this session holds for the current document (another
    *  document opened, or an undo named another session version). An undo
    *  keeps the engines (`keepEngines`): the data engine takes the version's
-   *  recipe, and DuckDB keeps its tables (see `followLabel`). */
+   *  recipe, and the store in it keeps its tables (see `followLabel`). */
   async function resetState(
     opts: { keepEngines?: boolean } = {},
   ): Promise<void> {
@@ -2185,9 +2147,8 @@ export function createSession(
     if (!opts.keepEngines) {
       engine?.free();
       engine = null;
-      const oldDuck = duck;
-      duck = null;
-      void oldDuck?.close();
+      store = null;
+      storeOf = null;
     }
     state.status = "idle";
     state.message = tr(STATUS.noSources);
@@ -2232,8 +2193,8 @@ export function createSession(
   }
 
   /** Restore the document's `session` part: the engine recipe, the locale and
-   *  the sync decisions, the host-side targets, the imported data (registered
-   *  in DuckDB on its first boot) and remote descriptors (inert). Then reconcile
+   *  the sync decisions, the host-side targets, the imported data (loaded into
+   *  the store when it is first used) and remote descriptors (inert). Then reconcile
    *  with the document: which variable fields are placed, and whether each
    *  recorded table is still there and still labelled with its binding. */
   async function restoreInternal(
@@ -2321,7 +2282,7 @@ export function createSession(
     for (const [id, el] of Object.entries(saved.targets.lowered))
       loweredInto.set(id, el);
 
-    // Imported data: back into DuckDB when it first boots.
+    // Imported data: back into the store when it is first used.
     for (const d of saved.data) {
       if (d.format !== "csv") {
         const fileBytes = await loadFile(d, (path) => host.parts.read(path));
@@ -2637,8 +2598,8 @@ export function createSession(
       const relinked = relinkSources.indexOf(name);
       if (relinked >= 0) relinkSources.splice(relinked, 1);
       try {
-        const d = await ensureDuck();
-        await d.registerCsv(name, csvText);
+        const d = await ensureStore();
+        await d.importCsv(name, csvText);
         const e = await ensureEngine();
         // NOTE: SourceKind is internally tagged — the `kind` object nests its
         // own `kind` discriminant (proven by test-integration/pipeline.e2e.mjs;
@@ -2655,14 +2616,9 @@ export function createSession(
         state.message = tr(STATUS.sourceRegistered, { name });
         markDirty();
       } catch (err) {
-        // Keep the more specific engine-missing / duckdb-missing status the
-        // boot helpers set; anything else is an import error.
-        if (
-          state.status !== "engine-missing" &&
-          state.status !== "duckdb-missing"
-        ) {
-          state.status = "error";
-        }
+        // Keep the more specific engine-missing status the boot helpers
+        // set; anything else is an import error.
+        if (state.status !== "engine-missing") state.status = "error";
         state.message = tr(STATUS.importFailed, { name, error: errText(err) });
         report({ level: "error", source: "import", message: state.message });
       }
@@ -2744,16 +2700,9 @@ export function createSession(
         return { source: name, format };
       }
       try {
-        const d = await ensureDuck();
+        const d = await ensureStore();
         const e = await ensureEngine();
-        const out = await loadIntoDuckDB(
-          d,
-          name,
-          format,
-          bytes,
-          xlsxReader(e),
-          options?.sheet,
-        );
+        const out = await loadIntoStore(d, name, format, bytes, options?.sheet);
         e.define_source({
           id: name,
           kind: {
@@ -2800,12 +2749,7 @@ export function createSession(
           ...(out.sheets !== undefined ? { sheets: out.sheets } : {}),
         };
       } catch (err) {
-        if (
-          state.status !== "engine-missing" &&
-          state.status !== "duckdb-missing"
-        ) {
-          state.status = "error";
-        }
+        if (state.status !== "engine-missing") state.status = "error";
         const error = `Import of "${fileName}" failed: ${errText(err)}`;
         state.message = error;
         report({ level: "error", source: "import", message: error });
@@ -2826,9 +2770,8 @@ export function createSession(
     async describeSource(source) {
       if (!sourceNames.includes(source)) return [];
       try {
-        const d = await ensureDuck();
-        const desc = await d.rows(`DESCRIBE ${quoteIdent(source)}`);
-        return desc.rows.map((r) => ({ name: r[0] ?? "", type: r[1] ?? "" }));
+        const d = await ensureStore();
+        return d.describe(`SELECT * FROM "${source.replace(/"/g, '""')}"`);
       } catch (err) {
         report({
           level: "warn",
@@ -2841,9 +2784,9 @@ export function createSession(
 
     async previewQuery(sql, limit = 50) {
       const empty = { columns: [], rows: [], total: null };
-      let d: DuckDBHandle;
+      let d: QueryHandle;
       try {
-        d = await ensureDuck();
+        d = await ensureStore();
       } catch (err) {
         return {
           ...empty,
@@ -2852,48 +2795,38 @@ export function createSession(
       }
       const refused = checkQuery(sql);
       if (refused) return { ...empty, diagnostic: refused };
+      const text = trimSql(sql);
       try {
-        const limited = previewSql(sql, limit);
-        const desc = await d.rows(`DESCRIBE ${limited}`);
-        const columns = desc.rows.map((r) => ({
-          name: r[0] ?? "",
-          type: r[1] ?? "",
-        }));
-        // DuckDB renders every value (dates, decimals with their scale, …)
-        // the way it would print them.
-        const shown = await d.rows(
-          `SELECT COLUMNS(*)::VARCHAR FROM (${limited})`,
-        );
-        const count = await d.rows(
-          `SELECT count(*) FROM (\n${sql.replace(/[\s;]+$/, "")}\n)`,
-        );
-        const total = Number(count.rows[0]?.[0] ?? NaN);
+        // The store renders every value the way a bound field displays it
+        // (a decimal with its scale, a date as YYYY-MM-DD).
+        const p = await d.preview(text, Math.max(0, Math.floor(limit)));
         return {
-          columns,
-          rows: shown.rows,
-          total: Number.isFinite(total) ? total : null,
+          columns: p.columns,
+          rows: p.rows,
+          total: p.count,
           diagnostic: null,
         };
       } catch (err) {
-        return { ...empty, diagnostic: diagnoseDuckDBError(err, 1) };
+        return { ...empty, diagnostic: diagnoseStoreError(err, text) };
       }
     },
 
     async saveQuery(id, sql, shape = "recordStream") {
-      let d: DuckDBHandle;
+      let d: QueryHandle;
       try {
-        d = await ensureDuck();
+        d = await ensureStore();
       } catch (err) {
         return { kind: "Engine", message: errText(err) };
       }
       const refused = checkQuery(sql);
       if (refused) return refused;
+      const text = trimSql(sql);
       try {
-        await d.rows(`DESCRIBE ${previewSql(sql, 0)}`);
+        await d.describe(text);
       } catch (err) {
-        return diagnoseDuckDBError(err, 1);
+        return diagnoseStoreError(err, text);
       }
-      this.addQuery(id, sql.replace(/[\s;]+$/, "").trim(), shape);
+      this.addQuery(id, text, shape);
       return null;
     },
 
@@ -3336,8 +3269,7 @@ export function createSession(
 
     async refreshData() {
       try {
-        const e = await ensureEngine();
-        const d = await ensureDuck();
+        const d = await ensureStore();
         for (const q of queries.values()) {
           // A document's queries are code (§11): only a SELECT over the
           // source tables runs (query/sql.ts).
@@ -3351,22 +3283,12 @@ export function createSession(
             continue;
           }
           try {
-            // Typed column buffers (one copy per column); a re-delivery of the
-            // same data is recognised by the engine and decodes nothing.
-            let rows: number;
-            if (typeof d.queryColumns === "function") {
-              const batch = await d.queryColumns(q.sql);
-              ingestColumnBatch(e, q.id, batch);
-              rows = batch.row_count;
-            } else {
-              const records = await d.query(q.sql);
-              e.ingest_result(q.id, records);
-              rows = records.row_count ?? 0;
-            }
-            // What was delivered is what the engine holds: no engine call.
+            // The rows go from the store to the binding session inside the
+            // engine; a re-delivery of the same data changes nothing.
+            const rows = await d.ingest(q.id, trimSql(q.sql));
             keepRecordCount(q.id, rows);
           } catch (err) {
-            const diag = diagnoseDuckDBError(err);
+            const diag = diagnoseStoreError(err);
             report({
               level: "error",
               source: "query",
@@ -4546,7 +4468,7 @@ export function createSession(
         Pick<DataEngineLike, "plan_merge" | "merge_words" | "merge_overset">
       >;
       const result = await writeMerge(host, engineForMerge, template, {
-        query: await asWritten(e, options.query),
+        query: await asWritten(options.query),
         recordsPerPage: options.recordsPerPage ?? { mode: "single" },
         removeBlankLines: options.removeBlankLines ?? false,
         template: mode,
@@ -4696,10 +4618,10 @@ export function createSession(
       listeners.clear();
       for (const h of providerHandles.values()) h.dispose();
       providerHandles.clear();
-      void duck?.close();
       engine?.free();
       engine = null;
-      duck = null;
+      store = null;
+      storeOf = null;
     },
   };
   return self;

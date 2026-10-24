@@ -66,7 +66,7 @@ const REPO = resolve(EDITOR, "..", "..");
 const DATA_BUNDLE = resolve(REPO, "modules", "data", "packages", "data-bundle");
 
 /** The data plugin's id: the one bundle whose wasm the package does not
- *  ship. Its engines (the data engine, DuckDB) load from the module host
+ *  ship. Its engine (the query store inside it) loads from the module host
  *  (ADR 220, ADR 223), and only when a profile activates paged.data. */
 const DATA_PLUGIN = "media.paged.data";
 
@@ -149,9 +149,9 @@ function moduleManifest(): Plugin {
   };
 }
 
-/** paged.data finds its engine loaders and DuckDB's extensions in `bin/`
- *  beside its chunk's directory, or under the host's `assetBase`; its two
- *  engine wasm files are not copied (the module host serves them). */
+/** paged.data finds its engine loader in `bin/` beside its chunk's
+ *  directory, or under the host's `assetBase`; its engine wasm is not copied
+ *  (the module host serves it). */
 function dataBin(): Plugin {
   const BIN = join(DATA_BUNDLE, "bin");
   const BIN_URL = join(DATA_BUNDLE, "src", "bin-url.ts");
@@ -173,9 +173,8 @@ function dataBin(): Plugin {
       };
     },
     generateBundle() {
-      // The two engines come from the module door; DuckDB's json and parquet
-      // extensions it loads itself, from bin/ (src/query/duckdb.ts).
-      const hosted = new Set(["data_js_bg.wasm", "duckdb-engine.wasm"]);
+      // The engine comes from the module door.
+      const hosted = new Set(["data_js_bg.wasm"]);
       let names: string[];
       try {
         names = (readdirSync(BIN, { recursive: true }) as string[]).map((n) =>
@@ -183,7 +182,7 @@ function dataBin(): Plugin {
         );
       } catch {
         this.error(
-          `${BIN} is missing: build paged.data first (moon run data:wasm data:duckdb)`,
+          `${BIN} is missing: build paged.data first (moon run data:wasm)`,
         );
       }
       for (const name of names) {
@@ -383,9 +382,6 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      "apache-arrow": resolve(CANVAS, "node_modules/apache-arrow"),
-    },
     dedupe: ["react", "react-dom"],
   },
   worker: {

@@ -18,13 +18,11 @@
 
 //! # data-xlsx — one worksheet of an `.xlsx` as a typed table
 //!
-//! DuckDB reads CSV, JSON and Parquet itself. It does not read XLSX in the
-//! shipped DuckDB-WASM 1.29.0 (engine v1.1.1): the `excel` extension has no
-//! wasm build for that version (extensions.duckdb.org answers 404), and the
-//! `spatial` extension's GDAL reader is 22.8 MB of wasm, a quarter of the
-//! whole app's budget. This crate reads the workbook with calamine (MIT,
-//! ~0.4 MB of wasm) and hands DuckDB JSON records plus a column type list,
-//! so DuckDB's `read_json` makes the table without guessing.
+//! The store (`data-store`) reads CSV, JSON and Parquet with its own readers;
+//! this crate reads a workbook with calamine (MIT, ~0.4 MB of wasm) and hands
+//! the store one worksheet as typed rows, so the table is made without
+//! guessing. (It was written for DuckDB-WASM 1.29.0, whose `excel` extension
+//! had no wasm build.)
 //!
 //! Data Merge semantics: the FIRST ROW of the used range names the columns;
 //! every later row is a record. An empty header cell is named `column_<n>`
@@ -63,7 +61,7 @@ pub enum XlsxError {
     Empty(String),
 }
 
-/// The DuckDB type a column is read as.
+/// The type a column is read as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColumnType {
     BigInt,
@@ -75,7 +73,7 @@ pub enum ColumnType {
 }
 
 impl ColumnType {
-    /// The DuckDB type name.
+    /// The SQL type name.
     pub fn sql(self) -> &'static str {
         match self {
             ColumnType::BigInt => "BIGINT",
@@ -186,8 +184,8 @@ pub fn read_sheet(bytes: &[u8], sheet: Option<&str>) -> Result<SheetTable, XlsxE
 }
 
 impl SheetTable {
-    /// The records as a JSON array of objects (DuckDB `read_json`,
-    /// `format = 'array'`). Every object carries every column.
+    /// The records as a JSON array of objects. Every object carries every
+    /// column.
     pub fn to_json(&self) -> String {
         let records: Vec<Json> = self
             .rows
