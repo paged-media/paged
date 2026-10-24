@@ -221,8 +221,19 @@ pub struct ExportInkSettings {
 /// unembeddable resource). Surfaced to preflight, never silent.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExportDiagnostic {
-    FontNotEmbeddable { font_id: u32, runs_outlined: usize },
-    ImageMissingBytes { image_index: u32 },
+    FontNotEmbeddable {
+        font_id: u32,
+        runs_outlined: usize,
+    },
+    ImageMissingBytes {
+        image_index: u32,
+    },
+    /// Engine ADR 1016 — a group in one of Photoshop's blend modes, which
+    /// PDF cannot name, drawn as a raster of its composite with the
+    /// backdrop baked in (at `ExportOptions::effect_dpi`).
+    BlendModeRasterized {
+        mode: &'static str,
+    },
 }
 
 /// Severity of a preflight finding (panels.md gap 20). Errors block a
@@ -249,6 +260,7 @@ impl ExportDiagnostic {
         match self {
             ExportDiagnostic::FontNotEmbeddable { .. } => "font_not_embeddable",
             ExportDiagnostic::ImageMissingBytes { .. } => "image_missing_bytes",
+            ExportDiagnostic::BlendModeRasterized { .. } => "blend_mode_rasterized",
         }
     }
 
@@ -261,6 +273,7 @@ impl ExportDiagnostic {
         match self {
             ExportDiagnostic::FontNotEmbeddable { .. } => FindingSeverity::Warning,
             ExportDiagnostic::ImageMissingBytes { .. } => FindingSeverity::Warning,
+            ExportDiagnostic::BlendModeRasterized { .. } => FindingSeverity::Warning,
         }
     }
 
@@ -276,6 +289,10 @@ impl ExportDiagnostic {
             ExportDiagnostic::ImageMissingBytes { image_index } => {
                 format!("placed image {image_index} had no usable bytes; placeholder drawn")
             }
+            ExportDiagnostic::BlendModeRasterized { mode } => format!(
+                "blend mode {mode} has no PDF equivalent; the group is drawn as a raster of \
+                 its composite with what lies under it, at the effect resolution"
+            ),
         }
     }
 }

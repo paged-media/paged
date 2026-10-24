@@ -1342,29 +1342,13 @@ pub(crate) fn aligned_outline_path(
     }
 }
 
-/// Map IDML's `<BlendingSetting BlendMode="...">` enum string to the
-/// compose-layer `BlendMode`. Unknown / absent values fall back to
-/// Normal. Names mirror Adobe's PDF blend-mode catalogue.
+/// Map the model's `BlendMode` string (IDML's `<BlendingSetting
+/// BlendMode="...">` for the sixteen InDesign modes, the same PascalCase
+/// for Photoshop's eleven, engine ADR 1016) to the compose-layer
+/// `BlendMode`. Unknown / absent values fall back to Normal.
 pub(crate) fn blend_mode_from_idml(name: Option<&str>) -> paged_compose::BlendMode {
-    use paged_compose::BlendMode;
-    match name {
-        Some("Multiply") => BlendMode::Multiply,
-        Some("Screen") => BlendMode::Screen,
-        Some("Overlay") => BlendMode::Overlay,
-        Some("Darken") => BlendMode::Darken,
-        Some("Lighten") => BlendMode::Lighten,
-        Some("ColorDodge") => BlendMode::ColorDodge,
-        Some("ColorBurn") => BlendMode::ColorBurn,
-        Some("HardLight") => BlendMode::HardLight,
-        Some("SoftLight") => BlendMode::SoftLight,
-        Some("Difference") => BlendMode::Difference,
-        Some("Exclusion") => BlendMode::Exclusion,
-        Some("Hue") => BlendMode::Hue,
-        Some("Saturation") => BlendMode::Saturation,
-        Some("Color") => BlendMode::Color,
-        Some("Luminosity") => BlendMode::Luminosity,
-        _ => BlendMode::Normal,
-    }
+    name.and_then(paged_compose::BlendMode::from_name)
+        .unwrap_or_default()
 }
 
 /// Inset (positive) or outset (negative) all four edges of a rect by

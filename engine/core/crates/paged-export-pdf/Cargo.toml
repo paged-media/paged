@@ -13,6 +13,9 @@ workspace = true
 [dependencies]
 idml-import = { path = "../idml-import" }
 paged-compose = { path = "../paged-compose" }
+# Engine ADR 1016: the CPU lane composites Photoshop's blend modes, which
+# PDF cannot name, into the raster the page draws instead.
+paged-gpu = { path = "../paged-gpu", default-features = false, features = ["cpu"] }
 paged-renderer = { path = "../paged-renderer", default-features = false }
 paged-color = { path = "../paged-color" }
 paged-model = { path = "../paged-model" }

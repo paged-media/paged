@@ -6652,6 +6652,7 @@ impl CanvasModel {
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::blend_mode_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"

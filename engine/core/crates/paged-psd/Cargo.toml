@@ -11,6 +11,9 @@ description = "PSD/PSB structural parse, PSD-faithful layer model, preservation-
 workspace = true
 
 [dependencies]
+# The 27 blend modes and their PSD / descriptor spellings (engine ADR 1016);
+# dependency-free, so paged-psd stays a leaf.
+paged-blend = { path = "../paged-blend" }
 paged-pixel = { path = "../paged-pixel" }
 thiserror = { workspace = true }
 # ZIP channel inflate (compression 2/3) — M1 `rendered` decode-on-demand.

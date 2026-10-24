@@ -127,6 +127,8 @@ pub fn export_page(
         base_ctm: [1.0, 0.0, 0.0, -1.0, off_left, off_bottom + trim_h],
         mcids: Vec::new(),
         form_depth: 0,
+        blend_bakes: None,
+        page_pt: (trim_w, trim_h),
     };
 
     let mut content = Content::new();
@@ -353,6 +355,12 @@ struct Walker<'a, 'b> {
     /// matrix maps pattern space to the page's DEFAULT space, not the
     /// CTM in force when it paints, so a gradient stroke needs it.
     base_ctm: [f32; 6],
+    /// Engine ADR 1016 — the CPU lane's composite of every group in one
+    /// of Photoshop's blend modes (PDF has no name for them), keyed by
+    /// the group's opening command; `None` until the first such group.
+    blend_bakes: Option<HashMap<usize, paged_gpu::BlendBake>>,
+    /// Page size in pt, for the bake raster.
+    page_pt: (f32, f32),
     /// ADR 182 — the page's marked content, by MCID: the paragraph each
     /// marked text object is text of. Only the page's own content stream
     /// is marked; text captured into a form (a transparency group, a
@@ -514,6 +522,89 @@ impl Walker<'_, '_> {
         self.walk(content, stack, at..end + 1);
         content.restore_state();
         true
+    }
+
+    /// Engine ADR 1016 — draw the bake of the Photoshop-mode group that
+    /// opens at `begin`: an RGB image XObject with its alpha as `/SMask`
+    /// over the bake's rectangle. The bake holds the backdrop with the
+    /// group blended in, so painting it over the backdrop (opaque where
+    /// the backdrop is) is the composite.
+    fn emit_blend_bake(
+        &mut self,
+        content: &mut Content,
+        begin: usize,
+        mode: paged_compose::BlendMode,
+    ) {
+        let dpi = self.input.options.effect_dpi.max(72.0);
+        if self.blend_bakes.is_none() {
+            let mut options = paged_gpu::RasterOptions::new(self.page_pt.0, self.page_pt.1);
+            options.dpi = dpi;
+            options.background = paged_compose::Color::rgba(0.0, 0.0, 0.0, 0.0);
+            let (_, bakes) = paged_gpu::vcpu::rasterize_with_blend_bakes(self.list, &options);
+            self.blend_bakes = Some(bakes.into_iter().map(|b| (b.begin, b)).collect());
+        }
+        self.diagnostics
+            .push(ExportDiagnostic::BlendModeRasterized { mode: mode.name() });
+        let Some(bake) = self.blend_bakes.as_ref().and_then(|b| b.get(&begin)) else {
+            return;
+        };
+        let n = (bake.w as usize) * (bake.h as usize);
+        let mut rgb = Vec::with_capacity(n * 3);
+        let mut alpha = Vec::with_capacity(n);
+        for px in bake.rgba.chunks_exact(4) {
+            let a = px[3];
+            for c in &px[..3] {
+                // Premultiplied → straight.
+                let v = if a == 0 {
+                    0
+                } else {
+                    ((*c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8
+                };
+                rgb.push(v);
+            }
+            alpha.push(a);
+        }
+        let deflate = |data: &[u8]| {
+            use std::io::Write as _;
+            let mut enc =
+                flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+            let _ = enc.write_all(data);
+            enc.finish().unwrap_or_default()
+        };
+        let smask_ref = self.state.refs.alloc();
+        {
+            let data = deflate(&alpha);
+            let mut x = self.state.pdf.image_xobject(smask_ref, &data);
+            x.width(bake.w as i32);
+            x.height(bake.h as i32);
+            x.bits_per_component(8);
+            x.color_space().device_gray();
+            x.filter(pdf_writer::Filter::FlateDecode);
+            x.finish();
+        }
+        let img_ref = self.state.refs.alloc();
+        {
+            let data = deflate(&rgb);
+            let mut x = self.state.pdf.image_xobject(img_ref, &data);
+            x.width(bake.w as i32);
+            x.height(bake.h as i32);
+            x.bits_per_component(8);
+            x.color_space().device_rgb();
+            x.filter(pdf_writer::Filter::FlateDecode);
+            x.s_mask(smask_ref);
+            x.finish();
+        }
+        let name = format!("Xb{}", self.xobject_counter);
+        self.xobject_counter += 1;
+        self.resources.x_objects.insert(name.clone(), img_ref);
+        let k = 72.0 / dpi;
+        let (x0, y0) = (bake.x as f32 * k, bake.y as f32 * k);
+        let (w, h) = (bake.w as f32 * k, bake.h as f32 * k);
+        content.save_state();
+        // The unit square is y-up; content space is y-down.
+        content.transform([w, 0.0, 0.0, -h, x0, y0 + h]);
+        content.x_object(Name(name.as_bytes()));
+        content.restore_state();
     }
 
     fn walk(&mut self, content: &mut Content, stack: &mut StateStack, range: Range<usize>) {
@@ -732,6 +823,18 @@ impl Walker<'_, '_> {
                         } => (*isolated, *knockout),
                         _ => (false, false),
                     };
+                    if !blend_mode.is_native() {
+                        // Engine ADR 1016: a Photoshop mode. PDF cannot
+                        // name it, so the group is drawn as the CPU
+                        // lane's composite of it over its backdrop, at
+                        // the effect resolution — visually exact, no
+                        // longer vector — and reported.
+                        let end = find_group_end(commands, i);
+                        self.emit_blend_bake(content, i, *blend_mode);
+                        i = end;
+                        i += 1;
+                        continue;
+                    }
                     let needs_group = *blend_mode != paged_compose::BlendMode::Normal
                         || *opacity < 0.999
                         || isolated

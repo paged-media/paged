@@ -47,7 +47,8 @@ pub use display_list::{
     SweepGradient, Transform,
 };
 pub use extent::{
-    fit_transparency_group_bounds, transparency_group_overflow, GroupFit, GROUP_AA_PAD_PT,
+    fit_transparency_group_bounds, lift_photoshop_fill_blends, transparency_group_overflow,
+    GroupFit, GROUP_AA_PAD_PT,
 };
 pub use glyph::{GlyphOutliner, TtfOutliner, UnitSquareOutliner};
 pub use pixel_layer::{PixelLayer, PixelTile};

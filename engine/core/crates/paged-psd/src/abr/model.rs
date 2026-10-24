@@ -716,7 +716,7 @@ fn blend_mode(d: &Descriptor, key: &[u8], w: &mut Vec<AbrWarning>) -> Option<Ble
                 key: String::from_utf8_lossy(key).into_owned(),
                 value: key_text(value),
             });
-            Some(BlendMode::Normal)
+            Some(BlendMode::NORMAL)
         }
     }
 }
@@ -1091,7 +1091,7 @@ pub(crate) fn read_brush(d: &Descriptor, index: usize, w: &mut Vec<AbrWarning>) 
             flow: t.number(b"flow").unwrap_or(TOOL_OPTIONS_ABSENT_DEFAULT),
             opacity: t.number(b"Opct").unwrap_or(TOOL_OPTIONS_ABSENT_DEFAULT),
             // Absent, or an empty identifier, both mean Normal.
-            blend_mode: blend_mode(t, b"Md  ", w).unwrap_or(BlendMode::Normal),
+            blend_mode: blend_mode(t, b"Md  ", w).unwrap_or(BlendMode::NORMAL),
             descriptor: t.clone(),
         }
     });

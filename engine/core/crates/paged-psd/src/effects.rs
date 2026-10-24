@@ -72,35 +72,7 @@ pub struct Effects {
 /// the four-character ids (`Nrml`, `Mltp`), Photoshop 27.10 writes the
 /// string ids (`normal`, `multiply`) for the same modes [OBS].
 pub fn blend_key_of(mode: &str) -> Option<[u8; 4]> {
-    Some(match mode {
-        "Nrml" | "normal" => *b"norm",
-        "Drkn" | "darken" => *b"dark",
-        "Mltp" | "multiply" => *b"mul ",
-        "CBrn" | "colorBurn" => *b"idiv",
-        "linearBurn" => *b"lbrn",
-        "darkerColor" => *b"dkCl",
-        "Lghn" | "lighten" => *b"lite",
-        "Scrn" | "screen" => *b"scrn",
-        "CDdg" | "colorDodge" => *b"div ",
-        "linearDodge" => *b"lddg",
-        "lighterColor" => *b"lgCl",
-        "Ovrl" | "overlay" => *b"over",
-        "SftL" | "softLight" => *b"sLit",
-        "HrdL" | "hardLight" => *b"hLit",
-        "vividLight" => *b"vLit",
-        "linearLight" => *b"lLit",
-        "pinLight" => *b"pLit",
-        "hardMix" => *b"hMix",
-        "Dfrn" | "difference" => *b"diff",
-        "Xclu" | "exclusion" => *b"smud",
-        "blendSubtraction" => *b"fsub",
-        "blendDivide" => *b"fdiv",
-        "H   " | "hue" => *b"hue ",
-        "Strt" | "saturation" => *b"sat ",
-        "Clr " | "color" => *b"colr",
-        "Lmns" | "luminosity" => *b"lum ",
-        _ => return None,
-    })
+    paged_blend::BlendMode::from_descriptor(mode).map(|m| *m.psd_key())
 }
 
 impl Effects {

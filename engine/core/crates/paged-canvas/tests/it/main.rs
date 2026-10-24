@@ -10,6 +10,7 @@ mod batch_composition;
 mod batch_delete_then_insert;
 mod batch_minting;
 mod batch_threading;
+mod blend_modes_27;
 mod bookmark_ops;
 mod c18_corner_surface;
 mod c62_line_ends_surface;
