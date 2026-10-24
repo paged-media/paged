@@ -137,15 +137,17 @@ function DataMarkersRender(props: OverlayProps) {
     if (!on || !service) return;
     // Each refresh is numbered: a late reply of an older one (every await
     // is a chance for the document to have moved on) is dropped.
-    let run = 0;
-    let live = true;
+    const runs = { latest: 0, live: true };
     const refresh = () => {
-      const mine = ++run;
-      void readMarkers(service, client, () => live && mine === run).then(
-        (read) => {
-          if (read !== "superseded") setMarkers(read);
-        },
-      );
+      runs.latest += 1;
+      const mine = runs.latest;
+      void readMarkers(
+        service,
+        client,
+        () => runs.live && mine === runs.latest,
+      ).then((read) => {
+        if (read !== "superseded") setMarkers(read);
+      });
     };
     refresh();
     const off = client.subscribe((msg) => {
@@ -159,7 +161,7 @@ function DataMarkersRender(props: OverlayProps) {
     });
     return () => {
       off();
-      live = false;
+      runs.live = false;
       // Toggled off (or the service gone): drop the mirror, so turning the
       // markers on again never flashes the state of edits ago.
       setMarkers([]);
