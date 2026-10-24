@@ -69,8 +69,17 @@ import { defineMessages } from "@paged-media/strings";
 export const SHAPER_STROKE_COMMAND_ID = "media.paged.draw.command.shaperStroke";
 
 export type ShaperResult =
-  | { applied: true; kind: Exclude<ShaperKind, "scribble">; created: ElementId | null }
-  | { applied: true; kind: "scribble"; mode: "keep" | "remove"; operands: number }
+  | {
+      applied: true;
+      kind: Exclude<ShaperKind, "scribble">;
+      created: ElementId | null;
+    }
+  | {
+      applied: true;
+      kind: "scribble";
+      mode: "keep" | "remove";
+      operands: number;
+    }
   | { applied: false; reason: string };
 
 const SCRIBBLE_KINDS = new Set(["polygon", "rectangle"]);
@@ -89,7 +98,10 @@ export function densify(
       const a = points[i - 1]!;
       const n = Math.ceil(Math.hypot(p[0] - a[0], p[1] - a[1]) / step);
       for (let k = 1; k < n; k++)
-        out.push([a[0] + ((p[0] - a[0]) * k) / n, a[1] + ((p[1] - a[1]) * k) / n]);
+        out.push([
+          a[0] + ((p[0] - a[0]) * k) / n,
+          a[1] + ((p[1] - a[1]) * k) / n,
+        ]);
     }
     out.push([p[0], p[1]]);
   });
@@ -100,7 +112,11 @@ export function densify(
  *  inside, as a key per point. */
 function containmentKeys(
   points: readonly Vec2[],
-  shapes: readonly { anchors: Parameters<typeof pointInAnchorPath>[1]; starts: number[]; m: Affine | null }[],
+  shapes: readonly {
+    anchors: Parameters<typeof pointInAnchorPath>[1];
+    starts: number[];
+    m: Affine | null;
+  }[],
 ): string[] {
   return points.map((p) =>
     shapes
@@ -127,34 +143,54 @@ export async function applyShaperStroke(
     const open = rec.kind === "line";
     const paint = await graphicPaintFor(host).catch(() => null);
     const outcome = await host.document.mutate(
-      withGraphicPaint(insertPathMutationFor(pageId, table.anchors, open), paint),
+      withGraphicPaint(
+        insertPathMutationFor(pageId, table.anchors, open),
+        paint,
+      ),
     );
     if (!outcome.applied)
-      return no(`the engine refused the shape: ${JSON.stringify(outcome.error)}`);
+      return no(
+        `the engine refused the shape: ${JSON.stringify(outcome.error)}`,
+      );
     const created = outcome.createdId ?? null;
     if (created) await host.selection.set([created]);
     return { applied: true, kind: rec.kind, created };
   }
   // A scribble: the closed shapes under it, top to bottom.
-  const candidates = (await knifeCandidates(host, pageId, points)).filter((id) =>
-    SCRIBBLE_KINDS.has(id.kind),
+  const candidates = (await knifeCandidates(host, pageId, points)).filter(
+    (id) => SCRIBBLE_KINDS.has(id.kind),
   );
-  const shapes: { id: ElementId; anchors: Parameters<typeof pointInAnchorPath>[1]; starts: number[]; m: Affine | null }[] = [];
+  const shapes: {
+    id: ElementId;
+    anchors: Parameters<typeof pointInAnchorPath>[1];
+    starts: number[];
+    m: Affine | null;
+  }[] = [];
   for (const id of candidates) {
     const read = await readEditablePath(host, id);
     if (!read || read.pageId !== pageId) continue;
     if ((read.subpathOpen ?? []).some(Boolean)) continue;
     const { table, matrix } = tableOfRead(read);
-    shapes.push({ id, anchors: table.anchors, starts: [...table.subpathStarts], m: matrix });
+    shapes.push({
+      id,
+      anchors: table.anchors,
+      starts: [...table.subpathStarts],
+      m: matrix,
+    });
   }
   const keys = containmentKeys(points, shapes);
-  const touched = shapes.filter((_, i) => keys.some((k) => k.split(",").includes(String(i))));
+  const touched = shapes.filter((_, i) =>
+    keys.some((k) => k.split(",").includes(String(i))),
+  );
   if (touched.length === 0) return no("the scribble is over no closed shape");
   const oneRegion = keys.every((k) => k === keys[0]) && keys[0] !== "";
   const mode = oneRegion ? "remove" : "keep";
   let operands = touched.map((s) => s.id);
   try {
-    operands = orderTopToBottom(operands, paintOrderLeaves(await host.document.tree()));
+    operands = orderTopToBottom(
+      operands,
+      paintOrderLeaves(await host.document.tree()),
+    );
   } catch {
     /* selection order stands */
   }

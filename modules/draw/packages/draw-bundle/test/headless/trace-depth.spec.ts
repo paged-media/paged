@@ -144,7 +144,9 @@ describe("draw conformance — IMAGE TRACE construct depth (WP6.6)", () => {
     expect(rec).toBeDefined();
     await (rec!.value as CommandContribution).handler(undefined, undefined);
     expect((await tracedRegions(h)).length).toBeGreaterThan(0);
-    expect(imageTraceOf(await h.host.document.getMetadata(IMG))?.preset).toBeNull();
+    expect(
+      imageTraceOf(await h.host.document.getMetadata(IMG))?.preset,
+    ).toBeNull();
     await h.host.document.undo();
     expect(await tracedRegions(h)).toHaveLength(0);
   });
