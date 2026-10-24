@@ -414,7 +414,12 @@ pub fn patch_document_xml_cols(
                             let _ = reader.read_to_end(QName(&name));
                             let end = reader.buffer_position() as usize;
                             out.extend_from_slice(&src[cursor..event_start]);
-                            out.extend_from_slice(&ppr);
+                            // Keep what the edit does not own (numbering,
+                            // borders, line spacing, the section's sectPr …).
+                            out.extend_from_slice(&crate::rpr::merge_ppr(
+                                Some(&src[event_start..end]),
+                                &ppr,
+                            ));
                             cursor = end;
                             ppr_done = true;
                             continue;
