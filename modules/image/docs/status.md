@@ -106,7 +106,10 @@ frame keeps its previous image until a GPU realm re-composites it.
   image when there is no add polygon). `selection: true` filters within the editor's
   selection of that frame (intersected with any `mask`): the live one while the frame's
   image is open, and once another image opened, the one it had when it closed (the session
-  keeps the last four frames' selections until another document opens). A selection made
+  keeps the last four frames' selections until another document opens). When that frame's
+  image opens again, its kept selection is set back into the engine and is the live
+  selection again (`selection_set_coverage`; resampled to the image when it is the same
+  image at another size, dropped when it is another crop). A selection made
   on the same image at another size (the aspect agrees within a pixel) is resampled to the
   canvas; one of another aspect (another crop) is refused, and so is a frame with no
   selection, headless or not, with the reason. A mask that covers no pixel is refused.

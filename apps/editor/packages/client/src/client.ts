@@ -1595,6 +1595,30 @@ export class CanvasClient {
   }
 
   /**
+   * Engine ADR 1004 amendment — {@link mutateWithBytes} applied INTO the
+   * undo step `appliedSeq` names (as `amendMutation` applies a JSON
+   * mutation): one undo reverts both. Refused with `notAmendable`, nothing
+   * applied, once that step is no longer the last one or an undo or a redo
+   * ran since. Resolves with the same reply `mutate` does.
+   */
+  async amendWithBytes(
+    appliedSeq: number,
+    mutation: Mutation,
+    bytes: Uint8Array,
+    transfer = false,
+  ): Promise<WorkerToMain> {
+    return this.postDirect(
+      {
+        op: "amendWithBytes",
+        appliedSeq,
+        mutationJson: JSON.stringify(mutation),
+        bytes,
+      },
+      transfer ? transferable([bytes]) : [],
+    );
+  }
+
+  /**
    * C-6 (I-06) — claim a placed image's tiled mip pyramid (the v44 wire).
    * The worker registers the claim, rebuilds, and answers with the tiles
    * that build LACKED — carried on the `resourceClaimApplied` ack as

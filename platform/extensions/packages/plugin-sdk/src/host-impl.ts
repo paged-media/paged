@@ -103,6 +103,7 @@ import type {
   Mutation,
   MutationInput,
   MutateOptions,
+  MutateWithBytesOptions,
   MutationOutcome,
   NetworkSurface,
   ObjectTypeContribution,
@@ -229,6 +230,11 @@ export const HOST_FEATURES: readonly string[] = [
   // STATIC: the worker handshake refuses an engine older than the pinned
   // protocol (76), which answers `amendMutation`.
   "document.mutate.amend@1",
+  // Engine ADR 1004 amendment — `mutateWithBytes(…, { amend })` too, and a
+  // script run's change carries the one step it ended in (`appliedSeq` on
+  // a `scriptResult`), so a write it provoked joins the script's step.
+  // STATIC like @1: the same pinned protocol answers both.
+  "document.mutate.amend@2",
   "document.undo@1",
   "document.collection@1",
   "document.frameChain@1",
@@ -2509,7 +2515,7 @@ export function createBundleHost(
     async mutateWithBytes(
       mutation: MutationInput,
       bytes: Uint8Array,
-      options?: { transfer?: boolean },
+      options?: MutateWithBytesOptions,
     ): Promise<MutationOutcome> {
       const gated = gateRawWrite(mutation, "document.mutateWithBytes");
       if (gated !== null) return gated;
@@ -2522,6 +2528,45 @@ export function createBundleHost(
           error:
             "mutateWithBytes: no replaceImageBytes with an empty `bytes` slot to fill",
         };
+      }
+      if (options?.amend !== undefined) {
+        // Engine ADR 1004 amendment — join the undo step `amend` names, as
+        // `mutate(…, { amend })` does; a refusal is an outcome.
+        const amend = options.amend;
+        if (!Number.isSafeInteger(amend) || amend < 0) {
+          return {
+            applied: false,
+            error: `document.mutateWithBytes: amend must be an appliedSeq (a whole number), got ${String(amend)}`,
+          };
+        }
+        try {
+          const editor = getEditor();
+          if (typeof editor.amendWithBytes === "function") {
+            return mutateOutcome(
+              await editor.amendWithBytes(
+                amend,
+                mutation as Mutation,
+                bytes,
+                options.transfer === true,
+              ),
+            );
+          }
+          // A host without the binary amend lane: the bytes ride the JSON
+          // `amendMutation` as a `number[]`.
+          const reply = await editor.client.send({
+            kind: "amendMutation",
+            payload: {
+              appliedSeq: amend,
+              mutation: spliceBytesSlot(
+                mutation,
+                Array.from(bytes),
+              ) as Mutation,
+            },
+          });
+          return mutateOutcome(reply);
+        } catch (error) {
+          return { applied: false, error };
+        }
       }
       try {
         const editor = getEditor();

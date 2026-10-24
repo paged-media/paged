@@ -212,6 +212,84 @@ describe.skipIf(!docxPresent)(
       expect(saveBackDiagnostics()).toEqual([]);
     });
 
+    it("a look given to part of a run on the canvas splits that run in the exported .docx", async () => {
+      // The style the import made for the bold "les" in "Apples".
+      const engine = await DocEngine.boot();
+      let boldStyle: string;
+      try {
+        engine.loadDocx(fixture("price-table.docx"));
+        const table = engine
+          .lowered()
+          .story.blocks.find((b) => b.kind === "table");
+        if (table?.kind !== "table") throw new Error("no table");
+        boldStyle = table.cells[2]!.paragraphs[0]!.runs[1]!.charStyleId!;
+      } finally {
+        engine.dispose();
+      }
+      expect(boldStyle).toBeTruthy();
+      const storyId = await story();
+      // In a cell: "1." of "1.20" takes the bold look.
+      const inCell = await h.host.document.mutate({
+        op: "applyStyle",
+        args: {
+          storyId,
+          start: 0,
+          end: 2,
+          style: boldStyle,
+          scope: "character",
+          cell: { tableId: await tableId(), row: 1, col: 1 },
+        },
+      } as never);
+      expect(inCell.applied).toBe(true);
+      // In the body: "Price" of "Price list".
+      const inBody = await h.host.document.mutate({
+        op: "applyStyle",
+        args: {
+          storyId,
+          start: 0,
+          end: 5,
+          style: boldStyle,
+          scope: "character",
+        },
+      } as never);
+      expect(inBody.applied).toBe(true);
+
+      const out = await exporter.export();
+      expect(saveBackDiagnostics()).toEqual([]);
+      const back = await DocEngine.boot();
+      try {
+        back.loadDocx(out!.bytes);
+        const blocks = back.lowered().story.blocks;
+        const runs = (p: {
+          runs: Array<{ text: string; charStyleId?: string | null }>;
+        }) => p.runs.map((r) => [r.text, r.charStyleId ?? null] as const);
+        const heading = blocks[0];
+        if (heading?.kind !== "paragraph") throw new Error("no heading");
+        const [price, list] = runs(heading);
+        expect([price![0], list![0]]).toEqual(["Price", " list"]);
+        expect(price![1]).not.toEqual(list![1]);
+        const table = blocks.find((b) => b.kind === "table");
+        if (table?.kind !== "table") throw new Error("no table");
+        const [one, twenty] = runs(table.cells[3]!.paragraphs[0]!);
+        expect([one![0], twenty![0]]).toEqual(["1.", "20"]);
+        expect(one![1]).not.toEqual(twenty![1]);
+        // "Apples" kept its two runs; the other cells their text.
+        expect(runs(table.cells[2]!.paragraphs[0]!).map((r) => r[0])).toEqual([
+          "App",
+          "les",
+        ]);
+        expect(
+          table.cells.map((c) =>
+            c.paragraphs
+              .map((p) => p.runs.map((r) => r.text).join(""))
+              .join("\n"),
+          ),
+        ).toEqual(CELLS);
+      } finally {
+        back.dispose();
+      }
+    });
+
     it("cells are saved back when another table was added to the story", async () => {
       const storyId = await story();
       const id = await tableId();

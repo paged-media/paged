@@ -721,6 +721,9 @@ export type WorkerToMain = WorkerToMainKind & {
 //   mutation }` applies a mutation INTO the undo step `appliedSeq` names
 //   (the reply is a mutation's), refused with `WorkerError::NotAmendable`
 //   once that step is no longer the last one or an undo/redo ran since.
+//   Rides v76 too (ADR 1004 amendment): `ScriptResult.appliedSeq`, the one
+//   undo step a script run ended in (a run is one step now), so its change
+//   can be amended; the `mutateWithBytesDirect` lane's amending twin.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(76);
 
 /// A per-run script budget on the wire (v63). Every field is optional
@@ -2493,6 +2496,16 @@ pub enum WorkerToMainKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[tsify(optional)]
         page_ids: Option<Vec<PageId>>,
+        /// v76 (engine ADR 1004, amendment 2026-10-23) — the undo step the
+        /// run's writes ended in, when they are ONE step a follow-up write
+        /// may still join with `AmendMutation`: the script's own (its core
+        /// writes and the host commits it reported fold into one), the last
+        /// in the history, and no undo or redo ran during the run. Absent
+        /// for a read-only run, a run that moved the history or that a
+        /// foreign edit split, and from older workers.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        applied_seq: Option<u64>,
     },
     /// v71 — the `ExecuteScript` (or `HostObjectsResult`) reply when the
     /// script SUSPENDED on the host's object registry: it named a
@@ -6079,6 +6092,7 @@ mod tests {
                 stats: None,
                 writes: None,
                 page_ids: None,
+                applied_seq: None,
             },
         };
         let json = serde_json::to_string(&env).unwrap();
@@ -6119,6 +6133,7 @@ mod tests {
                 stats: None,
                 writes: None,
                 page_ids: None,
+                applied_seq: None,
             },
         };
         let json = serde_json::to_string(&env).unwrap();

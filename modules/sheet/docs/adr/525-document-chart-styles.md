@@ -70,3 +70,11 @@ the document said, and there was no way to say "our charts look like this" once 
 - A chart is drawn with its document style everywhere the geometry is used — the page, the panel
   palette and a save.
 - The in-frame grid does not draw charts; a style change previews on the placed chart.
+
+## Amendment (2026-10-24): the chart writer carries the references
+
+A chart written to the xlsx shows the colours it draws — the workbook default chart style applied
+where the chart does not override a role — so another application sees what Paged shows. The
+paged extension keeps only the chart's own references, now with each swatch's colour model
+(`model="…"` on `pg:ref`) and the chart's colour-group palette (`<pg:palette>`), so a reload
+restores them; changing the workbook default marks every chart to be written again.

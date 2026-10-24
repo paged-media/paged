@@ -622,6 +622,12 @@ export function createObjectRegistry(
         entry: KindEntry;
         parts: readonly { path: string; bytes: Uint8Array | null }[];
       }> = [];
+      /** Extensions ADR 337 amendment — the writes the commit provokes,
+       *  in planner order; each joins the commit's undo step. */
+      const followUps: Array<{
+        who: string;
+        run: import("@paged-media/plugin-api").ObjectFollowUp;
+      }> = [];
       /** The ONE label per (plugin, host): a whole envelope, or sub-keys
        *  merged into the current one's `data`. */
       const labels = new Map<
@@ -660,6 +666,8 @@ export function createObjectRegistry(
         }
         if (write.kind === "rejected")
           throw new Refusal("failed", `${who}: ${write.reason}`);
+        if (typeof write.followUp === "function")
+          followUps.push({ who, run: write.followUp });
         const g = groupCreates.get(groupKey);
         if (write.created !== undefined) {
           const want = g?.count ?? 0;
@@ -838,11 +846,32 @@ export function createObjectRegistry(
       }
       if (note && typeof outcome.appliedSeq === "number")
         note(outcome.appliedSeq);
+      // Extensions ADR 337 amendment — the follow-ups join the step the
+      // commit made (`mutate(…, { amend })`); the step's number is the one
+      // the last of them answered.
+      let step = outcome.appliedSeq;
+      for (const f of followUps) {
+        if (typeof step !== "number") break;
+        try {
+          const next = await f.run({ appliedSeq: step });
+          if (typeof next === "number" && next !== step) {
+            step = next;
+            if (note) note(next);
+          }
+        } catch (err) {
+          log.warn(
+            `${f.who}: the follow-up of a write failed (${String(err)})`,
+          );
+        }
+      }
       notify(touched);
       const result: ObjectWriteResult & { commands?: ObjectCommandResult[] } = {
         applied: true,
         undoSteps: 1,
-        outcome,
+        outcome:
+          typeof step === "number" && step !== outcome.appliedSeq
+            ? { ...outcome, appliedSeq: step }
+            : outcome,
       };
       if (created.length > 0) {
         const names = await Promise.all(

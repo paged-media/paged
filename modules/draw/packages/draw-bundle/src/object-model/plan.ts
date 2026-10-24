@@ -40,6 +40,7 @@ import type {
   BundleHost,
   ElementId,
   MutationInput,
+  ObjectFollowUp,
   ObjectOp,
   ObjectWrite,
   PluginMetadataEnvelope,
@@ -66,6 +67,9 @@ export interface DrawPlan {
   mutations: MutationInput[];
   libraries: RecipeWrite[];
   stamps: StackStamp[];
+  /** Writes the commit provokes, joined to its undo step (extensions ADR
+   *  337 amendment): a recipe parameter's artwork rebuild. */
+  followUps: ObjectFollowUp[];
 }
 
 export type Planned = DrawPlan | { rejected: string };
@@ -76,6 +80,7 @@ export const plan = (p: Partial<DrawPlan> = {}): DrawPlan => ({
   mutations: p.mutations ?? [],
   libraries: p.libraries ?? [],
   stamps: p.stamps ?? [],
+  followUps: p.followUps ?? [],
 });
 
 export const rejected = (reason: string): Planned => ({ rejected: reason });
@@ -97,6 +102,21 @@ export async function finishPlans(
   const mutations: MutationInput[] = plans.flatMap((p) => p.mutations);
   const libraries = plans.flatMap((p) => p.libraries);
   const stamps = plans.flatMap((p) => p.stamps);
+  const followUps = plans.flatMap((p) => p.followUps);
+  // Each follow-up amends the number the previous one answered.
+  const followUp: ObjectFollowUp | undefined =
+    followUps.length === 0
+      ? undefined
+      : async ({ appliedSeq }) => {
+          let step = appliedSeq;
+          for (const f of followUps) {
+            const next = await f({ appliedSeq: step });
+            if (typeof next === "number") step = next;
+          }
+          return step;
+        };
+  const withFollowUp = <W extends ObjectWrite>(w: W): W =>
+    followUp ? { ...w, followUp } : w;
 
   let state: Extract<ObjectWrite, { kind: "state" }> | null = null;
   if (libraries.length > 0) {
@@ -130,8 +150,10 @@ export async function finishPlans(
         );
     }
   }
-  if (state === null) return { kind: "mutations", mutations };
-  return mutations.length === 0 ? state : { ...state, kind: "both", mutations };
+  if (state === null) return withFollowUp({ kind: "mutations", mutations });
+  return withFollowUp(
+    mutations.length === 0 ? state : { ...state, kind: "both", mutations },
+  );
 }
 
 /** A kind's `batch` (the per-kind door a pre-0.2.43 registry calls): its

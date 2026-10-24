@@ -19,9 +19,10 @@
 // Save-back of the native tables' cells. The read-back story
 // (`host.document.storyContent`) holds no table, so each cell of a table the
 // pour built natively is read on its own — the engine's cell `text`, its
-// paragraphs joined by `\n` — and handed to docx-js next to the story
-// (`cells`), which patches the edits into the cell's runs and adds or drops
-// the cell's paragraphs. Which native table a lowered table became is found
+// paragraphs joined by `\n`, and its `paragraphs` with their runs and
+// formatting — and handed to docx-js next to the story (`cells`), which
+// patches the edits into the cell's runs (splitting a run where part of it
+// took another look) and adds or drops the cell's paragraphs. Which native table a lowered table became is found
 // again by signature (`locateTables`), so a table survives the story around
 // it being edited, moved or partly deleted.
 
@@ -30,12 +31,38 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 import { locateTables } from "./tables.js";
 
-/** One cell read back: the table's lowered block, the lowered cell index and
- *  the cell's live text. */
+/** One cell read back: the table's lowered block, the lowered cell index,
+ *  the cell's live text and, where the engine reads it, its paragraphs with
+ *  their runs and formatting (the story read's shape), so runs split by a
+ *  new look and direct formatting are saved too. */
 export interface CellContent {
   block: number;
   cell: number;
   text: string;
+  paragraphs?: unknown[];
+}
+
+/** A cell's styled paragraphs (the engine's cell `paragraphs` read, JSON
+ *  text), or `undefined` where the engine has no such read: the cell's
+ *  text alone is saved then. */
+async function readStyledCell(
+  host: BundleHost,
+  tableId: string,
+  row: number,
+  col: number,
+): Promise<unknown[] | undefined> {
+  try {
+    const read = await host.objects.get(
+      `cell:${tableId}/${row},${col}`,
+      "paragraphs",
+    );
+    if (read.kind !== "value" || typeof read.value !== "string")
+      return undefined;
+    const parsed: unknown = JSON.parse(read.value);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -74,8 +101,19 @@ export async function readTableCells(
     for (let k = 0; k < block.cells.length; k += 1) {
       const c = block.cells[k]!;
       const text = place.cells[`${c.row},${c.col}`];
-      if (text !== undefined) cells.push({ block: b, cell: k, text });
-      else
+      if (text !== undefined) {
+        const paragraphs = await readStyledCell(
+          host,
+          place.tableId,
+          c.row,
+          c.col,
+        );
+        cells.push(
+          paragraphs
+            ? { block: b, cell: k, text, paragraphs }
+            : { block: b, cell: k, text },
+        );
+      } else
         skips.push(
           `block ${b} cell ${k}: the cell cannot be read; it keeps its Word text`,
         );

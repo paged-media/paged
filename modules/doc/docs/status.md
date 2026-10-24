@@ -35,6 +35,26 @@
   paragraph that held it is removed. Text typed into a Word paragraph with no text run gets a
   run (`InsertCellRun`). Every other byte stays; an empty `<w:p/>` in a cell now counts in the
   patcher's cell locator as it does in the import.
+- Run structure and character formatting made on the canvas are saved back, in body
+  paragraphs and table cells alike (editor plan G4). The overlay takes a paragraph's runs as
+  read back — text, character style and the direct formatting the engine reports (`font`,
+  `fontStyle`, `pointSize`, `fillColor`, `underline`, `strikethru`, `capitalization`,
+  `baselineShift`, `position`) — and a directly formatted run gets an edit style
+  (`CharacterStyle/docx-edit-N`, based on its character style). The differ maps the edited
+  runs onto the Word runs character by character (`plan_runs`: common start and end, then a
+  longest common subsequence, new text going to the run it replaces or the neighbour whose look
+  it has): an untouched run is not addressed (its bytes stay), a run whose text took one other
+  look is edited in place, and a run part of which took another look is split
+  (`SplitRun` / `SplitCellRun`): each piece is a copy of the `<w:r>` with its text, the pieces
+  in the run's own look keep its `<w:rPr>` bytes, the others get only what differs rewritten in
+  it (`merge_rpr`: `<w:b/>` added beside a run's `<w:lang>`, say). A changed look of a whole
+  run is merged the same way rather than replacing the run's `<w:rPr>`. Runs the engine joined
+  map back onto their Word runs; nothing is merged. Cells are read with the engine's cell
+  `paragraphs` (the story read's shape, as JSON text; engine `virtual_set.rs`) next to their
+  `text`. Limits: `tracking` has no Word property here, a colour the canvas made that is not a
+  swatch of the import is not written, a run holding more than text (a drawing, a field
+  character, a note reference) is not split and the split is reported, and a paragraph added
+  in a cell takes its neighbour's look.
 - Native tables are found again by signature, not by their ordinal in the story
   (`matchTables` in doc-host-model, `src/tables.ts`): the live tables of the document's
   stories are read (`tableRowCount`, `tableColumnCount`, each cell's `text`) and paired with
@@ -390,7 +410,9 @@ alone, unmatched baseline runs become `DeleteRun`, unmatched edited runs become
 `InsertRun` anchored after the preceding match. Paragraph count changes map to
 `DeleteParagraph` / `InsertParagraph`. The DOC-03 overlay now replaces a
 paragraph's run list wholesale when it changed, so the live editor path drives
-structural edits too.
+structural edits too. (Superseded for paragraphs with runs: the runs are now mapped
+character by character, `plan_runs`, and split rather than replaced; see the object
+model section above. The LCS over runs remains for a paragraph that had no run.)
 
 Verified: splice unit tests (delete run, insert-after, prepend, paragraph
 delete+append) and two end-to-end conformance tests — one through the DOC-03
