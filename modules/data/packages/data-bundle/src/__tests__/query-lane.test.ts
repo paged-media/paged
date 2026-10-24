@@ -1,6 +1,6 @@
 // Wave 6 query lane, pure parts: the builders' SQL, the guard's lexer,
-// DuckDB error text → diagnostics, file naming and quoting. The same SQL is
-// run against real DuckDB in test/sources-real.spec.ts.
+// Store errors → diagnostics, file naming and quoting. The same SQL is
+// run against the real store in test/sources-real.spec.ts.
 
 import { describe, expect, it } from "bun:test";
 

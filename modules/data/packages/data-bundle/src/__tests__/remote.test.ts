@@ -22,7 +22,7 @@
 // edit-time fetch happens exactly once post-consent and hands the bytes to the
 // query store like an imported file, and descriptors carry credentialRef
 // STRINGS only (rfc-credential-store — embedded user:pass@ is rejected).
-// Engine + DuckDB are mocked (the real-engine join is covered by the Rust
+// The engine and its store are mocked (the real-engine join is covered by the Rust
 // conformance suite + the e2e harness).
 
 import { beforeEach, afterEach, describe, expect, it, vi } from "bun:test";
@@ -55,17 +55,25 @@ vi.mock("../engine", () => ({
 vi.mock("../query/store", () => ({
   STORE_MISSING: "no store",
   storeHandle: () => ({
-    async importFile(
-      name: string,
-      format: string,
-      bytes: Uint8Array,
-    ) {
+    async importFile(name: string, format: string, bytes: Uint8Array) {
       importCalls.push({ name, format, text: new TextDecoder().decode(bytes) });
-      return { table: name, columns: [], rows: 0, errorCells: 0, asWritten: false };
+      return {
+        table: name,
+        columns: [],
+        rows: 0,
+        errorCells: 0,
+        asWritten: false,
+      };
     },
     async importCsv(name: string, text: string) {
       importCalls.push({ name, format: "csv", text });
-      return { table: name, columns: [], rows: 0, errorCells: 0, asWritten: true };
+      return {
+        table: name,
+        columns: [],
+        rows: 0,
+        errorCells: 0,
+        asWritten: true,
+      };
     },
     dropSource() {},
     tables: () => [],
