@@ -111,11 +111,8 @@ fn fitted_transform(
     let Some(mode) = FitMode::from_idml(fit) else {
         return Ok(None);
     };
-    let (w, h) = image::ImageReader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()
-        .context("sniff the image format")?
-        .into_dimensions()
-        .context("read the image's pixel size")?;
+    let info = paged_raster::probe(bytes).context("read the image's pixel size")?;
+    let (w, h) = (info.width, info.height);
     let model = session.model()?;
     let rect = model
         .scene()
