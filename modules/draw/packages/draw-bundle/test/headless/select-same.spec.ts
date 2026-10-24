@@ -409,4 +409,27 @@ describe("draw conformance — Select-same WP6.1 criteria and Global Edit [plugi
       await h.host.document.undo();
     }
   });
+
+  it("each WP6.1 criterion and Global Edit run as typed COMMANDS: each answers the selection it made", async () => {
+    const C = "media.paged.draw.command";
+    const run = async (name: string, args: Record<string, unknown> = {}) => {
+      const r = (await h.objects.invoke(`${C}.${name}`, {
+        targets: [`polygon:${String(POLY.id)}`],
+        ...args,
+      })) as string[];
+      return r.map((a) => a.split(":").at(-1)!).sort();
+    };
+    expect(await run("selectSameOpacity")).toContain(String(POLY.id));
+    expect(await run("selectSameBlendMode")).toContain(String(POLY.id));
+    expect(await run("selectSameAppearance")).toContain(String(POLY.id));
+    expect(await run("selectSameShapeKind")).toEqual([String(POLY.id)]);
+    // No style link: the reference alone, or nothing (as above).
+    expect((await run("selectSameGraphicStyle")).length).toBeLessThanOrEqual(1);
+    expect((await run("selectSameSymbolInstance")).length).toBeLessThanOrEqual(
+      1,
+    );
+    expect(await run("globalEdit", { tolerance: 0.5, anySize: false })).toEqual(
+      [String(POLY.id)],
+    );
+  });
 });

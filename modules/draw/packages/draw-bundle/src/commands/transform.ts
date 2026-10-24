@@ -94,7 +94,11 @@ import {
   type Vec2,
 } from "@paged-media/draw-geometry";
 
-import { pageOriginOf, storedTransformOf } from "../page-origin";
+import {
+  pageOriginOf,
+  storedTransformOf,
+  type PageOrigin,
+} from "../page-origin";
 import { engineOpVocabulary } from "./join-average";
 import { frameTransformMutationFor } from "./objects-on-path";
 import { batchMutationFor } from "./batch-handles";
@@ -156,6 +160,10 @@ export interface TransformTarget {
   /** A nested group's PARENT FRAME F — the spread-space transform its
    *  stored one sits in (`groupFrameOf`). Absent or null: the spread. */
   frame?: Affine | null;
+  /** The origin of the page the element's geometry was read on (spread
+   *  coordinates) — how a PAGE-space pivot (the Reflect tool's axis
+   *  point) is taken to spread space. Absent: unknown. */
+  origin?: PageOrigin;
 }
 
 export interface TransformResult {
@@ -331,17 +339,20 @@ export async function transformTargetsOf(
       matrix: m,
       box: m ? transformBounds(g.bounds, m) : g.bounds,
       group: false,
+      origin: pageOriginOf(g),
     });
   }
   // Its own call, so an engine that refuses a group id there costs the
   // page items nothing. Answered groups map to their composed transform,
   // in spread space (null = identity).
   const composed = new Map<string, Affine | null>();
+  const groupOrigins = new Map<string, PageOrigin>();
   const groupGeoms =
     groups.length > 0
       ? await host.document.elementGeometry([...groups]).catch(() => [])
       : [];
   for (const g of groupGeoms) {
+    groupOrigins.set(String(g.id.id), pageOriginOf(g));
     composed.set(
       String(g.id.id),
       storedTransformOf(
@@ -366,7 +377,15 @@ export async function transformTargetsOf(
     const frame = composed.has(key)
       ? groupFrameOf(composed.get(key) ?? null, matrix)
       : null;
-    out.push({ id, matrix, box, group: true, ...(frame ? { frame } : {}) });
+    const origin = groupOrigins.get(key);
+    out.push({
+      id,
+      matrix,
+      box,
+      group: true,
+      ...(frame ? { frame } : {}),
+      ...(origin ? { origin } : {}),
+    });
   }
   const answered = new Set(out.map((t) => `${t.id.kind}:${String(t.id.id)}`));
   for (const id of selection) {
@@ -397,6 +416,9 @@ export async function supportsDuplicate(host: BundleHost): Promise<boolean> {
 export async function applySelectionTransform(
   host: BundleHost,
   record: TransformRecord,
+  /** PAGE-space pivot (the Reflect tool's axis point, or a typed one) on
+   *  the selection's page; absent = the selection's centre. */
+  pivot?: Vec2,
 ): Promise<TransformResult> {
   const selection = host.selection.get();
   if (selection.length === 0) {
@@ -408,7 +430,9 @@ export async function applySelectionTransform(
     return { applied: false, targets: [], refusal: COPY_UNAVAILABLE_NOTE };
   }
   const targets = await transformTargetsOf(host, selection);
-  const centre = selectionCentre(targets.map((t) => t.box));
+  const centre = pivot
+    ? spreadPivotOf(pivot, targets)
+    : selectionCentre(targets.map((t) => t.box));
   if (!centre)
     return { applied: false, targets: [], refusal: "no readable geometry" };
   const outcome = await host.document.mutate(
@@ -423,14 +447,31 @@ export async function applySelectionTransform(
   return { applied: true, targets: targets.map((t) => t.id) };
 }
 
+/** A PAGE-space pivot in the spread space the batch writes: the page's
+ *  origin added, read off the first target that knows it. */
+export function spreadPivotOf(
+  pivot: Vec2,
+  targets: readonly TransformTarget[],
+): Vec2 | null {
+  if (targets.length === 0) return null;
+  const origin = targets.find((t) => t.origin)?.origin ?? [0, 0];
+  return [pivot[0] + origin[0], pivot[1] + origin[1]];
+}
+
 /** Reflect the selection across an axis at `angleDeg` through its
- *  centre. */
+ *  centre — or through `pivot` (page space), the Reflect tool's axis
+ *  point. */
 export function applyReflect(
   host: BundleHost,
   angleDeg: number,
   copy = false,
+  pivot?: Vec2,
 ): Promise<TransformResult> {
-  return applySelectionTransform(host, { kind: "reflect", angleDeg, copy });
+  return applySelectionTransform(
+    host,
+    { kind: "reflect", angleDeg, copy },
+    pivot,
+  );
 }
 
 /** Repeat the last transform on the current selection. Nothing
@@ -449,13 +490,28 @@ export async function applyTransformAgain(
 }
 
 /** A payload's angle / copy, sanitised. */
-function payloadOf(payload: unknown): { angleDeg?: number; copy: boolean } {
-  const p = (payload ?? {}) as { angleDeg?: unknown; copy?: unknown };
+function payloadOf(payload: unknown): {
+  angleDeg?: number;
+  copy: boolean;
+  pivot?: Vec2;
+} {
+  const p = (payload ?? {}) as {
+    angleDeg?: unknown;
+    copy?: unknown;
+    pivot?: unknown;
+  };
+  const pivot =
+    Array.isArray(p.pivot) &&
+    p.pivot.length === 2 &&
+    p.pivot.every((n) => typeof n === "number" && Number.isFinite(n))
+      ? ([p.pivot[0], p.pivot[1]] as [number, number])
+      : undefined;
   return {
     ...(typeof p.angleDeg === "number" && Number.isFinite(p.angleDeg)
       ? { angleDeg: p.angleDeg }
       : {}),
     copy: p.copy === true,
+    ...(pivot ? { pivot } : {}),
   };
 }
 
@@ -470,7 +526,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
       category: TRANSFORM_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
-        return applyReflect(host, p.angleDeg ?? 90, p.copy);
+        return applyReflect(host, p.angleDeg ?? 90, p.copy, p.pivot);
       },
     }),
     registerCommand(host, {
@@ -479,7 +535,7 @@ export function contributeTransformCommands(host: BundleHost): Disposable {
       category: TRANSFORM_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
-        return applyReflect(host, p.angleDeg ?? 0, p.copy);
+        return applyReflect(host, p.angleDeg ?? 0, p.copy, p.pivot);
       },
     }),
     registerCommand(host, {
