@@ -2566,6 +2566,7 @@ export function createSession(
       } as ElementId);
     },
     placements: () => props.placements(),
+    recordStatus: (query) => props.recordStatus(query, self.diffKeyOf(query)),
     refresh: async () => {
       await self.refreshData();
       await self.lowerAll();
@@ -4678,11 +4679,21 @@ export function createSession(
         template: mode,
         imageBase: options.imageBase,
         mergeId,
+        dataQuery: options.query,
         clear: plan.remove,
         templatePresent,
         pageHandles: labelActive,
       });
-      if (result.ok) mergeTemplates.set(mergeId, template);
+      if (result.ok) {
+        mergeTemplates.set(mergeId, template);
+        // The document is now written from this query's records: the
+        // "before" of its per-record status (editor ADR 291).
+        try {
+          e.mark_query_applied?.(options.query);
+        } catch {
+          // an engine without the lane: no status, nothing else changes
+        }
+      }
       for (const d of result.diagnostics) {
         report({
           level: result.ok ? "warn" : "error",

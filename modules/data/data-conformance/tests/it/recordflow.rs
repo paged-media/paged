@@ -109,6 +109,7 @@ fn rec(label: &str, height: f64) -> FlowRecord {
     FlowRecord {
         cells: vec![label.to_string()],
         height_pt: height,
+        record: None,
     }
 }
 
@@ -286,6 +287,7 @@ fn data_lower_paginate_emits_a_footer_block() {
         footer: Some(FlowRecord {
             cells: vec!["Subtotal".into(), "40.00".into()],
             height_pt: 10.0,
+            record: None,
         }),
     }];
     let flow = paginate_flow(&groups, &[frame("f1", 100.0)], &FlowLayoutOpts::default());

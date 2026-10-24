@@ -221,6 +221,8 @@ pub struct ResolvedFlowRecord {
     pub cells: Vec<String>,
     /// The measured instance height (fields × line height) the paginator packs.
     pub height_pt: f64,
+    /// The row of the result the instance shows (`None` for a footer).
+    pub record: Option<usize>,
 }
 
 /// A resolution failure (a missing binding/query/result/template, or a kind not
@@ -1362,6 +1364,7 @@ fn resolve_record_flow(
             .push(ResolvedFlowRecord {
                 cells,
                 height_pt: instance_height,
+                record: Some(row),
             });
         // Accumulate the footer aggregates from the RAW value (not the rendered
         // cell): record count always, sum/min/max over the numeric column.
@@ -1395,6 +1398,7 @@ fn resolve_record_flow(
             group.footer = Some(ResolvedFlowRecord {
                 cells,
                 height_pt: template.line_height_pt,
+                record: None,
             });
         }
     }

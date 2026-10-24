@@ -679,6 +679,9 @@ export interface MergeWriteOptions {
   /** The id every merged element is labelled with, so a re-merge finds and
    *  replaces them (`relower.ts`). */
   mergeId: string;
+  /** The session query the records come from, named in each label so the
+   *  Data panel can mark and find a record's frames (editor ADR 291). */
+  dataQuery?: string;
   /** Mutations that clear a previous run of this merge (`relower.ts`); they
    *  ride the first batch, so a re-merge is no extra undo step. */
   clear?: Mutation[];
@@ -796,6 +799,7 @@ export function contentMutation(
       const label = makeEnvelope({
         kind: "merge",
         merge: opts.mergeId,
+        ...(opts.dataQuery ? { query: opts.dataQuery } : {}),
         record: rec.record,
         frame: f.template,
         ...(createdPage ? { createdPage } : {}),

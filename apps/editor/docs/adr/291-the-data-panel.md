@@ -80,13 +80,33 @@ Query), place (drag a field header onto a frame, or right-click any property).
   polygon (an image binding, lowered at once); on anything else, or with no item under the
   point, the refusal and its reason reach Problems. A source table's headers do not drag (a
   binding reads a query).
-- Not part of this record, and not built yet:
-  - per-record status (a record new or deleted in the source) and markers per record, which
-    need the service to report which record each instance shows;
-  - a record dropped onto a grouped design, and a range dropped as a table;
-  - double-click to jump to one record's instances (the field's instances are selectable).
+- Not part of this record, and not built yet: a record dropped onto a grouped design, and a
+  range dropped as a table. Each needs a door member it does not have today, and the panel
+  says nothing it cannot back.
+- Amended 2026-10-24: `data@1` gained `recordStatus(query)` (the records new, changed and
+  placed, and how many placed records are gone) and a placement's `record` (plugin-sdk
+  0.74.3-canary.24). The engine decides (paged-data-session `record_status.rs`): it keeps each
+  query's result as of the last time the document was written from it (Update document, a
+  field refresh, a Data Merge) and matches the current result against it by record identity:
+  the key chosen in the Sync panel, else the first column whose values are present and unique
+  in both results (an id, a SKU), else the whole row, with which a changed record reads as one
+  removed and one added. Placed are a table's records, the first record a single-record
+  binding shows, and the records the page items carry in their labels: a merged record's
+  frames and a record-flow frame's records (the paginator names each instance's row). Before
+  the first write in a session there is nothing to compare with, and no record is new or
+  changed. Built on it:
+  - **Rows by status.** A query's grid numbers its rows as delivered (`row_number()`, so a
+    sorted or filtered row keeps its record) and tints a new row approved green and a changed
+    one review amber; a placed row has an info-blue bar at its start; "n placed records are
+    gone from the data" sits next to the count (`data-record-status.ts`).
+  - **Jump to one record's instances.** Double-clicking a placed row selects the page items
+    that show that record: the placements naming it, of a binding over the query or of its
+    Data Merge (`merge-<query>`).
+  - The door's `query` reads a query by its name as a table (the query rides along as a CTE),
+    which the grid of a query's tab needs.
 
-  Each needs a door member it does not have today, and the panel says nothing it cannot back.
+  Not built: the canvas markers do not show a record number, and a record stepped to in the
+  record preview is not tracked as placed (the first record is).
 - Amended 2026-10-24: record templates and their library, and the pagination inspector, are
   built, as paged.data's own panels (PM-0015 L4: they are the module's workflows, not the
   host's). **Record templates** lists the document's templates with the record flows using

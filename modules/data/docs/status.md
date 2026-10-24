@@ -115,6 +115,19 @@ editor ADR 291 left to this module are built as its own panels (see Shipped).
   query since the document was last written from it: rows added, removed and changed (each
   changed cell before and after), the key rows are matched by, and which bindings each
   change reaches (`DataSession::row_diff`, built on `data-bind` `diff()`).
+- **Per-record status** (2026-10-24; editor ADR 291). The data door's `recordStatus(query)`
+  says which records are new and which changed since the document was last written from the
+  query (Update document, a field refresh, a Data Merge), which are placed, and how many
+  placed records are gone; each placement names the record it shows. The engine decides
+  (`DataSession::record_status`, paged-data-session `record_status.rs`): records match by the
+  key chosen in the Sync panel, else the first column unique in both results, else the whole
+  row (a changed record is then a removal and an addition). Placed are a table's records, the
+  first record of a single-record binding, and the records page items carry in their labels:
+  merged records (the merge label names its query) and record-flow frames (the paginator
+  names each instance's row). The snapshot is not saved: after opening a document nothing is
+  new or changed until the document is written from the data again. A record stepped to in
+  the preview stepper is not tracked as placed. The door's `query` also reads a query by its
+  name, as the Data panel's grid does.
 - **Rule editor.** A rule's condition is checked as it is defined: a parse error or a field
   the data lacks is shown and the rule is not defined. "Preview" lists the records that fire,
   through the same evaluation that applies the rule. The style comes from the document's

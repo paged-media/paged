@@ -611,6 +611,27 @@ mod wasm {
             self.session.mark_rows_applied();
         }
 
+        /// Record one query's current result as the one the document was
+        /// written from (a Data Merge, a record stepped to).
+        pub fn mark_query_applied(&mut self, query: &str) {
+            self.session.mark_query_applied(&QueryId::from(query));
+        }
+
+        /// Editor ADR 291: one query's per-record status since it was last
+        /// written from (`RecordStatus`, or `null` while it has no result).
+        /// `opts` is `{ key?, instances? }`.
+        pub fn record_status(&self, query: &str, opts: JsValue) -> Result<JsValue, JsValue> {
+            let opts = if opts.is_null() || opts.is_undefined() {
+                Default::default()
+            } else {
+                from_js(opts)?
+            };
+            match self.session.record_status(&QueryId::from(query), &opts) {
+                Some(st) => to_js(&st),
+                None => Ok(JsValue::NULL),
+            }
+        }
+
         /// The §8 row diff per query since `mark_rows_applied`
         /// (`QueryRowDiff[]`). `opts` is `{ keys?, ruleQueries?, limit? }`.
         pub fn row_diff(&self, opts: JsValue) -> Result<JsValue, JsValue> {

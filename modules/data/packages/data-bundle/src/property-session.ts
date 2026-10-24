@@ -7,6 +7,7 @@
 
 import type {
   BundleHost,
+  DataRecordStatus,
   ElementId,
   Mutation,
   PropertySchema,
@@ -36,6 +37,13 @@ import {
   objectsOf,
   type PropertyLaneResult,
 } from "./property-lane";
+import {
+  engineRecordStatus,
+  recordInstances,
+  toDataRecordStatus,
+  withRecords,
+  type PlacedRecord,
+} from "./record-status";
 import { textVariablesOn } from "./text-variables";
 
 type Diagnostic = {
@@ -771,7 +779,7 @@ export function propertyMethods(ctx: PropertyContext) {
     /** The page items each binding is placed in, by address (the data
      *  door's `placements`): the session's facts and the labels first, then
      *  a property binding's selector resolved through `host.objects`. */
-    async placements(): Promise<{ binding: string; address: string }[]> {
+    async placements(): Promise<PlacedRecord[]> {
       const e = ctx.engineIfUp();
       if (!e) return [];
       const payload = (e.payload() ?? {}) as PayloadJson;
@@ -784,11 +792,8 @@ export function propertyMethods(ctx: PropertyContext) {
         lowered: ctx.loweredInto,
         storyHosted: await storyHosted(payload),
       };
-      const placed = placedElements(
-        payload,
-        facts,
-        labelledElements(await tree()),
-      );
+      const elements = labelledElements(await tree());
+      const placed = placedElements(payload, facts, elements);
       const out = placed.map((p) => ({
         binding: p.binding,
         address: `${p.element.kind}:${p.element.id}`,
@@ -806,7 +811,38 @@ export function propertyMethods(ctx: PropertyContext) {
           // A selector the document cannot answer now names nothing placed.
         }
       }
-      return out;
+      // Editor ADR 291: the record each placement shows.
+      return withRecords(
+        out,
+        payload,
+        recordInstances(payload, elements),
+        (query, instances) => engineRecordStatus(e, query, instances, null),
+      );
+    },
+
+    /** Editor ADR 291: a query's records new, changed and placed since the
+     *  document was written from it (the engine's `record_status`, with the
+     *  page items that show one record each read from their labels). */
+    async recordStatus(
+      query: string,
+      key: readonly string[] | null = null,
+    ): Promise<DataRecordStatus> {
+      const e = ctx.engineIfUp();
+      if (!e) return toDataRecordStatus(query, null);
+      const payload = (e.payload() ?? {}) as PayloadJson;
+      const instances = recordInstances(
+        payload,
+        labelledElements(await tree()),
+      ).filter((i) => i.query === query);
+      return toDataRecordStatus(
+        query,
+        engineRecordStatus(
+          e,
+          query,
+          instances.map((i) => i.record),
+          key,
+        ),
+      );
     },
 
     async recipe(): Promise<PayloadJson> {
