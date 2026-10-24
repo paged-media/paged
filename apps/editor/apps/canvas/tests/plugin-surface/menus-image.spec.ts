@@ -1137,6 +1137,23 @@ test.describe.serial("plugin menus — paged.image", () => {
     );
   });
 
+  test("Edit/Free transform — with no image open, raises the Image panel @feat:image.editor.transform-warp", async () => {
+    covers("menu:Edit/Free transform");
+    covers("command:media.paged.image.command.freeTransform");
+    await expectGreyedAndInert(bare, "Edit/Free transform");
+    const out = await clickEntry(
+      live,
+      "Edit/Free transform",
+      "media.paged.image.command.freeTransform",
+    );
+    expect(out.shell).toEqual([
+      { door: "openPanel", arg: "media.paged.image.panel.adjustments" },
+    ]);
+    expect(out.after, "opening a panel leaves the document alone").toBe(
+      out.before,
+    );
+  });
+
   test("Edit/Selection to path — with no image open, raises the Image panel", async () => {
     covers("menu:Edit/Selection to path");
     await expectGreyedAndInert(bare, "Edit/Selection to path");

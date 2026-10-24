@@ -39,6 +39,7 @@
 import {
   useEffect,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
@@ -60,7 +61,18 @@ import {
   useRegistries,
   useScreenMode,
   useSelection,
+  useTool,
+  useToolSettings,
 } from "@paged-media/shell";
+import {
+  BOX_MODES,
+  FREE_TRANSFORM_TOOL_ID,
+  REFERENCE_KEYS,
+  freeTransformBoxOf,
+  referencePointOf,
+  shearSelectionBy,
+  type ReferenceKey,
+} from "@paged-media/tools";
 import {
   formatLengthPair,
   parseLengthText,
@@ -132,7 +144,43 @@ const M = defineMessages("app.cockpitControlBar", {
   leading: "Leading (pt)",
   auto: "Auto",
   mixed: "— mixed —",
+  referencePoint: "Reference point",
+  referenceAt: "Reference point: {point}",
+  refNw: "top left",
+  refN: "top centre",
+  refNe: "top right",
+  refW: "centre left",
+  refC: "centre",
+  refE: "centre right",
+  refSw: "bottom left",
+  refS: "bottom centre",
+  refSe: "bottom right",
+  modeFreeTransform: "Free Transform",
+  modeConstrain: "Constrain",
+  modeFreeDistort: "Free Distort",
+  modePerspective: "Perspective",
+  shearLabel: "Shear",
+  shear: "Shear angle (degrees), about the reference point",
 });
+
+const REF_LABEL: Record<ReferenceKey, string> = {
+  nw: M.refNw,
+  n: M.refN,
+  ne: M.refNe,
+  w: M.refW,
+  c: M.refC,
+  e: M.refE,
+  sw: M.refSw,
+  s: M.refS,
+  se: M.refSe,
+};
+
+const MODE_LABEL: Record<(typeof BOX_MODES)[number], string> = {
+  freeTransform: M.modeFreeTransform,
+  constrain: M.modeConstrain,
+  freeDistort: M.modeFreeDistort,
+  perspective: M.modePerspective,
+};
 
 export function DesignControlBar() {
   const { elementSelection } = useSelection();
@@ -398,6 +446,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         digits={0}
         testId="opacity"
       />
+      <FreeTransformControls ids={ids} />
       <Sep />
       {multi && (
         <>
@@ -452,6 +501,110 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
           {strings.t(M.ungroup)}
         </Chip>
       )}
+    </>
+  );
+}
+
+// ── Free Transform (editor ADR 293) ────────────────────────────────
+
+/** A tool setting of the Free Transform tool, read through the store's
+ *  subscription (the store's context value never changes identity). */
+function useFreeTransformSetting(key: string, fallback: string): string {
+  const settings = useToolSettings();
+  const value = useSyncExternalStore(
+    (onChange) => settings.subscribe(FREE_TRANSFORM_TOOL_ID, onChange),
+    () => settings.getValue(FREE_TRANSFORM_TOOL_ID, key),
+  );
+  return typeof value === "string" ? value : fallback;
+}
+
+/** While the Free Transform tool is in hand: the reference-point grid,
+ *  the four modes and a numeric shear about the reference point. X, Y,
+ *  W, H and the angle are the bar's own fields beside it. */
+function FreeTransformControls({ ids }: { ids: readonly ElementId[] }) {
+  const strings = useStrings();
+  const { effectiveTool } = useTool();
+  const settings = useToolSettings();
+  const client = useCanvasClient();
+  const { placedGeometry } = useSelection();
+  const reference = useFreeTransformSetting("reference", "c") as ReferenceKey;
+  const mode = useFreeTransformSetting("mode", "freeTransform");
+  if (effectiveTool !== FREE_TRANSFORM_TOOL_ID || ids.length === 0) return null;
+  const box = freeTransformBoxOf(placedGeometry);
+  const set = (key: string, value: string) =>
+    settings.set(FREE_TRANSFORM_TOOL_ID, key, value);
+  return (
+    <>
+      <Sep />
+      <span
+        data-free-transform-controls
+        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+      >
+        <span
+          role="group"
+          aria-label={strings.t(M.referencePoint)}
+          style={{
+            display: "inline-grid",
+            gridTemplateColumns: "repeat(3, 8px)",
+            gap: 2,
+            padding: 2,
+          }}
+        >
+          {REFERENCE_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              data-reference={k}
+              aria-pressed={k === reference}
+              title={strings.t(M.referenceAt, {
+                point: strings.t(REF_LABEL[k]),
+              })}
+              onClick={() => set("reference", k)}
+              style={{
+                width: 8,
+                height: 8,
+                padding: 0,
+                border: "1px solid var(--pg-fg)",
+                borderRadius: 1,
+                background: k === reference ? "var(--pg-fg)" : "transparent",
+                cursor: "pointer",
+              }}
+            />
+          ))}
+        </span>
+        {BOX_MODES.map((m) => (
+          <span key={m} data-box-mode={m} aria-pressed={m === mode}>
+            <Chip
+              on={m === mode}
+              title={strings.t(MODE_LABEL[m])}
+              onClick={() => set("mode", m)}
+              testId={`ft-mode-${m}`}
+            >
+              {strings.t(MODE_LABEL[m])}
+            </Chip>
+          </span>
+        ))}
+        <NumField
+          label={strings.t(M.shearLabel)}
+          title={strings.t(M.shear)}
+          value={0}
+          unit="°"
+          min={-85}
+          max={85}
+          onCommit={
+            box
+              ? (deg) =>
+                  void shearSelectionBy(
+                    client,
+                    box,
+                    referencePointOf(box.quad, reference),
+                    deg,
+                  ).catch(() => {})
+              : null
+          }
+          testId="ft-shear"
+        />
+      </span>
     </>
   );
 }

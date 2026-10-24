@@ -229,6 +229,7 @@ export {
   // K-9 — what the tool-preview slot holds: one shape or a list.
   type ToolPreviewSlot,
   type ToolPreviewText,
+  type ToolPreviewHandle,
   // W-20 — one retained plugin overlay layer.
   type OverlayLayerEntry,
 } from "./state/overlay-signals-context";

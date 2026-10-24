@@ -67,6 +67,21 @@ export { createPolygonHandler } from "./handlers/polygon-tool";
 export { createRectangleHandler } from "./handlers/rectangle-tool";
 export { createScissorsHandler } from "./handlers/scissors-tool";
 export { createShearHandler } from "./handlers/shear-tool";
+export {
+  BOX_MODES,
+  FREE_TRANSFORM_TOOL_ID,
+  REFERENCE_KEYS,
+  REFERENCE_UV,
+  createFreeTransformHandler,
+  distortBatchFor,
+  distortRefusal,
+  freeTransformBoxOf,
+  referencePointOf,
+  shearSelectionBy,
+  type FreeTransformBox,
+  type ShearClient,
+  type ReferenceKey,
+} from "./handlers/free-transform-tool";
 export { createSmoothHandler } from "./handlers/smooth-tool";
 export {
   createRotateHandler,

@@ -284,12 +284,12 @@ test.describe("Concept 1 — tool rail", () => {
     );
     expect(hasCommand).toBe(false);
 
-    // A planned member never takes the slot FACE from a working
-    // sibling: Free Transform is planned, so the transform slot faces
-    // Rotate (which drives the engine's rotate gesture arm).
+    // The transform slot faces its group default, Free Transform (editor
+    // ADR 293), now that it is wired: a planned member would have yielded
+    // the face to a working sibling.
     await expect(page.locator('[data-tool-slot="transform"]')).toHaveAttribute(
       "data-tool",
-      "paged.tool.rotate",
+      "paged.tool.freeTransform",
     );
   });
 
