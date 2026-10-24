@@ -46,6 +46,14 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   origin in its spread and its spread (`PageSummary.page_origin` / `spread_id`); a table reports
   its header and footer bands (`tableHeaderRowCount` / `tableFooterRowCount`, read-only)
   ([ADR 159](adr/159-what-a-committed-change-reports.md), `v0.71.13`, additive on protocol 71).
+- **Page and margin reads.** A spread names its pages and its top-level items, each with the
+  page it sits on by the rule `elementGeometry` applies, the page holding the centre of its
+  transformed box (`SpreadSummary.page_ids` / `members`); a page reports its place in its spread,
+  the side its spine is on by the renderer's binding rule, and its inside and outside margins
+  beside the physical four (`PageSummary.index_in_spread` / `binding_edge` /
+  `margin_inside_pt` / `margin_outside_pt`). Additive serde-default fields, no protocol bump;
+  the editor's Align to page / margins / spread reads them
+  (`paged-canvas/tests/it/spread_membership_reads.rs`).
 - **Interaction.** Hit testing, element and text selection, caret and selection geometry,
   gestures (rotate, scale and shear
   about a given point) and snapping, as message kinds. Snapping is one engine resolver

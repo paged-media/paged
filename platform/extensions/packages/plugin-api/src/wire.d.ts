@@ -2169,6 +2169,26 @@ export interface PageSummary {
      * omit it.
      */
     spreadId?: string;
+    /**
+     * WP2.7 — the page\'s position in its spread, 0-based, left to right
+     * (`SpreadSummary.page_ids[index_in_spread]` is this page). Older
+     * workers omit it.
+     */
+    indexInSpread?: number;
+    /**
+     * WP2.7 — the edge the spine runs along ([`BindingEdgeWire`]):
+     * `right` on a verso, `left` on a recto and on a single page. Older
+     * workers omit it.
+     */
+    bindingEdge?: BindingEdgeWire;
+    /**
+     * WP2.7 — the margins on the spine side (inside) and away from it
+     * (outside), pt: `margin_left_pt` / `margin_right_pt` (the page\'s
+     * physical left and right) resolved through `binding_edge`. Inside
+     * is the left margin on a recto, the right one on a verso.
+     */
+    marginInsidePt?: number;
+    marginOutsidePt?: number;
 }
 
 /**
@@ -2255,6 +2275,20 @@ export interface SpreadSummary {
      * mirror. Empty for spreads with no guides.
      */
     guides?: GuideSummary[];
+    /**
+     * WP2.7 — the spread\'s pages, by id, in spread order (left to
+     * right): the `PageSummary.self_id`s whose `spread_id` names this
+     * spread. Additive; older workers omit it.
+     */
+    pageIds?: string[];
+    /**
+     * WP2.7 — the spread\'s top-level page items (a group stands for its
+     * members) in paint order, each with the page it sits on by the
+     * rule `elementGeometry` applies: the page that holds the centre of
+     * the item\'s transformed box, `None` on the pasteboard. Additive;
+     * older workers omit it.
+     */
+    members?: SpreadMemberSummary[];
 }
 
 /**
@@ -2870,6 +2904,24 @@ export interface TableHitContext {
     row: number;
     col: number;
 }
+
+/**
+ * WP2.7 — one top-level page item of a spread and the page it sits on
+ * (`None`: the pasteboard). Carried on [`SpreadSummary::members`].
+ */
+export interface SpreadMemberSummary {
+    id: ElementId;
+    pageId?: string | null;
+}
+
+/**
+ * WP2.7 — the edge of a page its binding (the spine) runs along, the
+ * renderer\'s rule: a page whose centre lies left of the spread\'s
+ * spine (spread x = 0) is a verso, bound on its right; every other
+ * page (a recto, a page alone in its spread, a non-facing page centred
+ * on the spine) is bound on its left.
+ */
+export type BindingEdgeWire = "left" | "right";
 
 /**
  * What [`derive_fields`] found.
