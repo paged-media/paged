@@ -64,6 +64,7 @@ mod paste_into;
 mod pipeline_lib;
 mod placed_pdf_page;
 mod placed_svg_vectors;
+mod placed_tiff;
 mod polygon_corners;
 mod radial_gradient_start;
 mod real_ttf;

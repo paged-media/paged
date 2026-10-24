@@ -226,10 +226,10 @@ import { defineMessages } from "@paged-media/strings";
 /** Command titles, message keys `registerCommand` reads in the editor's locale. */
 const M = defineMessages("draw.repeat", {
   radial:
-    "Repeat: Radial from selection (instances around a ring — artwork rebuilt by Update, not a live link)",
-  grid: "Repeat: Grid from selection (rows × columns, spacing, flip — artwork rebuilt by Update, not a live link)",
+    "Repeat: Radial from selection (instances around a ring — rebuilt when the original changes, or by Update)",
+  grid: "Repeat: Grid from selection (rows × columns, spacing, flip — rebuilt when the original changes, or by Update)",
   mirror:
-    "Repeat: Mirror from selection (one reflection across an axis — artwork rebuilt by Update, not a live link)",
+    "Repeat: Mirror from selection (one reflection across an axis — rebuilt when the original changes, or by Update)",
   update:
     "Repeat: Update (new parameters + the sources' CURRENT geometry; the instances get new ids)",
   select: "Repeat: Select the instances",

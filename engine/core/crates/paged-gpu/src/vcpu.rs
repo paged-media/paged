@@ -1880,17 +1880,20 @@ fn image_pixmap(img: &paged_compose::DecodedImage) -> Option<Pixmap> {
 /// Decode encoded image bytes to RGBA8 at the dimensions the build
 /// recorded, resizing when a DCT-scaled JPEG decodes at another size.
 fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
-    let img = image::load_from_memory(bytes).ok()?;
-    let raw = if img.width() == expected_w && img.height() == expected_h {
-        img.to_rgba8()
-    } else {
-        image::imageops::resize(
-            &img.to_rgba8(),
-            expected_w,
-            expected_h,
-            image::imageops::FilterType::Triangle,
-        )
-    };
+    // paged-raster: a TIFF decodes (capped at the recorded size) as the
+    // renderer's build-time decode does; every other format is `image`'s
+    // decode and RGBA8 conversion, unchanged.
+    let decoded = paged_raster::decode_rgba8(bytes, Some(expected_w.max(expected_h))).ok()?;
+    if decoded.width == expected_w && decoded.height == expected_h {
+        return Some(decoded.data);
+    }
+    let img = image::RgbaImage::from_raw(decoded.width, decoded.height, decoded.data)?;
+    let raw = image::imageops::resize(
+        &img,
+        expected_w,
+        expected_h,
+        image::imageops::FilterType::Triangle,
+    );
     Some(raw.into_raw())
 }
 

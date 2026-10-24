@@ -93,9 +93,9 @@ tsify-next = { workspace = true }
 wasm-bindgen = { workspace = true }
 image = { workspace = true }
 jpeg-decoder = "0.3"
-# PNG iCCP inflation for the export-time ICC extraction (already a
-# transitive dep via the image crate's PNG decoder).
-flate2 = "1"
+# TIFF decode (and the ICC extraction of JPEG, PNG and TIFF): the decoder
+# paged-gpu uses at raster time too, so native and wasm32 agree.
+paged-raster = { path = "../paged-raster" }
 # SVG parsing; paged-gpu's `svg` feature draws the tree with vello_cpu.
 # Pure-Rust, compiles on wasm32. No `text` feature: with no font database
 # (the browser sandbox reads no system fonts) usvg drew no SVG text

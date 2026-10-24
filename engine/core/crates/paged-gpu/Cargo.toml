@@ -14,12 +14,12 @@ workspace = true
 default = ["cpu"]
 # The GPU lane: Vello on wgpu. Builds with or without `cpu`; the native
 # `paged-inspect --backend vello` and the published wasm (`gpu`) enable it.
-vello-backend = ["dep:vello", "dep:wgpu", "dep:image"]
+vello-backend = ["dep:vello", "dep:wgpu", "dep:image", "dep:paged-raster"]
 # CPU rasterizer on vello_cpu — the same rendering model as the GPU
 # lane (Vello), no GPU required. The path of record: the fidelity gates,
 # the CLI, the renderer's pixel tests and the editor's CPU snapshots run
 # it.
-cpu = ["dep:vello_cpu", "dep:image"]
+cpu = ["dep:vello_cpu", "dep:image", "dep:paged-raster"]
 # Placed SVGs: `usvg` parses, `vello_cpu` draws (`svg.rs`), so no build
 # links a second rasterizer for them. The renderer turns it on in every
 # build, the viewer's included.
@@ -46,6 +46,9 @@ vello = { version = "0.11.0", optional = true, default-features = false, feature
 # display list carries glyphs as outlines.
 vello_cpu = { version = "0.3.0", optional = true, default-features = false, features = ["std", "u8_pipeline"] }
 image = { workspace = true, optional = true }
+# The wasm32 lazy path decodes a placed picture at raster time; a TIFF goes
+# through the decoder the renderer's build-time decode uses.
+paged-raster = { path = "../paged-raster", optional = true }
 usvg = { version = "0.48", optional = true, default-features = false, features = ["svgz"] }
 wgpu = { version = "30.0.1", optional = true }
 

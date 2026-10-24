@@ -2365,6 +2365,7 @@ dependencies = [
  "paged-mcp",
  "paged-model",
  "paged-mutate",
+ "paged-raster",
  "paged-repo",
  "paged-script",
  "paged-template",
@@ -2503,6 +2504,7 @@ dependencies = [
  "naga",
  "paged-compose",
  "paged-fidelity",
+ "paged-raster",
  "paged-test-resources",
  "pollster",
  "serde_json",
@@ -2606,6 +2608,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-raster"
+version = "0.0.0"
+dependencies = [
+ "flate2",
+ "image",
+ "paged-color",
+ "paged-test-resources",
+ "thiserror",
+ "tiff",
+ "tracing",
+]
+
+[[package]]
 name = "paged-renderer"
 version = "0.0.0"
 dependencies = [
@@ -2613,7 +2628,6 @@ dependencies = [
  "base64",
  "bytes",
  "clap",
- "flate2",
  "hayro-interpret",
  "idml-export",
  "idml-import",
@@ -2630,6 +2644,7 @@ dependencies = [
  "paged-gpu",
  "paged-model",
  "paged-mutate",
+ "paged-raster",
  "paged-scene",
  "paged-store",
  "paged-test-resources",

@@ -13,7 +13,7 @@ the code as it stood, for decisions made earlier; their status says so.
 | ADR | Title | Status |
 |---|---|---|
 | [014](014-data-provider-arrow-seam.md) | The data-provider seam: `RecordSet` = Arrow IPC, no `arrow-rs` (D-09) | Accepted (amended 2026-10-02) |
-| [015](015-duckdb-wasm-vendored.md) | DuckDB-WASM 1.29 vendored as paged.data's query engine | Accepted (amended 2026-10-02) |
+| [015](015-duckdb-wasm-vendored.md) | DuckDB-WASM 1.29 vendored as paged.data's query engine | Accepted (amended 2026-10-02; to be superseded by 561, PM-0015) |
 | [550](550-own-binding-language.md) | The binding language is the plugin's own, stored as source text | Accepted, recorded retroactively 2026-10-02 |
 | [551](551-compiled-to-native-content.md) | Bound content is compiled to native document content through a pure intermediate form | Accepted, recorded retroactively 2026-10-02 |
 | [552](552-binding-is-a-recipe.md) | A binding is a recipe stored in the document; resolved values are committed content | Accepted, recorded retroactively 2026-10-02 |
@@ -23,6 +23,10 @@ the code as it stood, for decisions made earlier; their status says so.
 | [556](556-secrets-never-enter-the-plugin.md) | Secrets never enter the plugin | Accepted, recorded retroactively 2026-10-02 |
 | [557](557-variables-and-data-sets.md) | Variables and data sets are a projection over bindings | Accepted, recorded retroactively 2026-10-02 |
 | [560](560-template-fields-are-binding-targets.md) | Template fields are binding targets | Accepted 2026-10-23 |
+
+Reserved by [PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md)
+(2026-10-24), each written when its code lands: **561** (Turso is the data engine; supersedes
+015), **562** (transforms) and **563** (asset columns).
 
 Proposed, not yet accepted (in the thoughts register): **558** (one universal binding,
 `Binding::Property`) and **559** (bindings in the `.paged` file stay InDesign-compatible).
