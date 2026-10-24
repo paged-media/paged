@@ -22,7 +22,8 @@
       }
     ],
     "documents": {
-      "open": true
+      "open": true,
+      "export": true
     }
   },
   "contributes": {
