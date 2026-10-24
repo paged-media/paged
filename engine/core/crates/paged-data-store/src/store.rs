@@ -501,9 +501,16 @@ fn display(v: &Value, scale: Option<u8>) -> Option<String> {
 }
 
 impl Store {
+    /// Whether `table` is a source table. SQL names are case-insensitive, and
+    /// the store keeps a quoted name as it folds it (`lowStock` is listed as
+    /// `lowstock`), so the comparison is too.
+    fn has_table(&self, table: &str) -> Result<bool> {
+        Ok(self.tables()?.iter().any(|t| t.eq_ignore_ascii_case(table)))
+    }
+
     /// A window of a source table's rows, in the table's order.
     pub fn records(&self, table: &str, offset: usize, limit: Option<usize>) -> Result<RecordSet> {
-        if !self.tables()?.iter().any(|t| t == table) {
+        if !self.has_table(table)? {
             return Err(StoreError::Read(format!("no source table \"{table}\"")));
         }
         let limit = limit.map_or(-1, |l| l as i64);
@@ -517,12 +524,17 @@ impl Store {
     /// transaction (all or none), and to its as-written twin when it has
     /// one, so Data Merge reads what was written. Returns the row count.
     pub fn edit(&self, table: &str, edits: &[RowEdit]) -> Result<usize> {
-        if !self.tables()?.iter().any(|t| t == table) {
-            return Err(StoreError::Read(format!("no source table \"{table}\" (a query is not written)")));
+        if !self.has_table(table)? {
+            return Err(StoreError::Read(format!(
+                "no source table \"{table}\" (a query is not written)"
+            )));
         }
         let columns = self.describe(&format!("SELECT * FROM {}", ident(table)))?;
         let twin = format!("{AS_WRITTEN_PREFIX}{table}");
-        let has_twin = self.all_tables()?.contains(&twin);
+        let has_twin = self
+            .all_tables()?
+            .iter()
+            .any(|t| t.eq_ignore_ascii_case(&twin));
         self.exec("BEGIN")?;
         let done = (|| -> Result<()> {
             for e in edits {
@@ -557,7 +569,10 @@ impl Store {
     }
 
     fn rowid(&self, table: &str, row: usize) -> Result<i64> {
-        let sql = format!("SELECT rowid FROM {} ORDER BY rowid LIMIT 1 OFFSET {row}", ident(table));
+        let sql = format!(
+            "SELECT rowid FROM {} ORDER BY rowid LIMIT 1 OFFSET {row}",
+            ident(table)
+        );
         let mut stmt = self.writer.prepare(&sql).map_err(sql_err(&sql))?;
         let mut id = None;
         self.drive(&mut stmt, &sql, |r| {
@@ -569,7 +584,13 @@ impl Store {
         id.ok_or_else(|| StoreError::Read(format!("\"{table}\" has no row {row}")))
     }
 
-    fn apply_edit(&self, table: &str, columns: &[ColumnInfo], edit: &RowEdit, as_text: bool) -> Result<()> {
+    fn apply_edit(
+        &self,
+        table: &str,
+        columns: &[ColumnInfo],
+        edit: &RowEdit,
+        as_text: bool,
+    ) -> Result<()> {
         let t = ident(table);
         let column = |name: &str| {
             columns
@@ -580,7 +601,8 @@ impl Store {
         let run = |sql: &str, values: Vec<turso_core::Value>| -> Result<()> {
             let mut stmt = self.writer.prepare(sql).map_err(sql_err(sql))?;
             for (i, v) in values.into_iter().enumerate() {
-                stmt.bind_at(NonZero::new(i + 1).expect("1-based"), v).map_err(sql_err(sql))?;
+                stmt.bind_at(NonZero::new(i + 1).expect("1-based"), v)
+                    .map_err(sql_err(sql))?;
             }
             self.drive(&mut stmt, sql, |_| true)
         };
@@ -601,9 +623,18 @@ impl Store {
                 let marks = vec!["?"; columns.len()].join(", ");
                 let cells = columns
                     .iter()
-                    .map(|c| cell_of(values.get(&c.name).unwrap_or(&serde_json::Value::Null), &c.ty, as_text))
+                    .map(|c| {
+                        cell_of(
+                            values.get(&c.name).unwrap_or(&serde_json::Value::Null),
+                            &c.ty,
+                            as_text,
+                        )
+                    })
                     .collect::<Result<Vec<_>>>()?;
-                run(&format!("INSERT INTO {t} ({}) VALUES ({marks})", names.join(", ")), cells)
+                run(
+                    &format!("INSERT INTO {t} ({}) VALUES ({marks})", names.join(", ")),
+                    cells,
+                )
             }
             RowEdit::Delete { row } => {
                 let id = self.rowid(table, *row)?;
@@ -636,7 +667,9 @@ fn cell_of(value: &serde_json::Value, ty: &str, as_text: bool) -> Result<turso_c
     Ok(match ty {
         "INTEGER" => turso_core::Value::from_i64(raw.parse().map_err(|_| bad())?),
         "REAL" => turso_core::Value::from_f64(raw.parse().map_err(|_| bad())?),
-        t if t.starts_with("DECIMAL") => turso_core::Value::from_f64(raw.parse().map_err(|_| bad())?),
+        t if t.starts_with("DECIMAL") => {
+            turso_core::Value::from_f64(raw.parse().map_err(|_| bad())?)
+        }
         "BOOLEAN" => turso_core::Value::from_i64(match raw.as_str() {
             "true" | "1" => 1,
             "false" | "0" => 0,

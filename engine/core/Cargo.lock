@@ -2966,6 +2966,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-action"
+version = "0.0.0"
+dependencies = [
+ "boa_engine",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "paged-canvas"
 version = "0.0.0"
 dependencies = [
@@ -3197,6 +3208,7 @@ dependencies = [
 name = "paged-data-session"
 version = "0.0.0"
 dependencies = [
+ "paged-action",
  "paged-data-automation",
  "paged-data-barcode",
  "paged-data-bind",

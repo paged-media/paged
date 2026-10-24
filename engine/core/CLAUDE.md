@@ -141,6 +141,9 @@ crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
   them), as do their test fixtures (`modules/data/conformance`) and the wasm surface
   (`data-js`). `paged-data-expr` must not reach the sync, query, lowering or store crates
   (core / ci guard).
+- `crates/paged-action/` — actions (ADR 1015): the registry, chains, the content-addressed
+  cache key the SDK's `actions@1` shares (`tests/keys.json`), and JS actions in a bare Boa
+  context with a fixed clock. Data transforms (data ADR 562) run on it.
 - `crates/paged-gen/` — IDML fixture generator (the `paged-gen` bin).
 - `crates/paged-sdk/` — published SDK wasm surface: a WebGPU
   `ViewerSession` (load IDML → present to OffscreenCanvas/Canvas via

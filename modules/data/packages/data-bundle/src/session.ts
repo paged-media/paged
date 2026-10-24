@@ -24,6 +24,7 @@
 // here (CLAUDE.md hard rule) — it orchestrates the Rust engine.
 
 import { createDataDoor, type DataDoor } from "./data-door";
+import type { TransformDefJson } from "./engine";
 import type {
   BundleHost,
   DataProviderHandle,
@@ -539,6 +540,11 @@ export interface DataSourceSession
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Define (or redefine) a transform (data ADR 562); it runs at the next
+   *  refresh, before the queries. Null when the engine has no transforms. */
+  defineTransform(def: TransformDefJson): Promise<string | null>;
+  removeTransform(id: string): Promise<boolean>;
+  listTransforms(): Promise<TransformDefJson[]>;
   /** host.objects (ADR 323): the document ops of a definition change made
    *  with `{ labels: "defer" }` — the element labels the recipe asks for,
    *  plus the document label naming the new session version — for the
@@ -2515,6 +2521,7 @@ export function createSession(
     ensureStore,
     sourceNames: () => sourceNames,
     queries: () => [...queries.values()],
+    transforms: () => (engine?.transforms?.() ?? []).map((t) => t.id),
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
     bindings: () =>
@@ -2526,6 +2533,27 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    async defineTransform(def) {
+      const e = await ensureEngine();
+      if (typeof e.define_transform !== "function")
+        return "this data engine has no transforms (rebuild it)";
+      e.define_transform(def);
+      markDirty();
+      emit();
+      return null;
+    },
+    async removeTransform(id) {
+      const e = await ensureEngine();
+      const removed = e.remove_transform?.(id) ?? false;
+      if (removed) {
+        markDirty();
+        emit();
+      }
+      return removed;
+    },
+    async listTransforms() {
+      return (await ensureEngine()).transforms?.() ?? [];
+    },
     async beforeObjectWrite() {
       preObjectWrite = null;
       if (labelHash !== null || !labelActive) return;
@@ -3288,6 +3316,20 @@ export function createSession(
     async refreshData() {
       try {
         const d = await ensureStore();
+        // Data ADR 562: the transforms run first, in order; each derived
+        // table is then a table the queries read.
+        const e = await ensureEngine();
+        for (const run of e.run_transforms?.() ?? []) {
+          if ("Err" in run.outcome) {
+            report({
+              level: "error",
+              source: "query",
+              message: `transform "${run.transform}" gave no table: ${run.outcome.Err}`,
+            });
+          } else {
+            door.touched(run.transform);
+          }
+        }
         for (const q of queries.values()) {
           // A document's queries are code (§11): only a SELECT over the
           // source tables runs (query/sql.ts).

@@ -15,6 +15,7 @@ on:
       - "modules/data/**"
       # The engine crates the module's crates depend on (PM-0015).
       - "engine/core/crates/paged-data-*/**"
+      - "engine/core/crates/paged-action/**"
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
@@ -36,6 +37,7 @@ on:
       - "modules/data/**"
       # The engine crates the module's crates depend on (PM-0015).
       - "engine/core/crates/paged-data-*/**"
+      - "engine/core/crates/paged-action/**"
       - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
@@ -124,7 +126,7 @@ jobs:
       - name: nextest, the engine's data crates (junit)
         if: ${{ !cancelled() }}
         working-directory: engine/core
-        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session
+        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session -p paged-action
       # The §12.2 invariant, both halves: every `implemented` registry row
       # names a test that exists, AND (with --junit) that test ran in the
       # nextest run above and passed. An #[ignore]d skeleton or a red test is

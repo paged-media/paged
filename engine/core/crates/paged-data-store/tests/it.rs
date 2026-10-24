@@ -324,7 +324,12 @@ fn a_source_table_is_edited_in_one_transaction__feat__data_store_turso() {
     use data_store::RowEdit;
     let store = Store::new().unwrap();
     store
-        .import("p", Format::Csv, b"sku,price,when\nA-1,9.50,2026-01-02\nB-2,12.00,2026-03-04\n", None)
+        .import(
+            "p",
+            Format::Csv,
+            b"sku,price,when\nA-1,9.50,2026-01-02\nB-2,12.00,2026-03-04\n",
+            None,
+        )
         .unwrap();
     let edits: Vec<RowEdit> = serde_json::from_value(serde_json::json!([
         { "op": "set", "row": 1, "field": "price", "value": 13.25 },
@@ -333,16 +338,30 @@ fn a_source_table_is_edited_in_one_transaction__feat__data_store_turso() {
     ]))
     .unwrap();
     assert_eq!(store.edit("p", &edits).unwrap(), 2);
-    let rows = store.preview("SELECT * FROM p ORDER BY rowid", 10).unwrap().rows;
+    let rows = store
+        .preview("SELECT * FROM p ORDER BY rowid", 10)
+        .unwrap()
+        .rows;
     assert_eq!(
         rows,
         vec![
-            vec![Some("B-2".into()), Some("13.25".into()), Some("2026-03-04".into())],
-            vec![Some("C-3".into()), Some("7.00".into()), Some("2026-05-06".into())],
+            vec![
+                Some("B-2".into()),
+                Some("13.25".into()),
+                Some("2026-03-04".into())
+            ],
+            vec![
+                Some("C-3".into()),
+                Some("7.00".into()),
+                Some("2026-05-06".into())
+            ],
         ]
     );
     // The as-written twin follows, so Data Merge reads what was written.
-    let twin = store.query_as_written("SELECT * FROM p", &["p".to_string()]).unwrap().unwrap();
+    let twin = store
+        .query_as_written("SELECT * FROM p", &["p".to_string()])
+        .unwrap()
+        .unwrap();
     assert_eq!(twin.row_count, 2);
     assert_eq!(twin.columns[0][1], Value::Text("C-3".into()));
 
@@ -353,17 +372,32 @@ fn a_source_table_is_edited_in_one_transaction__feat__data_store_turso() {
     ]))
     .unwrap();
     assert!(store.edit("p", &bad).is_err());
-    assert_eq!(store.preview("SELECT price FROM p ORDER BY rowid", 1).unwrap().rows[0][0].as_deref(), Some("13.25"));
+    assert_eq!(
+        store
+            .preview("SELECT price FROM p ORDER BY rowid", 1)
+            .unwrap()
+            .rows[0][0]
+            .as_deref(),
+        Some("13.25")
+    );
     assert!(store.edit("nope", &[]).is_err());
 }
 
 #[test]
 fn records_are_a_window_of_a_source_table__feat__data_store_turso() {
     let store = Store::new().unwrap();
-    store.import("p", Format::Csv, b"n\n1\n2\n3\n4\n", None).unwrap();
+    store
+        .import("p", Format::Csv, b"n\n1\n2\n3\n4\n", None)
+        .unwrap();
     let rs = store.records("p", 1, Some(2)).unwrap();
     assert_eq!(rs.row_count, 2);
     assert_eq!(rs.columns[0], vec![Value::Number(2.0), Value::Number(3.0)]);
     assert_eq!(store.records("p", 3, None).unwrap().row_count, 1);
     assert!(store.records("missing", 0, None).is_err());
+    // A name in mixed case is found as SQL finds it.
+    store
+        .import("lowStock", Format::Csv, b"n\n1\n", None)
+        .unwrap();
+    assert_eq!(store.records("lowStock", 0, None).unwrap().row_count, 1);
+    assert_eq!(store.edit("LOWSTOCK", &[]).unwrap(), 1);
 }
