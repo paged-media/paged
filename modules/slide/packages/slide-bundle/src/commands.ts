@@ -62,6 +62,31 @@ export const CMD = {
   exportPptx: `${COMMAND_PREFIX}.exportPptx`,
 } as const;
 
+/**
+ * The slide verbs' keys, each a Cmd chord with its Ctrl twin (the registry
+ * has no `mod`). PowerPoint's own where the editor leaves them free: Cmd+Up
+ * and Cmd+Down move the slide. Its New slide (Cmd+Shift+N, Ctrl+M) and
+ * Duplicate slide (Cmd+D) are the browser's new window and the editor's
+ * Place, so New slide is Option+Cmd+N and Duplicate slide adds Shift to
+ * it. Delete slide takes Option with Backspace, so the Backspace that
+ * deletes the selected object never deletes a slide. None of these chords
+ * is bound by the editor (its keybinding test holds them free), and each
+ * is offered only where its command applies and no text caret is active,
+ * where Cmd+Up and the rest move or edit text.
+ */
+export const SLIDE_KEYBINDINGS = [
+  ["alt+cmd+n", CMD.newSlide],
+  ["alt+ctrl+n", CMD.newSlide],
+  ["alt+shift+cmd+n", CMD.duplicateSlide],
+  ["alt+shift+ctrl+n", CMD.duplicateSlide],
+  ["alt+cmd+backspace", CMD.deleteSlide],
+  ["alt+ctrl+backspace", CMD.deleteSlide],
+  ["cmd+arrowup", CMD.moveSlideUp],
+  ["ctrl+arrowup", CMD.moveSlideUp],
+  ["cmd+arrowdown", CMD.moveSlideDown],
+  ["ctrl+arrowdown", CMD.moveSlideDown],
+] as const;
+
 /** The palette category (an identity, labelled through the shell). */
 const CATEGORY = "Slide";
 
@@ -94,8 +119,12 @@ export function contributeSlideCommands(
 ): Disposable & { ids: ReadonlySet<string> } {
   const handles: Disposable[] = [];
   const ids = new Set<string>();
+  /** Each registered command's `when`, for its keys. */
+  const whens = new Map<string, (state: unknown) => boolean>();
   const command = (c: Parameters<BundleHost["contribute"]["command"]>[0]) => {
     ids.add(c.id);
+    const w = c.when;
+    whens.set(c.id, typeof w === "function" ? w : () => w === undefined);
     return host.contribute.command(c);
   };
   const log = (verb: string, why: string) =>
@@ -288,6 +317,24 @@ export function contributeSlideCommands(
         handler: move("moveSlideDown", 1),
       }),
     );
+  }
+
+  // The keys of the slide verbs this host got, offered where the command
+  // is and no text caret is active.
+  if (host.supports("contribute.keybinding@1")) {
+    const caretActive = () =>
+      host.supports("text.caret@1") && host.text.caret() !== null;
+    for (const [key, command] of SLIDE_KEYBINDINGS) {
+      const when = whens.get(command);
+      if (!when) continue;
+      handles.push(
+        host.contribute.keybinding({
+          key,
+          command,
+          when: (state) => !caretActive() && when(state),
+        }),
+      );
+    }
   }
 
   return {

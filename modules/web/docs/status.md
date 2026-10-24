@@ -22,9 +22,13 @@ and the performance reading are in [`design/analysis-2026-10-05.md`](design/anal
   custom properties (`cssVar`, a splice over the css lane) are addressable through
   `host.objects`; every write is one undo step. The seven commands are also typed (address
   arguments, typed results, headless). Document values now live in the document label (the
-  old container part is still read). Not yet: the panel's own fields are listed for the
-  shared `PropertyField` (`PANEL_FIELDS`) but the panel still renders its own controls;
-  `{{frame.page}}` is not an object.
+  old container part is still read). The Web properties panel is a schema panel of the rows
+  `PANEL_FIELDS` lists, rendered by the host's `PropertyField`. Editor plan G4: the typed
+  `importHtml` (a whole file split into its lanes and sanitised) and `makeWebFrame` (an
+  existing frame made a web frame), and the derived rows `webFrame.diagnostics` (what the
+  source panel lints) and `webFrame.page` (the page number `{{frame.page}}` renders as). Every
+  PDF `paged-node` writes bakes the web frames to native items first and takes the bake back
+  afterwards, so a headless PDF shows them (`apps/cli/src/module-content.ts`).
 - **Source panel.** HTML and CSS editors, a sandboxed browser preview at the frame's content
   size (following resizes and undo) refreshed 300 ms after typing stops, an HTML linter, font diagnostics, template variables (`{{name}}` plus four
   filters), a tag outline, sanitised clipboard paste, an explicit "Save to document", and a
