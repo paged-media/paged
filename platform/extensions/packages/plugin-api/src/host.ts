@@ -46,9 +46,13 @@ import type {
   SnapPointResult,
   StyleCollection,
   StyleProperties,
+  PropertyPath,
+  Value,
 } from "./wire.js";
 import type {
   CommandContribution,
+  ControlBarGroupContribution,
+  StatusItemContribution,
   ExporterContribution,
   FrameSurfaceContribution,
   ImporterContribution,
@@ -485,6 +489,24 @@ export interface ContributionSurface {
    * warns and registers nothing).
    */
   frameSurface(contribution: FrameSurfaceContribution): Disposable;
+  /**
+   * Register a CONTROL-BAR GROUP (extensions ADR 348, C1): a segment of
+   * the host's control bar shown while the edit context `scope` names is
+   * active. See {@link ControlBarGroupContribution}. The id is
+   * namespaced; the scope borrows the context's declaration
+   * (`contributes.editContexts[]`) and the context must be registered by
+   * this bundle. Probe `supports("contribute.controlBarGroup@1")` for the
+   * door and `supports("controlBar.groups@1")` for a host that renders
+   * it (without one the door warns and registers nothing).
+   */
+  controlBarGroup(contribution: ControlBarGroupContribution): Disposable;
+  /**
+   * Register a STATUS-BAR ITEM (extensions ADR 348, C3), shown while the
+   * edit context `scope` names is active. Same gates as
+   * {@link controlBarGroup}; probe `supports("contribute.statusItem@1")`
+   * and `supports("statusBar.items@1")`.
+   */
+  statusItem(contribution: StatusItemContribution): Disposable;
   /**
    * Register an OBJECT TYPE (W3.2, closes W-03): a plugin-defined object
    * (a webFrame is a rectangle with attached source metadata). A
@@ -1782,6 +1804,85 @@ export interface TextSurface {
     texts: readonly string[],
     sizePt: number,
   ): Promise<TextMetrics[]>;
+  /**
+   * Extensions ADR 348 (C4) — the user's text SELECTION: the story and the
+   * range the caret spans, in the same content-offset convention as
+   * {@link caret} (`start == end` is a collapsed caret). `null` when no
+   * text is selected, inside a table cell (the v1 gap `caret` documents),
+   * or when the host injects no selection reader: probe
+   * `supports("text.selection@1")`.
+   */
+  selection(): TextSelection | null;
+  /** Called after the text selection changes (a click, a key, a find).
+   *  Inert without a selection reader. */
+  onDidChangeSelection(listener: () => void): Disposable;
+  /**
+   * The EFFECTIVE values the selected text is set with (what its runs and
+   * paragraphs resolve to through their styles), one entry per asked path:
+   * `{ value }`, `"mixed"` when the selection's runs or paragraphs disagree,
+   * or `null` when the path does not read here. A collapsed caret reads the
+   * character before it (the one after it at a paragraph start), as a
+   * word processor shows the format it will type with. Gated on
+   * `capabilities.document.read`. `null` without a selection.
+   */
+  properties(
+    paths: readonly PropertyPath[],
+  ): Promise<Partial<Record<PropertyPath, TextPropertyRead | null>> | null>;
+  /**
+   * Set character and paragraph properties on the selected text in ONE
+   * undo step (one batch of the engine's `setElementProperty` on the
+   * selection's story range). Paragraph paths apply to every paragraph the
+   * selection touches (the caret's paragraph when collapsed); character
+   * paths to the selected characters, and at a collapsed caret to the word
+   * around it, as Word does (`{ applied: false }` between words: there is
+   * nothing to format, and the engine stores no format on an empty range).
+   * Gated on `capabilities.document.write`. Probe `supports("text.format@1")`.
+   */
+  format(
+    properties: readonly TextPropertyWrite[],
+  ): Promise<TextFormatResult>;
+  /**
+   * Apply a paragraph or character STYLE (its `Self` id) to the selected
+   * text: the paragraph style to every paragraph the selection touches,
+   * the character style to the selected characters (the word at a caret).
+   * The same story-range write {@link format} makes, through
+   * `appliedParagraphStyle` / `appliedCharacterStyle`; one undo step.
+   */
+  applyStyle(
+    scope: "paragraph" | "character",
+    styleId: string,
+  ): Promise<TextFormatResult>;
+}
+
+/** C4 — the text selection {@link TextSurface.selection} reads. */
+export interface TextSelection {
+  storyId: string;
+  /** Content offsets (see {@link TextCaret}); `start <= end`. */
+  start: number;
+  end: number;
+}
+
+/** C4 — one effective value of the selected text. */
+export type TextPropertyRead = { value: Value["value"] } | "mixed";
+
+/** C4 — one property to set on the selected text. `value` is the wire
+ *  `Value` the engine's `setElementProperty` takes for `path`. */
+export interface TextPropertyWrite {
+  path: PropertyPath;
+  value: Value;
+  /** `"paragraphs"` sets a CHARACTER path on every character of the
+   *  paragraphs the selection touches (a word processor's line spacing,
+   *  which the engine holds per character as `characterLeading`). Absent:
+   *  a character path covers the selection (the word at a caret). */
+  extent?: "paragraphs";
+}
+
+/** C4 — what a text format write did. */
+export interface TextFormatResult {
+  applied: boolean;
+  /** Why not, when `applied` is false (no selection, a caret between
+   *  words, the engine's refusal). */
+  error?: string;
 }
 
 // -------------------------------------------------------------- overlay
@@ -1922,6 +2023,23 @@ export interface ShellSurface {
    * `supports("shell.exitEditContext@1")`).
    */
   exitEditContext(opts: { commit: boolean }): Promise<boolean>;
+  /**
+   * Extensions ADR 348 — declare that the OPEN DOCUMENT is one of this
+   * bundle's content types, or `null` to withdraw it: the document context.
+   * A Word document opened as the whole document has no frame to enter,
+   * yet it is Word content on every page, so its control-bar groups, scoped
+   * keybindings, status items and context-scoped menus must apply wherever
+   * the user is in it. They do while no frame-level edit context is
+   * active above it. It changes nothing else: the tool rail, the panels
+   * and the selection stay the document's.
+   *
+   * `type` must be an edit context this bundle registered (throws
+   * otherwise). The host drops the document context when the document is
+   * replaced or closed, and when the bundle is disposed; a bundle sets it
+   * again for a document it recognises (on `document.onDidOpen`). Answers
+   * whether the host took it: probe `supports("shell.documentContext@1")`.
+   */
+  setDocumentContext(type: string | null): boolean;
 }
 
 /** What `ShellSurface.saveFile` delivers (K-10) — the inverse of

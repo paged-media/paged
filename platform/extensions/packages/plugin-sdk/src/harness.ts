@@ -84,6 +84,9 @@ import type {
   ElementId,
   ElementGeometryItem,
   ExporterContribution,
+  ControlBarGroupContribution,
+  StatusItemContribution,
+  TextSelection,
   ImporterContribution,
   KeybindingContribution,
   MainToWorkerKind,
@@ -112,6 +115,8 @@ import {
   type ClipboardBackend,
   type DocumentsBackend,
   type NativeDocumentBackend,
+  type TextSelectionBackend,
+  type DocumentContextBackend,
   type SecretStoreBackend,
   type CreateBundleHostOptions,
   type ToolSettingsBackend,
@@ -156,7 +161,9 @@ export interface RecordedContribution {
     | "editContext"
     | "objectType"
     | "importer"
-    | "exporter";
+    | "exporter"
+    | "controlBarGroup"
+    | "statusItem";
   id: string;
   value:
     | ToolContribution
@@ -168,7 +175,9 @@ export interface RecordedContribution {
     | EditContextContribution
     | ObjectTypeContribution
     | ImporterContribution
-    | ExporterContribution;
+    | ExporterContribution
+    | ControlBarGroupContribution
+    | StatusItemContribution;
 }
 
 export interface HarnessOptions
@@ -404,6 +413,20 @@ export interface HeadlessHost {
   /** Document exporters registered through `contribute.exporter` (K-2 /
    *  S-06), recorded verbatim. */
   exportersContributed(): ExporterContribution[];
+  /** Control-bar groups registered through `contribute.controlBarGroup`
+   *  (extensions ADR 348), recorded verbatim. The harness wires the
+   *  registry, so `supports("controlBar.groups@1")` is true headlessly. */
+  controlBarGroupsContributed(): ControlBarGroupContribution[];
+  /** Status-bar items registered through `contribute.statusItem`. */
+  statusItemsContributed(): StatusItemContribution[];
+  /** Extensions ADR 348 (C4) — play the editor's caret: the text
+   *  selection `host.text.selection()` answers (content offsets), or
+   *  `null`. Notifies `onDidChangeSelection` listeners. The harness wires
+   *  the reader, so `supports("text.selection@1")` is true. */
+  setTextSelection(selection: TextSelection | null): void;
+  /** The document context a bundle holds (`host.shell.setDocumentContext`),
+   *  or `null`. Loading a document drops it, as the editor does. */
+  documentContext(): { pluginId: string; type: string } | null;
   /** The last tool preview a bundle pushed through
    *  `host.overlay.setToolPreview` (B-07). There is no overlay SURFACE
    *  headlessly, but the channel is RECORDED so conformance can assert a
@@ -797,6 +820,13 @@ function makeEngineEditor(
       exporters: recordingRegistry<ExporterContribution, "exporter">(
         "exporter",
       ),
+      controlBarGroups: recordingRegistry<
+        ControlBarGroupContribution,
+        "controlBarGroup"
+      >("controlBarGroup"),
+      statusItems: recordingRegistry<StatusItemContribution, "statusItem">(
+        "statusItem",
+      ),
     },
     selection: {
       get elementSelection() {
@@ -1100,6 +1130,28 @@ export async function createHeadlessHost(
   // adapter falls back to `localStorage`, which a browser-like realm
   // (happy-dom) shares between tests.
   const storage = options.storage ?? mapBacking();
+  // Extensions ADR 348 — the caret the test plays and the document
+  // context a bundle holds, shared across the harness's hosts.
+  let textSel: TextSelection | null = null;
+  const textSelListeners = new Set<() => void>();
+  const textSelection: TextSelectionBackend = {
+    read: () => textSel,
+    subscribe(listener) {
+      textSelListeners.add(listener);
+      return () => textSelListeners.delete(listener);
+    },
+  };
+  let docContext: { pluginId: string; type: string } | null = null;
+  const documentContext: DocumentContextBackend = {
+    set(pluginId, type) {
+      if (type === null) {
+        if (docContext?.pluginId === pluginId) docContext = null;
+        return true;
+      }
+      docContext = { pluginId, type };
+      return true;
+    },
+  };
 
   const buildHost = (
     manifest: PluginManifest,
@@ -1119,6 +1171,8 @@ export async function createHeadlessHost(
       willSave: options.willSave ?? willSave,
       toolSettings: options.toolSettings ?? toolSettings,
       capabilityMode: mode,
+      textSelection,
+      documentContext,
       // W-06 — a recordable fake asset source the conformance harness
       // can pass so a bundle's `@font-face` byte path is exercisable
       // headlessly (the editor's real adapter currently serves null;
@@ -1270,6 +1324,23 @@ export async function createHeadlessHost(
         .filter((c) => c.kind === "exporter")
         .map((c) => c.value as ExporterContribution);
     },
+    controlBarGroupsContributed() {
+      return contributions
+        .filter((c) => c.kind === "controlBarGroup")
+        .map((c) => c.value as ControlBarGroupContribution);
+    },
+    statusItemsContributed() {
+      return contributions
+        .filter((c) => c.kind === "statusItem")
+        .map((c) => c.value as StatusItemContribution);
+    },
+    setTextSelection(sel) {
+      textSel = sel ? { ...sel } : null;
+      for (const fn of [...textSelListeners]) fn();
+    },
+    documentContext() {
+      return docContext;
+    },
     lastToolPreview() {
       return lastPreview;
     },
@@ -1308,6 +1379,7 @@ export async function createHeadlessHost(
       // (`document.onDidOpen`, the parent index); so does the harness.
       const reply = loadDirect(idml);
       if (reply.kind === "documentLoaded") {
+        docContext = null;
         objects.core?.invalidate();
         fanOut(reply);
         return reply.payload.pageIds;
