@@ -165,7 +165,7 @@ export function recipeAutoUpdateOf(
 /** A change to handle: a committed change, a recipe written (`baseline`:
  *  fingerprint the recipes not seen yet), or a document opened (`open`:
  *  forget every fingerprint and take them afresh). */
-type Pending = DocumentChangeEvent | "baseline" | "open";
+type Pending = DocumentChangeEvent | "baseline" | "open" | "setting";
 
 const keyOf = (r: RecipeRef): string => `${r.kind}/${r.id}`;
 
@@ -398,10 +398,18 @@ function contributeRunning(
   };
 
   const handleChange = async (change: Pending): Promise<void> => {
-    // Off: nothing is read. Turned on again, the fingerprints are taken
-    // afresh (the setting's change schedules an `open`).
+    // Off: nothing is read, and the prints taken before the switch-off
+    // are KEPT. Turned on again (the setting's change schedules a
+    // `setting`), only the recipes with no kept print are fingerprinted:
+    // re-taking the others would race the next edit — a write sent right
+    // after the click can land before the baseline is read, which then
+    // already holds the edit and nothing rebuilds (measured in the
+    // editor's plugin-surface checkbox spec). So the first edit after the
+    // switch-on compares against the state before the switch-off, and its
+    // rebuild also catches up whatever changed while it was off. A
+    // document opened while off forgets them (they name another document).
     if (!recipeAutoUpdateEnabled(host)) {
-      seen.clear();
+      if (change === "open") seen.clear();
       return;
     }
     // Nothing to do without a recipe: five part reads, no walk.
@@ -413,6 +421,10 @@ function contributeRunning(
     if (change === "open") {
       owed.clear();
       await refingerprint(recipes);
+      return;
+    }
+    if (change === "setting") {
+      await refingerprint(recipes, (key) => !seen.has(key));
       return;
     }
     if (change === "baseline") {
@@ -498,7 +510,11 @@ function contributeRunning(
       const edits = changes.filter((c) => typeof c === "object");
       const change =
         edits[edits.length - 1] ??
-        (changes.includes("open") ? "open" : changes[changes.length - 1]);
+        (changes.includes("open")
+          ? "open"
+          : changes.includes("setting")
+            ? "setting"
+            : changes[changes.length - 1]);
       if (change === undefined) continue;
       try {
         await handleChange(change);
@@ -545,7 +561,7 @@ function contributeRunning(
   // compared against the document as it is (off, nothing was tracked).
   subs.push(
     onRecipeAutoUpdateChange(() => {
-      if (!disposed) schedule("open");
+      if (!disposed) schedule("setting");
     }),
   );
   try {
