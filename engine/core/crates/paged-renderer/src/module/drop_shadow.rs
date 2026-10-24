@@ -103,7 +103,8 @@ fn outline_target(frame: &ResolvedFrame<'_>, page: &mut BuiltPage) -> Option<Sha
                 ShadowTarget::Rect(*bbox)
             } else {
                 let path =
-                    polygon_path_from_anchors_with_open(anchors, subpath_starts, subpath_open);
+                    polygon_path_from_anchors_with_open(anchors, subpath_starts, subpath_open)
+                        .with_fill_rule(frame.fill_rule);
                 let cache_key = match frame.self_id {
                     Some(id) => fnv_1a_u64(id.as_bytes()),
                     None => path_signature(anchors),
@@ -305,24 +306,22 @@ impl RectOutline {
     fn into_path(self) -> PathData {
         match self {
             RectOutline::Path(path) => path,
-            RectOutline::Plain(r) => PathData {
-                segments: vec![
-                    PathSegment::MoveTo { x: r.x, y: r.y },
-                    PathSegment::LineTo {
-                        x: r.x + r.w,
-                        y: r.y,
-                    },
-                    PathSegment::LineTo {
-                        x: r.x + r.w,
-                        y: r.y + r.h,
-                    },
-                    PathSegment::LineTo {
-                        x: r.x,
-                        y: r.y + r.h,
-                    },
-                    PathSegment::Close,
-                ],
-            },
+            RectOutline::Plain(r) => PathData::new(vec![
+                PathSegment::MoveTo { x: r.x, y: r.y },
+                PathSegment::LineTo {
+                    x: r.x + r.w,
+                    y: r.y,
+                },
+                PathSegment::LineTo {
+                    x: r.x + r.w,
+                    y: r.y + r.h,
+                },
+                PathSegment::LineTo {
+                    x: r.x,
+                    y: r.y + r.h,
+                },
+                PathSegment::Close,
+            ]),
         }
     }
 }
@@ -556,5 +555,5 @@ fn stroke_outline(path: &PathData, stroke: &Stroke) -> PathData {
             PathEl::ClosePath => PathSegment::Close,
         })
         .collect();
-    PathData { segments }
+    PathData::new(segments)
 }

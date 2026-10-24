@@ -763,6 +763,8 @@ property_paths! {
         FrameAutoFit => "frameAutoFit" : bool_().default_bool(false).idml(idml![attr(FrameFittingOption, AutoFit)]),
         // Engine ADR 1003 — the page of a placed PDF the frame shows.
         FramePdfPage => "framePdfPage" : count().min(1.0).default_num(1.0).idml(idml![attr(PDFAttribute, PageNumber)]),
+        // Engine ADR 1006 — the outline's fill rule; IDML has no attribute.
+        FrameFillRule => "frameFillRule" : enum_(FILL_RULES).default_text("NonZero"),
         FrameStrokeType => "frameStrokeType" : enum_open(STROKE_TYPES).idml(idml![attr(TextFrame | Rectangle | Oval | GraphicLine | Polygon, StrokeType)]),
         FrameStrokeJoin => "frameStrokeJoin" : enum_open(END_JOINS).default_text("MiterEndJoin").idml(idml![attr(Rectangle | GraphicLine | Polygon, EndJoin)]),
         FrameStrokeMiterLimit => "frameStrokeMiterLimit" : number().range(1.0, 500.0).default_num(4.0).idml(idml![attr(Rectangle | GraphicLine | Polygon, MiterLimit)]),
@@ -1409,7 +1411,9 @@ mod tests {
         // the next row, written through any cell of the row.
         //
         // 243 -> 244: ADR 1003 — the page of a placed PDF.
-        assert_eq!(cat.settable_paths.len(), 244, "settable path count drifted");
+        //
+        // 244 -> 245: ADR 1006 — a frame's fill rule.
+        assert_eq!(cat.settable_paths.len(), 245, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

@@ -39,12 +39,12 @@ pub mod text;
 pub use display_list::{
     BevelDirection, BevelEmboss, BevelStyle, BevelTechnique, BlendMode, CellKey, Color,
     DashPattern, DecodedImage, DirectionalFeather, DisplayCommand, DisplayList, DropShadow,
-    Feather, FeatherCornerType, GlyphCacheKey, GlyphRunEntry, GlyphRunTable, GradientFeather,
-    GradientFeatherKind, GradientFeatherStop, GradientId, GradientStop, ImageId, InnerGlow,
-    InnerShadow, LayerEffect, LineCap, LineJoin, LinearGradient, LinkRegion, LinkRegionTable,
-    LinkTarget, OuterGlow, Paint, PathBuffer, PathData, PathId, PathSegment, RadialGradient, Rect,
-    Satin, SoftMaskType, SpotInk, SpotInkId, Stroke, StrokeMarks, StructKey, SweepGradient,
-    Transform,
+    Feather, FeatherCornerType, FillRule, GlyphCacheKey, GlyphRunEntry, GlyphRunTable,
+    GradientFeather, GradientFeatherKind, GradientFeatherStop, GradientId, GradientStop, ImageId,
+    InnerGlow, InnerShadow, LayerEffect, LineCap, LineJoin, LinearGradient, LinkRegion,
+    LinkRegionTable, LinkTarget, OuterGlow, Paint, PathBuffer, PathData, PathId, PathSegment,
+    RadialGradient, Rect, Satin, SoftMaskType, SpotInk, SpotInkId, Stroke, StrokeMarks, StructKey,
+    SweepGradient, Transform,
 };
 pub use extent::{
     fit_transparency_group_bounds, transparency_group_overflow, GroupFit, GROUP_AA_PAD_PT,

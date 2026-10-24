@@ -1162,6 +1162,7 @@ export {
   hiddenPairsNote,
   DASH_SECTION_NOTE,
   REFLECT_SECTION_NOTE,
+  SIMPLIFY_PREVIEW_ENGINE_NOTE,
   REFLECT_COPY_UNAVAILABLE_NOTE,
   PATH_OPTIONS_PANEL_NOTE,
   SELECT_SAME_TOLERANCE_NOTE,
@@ -1455,3 +1456,88 @@ export {
   RecipeAutoUpdateToggle,
   RECIPE_AUTO_UPDATE_LABEL,
 } from "./panels/recipe-auto-update-toggle";
+
+// WP6.1 part 2 — Simplify's live preview and corner lane, Reflect about a
+// point, the Join / Path Eraser / Reshape / Shaper / Star / Flare tools and
+// their commands.
+export { WAVE3_TOOL_IDS } from "./tools";
+export {
+  simplifyPreviewOf,
+  showSimplifyPreview,
+  clearSimplifyPreview,
+  type SimplifyPreview,
+  type SimplifyPreviewOptions,
+} from "./commands/simplify-preview";
+export {
+  clampCornerAngle,
+  DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG,
+} from "./commands/path-ops";
+export { spreadPivotOf } from "./commands/transform";
+export { reflectPivotOf } from "./commands/path-options";
+export {
+  rewritePathOps,
+  insertOpenPieceOps,
+  readEditablePath,
+} from "./commands/path-rewrite";
+export {
+  applyJoinScrub,
+  applyPathErase,
+  applyReshapeAt,
+  applyReshapeTable,
+  runJoinScrub,
+  runPathErase,
+  runReshapeAt,
+  erasePieceHandle,
+  JOIN_SCRUB_COMMAND_ID,
+  PATH_ERASE_COMMAND_ID,
+  RESHAPE_AT_COMMAND_ID,
+  PATH_TOOL_COMMAND_IDS,
+  DEFAULT_RESHAPE_RADIUS_PT,
+  type JoinResult,
+  type EraseResult,
+} from "./commands/path-tools";
+export {
+  applyInsertStar,
+  applyInsertFlare,
+  flareBatchFor,
+  flareHandle,
+  starParamsFrom,
+  flareParamsFrom,
+  starTableFor,
+  STAR_PARAM_DEFAULTS,
+  FLARE_PARAM_DEFAULTS,
+  FLARE_PAPER,
+  FLARE_RAY_OPACITY,
+  FLARE_RING_OPACITY,
+  INSERT_STAR_COMMAND_ID,
+  INSERT_FLARE_COMMAND_ID,
+  STAR_FLARE_COMMAND_IDS,
+  type StarParams,
+  type FlareParams,
+} from "./commands/star-flare";
+export {
+  applyShaperStroke,
+  runShaperStroke,
+  SHAPER_STROKE_COMMAND_ID,
+  type ShaperResult,
+} from "./commands/shaper";
+export {
+  createReflectHandler,
+  reflectPreview,
+  selectionPageBox,
+  type ReflectHandlerOptions,
+} from "./handlers/reflect";
+export { createReshapeHandler, tablePreview } from "./handlers/reshape";
+export {
+  createJoinHandler,
+  createPathEraserHandler,
+  createShaperHandler,
+  JOIN_TOLERANCE_PX,
+  PATH_ERASER_WIDTH_PX,
+} from "./handlers/scrub-tools";
+export {
+  createStarHandler,
+  createFlareHandler,
+  flareParamsOfGesture,
+} from "./handlers/star-flare";
+export { RESHAPE_OPTIONS, STAR_OPTIONS } from "./tool-options";

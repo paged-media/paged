@@ -276,3 +276,46 @@ fn a_page_past_the_last_shows_the_first() {
     let img = render(r#"<PDFAttribute PageNumber="9"/>"#);
     assert_eq!(at(&img, 60, 60), "red");
 }
+
+/// Engine ADR 1006 — a placed PDF fills `f*` and clips `W*` even-odd.
+/// Page 1: two nested red squares filled `f*` (both `re`, so both turn
+/// the same way: non-zero would fill the middle). Page 2: a blue page
+/// clipped `W*` by the same two squares.
+#[test]
+#[allow(non_snake_case)]
+fn a_placed_pdf_fills_and_clips_even_odd__feat__frames_paths_fill_rule_even_odd() {
+    let art = pdf(&[
+        (
+            [0.0, 0.0, 100.0, 100.0],
+            None,
+            "1 0 0 rg 10 10 80 80 re 30 30 40 40 re f*",
+        ),
+        (
+            [0.0, 0.0, 100.0, 100.0],
+            None,
+            "0 0 1 rg 0 0 100 100 re 25 25 50 50 re W* n 0 0 100 100 re f",
+        ),
+    ]);
+    let mut br = paged_renderer::BytesResolver::new();
+    br.add_image("art.pdf", art);
+    let options = PipelineOptions {
+        assets: Some(&br),
+        ..PipelineOptions::default()
+    };
+    let draw = |page: u32| {
+        let idml = package(&format!(
+            r#"<PDFAttribute PageNumber="{page}" PDFCrop="CropMedia"/>"#
+        ));
+        let document = idml_import::import_idml_doc(&idml).unwrap();
+        let (_built, images) =
+            pipeline::render_document(&document, &options, 72.0, Color::WHITE).unwrap();
+        images.into_iter().next().unwrap()
+    };
+    // The page sits at (10, 10), PDF y up: PDF (x, y) is page (10 + x, 110 - y).
+    let fill = draw(1);
+    assert_eq!(at(&fill, 30, 60), "red", "the ring fills");
+    assert_eq!(at(&fill, 60, 60), "white", "f* leaves the middle empty");
+    let clip = draw(2);
+    assert_eq!(at(&clip, 20, 60), "blue", "inside the clip");
+    assert_eq!(at(&clip, 60, 60), "white", "W* clips the middle away");
+}

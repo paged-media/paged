@@ -262,7 +262,7 @@ describe("panel sections", () => {
     ]);
   });
 
-  it("Median/Maximum/Minimum need a GPU; Modify needs a selection", () => {
+  it("Median/Maximum/Minimum need a GPU and open their dialogs; Modify needs a selection", () => {
     const { session, calls } = recorder();
     let tree = RankLookupSection({
       session,
@@ -303,6 +303,9 @@ describe("panel sections", () => {
       elements(mod2).find((p) => p["data-image-modify"] === "border")!
         .onClick as () => void
     )();
-    expect(calls).toEqual(["applyMorph(max)", "modifySelection(border,3)"]);
+    expect(calls).toEqual([
+      "openFilterDialog(maximum)",
+      "modifySelection(border,3)",
+    ]);
   });
 });

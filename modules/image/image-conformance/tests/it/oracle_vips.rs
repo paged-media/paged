@@ -345,6 +345,30 @@ fn row(id: &str) -> Row {
             "unit",
             Some((62, 62)),
         ),
+        "morph.dilate_r" => module(
+            &morph::MORPH_DILATE_R,
+            bytes(&morph::MorphRadiusParams::new(2, false)),
+            "unit",
+            Some((60, 60)),
+        ),
+        "morph.erode_r" => module(
+            &morph::MORPH_ERODE_R,
+            bytes(&morph::MorphRadiusParams::new(2, false)),
+            "unit",
+            Some((60, 60)),
+        ),
+        "rank.median_r" => module(
+            &morph::RANK_MEDIAN_R,
+            bytes(&morph::MorphRadiusParams::new(2, false)),
+            "unit",
+            Some((60, 60)),
+        ),
+        "conv.box_r" => module(
+            &conv::CONV_BOX_R,
+            bytes(&conv::ConvBoxRadiusParams::new(2)),
+            "unit",
+            Some((60, 60)),
+        ),
         "adjust.exposure" => module(
             &adjust::ADJUST_EXPOSURE,
             bytes(&adjust::AdjustExposureParams::new(0.5)),

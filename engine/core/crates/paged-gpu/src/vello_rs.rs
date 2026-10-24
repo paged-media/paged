@@ -115,8 +115,8 @@ use wgpu;
 
 pub(crate) use crate::vello_map::linear_to_peniko;
 use crate::vello_map::{
-    blend_to_peniko, glyph_fills, kurbo_stroke, path_to_bez, resolve_paint, stroke_geometry, Fills,
-    PaintBrush, StrokeGeometry,
+    blend_to_peniko, glyph_fills, kurbo_stroke, path_fill, path_to_bez, resolve_paint,
+    stroke_geometry, Fills, PaintBrush, StrokeGeometry,
 };
 use crate::{PathRasterizer, RasterOptions};
 
@@ -655,10 +655,11 @@ fn paint_effect_stamps(
         return;
     }
     let clip = path_to_bez(path_data, transform);
+    let path_data_fill = crate::vello_map::fill_of(path_data.fill_rule);
     for stamp in &stamps {
         let blend = blend_to_peniko(stamp.blend_mode);
         if stamp.clip_to_path {
-            scene.push_layer(Fill::NonZero, blend, 1.0, page_to_px, &clip);
+            scene.push_layer(path_data_fill, blend, 1.0, page_to_px, &clip);
             draw_effect_stamp(scene, stamp, page_to_px);
             scene.pop_layer();
         } else {
@@ -868,7 +869,7 @@ fn build_scene_with_transform_filtered(
                 // with Mix::Normal + Compose::SrcOver and full alpha
                 // — the layer becomes a pure clip.
                 scene.push_layer(
-                    Fill::NonZero,
+                    crate::vello_map::fill_of(path_data.fill_rule),
                     PenikoBlendMode::default(),
                     1.0,
                     page_to_px,
@@ -978,7 +979,8 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
+                let rule = path_fill(list, *path_id);
+                scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::FillPathBlend {
                 path_id,
@@ -1000,14 +1002,15 @@ fn build_scene_with_transform_filtered(
                     continue;
                 };
                 let pb = blend_to_peniko(*blend_mode);
+                let rule = path_fill(list, *path_id);
                 if pb.mix == Mix::Normal && pb.compose == Compose::SrcOver {
                     // Fast path: Normal blend, no layer needed.
-                    scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
+                    scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
                 } else {
                     // The blend layer's clip shape is the path
                     // itself — anything outside is unaffected.
-                    scene.push_layer(Fill::NonZero, pb, 1.0, page_to_px, &path);
-                    scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
+                    scene.push_layer(rule, pb, 1.0, page_to_px, &path);
+                    scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
                     scene.pop_layer();
                 }
             }
@@ -1055,7 +1058,8 @@ fn build_scene_with_transform_filtered(
                 let Some(brush) = resolve_paint(paint, list, transform) else {
                     continue;
                 };
-                scene.fill(Fill::NonZero, page_to_px, brush_ref(&brush), None, &path);
+                let rule = path_fill(list, *path_id);
+                scene.fill(rule, page_to_px, brush_ref(&brush), None, &path);
             }
             DisplayCommand::StrokePathOverprint {
                 path_id,
@@ -2615,7 +2619,13 @@ fn build_overprint_batch_scene(
                 else {
                     continue;
                 };
-                scene.fill(Fill::NonZero, page_to_px, white, None, &bez);
+                scene.fill(
+                    crate::vello_map::fill_of(path_data.fill_rule),
+                    page_to_px,
+                    white,
+                    None,
+                    &bez,
+                );
             }
         }
     }
@@ -3653,12 +3663,10 @@ mod tests {
             black,
             &mut list,
         );
-        let rule = list.paths.push_anon(paged_compose::PathData {
-            segments: vec![
-                paged_compose::PathSegment::MoveTo { x: 4.2, y: 20.35 },
-                paged_compose::PathSegment::LineTo { x: 33.7, y: 20.35 },
-            ],
-        });
+        let rule = list.paths.push_anon(paged_compose::PathData::new(vec![
+            paged_compose::PathSegment::MoveTo { x: 4.2, y: 20.35 },
+            paged_compose::PathSegment::LineTo { x: 33.7, y: 20.35 },
+        ]));
         list.commands.push(DisplayCommand::StrokePath {
             path_id: rule,
             paint: black,
@@ -4789,6 +4797,145 @@ mod tests {
                 alone,
                 "a third render after {what}"
             );
+        }
+    }
+
+    /// Engine ADR 1006 — two contours turned the same way (a donut whose
+    /// hole is not wound against its ring), and a five-pointed star drawn
+    /// as one self-crossing contour, in page points.
+    #[cfg(feature = "cpu")]
+    fn fill_rule_shapes(
+        rule: paged_compose::FillRule,
+    ) -> (paged_compose::PathData, paged_compose::PathData) {
+        use paged_compose::{PathData, PathSegment as S};
+        let square = |x: f32, y: f32, s: f32| {
+            vec![
+                S::MoveTo { x, y },
+                S::LineTo { x: x + s, y },
+                S::LineTo { x: x + s, y: y + s },
+                S::LineTo { x, y: y + s },
+                S::Close,
+            ]
+        };
+        let mut donut = square(10.0, 10.0, 40.0);
+        donut.extend(square(22.0, 22.0, 16.0));
+        let mut star = Vec::new();
+        for k in 0..5 {
+            let a = std::f32::consts::PI * (-0.5 + 0.8 * k as f32);
+            let (x, y) = (90.0 + 25.0 * a.cos(), 30.0 + 25.0 * a.sin());
+            star.push(if k == 0 {
+                S::MoveTo { x, y }
+            } else {
+                S::LineTo { x, y }
+            });
+        }
+        star.push(S::Close);
+        (
+            PathData::new(donut).with_fill_rule(rule),
+            PathData::new(star).with_fill_rule(rule),
+        )
+    }
+
+    /// The red channel at page point `(x, y)` of a 72 dpi, 120 pt wide
+    /// render.
+    #[cfg(feature = "cpu")]
+    fn red_at(buf: &[u8], x: usize, y: usize) -> u8 {
+        buf[(y * 120 + x) * 4]
+    }
+
+    /// Engine ADR 1006 — an even-odd donut and star fill alike on both
+    /// lanes, with the donut's hole and the star's middle empty; under
+    /// non-zero both fill (the control).
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn even_odd_fills_match_the_cpu_lane__feat__frames_paths_fill_rule_even_odd() {
+        use paged_compose::{DisplayCommand, FillRule, Paint, Transform};
+        for rule in [FillRule::EvenOdd, FillRule::NonZero] {
+            let mut list = DisplayList::new();
+            let (donut, star) = fill_rule_shapes(rule);
+            let black = Paint::Solid(ComposeColor::rgba(0.0, 0.0, 0.0, 1.0));
+            for path in [donut, star] {
+                let path_id = list.paths.push_anon(path);
+                list.commands.push(DisplayCommand::FillPath {
+                    path_id,
+                    paint: black,
+                    transform: Transform::IDENTITY,
+                });
+            }
+            let mut opts = RasterOptions::new(120.0, 60.0);
+            opts.dpi = 72.0;
+            opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+            let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+                return;
+            };
+            assert!(
+                ndiff <= 40 && worst <= 64,
+                "{rule:?}: lanes differ on {ndiff} pixels (worst {worst})"
+            );
+            let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+            let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+            for buf in [&gpu, &cpu] {
+                assert_eq!(red_at(buf, 15, 15), 0, "{rule:?}: the ring fills");
+                let (hole, middle) = (red_at(buf, 30, 30), red_at(buf, 90, 32));
+                match rule {
+                    FillRule::EvenOdd => {
+                        assert_eq!((hole, middle), (255, 255), "even-odd leaves both empty")
+                    }
+                    FillRule::NonZero => {
+                        assert_eq!((hole, middle), (0, 0), "non-zero fills both")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Engine ADR 1006 — an even-odd clip clips alike on both lanes: a
+    /// fill under the donut clip leaves the hole empty.
+    #[cfg(feature = "cpu")]
+    #[test]
+    #[allow(non_snake_case)]
+    fn even_odd_clips_match_the_cpu_lane__feat__frames_paths_fill_rule_even_odd() {
+        use paged_compose::{DisplayCommand, FillRule, Paint, Rect, Transform};
+        let mut list = DisplayList::new();
+        let (donut, star) = fill_rule_shapes(FillRule::EvenOdd);
+        let black = Paint::Solid(ComposeColor::rgba(0.0, 0.0, 0.0, 1.0));
+        for clip in [donut, star] {
+            let path_id = list.paths.push_anon(clip);
+            list.commands.push(DisplayCommand::PushClip {
+                path_id,
+                transform: Transform::IDENTITY,
+            });
+            paged_compose::emit_rect(
+                Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 120.0,
+                    h: 60.0,
+                },
+                black,
+                &mut list,
+            );
+            list.commands
+                .push(DisplayCommand::PopClip(Transform::IDENTITY));
+        }
+        let mut opts = RasterOptions::new(120.0, 60.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let Some((worst, ndiff)) = cpu_gpu_delta(&list, &opts) else {
+            return;
+        };
+        assert!(
+            ndiff <= 40 && worst <= 64,
+            "lanes differ on {ndiff} pixels (worst {worst})"
+        );
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        for buf in [&gpu, &cpu] {
+            assert_eq!(red_at(buf, 15, 15), 0, "the ring is inside the clip");
+            assert_eq!(red_at(buf, 30, 30), 255, "the hole is outside it");
+            assert_eq!(red_at(buf, 90, 32), 255, "so is the star's middle");
+            assert_eq!(red_at(buf, 90, 14), 0, "and its points are inside");
         }
     }
 }

@@ -93,9 +93,7 @@ pub(crate) fn polygon_path_from_anchors_with_open(
     subpath_open: &[bool],
 ) -> PathData {
     if anchors.is_empty() {
-        return PathData {
-            segments: Vec::new(),
-        };
+        return PathData::new(Vec::new());
     }
     let ranges = contour_ranges(anchors.len(), subpath_starts);
     let mut segs = Vec::with_capacity(anchors.len() * 2 + ranges.len() * 2);
@@ -141,7 +139,7 @@ pub(crate) fn polygon_path_from_anchors_with_open(
             segs.push(PathSegment::Close);
         }
     }
-    PathData { segments: segs }
+    PathData::new(segs)
 }
 
 /// B-23 — the outline a polygon actually paints: its anchor path with
@@ -220,7 +218,8 @@ pub(super) fn emit_polygon_into(
         ..
     } = &resolved.geometry
     {
-        let path = polygon_outline_path(anchors, subpath_starts, subpath_open, corner);
+        let path = polygon_outline_path(anchors, subpath_starts, subpath_open, corner)
+            .with_fill_rule(resolved.fill_rule);
         let cache_key = match resolved.self_id {
             Some(id) => fnv_1a_u64(id.as_bytes()),
             None => path_signature(anchors),

@@ -98,6 +98,8 @@ import {
   DEFAULT_OFFSET_DELTA_PT,
   DEFAULT_OUTLINE_WIDTH_PT,
   DEFAULT_SIMPLIFY_TOLERANCE_PT,
+  DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG,
+  clampCornerAngle,
   applyOffsetPath,
   applyOutlineStroke,
   applySimplifyPath,
@@ -109,6 +111,16 @@ import {
   MAX_STROKE_WEIGHT_TOLERANCE,
 } from "./select-same";
 import { applyDashArray, MAX_DASH_PAIRS } from "./dash";
+import {
+  FLARE_PARAM_DEFAULTS,
+  STAR_PARAM_DEFAULTS,
+  applyInsertFlare,
+  applyInsertStar,
+  flareParamsFrom,
+  starParamsFrom,
+  type FlareParams,
+  type StarParams,
+} from "./star-flare";
 import { applyReflect } from "./transform";
 import { applyWidthProfile, WIDTH_PROFILE_COMMAND_ID } from "./width-profile";
 import { supportsPathOps } from "./path-ops";
@@ -128,6 +140,8 @@ const M = defineMessages("draw.pathOptions", {
   spiral: "Insert spiral",
   rectGrid: "Insert rectangular grid",
   polarGrid: "Insert polar grid",
+  star: "Insert star",
+  flare: "Insert flare",
   selectSameWeight: "Select same stroke weight",
   widthProfile: "Width profile",
   command: "Path options: {section}…",
@@ -148,6 +162,8 @@ export const PATH_OPTION_SECTIONS = [
   "spiral",
   "rectGrid",
   "polarGrid",
+  "star",
+  "flare",
   "selectSameWeight",
   "widthProfile",
 ] as const;
@@ -165,6 +181,8 @@ export const PATH_OPTION_SECTION_TITLES: Record<PathOptionSection, string> = {
   spiral: M.spiral,
   rectGrid: M.rectGrid,
   polarGrid: M.polarGrid,
+  star: M.star,
+  flare: M.flare,
   selectSameWeight: M.selectSameWeight,
   widthProfile: M.widthProfile,
 };
@@ -231,6 +249,9 @@ export const OFFSET_JOIN_NOTE = M.offsetJoinNote;
 export interface SimplifyOptions {
   /** pt — the largest deviation a removed anchor may introduce. */
   tolerance: number;
+  /** Degrees, 0–180: anchors at least this sharp stay corners. 0 (the
+   *  default) is the engine's own simplify (`commands/path-ops.ts`). */
+  cornerAngle: number;
 }
 
 /** Outline Stroke's overrides. Each key defaults to the ELEMENT's own
@@ -268,6 +289,19 @@ export interface DashOptions {
 export interface ReflectOptions {
   angleDeg: number;
   copy: boolean;
+  /** Reflect about the point (`x`, `y`, page pt) instead of the
+   *  selection's centre — what the Reflect tool's Alt+click fills in. */
+  aboutPoint: boolean;
+  x: number;
+  y: number;
+}
+
+/** The page-space pivot a Reflect section names, or undefined for the
+ *  selection's centre. */
+export function reflectPivotOf(
+  o: ReflectOptions,
+): [number, number] | undefined {
+  return o.aboutPoint ? [o.x, o.y] : undefined;
 }
 
 /** WIDTH PROFILE — a three-stop variable width (start, middle, end; full
@@ -291,6 +325,8 @@ export interface PathOptions {
   spiral: SpiralParams;
   rectGrid: RectGridParams;
   polarGrid: PolarGridParams;
+  star: StarParams;
+  flare: FlareParams;
   selectSameWeight: SelectSameWeightOptions;
   widthProfile: WidthProfileOptions;
 }
@@ -303,7 +339,10 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
     join: "miter",
     miterLimit: DEFAULT_MITER_LIMIT,
   },
-  simplify: { tolerance: DEFAULT_SIMPLIFY_TOLERANCE_PT },
+  simplify: {
+    tolerance: DEFAULT_SIMPLIFY_TOLERANCE_PT,
+    cornerAngle: DEFAULT_SIMPLIFY_CORNER_ANGLE_DEG,
+  },
   outlineStroke: {
     overrideWidth: false,
     width: DEFAULT_OUTLINE_WIDTH_PT,
@@ -322,11 +361,13 @@ export const PATH_OPTIONS_DEFAULTS: PathOptions = {
     dash3: 0,
     gap3: 0,
   },
-  reflect: { angleDeg: 90, copy: false },
+  reflect: { angleDeg: 90, copy: false, aboutPoint: false, x: 0, y: 0 },
   arc: ARC_PARAM_DEFAULTS,
   spiral: SPIRAL_PARAM_DEFAULTS,
   rectGrid: RECT_GRID_PARAM_DEFAULTS,
   polarGrid: POLAR_GRID_PARAM_DEFAULTS,
+  star: STAR_PARAM_DEFAULTS,
+  flare: FLARE_PARAM_DEFAULTS,
   selectSameWeight: { tolerance: 0.5 },
   // A stroke that swells to 6 pt in the middle and tapers at both ends.
   widthProfile: { start: 1, middle: 6, end: 1 },
@@ -368,7 +409,12 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
       join: oneOf(offset?.join, STROKE_JOINS, d.offset.join),
       miterLimit: num(offset?.miterLimit, d.offset.miterLimit),
     },
-    simplify: { tolerance: num(simplify?.tolerance, d.simplify.tolerance) },
+    simplify: {
+      tolerance: num(simplify?.tolerance, d.simplify.tolerance),
+      cornerAngle: clampCornerAngle(
+        num(simplify?.cornerAngle, d.simplify.cornerAngle),
+      ),
+    },
     outlineStroke: {
       overrideWidth: bool(
         outline?.overrideWidth,
@@ -395,11 +441,16 @@ export function sanitizePathOptions(raw: unknown): PathOptions {
     reflect: {
       angleDeg: num(loose(r?.reflect)?.angleDeg, d.reflect.angleDeg),
       copy: bool(loose(r?.reflect)?.copy, d.reflect.copy),
+      aboutPoint: bool(loose(r?.reflect)?.aboutPoint, d.reflect.aboutPoint),
+      x: num(loose(r?.reflect)?.x, d.reflect.x),
+      y: num(loose(r?.reflect)?.y, d.reflect.y),
     },
     arc: arcParamsFrom(loose(r?.arc)),
     spiral: spiralParamsFrom(loose(r?.spiral)),
     rectGrid: rectGridParamsFrom(loose(r?.rectGrid)),
     polarGrid: polarGridParamsFrom(loose(r?.polarGrid)),
+    star: starParamsFrom(loose(r?.star)),
+    flare: flareParamsFrom(loose(r?.flare)),
     selectSameWeight: {
       tolerance: Math.min(
         MAX_STROKE_WEIGHT_TOLERANCE,
@@ -564,7 +615,11 @@ export function offsetPayloadOf(o: OffsetOptions): Record<string, unknown> {
 }
 
 export function simplifyPayloadOf(o: SimplifyOptions): Record<string, unknown> {
-  return { tolerance: o.tolerance };
+  // A corner angle of 0 is left out: the payload is then exactly what
+  // the engine lane always took.
+  return o.cornerAngle > 0
+    ? { tolerance: o.tolerance, cornerAngle: o.cornerAngle }
+    : { tolerance: o.tolerance };
 }
 
 /** Only the keys the user OVERRODE — an absent key is read from the
@@ -605,6 +660,10 @@ export function lastUsedPayload(
       return { ...all.rectGrid };
     case "polarGrid":
       return { ...all.polarGrid };
+    case "star":
+      return { ...all.star };
+    case "flare":
+      return { ...all.flare };
   }
 }
 
@@ -635,7 +694,12 @@ export async function applyPathOptions<S extends PathOptionSection>(
       await applyDashArray(host, dashLengthsOf(all.dash), dashTargetsOf(host));
       return;
     case "reflect":
-      await applyReflect(host, all.reflect.angleDeg, all.reflect.copy);
+      await applyReflect(
+        host,
+        all.reflect.angleDeg,
+        all.reflect.copy,
+        reflectPivotOf(all.reflect),
+      );
       return;
     case "arc":
       await applyInsertArc(host, { ...all.arc });
@@ -648,6 +712,12 @@ export async function applyPathOptions<S extends PathOptionSection>(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, { ...all.polarGrid });
+      return;
+    case "star":
+      await applyInsertStar(host, { ...all.star });
+      return;
+    case "flare":
+      await applyInsertFlare(host, { ...all.flare });
       return;
     case "selectSameWeight":
       await applySelectSameStrokeWeight(host, all.selectSameWeight.tolerance);
@@ -684,7 +754,7 @@ async function applyLastUsed(
       return;
     case "reflect": {
       const r = lastUsedPathOptions(host).reflect;
-      await applyReflect(host, r.angleDeg, r.copy);
+      await applyReflect(host, r.angleDeg, r.copy, reflectPivotOf(r));
       return;
     }
     case "arc":
@@ -698,6 +768,12 @@ async function applyLastUsed(
       return;
     case "polarGrid":
       await applyInsertPolarGrid(host, lastUsedPayload(host, "polarGrid"));
+      return;
+    case "star":
+      await applyInsertStar(host, lastUsedPayload(host, "star"));
+      return;
+    case "flare":
+      await applyInsertFlare(host, lastUsedPayload(host, "flare"));
       return;
     case "selectSameWeight":
       // The "within…" row was chosen explicitly, so it may use the
@@ -785,6 +861,8 @@ export const PATH_OPTIONS_COMMANDS: Record<PathOptionSection, string> = {
   spiral: `${C}.insertSpiralOptions`,
   rectGrid: `${C}.insertRectGridOptions`,
   polarGrid: `${C}.insertPolarGridOptions`,
+  star: `${C}.insertStarOptions`,
+  flare: `${C}.insertFlareOptions`,
   selectSameWeight: `${C}.selectSameStrokeWeightOptions`,
   widthProfile: WIDTH_PROFILE_COMMAND_ID,
 };
