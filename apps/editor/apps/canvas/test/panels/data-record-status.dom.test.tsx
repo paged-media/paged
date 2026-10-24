@@ -74,7 +74,7 @@ function run(sql: string): Row[] {
       sql,
     );
   if (!m) throw new Error(`the test service does not read: ${sql}`);
-  const rows = ROWS.map((r, i) => ({ __record: i, ...r }));
+  const rows: Row[] = ROWS.map((r, i) => ({ __record: i, ...r }));
   const [, f, desc] = m;
   if (f)
     rows.sort((a, b) => {

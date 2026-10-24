@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.slide: write a .pptx back from the original package and the document's slide plan."
+description = "paged.slide: write a .pptx back from the original package and the native document: untouched slides by their bytes, edited and new slides regenerated."
 
 [lints]
 workspace = true
@@ -15,9 +15,14 @@ paged-ooxml.workspace = true
 pptx-core.workspace = true
 pptx-import.workspace = true
 slide-resolve.workspace = true
+slide-native.workspace = true
+paged-model.workspace = true
+paged-scene.workspace = true
+paged-store.workspace = true
 quick-xml.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 paged-test-resources.workspace = true
-serde_json.workspace = true

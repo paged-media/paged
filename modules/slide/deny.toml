@@ -4,8 +4,9 @@
 # This doubles as the SDK-only rule's Rust half: [sources] denies unknown
 # registries/git, so a path/git reach-around into core/editor internals — or
 # into another plugin — cannot land silently. Its one engine dependency is the
-# model crates `slide-native` builds the deck with (path dependencies on
-# engine/core/crates at the same commit, ADR 708). Its OOXML code is
+# model crates `slide-native` builds the deck with and `pptx-export` reads the
+# document back with (path dependencies on engine/core/crates at the same
+# commit, ADR 708, ADR 711). Its OOXML code is
 # first-party (platform/shared/ooxml, without the ooxmlsdk typed DOM, so
 # neither ooxmlsdk nor the zip 8 it pulls in is in this graph).
 

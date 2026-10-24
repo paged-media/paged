@@ -247,7 +247,9 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
     if data.is_empty() {
         return None;
     }
-    Some(serde_json::json!({ "v": 1, "data": data }).to_string())
+    Some(ascii(
+        &serde_json::json!({ "v": 1, "data": data }).to_string(),
+    ))
 }
 
 /// The deck's own state as the document's plugin metadata, under
@@ -257,18 +259,24 @@ pub fn slide_label(s: &SlidePage) -> Option<String> {
 /// the bundle's envelope writes them (labels travel through InDesign as
 /// XML attribute text).
 pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> String {
-    let text = serde_json::json!({
-        "v": 1,
-        "data": {
-            "deck": {
-                "name": name,
-                "width": width,
-                "height": height,
-                "fonts": fonts,
+    ascii(
+        &serde_json::json!({
+            "v": 1,
+            "data": {
+                "deck": {
+                    "name": name,
+                    "width": width,
+                    "height": height,
+                    "fonts": fonts,
+                },
             },
-        },
-    })
-    .to_string();
+        })
+        .to_string(),
+    )
+}
+
+/// JSON text with every non-ASCII character as a `\uXXXX` escape.
+fn ascii(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if c.is_ascii() {
@@ -285,17 +293,66 @@ pub fn deck_label(name: &str, width: f64, height: f64, fonts: &[String]) -> Stri
 
 /// A placeholder item's metadata: its PowerPoint type and index.
 pub fn placeholder_label(it: &Item) -> Option<String> {
-    if matches!(it.kind, ItemKind::Group { .. }) {
+    item_label(it, None)
+}
+
+/// A shape action or link as item metadata: a URL, a slide part, a show
+/// action (`ppaction://…`) and the tooltip, as the deck wrote them.
+pub fn link_json(h: &pptx_core::Hyperlink) -> serde_json::Value {
+    let mut m = serde_json::Map::new();
+    if let Some(u) = &h.url {
+        m.insert("url".into(), u.clone().into());
+    }
+    if let Some(p) = &h.target_part {
+        m.insert("slide".into(), p.clone().into());
+    }
+    if let Some(a) = h.action.as_ref().filter(|a| !a.is_empty()) {
+        m.insert("action".into(), a.clone().into());
+    }
+    if let Some(t) = &h.tooltip {
+        m.insert("tooltip".into(), t.clone().into());
+    }
+    serde_json::Value::Object(m)
+}
+
+/// An item's metadata (slide ADR 703, ADR 711): the shape it came from
+/// (`key`: its slide part, `#`, then the `cNvPr` ids from the slide's tree
+/// down: `ppt/slides/slide2.xml#4/12` for shape 12 in group 4, `…#bg` for
+/// the background), its placeholder
+/// type and index, its preset geometry and adjust values, its click
+/// action and what a graphic frame drawn as a group holds. Export reads
+/// it to write the shape back. `None` when there is nothing to say.
+pub fn item_label(it: &Item, key: Option<&str>) -> Option<String> {
+    let mut data = serde_json::Map::new();
+    if let Some(k) = key {
+        data.insert("shape".into(), k.into());
+    }
+    if !matches!(it.kind, ItemKind::Group { .. }) {
+        if let Some((kind, idx)) = &it.meta.placeholder {
+            data.insert(
+                "placeholder".into(),
+                serde_json::json!({ "type": kind, "idx": idx }),
+            );
+        }
+    }
+    if let Some((prst, adj)) = &it.meta.preset {
+        data.insert(
+            "preset".into(),
+            serde_json::json!({ "prst": prst, "adj": adj }),
+        );
+    }
+    if let Some(h) = &it.meta.link {
+        data.insert("link".into(), link_json(h));
+    }
+    if let Some(f) = &it.meta.frame {
+        data.insert("frame".into(), f.clone().into());
+    }
+    if data.is_empty() {
         return None;
     }
-    let (kind, idx) = it.meta.placeholder.as_ref()?;
-    Some(
-        serde_json::json!({
-            "v": 1,
-            "data": { "placeholder": { "type": kind, "idx": idx } },
-        })
-        .to_string(),
-    )
+    Some(ascii(
+        &serde_json::json!({ "v": 1, "data": data }).to_string(),
+    ))
 }
 
 /// A name as the model keeps it: no control characters, and the white
@@ -582,6 +639,10 @@ struct Builder<'a> {
     table_styles: Vec<(TableStyleKey, TableStyleDef)>,
     /// Region cell styles: id and fill.
     cell_styles: Vec<(String, String)>,
+    /// The page each slide part became, for links to slides.
+    page_of_part: BTreeMap<String, String>,
+    /// Text hyperlinks: (number, destination).
+    links: Vec<(usize, paged_model::HyperlinkDestinationKind)>,
     diagnostics: Vec<String>,
 }
 
@@ -745,22 +806,36 @@ impl Builder<'_> {
         f
     }
 
-    fn item(&mut self, sb: &mut SpreadBuilder, it: &Item) {
+    /// Write `it`; `key` is its shape key on a slide (`None` on a master
+    /// or inside a drawn graphic frame).
+    fn item(&mut self, sb: &mut SpreadBuilder, it: &Item, key: Option<&str>) {
         // A placeholder carries its PowerPoint identity as item metadata, on
         // every element it is written as (outline and text frame): a copied
-        // slide knows which of its frames are placeholders.
-        let label = placeholder_label(it);
-        self.item_body(sb, it, label.as_deref());
+        // slide knows which of its frames are placeholders. Every element
+        // of a slide's shape names the shape (ADR 711).
+        let label = item_label(it, key);
+        self.item_body(sb, it, label.as_deref(), key);
     }
 
-    fn item_body(&mut self, sb: &mut SpreadBuilder, it: &Item, label: Option<&str>) {
+    fn item_body(
+        &mut self,
+        sb: &mut SpreadBuilder,
+        it: &Item,
+        label: Option<&str>,
+        key: Option<&str>,
+    ) {
         match &it.kind {
             ItemKind::Group { children } => {
                 self.element(&it.id, "group", &it.id);
                 sb.name(&it.id, &it.name);
+                sb.label(&it.id, label);
                 sb.open_groups.push(Vec::new());
+                // The members of a drawn chart or diagram are not shapes of
+                // the slide: they carry no key.
+                let inner = key.filter(|_| it.meta.frame.is_none());
                 for c in children {
-                    self.item(sb, c);
+                    let ck = inner.map(|k| format!("{k}/{}", c.meta.shape_id));
+                    self.item(sb, c, ck.as_deref());
                 }
                 let members = sb.open_groups.pop().unwrap_or_default();
                 let idx = sb.spread.groups.len();
@@ -1366,6 +1441,36 @@ impl Builder<'_> {
         });
     }
 
+    /// A run's link as the engine's text hyperlink: its source id, with
+    /// the hyperlink and its destination recorded for the designmap. A
+    /// URL is a URL destination, a slide the page it became, a show
+    /// action (next slide, end show, …) its `ppaction://` URL.
+    fn text_link(&mut self, h: &pptx_core::Hyperlink) -> Option<String> {
+        use paged_model::HyperlinkDestinationKind as K;
+        let action = h.action.as_deref().filter(|a| !a.is_empty());
+        let dest = if let Some(u) = &h.url {
+            K::Url(u.clone())
+        } else if let Some(page) = h
+            .target_part
+            .as_ref()
+            .and_then(|p| self.page_of_part.get(p))
+        {
+            K::Page(page.clone())
+        } else if let Some(a) = action.filter(|a| a.starts_with("ppaction://")) {
+            K::Url(a.to_string())
+        } else {
+            if let Some(p) = &h.target_part {
+                self.diagnostics.push(format!(
+                    "a text link to {p} is not a slide of the deck; dropped"
+                ));
+            }
+            return None;
+        };
+        let k = self.links.len() + 1;
+        self.links.push((k, dest));
+        Some(format!("HyperlinkTextSource/hl{k}"))
+    }
+
     fn paragraphs(&mut self, paras: &[Para]) -> Vec<Paragraph> {
         let mut out = Vec::with_capacity(paras.len());
         for p in paras {
@@ -1450,6 +1555,7 @@ impl Builder<'_> {
                     // Leading is a character attribute: a line takes the
                     // largest leading of its runs, so every run carries it.
                     leading: p.leading.map(n),
+                    hyperlink_source: r.link.as_ref().and_then(|h| self.text_link(h)),
                     text,
                     ..CharacterRun::default()
                 });
@@ -1457,6 +1563,16 @@ impl Builder<'_> {
             out.push(para);
         }
         out
+    }
+}
+
+/// A top-level slide item's shape key: its `cNvPr` id, or `bg` for the
+/// slide's background (the one item with no shape behind it).
+pub fn slide_key(it: &Item) -> String {
+    if it.meta.shape_id == 0 && it.meta.order == 0 {
+        "bg".to_string()
+    } else {
+        it.meta.shape_id.to_string()
     }
 }
 
@@ -1478,6 +1594,12 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         elements: BTreeMap::new(),
         table_styles: Vec::new(),
         cell_styles: Vec::new(),
+        page_of_part: deck
+            .slides
+            .iter()
+            .map(|s| (s.part.clone(), s.id.clone()))
+            .collect(),
+        links: Vec::new(),
         diagnostics: Vec::new(),
     };
     const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
@@ -1507,7 +1629,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
             ..Spread::default()
         });
         for it in &m.items {
-            w.item(&mut sb, it);
+            w.item(&mut sb, it, None);
         }
         let src = format!("MasterSpreads/MasterSpread_{}.xml", m.id);
         master_srcs.push(src.clone());
@@ -1538,7 +1660,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         // plugin metadata, so they move, duplicate and undo with it.
         sb.label(&s.id, slide_label(s).as_deref());
         for it in &s.items {
-            w.item(&mut sb, it);
+            w.item(&mut sb, it, Some(&format!("{}#{}", s.part, slide_key(it))));
         }
         spreads.push(ParsedSpread {
             src: format!("Spreads/Spread_s{}.xml", s.id),
@@ -1669,7 +1791,28 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
         },
     );
 
+    let mut hyperlinks = Vec::new();
+    let mut hyperlink_destinations = Vec::new();
+    for (k, dest) in std::mem::take(&mut w.links) {
+        let kind = match dest {
+            paged_model::HyperlinkDestinationKind::Page(_) => "HyperlinkPageDestination",
+            _ => "HyperlinkURLDestination",
+        };
+        let did = format!("{kind}/hl{k}");
+        hyperlink_destinations.push(paged_model::HyperlinkDestination {
+            self_id: did.clone(),
+            kind: dest,
+        });
+        hyperlinks.push(paged_model::Hyperlink {
+            self_id: format!("Hyperlink/hl{k}"),
+            name: Some(format!("Hyperlink {k}")),
+            source: Some(format!("HyperlinkTextSource/hl{k}")),
+            destination: Some(did),
+        });
+    }
     let designmap = DesignMap {
+        hyperlinks,
+        hyperlink_destinations,
         spreads: spreads
             .iter()
             .map(|s| SpreadRef { src: s.src.clone() })

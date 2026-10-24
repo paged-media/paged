@@ -33,7 +33,9 @@
 //     data counted (`data-record-status.ts`);
 //   · the grid is windowed: the service sorts and filters (guarded SQL), and
 //     only the rows in view cross;
-//   · with no data yet, a three-step start: import, query, bind.
+//   · with no data yet, a three-step start: import, query, bind;
+//   · the pipeline (`data-pipeline.tsx`): sources → transforms → queries,
+//     each with its rows or its error, a transform edited in place.
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
@@ -75,6 +77,13 @@ import {
   selectRecord,
   useRecordStatus,
 } from "./data-record-status";
+import { DataPipeline, offersPipeline, PipelineToggle } from "./data-pipeline";
+import {
+  AssetColumnEditor,
+  AssetColumnMarker,
+  PictureColumnToggle,
+  useAssetColumns,
+} from "./data-asset-column";
 
 const M = defineMessages("app.dataPanel", {
   startTitle: "Put data in the document",
@@ -330,6 +339,9 @@ function Grid({
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(300);
   const scroller = useRef<HTMLDivElement | null>(null);
+  // Data ADR 563: the field whose picture column editor is open.
+  const assets = useAssetColumns(service, table);
+  const [picture, setPicture] = useState<string | null>(null);
 
   const fields = table.schema.fields;
   const visible = fields.filter((f) => !hidden.has(f.name));
@@ -486,7 +498,30 @@ function Grid({
         >
           {t(M.columns)}
         </button>
+        {assets && fields.length > 0 && (
+          <PictureColumnToggle
+            open={picture !== null}
+            onToggle={() =>
+              setPicture(
+                picture !== null
+                  ? null
+                  : ([...assets.keys()][0] ?? fields[0]!.name),
+              )
+            }
+          />
+        )}
       </div>
+      {assets && picture !== null && (
+        <AssetColumnEditor
+          key={`${picture}:${assets.has(picture)}`}
+          service={service}
+          table={table}
+          field={picture}
+          column={assets.get(picture)}
+          onField={setPicture}
+          onClose={() => setPicture(null)}
+        />
+      )}
       {showColumns && (
         <div
           data-data-columns=""
@@ -668,6 +703,11 @@ function Grid({
                   if (e.detail > 1) return;
                   setSort(nextSort(sort, f.name, e.shiftKey));
                 }}
+                onContextMenu={(e) => {
+                  if (!assets) return;
+                  e.preventDefault();
+                  setPicture(f.name);
+                }}
                 onDoubleClick={() => {
                   if (n === 0) return;
                   void selectPlaced(
@@ -708,6 +748,9 @@ function Grid({
                 >
                   {f.ty}
                 </span>
+                {assets?.has(f.name) && (
+                  <AssetColumnMarker column={assets.get(f.name)!} />
+                )}
                 {s >= 0 && (
                   <span
                     style={muted}
@@ -875,6 +918,7 @@ export function DataPanel() {
   const [statuses, setStatuses] = useState<readonly DataBindingStatus[]>([]);
   const [updating, setUpdating] = useState(false);
   const [active, setActive] = useState("");
+  const [pipeline, setPipeline] = useState(false);
 
   useEffect(() => {
     if (!service) return;
@@ -939,7 +983,16 @@ export function DataPanel() {
             )}
           </button>
         ))}
+        {offersPipeline(service) && (
+          <PipelineToggle
+            open={pipeline}
+            onToggle={() => setPipeline(!pipeline)}
+          />
+        )}
       </div>
+      {pipeline && service && offersPipeline(service) && (
+        <DataPipeline service={service} onSelect={setActive} />
+      )}
       <StatusBar
         statuses={statuses}
         updating={updating}
