@@ -577,7 +577,7 @@ else on nesting:
 
 ```bash
 bun install && bun run test && bun run typecheck
-node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+bun ../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
 # The Rust half (the wasm is build output: run build-wasm.sh before specs that boot it)
 moon run draw:test        # Rust (nextest + doctests) and the TS tests, from anywhere
