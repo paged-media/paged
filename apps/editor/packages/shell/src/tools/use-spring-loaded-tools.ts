@@ -29,6 +29,7 @@ import { useContentSelection } from "../state/content-selection-context";
 import type { ToolId } from "../registries/tool";
 import { canvasKeyYields } from "../focus/key-ownership";
 import { useEditorKeys } from "../state/editor-root";
+import { useRegistries } from "../state/registries-context";
 
 // Concept 1 (T2) — spring-loaded momentary tools. Holding a key pushes
 // a transient override onto the active-tool stack; releasing it pops.
@@ -49,6 +50,7 @@ export function useSpringLoadedTools(): void {
   const keys = useEditorKeys();
   const { pushOverride, popOverride, clearOverrides } = useTool();
   const { contentSelectionRef } = useContentSelection();
+  const { keybindings } = useRegistries();
 
   // Which override each physical key pushed, so its key-up pops
   // exactly that id even if the modifier state changed in between.
@@ -66,6 +68,9 @@ export function useSpringLoadedTools(): void {
       if (!key || e.repeat) return;
       if (pushedByKey.current.has(key)) return;
       if (canvasKeyYields(e)) return;
+      // Editor ADR 299 — a scoped binding of the active context owns its
+      // key (Cmd+Space clears character formatting in a Word document).
+      if (keybindings.claims(e)) return;
       // A live text caret owns Space (it types). Cmd stays allowed —
       // it is a chord modifier everywhere.
       if (key === "space" && contentSelectionRef.current != null) return;
@@ -109,5 +114,12 @@ export function useSpringLoadedTools(): void {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
     };
-  }, [keys, pushOverride, popOverride, clearOverrides, contentSelectionRef]);
+  }, [
+    keys,
+    pushOverride,
+    popOverride,
+    clearOverrides,
+    contentSelectionRef,
+    keybindings,
+  ]);
 }
