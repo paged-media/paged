@@ -8,11 +8,18 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
 
 ## Layout
 
-- A Cargo workspace of 15 crates. They sit at the repo root, not under `crates/`. The
-  toolchain is pinned to Rust 1.99.1 (`rust-toolchain.toml`); no crate is published.
-- A pnpm workspace with two TypeScript packages under `packages/`.
-- `registry/`: YAML. The 42 rows in `functions/`, one per expression function, are read by
-  the two `build.rs` scripts. The 73 rows in `features/` are read by the `coverage-gate`
+- Sixteen crates in two Cargo workspaces (PM-0015). The engine-level twelve — the types,
+  the binding language, query shaping, sync, lowering, barcodes, data sets, sources, the
+  store and the XLSX reader, batch planning, and the session that joins them — are
+  `engine/core/crates/paged-data-*`, in the engine's workspace; each keeps its library name
+  (`data_core`, `data_store`, `data_session`, …). The module's workspace holds the other
+  four at its root: `data-js` (the wasm shim), `data-script`, `data-cli` and
+  `data-conformance`, which reach the engine crates by path. The toolchain
+  is pinned to Rust 1.99.1 in both; no crate is published.
+- Two TypeScript packages under `packages/`, in the root Bun workspace.
+- The function rows are `engine/core/crates/paged-data-core/functions/*.yaml`: 42 rows,
+  one per expression function, read by the two `build.rs` scripts.
+- `registry/`: YAML. The 73 rows in `features/` are read by the `coverage-gate`
   binary, which also reads the function rows; the 68 feature rows marked `implemented` name
   tests.
 - `scripts/`: the wasm build and the import lint.
@@ -20,6 +27,9 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
   built by the module; [`design/turso-spike-2026-10.md`](design/turso-spike-2026-10.md)).
 
 ## Rust crates
+
+The table names each crate by its directory; all but `data-js`, `data-script`, `data-cli`
+and `data-conformance` are `paged-data-<x>` packages in `engine/core/crates`.
 
 | Crate              | What it owns                                                                                                                                                                                                                        | Workspace crates it depends on                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,7 +44,8 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
 | `data-lower`       | Resolved content to the lowered form: variable, table, image, barcode, visibility; and `paginate_flow` for record flow.                                                                                                             | `data-core`, `data-barcode`                                                                                                           |
 | `data-bind`        | `ResolutionEngine`: resolves a binding against a delivered result, keeps a sync state per binding, evaluates rules, and holds the keyed row diff, the change report and the column-mapping suggestions.                             | `data-core`, `data-expr`, `data-query`                                                                                                |
 | `data-automation`  | `plan_batch`: splits a result into generation units (per record, per group, one catalog).                                                                                                                                           | `data-core`, `data-query`                                                                                                             |
-| `data-js`          | `DataSession`, which joins the crates above, and the wasm class `DataEngine`.                                                                                                                                                       | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation`, `data-store` |
+| `data-session`     | `DataSession`, which joins the crates above, and `labels`: the recipe a document's labels carry (core ADR 1014).                                                                                                                    | `data-core`, `data-sources`, `data-bind`, `data-lower`, `data-barcode`, `data-dataset`, `data-query`, `data-automation`, `data-store` |
+| `data-js`          | The wasm class `DataEngine`, a forwarding shim over `DataSession`; it re-exports the session's modules.                                                                                                                             | `data-session` (and `data-core`, `data-bind`, `data-lower`, `data-store` for its signatures)                                          |
 | `data-script`      | A Boa (`boa_engine` 0.21.1) context that evaluates a script to a `{ locale?, params?, build? }` value.                                                                                                                              | `data-core`, `data-automation`, `data-js`                                                                                             |
 | `data-cli`         | The library function `run_job` and the binary `paged-data-batch`.                                                                                                                                                                   | `data-core`, `data-lower`, `data-automation`, `data-js`, `data-script`                                                                |
 | `data-conformance` | 27 integration test files and the `coverage-gate` binary. Test only.                                                                                                                                                                | every crate except `data-cli` and `data-script`                                                                                       |
@@ -49,12 +60,12 @@ except that `src/…` is short for `packages/data-bundle/src/…`.
   database in memory; Turso reads a clock for its own bookkeeping, which on wasm comes from
   JavaScript (`data-store/src/clock.rs`; `std::time` has no clock on `wasm32-unknown-unknown`).
 - **Native-only code stays out of the wasm.** `data-script` and `data-cli` depend on
-  `data-js`, not the reverse. CI checks two edges with `cargo tree`: `data-expr` must not
-  reach `data-sources`, `data-query`, `data-bind`, `data-lower` or `data-js`, and the wasm
-  tree of `data-js` must not contain `data-conformance` or `proptest`.
+  `data-js`, not the reverse. CI checks two edges with `cargo tree`: `paged-data-expr` must
+  not reach the sources, query, bind, lower or store crates (core / ci), and the wasm tree of
+  `data-js` must not contain `data-conformance` or `proptest` (data / rust).
 
 **The function table.** `data-core/build.rs` and `data-expr/build.rs` both read
-`registry/functions/*.yaml` and sort the rows by id, so the index one assigns is the index
+`paged-data-core/functions/*.yaml` and sort the rows by id, so the index one assigns is the index
 the other dispatches on. The parser looks a function name up in the generated table; a name
 with no row is a parse error, which evaluation turns into the value `#NAME`. The
 `coverage-gate` binary fails when a registry row with `status: implemented` names no test
@@ -188,7 +199,7 @@ On branch `om/universal-binding` (2026-10-06), against plugin-api/plugin-sdk
   enum (members), text (maxLength), ref, asset, bounds/point/transform. `coerce: strict`
   fails a mismatch (sync state `Error`); `lenient` runs `missing` (`keepLast` writes nothing,
   `clear`, `default`, `error`). The expression language gained `MM CM IN PT PX AS` and
-  `RGB CMYK HEX SWATCH ENUM` (`registry/functions/{units,color}.yaml`); a length is a number
+  `RGB CMYK HEX SWATCH ENUM` (`paged-data-core/functions/{units,color}.yaml`); a length is a number
   in points and a colour is a canonical text literal, so no `Value` variant was added.
 - **One apply = one `host.objects.batch`** (`src/property-lane.ts`): `resolve_properties_at`
   decides every value (pinned and overridden bindings answer `keep`), `data-host-model`

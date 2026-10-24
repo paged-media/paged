@@ -13,6 +13,9 @@ on:
     branches: [main]
     paths:
       - "modules/data/**"
+      # The engine crates the module's crates depend on (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
+      - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
       - ".github/workflows/data-rust.yml"
@@ -31,6 +34,9 @@ on:
   pull_request:
     paths:
       - "modules/data/**"
+      # The engine crates the module's crates depend on (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
+      - "engine/core/Cargo.lock"
       # The shared formatting crate (platform/shared/fmt), a path dependency.
       - "platform/shared/fmt/**"
       - ".github/workflows/data-rust.yml"
@@ -68,21 +74,19 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/data -> target
+          workspaces: |
+            modules/data -> target
+            engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      # Each guard fails explicitly. They used to be two `! (… | grep …)`
-      # lines: bash's errexit ignores a `!`-negated command, so only the LAST
-      # line's status reached the step and the data-expr guard could never
-      # fail.
+      # Each guard fails explicitly: bash's errexit ignores a `!`-negated
+      # command. The data-expr guard moved with the crate to core / ci
+      # (paged-data-expr, PM-0015).
       - name: dependency guards (spec §4 rules)
         run: |
-          if cargo tree -p data-expr --edges normal | grep -E 'data-(sources|query|bind|lower|js)'; then
-            echo "LEAK: data-expr depends on a sources/query/bind/lower/js crate"; exit 1
-          fi
           if cargo tree -p data-js --target wasm32-unknown-unknown | grep -E 'data-conformance|proptest'; then
             echo "LEAK: the wasm tree pulls a test-only crate"; exit 1
           fi
@@ -102,7 +106,9 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/data -> target
+          workspaces: |
+            modules/data -> target
+            engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -113,13 +119,19 @@ jobs:
       # JUnit upload below run under `!cancelled()`.
       - name: nextest (junit)
         run: cargo nextest run --workspace --profile ci --no-fail-fast --no-tests=fail
+      # The engine-level data crates (engine/core/crates/paged-data-*) are
+      # tested in the engine's workspace; their junit joins the gate below.
+      - name: nextest, the engine's data crates (junit)
+        if: ${{ !cancelled() }}
+        working-directory: engine/core
+        run: cargo nextest run --profile ci --no-fail-fast --no-tests=fail -p paged-data-core -p paged-data-expr -p paged-data-query -p paged-data-bind -p paged-data-lower -p paged-data-barcode -p paged-data-dataset -p paged-data-sources -p paged-data-store -p paged-data-xlsx -p paged-data-automation -p paged-data-session
       # The §12.2 invariant, both halves: every `implemented` registry row
       # names a test that exists, AND (with --junit) that test ran in the
       # nextest run above and passed. An #[ignore]d skeleton or a red test is
       # a gap, not coverage.
       - name: coverage gate (the §12.2 verification invariant)
         if: ${{ !cancelled() }}
-        run: cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml
+        run: cargo run -p data-conformance --bin coverage-gate -- --junit target/nextest/ci/junit.xml --junit ../../engine/core/target/nextest/ci/junit.xml
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
       # PRIVATE paged-media/state repo, and GitHub refuses to resolve a private
@@ -135,7 +147,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: modules/data/target/nextest/ci/junit.xml
+          path: |
+            modules/data/target/nextest/ci/junit.xml
+            engine/core/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       # A silent fallback to the default linker fails here: mold stamps
@@ -161,7 +175,9 @@ jobs:
         uses: rui314/setup-mold@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: modules/data -> target
+          workspaces: |
+            modules/data -> target
+            engine/core -> target
           prefix-key: v0-rust-data
           # Only main writes the cache; pull requests restore main's (A10).
           save-if: ${{ github.ref == 'refs/heads/main' }}

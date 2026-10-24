@@ -1,0 +1,503 @@
+{
+  "about": "Element and document labels (data ADR 559) and the recipe restoreFromLabels rebuilds from them. Inputs are written by hand; `expect` is recorded from data-bundle/src/labels.ts by record.ts, and paged-data-session's labels test holds the Rust reader to it (core ADR 1014).",
+  "cases": [
+    {
+      "name": "a property binding on its host comes back with the host's oid selector",
+      "elements": [
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u12"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-3f9c1a2b\",\"bind\":[{\"id\":\"weight\",\"kind\":\"property\",\"target\":\"host\",\"path\":\"frameStrokeWeight\",\"query\":\"q\",\"expr\":\"MM(weight)\"}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}}]}}"
+        }
+      ],
+      "documentLabel": null,
+      "expect": {
+        "payload": {
+          "sources": [
+            {
+              "id": "products",
+              "kind": {
+                "kind": "file",
+                "format": "csv",
+                "name": "products.csv"
+              },
+              "capability": "fs.read",
+              "refresh": {
+                "policy": "manual"
+              }
+            }
+          ],
+          "queries": [
+            {
+              "id": "q",
+              "sql": "SELECT * FROM products",
+              "params": [],
+              "shape": {
+                "shape": "recordStream"
+              }
+            }
+          ],
+          "templates": [],
+          "bindings": [
+            {
+              "id": "weight",
+              "kind": "property",
+              "target": {
+                "selector": "frame[label.x-paged:media.paged.data*=\"\\\"oid\\\":\\\"pd-3f9c1a2b\\\"\"]"
+              },
+              "path": "frameStrokeWeight",
+              "query": "q",
+              "expr": "MM(weight)"
+            }
+          ]
+        },
+        "facts": {
+          "hostOids": {
+            "weight": "pd-3f9c1a2b"
+          },
+          "hostElements": {
+            "weight": {
+              "kind": "rectangle",
+              "id": "u12"
+            }
+          },
+          "visibility": {},
+          "image": {},
+          "barcode": {},
+          "lowered": {},
+          "storyHosted": {}
+        },
+        "fromElements": 1
+      }
+    },
+    {
+      "name": "each binding kind records where it is hosted today",
+      "elements": [
+        {
+          "element": {
+            "kind": "textFrame",
+            "id": "u20"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000001\",\"bind\":[{\"id\":\"v_name\",\"kind\":\"variable\",\"target\":\"v_name\",\"query\":\"q\",\"expr\":\"name\",\"missing\":{\"missing\":\"blank\"}},{\"id\":\"sale\",\"kind\":\"rule\",\"scope\":\"story:u9\",\"when\":\"price > 10\",\"apply\":{\"action\":\"paragraphStyle\",\"name\":\"Sale\"}}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}}],\"extra\":{\"v_name\":{\"variable\":\"v_name\"},\"sale\":{\"story\":\"u9\"}}}}"
+        },
+        {
+          "element": {
+            "kind": "oval",
+            "id": "u21"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000002\",\"bind\":[{\"id\":\"badge\",\"kind\":\"visibility\",\"target\":\"$host\",\"query\":\"q\",\"expr\":\"in_stock\",\"options\":{\"invert\":true,\"missing\":\"leave\"}}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}}],\"extra\":{\"badge\":{\"kind\":\"rectangle\"}}}}"
+        },
+        {
+          "element": {
+            "kind": "polygon",
+            "id": "u22"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000003\",\"bind\":[{\"id\":\"badge2\",\"kind\":\"visibility\",\"target\":\"$host\",\"query\":\"q\",\"expr\":\"in_stock\",\"options\":{\"invert\":true,\"missing\":\"leave\"}}]}}"
+        },
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u23"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000004\",\"bind\":[{\"id\":\"img\",\"kind\":\"image\",\"target\":\"u1a2\",\"query\":\"q\",\"expr\":\"photo\",\"policy\":{\"fit\":\"fill\",\"missing\":\"skip\"}}],\"extra\":{\"img\":{\"fit\":\"proportional\"}}}}"
+        },
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u24"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000005\",\"bind\":[{\"id\":\"ean\",\"kind\":\"barcode\",\"target\":\"$host\",\"query\":\"q\",\"symbology\":\"ean13\",\"expr\":\"ean\",\"options\":{\"quietZone\":0,\"missing\":\"flag\"}}]}}"
+        },
+        {
+          "element": {
+            "kind": "textFrame",
+            "id": "u25"
+          },
+          "label": "{\"v\":1,\"data\":{\"kind\":\"table\",\"binding\":\"tbl\",\"oid\":\"pd-00000006\",\"bind\":[{\"id\":\"tbl\",\"kind\":\"table\",\"region\":\"$host\",\"query\":\"q\",\"columns\":[{\"header\":\"Name\",\"expr\":\"name\",\"style\":null}],\"options\":{\"header_row\":true,\"group_by\":[]}}]}}"
+        },
+        {
+          "element": {
+            "kind": "textFrame",
+            "id": "u26"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-00000007\",\"bind\":[{\"id\":\"flow\",\"kind\":\"recordFlow\",\"chain\":\"u26\",\"query\":\"q\",\"template\":\"t1\"}]}}"
+        }
+      ],
+      "documentLabel": null,
+      "expect": {
+        "payload": {
+          "sources": [
+            {
+              "id": "products",
+              "kind": {
+                "kind": "file",
+                "format": "csv",
+                "name": "products.csv"
+              },
+              "capability": "fs.read",
+              "refresh": {
+                "policy": "manual"
+              }
+            }
+          ],
+          "queries": [
+            {
+              "id": "q",
+              "sql": "SELECT * FROM products",
+              "params": [],
+              "shape": {
+                "shape": "recordStream"
+              }
+            }
+          ],
+          "templates": [],
+          "bindings": [
+            {
+              "id": "v_name",
+              "kind": "variable",
+              "target": "v_name",
+              "query": "q",
+              "expr": "name",
+              "missing": {
+                "missing": "blank"
+              }
+            },
+            {
+              "id": "sale",
+              "kind": "rule",
+              "scope": "story:u9",
+              "when": "price > 10",
+              "apply": {
+                "action": "paragraphStyle",
+                "name": "Sale"
+              }
+            },
+            {
+              "id": "badge",
+              "kind": "visibility",
+              "target": "u21",
+              "query": "q",
+              "expr": "in_stock",
+              "options": {
+                "invert": true,
+                "missing": "leave"
+              }
+            },
+            {
+              "id": "badge2",
+              "kind": "visibility",
+              "target": "u22",
+              "query": "q",
+              "expr": "in_stock",
+              "options": {
+                "invert": true,
+                "missing": "leave"
+              }
+            },
+            {
+              "id": "img",
+              "kind": "image",
+              "target": "u1a2",
+              "query": "q",
+              "expr": "photo",
+              "policy": {
+                "fit": "fill",
+                "missing": "skip"
+              }
+            },
+            {
+              "id": "ean",
+              "kind": "barcode",
+              "target": "u24",
+              "query": "q",
+              "symbology": "ean13",
+              "expr": "ean",
+              "options": {
+                "quietZone": 0,
+                "missing": "flag"
+              }
+            },
+            {
+              "id": "tbl",
+              "kind": "table",
+              "region": "u25",
+              "query": "q",
+              "columns": [
+                {
+                  "header": "Name",
+                  "expr": "name",
+                  "style": null
+                }
+              ],
+              "options": {
+                "header_row": true,
+                "group_by": []
+              }
+            },
+            {
+              "id": "flow",
+              "kind": "recordFlow",
+              "chain": "u26",
+              "query": "q",
+              "template": "t1"
+            }
+          ]
+        },
+        "facts": {
+          "hostOids": {},
+          "hostElements": {},
+          "visibility": {
+            "badge": {
+              "elementId": "u21",
+              "kind": "rectangle"
+            },
+            "badge2": {
+              "elementId": "u22",
+              "kind": "polygon"
+            }
+          },
+          "image": {
+            "img": {
+              "elementId": "u23",
+              "fit": "proportional"
+            }
+          },
+          "barcode": {
+            "ean": {
+              "elementId": "u24"
+            }
+          },
+          "lowered": {
+            "tbl": {
+              "kind": "textFrame",
+              "id": "u25"
+            },
+            "flow": {
+              "kind": "textFrame",
+              "id": "u26"
+            }
+          },
+          "storyHosted": {
+            "v_name": {
+              "frame": "u20",
+              "extra": {
+                "variable": "v_name"
+              }
+            },
+            "sale": {
+              "frame": "u20",
+              "extra": {
+                "story": "u9"
+              }
+            }
+          }
+        },
+        "fromElements": 8
+      }
+    },
+    {
+      "name": "an element's copy of a binding wins over the document recipe's",
+      "elements": [
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u30"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-0000000a\",\"bind\":[{\"id\":\"weight\",\"kind\":\"property\",\"target\":\"host\",\"path\":\"frameStrokeWeight\",\"query\":\"q\",\"expr\":\"MM(weight) * 2\"}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}}]}}"
+        },
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u31"
+          },
+          "label": null
+        },
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u32"
+          },
+          "label": "vendor note, not JSON"
+        },
+        {
+          "element": {
+            "kind": "rectangle",
+            "id": "u33"
+          },
+          "label": "{\"v\":1,\"data\":{\"kind\":\"table\",\"binding\":\"other\"}}"
+        }
+      ],
+      "documentLabel": "{\"v\":1,\"data\":{\"session\":\"0f1e2d3c\",\"recipe\":{\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}},{\"id\":\"prices\",\"kind\":{\"kind\":\"remote\",\"url\":\"https://data.example/prices.csv\"},\"capability\":\"network\",\"refresh\":{\"policy\":\"manual\"}}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}},{\"id\":\"qp\",\"sql\":\"SELECT * FROM prices\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"templates\":[],\"bindings\":[{\"id\":\"weight\",\"kind\":\"property\",\"target\":{\"selector\":\"frame[label.x-paged:media.paged.data*=\\\"\\\\\\\"oid\\\\\\\":\\\\\\\"pd-0000000a\\\\\\\"\\\"]\"},\"path\":\"frameStrokeWeight\",\"query\":\"q\",\"expr\":\"MM(weight)\"},{\"id\":\"op\",\"kind\":\"property\",\"target\":{\"selector\":\"rectangle:u77\"},\"path\":\"frameOpacity\",\"query\":\"q\",\"expr\":\"50\"}],\"variables\":{\"name\":\"binding1\",\"variables\":[{\"name\":\"v_name\",\"trait\":\"textcontent\"}],\"dataSets\":[]},\"locales\":{\"weight\":\"de\"}}}}",
+      "expect": {
+        "payload": {
+          "sources": [
+            {
+              "id": "products",
+              "kind": {
+                "kind": "file",
+                "format": "csv",
+                "name": "products.csv"
+              },
+              "capability": "fs.read",
+              "refresh": {
+                "policy": "manual"
+              }
+            },
+            {
+              "id": "prices",
+              "kind": {
+                "kind": "remote",
+                "url": "https://data.example/prices.csv"
+              },
+              "capability": "network",
+              "refresh": {
+                "policy": "manual"
+              }
+            }
+          ],
+          "queries": [
+            {
+              "id": "q",
+              "sql": "SELECT * FROM products",
+              "params": [],
+              "shape": {
+                "shape": "recordStream"
+              }
+            },
+            {
+              "id": "qp",
+              "sql": "SELECT * FROM prices",
+              "params": [],
+              "shape": {
+                "shape": "recordStream"
+              }
+            }
+          ],
+          "templates": [],
+          "bindings": [
+            {
+              "id": "weight",
+              "kind": "property",
+              "target": {
+                "selector": "frame[label.x-paged:media.paged.data*=\"\\\"oid\\\":\\\"pd-0000000a\\\"\"]"
+              },
+              "path": "frameStrokeWeight",
+              "query": "q",
+              "expr": "MM(weight) * 2"
+            },
+            {
+              "id": "op",
+              "kind": "property",
+              "target": {
+                "selector": "rectangle:u77"
+              },
+              "path": "frameOpacity",
+              "query": "q",
+              "expr": "50"
+            }
+          ],
+          "variables": {
+            "name": "binding1",
+            "variables": [
+              {
+                "name": "v_name",
+                "trait": "textcontent"
+              }
+            ],
+            "dataSets": []
+          },
+          "locales": {
+            "weight": "de"
+          }
+        },
+        "facts": {
+          "hostOids": {
+            "weight": "pd-0000000a"
+          },
+          "hostElements": {
+            "weight": {
+              "kind": "rectangle",
+              "id": "u30"
+            }
+          },
+          "visibility": {},
+          "image": {},
+          "barcode": {},
+          "lowered": {},
+          "storyHosted": {}
+        },
+        "fromElements": 1
+      }
+    },
+    {
+      "name": "InDesign's AID escapes are decoded before the label is read",
+      "elements": [
+        {
+          "element": {
+            "kind": "textFrame",
+            "id": "u40"
+          },
+          "label": "{\"v\":1,\"data\":{\"oid\":\"pd-0000000b\",\"bind\":[{\"id\":\"v_name\",\"kind\":\"variable\",\"target\":\"v_name\",\"query\":\"q\",\"expr\":\"\\\"Gr<?AID 00fc?><?AID 00df?>e \\\" & name\",\"missing\":{\"missing\":\"blank\"}}],\"queries\":[{\"id\":\"q\",\"sql\":\"SELECT * FROM products\",\"params\":[],\"shape\":{\"shape\":\"recordStream\"}}],\"sources\":[{\"id\":\"products\",\"kind\":{\"kind\":\"file\",\"format\":\"csv\",\"name\":\"products.csv\"},\"capability\":\"fs.read\",\"refresh\":{\"policy\":\"manual\"}}]}}"
+        }
+      ],
+      "documentLabel": null,
+      "expect": {
+        "payload": {
+          "sources": [
+            {
+              "id": "products",
+              "kind": {
+                "kind": "file",
+                "format": "csv",
+                "name": "products.csv"
+              },
+              "capability": "fs.read",
+              "refresh": {
+                "policy": "manual"
+              }
+            }
+          ],
+          "queries": [
+            {
+              "id": "q",
+              "sql": "SELECT * FROM products",
+              "params": [],
+              "shape": {
+                "shape": "recordStream"
+              }
+            }
+          ],
+          "templates": [],
+          "bindings": [
+            {
+              "id": "v_name",
+              "kind": "variable",
+              "target": "v_name",
+              "query": "q",
+              "expr": "\"Grüße \" & name",
+              "missing": {
+                "missing": "blank"
+              }
+            }
+          ]
+        },
+        "facts": {
+          "hostOids": {},
+          "hostElements": {},
+          "visibility": {},
+          "image": {},
+          "barcode": {},
+          "lowered": {},
+          "storyHosted": {
+            "v_name": {
+              "frame": "u40"
+            }
+          }
+        },
+        "fromElements": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+[package]
+name = "paged-data-barcode"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data barcode/QR symbology encoders (spec §9.7, the EasyCatalog catalog-publishing staple): pure clean-room module/bar encoders (EAN-13/UPC-A, Code-128, QR) -> a frozen BarcodeGeometry filled-rect grid in a unit box, lowered to native vector ops. Dependency-free; derived from public ISO/IEC specs, never a GPL library. Pure model->IR; depends ONLY on data-core."
+
+[lib]
+# The Rust name it had in modules/data (PM-0014: moved with history; the
+# rename to paged_data_barcode is a later mechanical pass).
+name = "data_barcode"
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-data-core = { path = "../paged-data-core" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+[dev-dependencies]
+# An independent QR decoder for the version × mask sweep (MIT OR Apache-2.0,
+# test-only — the crate itself stays dependency-free).
+rqrr = "0.11"

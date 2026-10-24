@@ -12,8 +12,11 @@ project:
   description: "Database publishing module: DSL, bindings, the Turso query store."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
-# data-core and data-expr take platform/shared/fmt by path.
+# The engine crates (engine/core/crates/paged-data-*, PM-0015) and
+# platform/shared/fmt are path dependencies.
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
@@ -30,6 +33,9 @@ fileGroups:
     - "/.cargo/*.toml"
     - "/platform/shared/fmt/src/**/*.rs"
     - "/platform/shared/fmt/Cargo.toml"
+    - "/engine/core/crates/paged-data-*/**/*.rs"
+    - "/engine/core/crates/paged-data-*/Cargo.toml"
+    - "/engine/core/crates/paged-data-core/functions/*.yaml"
 
 tasks:
   js-test:

@@ -16,6 +16,8 @@ on:
     branches: [main]
     paths:
       - "modules/data/**"
+      # The engine crates the wasm is built from (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).
@@ -52,6 +54,8 @@ on:
   pull_request:
     paths:
       - "modules/data/**"
+      # The engine crates the wasm is built from (PM-0015).
+      - "engine/core/crates/paged-data-*/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
       # The extension contract the bundle builds against (workspace:*).

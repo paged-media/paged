@@ -38,6 +38,22 @@ members = [
     "crates/idml-import",
     "crates/idml-export",
     "crates/idml-coverage",
+    # paged.data's engine crates (PM-0015, moved from modules/data with their
+    # history): the binding language, the sync engine, lowering, the store
+    # (Turso) and its readers. modules/data keeps its wasm surface (data-js),
+    # its CLI, its script surface and its conformance suite.
+    "crates/paged-data-core",
+    "crates/paged-data-expr",
+    "crates/paged-data-query",
+    "crates/paged-data-bind",
+    "crates/paged-data-lower",
+    "crates/paged-data-barcode",
+    "crates/paged-data-dataset",
+    "crates/paged-data-sources",
+    "crates/paged-data-store",
+    "crates/paged-data-xlsx",
+    "crates/paged-data-automation",
+    "crates/paged-data-session",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
