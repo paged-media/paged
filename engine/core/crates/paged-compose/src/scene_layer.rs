@@ -686,6 +686,7 @@ pub fn emit_scene_layer<T>(
                     encoded: bytes::Bytes::new(),
                     rgba: rgba.clone(),
                     icc: None,
+                    rendering: None,
                 });
                 // `for_rect_in` maps the image's unit square into `dest`
                 // (content coords) then `content_outer` carries it to page

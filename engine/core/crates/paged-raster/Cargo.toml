@@ -18,8 +18,9 @@ image = { workspace = true }
 # PNG iCCP inflation (already in the graph through PNG and TIFF Deflate).
 flate2 = { workspace = true }
 # CMYK and Lab rasters convert through the engine's one CMS: lcms2 on native,
-# qcms on wasm32. Both halves are wasm-safe, see the crate docs.
-paged-color = { path = "../paged-color" }
+# moxcms on wasm32 (the `moxcms` feature), both with the frame's intent and
+# black-point compensation. Both halves are wasm-safe, see the crate docs.
+paged-color = { path = "../paged-color", features = ["moxcms"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

@@ -225,11 +225,19 @@ impl PathRasterizer for VelloRasterizer {
 /// heap stays at one decoded image at a time. Mirror of `vcpu.rs`'s
 /// helper of the same name; duplicated so this lane builds without the
 /// `cpu` feature.
-fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
+fn decode_image_for_render(
+    bytes: &[u8],
+    expected_w: u32,
+    expected_h: u32,
+    rendering: Option<paged_raster::Rendering>,
+) -> Option<Vec<u8>> {
     // paged-raster: a TIFF decodes (capped at the recorded size) as the
     // renderer's build-time decode does; every other format is `image`'s
     // decode and RGBA8 conversion, unchanged.
-    let decoded = paged_raster::decode_rgba8(bytes, Some(expected_w.max(expected_h))).ok()?;
+    // The build recorded the frame's rendering intent on the lazy image.
+    let conv = paged_raster::PagedColour::new(rendering.unwrap_or_default());
+    let decoded =
+        paged_raster::decode_rgba8_with(bytes, Some(expected_w.max(expected_h)), &conv).ok()?;
     if decoded.width == expected_w && decoded.height == expected_h {
         return Some(decoded.data);
     }
@@ -310,7 +318,8 @@ fn cached_image_data(img: &paged_compose::DecodedImage) -> Option<ImageData> {
     let pixels: Box<[u8]> = if eager {
         img.rgba.as_ref().to_vec().into_boxed_slice()
     } else {
-        decode_image_for_render(&img.encoded, img.width, img.height)?.into_boxed_slice()
+        decode_image_for_render(&img.encoded, img.width, img.height, img.rendering)?
+            .into_boxed_slice()
     };
     let size = pixels.len();
     let data = ImageData {
@@ -2652,6 +2661,7 @@ mod tests {
             encoded: bytes.into(),
             rgba: Vec::new().into(),
             icc: None,
+            rendering: None,
         };
         let red = lazy(png([255, 0, 0, 255]));
         let blue = lazy(png([0, 0, 255, 255]));
@@ -2736,6 +2746,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![255, 0, 0, 255].into(),
             icc: None,
+            rendering: None,
         });
 
         // RadialGradient: red → blue.
@@ -3406,6 +3417,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![200, 80, 80, 255].into(),
             icc: None,
+            rendering: None,
         });
         list.commands.push(DisplayCommand::Image {
             image_id,
@@ -3435,6 +3447,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: vec![200, 80, 80, 255].into(),
             icc: None,
+            rendering: None,
         });
         baseline.commands.push(DisplayCommand::Image {
             image_id: image_id_b,
@@ -4712,6 +4725,7 @@ mod tests {
             encoded: Vec::new().into(),
             rgba: rgba.into(),
             icc: None,
+            rendering: None,
         }
     }
 

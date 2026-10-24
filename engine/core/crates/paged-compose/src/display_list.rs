@@ -1375,6 +1375,13 @@ pub struct DecodedImage {
     /// colour space (concept E7); rasterizers ignore it. `None`
     /// default — every existing constructor stays valid.
     pub icc: Option<bytes::Bytes>,
+    /// The intent and black-point compensation the picture's colours
+    /// convert with when the rasterizer decodes `encoded` lazily (the
+    /// wasm32 path): the frame's `ImageRenderingIntent`, or the
+    /// document's Color Settings. `None` is the engine default (relative
+    /// colorimetric with BPC). An eagerly decoded `rgba` was converted
+    /// with it already.
+    pub rendering: Option<paged_color::cms::Rendering>,
 }
 
 /// Stroke parameters. Widths are in pt.

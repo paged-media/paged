@@ -50,7 +50,15 @@ fn is_eps_magic(bytes: &[u8]) -> bool {
 /// decode or buffer-shape failure — including EPS / PostScript
 /// streams, which would need a Ghostscript sidecar to rasterise
 /// (deferred, see `docs/plan.md` Phase 4).
-pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedImage> {
+///
+/// `rendering` is the intent and black-point compensation the picture's
+/// colours convert with (the frame's `ImageRenderingIntent` or the
+/// document's Color Settings, [`super::images::image_rendering`]); on
+/// wasm32 it rides on the lazy image to the raster-time decode.
+pub(super) fn decode_image_bytes(
+    bytes: &[u8],
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     paged_compose::perf::count(|c| c.pipeline_image_decodes += 1);
     // wasm32 has a hard 4 GB address-space cap. Eagerly decoding
     // every embedded image to RGBA8 during `build_document` bloats
@@ -63,11 +71,11 @@ pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedI
     // re-renders.
     #[cfg(target_arch = "wasm32")]
     {
-        peek_image_lazy(bytes, DECODE_MAX_RASTER_PX)
+        peek_image_lazy(bytes, DECODE_MAX_RASTER_PX, rendering)
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        decode_image_bytes_with_target_max(bytes, DECODE_MAX_RASTER_PX)
+        decode_image_bytes_with(bytes, DECODE_MAX_RASTER_PX, rendering)
     }
 }
 
@@ -78,7 +86,11 @@ pub(super) fn decode_image_bytes(bytes: &[u8]) -> Option<paged_compose::DecodedI
 /// SVG) so the display-list transform stays accurate without paying
 /// for the pixel decode. Only the wasm32 path defers decode this way.
 #[cfg(target_arch = "wasm32")]
-fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn peek_image_lazy(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     if is_eps_magic(bytes) {
         return None;
     }
@@ -96,6 +108,7 @@ fn peek_image_lazy(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedIm
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::new(),
         icc: extract_icc(bytes),
+        rendering: Some(rendering),
     })
 }
 
@@ -136,6 +149,7 @@ fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedI
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba),
         icc: None,
+        rendering: None,
     })
 }
 
@@ -200,10 +214,21 @@ fn peek_image_dimensions(bytes: &[u8], max_px: u32) -> Option<(u32, u32)> {
 // Native-only: the wasm32 build cfg's out the raster-decode path (the
 // engine receives pre-decoded images), so this and `decode_jpeg_scaled`
 // are dead there. The lint stays active on native.
-#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[cfg(test)]
 pub(super) fn decode_image_bytes_with_target_max(
     bytes: &[u8],
     max_px: u32,
+) -> Option<paged_compose::DecodedImage> {
+    decode_image_bytes_with(bytes, max_px, paged_color::cms::Rendering::default())
+}
+
+/// Decode at a caller-supplied longest-edge cap, converting a CMYK raster
+/// with `rendering`.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(super) fn decode_image_bytes_with(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
 ) -> Option<paged_compose::DecodedImage> {
     if is_eps_magic(bytes) {
         tracing::warn!("EPS / PostScript image detected; emitting missing-image placeholder");
@@ -215,7 +240,7 @@ pub(super) fn decode_image_bytes_with_target_max(
     if is_jpeg_magic(bytes) {
         if let Some((src_w, src_h)) = peek_jpeg_dimensions(bytes) {
             if src_w.max(src_h) > max_px {
-                if let Some(d) = decode_jpeg_scaled(bytes, max_px) {
+                if let Some(d) = decode_jpeg_scaled(bytes, max_px, rendering) {
                     return Some(d);
                 }
                 tracing::debug!(
@@ -228,7 +253,7 @@ pub(super) fn decode_image_bytes_with_target_max(
         }
     }
     if paged_raster::is_tiff(bytes) {
-        if let Some(d) = decode_tiff(bytes, max_px) {
+        if let Some(d) = decode_tiff(bytes, max_px, rendering) {
             return Some(d);
         }
     }
@@ -241,14 +266,19 @@ pub(super) fn decode_image_bytes_with_target_max(
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba.into_raw()),
         icc: extract_icc(bytes),
+        rendering: None,
     })
 }
 
 /// A TIFF through `paged-raster`, shrunk to `max_px` and converted with
-/// paged-color. `None` lets the caller try the `image` crate, the decoder
-/// TIFFs used before.
+/// paged-color with `rendering`. `None` lets the caller try the `image`
+/// crate, the decoder TIFFs used before.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn decode_tiff(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn decode_tiff(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     let img = match paged_raster::decode(
         bytes,
         paged_raster::DecodeOptions {
@@ -262,13 +292,14 @@ fn decode_tiff(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage>
             return None;
         }
     };
-    let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour).ok()?;
+    let rgba = paged_raster::to_rgba8(&img, &paged_raster::PagedColour::new(rendering)).ok()?;
     Some(paged_compose::DecodedImage {
         width: rgba.width,
         height: rgba.height,
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba.data),
         icc: tiff_icc(&img.info),
+        rendering: None,
     })
 }
 
@@ -315,7 +346,11 @@ fn peek_jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// JPEG-native factors (1, 1/2, 1/4, 1/8); the decoder picks the
 /// smallest factor whose output is ≥ the requested target.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
+fn decode_jpeg_scaled(
+    bytes: &[u8],
+    max_px: u32,
+    rendering: paged_color::cms::Rendering,
+) -> Option<paged_compose::DecodedImage> {
     use jpeg_decoder::{Decoder, PixelFormat};
     let mut decoder = Decoder::new(bytes);
     decoder.read_info().ok()?;
@@ -357,7 +392,7 @@ fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::Decode
         PixelFormat::L8 => l8_to_rgba(&pixels, w, h)?,
         PixelFormat::L16 => l16_to_rgba(&pixels, w, h)?,
         PixelFormat::RGB24 => rgb24_to_rgba(&pixels, w, h)?,
-        PixelFormat::CMYK32 => cmyk32_to_rgba(&pixels, w, h, icc_profile.as_deref())?,
+        PixelFormat::CMYK32 => cmyk32_to_rgba(&pixels, w, h, icc_profile.as_deref(), rendering)?,
     };
     Some(paged_compose::DecodedImage {
         width: w,
@@ -365,5 +400,6 @@ fn decode_jpeg_scaled(bytes: &[u8], max_px: u32) -> Option<paged_compose::Decode
         encoded: bytes::Bytes::copy_from_slice(bytes),
         rgba: bytes::Bytes::from(rgba),
         icc: icc_profile.map(bytes::Bytes::from),
+        rendering: None,
     })
 }

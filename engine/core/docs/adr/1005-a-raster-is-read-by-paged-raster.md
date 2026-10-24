@@ -54,3 +54,12 @@ the shrunk size. A Lab TIFF's profile is not carried on (its pixels arrive as sR
 - Orientation is reported, not applied (the renderer never applied it), and a CMYK TIFF without
   a profile does not yet use the document's CMYK working space.
 - The PDF export still embeds a TIFF as RGB pixels (its lazy path still uses `image`).
+
+## Note — 2026-10-24: the frame's intent ([ADR 1016](1016-one-cms-with-intents-and-bpc.md))
+
+`PagedColour` now carries a rendering (intent and black-point compensation) and converts
+through `paged_color::cms` on the preferred backend: lcms2 on native, moxcms on wasm32 (no
+longer qcms). The renderer passes the frame's `ImageRenderingIntent`, or the document's Color
+Settings, to the build-time decode and, on wasm32, on the lazy image to paged-gpu's
+raster-time decode (`decode_rgba8_with`). The default (relative colorimetric with BPC) is
+bit-identical to the transform above on native.
