@@ -89,3 +89,38 @@ selector meant a literal backslash in the engine, or was refused there.
   too), a `data@1` door over the same session (extensions ADR 343), and the bundle calling the
   engine's reader and guard instead of keeping its own (one implementation instead of two, held
   together by the shared cases until then).
+
+## Amendment (2026-10-24): `paged.data.*` in the interpreter
+
+PM-0015 ("One script interpreter") gives the engine's Boa interpreter `paged.data.*` next to
+`paged.actions.*` ([ADR 1015](1015-paged-action-the-action-registry.md)). The interpreter holds no
+data. Its embedder implements `paged_script::ScriptData` and attaches it for one run with
+`paged_script::with_data(&mut data, || run)` (`paged-script/src/data.rs`). The door sits in a
+thread-local for the length of that call and is removed when it returns, so it never reaches the
+next run. A script calls:
+
+- `paged.data.tables()`: what the run can read.
+- `paged.data.records(table, { offset?, limit? })`: a window of a table.
+- `paged.data.query(sql)`: the rows of one SELECT.
+- `paged.data.evaluate(query, expr, record)`: a binding expression's `{ display, value, error? }`
+  at a record, as the bind popover previews it.
+
+Record sets have the provider shape `{ schema: { fields: [{ name, ty }] }, columns, rowCount }`
+(`record_set_json`). An error the door reports becomes an `Error` the script can catch. With no
+door attached, every call throws a TypeError that says no data is attached to this run. That is
+the editor's worker today. A script never gets an empty answer that looks like data.
+
+`paged script DOC SCRIPT --source ID=FILE …` attaches one. `script_data` (`paged-cli/src/data.rs`)
+builds a `DataSession` from the document's binding labels as `paged data apply` does: it imports
+each file under its source id and runs the recipe's queries through the guard. A `--source` the
+recipe does not declare is imported by its file's extension, so a script can read a file into a
+document that binds nothing yet. The door answers as follows:
+
+- `tables` gives `{ sources: [{ id, imported }], queries: [{ id, sql, rowCount, error? }],
+  tables }`.
+- `records` reads `store_records`.
+- `query` runs `data_store::guard::check_query` first, then `store_query_records`. A script's SQL
+  is refused for the same reasons a document's queries are.
+- `evaluate` calls `evaluate_at`.
+
+With no label and no `--source`, nothing is attached.
