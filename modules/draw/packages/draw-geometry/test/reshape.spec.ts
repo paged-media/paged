@@ -18,7 +18,13 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { pathDistancesFrom, reshapeTable, reshapeWeight, type AnchorTable, type AnchorTriple } from "../src";
+import {
+  pathDistancesFrom,
+  reshapeTable,
+  reshapeWeight,
+  type AnchorTable,
+  type AnchorTriple,
+} from "../src";
 
 type P = [number, number];
 const corner = (p: P): AnchorTriple => ({ anchor: p, left: p, right: p });
@@ -52,14 +58,24 @@ describe("reshapeTable — the Reshape tool's falloff [plugin-draw.tool-wave-3]"
 
   it("distance is measured ALONG the path, and the short way round a closed one", () => {
     const sq: AnchorTable = {
-      anchors: [corner([0, 0]), corner([10, 0]), corner([10, 10]), corner([0, 10])],
+      anchors: [
+        corner([0, 0]),
+        corner([10, 0]),
+        corner([10, 10]),
+        corner([0, 10]),
+      ],
       subpathStarts: [0],
       subpathOpen: [false],
     };
     expect(pathDistancesFrom(sq, 0)).toEqual([0, 10, 20, 10]);
     // A U whose arms nearly touch: the far arm's tip is far along the path.
     const u: AnchorTable = {
-      anchors: [corner([0, 0]), corner([0, 100]), corner([2, 100]), corner([2, 0])],
+      anchors: [
+        corner([0, 0]),
+        corner([0, 100]),
+        corner([2, 100]),
+        corner([2, 0]),
+      ],
       subpathStarts: [0],
       subpathOpen: [true],
     };

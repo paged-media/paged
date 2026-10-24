@@ -394,9 +394,14 @@ describe("paged.draw tool options, no engine — Star and Reshape [plugin-draw.t
         .settle();
     const table = (r: UnitRig) =>
       (
-        r.leaves().find(
-          (m) => (m as { args?: { path?: string } }).args?.path === "framePath",
-        ) as { args: { value: { value: { anchors: { anchor: number[] }[] } } } }
+        r
+          .leaves()
+          .find(
+            (m) =>
+              (m as { args?: { path?: string } }).args?.path === "framePath",
+          ) as {
+          args: { value: { value: { anchors: { anchor: number[] }[] } } };
+        }
       ).args.value.value.anchors.map((a) => a.anchor);
     // The neighbours are 212 pt away along the path: past the 72 pt
     // default, inside 400.

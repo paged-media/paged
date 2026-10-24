@@ -112,7 +112,8 @@ export function createReshapeHandler(
       reset();
       return;
     }
-    if (snap.table && pageId) host.overlay.setToolPreviews(tablePreview(snap.table, matrix, pageId));
+    if (snap.table && pageId)
+      host.overlay.setToolPreviews(tablePreview(snap.table, matrix, pageId));
   };
 
   return {
@@ -128,7 +129,9 @@ export function createReshapeHandler(
       queue.run(async () => {
         let id: ElementId | null = null;
         try {
-          id = (await host.document.hitTest(e.pageId!, e.pagePoint!, "any"))?.element ?? null;
+          id =
+            (await host.document.hitTest(e.pageId!, e.pagePoint!, "any"))
+              ?.element ?? null;
         } catch {
           /* fall through to the selection */
         }
@@ -156,7 +159,8 @@ export function createReshapeHandler(
     onPointerMove(e) {
       queue.run(async () => {
         const p = machine && e.pageId === pageId ? local(e) : null;
-        if (machine && p) await sync(machine.handle({ type: "move", point: p }));
+        if (machine && p)
+          await sync(machine.handle({ type: "move", point: p }));
       });
     },
     onPointerUp(e) {
@@ -164,7 +168,9 @@ export function createReshapeHandler(
         if (!machine) return;
         const p = e.pageId === pageId ? local(e) : null;
         await sync(
-          p ? machine.handle({ type: "up", point: p }) : machine.handle({ type: "key", key: "Escape" }),
+          p
+            ? machine.handle({ type: "up", point: p })
+            : machine.handle({ type: "key", key: "Escape" }),
         );
       });
     },
