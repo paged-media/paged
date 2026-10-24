@@ -19,12 +19,14 @@
 // SVG IMPORT OF A SHAPE WITH SEVERAL CONTOURS, through the REAL engine. A
 // ring used to land as two filled siblings — the hole painted over by the
 // inner disc, whatever the file's `fill-rule` said. It is ONE compound
-// element now, wound for its fill rule by draw-geometry's
-// `orientForFillRule`. Anchor tables cannot tell a ring from a coin (the
-// engine fills NON-ZERO, so that is decided by the windings), so every
-// hole here is ALSO read off a real PDF: the page content stream is
-// inflated and the painted path's subpaths are measured — one fill op,
-// one path, alternating signed areas.
+// element now. A `nonzero` shape keeps its windings; an `evenodd` one is
+// written the engine's native `frameFillRule: "EvenOdd"` (engine ADR 1006)
+// with its contours as authored — and, on an engine without the rule, is
+// re-wound by draw-geometry's `orientForFillRule` instead. Anchor tables
+// cannot tell a ring from a coin (that is decided by the windings and the
+// rule), so every hole here is ALSO read off a real PDF: the page content
+// stream is inflated and the painted path's subpaths are measured — one
+// fill op (`f` non-zero, `f*` even-odd), one path, its signed areas.
 
 import { inflateSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
@@ -39,7 +41,11 @@ import {
 } from "@paged-media/draw-geometry";
 
 import { drawBundle, exportSvg, importSvg, leafIdsOf } from "../../src";
-import { commitSvgImport, shapesFromSvgBytes } from "../../src/io/svg";
+import {
+  FILL_RULE_FEATURE,
+  commitSvgImport,
+  shapesFromSvgBytes,
+} from "../../src/io/svg";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
@@ -135,17 +141,20 @@ const ringArea = (ring: [number, number][]): number => {
 };
 
 /** The FILLED paint blocks the import added: the subpath areas of every
- *  `f` block with `rings` subpaths, minus those there before. */
+ *  block filled by `op` (`f` non-zero, `f*` even-odd) with `rings`
+ *  subpaths, minus those there before. */
 async function paintedWith(
   h: HeadlessHost,
   rings: number,
   run: () => Promise<unknown>,
+  op: "f" | "f*" = "f",
 ): Promise<number[][]> {
+  const fill = op === "f" ? /^f$/m : /^f\*$/m;
   const blocks = async () =>
     (await pdfContentStream(h))
       .split(/\nq\n/)
       .slice(1)
-      .filter((b) => /^f$/m.test(b))
+      .filter((b) => fill.test(b))
       .map(subpathsOf)
       .filter((b) => b.length === rings)
       .map((b) => b.map(ringArea));
@@ -158,6 +167,32 @@ async function paintedWith(
 /** The signs of the areas, relative to the first: what non-zero reads. */
 const relative = (areas: readonly number[]): number[] =>
   areas.map((a) => Math.sign(a) * Math.sign(areas[0]!));
+
+/** The element's `frameFillRule`, as the engine reads it back. */
+async function fillRuleOf(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<string | undefined> {
+  const props = await h.host.document.elementProperties(id);
+  const v = props?.entries.find((e) => e.path === "frameFillRule")?.value;
+  return v?.type === "text" ? (v.value as string) : undefined;
+}
+
+/** `host`, answering no to the fill-rule feature: an engine before
+ *  engine ADR 1006, which fills non-zero only. */
+const withoutFillRule = (host: BundleHost): BundleHost =>
+  new Proxy(host, {
+    get(target, key, receiver) {
+      if (key === "supports") {
+        return (feature: string) =>
+          feature !== FILL_RULE_FEATURE && target.supports(feature);
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  }) as BundleHost;
+
+/** A five-pointed star drawn as ONE self-crossing contour. */
+const STAR = "M150 20 L226 254 L27 110 L273 110 L74 254 Z";
 
 describe("SVG import — a shape of several contours is ONE compound path [plugin-draw.svg-io]", () => {
   let h: HeadlessHost;
@@ -198,7 +233,7 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     await h.host.document.undo();
   });
 
-  it("an EVENODD ring wound the SAME way lands as one element whose inner contour is re-wound", async () => {
+  it("an EVENODD ring wound the SAME way lands as one element filled even-odd, its contours as authored [frames-paths.fill-rule-even-odd]", async () => {
     const svg = svgOf(
       `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40)}" fill-rule="evenodd" fill="#0033cc"/>`,
     );
@@ -206,9 +241,34 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     expect(Math.sign(contourSignedArea(authored.anchors.slice(0, 4)))).toBe(
       Math.sign(contourSignedArea(authored.anchors.slice(4, 8))),
     );
+    expect(h.host.supports(FILL_RULE_FEATURE)).toBe(true);
+    let ids: ElementId[] = [];
+    const painted = await paintedWith(
+      h,
+      2,
+      async () => {
+        ids = await importSvg(h.host, file("evenodd.svg", svg));
+      },
+      "f*",
+    );
+    expect(ids).toHaveLength(1);
+    // Nothing turned: the rule, not the winding, makes the hole.
+    expect(relative(await areasOf(h, ids[0]!))).toEqual([1, 1]);
+    expect(await fillRuleOf(h, ids[0]!)).toBe("EvenOdd");
+    // THE HOLE RENDERS: one path filled `f*`, two same-wound subpaths.
+    expect(painted).toHaveLength(1);
+    expect(relative(painted[0]!)).toEqual([1, 1]);
+    await h.host.document.undo();
+  });
+
+  it("on an engine without the fill rule, an EVENODD ring is re-wound instead: the hole turns, the fill stays non-zero", async () => {
+    const svg = svgOf(
+      `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40)}" fill-rule="evenodd" fill="#0033cc"/>`,
+    );
+    const authored = shapesFromSvgBytes(enc(svg))[0]!.anchors;
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 2, async () => {
-      ids = await importSvg(h.host, file("evenodd.svg", svg));
+      ids = await importSvg(withoutFillRule(h.host), file("evenodd.svg", svg));
     });
     expect(ids).toHaveLength(1);
     const areas = await areasOf(h, ids[0]!);
@@ -217,8 +277,51 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       Math.sign(contourSignedArea(authored.anchors.slice(0, 4))),
     );
     expect(relative(areas)).toEqual([1, -1]);
+    expect(await fillRuleOf(h, ids[0]!)).toBe("NonZero");
     expect(painted).toHaveLength(1);
     expect(relative(painted[0]!)).toEqual([1, -1]);
+    await h.host.document.undo();
+  });
+
+  it("a self-crossing EVENODD star imports EXACTLY: one contour, filled even-odd, its middle empty [frames-paths.fill-rule-even-odd]", async () => {
+    const svg = svgOf(`<path d="${STAR}" fill-rule="evenodd" fill="#aa2200"/>`);
+    let ids: ElementId[] = [];
+    const painted = await paintedWith(
+      h,
+      1,
+      async () => {
+        ids = await importSvg(h.host, file("star.svg", svg));
+      },
+      "f*",
+    );
+    expect(ids).toHaveLength(1);
+    expect(await fillRuleOf(h, ids[0]!)).toBe("EvenOdd");
+    // The PDF fills the one five-vertex contour by the even-odd rule,
+    // which leaves the pentagon in the middle empty.
+    expect(painted).toHaveLength(1);
+    await h.host.document.undo();
+  });
+
+  it("on an engine without the fill rule, the star still paints its non-zero region (the old limitation, kept for old engines)", async () => {
+    const svg = svgOf(`<path d="${STAR}" fill-rule="evenodd" fill="#aa2200"/>`);
+    let ids: ElementId[] = [];
+    const painted = await paintedWith(h, 1, async () => {
+      ids = await importSvg(withoutFillRule(h.host), file("star.svg", svg));
+    });
+    expect(ids).toHaveLength(1);
+    expect(await fillRuleOf(h, ids[0]!)).toBe("NonZero");
+    expect(painted).toHaveLength(1);
+    await h.host.document.undo();
+  });
+
+  it("a NONZERO shape writes no fill rule: it is the engine's default", async () => {
+    const svg = svgOf(`<path d="${STAR}" fill="#aa2200"/>`);
+    const { host, work } = countingHost(h.host);
+    const done = await commitSvgImport(host, file("star-nz.svg", svg));
+    expect(done.elements).toBe(1);
+    const [batch] = work.snapshot().mutations;
+    // 1 swatch, then insert, bind and the three paints — no fourth write.
+    expect(batch).toEqual({ op: "batch", ops: 1 + 5 });
     await h.host.document.undo();
   });
 
@@ -240,12 +343,25 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     );
     let ids: ElementId[] = [];
     const painted = await paintedWith(h, 4, async () => {
-      ids = await importSvg(h.host, file("nested.svg", svg));
+      ids = await importSvg(withoutFillRule(h.host), file("nested.svg", svg));
     });
     expect(ids).toHaveLength(1);
     expect(relative(await areasOf(h, ids[0]!))).toEqual([1, -1, 1, -1]);
     expect(painted).toHaveLength(1);
     expect(relative(painted[0]!)).toEqual([1, -1, 1, -1]);
+    await h.host.document.undo();
+    // With the rule the windings stay as drawn and `f*` paints the same
+    // alternation.
+    const native = await paintedWith(
+      h,
+      4,
+      async () => {
+        ids = await importSvg(h.host, file("nested.svg", svg));
+      },
+      "f*",
+    );
+    expect(relative(await areasOf(h, ids[0]!))).toEqual([1, 1, 1, 1]);
+    expect(native).toHaveLength(1);
     await h.host.document.undo();
   });
 
@@ -254,9 +370,14 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
       `<path d="${sq(20, 20, 40)} ${sq(200, 20, 40)}" fill-rule="evenodd" fill="#996600"/>`,
     );
     let ids: ElementId[] = [];
-    const painted = await paintedWith(h, 2, async () => {
-      ids = await importSvg(h.host, file("apart.svg", svg));
-    });
+    const painted = await paintedWith(
+      h,
+      2,
+      async () => {
+        ids = await importSvg(h.host, file("apart.svg", svg));
+      },
+      "f*",
+    );
     expect(ids).toHaveLength(1);
     // Neither is inside the other, so neither is a hole: same winding.
     expect(relative(await areasOf(h, ids[0]!))).toEqual([1, 1]);
@@ -286,9 +407,9 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     });
     const counted = work.snapshot();
     // 3 swatches; per shape insert, bind, three paints; per compound
-    // `framePath` and `frameBounds`.
+    // `framePath` and `frameBounds`; the even-odd one its `frameFillRule`.
     expect(counted.mutations).toEqual([
-      { op: "batch", ops: 3 + 3 * 5 + 2 * 2 },
+      { op: "batch", ops: 3 + 3 * 5 + 2 * 2 + 1 },
     ]);
     expect((await leaves()).length).toBe(before.length + 3);
     await h.host.document.undo();
@@ -361,17 +482,40 @@ describe("SVG import — a shape of several contours is ONE compound path [plugi
     const out = await exportSvg(h.host);
     const text = new TextDecoder().decode(out!.bytes);
     expect(text.match(/<path /g)).toHaveLength(1);
-    // The engine fills non-zero over the windings it stores, and the
+    // The element fills even-odd over the windings it stores, and the
     // file says so.
-    expect(text).toContain(`fill-rule="nonzero"`);
+    expect(text).toContain(`fill-rule="evenodd"`);
     const back = parseSvgDocument(text)!.shapes;
     expect(back).toHaveLength(1);
+    expect(back[0]!.style.fillRule).toBe("evenodd");
     const t = back[0]!.anchors;
     const areas = contourRanges(t.anchors.length, t.subpathStarts).map(
       ([from, to]) => contourSignedArea(t.anchors.slice(from, to)),
     );
-    expect(relative(areas)).toEqual([1, -1]);
+    expect(relative(areas)).toEqual([1, 1]);
     expect(back[0]!.style.fill).toBe("#0033cc");
+    await h.host.selection.set([]);
+    await h.host.document.undo();
+  });
+
+  it("EXPORT writes a non-zero compound as fill-rule nonzero, and a single even-odd star as evenodd", async () => {
+    const ring = svgOf(
+      `<path d="${sq(20, 20, 100)} ${sq(50, 50, 40, false)}" fill="#cc3300"/>`,
+    );
+    const ringIds = await importSvg(h.host, file("nz.svg", ring));
+    await h.host.selection.set(ringIds as never[]);
+    let text = new TextDecoder().decode((await exportSvg(h.host))!.bytes);
+    expect(text).toContain(`fill-rule="nonzero"`);
+    await h.host.selection.set([]);
+    await h.host.document.undo();
+
+    const star = svgOf(
+      `<path d="${STAR}" fill-rule="evenodd" fill="#aa2200"/>`,
+    );
+    const starIds = await importSvg(h.host, file("star.svg", star));
+    await h.host.selection.set(starIds as never[]);
+    text = new TextDecoder().decode((await exportSvg(h.host))!.bytes);
+    expect(text).toContain(`fill-rule="evenodd"`);
     await h.host.selection.set([]);
     await h.host.document.undo();
   });

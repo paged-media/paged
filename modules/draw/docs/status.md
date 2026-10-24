@@ -354,9 +354,12 @@ panel of these rows. The fields:
   It reads only what the browser can decode.
 - **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
   images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only. The engine fills non-zero, so `fill-rule="evenodd"` is
-  expressed by re-winding contours by nesting depth: contours that cross each other or
-  themselves (a star drawn as one path) paint their non-zero region. A shape stays one
+  writes solid colours only. `fill-rule="evenodd"` is written as the element's native
+  fill rule (`frameFillRule`, engine ADR 1006), the contours kept as authored, so contours
+  that cross each other or themselves (a star drawn as one path) import exactly; export
+  writes the element's rule back as `fill-rule`. On an engine without the fill rule
+  (`document.fillRule@1` not supported) an even-odd shape is re-wound by nesting depth
+  instead, and crossing contours there paint their non-zero region. A shape stays one
   path per contour when a contour after the first is open, or when the engine reports no
   page origin.
 
