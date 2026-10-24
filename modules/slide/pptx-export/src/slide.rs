@@ -715,14 +715,9 @@ impl<'a> Writer<'a, '_> {
             let inv = geom::invert(&nb).ok_or("a degenerate group transform")?;
             return Ok((geom::mul(&nc, &inv), false));
         }
-        if b.elems.len() != c.elems.len()
-            || b.elems.iter().zip(&c.elems).any(|(x, y)| x.kind != y.kind)
-        {
-            return Err("its items changed kind".into());
-        }
         let mut chosen = None;
         let mut reshaped = false;
-        for (eb, ec) in b.elems.iter().zip(&c.elems) {
+        for (eb, ec) in pairs(b, c)?.into_iter().filter_map(|(x, y)| Some((x, y?))) {
             let nb = geom::mul(&ctx.fx_base, &eb.transform());
             let nc = geom::mul(&ctx.fx_cur, &ec.transform());
             let s = box_map(bbox(eb), bbox(ec));
@@ -872,12 +867,70 @@ impl<'a> Writer<'a, '_> {
             let g = self.cust_geom(poly, &p, ctx)?;
             x = set_sppr(&x, &["a:prstGeom", "a:custGeom"], Some(&g), &["a:xfrm"])?;
         }
+        // An element of the shape deleted on its own: its outline (the
+        // shape paints nothing) or its text (the shape keeps no text).
+        let paired = pairs(b, c)?;
+        if paired
+            .iter()
+            .any(|(e, m)| m.is_none() && e.kind == Kind::Polygon)
+            && !c.elems.iter().any(|e| e.kind == Kind::Polygon)
+        {
+            x = set_sppr(
+                &x,
+                &[
+                    "a:noFill",
+                    "a:solidFill",
+                    "a:gradFill",
+                    "a:blipFill",
+                    "a:pattFill",
+                    "a:grpFill",
+                ],
+                Some("<a:noFill/>"),
+                &["a:xfrm", "a:prstGeom", "a:custGeom"],
+            )?;
+            x = set_sppr(
+                &x,
+                &["a:ln"],
+                Some("<a:ln><a:noFill/></a:ln>"),
+                &[
+                    "a:xfrm",
+                    "a:prstGeom",
+                    "a:custGeom",
+                    "a:noFill",
+                    "a:solidFill",
+                    "a:gradFill",
+                    "a:blipFill",
+                    "a:pattFill",
+                    "a:grpFill",
+                ],
+            )?;
+        }
+        if paired
+            .iter()
+            .any(|(e, m)| m.is_none() && e.kind == Kind::TextFrame)
+        {
+            let root = xml::root(&x).ok_or("unreadable shape")?;
+            if let Some(body) = root.child(&x, "p:txBody") {
+                let paras: Vec<El> = body
+                    .children(&x)
+                    .into_iter()
+                    .filter(|e| e.name == "a:p")
+                    .collect();
+                if let (Some(f), Some(l)) = (paras.first(), paras.last()) {
+                    let empty = format!(
+                        r#"<a:p><a:endParaRPr lang="{}" dirty="0"/></a:p>"#,
+                        esc(&self.lang)
+                    );
+                    x = xml::splice(&x, f.start, l.end, &empty);
+                }
+            }
+        }
         // Fill, line: from the outline (or a text frame that paints).
         let mut other: BTreeSet<String> = BTreeSet::new();
-        for (eb, ec) in b.elems.iter().zip(&c.elems) {
+        for (eb, ec) in paired.iter().filter_map(|(x, y)| Some((*x, (*y)?))) {
             let keys = changed_keys(&eb.v, &ec.v);
             let has = |set: &[&str]| keys.iter().any(|k| set.contains(&k.as_str()));
-            if eb.kind != Kind::TextFrame || c.elems.len() == 1 {
+            if eb.kind != Kind::TextFrame || b.elems.len() == 1 {
                 if has(FILL) || (keys.contains("opacity") && eb.kind != Kind::TextFrame) {
                     let fill = self.fill_of(ec);
                     x = set_sppr(
@@ -1762,6 +1815,30 @@ impl<'a> Writer<'a, '_> {
             }
         }
     }
+}
+
+/// The elements of a shape at import paired with the document's, by kind
+/// in order: `None` for one the document deleted. An element of a kind the
+/// shape did not have is an error (the shape changed what it is).
+fn pairs<'s>(b: &'s NShape, c: &'s NShape) -> Result<Vec<(&'s Elem, Option<&'s Elem>)>, String> {
+    let mut used = vec![false; c.elems.len()];
+    let mut out = Vec::new();
+    for eb in &b.elems {
+        let m = c
+            .elems
+            .iter()
+            .enumerate()
+            .find(|(i, ec)| !used[*i] && ec.kind == eb.kind)
+            .map(|(i, ec)| {
+                used[i] = true;
+                ec
+            });
+        out.push((eb, m));
+    }
+    if used.iter().any(|u| !u) {
+        return Err("its items changed kind".into());
+    }
+    Ok(out)
 }
 
 fn preset_xml(prst: &str, adj: &[(String, String)]) -> String {

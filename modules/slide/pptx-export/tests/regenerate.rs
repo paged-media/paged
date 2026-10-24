@@ -849,3 +849,39 @@ fn a_shape_made_in_the_editor_is_written() {
     );
     assert!((new.w - 80.0).abs() < 0.05 && (new.h - 50.0).abs() < 0.05);
 }
+
+#[test]
+fn deleting_a_shapes_outline_keeps_its_text() {
+    // The editor deletes one item: a shape's outline, its text frame left.
+    let bytes = fixture("geometry");
+    let base = imported(&bytes);
+    let before = resolved(&bytes);
+    let (page, key) = (0..base.spreads.len())
+        .flat_map(|p| top_keys(&base, p).into_iter().map(move |k| (p, k)))
+        .find(|(p, k)| {
+            let e = elements(&base, *p, k);
+            e.iter().any(|r| matches!(r, FrameRef::Polygon(_)))
+                && e.iter().any(|r| matches!(r, FrameRef::TextFrame(_)))
+        })
+        .expect("a shape with an outline and text");
+    let mut doc = base.clone();
+    let outline: Vec<FrameRef> = elements(&doc, page, &key)
+        .into_iter()
+        .filter(|r| matches!(r, FrameRef::Polygon(_)))
+        .collect();
+    doc.spreads[page]
+        .spread
+        .frames_in_order
+        .retain(|r| !outline.contains(r));
+    let out = export_doc(&bytes, &doc);
+    assert!(out.not_exported.is_empty(), "{:?}", out.not_exported);
+    let after = resolved(&out.bytes);
+    let id = shape_id(&key);
+    let b = item(&after, page, id);
+    assert_eq!(text_of(b), text_of(item(&before, page, id)));
+    let ItemKind::Shape { fill, stroke, .. } = &b.kind else {
+        panic!()
+    };
+    assert!(matches!(fill, slide_resolve::model::Paint::None));
+    assert!(stroke.is_none());
+}
