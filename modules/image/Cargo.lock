@@ -631,10 +631,10 @@ dependencies = [
 name = "image-cms"
 version = "0.0.0"
 dependencies = [
- "image-core",
  "lcms2",
  "lcms2-sys",
  "moxcms",
+ "paged-pixel",
  "qcms",
  "thiserror",
 ]
@@ -643,8 +643,8 @@ dependencies = [
 name = "image-codecs"
 version = "0.0.0"
 dependencies = [
- "image-core",
  "jpeg-encoder",
+ "paged-pixel",
  "thiserror",
  "zune-core",
  "zune-jpeg",
@@ -660,13 +660,13 @@ dependencies = [
  "half",
  "image-cms",
  "image-codecs",
- "image-core",
  "image-gpu",
  "image-graph",
  "image-js",
  "image-kernels",
  "image-pipeline",
- "image-psd",
+ "paged-pixel",
+ "paged-psd",
  "paged-test-resources",
  "png",
  "pollster",
@@ -676,16 +676,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "image-core"
-version = "0.0.0"
-
-[[package]]
 name = "image-gpu"
 version = "0.0.0"
 dependencies = [
  "half",
- "image-core",
  "image-kernels",
+ "paged-pixel",
  "paged-test-resources",
  "pollster",
  "thiserror",
@@ -697,10 +693,10 @@ name = "image-graph"
 version = "0.0.0"
 dependencies = [
  "half",
- "image-core",
  "image-gpu",
  "image-kernels",
  "image-pipeline",
+ "paged-pixel",
  "thiserror",
 ]
 
@@ -716,14 +712,14 @@ dependencies = [
  "harfrust",
  "image-cms",
  "image-codecs",
- "image-core",
  "image-gpu",
  "image-graph",
  "image-kernels",
  "image-pipeline",
- "image-psd",
  "jpeg-encoder",
  "js-sys",
+ "paged-pixel",
+ "paged-psd",
  "paged-test-resources",
  "pollster",
  "skrifa",
@@ -739,8 +735,8 @@ name = "image-kernels"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
- "image-core",
  "naga",
+ "paged-pixel",
 ]
 
 [[package]]
@@ -749,18 +745,9 @@ version = "0.0.0"
 dependencies = [
  "half",
  "image-codecs",
- "image-core",
  "image-gpu",
  "image-kernels",
- "thiserror",
-]
-
-[[package]]
-name = "image-psd"
-version = "0.0.0"
-dependencies = [
- "image-core",
- "miniz_oxide 0.9.1",
+ "paged-pixel",
  "thiserror",
 ]
 
@@ -1141,6 +1128,19 @@ checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "paged-pixel"
+version = "0.0.0"
+
+[[package]]
+name = "paged-psd"
+version = "0.0.0"
+dependencies = [
+ "miniz_oxide 0.9.1",
+ "paged-pixel",
+ "thiserror",
 ]
 
 [[package]]

@@ -31,9 +31,9 @@
 //! Fixtures are hand-built byte vectors IN this file (no image-conformance
 //! dependency — that crate dev-depends on this one; a cycle).
 
-use image_psd::container::Container;
-use image_psd::edit;
-use image_psd::model::{AddlBody, Compression, PsdFile, SectionKind};
+use paged_psd::container::Container;
+use paged_psd::edit;
+use paged_psd::model::{AddlBody, Compression, PsdFile, SectionKind};
 
 // ---------------------------------------------------------------------------
 // Byte-vector builders (big-endian, spec §10.4 layout) — mirror roundtrip.rs.

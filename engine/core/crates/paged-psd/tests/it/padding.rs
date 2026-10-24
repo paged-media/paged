@@ -28,7 +28,7 @@
 //! Each case verifies the re-encode path (Raw cleared) reproduces the
 //! canonical padding exactly — the verbatim path is covered in roundtrip.
 
-use image_psd::model::PsdFile;
+use paged_psd::model::PsdFile;
 
 fn be16(v: u16) -> [u8; 2] {
     v.to_be_bytes()

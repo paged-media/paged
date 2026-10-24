@@ -240,7 +240,7 @@ impl PsdFile {
     ///
     /// INK POLARITY. A CMYK PSD stores every ink plane INVERTED: 255 (or
     /// 65535) is NO ink, 0 is 100 % ink. Measured, not assumed — the
-    /// `patches` fixture Photoshop recorded (`image-conformance/fixtures/
+    /// `patches` fixture Photoshop recorded (`modules/image/image-conformance/fixtures/
     /// photoshop/cmyk-stacks`) fills known ink percentages, and its
     /// paper-white patch stores 255 in all four planes while 100 % cyan
     /// stores 0 in the cyan plane. This flips it back to ink amounts.

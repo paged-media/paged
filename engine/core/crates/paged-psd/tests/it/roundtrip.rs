@@ -28,8 +28,8 @@
 //!      assert semantic equality — proving canonical re-encoding is
 //!      structurally faithful even without the verbatim shortcut.
 
-use image_psd::container::Container;
-use image_psd::model::{AddlBody, ColorMode, GlobalLayerMask, PsdFile, ResourceBody, SectionKind};
+use paged_psd::container::Container;
+use paged_psd::model::{AddlBody, ColorMode, GlobalLayerMask, PsdFile, ResourceBody, SectionKind};
 
 // ---------------------------------------------------------------------------
 // Byte-vector builders (big-endian, spec §10.4 layout)

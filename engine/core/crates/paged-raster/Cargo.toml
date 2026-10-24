@@ -5,7 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Raster images: probe, decode and encode (TIFF through `tiff`, the web formats through `image`), with colour conversion through paged-color."
+description = "Raster images: probe, decode and encode (TIFF through `tiff`, PSD/PSB composites through paged-psd, the web formats through `image`), with colour conversion through paged-color."
 
 [lints]
 workspace = true
@@ -20,6 +20,8 @@ flate2 = { workspace = true }
 # CMYK and Lab rasters convert through the engine's one CMS: lcms2 on native,
 # qcms on wasm32. Both halves are wasm-safe, see the crate docs.
 paged-color = { path = "../paged-color" }
+# PSD/PSB composites and the layer records of PSDs and layered TIFFs.
+paged-psd = { path = "../paged-psd" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
