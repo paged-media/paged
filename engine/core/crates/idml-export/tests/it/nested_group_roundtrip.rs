@@ -45,12 +45,10 @@
 //! depth-blind newness test that contradicted the first. Teaching the
 //! pre-pass about groups at any depth restores one rule.
 //!
-//! The parser side is NOT the place: dropping the group from
-//! `frames_in_order` would trade a save-side duplication for the pasted
-//! subtree vanishing from the canvas, and lifting it into
-//! `Spread::nested_children` (the real B-18 completion — clipping plus
-//! container-transform composition) is a render-semantics change this
-//! repo cannot validate.
+//! Engine ADR 1010 since lifted the group into
+//! `Spread::nested_children` (clipping plus container-transform
+//! composition), so the parser no longer flattens it; the save keeps the
+//! group in place either way, which the tests below hold.
 
 use idml_export::rewrite::rewrite_spread;
 
@@ -77,12 +75,13 @@ fn count(haystack: &str, id: &str) -> usize {
     haystack.matches(&format!(r#"Self="{id}""#)).count()
 }
 
-/// The parse-side premise this whole test file rests on, asserted rather
-/// than assumed: the nested `<Group>` DOES land in the spread's z-table,
-/// and its members land on the group. If that ever changes, this file
-/// should fail loudly rather than keep passing for the wrong reason.
+/// The parse-side premise, asserted rather than assumed. Since engine
+/// ADR 1010 the pasted-in `<Group>` is lifted into the host's
+/// `nested_children` (it used to surface in the z-table, unclipped) and
+/// its members stay on the group; either way the save below must not
+/// write it twice.
 #[test]
-fn parser_flattens_a_pasted_in_group_into_the_z_table() {
+fn parser_lifts_a_pasted_in_group_into_its_host() {
     let spread = idml_import::parse_spread(SPREAD).expect("parse");
     assert_eq!(spread.groups.len(), 1);
     assert_eq!(spread.groups[0].self_id.as_deref(), Some("g1"));
@@ -92,17 +91,15 @@ fn parser_flattens_a_pasted_in_group_into_the_z_table() {
         "the group kept both members"
     );
     assert!(
-        spread
+        !spread
             .frames_in_order
             .contains(&idml_import::FrameRef::Group(0)),
-        "B-18 residual: a pasted-in group still surfaces in the z-table \
-         so the renderer paints it — {:?}",
+        "the pasted-in group is not top-level — {:?}",
         spread.frames_in_order
     );
-    assert!(
-        !spread.nested_children.contains_key("host"),
-        "a pasted-in GROUP is not lifted into nested_children (only plain \
-         page items are) — that is what makes it look top-level"
+    assert_eq!(
+        spread.nested_children.get("host"),
+        Some(&vec![idml_import::FrameRef::Group(0)])
     );
 }
 

@@ -937,6 +937,44 @@ pub(super) fn apply_create_group(
             }
         }
     }
+    // Engine ADR 1010 — a clip group's top-most member is its clipping
+    // path: a closed outline that hosts no pasted-in content of its own
+    // (that content would surface inside the clip once the writer
+    // lowers the group to paste-into).
+    if spec.clip {
+        let order_of = |r: &FrameRef| -> usize {
+            match nested_parent {
+                Some(pi) => spread.groups[pi].members.iter().position(|x| x == r),
+                None => spread.frames_in_order.iter().position(|x| x == r),
+            }
+            .unwrap_or(0)
+        };
+        let top = member_refs
+            .iter()
+            .max_by_key(|r| order_of(r))
+            .copied()
+            .expect("members checked non-empty");
+        if !matches!(
+            top,
+            FrameRef::Rectangle(_) | FrameRef::Oval(_) | FrameRef::Polygon(_)
+        ) {
+            return Err(invalid(
+                "a clipping mask's top-most object must be a rectangle, oval or polygon".into(),
+            ));
+        }
+        if let Some(top_id) = super::nested::frame_ref_self_id(spread, top) {
+            if spread
+                .nested_children
+                .get(top_id)
+                .is_some_and(|c| !c.is_empty())
+            {
+                return Err(invalid(
+                    "a clipping mask's top-most object hosts pasted-in content (release it first)"
+                        .into(),
+                ));
+            }
+        }
+    }
     // Mint or validate the id.
     let self_id = match &spec.self_id {
         Some(s) => {
@@ -1006,6 +1044,7 @@ pub(super) fn apply_create_group(
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            clip: spec.clip,
         });
         // The recorded slot is where `FrameRef::Group(new_group_idx)`
         // goes in the parent's members. Remove the member entries (may
@@ -1053,6 +1092,7 @@ pub(super) fn apply_create_group(
             corner_radius: None,
             corner_option: None,
             corners: Default::default(),
+            clip: spec.clip,
         });
         // Remove the member entries (which MAY be `FrameRef::Group`s in
         // v2 nested create), THEN re-insert the new group ref at the
@@ -1193,6 +1233,15 @@ pub(super) fn apply_dissolve_group(
             Site::Nested(pi, pos)
         }
         None => {
+            if spread
+                .nested_children
+                .values()
+                .any(|c| c.contains(&FrameRef::Group(group_idx)))
+            {
+                return Err(invalid(
+                    "the group is pasted into a container (release it before ungrouping)".into(),
+                ));
+            }
             let Some(slot) = spread
                 .frames_in_order
                 .iter()
@@ -1314,6 +1363,13 @@ pub(super) fn apply_dissolve_group(
             fix(r);
         }
     }
+    // Engine ADR 1010: a group pasted into a container is named by the
+    // container's children list, which steps down with the rest.
+    for children in spread.nested_children.values_mut() {
+        for r in children.iter_mut() {
+            fix(r);
+        }
+    }
 
     Ok(AppliedOperation {
         op: Operation::DissolveGroup {
@@ -1330,6 +1386,7 @@ pub(super) fn apply_dissolve_group(
                 // carry them so undo re-creates the group as it was.
                 opacity: group.transparency.opacity,
                 blend_mode: group.transparency.blend_mode.clone(),
+                clip: group.clip,
             },
         },
         invalidation: InvalidationHint {

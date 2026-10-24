@@ -2295,6 +2295,23 @@ pub(super) fn apply_set_property(
             let prev = std::mem::replace(slot, new_val);
             (Value::Bool(prev), frame_style_hint(node))
         }
+        // ---- Engine ADR 1010 — a clip group --------------------------
+        (NodeId::Group(id), PropertyPath::GroupClip) => {
+            let new_val = expect_bool(path, value)?;
+            if new_val {
+                check_clip_member(doc, node, id)?;
+            }
+            let group = find_group_mut(doc, id)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(&mut group.clip, new_val);
+            (
+                Value::Bool(prev),
+                InvalidationHint {
+                    structural: true,
+                    ..frame_style_hint(node)
+                },
+            )
+        }
         // ---- R-11 — the drop shadow's remaining attributes ----------
         (
             NodeId::TextFrame(_)
@@ -3747,4 +3764,50 @@ fn set_pdf_page(
         slot.get_or_insert_with(Default::default).page_number = next;
     }
     Ok(Value::Length(prev.map(|n| n as f32)))
+}
+
+/// Engine ADR 1010 — the group `id` can clip: its top-most member is a
+/// Rectangle, Oval or Polygon hosting no pasted-in content (the rule
+/// `CreateGroup { clip }` checks too).
+fn check_clip_member(
+    doc: &paged_scene::Document,
+    node: &NodeId,
+    id: &str,
+) -> Result<(), OperationError> {
+    use paged_model::FrameRef;
+    let refuse = |reason: &str| OperationError::InvalidValue {
+        node: node.clone(),
+        path: PropertyPath::GroupClip,
+        reason: reason.to_string(),
+    };
+    for parsed in &doc.spreads {
+        let spread = &parsed.spread;
+        let Some(group) = spread
+            .groups
+            .iter()
+            .find(|g| g.self_id.as_deref() == Some(id))
+        else {
+            continue;
+        };
+        let top = group.members.last().copied();
+        let top_id = match top {
+            Some(FrameRef::Rectangle(i)) => {
+                spread.rectangles.get(i).and_then(|f| f.self_id.as_deref())
+            }
+            Some(FrameRef::Oval(i)) => spread.ovals.get(i).and_then(|f| f.self_id.as_deref()),
+            Some(FrameRef::Polygon(i)) => spread.polygons.get(i).and_then(|f| f.self_id.as_deref()),
+            _ => {
+                return Err(refuse(
+                    "a clipping mask's top-most object must be a rectangle, oval or polygon",
+                ))
+            }
+        };
+        if top_id.is_some_and(|t| spread.nested_children.get(t).is_some_and(|c| !c.is_empty())) {
+            return Err(refuse(
+                "a clipping mask's top-most object hosts pasted-in content (release it first)",
+            ));
+        }
+        return Ok(());
+    }
+    Err(OperationError::NodeNotFound(node.clone()))
 }
