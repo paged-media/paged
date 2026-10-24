@@ -421,10 +421,9 @@ export function activate(host: BundleHost): BundleHandle {
     section: "selection",
     gesture: () => makeSelectionGesture(host, session, "polygon"),
   });
-  // Magic wand: click-select by color distance (v0 fixed tolerance
-  // 32/255 per channel, contiguous flood — documented in
-  // selection-machine.ts; a tool-options tolerance slider is a
-  // follow-up).
+  // Magic wand: click-select by color distance. Its tool options carry
+  // the tolerance (0–255 per channel, default 32) and the contiguous
+  // toggle (default on); see `tool-options.ts` and selection-machine.ts.
   contributeTool(host, {
     id: MAGIC_WAND_TOOL_ID,
     ...optionsFor(MAGIC_WAND_TOOL_ID),

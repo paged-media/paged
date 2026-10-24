@@ -3,7 +3,7 @@
   "package": "@paged-media/client",
   "protocol": 76,
   "counts": {
-    "clientMembers": 87,
+    "clientMembers": 88,
     "wireKinds": 56,
     "exports": 74
   },
@@ -419,6 +419,12 @@
           "kind": "method",
           "signature": "async mutateWithBytes(mutation: Mutation, bytes: Uint8Array, transfer",
           "summary": "v66 — apply `mutation` (a `batch` too) handing `bytes` to its first `replaceImageBytes` whose `bytes` is `[]` — the commit lane for processed pixels without a `number[]`."
+        },
+        {
+          "name": "CanvasClient.amendWithBytes",
+          "kind": "method",
+          "signature": "async amendWithBytes(appliedSeq: number, mutation: Mutation, bytes: Uint8Array, transfer",
+          "summary": "Engine ADR 1004 amendment — {@link mutateWithBytes} applied INTO the undo step `appliedSeq` names (as `amendMutation` applies a JSON mutation): one undo reverts both."
         },
         {
           "name": "CanvasClient.claimImageResource",

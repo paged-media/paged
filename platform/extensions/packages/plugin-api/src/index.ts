@@ -76,6 +76,7 @@ export type {
   ObjectOp,
   PartChange,
   ObjectWrite,
+  ObjectFollowUp,
   ObjectQuery,
   ObjectPredicate,
   ObjectKindContribution,

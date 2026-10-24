@@ -58,11 +58,12 @@
 //                       `paragraphRuleAbove`, `characterFillColor`) is
 //                       ABSENT — a read-only seam, NOT the core caret's
 //                       value, and NOT the mixed face;
-//   AC-TEXT-READONLY-1  the whole panel is READ-ONLY over the sheet,
-//                       because paged.sheet declares `writablePaths: []`.
-//                       This is the assertion neither other consumer
-//                       could make: Layers and Swatches write through
-//                       `provides.ops`, which was declared all along.
+//   AC-TEXT-WRITABLE-1  over the sheet the panel offers exactly the paths
+//                       paged.sheet declares in `writablePaths` (the cell
+//                       styles of sheet ADR 520) and nothing else. This is
+//                       the assertion neither other consumer could make:
+//                       Layers and Swatches write through `provides.ops`,
+//                       which was declared all along.
 //
 // Neither host panel contains an `if (pluginId === …)` and neither does
 // the platform seam they read through. `data-binding-source` is a DOM
@@ -603,6 +604,10 @@ test.describe("E2E text-retarget (ADR 023 — the VALUE axis)", () => {
     // `A1:B1` — bold 18pt Georgia beside italic 9pt Verdana.
     const frame = await importAndLower(page, "A1:B1");
     await enterSheetContext(page, frame, CHARACTER_PANEL);
+    // Entering puts the grid's active cell under the pointer, and the
+    // provider reads the selected cells: select both, as a designer
+    // would, so the panel reads the two styles together.
+    await page.keyboard.press("ControlOrMeta+a");
     // Re-arm the core caret inside the context (see AC-TEXT-ABSENT-1):
     // the last assertion below — that the panel does not fall back on
     // core's number when the provider says MIXED — needs core to HAVE a
@@ -713,7 +718,7 @@ test.describe("E2E text-retarget (ADR 023 — the VALUE axis)", () => {
     ).toHaveAttribute("data-binding-state", "absent");
   });
 
-  test("AC-TEXT-READONLY-1 — the panel is READ-ONLY over the sheet, because paged.sheet declares it", async ({
+  test("AC-TEXT-WRITABLE-1 — over the sheet the panel writes exactly the paths paged.sheet declares writable (sheet ADR 520)", async ({
     page,
   }) => {
     const panel = '[data-character-panel="ready"]';
@@ -752,22 +757,19 @@ test.describe("E2E text-retarget (ADR 023 — the VALUE axis)", () => {
       })
       .toEqual({ source: SHEET_PLUGIN, state: "value" });
 
-    // …and READ-ONLY here, including the paths whose VALUE it is showing.
-    // Not because writing is hard, but because the alternative — offer
-    // the control and let the write fall through on refusal — lands the
-    // commit on core's selection. Same lie, write side.
-    //
-    // This is the assertion the other two consumers could not make.
-    // Layers and Swatches write STRUCTURALLY, through `provides.ops`,
-    // whose availability was declared all along; the property lane had
-    // no declaration at all until `provides.writablePaths`, and that
-    // gap is what the VALUE axis found.
+    // …and over the sheet, what the panel offers is what paged.sheet
+    // DECLARES it writes (`provides.writablePaths`), never a control whose
+    // commit would fall through to core's selection. Since sheet ADR 520
+    // the selected cells take the font, size, decorations, alignment,
+    // text colour and document styles (one undo step each), so those
+    // controls are live; a path the provider owns without writing (the
+    // OpenType features, which a cell does not model) stays disabled.
     await expect(
       page.locator(`${panel} [data-control="characterFontSize"] input`).first(),
-    ).toBeDisabled();
+    ).toBeEnabled();
     await expect(
       page.locator(`${panel} [data-character-family] select`),
-    ).toBeDisabled();
+    ).toBeEnabled();
     await expect(
       page.locator(`${panel} [data-opentype-chip]`).first(),
     ).toBeDisabled();
@@ -789,6 +791,21 @@ test.describe("E2E text-retarget (ADR 023 — the VALUE axis)", () => {
         .filter((a) => (a.provides.paths?.length ?? 0) > 0)
         .map((a) => a.provides.writablePaths),
     );
-    expect(writable).toEqual([[]]);
+    expect(writable).toEqual([
+      [
+        "characterFontFamily",
+        "characterFontStyle",
+        "characterFontSize",
+        "characterFillColor",
+        "characterUnderline",
+        "characterStrikethru",
+        "characterPosition",
+        "paragraphJustification",
+        "appliedCharacterStyle",
+        "appliedParagraphStyle",
+        "appliedCellStyle",
+        "frameFillColor",
+      ],
+    ]);
   });
 });

@@ -482,7 +482,7 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // tool that is currently sitting on a substitute because that key
     // was taken: `shift+t` → Type on a Path (on `shift+h`; the editor's
     // own retirement note asks paged.draw to claim it), `i` →
-    // Eyedropper (on `shift+d`), `k` → Live Paint Bucket (on
+    // Eyedropper (on `shift+d`), `k` → Live Paint Bucket (then on
     // `shift+o`). Taking one for a NEW tool would spend the correction
     // those retirements were FOR. The only other free register is
     // `shift+z`, which reads as an undo variant on every platform and
@@ -493,6 +493,11 @@ export function drawTools(host: BundleHost): ToolContribution[] {
     // (This also CORRECTS the note further up: `shift+z` is no longer
     // "the only free shift key" — `shift+t` is free too, and so are the
     // single keys `i` and `k`.)
+    //
+    // UPDATE 2026-10-04: the Live Paint Bucket now holds `k` (above), the
+    // host's Eyedropper holds `i`, and paged.image took `shift+t` (clone
+    // stamp) and `shift+z` (raster type), so `shift+o` is the one free
+    // shift key; this tool stays keyless.
     //
     // ICON: `tool-rotate` is a REAL token in the host's kebab-case glyph
     // map and the honest metaphor — a radial repeat turns copies about a

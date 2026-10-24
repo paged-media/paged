@@ -997,6 +997,13 @@ export interface MutateWithBytesOptions {
   /** Hand the buffer to the host instead of copying it; it may be detached
    *  afterwards. Default `false`. */
   transfer?: boolean;
+  /** Engine ADR 1004 amendment — join the undo step this `appliedSeq`
+   *  names, exactly as {@link MutateOptions.amend} does for `mutate`: one
+   *  undo reverts both, a refusal is `applied: false` with the engine's
+   *  `notAmendable`, and the outcome's `appliedSeq` names the step from
+   *  then on. Probe `supports("document.mutate.amend@2")`: an older host
+   *  ignores the option and would apply the write as a step of its own. */
+  amend?: number;
 }
 
 /** What {@link DocumentSurface.onWillSave} listeners receive. */
@@ -1050,7 +1057,11 @@ export interface DocumentChangeEvent {
   /** Engine ADR 1004 — the engine's number of the undo step this change
    *  committed: present on a `mutationApplied` and a `gestureCommitted`
    *  where the host knows it (`supports("document.mutate.amend@1")`),
-   *  absent on an undo, a redo and a script run. Pass it as
+   *  absent on an undo and a redo. On a `scriptResult` it is present when
+   *  the run's writes are ONE step that may still be joined
+   *  (`supports("document.mutate.amend@2")`; a run is one undo step):
+   *  absent when the run moved the history (`paged.undo()`) or an edit made
+   *  while it waited on the host split it. Pass it as
    *  `mutate(…, { amend })` to make a follow-up write part of the same
    *  step. A change with `kind` `undoApplied` / `redoApplied` moved the
    *  history: a listener that rebuilds on edits leaves those alone, since
@@ -1241,7 +1252,8 @@ export interface DocumentSurface {
    * than applied without the bytes. Same gates and outcome as `mutate`:
    * `capabilities.document.write`, metadata only under this plugin's own
    * key, never a throw. `options.transfer: true` hands the buffer to the
-   * host, which may detach it; the default copies.
+   * host, which may detach it; the default copies. `options.amend` joins
+   * the write to an existing undo step, as `mutate`'s does.
    *
    * Call it unconditionally. Where the host wires the binary lane,
    * `supports("document.mutateBinary@1")` is true and the bytes are not

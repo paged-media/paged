@@ -34,6 +34,7 @@ export {
   type FillGradient,
   type IconRect,
   type FillPattern,
+  type LoweredPicture,
   type LoweredRun,
   type Merge,
   type Page,
@@ -133,6 +134,8 @@ export {
   gridSceneToSceneLayer,
   gridSceneToSvg,
   hitCell,
+  linkAt,
+  pictureBox,
   selectionRect,
   viewportHeightPt,
   viewportWidthPt,
@@ -144,6 +147,8 @@ export {
   type TracksSpec,
   type GridDataBar,
   type GridSparkline,
+  type GridLink,
+  type GridPicture,
   type GridFreeze,
   type GridMerge,
   type GridScene,
@@ -263,3 +268,4 @@ export {
 
 // Wave 9 — conditional-format data bars on the native placed table.
 export { tableDataBarOps, tableDataBars, tableIcons } from "./table-databars";
+export { tablePictureBox, tablePictureOps } from "./table-pictures";

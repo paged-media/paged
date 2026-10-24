@@ -61,6 +61,10 @@ Rules for every code change in this repo:
   (TS: the contract-import lint rule in `/bunfig.toml`, PM-0003; Rust: `deny.toml` sources +
   the cargo-tree CI guards). SDK gaps become RFI §6 entries /
   plugin-platform RFCs — NEVER core modifications from this project.
+  AMENDED (ADR 466, PM-0014): the TypeScript rule stands (plugin SDK
+  only); the Rust crates MAY path-depend on `engine/core/crates` for
+  raster codecs, PSD, pixel types, colour and kernels. `image-core` and
+  `image-psd` are planned to move there as `paged-pixel`/`paged-psd`.
 - **GPU-ONLY EXECUTION (§6/§9).** One production backend: WGSL compute
   via wgpu. No CPU kernel path ships. The scalar Rust reference twins are
   TEST-ONLY (`image-kernels` feature `reference`, enabled solely by

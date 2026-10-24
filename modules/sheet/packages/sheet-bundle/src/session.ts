@@ -60,7 +60,12 @@ import {
   type CalcSettingsInfo,
   type CellEditRecord,
   type CellStylePatch,
+  type CfRuleInfo,
+  type CfRuleSpec,
   type DocSwatch,
+  type HyperlinkInfo,
+  type HyperlinkSpec,
+  type PictureInfo,
   type EdgeStyle,
   type NameInfo,
   type SheetLayoutInfo,
@@ -950,6 +955,37 @@ export interface WorkbookSession extends DataToolsApi {
   formatTarget(): FormatTarget | null;
   /** Apply a partial style to the format target. */
   setStyle(patch: CellStylePatch): SessionResult;
+  /** W2.3 — the active sheet's hyperlinks; empty without a workbook. */
+  hyperlinks(): HyperlinkInfo[];
+  /** W2.3 — link a range of the active sheet (one undo step; the cells take
+   *  Excel's Hyperlink style). */
+  setHyperlink(range: string, link: HyperlinkSpec): SessionResult;
+  /** W2.3 — remove the links touching a range of the active sheet. */
+  removeHyperlinks(range: string): SessionResult;
+  /** W2.3 — set (add or replace) / delete the note of a cell of the active
+   *  sheet (one undo step each). A cell with a threaded comment refuses. */
+  setNote(
+    row: number,
+    col: number,
+    text: string,
+    author?: string,
+  ): SessionResult;
+  deleteNote(row: number, col: number): SessionResult;
+  /** W2.3 — the active sheet's pictures (drawing pictures and images in
+   *  cells) and a picture's bytes. */
+  pictures(): PictureInfo[];
+  pictureBytes(media: string): Uint8Array | null;
+  /** W2.5 — the active sheet's conditional-format rules (highest priority
+   *  first); empty without a workbook. */
+  cfRules(): CfRuleInfo[];
+  /** W2.5 — add / replace / delete / reorder conditional-format rules on
+   *  the active sheet; each is one undo step (the Conditional Formatting
+   *  dialog drives these). */
+  addCfRule(spec: CfRuleSpec): SessionResult;
+  updateCfRule(index: number, spec: CfRuleSpec): SessionResult;
+  deleteCfRule(index: number): SessionResult;
+  reorderCfRules(order: readonly number[]): SessionResult;
+  setCfStopIfTrue(index: number, stop: boolean): SessionResult;
   /** Borders on the format target: `all` edges of every cell, the
    *  `outline` of the block, one side of the block, or `none` (every edge
    *  of every cell cleared). */
@@ -1915,6 +1951,109 @@ export function createWorkbookSession(
     else markEdited();
     emitter.emit();
     return { ok: true };
+  }
+
+  /** One conditional-format authoring step on the active sheet: the
+   *  model's snapshot before and after is the undo / redo (W2.5). */
+  function cfStep(
+    apply: (engine: SheetEngine, sheet: number) => unknown,
+  ): SessionResult {
+    const sheet = state.activeSheet;
+    if (sheet === null) return { ok: false, message: "no sheet is active" };
+    return journalFormat(
+      (e) => {
+        if (!e.cfSnapshot || !e.cfRestore) return null;
+        const before = e.cfSnapshot(sheet);
+        return () => {
+          const after = e.cfSnapshot!(sheet);
+          return {
+            undo: (x) => x.cfRestore!(sheet, before),
+            redo: (x) => x.cfRestore!(sheet, after),
+          };
+        };
+      },
+      (e) => {
+        if (!e.addCfRule)
+          throw new Error("engine wasm predates the conditional-format doors");
+        apply(e, sheet);
+      },
+    );
+  }
+
+  /** One hyperlink step on the active sheet: the links and the range's
+   *  style ids before and after are the undo / redo (W2.3). */
+  function linkStep(
+    range: string,
+    apply: (engine: SheetEngine, sheet: number) => unknown,
+  ): SessionResult {
+    const sheet = state.activeSheet;
+    if (sheet === null) return { ok: false, message: "no sheet is active" };
+    return journalFormat(
+      (e) => {
+        if (!e.listHyperlinks || !e.restoreHyperlinks) return null;
+        const before = e.listHyperlinks(sheet);
+        const styles = styleSnapshot(e, sheet, range);
+        return () => {
+          const after = e.listHyperlinks!(sheet);
+          const st = styles?.();
+          return {
+            undo: (x) => {
+              x.restoreHyperlinks!(sheet, before);
+              st?.undo(x);
+            },
+            redo: (x) => {
+              x.restoreHyperlinks!(sheet, after);
+              st?.redo(x);
+            },
+          };
+        };
+      },
+      (e) => {
+        if (!e.setHyperlink)
+          throw new Error("engine wasm predates the hyperlink doors");
+        apply(e, sheet);
+      },
+    );
+  }
+
+  /** One note step on a cell of the active sheet: the note before and
+   *  after (absent = none) is the undo / redo (W2.3). */
+  function noteStep(
+    row: number,
+    col: number,
+    apply: (engine: SheetEngine, sheet: number) => unknown,
+  ): SessionResult {
+    const sheet = state.activeSheet;
+    if (sheet === null) return { ok: false, message: "no sheet is active" };
+    const noteAt = (e: SheetEngine) =>
+      e
+        .listComments()
+        .find((c) => c.sheet === sheet && c.row === row && c.col === col) ??
+      null;
+    const put = (
+      e: SheetEngine,
+      n: { author: string; text: string } | null,
+    ) => {
+      if (n) e.setNote!(sheet, row, col, n.author, n.text);
+      else e.deleteNote!(sheet, row, col);
+    };
+    return journalFormat(
+      (e) => {
+        if (!e.setNote || !e.deleteNote) return null;
+        const before = noteAt(e);
+        return () => {
+          const after = noteAt(e);
+          return {
+            undo: (x) => put(x, before),
+            redo: (x) => put(x, after),
+          };
+        };
+      },
+      (e) => {
+        if (!e.setNote) throw new Error("engine wasm predates the note doors");
+        apply(e, sheet);
+      },
+    );
   }
 
   /** The style-id snapshot step over `sheet`/`range` (null when the engine
@@ -6543,6 +6682,90 @@ export function createWorkbookSession(
           e.setStyle(t.sheet, t.range, patch);
         },
       );
+    },
+
+    hyperlinks() {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.listHyperlinks || sheet === null) return [];
+      try {
+        return e.listHyperlinks(sheet);
+      } catch (err) {
+        host.log.warn("hyperlinks could not be listed", err);
+        return [];
+      }
+    },
+
+    setHyperlink(range, link) {
+      return linkStep(range, (e, sheet) => e.setHyperlink!(sheet, range, link));
+    },
+
+    removeHyperlinks(range) {
+      return linkStep(range, (e, sheet) => e.removeHyperlinks!(sheet, range));
+    },
+
+    setNote(row, col, text, author) {
+      return noteStep(row, col, (e, sheet) =>
+        e.setNote!(sheet, row, col, author ?? "Paged", text),
+      );
+    },
+
+    deleteNote(row, col) {
+      return noteStep(row, col, (e, sheet) => e.deleteNote!(sheet, row, col));
+    },
+
+    pictures() {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.listPictures || sheet === null) return [];
+      try {
+        return e.listPictures(sheet);
+      } catch (err) {
+        host.log.warn("pictures could not be listed", err);
+        return [];
+      }
+    },
+
+    pictureBytes(media) {
+      const e = state.engine;
+      if (!e?.pictureBytes) return null;
+      try {
+        return e.pictureBytes(media);
+      } catch {
+        return null;
+      }
+    },
+
+    cfRules() {
+      const e = state.engine;
+      const sheet = state.activeSheet;
+      if (!e?.cfRules || sheet === null) return [];
+      try {
+        return e.cfRules(sheet);
+      } catch (err) {
+        host.log.warn("conditional formats could not be listed", err);
+        return [];
+      }
+    },
+
+    addCfRule(spec) {
+      return cfStep((e, sheet) => e.addCfRule!(sheet, spec));
+    },
+
+    updateCfRule(index, spec) {
+      return cfStep((e, sheet) => e.updateCfRule!(sheet, index, spec));
+    },
+
+    deleteCfRule(index) {
+      return cfStep((e, sheet) => e.deleteCfRule!(sheet, index));
+    },
+
+    reorderCfRules(order) {
+      return cfStep((e, sheet) => e.reorderCfRules!(sheet, order));
+    },
+
+    setCfStopIfTrue(index, stop) {
+      return cfStep((e, sheet) => e.setCfStopIfTrue!(sheet, index, stop));
     },
 
     setBorders(kind, edge) {
