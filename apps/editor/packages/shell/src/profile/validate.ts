@@ -51,6 +51,7 @@ const PROFILE_KEYS = new Set([
   "storageScope",
   "features",
   "role",
+  "compact",
 ]);
 
 const ROLES: ReadonlySet<string> = new Set([
@@ -307,8 +308,14 @@ export function validateProfile(input: unknown): {
         titleBar?: boolean;
         rulers?: boolean;
         thumbnails?: boolean;
+        preview?: boolean;
       } = {};
-      for (const key of ["titleBar", "rulers", "thumbnails"] as const) {
+      for (const key of [
+        "titleBar",
+        "rulers",
+        "thumbnails",
+        "preview",
+      ] as const) {
         const value = input.canvas[key];
         if (value === undefined) continue;
         if (typeof value === "boolean") canvas[key] = value;
@@ -330,6 +337,21 @@ export function validateProfile(input: unknown): {
       problems.push({
         path: "role",
         message: "expected author, editor, filler or viewer; ignored",
+      });
+    }
+  }
+
+  if (input.compact !== undefined) {
+    if (
+      input.compact === null ||
+      input.compact === "form-first" ||
+      input.compact === "field-sheet"
+    ) {
+      out.compact = input.compact;
+    } else {
+      problems.push({
+        path: "compact",
+        message: "expected form-first, field-sheet or null; ignored",
       });
     }
   }

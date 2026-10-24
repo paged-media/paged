@@ -83,6 +83,7 @@ import {
   zoomAt,
   type PageRect,
 } from "./layout";
+import { pinchCamera, startPinch, type Pinch } from "./pinch";
 import { FrameSurfaceHost } from "./FrameSurfaceHost";
 import { TextInputSurface } from "./TextInputSurface";
 
@@ -189,6 +190,9 @@ export interface ViewportCanvasProps {
   /** Concept 1 — the Hand tool (incl. the Space spring-load): every
    * primary-button drag pans, reusing the proven pan machinery. */
   forcePan?: boolean;
+  /** A filler or a viewer (editor ADR 293): a one-finger touch drag pans
+   *  the page instead of moving or marqueeing, and a tap still selects. */
+  touchPans?: boolean;
   /** Concept 1 — the Zoom tool (incl. Cmd+Space): a click zooms in
    * around the pointer; Alt-click zooms out. */
   zoomClick?: boolean;
@@ -255,6 +259,14 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     startPointer: [number, number];
     maxDelta: number;
   } | null>(null);
+
+  // Editor ADR 293 — the touch points on the canvas, by pointer id, in
+  // viewport px. Two of them are a pinch: it takes over from whatever the
+  // first finger began (rolled back, never committed), and the touch
+  // stays the pinch's until every finger has lifted.
+  const touchesRef = useRef(new Map<number, [number, number]>());
+  const pinchRef = useRef<Pinch | null>(null);
+  const pinchHeldRef = useRef(false);
 
   // Path-edit mode — true between a press the session took and its
   // release. The session owns the semantics; this only remembers that
@@ -614,8 +626,60 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       });
   };
 
+  const touchPoint = (
+    e: React.PointerEvent<HTMLDivElement>,
+  ): [number, number] => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  };
+
+  /** Editor ADR 293 — a touch pointer's part in a pinch. True when the
+   *  pinch took the event. */
+  const pinchDown = (e: React.PointerEvent<HTMLDivElement>): boolean => {
+    if (e.pointerType !== "touch") return false;
+    const touches = touchesRef.current;
+    touches.set(e.pointerId, touchPoint(e));
+    if (pinchHeldRef.current) return true;
+    if (touches.size < 2) return false;
+    // The second finger: roll back what the first one began, then pinch.
+    abortActiveDrag();
+    contentGestureRef.current = false;
+    const [a, b] = [...touches.values()];
+    pinchRef.current = startPinch(props.camera, a!, b!);
+    pinchHeldRef.current = true;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    return true;
+  };
+
+  const pinchMove = (e: React.PointerEvent<HTMLDivElement>): boolean => {
+    if (e.pointerType !== "touch") return false;
+    const touches = touchesRef.current;
+    if (!touches.has(e.pointerId)) return pinchHeldRef.current;
+    touches.set(e.pointerId, touchPoint(e));
+    const pinch = pinchRef.current;
+    if (pinch && touches.size >= 2) {
+      const [a, b] = [...touches.values()];
+      props.onCameraChange(pinchCamera(pinch, a!, b!));
+    }
+    return pinchHeldRef.current;
+  };
+
+  const pinchUp = (e: React.PointerEvent<HTMLDivElement>): boolean => {
+    if (e.pointerType !== "touch") return false;
+    const touches = touchesRef.current;
+    touches.delete(e.pointerId);
+    if (!pinchHeldRef.current) return false;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (touches.size < 2) pinchRef.current = null;
+    if (touches.size === 0) pinchHeldRef.current = false;
+    return true;
+  };
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.button !== 1) return;
+    if (pinchDown(e)) return;
     // K-1 — while an edit context that OPTS INTO content pointers is
     // active (has `onContentPointerDown` — sheet's "sheet" context; NOT
     // draw/web, whose tools must keep working), a primary-button press
@@ -705,7 +769,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       props.pathEdit.pointerDown(pathEditPointer);
     } else if (e.button === 1) {
       mode = "pan";
-    } else if (props.forcePan || props.zoomClick) {
+    } else if (
+      props.forcePan ||
+      props.zoomClick ||
+      (props.touchPans && e.pointerType === "touch")
+    ) {
       // Concept 1 — Hand (or a Space spring-load) pans on any drag;
       // the Zoom tool also pans on drag (its click action is handled
       // in onPointerUp's click branch).
@@ -1023,6 +1091,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     publishPointer(e);
+    if (pinchMove(e)) return;
     // K-1 — while a content gesture owns the pointer, route moves to the
     // active context (content coords) and skip tool/hover logic.
     if (contentGestureRef.current) {
@@ -1163,6 +1232,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   };
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pinchUp(e)) return;
     // K-1 — end a content gesture: deliver the up to the active context
     // and stop (don't run the tool/click path that would re-select).
     if (contentGestureRef.current) {
@@ -1448,7 +1518,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // here; we just roll the gesture back. Previously this aliased
   // `onPointerUp`, which COMMITTED the interrupted gesture — a phantom
   // mutation. Now it aborts (the plan's pointercancel → abort).
-  const onPointerCancel = () => {
+  const onPointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pinchUp(e)) return;
     // K-1 — a cancelled content gesture just ends (the context keeps its
     // state; no tool drag to abort).
     if (contentGestureRef.current) {

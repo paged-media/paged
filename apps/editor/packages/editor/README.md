@@ -1,7 +1,7 @@
 # @paged-media/editor
 
 The paged editor, embeddable. `createEditor(element, config)` mounts the full editor, or one of
-its presets (template filling, a viewer, a solo tool), into an element of your page and resolves
+its presets (template filling, a form, a viewer, a solo tool), into an element of your page and resolves
 to a handle you drive it by: load and save documents, fill a template's fields, export a PDF,
 switch features, theme it, listen to its events. `@paged-media/editor/iframe` drives an editor
 running in a frame instead.
@@ -42,6 +42,17 @@ editor.on((event) => {
   `@paged-media/editor/iframe`.
 - **React 19.3 or later** (a peer dependency): the editor renders with yours.
 - **The engine**, `@paged-media/paged`, is a dependency at the same version; npm installs it.
+
+## Phones and tablets
+
+The `template-fill` and `form` presets work on phones and tablets (editor ADR 293). Below 720 px
+of the editor's own width, `template-fill` gives the canvas the screen and opens the field tapped
+on it in a sheet underneath, and `form` puts the form first with its preview folded away. Their
+controls are 44 px touch targets there and on any coarse pointer; one finger pans the page, two
+pinch, and zoom buttons sit over the canvas. A picture field offers the phone's camera
+(`capture`) beside its library. A profile turns this off with `compact: null`; the full editor and
+the solo presets keep their desktop layout at every width. The page that hosts the editor needs a
+`<meta name="viewport" content="width=device-width, initial-scale=1">`.
 
 ## Assets
 

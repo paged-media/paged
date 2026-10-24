@@ -48,6 +48,7 @@ orientation only.
 | G4 coverage gaps                                 | Largely done: CLI imports and bytes, typed commands per module; open items listed in G4                                                 |                                                                                     |
 | H demos                                          | Done: gallery of ten pages, journeys                                                                                                    | `apps/canvas/demos/`                                                                |
 | I docs and website                               | PRs open                                                                                                                                | docs site, website                                                                  |
+| Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                | ADR 293, `packages/shell/src/state/compact.ts`                                      |
 
 Corrections to the plan found while building:
 
@@ -1371,6 +1372,7 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 | The editor profile is runtime data (amends 213)                          | editor       | 274     | A4         |
 | Features gate what is offered                                            | editor       | 275     | B2         |
 | Filling a template                                                       | editor       | 276     | D5         |
+| The fill presets on phones and tablets                                   | editor       | 293     | §14        |
 | The editor mounts as an instance                                         | editor       | 277     | E1         |
 | Host actions are commands                                                | editor       | 278     | E2         |
 | The embedding API and the iframe bridge                                  | editor       | 279     | E6         |

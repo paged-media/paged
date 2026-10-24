@@ -114,7 +114,19 @@ export interface CanvasFurniture {
   readonly titleBar?: boolean;
   readonly rulers?: boolean;
   readonly thumbnails?: boolean;
+  /** The canvas is a preview: it pans and zooms (a drag, a pinch, the
+   *  zoom buttons) and never selects or edits. Default false. */
+  readonly preview?: boolean;
 }
+
+/**
+ * What a fill shape shows below the compact breakpoint
+ * (`COMPACT_MAX_WIDTH_PX`, editor ADR 293): `form-first`, the form at full
+ * width with the preview collapsed above it; `field-sheet`, the canvas at
+ * full width with the active field in a sheet at the bottom. `null`: the
+ * same layout at every width, as a desktop editor.
+ */
+export type CompactLayout = "form-first" | "field-sheet";
 
 /** Which plugin bundles an editor activates. */
 export type BundleSelection = "all" | readonly string[];
@@ -147,6 +159,9 @@ export interface EditorProfile {
   /** The session's role (docs/composable-editor.md §7.6): what the engine
    *  lets this editor do to a template. Not stored in the document. */
   readonly role?: Role;
+  /** The layout below the compact breakpoint (editor ADR 293). Absent
+   *  inherits the preset's; `null` keeps the desktop layout. */
+  readonly compact?: CompactLayout | null;
 }
 
 /**
@@ -178,6 +193,7 @@ export interface ResolvedProfile {
   /** Every layer's switches, base first; a later key overrides. */
   readonly features: Readonly<Record<string, boolean>>;
   readonly role: Role;
+  readonly compact: CompactLayout | null;
 }
 
 /** Something about a profile that was ignored, with where it was. */

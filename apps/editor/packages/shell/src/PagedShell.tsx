@@ -175,6 +175,7 @@ import { useFps } from "./hooks/useFps";
 import { chooseFiles } from "./lib/file-chooser";
 import type {
   CanvasFurniture,
+  CompactLayout,
   RegionId,
   ResolvedRegion,
 } from "./profile/types";
@@ -182,6 +183,7 @@ import { ActionsBar } from "./chrome/RegionItems";
 import { useRegistryView } from "./state/live";
 import type { FeatureId } from "./state/features";
 import { SessionPolicyProvider } from "./state/session-role";
+import { useCompactLayout } from "./state/compact";
 import type { SessionPolicy } from "@paged-media/client";
 
 const DEFAULT_SESSION: SessionPolicy = { role: "editor", overrides: [] };
@@ -262,6 +264,9 @@ export interface PagedShellProps {
   regions?: Readonly<Record<RegionId, ResolvedRegion | null>>;
   /** The profile's canvas furniture: title bar, rulers, thumbnails. */
   canvasFurniture?: Partial<CanvasFurniture>;
+  /** The profile's layout below the compact breakpoint (editor ADR 293).
+   *  Omitted = a desktop editor at every width. */
+  compactLayout?: CompactLayout | null;
   /** The profile's feature switches, set once when the shell mounts
    *  (docs/composable-editor.md §6). Later changes go through
    *  `useRegistries().features`. */
@@ -306,6 +311,7 @@ export function PagedShell({
   initialDocumentSizePt,
   regions,
   canvasFurniture,
+  compactLayout,
   features,
   sessionPolicy,
   onSessionRoleChange,
@@ -314,7 +320,11 @@ export function PagedShell({
   guardUnload = true,
   children,
 }: PropsWithChildren<PagedShellProps>) {
-  const chromeRegions = chromeRegionsOf(regions, canvasFurniture);
+  const chromeRegions = chromeRegionsOf(
+    regions,
+    canvasFurniture,
+    compactLayout ?? null,
+  );
   const [ownScope] = useState(createEditorScope);
   return (
     <EditorScopeProvider scope={scope ?? ownScope}>
@@ -525,6 +535,9 @@ function ShellChrome({
   const cockpitActions = useCockpitActions();
   const client = useCanvasClient();
   const chrome = useChromeRegions();
+  // A fill shape on a phone (editor ADR 293): one finger pans and a tap
+  // selects, so the tool rail gives way to the canvas.
+  const compactLayout = useCompactLayout();
   const actionsRegion = chrome.region("actions-bar");
   const actionsItems =
     actionsRegion === null
@@ -1408,7 +1421,7 @@ function ShellChrome({
        *   dockview substrate) + the work area — either the fixed
        *   cockpit layout or the legacy dockview substrate. */}
       <div style={bodyRowStyle}>
-        {chrome.has("tool-rail") && !railHidden && (
+        {chrome.has("tool-rail") && !railHidden && !compactLayout && (
           <ToolRail
             hostToolIds={hostToolIds}
             foot={

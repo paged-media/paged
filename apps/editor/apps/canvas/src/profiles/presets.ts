@@ -35,6 +35,8 @@ import { SOLO_PROFILES, type SoloProfile } from "../solo/profiles";
 const M = defineMessages("app.profilesPresets", {
   fillIn: "Fill in",
   fillInBlurb: "Fill in the template's fields",
+  form: "Form",
+  formBlurb: "Fill in the template's fields in a form, with a preview",
   view: "View",
 });
 
@@ -86,7 +88,8 @@ export function soloPresetId(soloName: string): string {
 /** Fill in a template (docs/composable-editor.md §5.4): the canvas and the
  *  template form, a short tool rail, and Undo, Redo and Save; the session
  *  is a filler, so the engine lets it change only what the template
- *  permits. */
+ *  permits. On a phone the canvas fills the screen and the field tapped
+ *  on it opens in a sheet below (editor ADR 293). */
 const TEMPLATE_FILL: EditorProfile = {
   extends: "full",
   get title() {
@@ -103,13 +106,15 @@ const TEMPLATE_FILL: EditorProfile = {
       get blurb() {
         return t(M.fillInBlurb);
       },
-      slots: { left: "paged.template.form", inspector: "paged.template.form" },
+      slots: { left: "" },
     },
   ],
   regions: {
     header: {
       items: ["paged.editor.undo", "paged.editor.redo", "paged.file.savePaged"],
     },
+    form: { items: ["paged.template.form"] },
+    right: null,
     menubar: null,
     "context-toolbar": null,
     "tool-rail": {
@@ -127,7 +132,49 @@ const TEMPLATE_FILL: EditorProfile = {
   },
   canvas: { rulers: false, titleBar: false, thumbnails: true },
   features: { "chrome:context-menu": false },
+  compact: "field-sheet",
   storageScope: ".fill",
+};
+
+/** Fill in a template through a form (docs/composable-editor.md §5.4): the
+ *  form beside a preview that pans and zooms and edits nothing. On a phone
+ *  the form comes first and the preview folds away above it (editor ADR
+ *  293). The host adds its actions bar. */
+const FORM: EditorProfile = {
+  extends: "full",
+  get title() {
+    return t(M.form);
+  },
+  role: "filler",
+  panels: ["paged.template.form"],
+  modes: [
+    {
+      id: "form",
+      get title() {
+        return t(M.form);
+      },
+      get blurb() {
+        return t(M.formBlurb);
+      },
+      slots: { left: "" },
+    },
+  ],
+  regions: {
+    header: null,
+    menubar: null,
+    "context-toolbar": null,
+    "tool-rail": null,
+    left: null,
+    right: null,
+    "panel-rail": null,
+    "mode-bar": null,
+    palette: null,
+    form: { items: ["paged.template.form"] },
+  },
+  canvas: { rulers: false, titleBar: false, thumbnails: false, preview: true },
+  features: { "chrome:context-menu": false },
+  compact: "form-first",
+  storageScope: ".form",
 };
 
 /** Look at a document: the canvas and its pages, nothing to change. */
@@ -167,6 +214,7 @@ function buildPresets(): Record<string, EditorProfile> {
   const presets: Record<string, EditorProfile> = {
     full: {},
     "template-fill": TEMPLATE_FILL,
+    form: FORM,
     viewer: VIEWER,
   };
   for (const [name, profile] of Object.entries(SOLO_PROFILES)) {

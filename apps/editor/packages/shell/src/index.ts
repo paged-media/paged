@@ -984,6 +984,7 @@ export {
   matchIndices,
   type BundleSelection,
   type CanvasFurniture,
+  type CompactLayout,
   type EditorProfile,
   type ItemMatcher,
   type ProfileMode,
@@ -1008,6 +1009,15 @@ export {
   type ChromeOverride,
   type ChromeRegions,
 } from "./state/chrome-regions";
+export {
+  COMPACT_MAX_WIDTH_PX,
+  TOUCH_TARGET_PX,
+  isCompactWidth,
+  touchTargetStyle,
+  useCompactLayout,
+  useEditorWidth,
+  useTouchSized,
+} from "./state/compact";
 export {
   CHROME_FEATURES,
   FEATURE_KINDS,
