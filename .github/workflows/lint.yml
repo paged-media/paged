@@ -75,12 +75,15 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
 
-      # bunx keeps the pinned canary's package in Bun's package cache.
+      # tooling/js/bun-canary.sh installs the pinned canary once into
+      # ~/.cache/paged/bun-canary (and its package into Bun's cache).
       - name: cache the pinned bun lint canary
         uses: actions/cache@v4
         with:
-          path: ~/.bun/install/cache
-          key: bun-canary-${{ runner.os }}-${{ hashFiles('tooling/js/bun-canary-version') }}
+          path: |
+            ~/.bun/install/cache
+            ~/.cache/paged/bun-canary
+          key: bun-canary-v2-${{ runner.os }}-${{ hashFiles('tooling/js/bun-canary-version') }}
 
       # Annotations on the diff (github), and the same run as JUnit for the
       # artifact. A clean run writes an empty <testsuites>.
