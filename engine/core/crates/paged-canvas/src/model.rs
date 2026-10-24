@@ -10865,38 +10865,9 @@ impl CanvasModel {
     /// save). Field names mirror `paged_model::CharacterRun`/`Paragraph`.
     pub fn story_content(&self, story_id: &str) -> Option<crate::channel::StoryContent> {
         let s = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
-        let paragraphs = s
-            .story
-            .paragraphs
-            .iter()
-            .map(|para| {
-                let runs = para
-                    .runs
-                    .iter()
-                    .map(|run| crate::channel::RunContent {
-                        text: run.text.clone(),
-                        character_style: run.character_style.clone(),
-                        font: run.font.clone(),
-                        font_style: run.font_style.clone(),
-                        point_size: run.point_size,
-                        fill_color: run.fill_color.clone(),
-                        underline: run.underline,
-                        strikethru: run.strikethru,
-                        capitalization: run.capitalization.clone(),
-                        baseline_shift: run.baseline_shift,
-                        position: run.position.clone(),
-                        tracking: run.tracking,
-                    })
-                    .collect();
-                crate::channel::ParagraphContent {
-                    paragraph_style: para.paragraph_style.clone(),
-                    runs,
-                }
-            })
-            .collect();
         Some(crate::channel::StoryContent {
             self_id: s.self_id.clone(),
-            paragraphs,
+            paragraphs: s.story.paragraphs.iter().map(paragraph_content).collect(),
         })
     }
 
@@ -14925,6 +14896,34 @@ fn indesign_index_paragraph_style(id: &str, based_on: &str) -> paged_model::Para
         _ => {}
     }
     def
+}
+
+/// DOC-03 — one paragraph as the content read gives it: its applied style
+/// and its runs, each with its text, applied character style and direct
+/// character overrides. A story's paragraphs (`story_content`) and a table
+/// cell's (the cell's `paragraphs` read) read the same.
+pub(crate) fn paragraph_content(para: &paged_model::Paragraph) -> crate::channel::ParagraphContent {
+    crate::channel::ParagraphContent {
+        paragraph_style: para.paragraph_style.clone(),
+        runs: para
+            .runs
+            .iter()
+            .map(|run| crate::channel::RunContent {
+                text: run.text.clone(),
+                character_style: run.character_style.clone(),
+                font: run.font.clone(),
+                font_style: run.font_style.clone(),
+                point_size: run.point_size,
+                fill_color: run.fill_color.clone(),
+                underline: run.underline,
+                strikethru: run.strikethru,
+                capitalization: run.capitalization.clone(),
+                baseline_shift: run.baseline_shift,
+                position: run.position.clone(),
+                tracking: run.tracking,
+            })
+            .collect(),
+    }
 }
 
 #[cfg(test)]

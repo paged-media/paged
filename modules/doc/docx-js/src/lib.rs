@@ -158,7 +158,8 @@ mod wasm {
 
         /// M2 edited save-back driven by the DOC-03 read: forward the host's
         /// `StoryContent` JSON (`host.document.storyContent(storyId)`), plus
-        /// `cells: [{ block, cell, text }]` for the native tables' cells; it is
+        /// `cells: [{ block, cell, text, paragraphs? }]` for the native tables'
+        /// cells (`paragraphs`: the cell's styled read, when the host has it); it is
         /// overlaid on the import baseline, diffed, and saved. This is the LIVE
         /// path — live once the host injects the v54 read backend (gated by the
         /// bundle on `supports("document.readStory@1")`).

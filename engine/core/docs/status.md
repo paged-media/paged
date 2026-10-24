@@ -129,7 +129,9 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   addressed by its id or its name. A `set` is always one undo step, colour settings and the
   other application state included. `null` clears a nullable row (text, enum or reference)
   exactly as `""` does. A cell reads its `text` (its paragraphs joined by `\n`, the stream a
-  cell-addressed `insertText` writes), as a story does. A read tells a mixed value (`mixed: true`, a range whose runs
+  cell-addressed `insertText` writes), as a story does, and its `paragraphs` (each
+  paragraph's style and runs with their text, character style and direct formatting, the
+  story-content read's shape, as JSON text), read-only. A read tells a mixed value (`mixed: true`, a range whose runs
   disagree) from a refusal, which carries a code (`noSuchPath`, `notFound`, `badAddress`,
   `noDocument`). A frame's image content (`imageBytes`), its thread links
   (`nextTextFrame`, `previousTextFrame`), its opacity mask (`opacityMask`) and its path points
