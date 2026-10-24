@@ -93,6 +93,9 @@ export interface WordContribution {
   store: WordStore;
   /** Hold (true) or drop (false) the document context. */
   setDocumentContext(on: boolean): void;
+  /** Run a Word command by id (the typed twins of ADR 323 call this);
+   *  false for an id that is not a Word command. */
+  run(id: string): Promise<boolean>;
 }
 
 /**
@@ -253,9 +256,21 @@ export function contributeWord(
     );
   }
 
+  const byId = new Map(
+    (Object.keys(WORD_COMMAND) as WordCommandName[]).map((n) => [
+      WORD_COMMAND[n] as string,
+      n,
+    ]),
+  );
   return {
     store,
     setDocumentContext,
+    async run(id) {
+      const name = byId.get(id);
+      if (!name) return false;
+      await runWordCommand(host, name, state);
+      return true;
+    },
     dispose() {
       if (wordsTimer) clearTimeout(wordsTimer);
       for (const d of disposers) d();

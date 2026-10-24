@@ -3,11 +3,12 @@
   "package": "@paged-media/client",
   "protocol": 76,
   "counts": {
-    "clientMembers": 88,
-    "wireKinds": 56,
-    "exports": 74
+    "clientMembers": 91,
+    "wireKinds": 57,
+    "exports": 75
   },
   "wireKinds": [
+    "amendMutation",
     "beginGesture",
     "cancelGesture",
     "claimImageResource",
@@ -95,6 +96,24 @@
           "kind": "method",
           "signature": "async send(kind: MainToWorkerKind): Promise<WorkerToMain>",
           "summary": "Send a typed message and await the worker's reply."
+        },
+        {
+          "name": "CanvasClient.beginUndoGroup",
+          "kind": "method",
+          "signature": "beginUndoGroup(options: { continueSeq?: number | null }",
+          "summary": "WP4.11 — group the document writes that follow into ONE undo step, until {@link endUndoGroup}."
+        },
+        {
+          "name": "CanvasClient.endUndoGroup",
+          "kind": "method",
+          "signature": "async endUndoGroup(): Promise<UndoGroupResult | null>",
+          "summary": "Close the group {@link beginUndoGroup} opened, once its writes have settled, and say what it became."
+        },
+        {
+          "name": "CanvasClient.undoGroupOpen",
+          "kind": "property",
+          "signature": "get undoGroupOpen(): boolean",
+          "summary": "Is an undo group open?"
         },
         {
           "name": "CanvasClient.subscribe",
@@ -616,6 +635,12 @@
           "name": "CanvasClientOptions",
           "kind": "type",
           "signature": "CanvasClientOptions",
+          "summary": null
+        },
+        {
+          "name": "UndoGroupResult",
+          "kind": "type",
+          "signature": "UndoGroupResult",
           "summary": null
         },
         {
@@ -1433,6 +1458,12 @@
           "name": "SnapshotPng",
           "kind": "type",
           "signature": "SnapshotPng",
+          "summary": null
+        },
+        {
+          "name": "SwatchColorSpec",
+          "kind": "type",
+          "signature": "SwatchColorSpec",
           "summary": null
         },
         {

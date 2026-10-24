@@ -504,6 +504,7 @@ export function activate(host: BundleHost): BundleHandle {
   const objectModel = contributeDocObjectModel(host, {
     place: (name, bytes) => ingest(name, bytes, "place"),
     exportBytes: (state) => exportState(state),
+    wordCommand: (id) => (word ? word.run(id) : Promise.resolve(false)),
   });
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a
