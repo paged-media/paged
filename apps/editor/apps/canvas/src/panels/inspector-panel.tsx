@@ -71,6 +71,7 @@ const M = defineMessages("app.inspectorPanel", {
   stroke: "Stroke",
   weight: "Weight",
   opacity: "Opacity",
+  fillRule: "Fill rule",
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -360,6 +361,8 @@ function labelForPath(strings: Strings, path: PropertyPath): string {
       return strings.t(M.weight);
     case "frameOpacity":
       return strings.t(M.opacity);
+    case "frameFillRule":
+      return strings.t(M.fillRule);
     default:
       return path;
   }

@@ -675,6 +675,16 @@ Feature strings of the form `"area.member@major"` (e.g.
 `"contribute.tool@1"`, `"document.hitTest@1"`). The implemented set is
 exported as `HOST_FEATURES` so tests and docs can't drift from code.
 
+A flag may name a PROPERTY rather than a door when a bundle chooses a
+different lowering by it. `"document.fillRule@1"` (engine ADR 1006) says
+the vendored wire and catalog carry `frameFillRule` ("NonZero" /
+"EvenOdd") on every frame kind with an outline; it rides the ordinary
+property doors. The path is additive at protocol 76, so the handshake
+does not prove the engine has it: an older engine refuses the write as
+an unknown path (an outcome) and reads no row. paged.draw's SVG importer
+asks it before choosing between writing the rule and re-winding the
+contours for non-zero.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

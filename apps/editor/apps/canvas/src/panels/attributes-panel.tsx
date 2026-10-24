@@ -25,6 +25,9 @@
 //   ── OVERPRINT kicker ──
 //   Overprint fill/stroke  check rows            LIVE  (W2.3)
 //   Gap color               label-left swatch    seam
+//   ── PATH kicker ──
+//   Fill rule              two-segment toggle    LIVE  (engine ADR 1006)
+//   Reverse path direction button                paged.draw's command
 //
 // The LIVE pills bind `selectionProperty:frame{Nonprinting,
 // OverprintFill,OverprintStroke}` + the element-level
@@ -33,23 +36,41 @@
 // kind; nonprinting + overprint as before. On a kind without the
 // PropertyEntry the binding reads null → the pill shows the mixed
 // (em-dash) sentinel, disabled.
+//
+// FILL RULE (Illustrator's Attributes ▸ Use Non-Zero / Even-Odd Fill
+// Rule) binds `frameFillRule`, a native engine property on every frame
+// kind with an outline (Text frame, Rectangle, Oval, Polygon, Graphic
+// line). It is a property, not a command: the toggle is one
+// `host.objects` write (one batch over a multi-selection = one undo
+// step), read back through the same field. A group has no outline of
+// its own, so a selection holding one reads mixed.
+//
+// REVERSE PATH DIRECTION sits beside it because, under non-zero, the
+// direction of each contour is what makes a hole. The engine has no
+// reversal op; the reversal is paged.draw's command (draw-geometry's
+// `reverseContour`, written through `framePath`), so the button invokes
+// that command by id and is disabled when no bundle registered it (an
+// editor without draw) or nothing is selected.
 
 import { useMemo, useState } from "react";
 
 import {
+  Icon,
   ObjectFieldFrame,
   PropertyField,
   TogglePill,
   useObjectBindings,
   useObjectField,
   useObjectModel,
+  useRegistries,
+  useRegistryView,
   useSelection,
   type ObjectField,
 } from "@paged-media/shell";
 import type { Value } from "@paged-media/client";
 
 import { useAddressOfElement } from "../object-model";
-import { refusalText, status } from "@paged-media/panel-kit";
+import { Segment, refusalText, status } from "@paged-media/panel-kit";
 import { defineMessages, useStrings } from "@paged-media/strings";
 
 const M = defineMessages("app.attributesPanel", {
@@ -64,7 +85,24 @@ const M = defineMessages("app.attributesPanel", {
   noLabels: "No labels on this object.",
   onlyPagedLabels: "Only x-paged: labels are written here",
   addLabel: "Add label",
+  path: "Path",
+  fillRule: "Fill rule",
+  nonZero: "Use non-zero fill rule",
+  evenOdd: "Use even-odd fill rule",
+  reversePath: "Reverse path direction",
 });
+
+/** paged.draw's Reverse Path Direction (draw-bundle
+ *  `commands/reverse-path.ts`): it reverses every contour of every
+ *  selected path in one undo step. */
+export const REVERSE_PATH_COMMAND_ID =
+  "media.paged.draw.command.reversePathDirection";
+
+/** The two values of `frameFillRule` (engine ADR 1006). */
+const FILL_RULES = [
+  { value: "NonZero", glyph: "ui-fill-rule-nonzero", label: "nonZero" },
+  { value: "EvenOdd", glyph: "ui-fill-rule-evenodd", label: "evenOdd" },
+] as const;
 
 // ADR 323 — every pill is an object-model field: reads/writes through
 // `host.objects` (one batch over a multi-selection = one undo step),
@@ -75,12 +113,110 @@ const BINDINGS = {
   nonprinting: { scope: "element" as const, path: "frameNonprinting" },
   overprintFill: { scope: "element" as const, path: "frameOverprintFill" },
   overprintStroke: { scope: "element" as const, path: "frameOverprintStroke" },
+  fillRule: { scope: "element" as const, path: "frameFillRule" },
 };
 
 function unwrapBool(v: Value | null): boolean | null {
   if (!v) return null;
   if (v.type !== "bool") return null;
   return v.value as boolean;
+}
+
+function unwrapText(v: Value | null): string | null {
+  if (!v) return null;
+  if (v.type !== "text") return null;
+  return v.value as string;
+}
+
+/** The fill-rule toggle: two joined segments, one per rule, the active
+ *  one pressed. A mixed selection presses neither; a selection with no
+ *  write path (nothing selected, a kind without an outline) disables
+ *  both. */
+function FillRuleRow({ field }: { field: ObjectField }) {
+  const strings = useStrings();
+  const rule = unwrapText(field.value);
+  // An unset rule reads as the engine's default.
+  const current = rule === "" ? "NonZero" : rule;
+  const inert = field.onCommit == null;
+  return (
+    <ObjectFieldFrame field={field}>
+      <div
+        className="flex items-center justify-between py-[6px]"
+        data-fill-rule-row=""
+        data-mixed={current === null ? "" : undefined}
+      >
+        <span className="text-xs" style={{ color: "var(--pg-fg)" }}>
+          {strings.t(M.fillRule)}
+        </span>
+        <div
+          role="group"
+          aria-label={strings.t(M.fillRule)}
+          className="inline-flex overflow-hidden rounded-[6px] border border-input"
+          style={{ opacity: inert ? 0.55 : 1 }}
+        >
+          {FILL_RULES.map((opt, i) => {
+            const active = current === opt.value;
+            const label = strings.t(M[opt.label]);
+            return (
+              <Segment
+                key={opt.value}
+                pressed={active}
+                disabled={inert}
+                data-fill-rule={opt.value}
+                aria-label={label}
+                title={label}
+                className="flex h-[26px] w-[32px] cursor-pointer items-center justify-center border-0 disabled:cursor-default"
+                style={{
+                  borderRight:
+                    i < FILL_RULES.length - 1
+                      ? "1px solid var(--pg-border)"
+                      : "none",
+                  background: active
+                    ? "var(--chrome-slot-active)"
+                    : "var(--pg-bg)",
+                  color: active
+                    ? "var(--chrome-icon-active)"
+                    : "var(--pg-muted-fg)",
+                }}
+                onClick={() => {
+                  if (active) return;
+                  field.onCommit?.({ type: "text", value: opt.value } as Value);
+                }}
+              >
+                <Icon name={opt.glyph} size={15} />
+              </Segment>
+            );
+          })}
+        </div>
+      </div>
+    </ObjectFieldFrame>
+  );
+}
+
+/** Reverse Path Direction: paged.draw's command, invoked by id. */
+function ReversePathButton() {
+  const strings = useStrings();
+  const registries = useRegistries();
+  const commands = useRegistryView(registries.commands);
+  const { elementSelection } = useSelection();
+  const available =
+    commands.get(REVERSE_PATH_COMMAND_ID) !== undefined &&
+    (commands.offered?.(REVERSE_PATH_COMMAND_ID) ?? true);
+  return (
+    <div className="flex justify-end pb-1 pt-[2px]">
+      <button
+        type="button"
+        data-reverse-path=""
+        disabled={!available || elementSelection.length === 0}
+        onClick={() => {
+          void registries.commands.invoke(REVERSE_PATH_COMMAND_ID);
+        }}
+        className="h-[26px] rounded-[6px] border border-input px-2 text-[11px] disabled:opacity-55"
+      >
+        {strings.t(M.reversePath)}
+      </button>
+    </div>
+  );
 }
 
 function CheckRow({
@@ -210,6 +346,14 @@ export function AttributesPanel() {
           label={strings.t(M.gapColor)}
           scope="element"
         />
+      </div>
+      <div
+        className="-mx-3 mt-2 border-t border-input px-3 pt-2"
+        data-section="Path"
+      >
+        <div className="pg-label mb-1">{strings.t(M.path)}</div>
+        <FillRuleRow field={resolved.fillRule} />
+        <ReversePathButton />
       </div>
       <LabelsSection />
     </div>
