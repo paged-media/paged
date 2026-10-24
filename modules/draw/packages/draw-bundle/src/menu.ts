@@ -118,6 +118,8 @@ defineMessages("menu", {
   "Insert arc…": "Insert arc…",
   "Insert spiral…": "Insert spiral…",
   "Insert rectangular grid…": "Insert rectangular grid…",
+  "Insert star…": "Insert star…",
+  "Insert flare…": "Insert flare…",
   "Insert polar grid…": "Insert polar grid…",
   "Select same": "Select same",
   Fill: "Fill",
@@ -282,6 +284,10 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Object/Insert spiral…", "insertSpiralOptions", "plugin-insert"],
   ["Object/Insert rectangular grid…", "insertRectGridOptions", "plugin-insert"],
   ["Object/Insert polar grid…", "insertPolarGridOptions", "plugin-insert"],
+  //    WP6.1 part 2 — the Star and Flare tools' dialogs, reached from the
+  //    menu as well (a click with either tool raises the same section).
+  ["Object/Insert star…", "insertStarOptions", "plugin-insert"],
+  ["Object/Insert flare…", "insertFlareOptions", "plugin-insert"],
 
   // ── Select same — merges into Edit, where selection verbs live. ──
   ["Edit/Select same/Fill", "selectSameFill", "select-same"],
