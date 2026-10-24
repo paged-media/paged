@@ -387,6 +387,17 @@ export const TWINS: readonly TwinSpec[] = [
     { ...T, tolerance: LEN },
     { result: SELECTION_RESULT },
   ),
+  { ...sel("selectSameOpacity"), result: SELECTION_RESULT },
+  { ...sel("selectSameBlendMode"), result: SELECTION_RESULT },
+  { ...sel("selectSameAppearance"), result: SELECTION_RESULT },
+  { ...sel("selectSameGraphicStyle"), result: SELECTION_RESULT },
+  { ...sel("selectSameSymbolInstance"), result: SELECTION_RESULT },
+  { ...sel("selectSameShapeKind"), result: SELECTION_RESULT },
+  twin(
+    "globalEdit",
+    { ...T, tolerance: LEN, anySize: BOOL },
+    { result: SELECTION_RESULT },
+  ),
   // Insert shapes — the generators' full parameters.
   twin("insertArc", ARC),
   twin("insertSpiral", SPIRAL),

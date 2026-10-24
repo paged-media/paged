@@ -334,6 +334,15 @@ describe("paged.draw — headless conformance (B-13 replay)", () => {
         "command",
         "command",
         "command",
+        // WP6.1 — Select-same (Opacity / Blending mode / Appearance /
+        // Graphic style / Symbol instance / Shape kind) and Global Edit.
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
+        "command",
         // Wave 2 — Insert shapes (Arc / Spiral / Rect grid / Polar
         // grid).
         "command",

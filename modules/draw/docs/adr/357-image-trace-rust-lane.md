@@ -95,3 +95,13 @@ re-check the `flo_curves` note.
 A trace commits in one batch and one undo step ([ADR 360](360-records-name-no-minted-ids.md)):
 the trace record no longer lists its regions; each region carries a `tracedRegion` marker naming
 its source.
+
+## Amendment 2026-10-24
+
+The trace is no longer fitted to the frame's bounds. The frame's row of the `links` collection
+carries the image's own transform (`LinkSummary.imageTransform`, RFI C-27), so a traced pixel maps
+through `itemTransform ∘ imageTransform ∘ scale(natural / traced)`, and the raster is first cropped
+to the part the frame shows (`visibleRasterRect` in `packages/draw-bundle/src/commands/image-trace.ts`).
+A null transform keeps the old stretch, which is what the renderer does for such a picture. Two
+cases remain: a placement the engine resolves at render time from a named fit or fitting crops is
+reported as null, and a rotated placement or a non-rectangular frame is cropped to a box.
