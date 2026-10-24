@@ -90,6 +90,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [281](281-the-canvas-mounts-frame-surfaces.md) | The canvas mounts a bundle's frame surface over the active frame | Accepted 2026-10-22 |
 | [282](282-enter-enters-owned-content.md) | Enter enters the content a plugin owns | Accepted 2026-10-23 |
 | [283](283-a-frame-surface-goes-full-screen.md) | A frame surface goes full screen through a chrome override | Accepted 2026-10-23 |
+| [284](284-the-breadcrumb-stays-under-the-title-bar.md) | The edit-context breadcrumb stays under the title bar; full screen carries its own | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

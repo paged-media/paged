@@ -405,10 +405,11 @@ export function tableDecorOps(
     const colsN = content.cols.length;
     for (let r = 0; r < rowsN; r++) {
       for (let c = 0; c < colsN; c++) {
-        // The same edges the grid rules address: the first row's top and
-        // the first column's left, every cell's bottom and right.
-        if (r === 0) putEdge(r, c, "cellTopEdgeStrokeWeight", 0);
-        if (c === 0) putEdge(r, c, "cellLeftEdgeStrokeWeight", 0);
+        // All four edges of every cell: the engine keeps a cell's top and
+        // left apart from its neighbour's bottom and right, so an inner
+        // edge left unset still draws the default stroke.
+        putEdge(r, c, "cellTopEdgeStrokeWeight", 0);
+        putEdge(r, c, "cellLeftEdgeStrokeWeight", 0);
         putEdge(r, c, "cellBottomEdgeStrokeWeight", 0);
         putEdge(r, c, "cellRightEdgeStrokeWeight", 0);
       }
@@ -436,6 +437,19 @@ export function tableDecorOps(
             row.heightPt > 1.5 * lineHeightPt(style?.fontSizePt)
           ? "BottomAlign"
           : undefined;
+      // A frame page pads its text as the grid does (ADR 510): the cell's
+      // text keeps clear of its neighbours. Only cells with text need it.
+      if (content.textInsetPt && cell.text.length > 0) {
+        for (const path of ["cellInsetLeft", "cellInsetRight"] as const)
+          cellProps.push({
+            op: "setElementProperty",
+            args: {
+              elementId: cellId(storyId, tableId, r, c),
+              path,
+              value: { type: "length", value: content.textInsetPt },
+            },
+          });
+      }
       if (vj) {
         cellProps.push({
           op: "setElementProperty",

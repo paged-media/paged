@@ -35,7 +35,9 @@ import {
   type GridScene,
 } from "../../sheet-host-model/src";
 import {
+  FOOTER_PT,
   makeSheetFrameSurface,
+  stepZoom,
   type FrameSurfaceSession,
   withSwatchColors,
 } from "../src/surface/sheet-frame-surface";
@@ -511,5 +513,59 @@ describe("sheet frame surface", () => {
     );
     act(() => r.unmount());
     expect(calls.at(-1)).toEqual(["detach"]);
+  });
+
+  it("full screen: sheet tabs switch the sheet, the zoom scales the grid, the header goes back to the page", () => {
+    const { session, calls } = fakeSession();
+    const asked: string[] = [];
+    const surface = makeSheetFrameSurface(session);
+    const fs = props({
+      presentation: "fullscreen",
+      widthPt: 800,
+      heightPt: 600,
+      requestPresentation: (p) => asked.push(p),
+    });
+    const r = render(createElement(surface.render, fs));
+    // The grid leaves room for the status bar under it.
+    expect(calls[0]).toEqual([
+      "attach",
+      { wPt: 800 - hw, hPt: 600 - FOOTER_PT - hh },
+    ]);
+    const tabs = r.getAllByTestId("sheet-tab");
+    expect(tabs.map((t) => t.textContent)).toEqual(["Sheet1", "Prices"]);
+    expect(tabs[0]!.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(tabs[1]!);
+    expect(calls).toContainEqual(["sheet", 1]);
+    expect(r.getByTestId("sheet-status-mode").textContent).toBe("Ready");
+    // Zoom to 200 %: the grid sees half the area, and pointer points halve.
+    fireEvent.change(r.getByTestId("sheet-zoom"), { target: { value: "2" } });
+    expect(calls).toContainEqual([
+      "attach",
+      { wPt: 400 - hw, hPt: (600 - FOOTER_PT) / 2 - hh },
+    ]);
+    const root = r.getByTestId("sheet-frame-surface");
+    fireEvent.pointerDown(root, {
+      button: 0,
+      clientX: 2 * (hw + 10),
+      clientY: 2 * (hh + 5),
+    });
+    expect(calls).toContainEqual([
+      "down",
+      10,
+      5,
+      { shift: false, copy: false, add: false },
+    ]);
+    fireEvent.pointerUp(root, { button: 0, clientX: 0, clientY: 0 });
+    const bar = render(createElement(surface.bar, fs));
+    fireEvent.click(bar.getByTestId("sheet-back-to-page"));
+    expect(asked).toEqual(["frame"]);
+  });
+
+  it("zoom steps follow Excel's presets and stop at 10 % and 400 %", () => {
+    expect(stepZoom(1, 1)).toBe(1.25);
+    expect(stepZoom(1, -1)).toBe(0.75);
+    expect(stepZoom(1.1, -1)).toBe(1);
+    expect(stepZoom(4, 1)).toBe(4);
+    expect(stepZoom(0.1, -1)).toBe(0.1);
   });
 });
