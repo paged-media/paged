@@ -52,8 +52,9 @@
 // existed: it applies the operation with the last-used values, and says
 // so in the log.
 //
-// IMAGE TRACE is not here. Its menu row still carries an ellipsis and
-// still runs fixed options; its command file belongs to another change.
+// IMAGE TRACE and RECOLOR ARTWORK are not here: their "…" rows raise
+// panels of their own (`panels/image-trace-panel.tsx`,
+// `panels/recolor-panel.tsx`), whose options are not path parameters.
 //
 // STROKE DASHES ARE HERE, and that is a decision, not a convenience. The
 // four dash presets (`commands/dash.ts`) were the only way to set a dash,

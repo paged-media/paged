@@ -63,6 +63,7 @@ mod paragraph_pages;
 mod paste_into;
 mod pipeline_lib;
 mod placed_pdf_page;
+mod placed_psd;
 mod placed_svg_vectors;
 mod placed_tiff;
 mod polygon_corners;

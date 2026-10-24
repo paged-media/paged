@@ -229,6 +229,7 @@ impl<'b> Page<'b> {
                 .header
                 .entry(self.bytes, self.ifd, IMAGE_SOURCE_DATA)
                 .is_some(),
+            layer_count: self.layer_count(),
             resolution,
             orientation: self
                 .short(ORIENTATION)
@@ -237,6 +238,22 @@ impl<'b> Page<'b> {
                 .unwrap_or(1),
             page_count: self.page_count,
         })
+    }
+
+    /// The layer records in Photoshop's layer data (tag 37724), read
+    /// through `paged-psd` without their pixels; `Some(0)` without the
+    /// tag, `None` when the data is there but not readable.
+    fn layer_count(&self) -> Option<usize> {
+        let Some(data) = self.header.value(self.bytes, self.ifd, IMAGE_SOURCE_DATA) else {
+            return Some(0);
+        };
+        match paged_psd::image_source_data_records(data) {
+            Ok(list) => Some(list.layers.len()),
+            Err(err) => {
+                tracing::debug!(error = %err, "TIFF layer data not read");
+                None
+            }
+        }
     }
 
     /// The alpha kind and the index of the alpha sample within a pixel.

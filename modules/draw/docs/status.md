@@ -92,18 +92,41 @@ canary added is under [Releases](#releases).
   stored in the `.paged` file.
 - **Live paint, pattern, repeat, blend, objects on a path.** Each keeps a stored recipe and
   has a panel plus commands to make, update and release it. The first four insert artwork;
-  objects on a path moves the selected objects and creates none.
+  objects on a path moves the selected objects and creates none. Since WP6.6 a blend takes
+  keys with different anchor or contour counts (the intermediates get a matched structure,
+  the keys keep theirs), two groups (member to member by order; the groups stay groups) and
+  gradient fills (stop for stop, each intermediate its own gradient).
 - **Opacity mask and type on a path.** Make and release a mask from the top selected object;
   attach an existing story to a path and detach it.
 - **Create outlines.** Type ▸ Create outlines turns a text frame's glyphs into compound
   paths, one per fill colour, grouped when there are several, in one undo step.
-- **Image trace.** One command turns a placed raster image into grouped, filled paths. It
+- **Image trace.** One command turns a placed raster image into grouped paths. It
   runs in a host worker where the host offers one, and on the calling thread otherwise.
   The paths land where the image is displayed: the trace follows the image's own placement
-  in its frame, and only the part the frame shows is traced.
-- **SVG.** An importer for `.svg` files and an exporter for the selection. A file is one
-  undo step. A shape of several contours imports as one compound path, its holes wound
-  for its `fill-rule`, and exports as one `<path>` of several subpaths.
+  in its frame, and only the part the frame shows is traced. Since WP6.6: Illustrator's
+  twelve **presets** (Default, High and Low Fidelity Photo, 3 / 6 / 16 Colors, Shades of
+  Gray, Black and White Logo, Sketched Art, Silhouettes, Line Art, Technical Drawing) map onto
+  the kernel's options, and the colour counts snap the raster to that many colours first (a
+  deterministic k-means in `crates/draw-trace`); **centreline** tracing (Line Art, Technical
+  Drawing) thins the ink to its skeleton (Zhang–Suen) and lowers it to OPEN stroked paths at
+  the ink's mean width; **Re-trace** traces again with new options and replaces the previous
+  result in one undo step (the record keeps the options, every region names its image);
+  a trace made **live** is traced again inside the edit that changes its image's link or
+  bytes, over the recipe auto-update's step amend. An Image Trace panel holds the preset, the
+  options, Live, Trace and Re-trace; Draw ▸ Image trace… raises it.
+- **Recolor Artwork and the Color Guide (WP6.5).** Edit ▸ Edit colors ▸ Recolor artwork…
+  raises a panel that reads the selection's colours (fills, strokes, gradient stops and
+  appearance layers, heaviest first, at their display colours) and recolours them by a
+  harmony rule (complementary, analogous, triad, split complementary, tetrad,
+  monochromatic, shades, tints) on an HSB wheel whose handles turn the whole harmony, by
+  reduction to N colours (Lab k-means, deterministic, onto existing colours), or onto the
+  nearest swatches of a colour group. Apply is one batch: new swatches (a spot colour's
+  replacement is a spot), new gradients where stops change, the selection's refs
+  re-pointed; an object's tint is kept, so a tint of a spot stays a tint. The Color Guide
+  panel shows the fill's harmony and its shades / tints, warm / cool and vivid / muted
+  variations; a click fills the selection (Alt-click strokes). The colour math is
+  draw-geometry's `color-harmony.ts`.
+- **SVG.** An importer for `.svg` files and an exporter for the selection.
 - **Simplify with a live preview.** While the Path Options Simplify section is open, the
   simplified selection is drawn dashed over the canvas with its anchor counts, following
   every edit and selection change. A corner angle (0–180°) keeps anchors at least that sharp
@@ -111,7 +134,7 @@ canary added is under [Releases](#releases).
   none it is the engine's `simplifyPath` as before and the preview is the same fit, which can
   keep a slightly different number of anchors (the panel says so). A simplify never adds
   anchors.
-- **Menu.** 92 menu entries on a host that offers the menu door.
+- **Menu.** 94 menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -306,16 +329,17 @@ panel of these rows. The fields:
   (below). Both need a host with `storage.parts@1`.
 - **Undo steps.** Almost every command is one batch and one undo step, however many items
   it creates or rebuilds (pattern, symbols, live paint, blend, repeat, compound path, brush
-  strokes, SVG import). Two take two: appearance bake and image trace, because their
-  records name the created items by id. A clipped repeat takes two as well.
+  strokes, SVG import, image trace and re-trace, recolour). A clipped repeat takes two.
 - **Appearance.** An unbaked stack shows only its front fill and front stroke. Bake refuses
   a source with more than one contour.
 - **Pattern** produces copies of the artwork, not a fill: at most 400, and no text frames.
-  **Repeat** and **blend** stop at 200 instances or steps; a blend needs two paths with the
-  same contour and anchor counts.
+  **Repeat** and **blend** stop at 200 instances or steps. A blend refuses an open key
+  against a closed one, groups of different sizes, a linear gradient against a radial one,
+  and stops in different places when a midpoint other than 50 % would have to be resampled.
 - **Symbols.** An instance is re-created geometry with flat paint: no text, gradient stops,
   image content or per-instance override. Redefine and reset give its items new ids.
-- **Live paint** has no gap handling and cannot stroke edges. The engine refuses more than
+- **Live paint** has no gap handling and cannot stroke edges (WP6.6 leaves both to the
+  engine's arrangement work, WP2.4). The engine refuses more than
   12 inputs or 256 faces. A fill is inserted above the paths that bound it.
 - **Region tools** work in raw path space: results are exact only when the inputs share one
   item transform. An element moved far enough off its page cannot be measured.
@@ -354,9 +378,12 @@ panel of these rows. The fields:
   It reads only what the browser can decode.
 - **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
   images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only. The engine fills non-zero, so `fill-rule="evenodd"` is
-  expressed by re-winding contours by nesting depth: contours that cross each other or
-  themselves (a star drawn as one path) paint their non-zero region. A shape stays one
+  writes solid colours only. `fill-rule="evenodd"` is written as the element's native
+  fill rule (`frameFillRule`, engine ADR 1006), the contours kept as authored, so contours
+  that cross each other or themselves (a star drawn as one path) import exactly; export
+  writes the element's rule back as `fill-rule`. On an engine without the fill rule
+  (`document.fillRule@1` not supported) an even-odd shape is re-wound by nesting depth
+  instead, and crossing contours there paint their non-zero region. A shape stays one
   path per contour when a contour after the first is open, or when the engine reports no
   page origin.
 
@@ -372,8 +399,10 @@ panel of these rows. The fields:
 - Symbol sets and their tools, nine-slice scaling, per-instance override records (an
   instance's deviations are its items' own properties); merging,
   importing, exporting and organising graphic styles.
-- Trace presets, re-tracing and centreline detection.
-- Resampling two blend paths that do not match; readers for `.ai` and `.eps` files.
+- A variable-width centreline (a traced stroke has the ink's mean width); a Color Guide
+  "save group"; Recolor Artwork's per-row colour editing in the panel (the `map` payload
+  does it).
+- Readers for `.ai` and `.eps` files.
 
 ## Releases
 

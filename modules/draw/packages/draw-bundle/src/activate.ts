@@ -160,7 +160,15 @@ import {
 import {
   contributeImageTraceCommand,
   IMAGE_TRACE_COMMAND_IDS,
+  IMAGE_TRACE_PANEL_ID,
 } from "./commands/image-trace";
+import { contributeLiveRetrace } from "./commands/image-trace-live";
+import {
+  contributeRecolorCommands,
+  COLOR_GUIDE_PANEL_ID,
+  RECOLOR_COMMAND_IDS,
+  RECOLOR_PANEL_ID,
+} from "./commands/recolor";
 import {
   contributeFillGradientCommands,
   FILL_GRADIENT_COMMAND_IDS,
@@ -220,6 +228,9 @@ import {
   OBJECTS_ON_PATH_PANEL_ID,
 } from "./panels/objects-on-path-panel";
 import { makePathOptionsPanel } from "./panels/path-options-panel";
+import { makeImageTracePanel } from "./panels/image-trace-panel";
+import { makeRecolorPanel } from "./panels/recolor-panel";
+import { makeColorGuidePanel } from "./panels/color-guide-panel";
 import { contributeSvgIo } from "./io/svg";
 import { contributeDrawObjectModel } from "./object-model";
 import {
@@ -381,6 +392,25 @@ export function activate(host: BundleHost): BundleHandle {
     id: PATH_OPTIONS_PANEL_ID,
     icon: "tool-smooth",
     ...makePathOptionsPanel(host),
+  });
+  // WP6.6 — IMAGE TRACE options: the presets, the options they set, Live,
+  // Trace and Re-trace (the Draw ▸ Image trace… row raises it).
+  host.contribute.panel({
+    id: IMAGE_TRACE_PANEL_ID,
+    icon: "ui-filter",
+    ...makeImageTracePanel(host),
+  });
+  // WP6.5 — RECOLOR ARTWORK (harmony on a wheel, reduce, library) and the
+  // COLOR GUIDE (the fill's harmony and its variations).
+  host.contribute.panel({
+    id: RECOLOR_PANEL_ID,
+    icon: "ui-swatch-fill",
+    ...makeRecolorPanel(host),
+  });
+  host.contribute.panel({
+    id: COLOR_GUIDE_PANEL_ID,
+    icon: "ui-sun",
+    ...makeColorGuidePanel(host),
   });
   // B-12 — the stroke DASH presets as commands (the schema binding
   // ceiling is scalar, a dash array is a vector → command-driven). Each
@@ -594,6 +624,10 @@ export function activate(host: BundleHost): BundleHandle {
   // non-zero. One-shot, fills only, main-thread — commands/image-trace.ts
   // states the whole honest scope, and the command TITLE carries it.
   const imageTraceCommandSub = contributeImageTraceCommand(host);
+  // …a LIVE trace re-traced inside the edit that changes its image's link.
+  const liveRetraceSub = contributeLiveRetrace(host);
+  // WP6.5 — Recolor Artwork and the Color Guide's apply.
+  const recolorCommandsSub = contributeRecolorCommands(host);
   // W3.2 — the vectorGraphic edit context (closes B-02): double-click a
   // path enters anchor-editing (the anchor tools focused, the stroke
   // panel raised, a breadcrumb, Esc exits).
@@ -656,7 +690,7 @@ export function activate(host: BundleHost): BundleHandle {
       publishDrawPropertyLists(host))
     : null;
   host.log.info(
-    `activated — ${tools.length} tools + 3 schema panels + 9 React panels + ` +
+    `activated — ${tools.length} tools + 3 schema panels + 12 React panels + ` +
       `${
         DASH_COMMAND_IDS.length +
         FILL_GRADIENT_COMMAND_IDS.length +
@@ -682,6 +716,7 @@ export function activate(host: BundleHost): BundleHandle {
         GLOBAL_EDIT_COMMAND_IDS.length +
         INSERT_SHAPE_COMMAND_IDS.length +
         IMAGE_TRACE_COMMAND_IDS.length +
+        RECOLOR_COMMAND_IDS.length +
         BLEND_COMMAND_IDS.length +
         OBJECTS_ON_PATH_COMMAND_IDS.length +
         CUT_COMMAND_IDS.length +
@@ -709,6 +744,8 @@ export function activate(host: BundleHost): BundleHandle {
       svgIoSub.dispose();
       menuSub.dispose();
       imageTraceCommandSub.dispose();
+      liveRetraceSub.dispose();
+      recolorCommandsSub.dispose();
       objectsOnPathCommandsSub.dispose();
       blendCommandsSub.dispose();
       insertShapeCommandsSub.dispose();

@@ -136,6 +136,27 @@ describe("paged.draw — the automatic recipe update", () => {
     }
   });
 
+  it("an edit sent right after switching the update back on rebuilds", async () => {
+    await idle();
+    setRecipeAutoUpdate(h.host, false);
+    await idle();
+    const before = await instances();
+    // Off, an edit rebuilds nothing…
+    expect((await moveSourceAnchor(3)).applied).toBe(true);
+    await idle();
+    expect((await instances()).map((i) => i.id)).toEqual(
+      before.map((i) => i.id),
+    );
+    // …switched on, an edit sent at once rebuilds: the prints kept from
+    // before the switch-off are what it is compared against (re-taking
+    // them raced the edit, the editor's checkbox spec).
+    setRecipeAutoUpdate(h.host, true);
+    expect((await moveSourceAnchor(5)).applied).toBe(true);
+    await idle();
+    const after = await instances();
+    expect(after.map((i) => i.id)).not.toContain(before[0]!.id);
+  });
+
   // Engine ADR 1004 amendment: a script run is one step its reply names.
   it("a script's edit of a source rebuilds the repeat in the script's step", async () => {
     await idle();
