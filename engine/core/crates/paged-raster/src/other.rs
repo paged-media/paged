@@ -16,9 +16,12 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! PNG, JPEG, WebP, GIF and BMP, read through `image`.
+//! PNG, JPEG, WebP, GIF and BMP, read through `image`; and TGA, QOI, ICO
+//! (its largest entry, as `image` picks it), Radiance HDR and OpenEXR
+//! (the `exr` feature), each decoded with its format named, since TGA has
+//! no magic number `image` could guess from.
 
-use image::{DynamicImage, ImageDecoder};
+use image::{DynamicImage, ImageDecoder, ImageFormat};
 
 use crate::{
     Alpha, ColorModel, DecodeOptions, Error, Format, RasterImage, RasterInfo, Result, Rgba8,
@@ -46,14 +49,32 @@ fn single_page(page: usize) -> Result<()> {
     }
 }
 
+/// The `image` format of one of this module's formats.
+fn image_format(format: Format) -> Option<ImageFormat> {
+    Some(match format {
+        Format::Png => ImageFormat::Png,
+        Format::Jpeg => ImageFormat::Jpeg,
+        Format::WebP => ImageFormat::WebP,
+        Format::Gif => ImageFormat::Gif,
+        Format::Bmp => ImageFormat::Bmp,
+        Format::Tga => ImageFormat::Tga,
+        Format::Qoi => ImageFormat::Qoi,
+        Format::Ico => ImageFormat::Ico,
+        Format::Hdr => ImageFormat::Hdr,
+        Format::Exr => ImageFormat::OpenExr,
+        _ => return None,
+    })
+}
+
+fn load(bytes: &[u8], format: Format) -> Result<DynamicImage> {
+    let f = image_format(format).ok_or(Error::UnknownFormat)?;
+    image::load_from_memory_with_format(bytes, f).map_err(|e| malformed(format, e))
+}
+
 pub(crate) fn probe(bytes: &[u8], format: Format, page: usize) -> Result<RasterInfo> {
     single_page(page)?;
-    let reader = image::ImageReader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()
-        .map_err(|e| Error::Malformed {
-            format,
-            detail: e.to_string(),
-        })?;
+    let f = image_format(format).ok_or(Error::UnknownFormat)?;
+    let reader = image::ImageReader::with_format(std::io::Cursor::new(bytes), f);
     let mut decoder = reader.into_decoder().map_err(|e| malformed(format, e))?;
     let (width, height) = decoder.dimensions();
     let colour = decoder.color_type();
@@ -103,7 +124,7 @@ fn describe(colour: image::ColorType) -> (ColorModel, Alpha, SampleFormat) {
 
 pub(crate) fn decode(bytes: &[u8], format: Format, opts: DecodeOptions) -> Result<RasterImage> {
     let info = probe(bytes, format, opts.page)?;
-    let img = image::load_from_memory(bytes).map_err(|e| malformed(format, e))?;
+    let img = load(bytes, format)?;
     let (width, height) = (img.width(), img.height());
     let (model, alpha, data) = match img {
         DynamicImage::ImageLuma8(b) => (ColorModel::Gray, Alpha::None, Samples::U8(b.into_raw())),
@@ -153,10 +174,12 @@ pub(crate) fn decode(bytes: &[u8], format: Format, opts: DecodeOptions) -> Resul
 }
 
 /// Exactly what the renderer did before this crate: `image`'s decode and
-/// its RGBA8 conversion.
+/// its RGBA8 conversion (for bytes no format sniffs, `image`'s guess).
 pub(crate) fn decode_rgba8(bytes: &[u8]) -> Result<Rgba8> {
-    let format = crate::sniff(bytes).unwrap_or(Format::Png);
-    let img = image::load_from_memory(bytes).map_err(|e| malformed(format, e))?;
+    let img = match crate::sniff(bytes) {
+        Some(format) if image_format(format).is_some() => load(bytes, format)?,
+        _ => image::load_from_memory(bytes).map_err(|e| malformed(Format::Png, e))?,
+    };
     let rgba = img.to_rgba8();
     Ok(Rgba8 {
         width: rgba.width(),

@@ -12,6 +12,7 @@
       "openNative": true
     },
     "clipboard": "none",
+    "keybindings": true,
     "assets": ["fonts"],
     "wasm": [
       {
@@ -22,7 +23,8 @@
       }
     ],
     "documents": {
-      "open": true
+      "open": true,
+      "export": true
     }
   },
   "contributes": {

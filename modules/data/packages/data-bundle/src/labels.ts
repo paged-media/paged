@@ -280,6 +280,30 @@ export interface LabelPlan {
  * hosted binding in its element's label (with the queries and sources it
  * reads), stale entries removed. Pure — `elements` is one tree read.
  */
+/** Where each binding's content is placed: the page item that carries it,
+ *  when the document has that item (the data door's `placements`). A
+ *  property binding the facts and the labels do not place is left out; the
+ *  caller resolves its selector. */
+export function placedElements(
+  payload: PayloadJson,
+  facts: HostFacts,
+  elements: readonly LabelledElement[],
+): { binding: string; element: ElementId }[] {
+  const byOid = new Map<string, LabelledElement>();
+  for (const e of elements) {
+    const oid = e.data?.oid;
+    if (typeof oid === "string") byOid.set(oid, e);
+  }
+  const out: { binding: string; element: ElementId }[] = [];
+  for (const b of payload.bindings ?? []) {
+    const el = hostElementOf(b, facts, byOid, elements);
+    if (!el || typeof el.id !== "string") continue;
+    const current = elements.find((e) => sameId(e.element, el));
+    if (current) out.push({ binding: b.id, element: current.element });
+  }
+  return out;
+}
+
 export function planLabels(
   payload: PayloadJson,
   facts: HostFacts,

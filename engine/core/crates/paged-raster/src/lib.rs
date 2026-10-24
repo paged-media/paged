@@ -65,6 +65,25 @@
 //! layers themselves are the image module's; [`RasterInfo::layer_count`]
 //! says how many there are.
 //!
+//! An EPS (a DOS EPS binary file, or PostScript text) is read for its
+//! preview: the DOS file's TIFF through the TIFF reader, or an EPSI
+//! `%%BeginPreview` bitmap (1/2/4/8-bit gray); [`eps_bounding_box`] gives
+//! the area the artwork covers, in points. A metafile-only or preview-less
+//! EPS is refused by name (there is no PostScript interpreter).
+//!
+//! A DNG (a TIFF with DNGVersion) is developed with a good default: its
+//! raw IFD (CFA or LinearRaw; uncompressed or lossless JPEG), black and
+//! white levels, a bilinear demosaic, AsShotNeutral white balance, the
+//! ColorMatrix to linear sRGB and the sRGB curve, as 16-bit RGB. See the
+//! `dng` module for what is not applied.
+//!
+//! AVIF (feature `avif`: `avif-parse` and rav1d) and JPEG XL (feature
+//! `jxl`: `jxl-oxide`) decode in pure Rust on native and wasm32; TGA,
+//! QOI, ICO, Radiance HDR and OpenEXR (feature `exr`) through `image`.
+//! The scene-linear floats of HDR and EXR are clipped and sRGB-encoded by
+//! [`to_rgba8`]. A build without a feature sniffs the format and refuses
+//! it, naming the feature.
+//!
 //! ## Colour
 //!
 //! [`to_rgba8`] takes the conversion as a [`ColourConvert`] so a caller
@@ -81,20 +100,27 @@
 //! ## Not here yet
 //!
 //! Orientation is reported, not applied (the renderer never applied it).
-//! Region decode, the remaining codecs and encoders of the raster plan,
-//! and gray or RGB ICC conversion follow in later work. A layered TIFF
+//! Region decode, the encoders beyond TIFF, and gray or RGB ICC conversion
+//! follow in later work. A layered TIFF
 //! (tag 37724) decodes its flattened image; its layer records are read
 //! through `paged-psd` for [`RasterInfo::layer_count`] only.
 
 #![forbid(unsafe_code)]
 
+mod avif;
 mod convert;
+mod dng;
+mod eps;
 mod icc;
+mod jxl;
+mod lj92;
 mod other;
 mod psd;
 mod shrink;
 mod sniff;
 mod tif;
+
+pub use eps::bounding_box as eps_bounding_box;
 
 pub use convert::{to_rgba8, ColourConvert, NaiveColour, PagedColour};
 pub use icc::extract_icc;
@@ -309,6 +335,10 @@ pub fn probe_page(bytes: &[u8], page: usize) -> Result<RasterInfo> {
     match sniff(bytes) {
         Some(Format::Tiff) => tif::probe(bytes, page),
         Some(Format::Psd) => psd::probe(bytes, page),
+        Some(Format::Eps) => eps::probe(bytes, page),
+        Some(Format::Dng) => dng::probe(bytes, page),
+        Some(Format::Avif) => avif::probe(bytes, page),
+        Some(Format::Jxl) => jxl::probe(bytes, page),
         Some(format) => other::probe(bytes, format, page),
         None => Err(Error::UnknownFormat),
     }
@@ -319,8 +349,29 @@ pub fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
     match sniff(bytes) {
         Some(Format::Tiff) => tif::decode(bytes, opts),
         Some(Format::Psd) => psd::decode(bytes, opts),
+        Some(Format::Eps) => eps::decode(bytes, opts),
+        Some(Format::Dng) => dng::decode(bytes, opts),
+        Some(Format::Avif) => avif::decode(bytes, opts),
+        Some(Format::Jxl) => jxl::decode(bytes, opts),
         Some(format) => other::decode(bytes, format, opts),
         None => Err(Error::UnknownFormat),
+    }
+}
+
+/// A decoded image box-shrunk to `max_dim`, for the decoders that read
+/// at full size first.
+pub(crate) fn shrink_image(img: RasterImage, max_dim: Option<u32>) -> RasterImage {
+    let k = shrink::factor(img.width, img.height, max_dim);
+    if k <= 1 {
+        return img;
+    }
+    let channels = img.channels();
+    let (data, width, height) = shrink::shrink(img.data, img.width, img.height, channels, k);
+    RasterImage {
+        width,
+        height,
+        data,
+        ..img
     }
 }
 
@@ -330,7 +381,8 @@ pub fn decode(bytes: &[u8], opts: DecodeOptions) -> Result<RasterImage> {
 ///
 /// A TIFF decodes through this crate (shrunk to `max_dim` when given);
 /// one it cannot read is handed to `image`, the decoder TIFFs used before.
-/// A PSD/PSB decodes its merged composite (shrunk to `max_dim`).
+/// A PSD/PSB decodes its merged composite, an EPS its preview, and DNG,
+/// AVIF, JPEG XL, HDR and EXR through this crate (shrunk to `max_dim`).
 /// Every other format is `image::load_from_memory(bytes)?.to_rgba8()`,
 /// unchanged, at full size.
 pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
@@ -341,10 +393,36 @@ pub fn decode_rgba8(bytes: &[u8], max_dim: Option<u32>) -> Result<Rgba8> {
                 tracing::warn!(error = %err, "TIFF decode failed; trying the image crate");
                 other::decode_rgba8(bytes).map_err(|_| err)
             }),
-        Some(Format::Psd) => psd::decode(bytes, DecodeOptions { page: 0, max_dim })
+        Some(
+            Format::Psd
+            | Format::Eps
+            | Format::Dng
+            | Format::Avif
+            | Format::Jxl
+            | Format::Hdr
+            | Format::Exr,
+        ) => decode(bytes, DecodeOptions { page: 0, max_dim })
             .and_then(|img| to_rgba8(&img, &PagedColour)),
         _ => other::decode_rgba8(bytes),
     }
+}
+
+/// The formats [`decode_rgba8`] reads through this crate's own decoders
+/// (shrunk to `max_dim`, colour through [`PagedColour`]) rather than as
+/// `image::load_from_memory(..).to_rgba8()`: everything except PNG, JPEG,
+/// WebP, GIF, BMP, TGA, QOI and ICO.
+pub fn reads_natively(format: Format) -> bool {
+    !matches!(
+        format,
+        Format::Png
+            | Format::Jpeg
+            | Format::WebP
+            | Format::Gif
+            | Format::Bmp
+            | Format::Tga
+            | Format::Qoi
+            | Format::Ico
+    )
 }
 
 /// The bytes are a TIFF (classic or BigTIFF, either byte order).

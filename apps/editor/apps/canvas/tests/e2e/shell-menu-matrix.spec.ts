@@ -88,6 +88,7 @@ const HOST_MENU = [
   "View/Show text threads",
   "View/Snap to points",
   "View/Show heading anchors",
+  "View/Show data markers",
   "Edit/Select all",
   "Object/Bring to front",
   "Object/Bring forward",
@@ -143,6 +144,7 @@ const HOST_MENU = [
   "File/New from a brief…",
   "File/Open recent",
   "File/Close",
+  "File/Automate/Batch…",
   "File/Package…",
   "File/Print…",
   "Layout/Margins and columns…",
@@ -770,6 +772,30 @@ test.describe("the host menu bar", () => {
     await expect(
       page.getByRole("menuitemcheckbox", { name: /Snap to points/ }),
     ).toHaveAttribute("aria-checked", "true", { timeout: 2_000 });
+  });
+
+  test("View/Show data markers toggles its checked state", async ({ page }) => {
+    covers("menu:View/Show data markers");
+    await openShell(page, { doc: true });
+    const trigger = page.locator('[data-menu-trigger="View"]');
+    const row = page.getByRole("menuitemcheckbox", {
+      name: /Show data markers/,
+    });
+    // Open the View menu from closed: whether a click on a checkbox row
+    // closes the menu is the menu's business, so close it ourselves first.
+    const openView = async () => {
+      await page.keyboard.press("Escape");
+      await expect(row).toBeHidden();
+      await trigger.click();
+      await expect(row).toBeVisible();
+    };
+    await openView();
+    // Off by default; a click turns it on, and the row shows it checked.
+    await expect(row).toHaveAttribute("aria-checked", "false");
+    await row.click();
+    await openView();
+    await expect(row).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("Escape");
   });
 });
 

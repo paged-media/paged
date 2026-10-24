@@ -22,6 +22,9 @@
 // every call a message. It loads a template file, fills a field, and
 // answers Submit.
 
+// `?url`: the build emits the file and the demo fetches it there.
+import cardUrl from "../../demos/assets/business-card.paged?url";
+
 import { connectEditor } from "../embed";
 import { demoPage, section } from "./page";
 
@@ -67,11 +70,7 @@ const editor = await connectEditor(frame, {
 editor.on((event) => {
   if (event.type === "fieldChange") note("fields changed");
 });
-const bytes = new Uint8Array(
-  await (
-    await fetch(new URL("./assets/business-card.paged", location.href))
-  ).arrayBuffer(),
-);
+const bytes = new Uint8Array(await (await fetch(cardUrl)).arrayBuffer());
 await editor.load({ bytes, name: "business-card.paged" });
 await editor.setRole("filler");
 

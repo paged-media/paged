@@ -39,7 +39,7 @@ import {
 } from "./panels/outline-panel.js";
 import { placeEmbedded } from "./place.js";
 import { openStandalone } from "./open.js";
-import { readTableCells } from "./save-cells.js";
+import { canvasColors, readTableCells } from "./save-cells.js";
 import {
   discoverDocs,
   readDocBytes,
@@ -47,6 +47,7 @@ import {
   type DocState,
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
+import { contributeWord, type WordContribution } from "./word/contribute.js";
 import {
   docPropertiesPanel,
   PROPERTIES_PANEL_ID,
@@ -60,6 +61,8 @@ import {
 import type { StoryContentLike } from "@paged-media/doc-host-model";
 
 const PANEL_ID = "media.paged.doc.panel.outline";
+/** The frame a standalone open labels (open.ts `finishStandalone`). */
+const STANDALONE_FRAME = "docx_f0";
 const DOCX_MIME =
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -87,6 +90,9 @@ export function activate(host: BundleHost): BundleHandle {
   // The panel's document store: the RETAINED LoweredDoc (plain JSON — the
   // engine itself is disposed after placement) + the placement record.
   const docStore = createDocStore();
+  // Doc ADR 608 — the Word chrome (control bar, shortcuts, status items),
+  // contributed once the wordDocument context is registered below.
+  let word: WordContribution | null = null;
 
   // Load bytes -> engine -> lowering -> embedded placement.
   // `open` is File ▸ Open / drop (the importer): the Word document BECOMES
@@ -112,6 +118,9 @@ export function activate(host: BundleHost): BundleHandle {
           ? await openStandalone(host, engine, ir, bytes, name)
           : null;
       if (opened) {
+        // Doc ADR 608 — the Word document IS the document: its context
+        // applies on every page, with no frame to enter.
+        word?.setDocumentContext(true);
         // The open may have lowered again for an engine without span/split
         // columns (another story per column change): count what it poured.
         last = {
@@ -187,12 +196,18 @@ export function activate(host: BundleHost): BundleHandle {
       contents,
       sectionBlocks(ir).map(pouredParagraphCount),
     );
-    const { cells, skips } = await readTableCells(host, ir, sections);
+    const { cells, tables, skips } = await readTableCells(host, ir, sections);
     const engine = await DocEngine.boot();
     try {
       engine.loadDocx(source);
       engine.setMidPageColumns(state.data.midPageColumns ?? true);
-      const bytes = engine.saveEditedFromContent({ ...content, cells });
+      const colors = await canvasColors(host, content.paragraphs, cells);
+      const bytes = engine.saveEditedFromContent({
+        ...content,
+        cells,
+        tables,
+        colors,
+      });
       host.diagnostics.set(
         "media.paged.doc/save-back",
         [...skips, ...engine.lastSaveSkips()].map((message) => ({
@@ -273,9 +288,12 @@ export function activate(host: BundleHost): BundleHandle {
           engine.lowered(),
           last.storyIds,
         );
+        const colors = await canvasColors(host, content.paragraphs, read.cells);
         const bytes = engine.saveEditedFromContent({
           ...content,
           cells: read.cells,
+          tables: read.tables,
+          colors,
         });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan
@@ -465,6 +483,19 @@ export function activate(host: BundleHost): BundleHandle {
         // (ADR 023). The SDK door takes no options and always raises.
       }).dispose,
     );
+    word = contributeWord(host, {
+      async docStories() {
+        if (last && last.storyIds.length > 0) return last.storyIds;
+        const docs = await discoverDocs(host).catch(() => []);
+        return docs.flatMap((d) => d.data.sections ?? []);
+      },
+      async isWordDocument() {
+        const docs = await discoverDocs(host).catch(() => []);
+        return docs.some(
+          (d) => (d.frame as { id: string }).id === STANDALONE_FRAME,
+        );
+      },
+    });
   }
 
   // ADR 323 — the object model: the placed document, its blocks, runs and
@@ -473,6 +504,7 @@ export function activate(host: BundleHost): BundleHandle {
   const objectModel = contributeDocObjectModel(host, {
     place: (name, bytes) => ingest(name, bytes, "place"),
     exportBytes: (state) => exportState(state),
+    wordCommand: (id) => (word ? word.run(id) : Promise.resolve(false)),
   });
 
   // ADR 323 — the object properties as host-rendered PropertyFields (a
@@ -500,6 +532,7 @@ export function activate(host: BundleHost): BundleHandle {
   return {
     dispose() {
       menuSub.dispose();
+      word?.dispose();
       objectModel?.dispose();
       for (const d of disposers) d();
     },

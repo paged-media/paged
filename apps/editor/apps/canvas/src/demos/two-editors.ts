@@ -61,6 +61,9 @@ async function mount(side: Side): Promise<void> {
       regions: {
         "actions-bar": { items: [{ kind: "spacer" }, "paged.host.submit"] },
       },
+      // Two editors side by side on a desktop page: each is narrower than
+      // the compact breakpoint, and keeps its form column all the same.
+      compact: null,
     },
     actions: {
       async submit() {

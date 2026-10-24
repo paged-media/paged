@@ -80,6 +80,11 @@ pub enum DiagnosticCode {
     /// frame's intrinsic fill rendered (plus the stroke-only
     /// ghost-cross when `degraded_asset_markers` is on).
     ImageContentUnrenderable,
+    /// A placed EPS was drawn from the preview it carries (a DOS EPS
+    /// binary file's TIFF, or an EPSI bitmap), stretched over its
+    /// bounding box: the engine has no PostScript interpreter, so the
+    /// artwork shows at the preview's resolution (engine ADR 1005).
+    ImageDrawnFromPreview,
 }
 
 impl DiagnosticCode {
@@ -94,6 +99,7 @@ impl DiagnosticCode {
             DiagnosticCode::SectionNumberingFallback => Severity::Info,
             DiagnosticCode::FontSubstituted => Severity::Warning,
             DiagnosticCode::ImageContentUnrenderable => Severity::Warning,
+            DiagnosticCode::ImageDrawnFromPreview => Severity::Warning,
         }
     }
 }

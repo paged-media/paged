@@ -31,10 +31,13 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 
 - asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
   the column's action chain, placed as a data URI;
+  declared through the door too (`assetColumns`, `setAssetColumn`: an unknown query or field
+  is refused, a change re-reads the query), from the Data panel's picture column editor;
 - paged.sheet edits a table of the document's data in place through `data@1`.
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
-binding kinds headless.
+binding kinds headless. The record templates library and the pagination inspector that
+editor ADR 291 left to this module are built as its own panels (see Shipped).
 
 ## Shipped
 
@@ -160,6 +163,35 @@ binding kinds headless.
   a `resizeFrame` or a drag of a chain frame's handles; the second needs a host that reports
   a gesture's reflow (core v0.71.13 through plugin-sdk 0.2.58). On an older host a handle
   resize re-paginates nothing; a move never does. No panel calls these yet.
+- **Record templates** (the Record templates panel, `src/record-templates.ts`; 2026-10-24). A
+  record template is the cell a record flow repeats: lines of a label and an expression, at a
+  line height. The panel lists the document's templates with the flows using each; "New from
+  selection" reads the selected text frames written as for Data Merge (each line one template
+  line, `<<field>>` a field reference, other text kept as text; a `<<name>>` that is not a
+  field name stays literal and is said); a rename moves the flows using the template; a
+  delete is refused while a flow uses it; the preview fills a template with record N of a
+  query (the engine's `preview_template`, in the order the stepper numbers records). The
+  library is saved with the session.
+- **Record flow pagination** (the Record flow pagination panel). A flow's template and its
+  line height, group by, repeated and continued group headers and a group footer (`{count}`,
+  and a sum, average, minimum or maximum of one field) are inline controls written at once.
+  The summary beside them is the engine's pagination of the flow over the start page's margin
+  box, one frame per page, as lowering places it: records placed of the total, records per
+  page, headers repeated as continued, overflow, a record taller than a page. A flow's own
+  repeated/continued header options now reach the paginator (before, every caller paginated
+  with both on). Not offered, because the engine has none: keep-together of a group, a break
+  before a group, per-group footers other than one aggregate row, the header height (16 pt).
+- **The pipeline** (2026-10-24; the Data panel's Pipeline view, editor ADR 291, over
+  [ADR 562](adr/562-transforms-are-javascript-over-tables.md)). The data door serves
+  `pipeline()`: each source, transform and query in refresh order, with the tables it reads
+  (a query's FROM and JOIN tables, read by the guard's own walk, `tablesRead` in
+  `src/query/sql.ts`), a transform's source and parameters, a query's SQL, and the rows or the
+  error of its last run (a guard refusal included). `defineTransform` refuses with the reason
+  (a name that is not a table name, or is a source's or a query's; an empty source; an input
+  that is not a source or a transform running before it; parameters that are not an object),
+  and a transform defined through the door runs at once, so its step shows its rows or its
+  error before the queries are refreshed. A define or a remove is announced as a change of the
+  transform's table.
 - **Headless batch.** `paged-data-batch`, built from source, reads a JSON job with
   materialised query results and prints the paginated flow of each output document. A
   script evaluated in Boa can supply the locale, the parameters and the build.
@@ -242,8 +274,8 @@ Not done:
   writes another property (a stroke weight) needs its permission in the field's grants, and a
   write to an item the template does not open is refused. A text variable and a picture are
   not module fields: they are text and image fields of their frames. `paged template check`
-  still reports the query's derived `recordCount` as a difference after a record field is
-  filled (it compares derived rows).
+  compares stored rows only, so a filled record field's derived `recordCount` is no
+  difference.
 
 - **Catalogues** ([ADR 560](adr/560-template-fields-are-binding-targets.md), plan F8;
   `src/catalogue.ts`). A template's own text, picture and visibility fields are binding
@@ -261,9 +293,15 @@ Not done:
   author's page policy opens the template page (`{ "allow": ["document.pages"] }`): the
   engine asks `document.pages` of the page removed or duplicated, and the copies inherit
   the grant; the first run is an author's (it marks the template page with this plugin's
-  page label). Not yet: a page whose stories hold a table, an anchored object or a footnote
-  cannot be copied; module fields are not catalogue targets; the editor's Template panel
-  has no control for the page grant.
+  page label). The Template panel's "This page" section sets the page grant. Two limits stay,
+  with their reasons: a page whose stories hold a table, an anchored object or a footnote
+  cannot be copied, because the engine's `duplicatePage` refuses a story holding an object
+  with an id of its own (a copy would put that id in the document twice; re-minting those ids
+  is engine work, shared with `duplicateElements` and snippet paste, core
+  `paged-mutate/src/apply/duplicate_page.rs`); and module fields are not catalogue targets,
+  because the engine's catalogue plan (`plan_catalogue`) types each value by a core field
+  kind and has no type for a module's value, which the data@1 binding work is redesigning
+  (the catalogue's targets follow it there).
 
 - **Inspection commands** (plan G4). Typed, read-only: `previewQuery { sql, limit }`,
   `checkExpression { expr, query? }`, `refreshDiff`, `previewRecordFlow { binding }`; and the

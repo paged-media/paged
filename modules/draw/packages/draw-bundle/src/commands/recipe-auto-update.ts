@@ -82,6 +82,7 @@ import {
   updateRecipe,
   type RecipeRef,
 } from "./recipe-update";
+import { takeRecipesRebuiltIn } from "./recipe-steps";
 import { linkIndex, shareLinkIndex } from "../link-index";
 import { addressOf } from "../object-model/shared";
 
@@ -397,7 +398,12 @@ function contributeRunning(
     }
   };
 
-  const handleChange = async (change: Pending): Promise<void> => {
+  const handleChange = async (
+    change: Pending,
+    /** The recipes their own command already rebuilt in the burst's steps
+     *  (`recipe-steps.ts`): only fingerprinted, never rebuilt again. */
+    rebuiltByCommand: ReadonlySet<string> = new Set(),
+  ): Promise<void> => {
     // Off: nothing is read, and the prints taken before the switch-off
     // are KEPT. Turned on again (the setting's change schedules a
     // `setting`), only the recipes with no kept print are fingerprinted:
@@ -458,7 +464,8 @@ function contributeRunning(
       const print = await fingerprintOf(host, sources);
       now.set(key, print);
       const was = previous.get(key);
-      if (was !== undefined && was !== print) changed.push(recipe);
+      if (was !== undefined && was !== print && !rebuiltByCommand.has(key))
+        changed.push(recipe);
     }
     seen.clear();
     for (const [key, print] of now) seen.set(key, print);
@@ -507,6 +514,13 @@ function contributeRunning(
       // came with it.
       const changes = queue.filter((c) => !isOwn(c));
       queue = [];
+      // What the burst's own recipe commands already rebuilt (taken for
+      // every step, so a note never outlives the change it names).
+      const rebuiltByCommand = new Set<string>();
+      for (const c of changes)
+        if (typeof c === "object" && typeof c.appliedSeq === "number")
+          for (const key of takeRecipesRebuiltIn(c.appliedSeq))
+            rebuiltByCommand.add(key);
       const edits = changes.filter((c) => typeof c === "object");
       const change =
         edits[edits.length - 1] ??
@@ -517,7 +531,7 @@ function contributeRunning(
             : changes[changes.length - 1]);
       if (change === undefined) continue;
       try {
-        await handleChange(change);
+        await handleChange(change, rebuiltByCommand);
       } catch (e) {
         host.log.debug(`recipes: automatic update skipped (${String(e)})`);
       }

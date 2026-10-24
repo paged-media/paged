@@ -77,7 +77,9 @@ export type FakeRegistryName =
   | "objectTypes"
   | "importers"
   | "exporters"
-  | "frameSurfaces";
+  | "frameSurfaces"
+  | "controlBarGroups"
+  | "statusItems";
 
 /** The gesture-channel messages, as `client.send` carries them. */
 export type GestureChannelMessage =
@@ -763,6 +765,8 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
       frameSurfaces: registry("frameSurfaces", (c) =>
         String(c.contextType ?? ""),
       ),
+      controlBarGroups: registry("controlBarGroups", byId),
+      statusItems: registry("statusItems", byId),
     } as unknown as PagedEditor["registries"],
     selection: {
       get elementSelection() {

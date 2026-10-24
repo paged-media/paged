@@ -663,6 +663,47 @@ pub fn lower_with(doc: &DocxDocument, options: LowerOptions) -> LoweredDoc {
         ));
     }
 
+    // W0 — what the import shows simplified rather than drops.
+    let held = doc.held;
+    if held.tracked_changes > 0 {
+        let mut msg = format!(
+            "{} tracked change(s) shown as accepted; review them in Word. Insertions \
+             show as plain text, deletions are not shown, formatting changes show \
+             the new formatting; the markup is kept in the .docx on save, and an \
+             edit that reaches it is refused",
+            held.tracked_changes
+        );
+        if held.deleted_marks_kept > 0 {
+            msg.push_str(&format!(
+                ". {} paragraph(s) whose mark is a tracked deletion stay paragraphs of \
+                 their own (accepting would join each to the next)",
+                held.deleted_marks_kept
+            ));
+        }
+        ctx.diagnostics.push(Diagnostic::warning(msg, 3));
+    }
+    if held.hidden_runs > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} hidden run(s) not shown (Word's hidden text, as with hidden text \
+                 turned off); they are kept in the .docx on save",
+                held.hidden_runs
+            ),
+            3,
+        ));
+    }
+    if held.content_controls > 0 {
+        ctx.diagnostics.push(Diagnostic::info(
+            format!(
+                "{} content control(s) kept as plain content: their text shows, the \
+                 controls stay in the .docx on save, and an edit of text inside one \
+                 is refused",
+                held.content_controls
+            ),
+            3,
+        ));
+    }
+
     if ctx.hyperlinks > 0 {
         let styled_only = ctx.hyperlinks - ctx.clickable_links;
         let mut msg = format!(
@@ -1061,7 +1102,7 @@ impl Lowering {
         let mut para = defaults.para.clone();
         para.widow_control.get_or_insert(true);
         let mut props = self.para_props(&para);
-        props.extend(self.run_props(&defaults.run));
+        props.extend(self.run_props(&defaults.run, defaults.run.size_half_pts));
         // Word's own defaults where docDefaults is silent, which are not the
         // engine's: 10 pt type (the engine's is 12 pt) and no automatic
         // hyphenation unless the settings turn it on (the engine's is on).
@@ -1193,7 +1234,8 @@ impl Lowering {
                         props.push(len("characterLeading", pt));
                         self.style_leading.insert(id.clone(), pt);
                     }
-                    props.extend(self.run_props(&s.run));
+                    let size = self.resolve_face(None, Some(&s.style_id)).1;
+                    props.extend(self.run_props(&s.run, size));
                     self.record_style(LoweredStyle {
                         id,
                         name: s.name.clone().unwrap_or_else(|| s.style_id.clone()),
@@ -1207,7 +1249,14 @@ impl Lowering {
                     });
                 }
                 StyleKind::Character => {
-                    let props = self.run_props(&s.run);
+                    // A character style's spacing at its own size, else the
+                    // document's (the paragraph it lands in is not known).
+                    let size = self
+                        .style_chain(Some(&s.style_id))
+                        .iter()
+                        .find_map(|st| st.run.size_half_pts)
+                        .or(self.word_defaults.run.size_half_pts);
+                    let props = self.run_props(&s.run, size);
                     self.record_style(LoweredStyle {
                         id: format!("{CHAR_PREFIX}{}", sanitize(&s.style_id)),
                         name: s.name.clone().unwrap_or_else(|| s.style_id.clone()),
@@ -1520,13 +1569,14 @@ impl Lowering {
         } else {
             self.run_pitches(p)
         };
+        let run_style = self.style_of(p).map(str::to_string);
         let mut runs: Vec<LoweredRun> = p
             .runs
             .iter()
             .filter(|r| !r.text.is_empty())
             .enumerate()
             .map(|(i, r)| {
-                let mut run = self.lower_run(r);
+                let mut run = self.lower_run(r, run_style.as_deref());
                 if let Some(pt) = run_leadings.get(i).copied().flatten() {
                     run.char_style_id = Some(self.synthesize(
                         StyleCollection::Character,
@@ -1623,7 +1673,7 @@ impl Lowering {
         )
     }
 
-    fn lower_run(&mut self, r: &Run) -> LoweredRun {
+    fn lower_run(&mut self, r: &Run, para_style: Option<&str>) -> LoweredRun {
         for sym in &r.symbols {
             let font = sym.font.clone().unwrap_or_else(|| "no font".into());
             if sym.char.is_some() {
@@ -1637,7 +1687,8 @@ impl Lowering {
             .style_id
             .as_ref()
             .map(|id| format!("{CHAR_PREFIX}{}", sanitize(id)));
-        let mut props = self.run_props(&r.props);
+        let size = self.resolve_face(Some(r), para_style).1;
+        let mut props = self.run_props(&r.props, size);
 
         // A hyperlink run gets the conventional look — blue + underline — unless
         // the run already sets those directly. The blue/underline is the
@@ -2447,7 +2498,11 @@ impl Lowering {
             .collect()
     }
 
-    fn run_props(&mut self, r: &RunProps) -> Vec<StyleProp> {
+    /// A run's Word properties as engine style properties. `size_half_pts`
+    /// is the size the run resolves to (its own, its styles', the
+    /// document's), which Word's absolute character spacing is relative to
+    /// as the engine's tracking (1/1000 em).
+    fn run_props(&mut self, r: &RunProps, size_half_pts: Option<u32>) -> Vec<StyleProp> {
         let mut out = Vec::new();
         if let Some(font) = &r.font {
             out.push(StyleProp {
@@ -2511,8 +2566,27 @@ impl Lowering {
         if let Some(half) = r.baseline_half_pts {
             out.push(len("characterBaselineShift", half as f32 / 2.0));
         }
+        if let Some(tw) = r.spacing_twips {
+            let size_pt = size_half_pts.map_or(10.0, half_pt_to_pt);
+            out.push(len("characterTracking", tracking_of_twips(tw, size_pt)));
+        }
         out
     }
+}
+
+/// Word's character spacing (`w:spacing/@w:val`, twentieths of a point) as
+/// the engine's tracking (thousandths of an em) at `size_pt`.
+pub fn tracking_of_twips(twips: i32, size_pt: f32) -> f32 {
+    if size_pt <= 0.0 {
+        return 0.0;
+    }
+    twips as f32 / 20.0 / size_pt * 1000.0
+}
+
+/// The engine's tracking at `size_pt` as Word's character spacing in
+/// twentieths of a point (the inverse of [`tracking_of_twips`]).
+pub fn twips_of_tracking(tracking: f32, size_pt: f32) -> i32 {
+    (tracking / 1000.0 * size_pt * 20.0).round() as i32
 }
 
 /// A Word tab stop's `w:val` as the engine's IDML `Alignment` (and its
@@ -2811,6 +2885,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2867,6 +2942,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             })
         };
@@ -2934,6 +3010,7 @@ mod tests {
                 mark_half_pts: None,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -2970,6 +3047,7 @@ mod tests {
                     mark_half_pts: None,
                     source_para_ord: 0,
                     source_cell: None,
+                    held: Default::default(),
                     bookmarks: Vec::new(),
                 }],
                 grid_span: 1,
@@ -2984,6 +3062,7 @@ mod tests {
                 column_widths: vec![2000],
                 rows,
                 cell_margins: docx_core::CellMargins::default(),
+                content_control_rows: false,
             }));
             let l = lower(&doc);
             match &l.story.blocks[0] {
@@ -3014,6 +3093,7 @@ mod tests {
                 mark_half_pts: size,
                 source_para_ord: 0,
                 source_cell: None,
+                held: Default::default(),
                 bookmarks: Vec::new(),
             }));
         }
@@ -3096,6 +3176,7 @@ mod tests {
             mark_half_pts: None,
             source_para_ord: 0,
             source_cell: None,
+            held: Default::default(),
             bookmarks: Vec::new(),
         }));
 
@@ -3256,6 +3337,7 @@ mod tests {
                 right: Some(60),
                 ..Default::default()
             },
+            content_control_rows: false,
         }));
         let l = lower(&doc);
         let LoweredBlock::Table(t) = &l.story.blocks[0] else {

@@ -39,8 +39,25 @@ export interface DataDoorSource {
   onDidChangeService(listener: () => void): { dispose(): void };
 }
 
+/** The drag type of a Data panel field header (editor ADR 291, drag to
+ *  place): its data is a {@link DataFieldDrag} as JSON. */
+export const DATA_FIELD_DRAG_TYPE = "application/x-paged-data-field";
+
+/** A field dragged out of the Data panel. */
+export interface DataFieldDrag {
+  query: string;
+  field: string;
+}
+
+/** What the app does with a field dropped on the document viewport. */
+export type DataFieldDropHandler = (
+  drag: DataFieldDrag,
+  at: { clientX: number; clientY: number },
+) => void;
+
 interface DataDoorStore {
   source: DataDoorSource | null;
+  drop: DataFieldDropHandler | null;
   revision: number;
   listeners: Set<() => void>;
   unhook: (() => void) | null;
@@ -50,6 +67,7 @@ interface DataDoorStore {
 const DATA_DOOR = scoped("dataDoor", (): DataDoorStore => {
   const store: DataDoorStore = {
     source: null,
+    drop: null,
     revision: 0,
     listeners: new Set(),
     unhook: null,
@@ -105,4 +123,39 @@ export function useDataRevision(): number {
     () => store.revision,
     () => 0,
   );
+}
+
+/** Where a field dropped on the viewport goes: the app hit-tests the point
+ *  and asks the data service to place it there. */
+export function setDataDropHandler(
+  scope: EditorScope,
+  handler: DataFieldDropHandler | null,
+): void {
+  scope.get(DATA_DOOR).drop = handler;
+}
+
+/** The viewport's side of drag to place: `accepts` says whether a drag
+ *  carries a field this editor can place, `drop` places it. Both read the
+ *  handler when they run (an event), never during render. */
+export function useDataFieldDrop(): {
+  accepts(types: readonly string[]): boolean;
+  drop(data: string, at: { clientX: number; clientY: number }): boolean;
+} {
+  const store = useScoped(DATA_DOOR);
+  return {
+    accepts: (types) => !!store.drop && types.includes(DATA_FIELD_DRAG_TYPE),
+    drop(data, at) {
+      if (!store.drop) return false;
+      let drag: Partial<DataFieldDrag>;
+      try {
+        drag = JSON.parse(data) as Partial<DataFieldDrag>;
+      } catch {
+        return false;
+      }
+      if (typeof drag.query !== "string" || typeof drag.field !== "string")
+        return false;
+      store.drop({ query: drag.query, field: drag.field }, at);
+      return true;
+    },
+  };
 }

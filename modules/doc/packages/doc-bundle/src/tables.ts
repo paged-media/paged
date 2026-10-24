@@ -36,6 +36,10 @@ import type { BundleHost } from "@paged-media/plugin-api";
 export interface TablePlace {
   storyId: string;
   tableId: string;
+  /** The live table's rows and columns (another row count than the pour's
+   *  only when located with `rowsMayChange`). */
+  rows: number;
+  cols: number;
   cells: Readonly<Record<string, string>>;
 }
 
@@ -89,11 +93,13 @@ export async function readLiveTables(
  * signature among the live tables of `storyIds` ({@link matchTables}).
  * Answers the places by lowered block, and one message per table that
  * cannot be found (deleted, or reshaped and every cell edited).
+ * `rowsMayChange` also finds a table whose rows were added or removed.
  */
 export async function locateTables(
   host: BundleHost,
   ir: LoweredDoc,
   storyIds: readonly string[],
+  options: { rowsMayChange?: boolean } = {},
 ): Promise<{ places: Map<number, TablePlace>; missing: number[] }> {
   const places = new Map<number, TablePlace>();
   const missing: number[] = [];
@@ -103,13 +109,20 @@ export async function locateTables(
   if (blocks.length === 0) return { places, missing };
   const live = await readLiveTables(host, storyIds);
   const byId = new Map(live.map((t) => [t.id, t]));
-  const matched = matchTables(ir, live);
+  const matched = matchTables(ir, live, options);
   for (const { block } of blocks) {
     const id = matched.get(block);
     const t = id === undefined ? undefined : byId.get(id);
     const storyId = t ? storyIds[t.story] : undefined;
     if (id === undefined || !storyId) missing.push(block);
-    else places.set(block, { storyId, tableId: id, cells: t!.cells });
+    else
+      places.set(block, {
+        storyId,
+        tableId: id,
+        rows: t!.rows,
+        cols: t!.cols,
+        cells: t!.cells,
+      });
   }
   return { places, missing };
 }

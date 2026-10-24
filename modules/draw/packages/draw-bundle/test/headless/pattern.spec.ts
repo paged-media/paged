@@ -301,6 +301,9 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
         "Making, re-planning, releasing and deleting the copies are one undo step each",
       );
       expect(t(PATTERN_PANEL_NOTE)).not.toContain("two undo steps");
+      expect(t(PATTERN_PANEL_NOTE)).toContain(
+        "While Update automatically is on, editing the original re-plans the copies in the same undo step",
+      );
     });
 
     it("every command TITLE carries what the contract has no field to say", () => {

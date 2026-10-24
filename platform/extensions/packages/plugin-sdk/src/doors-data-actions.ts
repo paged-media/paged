@@ -195,6 +195,60 @@ export function createDataSurface(
       const s = service("refresh", "bind");
       return member(s, "refresh", "refresh")();
     },
+    async placements() {
+      const s = service("placements", "read");
+      return [...(await member(s, "placements", "placements")())];
+    },
+    async place(target, query, field) {
+      const s = service("place", "bind");
+      return member(s, "place", "place")(target, query, field);
+    },
+    async placeTable(target, query, fields) {
+      const s = service("placeTable", "bind");
+      return member(s, "placeTable", "placeTable")(target, query, fields);
+    },
+    async placeRecord(target, query, record) {
+      const s = service("placeRecord", "bind");
+      return [
+        ...(await member(s, "placeRecord", "placeRecord")(
+          target,
+          query,
+          record,
+        )),
+      ];
+    },
+    async pipeline() {
+      const s = service("pipeline", "read");
+      return [...(await member(s, "pipeline", "pipeline")())];
+    },
+    async defineTransform(def) {
+      const s = service("defineTransform", "write");
+      return member(s, "defineTransform", "defineTransform")(def);
+    },
+    async removeTransform(id) {
+      const s = service("removeTransform", "write");
+      return member(s, "removeTransform", "removeTransform")(id);
+    },
+    async assetColumns() {
+      const s = service("assetColumns", "read");
+      return [...(await member(s, "assetColumns", "assetColumns")())];
+    },
+    async setAssetColumn(query, field, def) {
+      const s = service("setAssetColumn", "write");
+      return member(s, "setAssetColumn", "setAssetColumn")(query, field, def);
+    },
+    async recordStatus(query) {
+      const s = service("recordStatus", "read");
+      return member(s, "recordStatus", "recordStatus")(query);
+    },
+    async loadSample() {
+      const s = service("loadSample", "write");
+      return member(s, "loadSample", "loadSample")();
+    },
+    async issues() {
+      const s = service("issues", "read");
+      return [...(await member(s, "issues", "issues")())];
+    },
     onDidChange(listener) {
       requireDeclared(
         cap?.read === true,

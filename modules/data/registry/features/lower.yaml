@@ -84,9 +84,34 @@
   title: Pagination convergence — repeated/continued headers, tall-record handling
   spec: plugin-data data-lower/src/lib.rs (base-idea §9.4)
   status: implemented
-  provenance: ["greedy atomic packing; single bounded pass converges even for a record taller than a frame; order-preserving (property tested)"]
+  provenance:
+    [
+      "greedy atomic packing; single bounded pass converges even for a record taller than a frame; order-preserving (property tested)",
+      "a flow's own FlowOpts (repeated/continued headers) reach the paginator (DataSession::flow_layout, used by data-js when no layout is passed); the pagination inspector panel sets them inline and shows the paginated result over the start page's margin box",
+    ]
   tests:
-    rust: ["data-conformance/tests/it/recordflow.rs::data_recordflow_pagination"]
+    rust:
+      [
+        "data-conformance/tests/it/recordflow.rs::data_recordflow_pagination",
+        "engine:paged-data-session/tests/templates.rs::data_lower_pagination_options",
+      ]
+    vitest: ["packages/data-bundle/test/record-templates.dom.test.tsx"]
+
+- id: data.lower.record-templates
+  title: Record templates — a library of the cells a record flow repeats, made from frame text, renamed, deleted, previewed with record N
+  spec: plugin-data packages/data-bundle/src/record-templates.ts + paged-data-session DataSession::template_library / template_from_text / rename_template / remove_template / preview_template + paged-data-lower merge::template_lines
+  status: implemented
+  provenance:
+    [
+      "a template is data-core Template (label + expression lines at a line height); made from the selected text frames written as for Data Merge (<<field>> → a field reference, other text → string literals, joined with &), saved with the session payload; a rename moves the flows using it; a delete is refused while a flow uses it",
+    ]
+  tests:
+    rust:
+      [
+        "engine:paged-data-session/tests/templates.rs::data_lower_record_templates",
+        "engine:paged-data-lower/src/merge.rs::data_lower_record_templates",
+      ]
+    vitest: ["packages/data-bundle/test/record-templates.dom.test.tsx"]
 
 - id: data.lower.table-native
   title: Native table lowering (insertTable + per-cell insertText; D-02 retired)

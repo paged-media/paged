@@ -20,6 +20,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   type PropsWithChildren,
@@ -35,6 +36,7 @@ import { useScreenMode } from "./screen-mode-context";
 import { useOverlaySignals } from "./overlay-signals-context";
 import { useContentSelection } from "./content-selection-context";
 import { useToolSettings } from "./tool-settings-context";
+import { useRegistryView } from "./live";
 import {
   useOptionalEditContextStack,
   type EditContextFrame,
@@ -272,6 +274,17 @@ export interface PagedEditor {
    */
   editContext: EditContextFrame | null;
 
+  /**
+   * Extensions ADR 348 — the DOCUMENT CONTEXT: the plugin content type
+   * the open document is (a Word document opened as the whole document),
+   * held by that plugin (`host.shell.setDocumentContext`), or null. The
+   * scoped contributions (control-bar groups, keybindings, status items,
+   * context menus) follow `editContext ?? documentContext`
+   * (`activeScopeContext`); nothing else reads it. Dropped when a
+   * document loads.
+   */
+  documentContext: string | null;
+
   /** The four shell registries. */
   registries: ShellRegistries;
 
@@ -336,6 +349,16 @@ function PagedEditorBinder({
   // context active" are the same fact to every consumer.
   const editContextStack = useOptionalEditContextStack();
   const editContext = editContextStack?.active ?? null;
+  const documentContext =
+    useRegistryView(registries.documentContext).get()?.type ?? null;
+  // A loaded document is a new document: whatever content type the last
+  // one was, this one is not it until its plugin says so again.
+  useEffect(() => {
+    const store = registries.documentContext;
+    return client.subscribe((msg) => {
+      if ((msg as { kind?: string }).kind === "documentLoaded") store.clear();
+    });
+  }, [client, registries]);
 
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const editor = useMemo<PagedEditor>(
@@ -395,6 +418,7 @@ function PagedEditorBinder({
           client.onResourceTilesNeeded(listener),
       },
       editContext,
+      documentContext,
       registries,
       scope,
     }),
@@ -410,6 +434,7 @@ function PagedEditorBinder({
       contentSelection,
       toolSettings,
       editContext,
+      documentContext,
       registries,
     ],
   );

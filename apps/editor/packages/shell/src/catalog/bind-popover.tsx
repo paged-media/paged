@@ -282,7 +282,12 @@ export function BindPopover({
 
   return (
     <Dialog open={target !== null} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent data-bind-popover="" className="max-w-lg">
+      <DialogContent
+        data-bind-popover=""
+        data-bind-path={target?.path}
+        data-bind-selector={target?.selector}
+        className="max-w-lg"
+      >
         <DialogHeader>
           <DialogTitle>
             {t(BIND.title, { property: target?.label ?? "" })}

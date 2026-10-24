@@ -82,6 +82,7 @@ async function mount(profile?: EditorProfile) {
         canvasComponent={() => <div data-test-canvas />}
         regions={resolved?.regions}
         canvasFurniture={resolved?.canvas}
+        compactLayout={resolved?.compact ?? null}
       />,
     );
   });
@@ -256,5 +257,53 @@ describe("region contents (A3)", () => {
         '[data-actions-bar] [data-region-command="paged.file.exportPdf"]',
       ),
     ).toBe(true);
+  });
+});
+
+describe("a fill shape on a phone (editor ADR 294)", () => {
+  const FILL: EditorProfile = {
+    regions: {
+      header: { items: ["paged.editor.undo", "paged.editor.redo"] },
+      menubar: null,
+      "context-toolbar": null,
+      "tool-rail": { items: ["paged.tool.select", "paged.tool.hand"] },
+      right: null,
+      "panel-rail": null,
+      "mode-bar": null,
+      palette: null,
+      form: { items: [RIGHT] },
+    },
+    canvas: { titleBar: false, rulers: false, thumbnails: false },
+    compact: "field-sheet",
+  };
+  const realWidth = window.innerWidth;
+  const setWidth = (px: number) =>
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: px,
+    });
+  afterEach(() => setWidth(realWidth));
+
+  test("below 720 px the tool rail gives way and the form is a sheet", async () => {
+    setWidth(390);
+    const shell = await mount(FILL);
+    expect(shell.has(CHROME.toolRail)).toBe(false);
+    expect(shell.has("[data-header-compact]")).toBe(true);
+    expect(shell.has("[data-field-sheet] [data-test-right]")).toBe(true);
+    expect(shell.has("[data-touch-zoom]")).toBe(true);
+    for (const button of shell.root.querySelectorAll<HTMLElement>(
+      "[data-region-command]",
+    ))
+      expect(parseFloat(button.style.minHeight)).toBeGreaterThanOrEqual(44);
+  });
+
+  test("at 720 px and wider it is the desktop fill layout", async () => {
+    setWidth(1024);
+    const shell = await mount(FILL);
+    expect(shell.has(CHROME.toolRail)).toBe(true);
+    expect(shell.has("[data-header-compact]")).toBe(false);
+    expect(shell.has("[data-field-sheet]")).toBe(false);
+    expect(shell.has("[data-form-column] [data-test-right]")).toBe(true);
+    expect(shell.has("[data-touch-zoom]")).toBe(false);
   });
 });

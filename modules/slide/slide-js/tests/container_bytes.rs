@@ -105,6 +105,7 @@ fn as_is(bytes: &[u8]) -> ExportPlan {
                 hidden: s.hidden,
                 notes: None,
                 content_edited: false,
+                ..SlidePlan::default()
             })
             .collect(),
     }

@@ -70,6 +70,8 @@ pub use paged_canvas::channel::{HostObjectAnswer, HostObjectCall, HostObjectErro
 
 mod actions;
 pub use actions::clear_actions;
+mod data;
+pub use data::{with_data, ScriptData};
 mod host_bridge;
 pub use host_bridge::MAX_HOST_ROUNDS;
 use paged_canvas::CanvasModel;
@@ -1461,6 +1463,9 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
     // Core ADR 1015 — `paged.actions.*`: the action registry.
     let actions = actions::object(ctx, guarded);
     paged.set(js_string!("actions"), actions, false, ctx)?;
+    // PM-0015 — `paged.data.*`: the data the embedder attached to this run.
+    let data = data::object(ctx, guarded);
+    paged.set(js_string!("data"), data, false, ctx)?;
     ctx.register_global_property(js_string!("paged"), paged, Attribute::all())?;
 
     let console = ObjectInitializer::new(ctx)

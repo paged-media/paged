@@ -45,7 +45,12 @@ import type {
 import { t } from "@paged-media/strings";
 
 import { contributeSlideCommands } from "./commands.js";
-import { exportPlan, pageFingerprints } from "./deck-export.js";
+import {
+  documentBytes,
+  exportDiagnostics,
+  exportPlan,
+  pageFingerprints,
+} from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
@@ -278,7 +283,8 @@ export function activate(host: BundleHost): BundleHandle {
   }
 
   // PPTX export: the deck the document was imported from, rewritten for
-  // the document's slides (order, duplicates, deletions, hidden, notes).
+  // the document's slides (order, duplicates, deletions, hidden, notes) and
+  // what is on them (ADR 704, ADR 711).
   async function exportDeck() {
     if (!host.supports("storage.parts@1")) return null;
     const original = await host.parts.read(SOURCE_PART);
@@ -299,16 +305,10 @@ export function activate(host: BundleHost): BundleHandle {
         >)
       : {};
     const plan = await exportPlan(host, prints);
+    const document = await documentBytes(host);
     const engine = await slideEngine();
-    const out = engine.exportPptx(original, plan);
-    host.diagnostics.set(
-      EXPORT_DIAGNOSTICS,
-      out.diagnostics.map((message) => ({
-        severity: "warning" as const,
-        message,
-        source: "pptx",
-      })),
-    );
+    const out = engine.exportPptx(original, plan, document);
+    host.diagnostics.set(EXPORT_DIAGNOSTICS, exportDiagnostics(out));
     const meta = await host.document.meta();
     const name =
       (meta as { documentName?: string }).documentName?.trim() ||
@@ -317,7 +317,8 @@ export function activate(host: BundleHost): BundleHandle {
     return {
       bytes: out.bytes,
       fileName: `${name}.pptx`,
-      diagnostics: out.diagnostics,
+      diagnostics: [...out.diagnostics, ...out.notExported],
+      notExported: out.notExported,
     };
   }
 

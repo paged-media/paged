@@ -29,10 +29,15 @@
 // takes; `createHeadlessHost` is the conformance host over the real engine.
 
 import type {
+  DataAssetColumn,
   DataBindingInfo,
+  DataPipelineStep,
+  DataPlaced,
+  DataPlacement,
   DataRowEdit,
   DataService,
   DataTableInfo,
+  DataTransformDef,
   ProviderField,
   ProviderRecordSet,
 } from "@paged-media/plugin-api";
@@ -65,6 +70,10 @@ export const silentConsole: Readonly<
   error: () => {},
 });
 
+/** One page item's address (ADR 131): the fake's placements name these. */
+const PAGE_ITEM =
+  /^(textFrame|textframe|rectangle|rect|oval|polygon|graphicLine|graphicline|group|frame):[^\s,>]+$/;
+
 /** One table of a {@link fakeDataService}: its fields and its rows. */
 export interface FakeDataTable {
   fields: readonly ProviderField[];
@@ -79,7 +88,12 @@ export interface FakeDataTable {
  * bundle's `host.data.serve`), and a consumer under test reads, writes and
  * binds as it would against paged.data. `query` answers `SELECT * FROM
  * <table>` only, and says so for anything else: the fake runs no SQL.
- * Bindings are recorded, not resolved.
+ * Bindings are recorded, not resolved: `placements` names each binding whose
+ * target is one page item's address (`rectangle:u1`, not a selector) as
+ * placed there and `linked`; `place`, `placeTable` and `placeRecord` record
+ * a binding on the item. Transforms and asset columns are kept, not run;
+ * `recordStatus` reports every record unchanged; `loadSample` adds a query
+ * table `sample`; `issues` finds none.
  */
 export function fakeDataService(
   tables: Readonly<Record<string, FakeDataTable>>,
@@ -95,6 +109,17 @@ export function fakeDataService(
   );
   const bindings = new Map<string, DataBindingInfo>();
   let nextBinding = 1;
+  const transforms = new Map<string, DataTransformDef>();
+  const assets = new Map<string, DataAssetColumn>();
+  const record = (spec: Omit<DataBindingInfo, "id">): DataBindingInfo => {
+    const b = { ...spec, id: `b${nextBinding++}` };
+    bindings.set(b.id, b);
+    return b;
+  };
+  const target = (address: string): void => {
+    if (!PAGE_ITEM.test(address))
+      throw new Error(`${address} is not one page item's address`);
+  };
   const table = (name: string) => {
     const t = state.get(name);
     if (!t) throw new Error(`no table ${name}`);
@@ -181,6 +206,110 @@ export function fakeDataService(
         };
       const value = t.rows[record]?.[field] ?? null;
       return { display: value === null ? "" : String(value), value };
+    },
+    async placements() {
+      const placed: DataPlacement[] = [];
+      for (const b of bindings.values())
+        if (PAGE_ITEM.test(b.target))
+          placed.push({ binding: b.id, address: b.target, status: "linked" });
+      return placed;
+    },
+    async place(address, query, field) {
+      target(address);
+      if (!table(query).fields.some((f) => f.name === field))
+        throw new Error(`${query} has no field ${field}`);
+      const b = record({
+        target: address,
+        path: "content",
+        query,
+        expr: field,
+      });
+      return {
+        binding: b.id,
+        kind: address.startsWith("text") ? "variable" : "image",
+      };
+    },
+    async placeTable(address, query, fields) {
+      target(address);
+      const t = table(query);
+      const cols = fields ?? t.fields.map((f) => f.name);
+      const b = record({
+        target: address,
+        path: "table",
+        query,
+        expr: cols.join(","),
+      });
+      return { binding: b.id, kind: "table" };
+    },
+    async placeRecord(address, query, row) {
+      target(address);
+      if (!table(query).rows[row])
+        throw new Error(`${query} has no record ${row}`);
+      const b = record({
+        target: address,
+        path: "record",
+        query,
+        expr: String(row),
+      });
+      const placed: DataPlaced = { binding: b.id, kind: "record" };
+      return [placed];
+    },
+    async pipeline() {
+      const steps: DataPipelineStep[] = [...state.entries()].map(
+        ([name, t]) => ({
+          id: name,
+          kind: t.kind ?? "source",
+          inputs: [],
+          rowCount: t.rows.length,
+        }),
+      );
+      for (const d of transforms.values())
+        steps.push({
+          id: d.id,
+          kind: "transform",
+          inputs: d.inputs,
+          source: d.source,
+          ...(d.params ? { params: d.params } : {}),
+        });
+      return steps;
+    },
+    async defineTransform(def) {
+      for (const i of def.inputs) table(i);
+      transforms.set(def.id, { ...def });
+    },
+    async removeTransform(id) {
+      return transforms.delete(id);
+    },
+    async assetColumns() {
+      return [...assets.values()];
+    },
+    async setAssetColumn(query, field, def) {
+      if (!table(query).fields.some((f) => f.name === field))
+        throw new Error(`${query} has no field ${field}`);
+      if (def) assets.set(`${query}.${field}`, { ...def, query, field });
+      else assets.delete(`${query}.${field}`);
+    },
+    async recordStatus(query) {
+      table(query);
+      return { query, added: [], changed: [], removed: 0, placed: [] };
+    },
+    async loadSample() {
+      state.set("sample", {
+        fields: [
+          { name: "sku", ty: "text" },
+          { name: "price", ty: "float" },
+        ],
+        rows: [
+          { sku: "A-1", price: 9.5 },
+          { sku: "B-2", price: 12 },
+        ],
+        kind: "query",
+        revision: 1,
+      });
+      return "sample";
+    },
+    async issues() {
+      return [];
     },
     rows: (name) => table(name).rows,
   };

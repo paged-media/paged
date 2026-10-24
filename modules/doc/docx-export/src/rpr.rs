@@ -163,6 +163,9 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
     if let Some(color) = &props.color {
         s.push_str(&format!("<w:color w:val=\"{}\"/>", escape(color)));
     }
+    if let Some(tw) = props.spacing_twips {
+        s.push_str(&format!("<w:spacing w:val=\"{tw}\"/>"));
+    }
     if let Some(pos) = props.baseline_half_pts {
         s.push_str(&format!("<w:position w:val=\"{pos}\"/>"));
     }
@@ -262,6 +265,216 @@ pub fn render_ppr(props: &ParaProps, pstyle: Option<&str>) -> Vec<u8> {
     }
     s.push_str("</w:pPr>");
     s.into_bytes()
+}
+
+/// `CT_PPr` child order (ECMA-376 §17.3.1.26): the merged `<w:pPr>` writes its
+/// children in this order. A name not listed sorts after the known ones.
+const PPR_ORDER: &[&str] = &[
+    "pStyle",
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "framePr",
+    "widowControl",
+    "numPr",
+    "suppressLineNumbers",
+    "pBdr",
+    "shd",
+    "tabs",
+    "suppressAutoHyphens",
+    "kinsoku",
+    "wordWrap",
+    "overflowPunct",
+    "topLinePunct",
+    "autoSpaceDE",
+    "autoSpaceDN",
+    "bidi",
+    "adjustRightInd",
+    "snapToGrid",
+    "spacing",
+    "ind",
+    "contextualSpacing",
+    "mirrorIndents",
+    "suppressOverlap",
+    "jc",
+    "textDirection",
+    "textAlignment",
+    "textboxTightWrap",
+    "outlineLvl",
+    "divId",
+    "cnfStyle",
+    "rPr",
+    "sectPr",
+    "pPrChange",
+];
+
+/// The `<w:pPr>` children [`render_ppr`] decides on. Every other child of the
+/// original — numbering, borders, shading, the paragraph mark's run
+/// properties, a `sectPr` that ends a section, a recorded change — is kept.
+const PPR_OWNED: &[&str] = &[
+    "pStyle",
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "spacing",
+    "ind",
+    "tabs",
+    "jc",
+];
+
+/// Attributes of `w:spacing` / `w:ind` that [`render_ppr`] decides on; the rest
+/// (line spacing, auto spacing, character-unit indents …) are kept.
+fn owned_attr(elem: &str, attr: &str) -> bool {
+    match elem {
+        "spacing" => matches!(attr, "before" | "after"),
+        "ind" => matches!(
+            attr,
+            "left" | "right" | "start" | "end" | "hanging" | "firstLine"
+        ),
+        _ => false,
+    }
+}
+
+fn local(name: &[u8]) -> &str {
+    let n = std::str::from_utf8(name).unwrap_or("");
+    n.rsplit(':').next().unwrap_or(n)
+}
+
+/// The top-level children of a `<w:pPr>…</w:pPr>` fragment: (local name,
+/// the child's exact bytes, its attributes as (qualified name, raw value)).
+type PprChild = (String, Vec<u8>, Vec<(String, String)>);
+
+fn ppr_children(frag: &[u8]) -> Option<Vec<PprChild>> {
+    use quick_xml::events::Event;
+    let mut r = quick_xml::Reader::from_reader(frag);
+    let mut out = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0usize;
+    let mut cur: Option<(String, Vec<(String, String)>)> = None;
+    loop {
+        let before = r.buffer_position() as usize;
+        match r.read_event().ok()? {
+            Event::Start(e) => {
+                depth += 1;
+                if depth == 2 {
+                    start = before;
+                    cur = Some((local(e.name().as_ref()).to_string(), attrs(&e)));
+                }
+            }
+            Event::Empty(e) => {
+                if depth == 1 {
+                    let end = r.buffer_position() as usize;
+                    out.push((
+                        local(e.name().as_ref()).to_string(),
+                        frag[before..end].to_vec(),
+                        attrs(&e),
+                    ));
+                }
+            }
+            Event::End(_) => {
+                if depth == 2 {
+                    let end = r.buffer_position() as usize;
+                    let (n, a) = cur.take()?;
+                    out.push((n, frag[start..end].to_vec(), a));
+                }
+                depth = depth.checked_sub(1)?;
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    Some(out)
+}
+
+fn attrs(e: &quick_xml::events::BytesStart<'_>) -> Vec<(String, String)> {
+    e.attributes()
+        .flatten()
+        .map(|a| {
+            (
+                String::from_utf8_lossy(a.key.as_ref()).into_owned(),
+                String::from_utf8_lossy(&a.value).into_owned(),
+            )
+        })
+        .collect()
+}
+
+/// Merge a freshly rendered `<w:pPr>` (from [`render_ppr`]) into the
+/// paragraph's ORIGINAL `<w:pPr>` bytes: the owned children come from `new`;
+/// every other original child is kept byte for byte; `w:spacing` / `w:ind`
+/// keep the original attributes `render_ppr` does not decide on. Children are
+/// written in `CT_PPr` order. With no original, `new` is returned as is.
+///
+/// Without this, a paragraph-format edit dropped the paragraph's numbering,
+/// borders, shading, line spacing and — on a section's last paragraph — the
+/// `w:sectPr`, which deletes the section.
+pub fn merge_ppr(original: Option<&[u8]>, new: &[u8]) -> Vec<u8> {
+    let Some(orig) = original else {
+        return new.to_vec();
+    };
+    let (Some(old_kids), Some(new_kids)) = (ppr_children(orig), ppr_children(new)) else {
+        return new.to_vec();
+    };
+    let mut kids: Vec<(String, Vec<u8>)> = Vec::new();
+    for (name, bytes, _) in &old_kids {
+        if !PPR_OWNED.contains(&name.as_str()) {
+            kids.push((name.clone(), bytes.clone()));
+        }
+    }
+    for (name, bytes, new_attrs) in &new_kids {
+        let merges_attrs = matches!(name.as_str(), "spacing" | "ind");
+        let kept: Vec<(String, String)> = old_kids
+            .iter()
+            .find(|(n, _, _)| merges_attrs && n == name)
+            .map(|(_, _, a)| {
+                a.iter()
+                    .filter(|(k, _)| !owned_attr(name, local(k.as_bytes())))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        if kept.is_empty() {
+            kids.push((name.clone(), bytes.clone()));
+        } else {
+            let mut s = format!("<w:{name}");
+            for (k, v) in new_attrs.iter().chain(kept.iter()) {
+                s.push_str(&format!(" {k}=\"{v}\""));
+            }
+            s.push_str("/>");
+            kids.push((name.clone(), s.into_bytes()));
+        }
+    }
+    // Spacing / indent attributes the original had but the edit no longer
+    // sets an owned value for still need their element.
+    for (name, _, a) in &old_kids {
+        if matches!(name.as_str(), "spacing" | "ind") && !new_kids.iter().any(|(n, _, _)| n == name)
+        {
+            let kept: Vec<&(String, String)> = a
+                .iter()
+                .filter(|(k, _)| !owned_attr(name, local(k.as_bytes())))
+                .collect();
+            if !kept.is_empty() {
+                let mut s = format!("<w:{name}");
+                for (k, v) in kept {
+                    s.push_str(&format!(" {k}=\"{v}\""));
+                }
+                s.push_str("/>");
+                kids.push((name.clone(), s.into_bytes()));
+            }
+        }
+    }
+    let rank = |n: &str| {
+        PPR_ORDER
+            .iter()
+            .position(|o| *o == n)
+            .unwrap_or(PPR_ORDER.len())
+    };
+    kids.sort_by_key(|(n, _)| rank(n));
+    let mut out = b"<w:pPr>".to_vec();
+    for (_, b) in kids {
+        out.extend_from_slice(&b);
+    }
+    out.extend_from_slice(b"</w:pPr>");
+    out
 }
 
 /// A whole `<w:r>` element: optional `<w:rPr>` + the text. Used by the
@@ -393,6 +606,7 @@ fn changed_elements(from: &RunFormat, to: &RunFormat) -> Vec<(&'static str, Opti
     field!(small_caps, "smallCaps");
     field!(strike, "strike");
     field!(color, "color");
+    field!(spacing_twips, "spacing");
     field!(baseline_half_pts, "position");
     field!(size_half_pts, "sz");
     field!(underline, "u");
@@ -488,6 +702,39 @@ fn toggle(s: &mut String, name: &str, v: Option<bool>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn merge_ppr_keeps_what_the_edit_does_not_own() {
+        let orig = br#"<w:pPr><w:pStyle w:val="Body"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr><w:spacing w:before="120" w:line="360" w:lineRule="auto"/><w:jc w:val="left"/><w:rPr><w:b/></w:rPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:pPr>"#;
+        let props = ParaProps {
+            space_before: Some(240),
+            justification: Some(Justification::Center),
+            ..Default::default()
+        };
+        let new = render_ppr(&props, Some("Body"));
+        let merged = String::from_utf8(merge_ppr(Some(orig), &new)).unwrap();
+        assert_eq!(
+            merged,
+            r#"<w:pPr><w:pStyle w:val="Body"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr><w:spacing w:before="240" w:line="360" w:lineRule="auto"/><w:jc w:val="center"/><w:rPr><w:b/></w:rPr><w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:pPr>"#
+        );
+    }
+
+    #[test]
+    fn merge_ppr_drops_an_owned_child_the_edit_removed_but_keeps_line_spacing() {
+        let orig = br#"<w:pPr><w:keepNext/><w:spacing w:after="200" w:line="276" w:lineRule="auto"/></w:pPr>"#;
+        let new = render_ppr(&ParaProps::default(), None);
+        let merged = String::from_utf8(merge_ppr(Some(orig), &new)).unwrap();
+        assert_eq!(
+            merged,
+            r#"<w:pPr><w:spacing w:line="276" w:lineRule="auto"/></w:pPr>"#
+        );
+    }
+
+    #[test]
+    fn merge_ppr_without_an_original_is_the_rendered_ppr() {
+        let new = render_ppr(&ParaProps::default(), Some("Heading1"));
+        assert_eq!(merge_ppr(None, &new), new);
+    }
+
     use super::*;
 
     fn look(f: impl FnOnce(&mut RunProps)) -> RunFormat {

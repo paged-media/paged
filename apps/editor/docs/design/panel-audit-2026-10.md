@@ -137,5 +137,7 @@ The editor backs it in `apps/canvas/src/plugin-pages.ts`.
   inline status primitive). The plugins now show refusals in their own panels, each in
   its own way.
 - **Shared primitives.** The kit's input primitives exposed through `plugin-api`.
-- **Doc plugin size.** paged.doc's wasm built from `main` is 8.64 MB, over its manifest's
-  8 MiB budget.
+- **Doc plugin size: resolved.** paged.doc's wasm was 8.64 MB when this audit was written,
+  over its manifest's 8 MiB budget. The `wasm-release` profile (2026-10-14) brought it
+  down, and the build now enforces `maxBytes`. It measured 6.56 MiB raw (1.79 MiB gzip)
+  on 2026-10-24; see `modules/doc/docs/status.md`.

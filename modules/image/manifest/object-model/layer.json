@@ -95,10 +95,93 @@
       "members": [
         "pixels",
         "adjustment",
-        "smart"
+        "smart",
+        "fill"
       ]
     },
     "access": "readOnly"
+  },
+  {
+    "path": "fillOpacity",
+    "type": {
+      "kind": "number",
+      "unit": "percent"
+    },
+    "range": {
+      "min": 0,
+      "max": 100
+    },
+    "default": 100,
+    "summary": "Fill opacity: the layer's own pixels, apart from its opacity (on the eight special blend modes it acts inside the blend)."
+  },
+  {
+    "path": "knockout",
+    "type": {
+      "kind": "enum",
+      "members": [
+        "none",
+        "shallow",
+        "deep"
+      ]
+    },
+    "default": "none",
+    "summary": "Knockout: the layer cuts through the layers beneath it to its group's start (shallow) or to the Background (deep)."
+  },
+  {
+    "path": "colorLabel",
+    "type": {
+      "kind": "enum",
+      "members": [
+        "none",
+        "red",
+        "orange",
+        "yellow",
+        "green",
+        "blue",
+        "violet",
+        "gray"
+      ]
+    },
+    "default": "none"
+  },
+  {
+    "path": "lockTransparency",
+    "type": {
+      "kind": "bool"
+    },
+    "default": false,
+    "summary": "Paint, fills and filters keep every pixel's alpha."
+  },
+  {
+    "path": "lockPosition",
+    "type": {
+      "kind": "bool"
+    },
+    "default": false
+  },
+  {
+    "path": "lockAll",
+    "type": {
+      "kind": "bool"
+    },
+    "default": false,
+    "summary": "Pixels, transparency, position and the blending properties."
+  },
+  {
+    "path": "adjustmentKind",
+    "type": {
+      "kind": "text"
+    },
+    "access": "readOnly",
+    "summary": "An adjustment layer's kind (levels, curves, … ; chain for a stored chain), else absent."
+  },
+  {
+    "path": "fillKind",
+    "type": {
+      "kind": "text"
+    },
+    "access": "readOnly",
+    "summary": "A fill layer's kind (solid, gradient, pattern), else absent."
   },
   {
     "path": "id",

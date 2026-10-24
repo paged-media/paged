@@ -624,6 +624,20 @@
           ]
         },
         {
+          "defaults": [],
+          "help": "A data source's file, repeatable: `--source products=products.csv`. The script reads it as `paged.data.*` (tables, records, query, evaluate), with the document's binding labels' queries run through the query guard, as `paged data apply` runs them. A source the labels do not declare is read by the file's extension",
+          "long": "source",
+          "name": "sources",
+          "positional": false,
+          "repeatable": true,
+          "required": false,
+          "short": null,
+          "takesValues": true,
+          "valueNames": [
+            "ID=FILE"
+          ]
+        },
+        {
           "defaults": [
             "pdf17"
           ],
