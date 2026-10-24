@@ -134,6 +134,7 @@ import {
   commitLoweredVisibility,
   commitRule,
   failedBatchChild,
+  frameStory,
   resolveElementId,
   type LowerContext,
 } from "./lower";
@@ -541,6 +542,14 @@ export interface DataSourceSession
   getState(): SessionState;
   /** The data door this session serves (`data@1`, extensions ADR 343). */
   dataDoor(): DataDoor;
+  /** Editor ADR 291's drag to place: a field dropped on a page item. Into a
+   *  text frame it is a variable at the start of the frame's story, onto a
+   *  graphic frame its picture (an image binding). */
+  placeField(
+    query: string,
+    field: string,
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }>;
   /** Data ADR 563 — declare (or, with null, undeclare) `<query>.<field>` an
    *  asset column: an image binding over it fetches (consented origins
    *  only), keeps (by content hash) and runs the chain before placing. */
@@ -2541,6 +2550,13 @@ export function createSession(
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
     syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
+    place: async (target, query, field) => {
+      const [kind, ...rest] = target.split(":");
+      return self.placeField(query, field, {
+        kind,
+        id: rest.join(":"),
+      } as ElementId);
+    },
     placements: () => props.placements(),
     refresh: async () => {
       await self.refreshData();
@@ -2597,6 +2613,42 @@ export function createSession(
   const self: DataSourceSession = {
     ...props,
     dataDoor: () => door,
+    async placeField(query, field, target) {
+      const id = `${field.replace(/[^A-Za-z0-9_]/g, "_")}-${Date.now().toString(36)}`;
+      if (target.kind === "textFrame") {
+        const story = await frameStory(host, String(target.id));
+        if (!story)
+          throw new Error(
+            `the text frame ${String(target.id)} has no story to place a field into`,
+          );
+        self.addVariableBinding(id, id, query, field);
+        const e = await ensureEngine();
+        const lowered = e.resolve_lowered(id) as { kind?: string } | null;
+        if (lowered?.kind !== "variable")
+          throw new Error(
+            `the field ${field} does not resolve (refresh the data first)`,
+          );
+        const placed = await commitLoweredVariable(
+          host,
+          lowered as never,
+          id,
+          story,
+        );
+        if (!placed) throw new Error(`the field ${field} could not be placed`);
+        placedVariables.add(id);
+        emit();
+        return { binding: id, kind: "variable" };
+      }
+      if (["rectangle", "oval", "polygon"].includes(String(target.kind))) {
+        self.addImageBinding(id, String(target.id), query, field);
+        await self.lowerBinding(id);
+        emit();
+        return { binding: id, kind: "image" };
+      }
+      throw new Error(
+        `a field is placed into a text frame or onto a graphic frame, not on a ${String(target.kind)}`,
+      );
+    },
     setAssetColumn(query, field, def) {
       const key = `${query}.${field}`;
       if (def) assetColumns.set(key, { ...def });

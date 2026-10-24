@@ -205,7 +205,9 @@ import {
   ObjectPropertyField,
   ObjectPropertyFrame,
   setDataDoorSource,
+  setDataDropHandler,
 } from "@paged-media/shell";
+import { placeDroppedField } from "../data-drop";
 import {
   cockpitActionsOf,
   createEditorScope,
@@ -561,7 +563,35 @@ function PluginBundles() {
     // Editor ADRs 291, 292: the Data panel and the bind popover read the
     // document's data from the same shared backend the bundles meet at.
     const dataBackend = hostOptions.shared.data;
-    if (dataBackend) setDataDoorSource(scope, dataBackend);
+    if (dataBackend) {
+      setDataDoorSource(scope, dataBackend);
+      // Editor ADR 291: a field dropped on the document is placed there; a
+      // refusal (no frame under it, a line) reaches Problems.
+      setDataDropHandler(scope, (drag, at) => {
+        const paged = pagedRef.current;
+        if (!paged) return;
+        void placeDroppedField(
+          paged,
+          dataBackend.current()?.service ?? null,
+          drag,
+          at,
+        ).then((r) =>
+          problemsSink.publish(
+            "media.paged.data",
+            "drag-to-place",
+            "error" in r
+              ? [
+                  {
+                    severity: "warning",
+                    message: r.error,
+                    source: "drag-to-place",
+                  },
+                ]
+              : [],
+          ),
+        );
+      });
+    }
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.

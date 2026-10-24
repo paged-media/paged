@@ -19,7 +19,12 @@ import type {
 } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
+import {
+  dataFields,
+  ENGINE_ANCHOR,
+  openRealHost,
+  REQUIRE_REAL_CORE,
+} from "./real-core";
 import {
   bootRealEngine,
   DATA_JS_WASM,
@@ -180,6 +185,39 @@ describe.skipIf(!ready && !required)(
       ]);
       await consumer.data.unbind(b.id);
       expect(await consumer.data.bindings()).toEqual([]);
+
+      // Editor ADR 291's drag to place: a field dropped into a text frame is
+      // a variable in its story; a line takes no field.
+      const fr = (await dataHost.document.mutate({
+        op: "batch",
+        args: {
+          ops: [
+            {
+              op: "insertTextFrame",
+              args: { pageId: "usp", bounds: [100, 100, 300, 400] },
+            },
+            { op: "bindCreated", args: { handle: "f" } },
+          ],
+        },
+      } as never)) as { minted?: { element: { id: string } }[] };
+      const frame = fr.minted![0]!.element.id;
+      const placed = await consumer.data.place(
+        `textFrame:${frame}`,
+        "q",
+        "sku",
+      );
+      expect(placed.kind).toBe("variable");
+      expect(
+        (await dataFields(dataHost as never)).find(
+          (f) => f.key === placed.binding,
+        )?.value,
+      ).toBe("A-1");
+      await expect(
+        consumer.data.place("graphicLine:x", "q", "sku"),
+      ).rejects.toThrow(/text frame or onto a graphic frame/);
+      await expect(
+        consumer.data.place(`textFrame:${frame}`, "nope", "sku"),
+      ).rejects.toThrow(/no query "nope"/);
 
       // Data ADR 562: a transform's derived table is a read-only table of the
       // door, refreshed before the queries.

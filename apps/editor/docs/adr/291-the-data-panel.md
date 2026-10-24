@@ -3,7 +3,8 @@
 - **Status:** Accepted 2026-10-24.
 - **Scope:** `apps/canvas/src/panels/data-panel.tsx` and `data-grid-model.ts` (panel
   `paged.data`, registered in `built-in-panels.tsx`); `packages/shell/src/state/data-door.ts`
-  (`setDataDoorSource`, `useDataService`, `useDataRevision`); `apps/canvas/src/app/mount.tsx`
+  (`setDataDoorSource`, `useDataService`, `useDataRevision`, the drop handler);
+  `apps/canvas/src/data-drop.ts`; `apps/canvas/src/app/mount.tsx`
   (the editor scope pointed at the shared data backend). Decided by
   [PM-0015](../../../../docs/adr/PM-0015-data-and-actions-are-platform-layers.md) (record
   "editor 291"); reads extensions
@@ -44,7 +45,7 @@ the grouping of the sorted rows it holds.
 
 **First run.** With no service: why (no module serves the document's data). With a service and
 no table: three steps, each with its door: import a source (opens Sources), write a query (opens
-Query), bind (right-click any property).
+Query), place (drag a field header onto a frame, or right-click any property).
 
 ## Consequences
 
@@ -69,10 +70,20 @@ Query), bind (right-click any property).
   - **Jump to a field's instances.** Double-clicking a bound field's header selects the page
     items the bindings reading that field are placed in (the second click of the double-click
     does not reverse the sort).
+- Amended 2026-10-24: `data@1` gained `place(target, query, field)` (bind role; plugin-sdk
+  0.74.3-canary.23). **Drag to place:** a query's field header drags out of the grid (drag type
+  `application/x-paged-data-field`, `{query, field}`); the canvas column accepts it while the
+  app has a drop handler (`setDataDropHandler`, `useDataFieldDrop` in the shell's data-door
+  store), and the app (`apps/canvas/src/data-drop.ts`) hit-tests the drop point as the context
+  menu does and hands the page item's address to the service. paged.data places the field as a
+  variable at the start of a text frame's story, or as the picture of a rectangle, oval or
+  polygon (an image binding, lowered at once); on anything else, or with no item under the
+  point, the refusal and its reason reach Problems. A source table's headers do not drag (a
+  binding reads a query).
 - Not part of this record, and not built yet:
   - per-record status (a record new or deleted in the source) and markers per record, which
     need the service to report which record each instance shows;
-  - drag to place, which needs a canvas drop target for a field;
+  - a record dropped onto a grouped design, and a range dropped as a table;
   - record templates and their library, and a pagination inspector, which stay paged.data's
     (Data Merge, record flow) until they have a door;
   - double-click to jump to one record's instances (the field's instances are selectable).

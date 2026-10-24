@@ -86,7 +86,8 @@ export interface FakeDataTable {
  * <table>` only, and says so for anything else: the fake runs no SQL.
  * Bindings are recorded, not resolved: `placements` names each binding whose
  * target is one page item's address (`rectangle:u1`, not a selector) as
- * placed there and `linked`.
+ * placed there and `linked`; `place` records a `content` binding of the
+ * field on the item.
  */
 export function fakeDataService(
   tables: Readonly<Record<string, FakeDataTable>>,
@@ -195,6 +196,24 @@ export function fakeDataService(
         if (PAGE_ITEM.test(b.target))
           placed.push({ binding: b.id, address: b.target, status: "linked" });
       return placed;
+    },
+    async place(target, query, field) {
+      if (!PAGE_ITEM.test(target))
+        throw new Error(`${target} is not one page item's address`);
+      if (!table(query).fields.some((f) => f.name === field))
+        throw new Error(`${query} has no field ${field}`);
+      const b = {
+        target,
+        path: "content",
+        query,
+        expr: field,
+        id: `b${nextBinding++}`,
+      };
+      bindings.set(b.id, b);
+      return {
+        binding: b.id,
+        kind: target.startsWith("text") ? "variable" : "image",
+      };
     },
     rows: (name) => table(name).rows,
   };

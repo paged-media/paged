@@ -2341,6 +2341,16 @@ export interface DataService {
    *  in, with the binding's sync state (the canvas field markers, a binding's
    *  instances in the Data panel). */
   placements?(): Promise<readonly DataPlacement[]>;
+  /** Place a field on a page item, as dropping it there means (the Data
+   *  panel's drag to place): into a text frame a variable, onto a graphic
+   *  frame its picture. The service refuses a target it cannot place on. */
+  place?(target: string, query: string, field: string): Promise<DataPlaced>;
+}
+
+/** What a placed field became. */
+export interface DataPlaced {
+  binding: string;
+  kind: string;
 }
 
 /** One placed instance of a binding: the page item its content lands in. */
@@ -2413,6 +2423,8 @@ export interface DataSurface {
   refresh(): Promise<void>;
   /** The page items each binding is placed in (`read`). */
   placements(): Promise<readonly DataPlacement[]>;
+  /** Place a field on a page item (`bind`). */
+  place(target: string, query: string, field: string): Promise<DataPlaced>;
   /** Fires when a table's rows change (`read`). */
   onDidChange(listener: (change: DataChange) => void): Disposable;
 }
