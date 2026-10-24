@@ -1677,6 +1677,7 @@ function CanvasAppRoot() {
       initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
       regions={instance.profile.regions}
       canvasFurniture={instance.profile.canvas}
+      compactLayout={instance.profile.compact}
       features={instance.profile.features}
       sessionPolicy={{ role, overrides: [] }}
       onSessionRoleChange={instance.role.set}

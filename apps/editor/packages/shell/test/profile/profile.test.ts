@@ -60,7 +60,9 @@ describe("the base profile", () => {
       titleBar: true,
       rulers: true,
       thumbnails: true,
+      preview: false,
     });
+    expect(base.compact).toBeNull();
   });
 });
 
@@ -122,6 +124,7 @@ describe("resolveProfile", () => {
       titleBar: true,
       rulers: false,
       thumbnails: true,
+      preview: false,
     });
   });
 
@@ -422,5 +425,28 @@ describe("the session role in a profile", () => {
     const bad = validateProfile({ role: "admin" });
     expect(bad.profile.role).toBeUndefined();
     expect(bad.problems.map((p) => p.path)).toEqual(["role"]);
+  });
+});
+
+describe("the compact layout and a preview canvas in a profile", () => {
+  test("follow the chain, null keeps the desktop layout, and are shape-checked", () => {
+    const presets = {
+      form: { compact: "form-first", canvas: { preview: true } },
+    } as const;
+    const { profile } = resolveProfile({ extends: "form" }, presets);
+    expect(profile.compact).toBe("form-first");
+    expect(profile.canvas.preview).toBe(true);
+    const desktop = resolveProfile(
+      { extends: "form", compact: null },
+      presets,
+    ).profile;
+    expect(desktop.compact).toBeNull();
+    const bad = validateProfile({ compact: "phone", canvas: { preview: 1 } });
+    expect(bad.profile.compact).toBeUndefined();
+    expect(bad.problems.map((p) => p.path).sort()).toEqual([
+      "canvas.preview",
+      "compact",
+    ]);
+    expect(validateProfile({ compact: null }).profile.compact).toBeNull();
   });
 });

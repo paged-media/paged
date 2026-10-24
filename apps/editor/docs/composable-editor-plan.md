@@ -51,6 +51,7 @@ orientation only.
 | Decision 1 (2026-10-24): no degraded mode        | Done: `createEditor` refuses an unisolated page with `EditorError` `notCrossOriginIsolated`, naming the iframe path                     | `src/embed/errors.ts`, PM-0013 amendment 2                                          |
 | Decision 2 (2026-10-24): stable ids              | Done: `deprecated-ids.json`, aliases with an `idDeprecated` event, the ledger guard, release notes                                      | `scripts/feature-ids.mjs`, `profile/deprecations.ts`, PM-0013 amendment 2           |
 | Decision 4 (2026-10-24): "Edit template"         | Done: the template notice in the full editor                                                                                            | ADR 293, `panels/template/template-notice.tsx`                                      |
+| Mobile fill presets (decision 2026-10-24)        | Done: `form` preset; field sheet or form first below 720 px; 44 px targets; touch pan, pinch, zoom buttons; camera input                | ADR 294, `packages/shell/src/state/compact.ts`                                      |
 
 Corrections to the plan found while building:
 
@@ -1410,6 +1411,7 @@ the canvas, a script (`paged.*`) and a plugin, because "every caller" is the cla
 | The editor profile is runtime data (amends 213)                          | editor       | 274     | A4         |
 | Features gate what is offered                                            | editor       | 275     | B2         |
 | Filling a template                                                       | editor       | 276     | D5         |
+| The fill presets on phones and tablets                                   | editor       | 294     | §14        |
 | The editor mounts as an instance                                         | editor       | 277     | E1         |
 | Host actions are commands                                                | editor       | 278     | E2         |
 | The embedding API and the iframe bridge                                  | editor       | 279     | E6         |

@@ -19,7 +19,11 @@
 
 // Demo: design placeholders. A locked business card whose name, title,
 // e-mail and portrait are the only open parts (profile `template-fill`,
-// role filler). Submit hands the values to the host.
+// role filler). Submit hands the values to the host. It works on a phone
+// (editor ADR 294): the card fills the screen, a tapped field opens in a
+// sheet below it, and the portrait can come from the camera. With
+// `?layout=form` it is the `form` preset instead: the form first, the
+// card as a preview.
 
 import { createEditor, type EditorHandle } from "../embed";
 import { demoPage, downloadLink, section } from "./page";
@@ -36,10 +40,12 @@ pre.setAttribute("data-demo-submitted", "");
 pre.textContent = "Nothing submitted yet.";
 result.append(pre);
 
+const layout = new URLSearchParams(location.search).get("layout");
+
 let editor: EditorHandle;
 editor = await createEditor(page.stage, {
   profile: {
-    extends: "template-fill",
+    extends: layout === "form" ? "form" : "template-fill",
     regions: {
       "actions-bar": { items: [{ kind: "spacer" }, "paged.host.submit"] },
     },
@@ -61,4 +67,4 @@ editor = await createEditor(page.stage, {
 page.status("building the template…");
 await businessCard(editor);
 await editor.setRole("filler");
-page.status("ready: fill the fields on the right, then Submit");
+page.status("ready: fill in the fields, then Submit");
