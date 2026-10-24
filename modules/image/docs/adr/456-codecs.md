@@ -1,6 +1,6 @@
 # ADR 456 — Codecs are pure-Rust, permissively licensed adapters behind I/O-free traits
 
-- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `f7d21e5`.
+- **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `f7d21e5`. Amended 2026-10-24 by [ADR 466](466-core-raster-crates-are-shared.md).
 - **Scope:** `image-codecs`, `registry/codecs.yaml`, `deny.toml`, `NOTICE.md`
 
 ## Context
@@ -88,3 +88,10 @@ states 100 MB for the whole application, and `glue/manifest.json:35` still decla
 - [ADR 457](457-colour-management.md) — what happens to an embedded ICC profile after decode
 - [ADR 460](460-document-is-not-the-store.md) — the exporters that call the encoders
 - [ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md) — the wasm size budget
+
+## Amendment, 2026-10-24 — the codecs merge with the engine's decoders
+
+[ADR 466](466-core-raster-crates-are-shared.md) lets the module's Rust depend on `engine/core`
+crates. The adapters here are planned to move into the engine's `paged-raster`, which the
+renderer decodes through as well; the rules above (pure Rust, no vendored C, licences on the
+allow list, I/O-free sources and targets) go with them.

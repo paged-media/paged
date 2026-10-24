@@ -1,6 +1,7 @@
 # PM-0002 — Built-in modules share internal code; extensions see only the public contract
 
-- **Status:** Accepted 2026-10-18.
+- **Status:** Accepted 2026-10-18. Amended 2026-10-24 by [PM-0014](PM-0014-capability-layering.md)
+  (the image codecs merge with the engine's decoders).
 - **Scope:** `modules/*`, `platform/shared/*`, `platform/extensions` (`plugin-api`, `plugin-sdk`),
   `apps/editor`.
 
@@ -54,3 +55,11 @@ depend on, or every internal refactor turns into a contract change.
   guard checks that.
 - Merging the formula engines, the image codecs with the engine's decoders, and the doc and
   slide binaries is left for later. They are measured first.
+
+## Amendment (2026-10-24): the image codecs merge with the engine's decoders
+
+[PM-0014](PM-0014-capability-layering.md) decides the image half of the last consequence: the
+image module's codecs, PSD reader, pixel types and kernels move into or merge with `engine/core`
+crates (`paged-raster`, `paged-psd`, `paged-pixel`, `paged-kernels`), and a module may
+path-depend on `engine/core` crates. The formula engines and the doc and slide binaries stay
+as stated above. Extensions still see only the public contract.
