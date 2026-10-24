@@ -27,7 +27,11 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
@@ -38,9 +42,7 @@ const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 // The same products after a price change of A-1.
 const CSV2 = "sku,price\nA-1,12.5\nB-2,19.99\nC-3,29.99\n";
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {

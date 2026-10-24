@@ -40,7 +40,8 @@ afterAll(async () => {
   await lane?.close();
 }, 30_000);
 
-const TRAPS = /unreachable|RuntimeError|out of bounds|panicked|Content Security Policy/;
+const TRAPS =
+  /unreachable|RuntimeError|out of bounds|panicked|Content Security Policy/;
 
 /** Requests outside the page's origin, the module host's (the door test's,
  *  which the editor's connect-src lists) left out: the lane must make none. */
@@ -240,7 +241,11 @@ describe.skipIf(LANE_OFF)(
     it.skipIf(NO_LANE)(
       "JSON imports — an array of objects and newline-delimited records — read in the engine [data.source.adapters]",
       async () => {
-        const out = await inPage<{ arr?: unknown; nd?: unknown; error?: string }>(
+        const out = await inPage<{
+          arr?: unknown;
+          nd?: unknown;
+          error?: string;
+        }>(
           `try {
            const enc = new TextEncoder();
            await L.loadIntoStore(d, "catalog", "json",

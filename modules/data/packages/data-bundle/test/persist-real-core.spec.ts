@@ -22,7 +22,11 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -32,9 +36,7 @@ const actualEngine = await importActual(() => import("../src/engine"));
 
 const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 /** The bundle module, with the two engine boots pointed at real Node builds. */

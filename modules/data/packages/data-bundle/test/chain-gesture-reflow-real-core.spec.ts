@@ -101,8 +101,7 @@ describe.skipIf(!RUN_BUDGETS)(
       h?.dispose();
       h = null;
     });
-    afterAll(async () => {
-    });
+    afterAll(async () => {});
 
     /** A 40-record flow paginated over two threaded frames; the first frame's
      *  id, the chain's story, the flows the subscription reported, and the

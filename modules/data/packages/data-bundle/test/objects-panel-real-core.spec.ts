@@ -36,7 +36,11 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 import { BIND, OBJECTS_PANEL_ID } from "../src/panels/objects-panel";
 import { labelledElements } from "../src/labels";
 import { undoMark, undoSteps } from "./perf/harness";
@@ -49,9 +53,7 @@ const actualEngine = await importActual(() => import("../src/engine"));
 const CSV = "sku,weight_mm\nA-1,2\nB-2,4\n";
 const BINDING = "plugin:media.paged.data/binding/weight";
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {

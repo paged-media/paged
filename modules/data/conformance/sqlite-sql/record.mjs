@@ -17,9 +17,16 @@ const version = execFileSync(sqlite, ["--version"], { encoding: "utf8" })
 
 const results = {};
 for (const c of spec.cases) {
-  const script = [...spec.setup.map((s) => `${s};`), ".mode json", `${c.sql};`].join("\n");
+  const script = [
+    ...spec.setup.map((s) => `${s};`),
+    ".mode json",
+    `${c.sql};`,
+  ].join("\n");
   try {
-    const out = execFileSync(sqlite, [":memory:"], { input: script, encoding: "utf8" });
+    const out = execFileSync(sqlite, [":memory:"], {
+      input: script,
+      encoding: "utf8",
+    });
     // One object per row, keys in column order; an empty result prints nothing.
     const rows = out.trim() === "" ? [] : JSON.parse(out);
     results[c.id] = { rows: rows.map((r) => Object.values(r)) };

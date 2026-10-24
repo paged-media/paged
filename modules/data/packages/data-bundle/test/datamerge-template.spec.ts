@@ -25,7 +25,11 @@ import {
   openRealHost,
   REQUIRE_REAL_CORE,
 } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
@@ -130,9 +134,7 @@ describe("the Data Merge template writer against InDesign's oracle [data.export.
   });
 });
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 
 describe.skipIf(!ready && !(REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE))(
   "Export as InDesign Data Merge template, real stack [data.export.datamerge]",

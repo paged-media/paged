@@ -34,7 +34,11 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import { bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_ENGINE } from "./real-engine";
+import {
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_ENGINE,
+} from "./real-engine";
 import { readZip, stripContainerParts, text } from "./zip";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -48,9 +52,7 @@ const CSV2 =
   "sku,name,weight_mm,tint\nA-1,Alpha Two,2,#ff0000\nB-2,Beta,4,Black\nC-3,Gamma,1,Black\n";
 const TV = "textVariable:dTextVariablenpaged:v_name";
 
-const ready =
-  ENGINE_ANCHOR !== null &&
-  existsSync(DATA_JS_WASM);
+const ready = ENGINE_ANCHOR !== null && existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_ENGINE;
 
 async function loadBundleModule() {
