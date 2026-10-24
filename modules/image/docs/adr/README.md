@@ -19,7 +19,7 @@ stood, for decisions made earlier; their status says so.
 | [453](453-tolerance-not-golden-bytes.md) | GPU output is verified against the scalar reference by tolerance, never by golden bytes | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-04) |
 | [454](454-two-evaluation-engines.md) | Two evaluation engines over one kernel set | Accepted, recorded retroactively 2026-10-02 |
 | [455](455-pixel-model.md) | The pixel model: explicit format, 16-bit float working tiles | Accepted, recorded retroactively 2026-10-02 |
-| [456](456-codecs.md) | Codecs are pure-Rust, permissively licensed adapters behind I/O-free traits | Accepted, recorded retroactively 2026-10-02 |
+| [456](456-codecs.md) | Codecs are pure-Rust, permissively licensed adapters behind I/O-free traits | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-24 by 466) |
 | [457](457-colour-management.md) | Colour management: one seam, one engine for display and one for print | Accepted, recorded retroactively 2026-10-02 |
 | [458](458-psd-preservation.md) | PSD is read and written by an own parser under a preservation rule | Accepted, recorded retroactively 2026-10-02 |
 | [459](459-scene-layer-image-and-tiles.md) | Results reach the page as a retained scene-layer image plus a tile provider | Accepted, recorded retroactively 2026-10-02 |
@@ -29,6 +29,7 @@ stood, for decisions made earlier; their status says so.
 | [463](463-one-undo-list.md) | One undo list for pixels and the layer stack, reachable from the host | Accepted 2026-10-04 |
 | [464](464-layers-at-their-own-bounds.md) | Layers live at their own bounds | Accepted 2026-10-05 |
 | [465](465-cpu-twins-for-region-filters.md) | Where no GPU exists, a region filter runs on shipped CPU twins | Accepted 2026-10-23 (an exception to 450; amended 2026-10-23: a mask as data) |
+| [466](466-core-raster-crates-are-shared.md) | The engine's raster crates are shared: the module's Rust may depend on them | Accepted 2026-10-24 (amends the isolation contract and 456) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

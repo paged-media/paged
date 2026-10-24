@@ -17,13 +17,14 @@ their status says so.
 | [351](351-shapes-are-native-page-items.md) | Drawn shapes are native page items; the plugin owns no content type | Accepted, recorded retroactively 2026-10-02 |
 | [352](352-basic-operations-belong-to-the-host.md) | Basic object operations belong to the host | Accepted, recorded retroactively 2026-10-02 |
 | [353](353-path-algebra-runs-in-the-engine.md) | Path algebra that changes a document path runs in the engine | Accepted, recorded retroactively 2026-10-02 |
-| [354](354-multi-paint-bakes-to-a-group.md) | A multi-paint appearance bakes to a group of single-paint items | Accepted, recorded retroactively 2026-10-02 |
+| [354](354-multi-paint-bakes-to-a-group.md) | A multi-paint appearance bakes to a group of single-paint items | Accepted, recorded retroactively 2026-10-02 (partially superseded 2026-10-24 by 361) |
 | [355](355-libraries-in-container-parts.md) | Document-level libraries and recipes live in container parts | Accepted, recorded retroactively 2026-10-02 |
-| [356](356-live-constructs-are-recipes.md) | Live constructs are a stored recipe plus artwork that can be regenerated | Accepted, recorded retroactively 2026-10-02 |
+| [356](356-live-constructs-are-recipes.md) | Live constructs are a stored recipe plus artwork that can be regenerated | Accepted, recorded retroactively 2026-10-02 (partially superseded 2026-10-24 by 361) |
 | [357](357-image-trace-rust-lane.md) | Image Trace is the one Rust lane | Accepted, recorded retroactively 2026-10-02 |
 | [358](358-one-snapper-the-engine-resolves.md) | One snapper for the point-placing tools; the engine resolves | Accepted 2026-10-19 |
 | [359](359-the-host-owns-the-pencil.md) | The host owns the Pencil; it runs this repo's PencilMachine | Accepted 2026-10-19 |
 | [360](360-records-name-no-minted-ids.md) | A bake or trace record names no id its own batch mints | Accepted 2026-10-20 |
+| [361](361-visual-live-constructs-move-to-the-engine.md) | Visual live constructs move to the engine; recipes remain for generators | Accepted 2026-10-24 (partially supersedes 354, 356) |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).
