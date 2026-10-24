@@ -77,15 +77,30 @@
 // `regions`; `imageTraceOf` reads it. What the batch created comes off
 // the engine's reply (`commands/minted.ts`).
 //
-// KNOWN GAP, named rather than papered over: the trace is fitted to the
-// FRAME's bounds. A placed image's OWN transform inside its frame (fit,
-// crop, offset — the IDML `<Image>` `ItemTransform`) is not on the plugin
-// contract: `elementGeometry` reports the frame's bounds + the FRAME's
-// `itemTransform` and a `hasImage` flag, and no read door exposes the
-// inner one. So a cropped or non-fitted placement traces to the frame
-// rectangle and will not line up with what is displayed. That is an RFI
-// gap (a placed-image placement read), not something to guess at here —
-// the command logs the assumption every time it runs.
+// WHERE THE PIXELS SIT (RFI C-27, closed). The trace is laid where the
+// image is DISPLAYED, not stretched over the frame: the frame's row of
+// the `links` collection carries `imageTransform` — the placed image's
+// own `<Image ItemTransform>`, natural pixel rect → the frame's inner
+// space, the matrix the renderer composes — so a traced pixel maps
+// through `itemTransform ∘ imageTransform ∘ scale(natural / traced)`
+// (the last factor undoes the decoder's downsample). And because the
+// frame CLIPS the image, only the part of the raster the frame shows is
+// traced: the frame's bounds are carried back into raster pixels and the
+// raster is cropped to that box first, so a cropped placement yields
+// artwork for what is visible and nothing for the overhang. Exact for an
+// axis-aligned placement; a rotated or skewed one is cropped to the box
+// around the visible quad, and an oval or polygon frame to its bounds,
+// so artwork can overhang a non-rectangular clip by up to that box.
+//
+// THE FALLBACK, and what is still not on the contract: a row whose
+// `imageTransform` is null (or an engine that predates the field) is the
+// case the renderer stretches over the frame bounds, and so does the
+// trace. The renderer also RESOLVES a placement itself for a picture
+// that carries no inner transform but names a fit or `FrameFittingOption`
+// crops (an image placed through the authoring doors) — the row reports
+// null for those, so they still trace to the frame rectangle. That one
+// is an engine follow-up (report the resolved transform), logged when
+// it applies.
 //
 // WHERE THE TRACE RUNS, with MEASURED numbers rather than a comforting
 // adjective. The kernel call is synchronous and cannot be interrupted:
@@ -109,6 +124,7 @@ import type {
 import {
   applyAffine,
   composeAffine,
+  invertAffine,
   makeCompoundTable,
   rgbToHex,
   type Affine,
@@ -309,29 +325,177 @@ function mintTraceSwatchId(): string {
 }
 
 /**
- * The affine that maps PIXEL space (origin top-left of the raster, +y
- * down) onto PAGE space for a frame whose `elementGeometry` reports
- * `bounds` = `[top, left, bottom, right]` in its own inner space and
- * `itemTransform` on top of that.
+ * How a placed image sits in its frame — the `links` row's
+ * `imageTransform` and the natural pixel size it is written against.
+ * `crop` is where the traced raster starts inside the decoded one, when
+ * only the visible part was traced (`visibleRasterRect`).
+ */
+export interface ImagePlacement {
+  /** Natural pixel rect → the frame's inner space (row-major). */
+  imageTransform: Affine;
+  /** The decoded file's natural size, the rect `imageTransform` maps. */
+  naturalWidth: number;
+  naturalHeight: number;
+}
+
+/** One frame's row of the `links` collection, as far as the trace reads
+ *  it (the contract's `LinkSummary`; plugin-api exports the door, not
+ *  the row type). */
+export interface LinkRow {
+  hostSelfId: string;
+  imageTransform?: readonly number[] | null;
+}
+
+/** The placement a `links` row states for frame `selfId`, or null when
+ *  the row is missing or carries no usable `imageTransform` (the
+ *  stretched case). Pure. */
+export function imagePlacementOf(
+  rows: readonly LinkRow[],
+  selfId: string,
+  naturalWidth: number,
+  naturalHeight: number,
+): ImagePlacement | null {
+  const m = rows.find((r) => r.hostSelfId === selfId)?.imageTransform;
+  if (!Array.isArray(m) || m.length !== 6) return null;
+  if (!m.every((n) => typeof n === "number" && Number.isFinite(n))) {
+    return null;
+  }
+  if (m[0] * m[3] - m[1] * m[2] === 0) return null;
+  if (!(naturalWidth > 0 && naturalHeight > 0)) return null;
+  return {
+    imageTransform: [m[0], m[1], m[2], m[3], m[4], m[5]] as Affine,
+    naturalWidth,
+    naturalHeight,
+  };
+}
+
+/** Raster pixels → the frame's inner space: the downsample undone, then
+ *  the image's own transform. */
+function rasterToFrame(
+  placement: ImagePlacement,
+  rasterWidth: number,
+  rasterHeight: number,
+): Affine {
+  const scale: Affine = [
+    placement.naturalWidth / rasterWidth,
+    0,
+    0,
+    placement.naturalHeight / rasterHeight,
+    0,
+    0,
+  ];
+  return composeAffine(placement.imageTransform, scale);
+}
+
+/**
+ * The part of a `rasterWidth × rasterHeight` raster the frame SHOWS, as
+ * `[x, y, width, height]` in whole raster pixels: the frame's `bounds`
+ * carried back into raster space, boxed, rounded outward and clipped to
+ * the raster. Null when the frame shows none of it. Without a placement
+ * the raster fills the frame, so the whole raster is visible. Pure.
+ */
+export function visibleRasterRect(
+  bounds: readonly [number, number, number, number],
+  placement: ImagePlacement | null,
+  rasterWidth: number,
+  rasterHeight: number,
+): [number, number, number, number] | null {
+  if (rasterWidth <= 0 || rasterHeight <= 0) return null;
+  if (!placement) return [0, 0, rasterWidth, rasterHeight];
+  const inverse = invertAffine(
+    rasterToFrame(placement, rasterWidth, rasterHeight),
+  );
+  if (!inverse) return null;
+  const [top, left, bottom, right] = bounds;
+  const corners = [
+    applyAffine(inverse, left, top),
+    applyAffine(inverse, right, top),
+    applyAffine(inverse, right, bottom),
+    applyAffine(inverse, left, bottom),
+  ];
+  // A hair of slack so a frame edge that lands on a pixel edge in exact
+  // arithmetic does not pull in a whole extra pixel row.
+  const EPS = 1e-6;
+  const x0 = Math.max(
+    0,
+    Math.floor(Math.min(...corners.map((c) => c[0])) + EPS),
+  );
+  const y0 = Math.max(
+    0,
+    Math.floor(Math.min(...corners.map((c) => c[1])) + EPS),
+  );
+  const x1 = Math.min(
+    rasterWidth,
+    Math.ceil(Math.max(...corners.map((c) => c[0])) - EPS),
+  );
+  const y1 = Math.min(
+    rasterHeight,
+    Math.ceil(Math.max(...corners.map((c) => c[1])) - EPS),
+  );
+  if (x1 <= x0 || y1 <= y0) return null;
+  return [x0, y0, x1 - x0, y1 - y0];
+}
+
+/** Copy the `[x, y, width, height]` window out of an RGBA raster. The
+ *  whole raster comes back as it is (no copy). Pure. */
+export function cropRaster(
+  data: Uint8ClampedArray,
+  width: number,
+  rect: readonly [number, number, number, number],
+): Uint8ClampedArray {
+  const [x, y, w, h] = rect;
+  if (x === 0 && y === 0 && w === width && data.length === w * h * 4) {
+    return data;
+  }
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    const from = ((y + row) * width + x) * 4;
+    out.set(data.subarray(from, from + w * 4), row * w * 4);
+  }
+  return out;
+}
+
+/**
+ * The affine that maps PIXEL space (origin top-left of the traced
+ * raster, +y down) onto PAGE space for a frame whose `elementGeometry`
+ * reports `bounds` = `[top, left, bottom, right]` in its own inner space
+ * and `itemTransform` on top of that.
  *
- * The raster is stretched to FILL the frame's bounds — see the module
- * header's named gap: the placed image's own fit/crop transform is not on
- * the contract, so this is the only mapping available.
+ * With a `placement` (the `links` row's `imageTransform`) the pixels go
+ * where the renderer draws them: `itemTransform ∘ imageTransform ∘
+ * scale(natural / raster) ∘ translate(crop)`, `crop` being where a
+ * cropped raster starts in the decoded one. Without one the raster is
+ * stretched to FILL the frame's bounds — the renderer's own fallback for
+ * a picture with no inner transform.
  */
 export function pixelToPageAffine(
   bounds: readonly [number, number, number, number],
   itemTransform: Affine | null,
   rasterWidth: number,
   rasterHeight: number,
+  placement: ImagePlacement | null = null,
+  crop: readonly [number, number] = [0, 0],
 ): Affine | null {
   if (rasterWidth <= 0 || rasterHeight <= 0) return null;
-  const [top, left, bottom, right] = bounds;
-  const sx = (right - left) / rasterWidth;
-  const sy = (bottom - top) / rasterHeight;
-  if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx === 0 || sy === 0) {
-    return null;
+  let fit: Affine;
+  if (placement) {
+    fit = composeAffine(rasterToFrame(placement, rasterWidth, rasterHeight), [
+      1,
+      0,
+      0,
+      1,
+      crop[0],
+      crop[1],
+    ]);
+  } else {
+    const [top, left, bottom, right] = bounds;
+    const sx = (right - left) / rasterWidth;
+    const sy = (bottom - top) / rasterHeight;
+    if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx === 0 || sy === 0) {
+      return null;
+    }
+    fit = [sx, 0, 0, sy, left, top];
   }
-  const fit: Affine = [sx, 0, 0, sy, left, top];
   return itemTransform ? composeAffine(itemTransform, fit) : fit;
 }
 
@@ -736,6 +900,9 @@ interface TraceSource {
   itemTransform: Affine | null;
   uri: string;
   bytes: Uint8Array;
+  /** The frame's `links` rows (empty when the collection is unreadable):
+   *  where the image's own placement is read from. */
+  links: readonly LinkRow[];
 }
 
 async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
@@ -785,6 +952,9 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
   }
   // C-23 — a trace inserts its result onto a page.
   if (!item.pageId) return null;
+  const links = await host.document
+    .collection<LinkRow>("links")
+    .catch(() => [] as readonly LinkRow[]);
   return {
     id,
     pageId: item.pageId,
@@ -793,6 +963,7 @@ async function traceSourceOf(host: BundleHost): Promise<TraceSource | null> {
     itemTransform: (item.itemTransform ?? null) as Affine | null,
     uri: asset.uri,
     bytes: asset.bytes,
+    links,
   };
 }
 
@@ -844,6 +1015,8 @@ export async function applyImageTrace(
     height: number;
     scale: number;
     sourcePixels: [number, number];
+    /** Pixels → page, for the raster as it was traced. */
+    pixelToPage: Affine | null;
   };
   try {
     const limits: TraceLimits = await session.limits();
@@ -874,13 +1047,54 @@ export async function applyImageTrace(
           `(×${raster.scale.toFixed(3)}). Detail below the new sample grid is gone.`,
       );
     }
+    // Where the pixels sit in the frame, and the part the frame shows.
+    const placement = imagePlacementOf(
+      source.links,
+      String(source.id.id),
+      raster.sourceWidth,
+      raster.sourceHeight,
+    );
+    if (placement) {
+      host.log.debug(
+        `${label}: placing the trace by the image's own transform ` +
+          `[${placement.imageTransform.join(", ")}]`,
+      );
+    } else {
+      host.log.debug(
+        `${label}: the frame's link reports no image transform — the ` +
+          `trace is fitted to the FRAME's bounds, as the renderer stretches ` +
+          `such a picture (a placement the engine resolves from a named fit ` +
+          `or fitting crops is not reported and will not line up)`,
+      );
+    }
+    const visible = visibleRasterRect(
+      source.bounds,
+      placement,
+      raster.width,
+      raster.height,
+    );
+    if (!visible) {
+      host.log.warn(
+        `${label}: the frame shows none of the image (it is placed ` +
+          `entirely outside the frame) — nothing to trace`,
+      );
+      return [];
+    }
+    const pixels = cropRaster(raster.data, raster.width, visible);
+    const [cropX, cropY, tracedWidth, tracedHeight] = visible;
+    if (tracedWidth !== raster.width || tracedHeight !== raster.height) {
+      host.log.debug(
+        `${label}: tracing the visible ${tracedWidth}×${tracedHeight} px ` +
+          `of ${raster.width}×${raster.height} (the frame crops the rest)`,
+      );
+    }
     if (
       session.thread === "calling" &&
-      raster.width * raster.height > TRACE_SLOW_PIXELS
+      tracedWidth * tracedHeight > TRACE_SLOW_PIXELS
     ) {
       // No way to interrupt a synchronous wasm call, so warn BEFORE.
       host.log.warn(
-        `${label}: tracing ${raster.width}×${raster.height} px on the calling ` +
+        `${label}: tracing ${tracedWidth}×${tracedHeight} px on the calling ` +
           `thread — this BLOCKS (measured: ~0.3 s on flat artwork, up to ~6 s ` +
           `on a noisy photograph at this size). Lower maxTracePixels for a ` +
           `faster, coarser trace.`,
@@ -891,16 +1105,19 @@ export async function applyImageTrace(
     // calling-thread fallback it is the line that freezes the UI.
     try {
       traced = {
-        width: raster.width,
-        height: raster.height,
+        width: tracedWidth,
+        height: tracedHeight,
         scale: raster.scale,
         sourcePixels: [raster.sourceWidth, raster.sourceHeight],
-        result: await session.trace(
-          raster.data,
+        pixelToPage: pixelToPageAffine(
+          source.bounds,
+          source.itemTransform,
           raster.width,
           raster.height,
-          options,
+          placement,
+          [cropX, cropY],
         ),
+        result: await session.trace(pixels, tracedWidth, tracedHeight, options),
       };
     } catch (err) {
       host.log.warn(
@@ -919,21 +1136,11 @@ export async function applyImageTrace(
     }`,
   );
 
-  const pixelToPage = pixelToPageAffine(
-    source.bounds,
-    source.itemTransform,
-    traced.width,
-    traced.height,
-  );
+  const pixelToPage = traced.pixelToPage;
   if (!pixelToPage) {
     host.log.warn(`${label}: the frame has no mappable bounds — no-op`);
     return [];
   }
-  host.log.debug(
-    `${label}: fitting the trace to the FRAME's bounds — a placed image's ` +
-      `own fit/crop transform is not on the plugin contract, so a cropped ` +
-      `placement will not line up (named gap, see commands/image-trace.ts)`,
-  );
 
   return applyImageTracePlan(
     host,

@@ -203,3 +203,12 @@ export {
   type DistributeArgs,
   type EaseKind,
 } from "./along-path";
+// Global Edit — two anchor tables describe the same shape (position
+// never matters; size only without `anySize`).
+export {
+  sameShape,
+  shapeStructureKey,
+  SAME_SHAPE_TOLERANCE,
+  SAME_SHAPE_SHIFT_LIMIT,
+  type SameShapeOptions,
+} from "./shape-match";

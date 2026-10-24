@@ -282,6 +282,9 @@ export function imageItem(
   uri: string,
   png: Uint8Array,
   pixels: { width: number; height: number },
+  /** The `<Image ItemTransform>` (default: the image stretched over the
+   *  frame), for a cropped, offset or scaled placement. */
+  imageTransform?: string,
 ): string {
   const [top, left, bottom, right] = bounds.split(" ").map(Number);
   const base64 = Buffer.from(png).toString("base64");
@@ -310,7 +313,7 @@ export function imageItem(
     // fill is invisible under a resolved image anyway.
     `<Rectangle Self="${self}" GeometricBounds="${bounds}" ItemTransform="1 0 0 1 0 0" FillColor="Color/Black">` +
     rectPath +
-    `<Image Self="${self}img" ItemTransform="${sx} 0 0 ${sy} ${left} ${top}" ` +
+    `<Image Self="${self}img" ItemTransform="${imageTransform ?? `${sx} 0 0 ${sy} ${left} ${top}`}" ` +
     `LinkResourceURI="${uri}">` +
     imagePath +
     `<Link LinkResourceURI="${uri}"/>` +

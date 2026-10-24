@@ -53,7 +53,9 @@ canary added is under [Releases](#releases).
   limit), Simplify, Join, Close, Average endpoints, Reverse path direction;
   Pathfinder Unite, Subtract, Intersect, Exclude, Divide, Trim, Merge, Crop, Outline and
   Minus back; Make and Release compound path; five corner presets for rectangles, polygons
-  and text frames; Select same fill, stroke or stroke weight (with a tolerance); Insert arc,
+  and text frames; Select same fill, stroke, stroke weight (with a tolerance), opacity,
+  blending mode, appearance, graphic style, symbol instance or shape kind, and Global Edit
+  (select every object of the same shape, optionally at any size); Insert arc,
   spiral, rectangular grid and polar grid; Reflect (horizontal, vertical, a typed axis, and
   a copy) and Transform again; a dash editor; a width profile (start, middle and end widths)
   that replaces each selected open path with its outline. Parameters are typed in a Path
@@ -77,8 +79,10 @@ canary added is under [Releases](#releases).
   paths, one per fill colour, grouped when there are several, in one undo step.
 - **Image trace.** One command turns a placed raster image into grouped, filled paths. It
   runs in a host worker where the host offers one, and on the calling thread otherwise.
+  The paths land where the image is displayed: the trace follows the image's own placement
+  in its frame, and only the part the frame shows is traced.
 - **SVG.** An importer for `.svg` files and an exporter for the selection.
-- **Menu.** 82 commands have menu entries on a host that offers the menu door.
+- **Menu.** 90 commands have menu entries on a host that offers the menu door.
 - **The link index.** The ten features that tag elements with this bundle's metadata
   (graphic styles, symbols, live paint, pattern, repeat, blend, objects on a path, opacity
   masks, type on a path, the appearance bake) find them through one shared index per
@@ -292,9 +296,16 @@ panel of these rows. The fields:
 - **Opacity mask and type on a path.** Options cannot be edited in place; release or detach
   and apply again. A masking object cannot be selected. No story is created: the text must
   already exist and be unflowed.
-- **Image trace** is one-shot and fills only; images are downsampled to 1,048,576 pixels by default. It fits the result to
-  the frame's bounds, so a cropped or offset image does not line up. It reads only what the
-  browser can decode.
+- **Global Edit** selects the matching objects; it is not Illustrator's editing mode. An
+  edit that applies to a selection (paint, opacity, a transform) reaches all of them, but a
+  point edit on one path does not propagate. A rotated or mirrored copy does not match.
+  Select same compares colours by swatch, so two swatches holding the same colour differ.
+- **Image trace** is one-shot and fills only; images are downsampled to 1,048,576 pixels by default. A placement the
+  engine resolves at render time from a named fit or fitting crops, with no inner transform
+  in the document, is not reported to plugins, so that image is fitted to the frame's bounds
+  and may not line up. A rotated or skewed placement, or an oval or polygon frame, is cropped
+  to the box around what is visible, so traced paths can extend past a non-rectangular clip.
+  It reads only what the browser can decode.
 - **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
   images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
   writes solid colours only.

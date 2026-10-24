@@ -261,6 +261,175 @@ describe("paged.draw commands, no engine — Select Same", () => {
   });
 });
 
+describe("paged.draw commands, no engine — Select Same, WP6.1 criteria [plugin-draw.select-same]", () => {
+  const S = (id: string) => ({ kind: "polygon", id }) as ElementId;
+  const R = (id: string) => ({ kind: "rectangle", id }) as ElementId;
+  const env = (data: Record<string, unknown>) => ({ v: 1, data });
+  const stack = {
+    fills: [{ color: "Color/Red", tint: 100 }],
+    strokes: [],
+  };
+  /** Six squares and an oval-ish rectangle, varied one property at a time. */
+  const many = (): FakeElement[] => [
+    rectEl("polygon", "p1", [0, 0, 10, 10], {
+      frameOpacity: { type: "length", value: 50 },
+      frameBlendMode: { type: "text", value: "Multiply" },
+    }),
+    rectEl("polygon", "p2", [20, 0, 30, 10], {
+      frameOpacity: { type: "length", value: 50 },
+      frameBlendMode: { type: "text", value: "multiply" },
+    }),
+    rectEl("polygon", "p3", [40, 0, 50, 10], {
+      frameOpacity: { type: "length", value: 100 },
+      frameBlendMode: { type: "text", value: "" },
+    }),
+    rectEl("polygon", "p4", [60, 0, 70, 10], {
+      frameOpacity: { type: "length", value: 100 },
+      frameBlendMode: { type: "text", value: "Normal" },
+    }),
+    {
+      ...rectEl("rectangle", "r1", [0, 40, 10, 50]),
+      meta: env({ graphicStyle: { id: "gs-1", rev: "x" }, appearance: stack }),
+    },
+    {
+      ...rectEl("rectangle", "r2", [20, 40, 30, 50]),
+      meta: env({ graphicStyle: { id: "gs-1", rev: "y" }, appearance: stack }),
+    },
+    {
+      ...rectEl("polygon", "s1", [0, 80, 10, 90]),
+      meta: env({
+        symbolInstance: { symbol: "sym-1", instance: "si-1", piece: 0 },
+      }),
+    },
+    {
+      ...rectEl("polygon", "s2", [20, 80, 30, 90]),
+      meta: env({
+        symbolInstance: { symbol: "sym-1", instance: "si-2", piece: 0 },
+      }),
+    },
+    {
+      ...rectEl("polygon", "s3", [40, 80, 50, 90]),
+      meta: env({
+        symbolInstance: { symbol: "sym-2", instance: "si-3", piece: 0 },
+      }),
+    },
+  ];
+  const run = async (id: string, selection: ElementId[]) => {
+    const r = unitRig(many(), { selection });
+    await r.run(`${C}.${id}`);
+    expect(r.sent()).toEqual([]);
+    expect(r.steps()).toBe(0);
+    return ids(r.fake.selection());
+  };
+
+  it("Select same opacity matches the reference's opacity, and writes nothing", async () => {
+    covers("command:media.paged.draw.command.selectSameOpacity");
+    expect(await run("selectSameOpacity", [S("p1")])).toEqual(["p1", "p2"]);
+    expect(await run("selectSameOpacity", [S("p3")])).toEqual(["p3", "p4"]);
+  });
+
+  it("Select same blending mode: names compare case-blind, unset is Normal", async () => {
+    covers("command:media.paged.draw.command.selectSameBlendMode");
+    expect(await run("selectSameBlendMode", [S("p1")])).toEqual(["p1", "p2"]);
+    expect(await run("selectSameBlendMode", [S("p3")])).toEqual(["p3", "p4"]);
+  });
+
+  it("Select same appearance: the stack AND the base paint must agree", async () => {
+    covers("command:media.paged.draw.command.selectSameAppearance");
+    // r1 and r2 carry the same stack over the same base paint.
+    expect(await run("selectSameAppearance", [R("r1")])).toEqual(["r1", "r2"]);
+    // p3 and p4 differ only in how Normal is spelled: one appearance.
+    expect(await run("selectSameAppearance", [S("p3")])).toEqual(["p3", "p4"]);
+    // p1 and p2 agree on paint, opacity and (case-blind) mode, no stack.
+    expect(await run("selectSameAppearance", [S("p1")])).toEqual(["p1", "p2"]);
+  });
+
+  it("Select same graphic style follows the link, overridden or not", async () => {
+    covers("command:media.paged.draw.command.selectSameGraphicStyle");
+    expect(await run("selectSameGraphicStyle", [R("r1")])).toEqual([
+      "r1",
+      "r2",
+    ]);
+    // An unlinked reference has nothing to match on.
+    expect(await run("selectSameGraphicStyle", [S("p1")])).toEqual(["p1"]);
+  });
+
+  it("Select same symbol instance selects every instance of that symbol", async () => {
+    covers("command:media.paged.draw.command.selectSameSymbolInstance");
+    expect(await run("selectSameSymbolInstance", [S("s1")])).toEqual([
+      "s1",
+      "s2",
+    ]);
+    expect(await run("selectSameSymbolInstance", [S("p1")])).toEqual(["p1"]);
+  });
+
+  it("Select same shape kind matches the element's own kind", async () => {
+    covers("command:media.paged.draw.command.selectSameShapeKind");
+    expect(await run("selectSameShapeKind", [R("r1")])).toEqual(["r1", "r2"]);
+    expect(await run("selectSameShapeKind", [S("p1")])).toEqual([
+      "p1",
+      "p2",
+      "p3",
+      "p4",
+      "s1",
+      "s2",
+      "s3",
+    ]);
+  });
+});
+
+describe("paged.draw commands, no engine — Global Edit [plugin-draw.select-same]", () => {
+  const L: [number, number][] = [
+    [0, 0],
+    [30, 0],
+    [30, 10],
+    [10, 10],
+    [10, 40],
+    [0, 40],
+  ];
+  const at = (dx: number, dy: number, k = 1): [number, number][] =>
+    L.map(([x, y]) => [x * k + dx, y * k + dy]);
+  const shape = (id: string, pts: [number, number][]): FakeElement => ({
+    ...openEl(id, pts),
+    open: false,
+  });
+  const shapes = (): FakeElement[] => [
+    shape("g1", at(100, 100)),
+    shape("g2", at(300, 120)),
+    shape("g3", at(500, 100, 2)),
+    shape(
+      "g4",
+      at(100, 400).map(([x, y], i) => (i === 3 ? [x + 3, y] : [x, y])),
+    ),
+    rectEl("polygon", "g5", [0, 0, 30, 40]),
+  ];
+  const run = async (payload?: unknown) => {
+    const r = unitRig(shapes(), {
+      selection: [{ kind: "polygon", id: "g1" } as ElementId],
+    });
+    await r.run(`${C}.globalEdit`, payload);
+    expect(r.sent()).toEqual([]);
+    expect(r.steps()).toBe(0);
+    return ids(r.fake.selection());
+  };
+
+  it("Global Edit selects every object of the same shape, wherever it sits", async () => {
+    covers("command:media.paged.draw.command.globalEdit");
+    expect(await run()).toEqual(["g1", "g2"]);
+  });
+
+  it("anySize matches a scaled copy; a tolerance takes in a nudged point", async () => {
+    expect(await run({ anySize: true })).toEqual(["g1", "g2", "g3"]);
+    expect(await run({ tolerance: 3 })).toEqual(["g1", "g2", "g4"]);
+  });
+
+  it("no selection, or a reference with no geometry, is a no-op", async () => {
+    const r = unitRig(shapes(), { selection: [] });
+    await r.run(`${C}.globalEdit`);
+    expect(r.fake.selection()).toEqual([]);
+  });
+});
+
 describe("paged.draw commands, no engine — opacity masks", () => {
   it("Make opacity mask masks the lower path with the upper one and stamps the record, in one batch; one path sends nothing", async () => {
     covers("command:media.paged.draw.command.makeOpacityMask");

@@ -85,6 +85,9 @@ import {
   decodeSizeFor,
   imageTraceOf,
   pixelToPageAffine,
+  imagePlacementOf,
+  visibleRasterRect,
+  cropRaster,
   rasterDecoderAvailable,
   regionTableFor,
   traceContourHandle,
@@ -117,7 +120,11 @@ import {
   serveTraceRequests,
   type TraceWorkerScope,
 } from "../../src/trace-worker";
-import { F7_PLACED_IMAGE, ringPixels } from "../fixtures/corpus";
+import {
+  F7_PLACED_IMAGE,
+  placedImageWith,
+  ringPixels,
+} from "../fixtures/corpus";
 import { openHost } from "./host";
 import { runThrough, type LaneName } from "./one-batch";
 
@@ -1492,5 +1499,179 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       // `../wasm/…` import points.
       expect(pkg.files).toEqual(expect.arrayContaining(["wasm"]));
     });
+  });
+});
+
+// D-52 — THE TRACE LANDS WHERE THE PIXELS ARE DISPLAYED. The frame's
+// `links` row carries the image's own `<Image ItemTransform>` (C-27);
+// the trace maps through it and traces only what the frame shows.
+describe("draw conformance — IMAGE TRACE on a cropped / offset / scaled placement [plugin-draw.image-trace]", () => {
+  const FRAME = [100, 100, 340, 340] as [number, number, number, number];
+
+  describe("the pure mapping", () => {
+    const placed = imagePlacementOf(
+      [{ hostSelfId: "uimg", imageTransform: [2, 0, 0, 2, 150, 130] }],
+      "uimg",
+      48,
+      48,
+    )!;
+
+    it("a link row's imageTransform is the placement; a null or degenerate one is not", () => {
+      expect(placed.imageTransform).toEqual([2, 0, 0, 2, 150, 130]);
+      const rows = [
+        { hostSelfId: "a", imageTransform: null },
+        { hostSelfId: "b", imageTransform: [0, 0, 0, 0, 1, 1] },
+        { hostSelfId: "c" },
+      ];
+      for (const id of ["a", "b", "c", "missing"]) {
+        expect(imagePlacementOf(rows, id, 48, 48)).toBeNull();
+      }
+    });
+
+    it("pixels map through itemTransform ∘ imageTransform ∘ the downsample", () => {
+      // Traced at half the natural size: raster pixel 24 is natural 48.
+      const m = pixelToPageAffine(FRAME, [1, 0, 0, 1, 10, 20], 24, 24, placed)!;
+      expect(m).toEqual([4, 0, 0, 4, 160, 150]);
+      // Without a placement: stretched over the frame, as before.
+      expect(pixelToPageAffine(FRAME, null, 48, 48)).toEqual([
+        5, 0, 0, 5, 100, 100,
+      ]);
+    });
+
+    it("the visible rect is the frame carried back into raster pixels", () => {
+      // 10 pt per pixel from -60: the frame shows pixels 16..40.
+      const big = imagePlacementOf(
+        [{ hostSelfId: "f", imageTransform: [10, 0, 0, 10, -60, -60] }],
+        "f",
+        48,
+        48,
+      );
+      expect(visibleRasterRect(FRAME, big, 48, 48)).toEqual([16, 16, 24, 24]);
+      // Wholly inside the frame: the whole raster.
+      expect(visibleRasterRect(FRAME, placed, 48, 48)).toEqual([0, 0, 48, 48]);
+      // No placement: the raster fills the frame.
+      expect(visibleRasterRect(FRAME, null, 48, 48)).toEqual([0, 0, 48, 48]);
+      // Placed off the frame: nothing to trace.
+      const away = imagePlacementOf(
+        [{ hostSelfId: "f", imageTransform: [1, 0, 0, 1, 900, 900] }],
+        "f",
+        48,
+        48,
+      );
+      expect(visibleRasterRect(FRAME, away, 48, 48)).toBeNull();
+    });
+
+    it("cropRaster copies the window row by row; the whole raster is not copied", () => {
+      const data = new Uint8ClampedArray(ringPixels(4));
+      expect(cropRaster(data, 4, [0, 0, 4, 4])).toBe(data);
+      for (let i = 0; i < data.length; i++) data[i] = i % 256;
+      const out = cropRaster(data, 4, [1, 2, 2, 1]);
+      expect([...out]).toEqual([...data.subarray(36, 44)]);
+    });
+  });
+
+  describe("through the command and the real engine", () => {
+    /** The ring's ink box in natural pixels (`ringPixels`: 8..40). */
+    const INK = { from: 8, to: 40 };
+
+    const stubDecoder = (): void => {
+      stubGlobal("createImageBitmap", async () => ({
+        width: 48,
+        height: 48,
+        close() {},
+      }));
+      stubGlobal(
+        "OffscreenCanvas",
+        class {
+          constructor(
+            readonly width: number,
+            readonly height: number,
+          ) {}
+          getContext() {
+            return {
+              drawImage() {},
+              getImageData: () => ({
+                data: new Uint8ClampedArray(ringPixels(48)),
+              }),
+            };
+          }
+        },
+      );
+    };
+    afterEach(() => unstubAllGlobals());
+
+    /** Trace the fixture's frame and answer the PAGE-space box of every
+     *  anchor the trace made, then undo it. */
+    const traceBox = async (
+      transform: string,
+    ): Promise<{ box: [number, number, number, number]; logs: string[] }> => {
+      const h = await openHost();
+      try {
+        await h.load(placedImageWith("placed-transform", transform).bytes());
+        h.loadBundle(drawBundle);
+        const links = (await h.host.document.collection("links")) as {
+          hostSelfId: string;
+          imageTransform?: unknown;
+        }[];
+        // The engine reports the placement this fixture authored.
+        expect(
+          links.find((l) => l.hostSelfId === "uimg")?.imageTransform,
+        ).toEqual(transform.split(" ").map(Number));
+        stubDecoder();
+        const logs: string[] = [];
+        await h.host.selection.set([IMAGE]);
+        const created = await applyImageTrace(hostWith(h.host, null, logs), {
+          mode: "bw",
+          pathMode: "polygon",
+        });
+        expect(created.length).toBeGreaterThan(0);
+        let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+        for (const id of created) {
+          const r = (await h.host.document.pathAnchors(id))!;
+          const m = r.itemTransform ?? [1, 0, 0, 1, 0, 0];
+          for (const a of r.anchors) {
+            const x = m[0] * a.anchor[0] + m[2] * a.anchor[1] + m[4];
+            const y = m[1] * a.anchor[0] + m[3] * a.anchor[1] + m[5];
+            [x0, y0, x1, y1] = [
+              Math.min(x0, x),
+              Math.min(y0, y),
+              Math.max(x1, x),
+              Math.max(y1, y),
+            ];
+          }
+        }
+        // Still ONE batch, so one undo takes it all back.
+        await h.host.document.undo();
+        expect(await leafIds(h)).toEqual(["uimg"]);
+        return { box: [x0, y0, x1, y1], logs };
+      } finally {
+        h.dispose();
+      }
+    };
+
+    it("an OFFSET and SCALED placement: the trace covers the ring where it is drawn, not the frame", async () => {
+      // 48 px at 2 pt per pixel from (150, 130): the ink is 166..230 × 146..210.
+      const { box, logs } = await traceBox("2 0 0 2 150 130");
+      const at = (p: number, origin: number) => origin + 2 * p;
+      expect(box[0]).toBeCloseTo(at(INK.from, 150), 0);
+      expect(box[1]).toBeCloseTo(at(INK.from, 130), 0);
+      expect(box[2]).toBeCloseTo(at(INK.to, 150), 0);
+      expect(box[3]).toBeCloseTo(at(INK.to, 130), 0);
+      expect(logs.join("\n")).toContain("by the image's own transform");
+      expect(logs.join("\n")).not.toContain("fitted to the FRAME");
+    }, 60_000);
+
+    it("a CROPPED placement: only what the frame shows is traced, and it lines up", async () => {
+      // 10 pt per pixel from -60: the frame shows pixels 16..40, whose ink
+      // runs to the frame edges — and nothing of the overhang is traced.
+      const { box, logs } = await traceBox("10 0 0 10 -60 -60");
+      expect(box[0]).toBeCloseTo(100, 0);
+      expect(box[1]).toBeCloseTo(100, 0);
+      expect(box[2]).toBeCloseTo(340, 0);
+      expect(box[3]).toBeCloseTo(340, 0);
+      expect(logs.join("\n")).toContain(
+        "tracing the visible 24×24 px of 48×48",
+      );
+    }, 60_000);
   });
 });

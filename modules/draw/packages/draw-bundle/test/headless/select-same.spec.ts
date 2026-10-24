@@ -50,6 +50,7 @@ import {
   applySelectSameStrokeWeight,
   strokeWeightToleranceOf,
   MAX_STROKE_WEIGHT_TOLERANCE,
+  globalEditMatches,
 } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
@@ -305,5 +306,107 @@ describe("draw conformance — Select-same (Phase 9 Tier B)", () => {
       );
       expect(strokeWeightToleranceOf({ tolerance: 0.25 })).toBe(0.25);
     });
+  });
+});
+
+// WP6.1 (D-49) — the criteria past paint, and Global Edit, against the
+// real engine: what each one reads back off a document the engine wrote.
+describe("draw conformance — Select-same WP6.1 criteria and Global Edit [plugin-draw.select-same]", () => {
+  let h: HeadlessHost;
+
+  beforeAll(async () => {
+    h = await openHost();
+    await h.load(F1_MULTI_SHAPE.bytes());
+    h.loadBundle(drawBundle);
+  });
+  afterAll(() => h?.dispose());
+
+  const ids = (s: readonly ElementId[]) => s.map((e) => String(e.id)).sort();
+  const set = (
+    elementId: ElementId,
+    path: "frameOpacity" | "frameBlendMode",
+    value: number | string,
+  ) => ({
+    op: "setElementProperty" as const,
+    args: {
+      elementId,
+      path,
+      value:
+        typeof value === "number"
+          ? { type: "length" as const, value }
+          : { type: "text" as const, value },
+    },
+  });
+
+  it("same OPACITY and same BLENDING MODE read what the engine stored", async () => {
+    const outcome = await h.host.document.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          set(RECT, "frameOpacity", 40),
+          set(POLY, "frameOpacity", 40),
+          set(RECT, "frameBlendMode", "Multiply"),
+          set(LINE, "frameBlendMode", "Multiply"),
+        ],
+      },
+    });
+    expect(outcome.applied).toBe(true);
+    try {
+      expect(ids(await selectSameMatches(h.host, RECT, "opacity"))).toEqual([
+        "upoly",
+        "urect",
+      ]);
+      expect(ids(await selectSameMatches(h.host, LINE, "opacity"))).toEqual([
+        "uline",
+      ]);
+      expect(ids(await selectSameMatches(h.host, RECT, "blendMode"))).toEqual([
+        "uline",
+        "urect",
+      ]);
+      // The polygon's mode was never set: it is Normal, alone.
+      expect(ids(await selectSameMatches(h.host, POLY, "blendMode"))).toEqual([
+        "upoly",
+      ]);
+    } finally {
+      await h.host.document.undo();
+    }
+  });
+
+  it("same SHAPE KIND is the element's own kind", async () => {
+    expect(ids(await selectSameMatches(h.host, POLY, "shapeKind"))).toEqual([
+      "upoly",
+    ]);
+    expect(ids(await selectSameMatches(h.host, RECT, "shapeKind"))).toEqual([
+      "urect",
+    ]);
+  });
+
+  it("same GRAPHIC STYLE / SYMBOL with no link is the reference alone or nothing", async () => {
+    expect(await selectSameMatches(h.host, RECT, "graphicStyle")).toEqual([]);
+    expect(await selectSameMatches(h.host, RECT, "symbol")).toEqual([]);
+  });
+
+  it("same APPEARANCE: the rectangle and polygon share paint; the line does not", async () => {
+    const got = ids(await selectSameMatches(h.host, RECT, "appearance"));
+    expect(got).toContain("urect");
+    expect(got).not.toContain("uline");
+  });
+
+  it("GLOBAL EDIT finds a moved copy of the polygon, and only that", async () => {
+    const outcome = await h.host.document.mutate({
+      op: "duplicateElements",
+      args: { elementIds: [POLY], offset: [37, 11] },
+    });
+    expect(outcome.applied).toBe(true);
+    try {
+      const got = await globalEditMatches(h.host, POLY);
+      expect(got).toHaveLength(2);
+      expect(ids(got)).toContain("upoly");
+      expect(got.every((e) => e.kind === "polygon")).toBe(true);
+      // The rectangle has no twin.
+      expect(ids(await globalEditMatches(h.host, RECT))).toEqual(["urect"]);
+    } finally {
+      await h.host.document.undo();
+    }
   });
 });
