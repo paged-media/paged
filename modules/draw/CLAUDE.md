@@ -564,6 +564,9 @@ else on nesting:
   way, every other path the other) for Make Compound Path, because that
   is what Illustrator does — measured, `test/oracle/compound-path.spec.ts`:
   it stays non-zero and paints a square nested three levels deep SOLID.
+  SVG import picks between them by the file's `fill-rule`
+  (`orientForFillRule`): `evenodd` takes the depth rule, `nonzero` keeps
+  the authored winding, which already IS a non-zero region.
 - **`flo_curves` 0.3 (transitively, via visioncortex) is NOT the version
   the engine had to patch.** Core patches flo_curves 0.8 for a
   non-transitive comparator in `GraphPath::exterior_paths` that aborts

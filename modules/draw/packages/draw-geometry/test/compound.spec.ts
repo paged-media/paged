@@ -25,6 +25,7 @@ import {
   makeCompoundTable,
   mergeCompound,
   orientByPaintOrder,
+  orientForFillRule,
   orientForNonZeroHoles,
   pointInAnchorPath,
   reverseContour,
@@ -406,6 +407,121 @@ describe("draw-geometry — compound-path contour algebra", () => {
         expect(() => orientByPaintOrder(two, bad)).toThrow(RangeError);
       }
       expect(() => orientByPaintOrder(table(OUTER), 1)).toThrow(RangeError);
+    });
+  });
+
+  // SVG import: a shape that names its fill rule. `nonzero` is what the
+  // engine fills by, so the authored winding IS the region; `evenodd` is
+  // the depth rule. Read as non-zero windings at probe points — what the
+  // engine paints — not as signs.
+  describe("orientForFillRule — an SVG shape's fill-rule, under the engine's non-zero fill [plugin-draw.svg-io]", () => {
+    const windingAt = (t: AnchorTable, p: [number, number]): number =>
+      contourRanges(t.anchors.length, t.subpathStarts).reduce(
+        (sum, [from, to]) =>
+          sum +
+          refWindingNumber(
+            p,
+            t.anchors.slice(from, to).map((a) => a.anchor),
+          ),
+        0,
+      );
+    const painted = (t: AnchorTable, p: [number, number]): boolean =>
+      windingAt(t, p) !== 0;
+    const SAME = mergeCompound([table(OUTER), table(INNER)]);
+    const OPPOSITE = mergeCompound([
+      table(OUTER),
+      table(reverseContour(INNER)),
+    ]);
+
+    it("nonzero keeps the authored winding: an opposite-wound ring has its hole", () => {
+      const out = orientForFillRule(OPPOSITE, "nonzero");
+      expect(out).toBe(OPPOSITE);
+      expect(painted(out, [150, 150])).toBe(true);
+      expect(painted(out, [250, 250])).toBe(false);
+    });
+
+    it("nonzero keeps a SAME-wound ring solid — that is what every SVG renderer paints", () => {
+      const out = orientForFillRule(SAME, "nonzero");
+      expect(out).toBe(SAME);
+      expect(painted(out, [250, 250])).toBe(true);
+    });
+
+    it("nonzero is the default, as in SVG", () => {
+      expect(orientForFillRule(SAME)).toBe(SAME);
+    });
+
+    it("evenodd re-winds a same-wound ring's inner contour, and only that one", () => {
+      const out = orientForFillRule(SAME, "evenodd");
+      // Contour 0 keeps its anchors exactly; the hole turns.
+      expect(out.anchors.slice(0, 4)).toEqual(SAME.anchors.slice(0, 4));
+      expect(out.subpathStarts).toEqual([0, 4]);
+      expect(Math.sign(contourSignedArea(out.anchors.slice(4, 8)))).toBe(
+        -Math.sign(contourSignedArea(out.anchors.slice(0, 4))),
+      );
+      expect(painted(out, [150, 150])).toBe(true);
+      expect(painted(out, [250, 250])).toBe(false);
+      expect(painted(out, [50, 50])).toBe(false);
+    });
+
+    it("evenodd over an already opposite-wound ring changes nothing", () => {
+      expect(orientForFillRule(OPPOSITE, "evenodd")).toEqual(OPPOSITE);
+    });
+
+    it("evenodd paints the even-odd region three levels deep, wound any way", () => {
+      // Four nested squares, all drawn the same way round: even-odd paints
+      // depth 0 and 2 and leaves 1 and 3 empty. Non-zero over the authored
+      // winding would paint all of it.
+      const nested = mergeCompound([
+        table(quad(0, 0, 400, 400)),
+        table(quad(50, 50, 350, 350)),
+        table(quad(100, 100, 300, 300)),
+        table(quad(150, 150, 250, 250)),
+      ]);
+      expect(painted(nested, [200, 200])).toBe(true);
+      const out = orientForFillRule(nested, "evenodd");
+      expect(painted(out, [25, 25])).toBe(true); // depth 0
+      expect(painted(out, [75, 75])).toBe(false); // depth 1
+      expect(painted(out, [125, 125])).toBe(true); // depth 2
+      expect(painted(out, [200, 200])).toBe(false); // depth 3
+      // …and it agrees with the even-odd point test over the same table.
+      for (const p of [
+        [25, 25],
+        [75, 75],
+        [125, 125],
+        [200, 200],
+      ] as [number, number][]) {
+        expect(painted(out, p)).toBe(
+          pointInAnchorPath(p, out.anchors, out.subpathStarts),
+        );
+      }
+    });
+
+    it("evenodd over contours that do not nest paints both — none is a hole", () => {
+      const apart = mergeCompound([
+        table(quad(0, 0, 50, 50)),
+        table(reverseContour(quad(100, 0, 150, 50))),
+      ]);
+      const out = orientForFillRule(apart, "evenodd");
+      expect(painted(out, [25, 25])).toBe(true);
+      expect(painted(out, [125, 25])).toBe(true);
+    });
+
+    it("THE LIMIT: a self-intersecting contour under evenodd keeps its non-zero region", () => {
+      // A five-point star as ONE contour: even-odd leaves the pentagon in
+      // the middle empty, non-zero (winding 2 there) fills it. No
+      // reversal of a single ring changes that, so until the engine
+      // carries an even-odd fill rule the centre paints.
+      const pts: [number, number][] = [0, 2, 4, 1, 3].map((k) => {
+        const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+        return [200 + 100 * Math.cos(a), 200 + 100 * Math.sin(a)];
+      });
+      const star = table(pts.map((p) => ({ anchor: p, left: p, right: p })));
+      const out = orientForFillRule(star, "evenodd");
+      expect(out).toEqual(star);
+      expect(
+        pointInAnchorPath([200, 200], out.anchors, out.subpathStarts),
+      ).toBe(false);
+      expect(painted(out, [200, 200])).toBe(true);
     });
   });
 });

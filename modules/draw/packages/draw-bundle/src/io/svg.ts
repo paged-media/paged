@@ -20,10 +20,39 @@
 //
 // The IMPORTER claims `.svg`: it parses the document (draw-geometry's
 // host-free reader → flattened shapes with style), then lowers each shape
-// through the SAME `insertPath` lane the pen/pencil tools use — one path
-// per contour, with a fill/stroke swatch created + assigned when the shape
-// carries a solid colour. No new platform door: it rides
+// through the SAME `insertPath` lane the pen/pencil tools use — ONE
+// element per shape, with a fill/stroke swatch created + assigned when the
+// shape carries a solid colour. No new platform door: it rides
 // `host.document.mutate` only.
+//
+// A SHAPE OF SEVERAL CONTOURS IS ONE COMPOUND PATH — a ring is one
+// element with a hole, not a disc under a disc. `insertPath` carries ONE
+// contour, so the shape's first contour is inserted, named
+// (`bindCreated`), and the whole table is written onto that name through
+// the `framePath` door Make Compound Path and Image Trace use, its frame
+// box with it (`frameBounds`: a `framePath` write does not recompute the
+// box, and a later contour may lie outside the first). The table is
+// written in SPREAD space — `insertPath` adds the page's origin,
+// `framePath` stores verbatim (`../page-origin.ts`) — so the origin comes
+// from the target page's row in the `pages` collection.
+//
+// WINDING. The engine fills NON-ZERO, and the shape's `fill-rule` says
+// which region it means; draw-geometry's `orientForFillRule` decides
+// (winding is decided there and nowhere else): `nonzero`, SVG's default,
+// keeps the contours as authored — they already describe a non-zero
+// region; `evenodd` re-winds them by NESTING DEPTH, which paints the
+// even-odd region for contours that do not cross. Even-odd over CROSSING
+// contours (a self-intersecting star) cannot be said with direction and
+// paints its non-zero region until the engine carries an even-odd fill
+// rule.
+//
+// THREE CASES STAY ONE ELEMENT PER CONTOUR, as every shape used to:
+//   · an OPEN contour after the first — `framePath` carries no
+//     `subpathOpen`, so a merged open contour would render CLOSED, and a
+//     stroked polyline would gain a closing segment it never had;
+//   · a target page whose row reports no `pageOrigin` (an engine before
+//     core 0.71.13) — the spread-space table cannot be written without it;
+//   · a compound the engine REFUSED, bisected down to its contours (below).
 //
 // ONE FILE IS ONE BATCH — one document rebuild and one undo step, however
 // many shapes it holds. It used to be a loop of awaited single mutations:
@@ -32,15 +61,17 @@
 // its own undo step. Measured on a 50-shape file into a 500-shape
 // document: 201 mutations and 150 undo steps. Now: 1 and 1.
 //
-// THE BATCH, per contour and in this order — every rule MEASURED against
+// THE BATCH, per element and in this order — every rule MEASURED against
 // the booted engine (protocol 64), because each is a way to get it wrong:
 //
 //   createSwatch        once per DISTINCT colour of the file, with a
 //                       client-chosen id a LATER child may point at;
-//   insertPath          the contour;
+//   insertPath          the (first) contour;
 //   bindCreated         names what that insert minted — its OWN op, and
 //                       AFTER its creating child (the C-15 rules,
 //                       `commands/batch-handles.ts`);
+//   setElementProperty  ×2 on `"$h:<handle>"`, a compound only — the whole
+//                       table (`framePath`), then its box (`frameBounds`);
 //   setElementProperty  ×3 on `"$h:<handle>"` — fill, stroke, weight.
 //
 // WHY THE PAINT IS WRITTEN ON THE HANDLE and not, as before, inherited
@@ -91,7 +122,10 @@
 // which the engine refuses as a malformed MESSAGE). So a refused batch is
 // halved and retried until the refusing contour stands alone, and only
 // that contour is warned and left out. The price is paid by the broken
-// file alone: every half that applies is its own undo step.
+// file alone: every half that applies is its own undo step — and a
+// compound shape split this way lands as one element per surviving
+// contour, its holes painted, because the contour the engine refused is
+// the one the hole needed it to agree with.
 //
 // The EXPORTER claims `.svg`: it reads the selected shapes' geometry
 // (`pathAnchors`, with the element transform applied so the exported
@@ -124,8 +158,11 @@ import {
   parseSvgDocument,
   serializeSvgDocument,
   applyAffine,
+  contourRanges,
+  orientForFillRule,
   parseCssColor,
   rgbToHex,
+  tableBounds,
   type DrawShape,
   type SvgStyle,
   type AnchorTable,
@@ -134,7 +171,9 @@ import {
 } from "@paged-media/draw-geometry";
 
 import { defineMessages, t } from "@paged-media/strings";
+import { framePathMutationFor } from "../commands/compound-path";
 import { mintedLeaves, mutateMinting } from "../commands/minted";
+import { pageOriginOf, spreadTableOf, type PageOrigin } from "../page-origin";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -182,11 +221,14 @@ function mintSwatchId(): string {
   return `Color/udrawsvg${n}`;
 }
 
-/** The `insertPath` mutation for one shape's geometry (the EXACT shape
- *  the pen/pencil commit emits, compound-aware). A multi-subpath shape
- *  is split into one insertPath per contour — the engine's insertPath
- *  takes a single open/closed flag, so compound paths lower as a group
- *  of contours. Exported for the conformance spec. */
+/** One `insertPath` per contour of `table` (the EXACT shape the
+ *  pen/pencil commit emits): the engine's `insertPath` takes a single
+ *  contour and a single open/closed flag. This is the lowering of
+ *  contours that are SEPARATE paths — the insert-shape grids, and the
+ *  importer's one-element-per-contour cases; an imported compound shape
+ *  inserts only its first contour this way and writes the rest through
+ *  `framePath` ({@link svgImportOpsFor}). Exported for the conformance
+ *  spec. */
 export function insertPathMutationsForShape(
   pageId: string,
   table: AnchorTable,
@@ -389,40 +431,199 @@ export async function resolveTargetPage(
   return null;
 }
 
+/** Where an import lands: the page, and that page's origin in its spread
+ *  — `null` when the engine does not report one, which keeps every shape
+ *  one element per contour (the module header says why). */
+export interface SvgImportTarget {
+  pageId: string;
+  pageOrigin: PageOrigin | null;
+}
+
+/** A `pages` row, as far as the importer reads it. */
+interface PageRow {
+  selfId?: string;
+  pageOrigin?: unknown;
+}
+
+/** {@link resolveTargetPage}, and the page's origin when `withOrigin` —
+ *  read off the same `pages` row, so a file with a compound shape costs
+ *  at most that one collection read on top of the meta read. */
+async function resolveImportTarget(
+  host: BundleHost,
+  withOrigin: boolean,
+): Promise<SvgImportTarget | null> {
+  const meta = await host.document.meta();
+  if (meta.activePage && !withOrigin) {
+    return { pageId: meta.activePage, pageOrigin: null };
+  }
+  let rows: readonly PageRow[] = [];
+  try {
+    rows = await host.document.collection<PageRow>("pages");
+  } catch {
+    rows = [];
+  }
+  const pageId =
+    meta.activePage ??
+    rows.find((p) => p && typeof p.selfId === "string")?.selfId ??
+    null;
+  if (!pageId) return null;
+  const row = rows.find((p) => p?.selfId === pageId);
+  return {
+    pageId,
+    pageOrigin:
+      withOrigin && row && Array.isArray(row.pageOrigin)
+        ? pageOriginOf(row)
+        : null,
+  };
+}
+
 // ------------------------------------------------- the one-batch plan
 
-/** One shape, ready to commit: its paint, and one `insertPath` per
- *  contour (compound shapes → sibling paths, in contour order). */
+/** One contour of a unit, in PAGE space, in the direction it is written. */
+export interface SvgImportContour {
+  anchors: AnchorTriple[];
+  open: boolean;
+}
+
+/** One unit of commit: a shape's paint and the contours it lands. With
+ *  `pageOrigin` set the unit is ONE compound element (its first contour
+ *  inserted, the whole table written by `framePath`); with `null` it is
+ *  one element per contour. */
 export interface SvgImportUnit {
   style: SvgStyle;
-  inserts: Mutation[];
+  pageId: string;
+  contours: SvgImportContour[];
+  /** The page's origin in its spread when the contours are ONE element;
+   *  null = one element per contour. */
+  pageOrigin: PageOrigin | null;
 }
+
+/** Elements a unit puts into the document. */
+const elementsOf = (unit: SvgImportUnit): number =>
+  unit.pageOrigin !== null ? 1 : unit.contours.length;
+
+/** The contours of `table` as written, empty ranges dropped, each with
+ *  its own open flag — read at the contour's index in `subpathStarts`, so
+ *  a dropped empty contour does not shift a later flag onto its
+ *  neighbour. */
+function contoursOfTable(table: AnchorTable): SvgImportContour[] {
+  const starts = table.subpathStarts.length > 0 ? table.subpathStarts : [0];
+  const open = table.subpathOpen ?? [];
+  const out: SvgImportContour[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const from = starts[i]!;
+    const to = i + 1 < starts.length ? starts[i + 1]! : table.anchors.length;
+    if (to <= from) continue;
+    out.push({
+      anchors: table.anchors.slice(from, to).map((a) => ({
+        anchor: [a.anchor[0], a.anchor[1]] as [number, number],
+        left: [a.left[0], a.left[1]] as [number, number],
+        right: [a.right[0], a.right[1]] as [number, number],
+      })),
+      open: open[i] ?? false,
+    });
+  }
+  return out;
+}
+
+/** Can a shape be ONE element? Two or more contours, and none past the
+ *  first open: `framePath` carries no `subpathOpen`, so a later open
+ *  contour would render closed (the first one's flag rides `insertPath`). */
+const compoundable = (table: AnchorTable): boolean => {
+  const contours = contoursOfTable(table);
+  return contours.length >= 2 && contours.slice(1).every((c) => !c.open);
+};
 
 /** The shapes of a file as commit units, in DOCUMENT order — which is the
  *  order they are inserted in, and insertion order is paint order. A shape
- *  with no contour to insert contributes nothing (no swatch either).
+ *  with no contour to insert contributes nothing (no swatch either). A
+ *  shape of several contours is ONE compound unit, its contours oriented
+ *  for its `fill-rule` by draw-geometry's `orientForFillRule`, when
+ *  `target.pageOrigin` is known and no contour past the first is open.
  *  Pure — exported for the conformance spec. */
 export function svgImportUnitsFor(
-  pageId: string,
+  target: SvgImportTarget,
   shapes: readonly DrawShape[],
 ): SvgImportUnit[] {
   const units: SvgImportUnit[] = [];
   for (const shape of shapes) {
-    const inserts = insertPathMutationsForShape(pageId, shape.anchors);
-    if (inserts.length > 0) units.push({ style: shape.style, inserts });
+    const compound = target.pageOrigin !== null && compoundable(shape.anchors);
+    const table = compound
+      ? orientForFillRule(shape.anchors, shape.style.fillRule)
+      : shape.anchors;
+    const contours = contoursOfTable(table);
+    if (contours.length === 0) continue;
+    units.push({
+      style: shape.style,
+      pageId: target.pageId,
+      contours,
+      pageOrigin: compound ? target.pageOrigin : null,
+    });
   }
   return units;
 }
 
-/** The batch-local handle of the Nth contour a batch inserts. */
-export const svgImportHandle = (contour: number): string => `c${contour}`;
+/** Halve a unit's contours — the refusal bisection's narrowing of ONE
+ *  shape. Each half keeps the shape's orientation and lands as one
+ *  element per contour: the hole relation was between contours the
+ *  engine did not take together. */
+function splitUnit(unit: SvgImportUnit): [SvgImportUnit, SvgImportUnit] {
+  const mid = unit.contours.length >> 1;
+  const half = (contours: SvgImportContour[]): SvgImportUnit => ({
+    ...unit,
+    contours,
+    pageOrigin: null,
+  });
+  return [half(unit.contours.slice(0, mid)), half(unit.contours.slice(mid))];
+}
+
+/** The batch-local handle of the Nth element a batch inserts. */
+export const svgImportHandle = (element: number): string => `c${element}`;
+
+const insertOf = (pageId: string, c: SvgImportContour): Mutation => ({
+  op: "insertPath",
+  args: { pageId, anchors: c.anchors, open: c.open },
+});
+
+/** The writes that turn the element `target`, inserted with the unit's
+ *  first contour, into the whole compound: the table (spread space —
+ *  `framePath` stores verbatim where `insertPath` added the origin), then
+ *  the frame box around it. */
+function compoundWritesFor(
+  target: ElementId,
+  unit: SvgImportUnit,
+  origin: PageOrigin,
+): MutationInput[] {
+  const anchors: AnchorTriple[] = [];
+  const subpathStarts: number[] = [];
+  for (const c of unit.contours) {
+    subpathStarts.push(anchors.length);
+    anchors.push(...c.anchors);
+  }
+  const spread = spreadTableOf({ anchors, subpathStarts }, origin);
+  const ops: MutationInput[] = [framePathMutationFor(target, spread)];
+  const box = tableBounds(spread);
+  if (box) {
+    ops.push({
+      op: "setElementProperty",
+      args: {
+        elementId: target,
+        path: "frameBounds",
+        value: { type: "bounds", value: box },
+      },
+    });
+  }
+  return ops;
+}
 
 /**
  * The children of ONE batch that commits `units`, in the order the engine
  * must see them. Per unit: a `createSwatch` for each colour `palette` does
- * not hold yet; then per contour its `insertPath`, the `bindCreated` that
- * names it, and the three property writes that paint it through that
- * name. The module header says why the paint is not inherited instead.
+ * not hold yet; then per element its `insertPath`, the `bindCreated` that
+ * names it, for a compound the `framePath` + `frameBounds` writes that
+ * make it the whole shape, and the three property writes that paint it
+ * through that name. The module header says why the paint is not
+ * inherited instead.
  *
  * Self-contained: any run of units — or of one unit's contours — may be
  * committed alone, which is what the refusal bisection does.
@@ -435,19 +636,20 @@ export function svgImportOpsFor(
   palette: SvgSwatchPalette,
 ): MutationInput[] {
   const ops: MutationInput[] = [];
-  let contour = 0;
+  let element = 0;
   for (const unit of units) {
     const { swatches, defaults } = styleDefaultsForShape(unit.style, palette);
     for (const swatch of swatches) ops.push(swatch);
-    for (const insert of unit.inserts) {
-      const handle = svgImportHandle(contour++);
-      ops.push(insert, bindCreatedMutationFor(handle));
-      for (const write of paintMutationsFor(
-        handleElementId(handle),
-        defaults,
-      )) {
-        ops.push(write);
+    const elements =
+      unit.pageOrigin !== null ? [unit.contours[0]!] : unit.contours;
+    for (const contour of elements) {
+      const handle = svgImportHandle(element++);
+      const target = handleElementId(handle);
+      ops.push(insertOf(unit.pageId, contour), bindCreatedMutationFor(handle));
+      if (unit.pageOrigin !== null) {
+        ops.push(...compoundWritesFor(target, unit, unit.pageOrigin));
       }
+      ops.push(...paintMutationsFor(target, defaults));
     }
   }
   return ops;
@@ -457,7 +659,8 @@ export function svgImportOpsFor(
 export interface SvgImportCommit {
   /** Shapes the file parsed into. */
   shapes: number;
-  /** Elements inserted — one per contour. */
+  /** Elements inserted — one per shape, one per contour where a shape
+   *  stays split (the module header names the cases). */
   elements: number;
   /** Swatches created — one per DISTINCT colour among the shapes that
    *  reached the document. */
@@ -498,10 +701,17 @@ async function commitShapes(
   minted?: ElementId[],
 ): Promise<SvgImportCommit> {
   const done = nothingCommitted(shapes.length);
-  const pageId = await resolveTargetPage(host);
-  if (!pageId) {
+  const wantsOrigin = shapes.some((s) => compoundable(s.anchors));
+  const target = await resolveImportTarget(host, wantsOrigin);
+  if (!target) {
     host.log.warn(`${SVG_IMPORTER_ID}: no target page — nothing inserted`);
     return done;
+  }
+  if (wantsOrigin && target.pageOrigin === null) {
+    host.log.warn(
+      `${SVG_IMPORTER_ID}: the engine reports no page origin — compound ` +
+        `shapes in ${fileName} land as one path per contour, holes painted`,
+    );
   }
   let palette: SvgSwatchPalette = new Map();
 
@@ -517,7 +727,7 @@ async function commitShapes(
     let outcome: MutationOutcome;
     if (minted) {
       // The batch inserts paths and swatches only, so what it minted is
-      // exactly the contours it inserted, in order (swatches are not
+      // exactly the elements it inserted, in order (swatches are not
       // elements and are not listed).
       const built = await mutateMinting(host, batch);
       outcome = built.outcome;
@@ -529,7 +739,7 @@ async function commitShapes(
       done.swatches += trial.size - palette.size;
       palette = trial;
       done.batches += 1;
-      for (const unit of units) done.elements += unit.inserts.length;
+      for (const unit of units) done.elements += elementsOf(unit);
       return;
     }
     if (units.length > 1) {
@@ -538,13 +748,12 @@ async function commitShapes(
       await commit(units.slice(mid));
       return;
     }
-    const { style, inserts } = units[0];
-    if (inserts.length > 1) {
-      // One shape, several contours: the old loop kept the contours the
-      // engine accepted, so narrow down to the contour as well.
-      const mid = inserts.length >> 1;
-      await commit([{ style, inserts: inserts.slice(0, mid) }]);
-      await commit([{ style, inserts: inserts.slice(mid) }]);
+    if (units[0].contours.length > 1) {
+      // One shape, several contours: keep the contours the engine
+      // accepts, so narrow down to the contour as well.
+      const [front, back] = splitUnit(units[0]);
+      await commit([front]);
+      await commit([back]);
       return;
     }
     done.refused += 1;
@@ -554,7 +763,7 @@ async function commitShapes(
       )}`,
     );
   };
-  await commit(svgImportUnitsFor(pageId, shapes));
+  await commit(svgImportUnitsFor(target, shapes));
 
   host.log.info(
     `${SVG_IMPORTER_ID}: imported ${shapes.length} shapes ` +
@@ -567,8 +776,9 @@ async function commitShapes(
 /**
  * Commit an opened SVG file to the document — what File ▸ Open runs. Parse
  * → one batch: a swatch per distinct colour, and per shape its paint and
- * one path per contour (a compound shape's extra contours become sibling
- * paths). ONE mutation and ONE undo step for a file the engine takes
+ * ONE path — a shape of several contours is one compound path, wound for
+ * its `fill-rule` (the module header names the cases that stay one path
+ * per contour). ONE mutation and ONE undo step for a file the engine takes
  * whole; a contour it refuses is warned and left out (never a throw — the
  * mutate-never-throws convention), at the cost of an undo step per half
  * the bisection had to commit.
@@ -654,6 +864,13 @@ async function shapeFromElement(
   };
 
   const style: SvgStyle = {};
+  // A compound is ONE `<path>` of several subpaths, and the engine fills
+  // it NON-ZERO over the windings it stores — the importer wound an
+  // even-odd source for exactly that — so the file says which rule its
+  // geometry is meant for.
+  if (contourRanges(table.anchors.length, table.subpathStarts).length > 1) {
+    style.fillRule = "nonzero";
+  }
   const props = await host.document.elementProperties(id);
   if (props) {
     for (const entry of props.entries) {
