@@ -78,7 +78,7 @@ import { defineMessages, t, useStrings } from "@paged-media/strings";
 const M = defineMessages("draw.blendPanel", {
   summary:
     "Fill the space between two selected objects with intermediate shapes that change step by step in shape and colour.",
-  note: "A blend makes real intermediate shapes and remembers how it built them. Editing a key object does not change the intermediates until you choose Update. The step count shown under Spacing is worked out from the settings; the artwork is only rebuilt when you build or update. The intermediates follow a straight line between the two objects unless you replace it with a path of your own (Spine): that path keeps its own colour and stays outside the blend's group, so you can still edit it. Reverse spine swaps which end each shape travels to; reverse front to back only changes which shapes paint on top. Building, updating, reversing, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
+  note: "A blend makes real intermediate shapes and remembers how it built them. While Update automatically is on, editing a key object rebuilds the intermediates in the same undo step; with it off, they change only when you choose Update. The step count shown under Spacing is worked out from the settings; the artwork is only rebuilt when you build or update. The intermediates follow a straight line between the two objects unless you replace it with a path of your own (Spine): that path keeps its own colour and stays outside the blend's group, so you can still edit it. Reverse spine swaps which end each shape travels to; reverse front to back only changes which shapes paint on top. Building, updating, reversing, expanding and releasing are one undo step each; the saved settings are kept outside undo.",
   selectTwo: "Select two objects to blend",
   selectExactlyTwo: "Select exactly two objects to blend ({count} selected)",
   smoothColor: "Smooth colour",
@@ -132,7 +132,7 @@ const M = defineMessages("draw.blendPanel", {
   reverseSpineHint: "Travel the spine the other way (geometry moves)",
   reverseOrder: "Reverse front to back",
   reverseOrderHint: "Flip paint order (nothing moves)",
-  keysHint: "Select the key objects — edit them, then Update",
+  keysHint: "Select the key objects to edit them",
   keys: "Keys",
   expandHint: "Stop tracking and keep every intermediate as ordinary artwork",
   expand: "Expand",
