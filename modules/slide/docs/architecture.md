@@ -15,26 +15,30 @@ resolved deck
 host.assets.registerDocumentFont (embedded faces), then
 host.nativeDocument.open  →  native slides in the editor
 
-native document ── slide-host-model (read model) ── pptx-export ──► .pptx
+original .pptx + native document (.paged, host.documents.exportPaged)
+  │  pptx-export      native read model → untouched slides by their bytes,
+  │                   edited shapes patched, new shapes and slides written (ADR 711)
+  ▼
+.pptx
 ```
 
-| Crate / package             | Role                                                                                             | Status                            |
-| --------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------- |
-| `paged-ooxml` (shared)      | OPC container with its memory budget, relationships, colour (platform/shared/ooxml, doc ADR 607) | in place                          |
-| `pptx-core`                 | format-level IR; its chart model is the shared `dml-chart` one (ADR 709)                         | in place                          |
-| `pptx-import`               | `.pptx` → IR; charts through the shared `dml-chart` reader (ADR 709)                             | in place: reads every corpus deck |
-| `pptx-fonts`                | embedded faces: Embedded OpenType, MicroType Express, embedding permissions (ADR 707)            | in place                          |
-| `slide-resolve`             | inheritance resolution                                                                           | M1                                |
-| `slide-geom`                | preset geometry evaluator                                                                        | M1                                |
-| `slide-chart`               | chart lowering from cached values                                                                | M1                                |
-| `slide-native`              | resolved deck → native document, packaged as `.paged` (ADR 708)                                  | in place                          |
-| `pptx-export`               | native read model → `.pptx`                                                                      | M4                                |
-| `slide-js`                  | wasm-bindgen surface                                                                             | M1                                |
-| `slide-conformance`         | oracle recordings and headless comparison                                                        | M0/M1                             |
-| `packages/slide-bundle`     | manifest, importer/exporter, panels, slideshow                                                   | M1–M5                             |
-| `packages/slide-host-model` | read model for export                                                                            | M4                                |
+| Crate / package         | Role                                                                                                                                                             | Status                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `paged-ooxml` (shared)  | OPC container with its memory budget, relationships, colour (platform/shared/ooxml, doc ADR 607)                                                                 | in place                                                  |
+| `dml-chart` (shared)    | DrawingML chart model and reader (platform/shared/dml-chart, ADR 709)                                                                                            | in place                                                  |
+| `pptx-core`             | format-level IR; its chart model is the shared `dml-chart` one (ADR 709)                                                                                         | in place                                                  |
+| `pptx-import`           | `.pptx` → IR; charts through the shared `dml-chart` reader (ADR 709)                                                                                             | in place: reads every corpus deck                         |
+| `pptx-fonts`            | embedded faces: Embedded OpenType, MicroType Express, embedding permissions (ADR 707)                                                                            | in place                                                  |
+| `slide-resolve`         | inheritance resolution                                                                                                                                           | in place                                                  |
+| `slide-geom`            | preset geometry evaluator                                                                                                                                        | in place                                                  |
+| `slide-chart`           | chart lowering from cached values                                                                                                                                | in place                                                  |
+| `slide-native`          | resolved deck → native document, packaged as `.paged` (ADR 708); item labels with shape keys (ADR 711)                                                           | in place                                                  |
+| `pptx-export`           | native read model (`native`), probe of inherited text defaults (`probe`), slide/shape/text writers (`slide`, `text`, `geom`, `xml`) → `.pptx` (ADR 704, ADR 711) | shapes, text, pictures, tables, groups, new slides, links |
+| `slide-js`              | wasm-bindgen surface                                                                                                                                             | in place                                                  |
+| `slide-conformance/`    | fixtures and PowerPoint recordings (a folder, not a crate; ADR 705)                                                                                              | in place                                                  |
+| `packages/slide-bundle` | manifest, importer/exporter (`deck-export.ts`: the plan and the document for export), panels, commands                                                           | M1–M4                                                     |
 
-One crate depends on the engine: `slide-native` builds the deck with the engine's model crates
-(`paged-model`, `paged-scene`, `paged-store`; path dependencies on `engine/core/crates`, built
-from the same commit, ADR 708). At runtime the plugin talks to the engine only through the host
+Two crates depend on the engine's model crates (`paged-model`, `paged-scene`, `paged-store`;
+path dependencies on `engine/core/crates`, built from the same commit): `slide-native` builds
+the deck with them (ADR 708), `pptx-export` reads the document back with them (ADR 711). At runtime the plugin talks to the engine only through the host
 contract (`@paged-media/plugin-api`), and is tested against the engine in a headless host.

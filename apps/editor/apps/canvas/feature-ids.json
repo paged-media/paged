@@ -3,8 +3,8 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 497,
-    "keybinding": 98,
+    "command": 528,
+    "keybinding": 122,
     "menu": 375,
     "panel": 129,
     "tool": 81
@@ -202,6 +202,161 @@
     },
     {
       "id": "command:media.paged.doc.command.placeDoc",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.alignCenter",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.alignLeft",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.alignRight",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.allCaps",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.bold",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.bullets",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.clearCharacter",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.copyFormat",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.decreaseIndent",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.growFont",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.heading1",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.heading2",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.heading3",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.increaseIndent",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.italic",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.justify",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.lineSpacing1",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.lineSpacing15",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.lineSpacing2",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listLevelDown",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listLevelUp",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.normal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.numbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.pasteFormat",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.shrinkFont",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.smallCaps",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.spaceBefore",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.strikethrough",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.subscript",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.superscript",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.underline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -2611,6 +2766,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+0→media.paged.doc.command.word.spaceBefore",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+0→paged.view.fitPage",
       "kind": "keybinding",
       "owner": "editor"
@@ -2619,6 +2779,11 @@
       "id": "keybinding:cmd+1→paged.view.zoom100",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+=→media.paged.doc.command.word.subscript",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+=→paged.view.zoomIn",
@@ -2641,6 +2806,26 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+alt+1→media.paged.doc.command.word.heading1",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+2→media.paged.doc.command.word.heading2",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+3→media.paged.doc.command.word.heading3",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+alt+c→media.paged.doc.command.word.copyFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
       "kind": "keybinding",
       "owner": "editor"
@@ -2649,6 +2834,11 @@
       "id": "keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+alt+v→media.paged.doc.command.word.pasteFormat",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+arrowdown→media.paged.slide.command.moveSlideDown",
@@ -2664,6 +2854,11 @@
       "id": "keybinding:cmd+a→paged.edit.selectAll",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+b→media.paged.doc.command.word.bold",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+c→media.paged.sheet.command.copySelection",
@@ -2686,6 +2881,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+e→media.paged.doc.command.word.alignCenter",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+f→media.paged.sheet.command.findInSheet",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -2696,9 +2896,24 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+i→media.paged.doc.command.word.italic",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+j→media.paged.doc.command.word.justify",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+k→paged.palette.toggle",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+l→media.paged.doc.command.word.alignLeft",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+l→paged.object.lock",
@@ -2706,9 +2921,24 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+r→media.paged.doc.command.word.alignRight",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+r→media.paged.sheet.command.fillRight",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "keybinding:cmd+shift+<→media.paged.doc.command.word.shrinkFont",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+shift+>→media.paged.doc.command.word.growFont",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+shift+[→paged.object.sendToBack",
@@ -2721,6 +2951,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+shift+a→media.paged.doc.command.word.allCaps",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
@@ -2729,6 +2964,21 @@
       "id": "keybinding:cmd+shift+h→paged.sample.hello",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+k→media.paged.doc.command.word.smallCaps",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+shift+l→media.paged.doc.command.word.bullets",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+shift+m→media.paged.doc.command.word.decreaseIndent",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+shift+s→paged.file.saveAsIdml",
@@ -2746,9 +2996,19 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+space→media.paged.doc.command.word.clearCharacter",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+s→paged.file.savePaged",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+u→media.paged.doc.command.word.underline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+v→media.paged.sheet.command.pasteSelection",
@@ -2891,6 +3151,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+shift+m→media.paged.doc.command.word.increaseIndent",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:ctrl+shift+s→paged.file.saveAsIdml",
       "kind": "keybinding",
       "owner": "editor"
@@ -2986,9 +3251,19 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:shift+tab→media.paged.doc.command.word.listLevelUp",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:shift+tab→paged.chrome.togglePanels",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:tab→media.paged.doc.command.word.listLevelDown",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:tab→paged.chrome.toggleAll",

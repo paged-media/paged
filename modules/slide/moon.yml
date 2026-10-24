@@ -14,7 +14,7 @@ project:
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
 #
-# slide-native builds on the engine's model crates (ADR 708).
+# slide-native and pptx-export build on the engine's model crates (ADR 708, ADR 711).
 dependsOn:
   - id: "core"
     scope: "production"

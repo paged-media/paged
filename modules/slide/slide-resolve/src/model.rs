@@ -228,6 +228,13 @@ pub struct ItemMeta {
     pub order: usize,
     pub placeholder: Option<(String, Option<u32>)>,
     pub preset: Option<(String, Vec<(String, String)>)>,
+    /// What a graphic frame drawn as a group holds (`chart`, `diagram`):
+    /// its members are a drawing of it, not shapes of the slide.
+    #[serde(default)]
+    pub frame: Option<String>,
+    /// The shape's click action (`a:hlinkClick` on `p:cNvPr`).
+    #[serde(default)]
+    pub link: Option<pptx_core::Hyperlink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,7 +309,8 @@ pub struct TextRun {
     pub baseline: f64,
     pub rgb: Rgb,
     pub alpha: f64,
-    pub link: Option<String>,
+    /// The run's `a:hlinkClick`: a URL, a slide or a show action.
+    pub link: Option<pptx_core::Hyperlink>,
     /// `a:fld type` (`slidenum`, `datetime1`, …); `text` holds the value
     /// PowerPoint last computed.
     pub field: Option<String>,

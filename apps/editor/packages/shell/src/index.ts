@@ -365,6 +365,12 @@ export {
   entryApplies,
   isEnabled,
   panelBelongsHere,
+  activeScopeContext,
+  type ControlBarGroupContribution,
+  type ControlBarGroupRegistry,
+  type DocumentContextStore,
+  type StatusItemContribution,
+  type StatusItemRegistry,
 } from "./registries";
 
 // ── W3.2 — edit-context + object-type registries (B-02 / W-03) ──
@@ -560,6 +566,12 @@ export { useModifierState, type ModifierState } from "./hooks/useModifierState";
 
 // ── Keyboard focus (ADR 234) ───────────────────────────────────
 export * from "./focus";
+export {
+  ContributedControlBarGroups,
+  StatusBar,
+  useActiveScopeContext,
+  useHasControlBarGroups,
+} from "./chrome/ContributedBarItems";
 
 // ── Gestures ───────────────────────────────────────────────────
 export {
