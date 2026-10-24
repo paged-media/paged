@@ -147,6 +147,16 @@ export interface DataEngineLike {
   merge_words?(plan: unknown, frames: number): unknown;
   /** Wave 5: per record, per frame, is the merged text overset (DM-7)? */
   merge_overset?(plan: unknown, metrics: unknown): unknown;
+  /** Data ADR 564: one text's distinct words, for the host to measure. */
+  text_words?(text: string): unknown;
+  /** Data ADR 564: is a text overset in a frame `width` × `height` (pt) at
+   *  the measured `metrics` (`{ leadingPt, advances }`)? */
+  text_overset?(
+    text: string,
+    width: number,
+    height: number,
+    metrics: unknown,
+  ): boolean;
   publish_provider(
     query: string,
     providerId: string,

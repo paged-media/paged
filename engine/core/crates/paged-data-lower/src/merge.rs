@@ -533,18 +533,36 @@ pub fn merge_words(plan: &MergePlan, frames: usize) -> Vec<Vec<String>> {
             let (Some(text), Some(set)) = (&f.text, sets.get_mut(f.template)) else {
                 continue;
             };
-            if text.is_empty() {
-                continue;
-            }
-            set.insert(" ".to_string());
-            for line in text.split('\n') {
-                for w in line.split(' ').filter(|w| !w.is_empty()) {
-                    set.insert(w.to_string());
-                }
-            }
+            set.extend(text_words(text));
         }
     }
     sets.into_iter().map(|s| s.into_iter().collect()).collect()
+}
+
+/// The distinct words of one text, as [`count_lines`] measures them: a run
+/// of characters between spaces within a line, and the space itself (the
+/// wrap needs its width); none for an empty text.
+pub fn text_words(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let mut set = BTreeSet::new();
+    set.insert(" ".to_string());
+    for line in text.split('\n') {
+        for w in line.split(' ').filter(|w| !w.is_empty()) {
+            set.insert(w.to_string());
+        }
+    }
+    set.into_iter().collect()
+}
+
+/// Is `text` overset in a text frame `width` × `height` (pt) at `metrics`?
+/// Its wrapped lines × leading exceed the height by more than half a point
+/// (DM-7's rule; data ADR 564 asks it of any placed text). An empty text
+/// never is.
+pub fn text_overset(text: &str, width: f64, height: f64, metrics: &FrameMetrics) -> bool {
+    !text.is_empty()
+        && count_lines(text, width, &metrics.advances) as f64 * metrics.leading_pt > height + 0.5
 }
 
 /// The measured font of one template frame: its leading and the advance of
@@ -604,11 +622,12 @@ pub fn merge_overset(plan: &MergePlan, metrics: &[FrameMetrics]) -> Vec<Vec<bool
             r.frames
                 .iter()
                 .map(|f| match (&f.text, metrics.get(f.template)) {
-                    (Some(text), Some(m)) if !text.is_empty() => {
-                        let width = f.bounds[3] - f.bounds[1];
-                        let height = f.bounds[2] - f.bounds[0];
-                        count_lines(text, width, &m.advances) as f64 * m.leading_pt > height + 0.5
-                    }
+                    (Some(text), Some(m)) => text_overset(
+                        text,
+                        f.bounds[3] - f.bounds[1],
+                        f.bounds[2] - f.bounds[0],
+                        m,
+                    ),
                     _ => false,
                 })
                 .collect()
@@ -648,6 +667,24 @@ mod tests {
     }
 
     const LETTER_MARGINS: Bounds = [36.0, 36.0, 756.0, 576.0];
+
+    #[test]
+    #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature
+    fn data_lower_text_overset_wraps_and_compares__feat__data_issues() {
+        assert_eq!(text_words("a bb\na"), [" ", "a", "bb"]);
+        assert!(text_words("").is_empty());
+        let m = FrameMetrics {
+            leading_pt: 12.0,
+            advances: [("a", 10.0), (" ", 5.0)]
+                .into_iter()
+                .map(|(w, a)| (w.to_string(), a))
+                .collect(),
+        };
+        // Two words a line at 25 pt: four words take two lines, 24 pt.
+        assert!(!text_overset("a a a a", 25.0, 24.0, &m));
+        assert!(text_overset("a a a a", 25.0, 20.0, &m));
+        assert!(!text_overset("", 25.0, 0.0, &m));
+    }
 
     #[test]
     #[allow(non_snake_case)] // the `__feat__<id>` suffix links the test to its cockpit feature

@@ -32,6 +32,10 @@ transforms and asset actions run in the engine's script interpreter. On `main`:
 - asset columns ([ADR 563](adr/563-asset-columns.md)): consented fetch, content-hash cache,
   the column's action chain, placed as a data URI;
 - paged.sheet edits a table of the document's data in place through `data@1`.
+- data issues ([ADR 564](adr/564-data-issues.md)): overset text (the host's frame chain, or the
+  engine's measured wrap where the host lays out without fonts), a missing or too coarse
+  picture (asset columns), an empty or failed value, records a flow left out; served as
+  `data@1` `issues()`, published to Problems, summed up in the Data panel.
 
 Not built yet: the Data panel and the bind popover (editor ADRs 291, 292) and the remaining
 binding kinds headless. The record templates library and the pagination inspector that
