@@ -65,6 +65,18 @@ fn a_paragraph_with_a_picture_takes_auto_leading__feat__plugin_doc_word_paginati
         } else {
             with_picture += 1;
             assert_eq!(leading, Some(0.0), "auto leading: the line grows");
+            // ... at the percentage that keeps Word's pitch for its text
+            // lines (ADR 617): more than the size, less than double it.
+            let auto = lowered
+                .styles
+                .iter()
+                .find(|s| Some(&s.id) == p.para_style_id.as_ref())
+                .and_then(|s| s.props.iter().find(|p| p.path == "paragraphAutoLeading"))
+                .map(|p| p.value.clone());
+            assert!(
+                matches!(auto, Some(PropValue::Length(pct)) if pct > 100.0 && pct < 200.0),
+                "auto leading at Word's pitch, got {auto:?}"
+            );
         }
     }
     assert!(with_picture > 0, "the fixture has a picture paragraph");

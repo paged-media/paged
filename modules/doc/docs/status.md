@@ -82,6 +82,22 @@ of 2026-10-24):
   import, diagnostics, zero-edit identity (EditSet and story read-back),
   edits beside and inside each construct, and the refusals.
 
+## Pagination steps 1–3 (doc ADR 617, engine ADR 1016, 2026-10-24)
+
+- Every Word paragraph composes with the engine's Word first-fit composer
+  (`paragraphComposer = "Word First-fit"`), not InDesign's Single-line Composer: no compressed
+  justified line, Word's hyphenation zone, a hyphen as an ordinary break, an over-wide word
+  split on its own line.
+- A picture paragraph's text lines keep Word's pitch (auto leading at Word's pitch over the
+  size); the picture's line grows to the picture as before. Fonts registered after the open
+  re-measure (engine, already in place).
+- Measured headless on two real documents with Word's faces: paragraphs with Word's line count
+  796 → 801 of 813 and 605 → 605 of 624; page starts unchanged at 2 % and 13.1 %
+  (`docs/reference/acceptance-real-docx.md`, round 14). Line breaking is no longer the gap.
+- `first_fit_docx()` and `scripts/word-first-fit-probe.sh` ask Word the breaking and picture
+  questions; Word's answer (`fixtures/first-fit.word.json`) is not committed yet.
+- Found, not fixed: the pour refuses all text after a table on current main (round 14).
+
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
 
 - `MERGEFIELD` parsed in both field forms (name, switches, instruction), carried on runs and

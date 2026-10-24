@@ -252,7 +252,8 @@ fn paragraph_style_composer_cascades_and_undoes() {
     );
     assert_eq!(breaks(&m, &paragraph_twin), before);
 
-    // The World-Ready names are accepted and kept verbatim.
+    // The World-Ready names and Word's first-fit are accepted and kept
+    // verbatim.
     for (name, composer) in [
         (
             "HL Composer Optyca",
@@ -262,6 +263,9 @@ fn paragraph_style_composer_cascades_and_undoes() {
             "HL Single Optyca",
             paged_model::Composer::WorldReadySingleLine,
         ),
+        // paged's own: Word's first-fit (ADR 1016), what a Word document's
+        // styles carry.
+        ("Word First-fit", paged_model::Composer::WordFirstFit),
     ] {
         set(&mut m, V::Text(name.into())).expect(name);
         assert_eq!(
