@@ -38,7 +38,8 @@
 
 import { scoped, type EditorScope } from "./editor-scope";
 
-export type ViewToggle = "textThreads" | "snapToPoints" | "headingAnchors";
+export type ViewToggle =
+  "textThreads" | "snapToPoints" | "headingAnchors" | "dataMarkers";
 
 type Listener = () => void;
 
@@ -56,6 +57,10 @@ const DEFAULTS: Readonly<Record<ViewToggle, boolean>> = {
   // page carries: drawn always, every document with a heading wore a
   // green badge nobody asked for.
   headingAnchors: false,
+  // Off by default. The data field markers (editor ADR 291) show which
+  // frames a binding places content in and its sync state: InDesign data
+  // tools keep such markers behind a View option too, and they never print.
+  dataMarkers: false,
 };
 
 const TOGGLES = scoped("viewToggles", () => ({

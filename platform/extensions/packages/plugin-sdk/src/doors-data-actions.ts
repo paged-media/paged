@@ -195,6 +195,10 @@ export function createDataSurface(
       const s = service("refresh", "bind");
       return member(s, "refresh", "refresh")();
     },
+    async placements() {
+      const s = service("placements", "read");
+      return [...(await member(s, "placements", "placements")())];
+    },
     onDidChange(listener) {
       requireDeclared(
         cap?.read === true,

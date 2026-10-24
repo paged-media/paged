@@ -15,6 +15,7 @@ import type {
   DataBindingSpec,
   DataChange,
   DataEvaluation,
+  DataPlacement,
   DataRowEdit,
   DataService,
   DataTableInfo,
@@ -44,6 +45,8 @@ export interface DataDoorDeps {
   ): Promise<DataEvaluation>;
   /** A binding's sync state as the engine names it, or null. */
   syncStatusOf(id: string): string | null;
+  /** The page items each binding is placed in, by ADR 131 address. */
+  placements(): Promise<readonly { binding: string; address: string }[]>;
   /** Read the data again and lower every binding (the panel's Update). */
   refresh(): Promise<void>;
   /** The defined bindings as the engine payload carries them. */
@@ -115,6 +118,13 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     return trimSql(sql);
   };
   const queryOf = (name: string) => deps.queries().find((q) => q.id === name);
+
+  const statusOf = (id: string): DataBindingStatus["status"] => {
+    const raw = deps.syncStatusOf(id);
+    return STATUSES.has(raw ?? "")
+      ? (raw as DataBindingStatus["status"])
+      : "unresolved";
+  };
 
   const service: DataService = {
     async tables() {
@@ -212,10 +222,7 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     async status() {
       const out: DataBindingStatus[] = [];
       for (const b of deps.bindings()) {
-        const raw = deps.syncStatusOf(b.id);
-        const status = STATUSES.has(raw ?? "")
-          ? (raw as DataBindingStatus["status"])
-          : "unresolved";
+        const status = statusOf(b.id);
         out.push({
           id: b.id,
           kind: b.kind,
@@ -228,6 +235,12 @@ export function createDataDoor(deps: DataDoorDeps): DataDoor {
     },
     async refresh() {
       await deps.refresh();
+    },
+    async placements() {
+      const out: DataPlacement[] = [];
+      for (const p of await deps.placements())
+        out.push({ ...p, status: statusOf(p.binding) });
+      return out;
     },
     async bindings() {
       const out: DataBindingInfo[] = [];

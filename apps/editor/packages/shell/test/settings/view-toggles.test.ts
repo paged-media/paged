@@ -17,7 +17,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// Settings `view.textThreads`, `view.snapToPoints`, `view.headingAnchors`
+// Settings `view.textThreads`, `view.snapToPoints`, `view.headingAnchors`,
+// `view.dataMarkers`
 // (view-toggles.ts): the View-menu toggles an overlay or a tool reads and
 // a command flips. Module-scope and in memory: they survive a dock
 // close/reopen, and a reload starts from the defaults.
@@ -46,14 +47,16 @@ const DEFAULTS: Record<ViewToggle, boolean> = {
   textThreads: false,
   snapToPoints: true,
   headingAnchors: false,
+  dataMarkers: false,
 };
 
 describe("view toggles", () => {
-  test("defaults: threads off, snap to points on, heading anchors off", () => {
+  test("defaults: threads off, snap to points on, heading anchors and data markers off", () => {
     covers(
       "setting:view.textThreads",
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
+      "setting:view.dataMarkers",
     );
     for (const [k, v] of Object.entries(DEFAULTS))
       expect({ k, v: getViewToggle(scope, k as ViewToggle) }).toEqual({ k, v });
@@ -64,6 +67,7 @@ describe("view toggles", () => {
       "setting:view.textThreads",
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
+      "setting:view.dataMarkers",
     );
     for (const k of Object.keys(DEFAULTS) as ViewToggle[]) {
       resetViewToggles(scope);
@@ -99,17 +103,20 @@ describe("view toggles", () => {
       "setting:view.textThreads",
       "setting:view.snapToPoints",
       "setting:view.headingAnchors",
+      "setting:view.dataMarkers",
     );
     // A reload mounts a new editor, with a new scope.
     const before = createEditorScope();
     setViewToggle(before, "textThreads", true);
     setViewToggle(before, "snapToPoints", false);
     setViewToggle(before, "headingAnchors", true);
+    setViewToggle(before, "dataMarkers", true);
     const after = createEditorScope();
     expect({
       textThreads: getViewToggle(after, "textThreads"),
       snapToPoints: getViewToggle(after, "snapToPoints"),
       headingAnchors: getViewToggle(after, "headingAnchors"),
+      dataMarkers: getViewToggle(after, "dataMarkers"),
     }).toEqual(DEFAULTS);
   });
 

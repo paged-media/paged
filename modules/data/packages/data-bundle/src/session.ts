@@ -2549,6 +2549,7 @@ export function createSession(
     addPropertyBinding: (id, spec) => props.addPropertyBinding(id, spec),
     removeBinding: (id) => props.removeBinding(id),
     syncStatusOf: (id) => (engine ? syncStatus(engine, id) : null),
+    placements: () => props.placements(),
     refresh: async () => {
       await self.refreshData();
       await self.lowerAll();

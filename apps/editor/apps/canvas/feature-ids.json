@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 456,
+    "command": 458,
     "keybinding": 88,
-    "menu": 334,
+    "menu": 336,
     "panel": 127,
     "tool": 81
   },
@@ -2101,6 +2101,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.object.editClippingContents",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.object.group",
       "kind": "command",
       "owner": "editor"
@@ -2267,6 +2272,11 @@
     },
     {
       "id": "command:paged.view.previousPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.toggleDataMarkers",
       "kind": "command",
       "owner": "editor"
     },
@@ -3901,6 +3911,21 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Clipping mask/Edit contents",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Clipping mask/Make",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Object/Clipping mask/Release",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Object/Delete",
       "kind": "menu",
       "owner": "editor"
@@ -4021,11 +4046,6 @@
       "owner": "editor"
     },
     {
-      "id": "menu:Object/Make clipping mask",
-      "kind": "menu",
-      "owner": "editor"
-    },
-    {
       "id": "menu:Object/Nudge down",
       "kind": "menu",
       "owner": "editor"
@@ -4099,11 +4119,6 @@
       "id": "menu:Object/Rasterize…",
       "kind": "menu",
       "owner": "media.paged.draw"
-    },
-    {
-      "id": "menu:Object/Release clipping mask",
-      "kind": "menu",
-      "owner": "editor"
     },
     {
       "id": "menu:Object/Select parent group",
@@ -4352,6 +4367,11 @@
     },
     {
       "id": "menu:View/Fit spread in window",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
     },
