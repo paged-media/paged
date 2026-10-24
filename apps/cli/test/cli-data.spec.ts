@@ -579,3 +579,57 @@ describe("paged plugins", () => {
     );
   });
 });
+
+describe("paged data — the document's data through data@1 (extensions ADR 343)", () => {
+  it("lists the tables, reads a window, runs a guarded query [plugin-platform.data-door]", async () => {
+    const csv = join(tmp.dir, "products.csv");
+    writeFileSync(csv, "sku,price\nA-1,9.5\nB-2,12\nC-3,30\n");
+    const tables = await cli(["data", fx.idml, "--data", csv, DATA]);
+    expect(tables.code, tables.out).toBe(0);
+    const data = (
+      tables.json.tables as { name: string; rowCount: number }[]
+    ).find((t) => t.name === "data");
+    expect(data?.rowCount).toBe(3);
+
+    const window = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--table",
+      "data",
+      "--offset",
+      "1",
+      "--limit",
+      "1",
+      DATA,
+    ]);
+    expect(window.code, window.out).toBe(0);
+    expect(window.json.records).toEqual([{ sku: "B-2", price: 12 }]);
+
+    const q = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--query",
+      'SELECT sku FROM "data" WHERE price > 10 ORDER BY sku',
+      DATA,
+    ]);
+    expect(q.json.records).toEqual([{ sku: "B-2" }, { sku: "C-3" }]);
+
+    const refused = await cli([
+      "data",
+      fx.idml,
+      "--data",
+      csv,
+      "--query",
+      "SELECT * FROM read_csv('/etc/passwd')",
+      DATA,
+    ]);
+    expect(refused.code).toBe(1);
+    expect(refused.json.error.message).toContain(
+      "read_csv() reads files or URLs",
+    );
+  });
+});

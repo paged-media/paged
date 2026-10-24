@@ -756,6 +756,33 @@ const CASES: Record<string, Case[]> = {
       structure: () => zipEntries(readFileSync(T("out.paged"))).join("\n"),
     },
   ],
+  data: [
+    { name: "help", argv: () => ["data", "--help"], exit: 0 },
+    { name: "usage", argv: () => ["data"], exit: 2 },
+    {
+      name: "input-no-data-bundle",
+      argv: () => ["data", fx.paged, "--data", T("records.csv"), NP],
+      exit: 2,
+    },
+    {
+      name: "ok",
+      needs: "data-engine",
+      argv: () => [
+        "data",
+        fx.paged,
+        "--data",
+        T("records.csv"),
+        "--table",
+        "data",
+        "--limit",
+        "2",
+        "--format",
+        "text",
+        DATA,
+      ],
+      exit: 0,
+    },
+  ],
   apply: [
     { name: "help", argv: () => ["apply", "--help"], exit: 0 },
     { name: "usage", argv: () => ["apply"], exit: 2 },
@@ -1244,6 +1271,14 @@ describe("paged-node golden transcripts", () => {
   it("mcp (a stdio session: initialize, the tools, an empty library)", async () => {
     covers("cli:paged-node mcp");
     await runVerb("mcp");
+  });
+  it("data: argument and input errors", async () => {
+    covers("cli:paged-node data");
+    await runVerb("data");
+  });
+  withDataEngine("data: a table's records through data@1", async () => {
+    covers("cli:paged-node data");
+    await runCase("data", theCase("data", "ok"));
   });
   it("apply: argument and input errors", async () => {
     covers("cli:paged-node apply");
