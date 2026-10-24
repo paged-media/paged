@@ -569,7 +569,7 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
     it("the panel note states regenerable-not-live, the missing gaps and edges, the caps and the z-order", () => {
       // Plain words for each fact (the panel's About text).
       expect(t(LIVE_PAINT_NOTE)).toContain(
-        "does not repaint anything until you choose Regenerate",
+        "nothing is repainted until you choose Regenerate",
       );
       expect(t(LIVE_PAINT_NOTE)).toContain("gaps are not closed for you");
       expect(t(LIVE_PAINT_NOTE)).toContain("edges cannot be painted");
