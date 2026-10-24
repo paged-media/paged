@@ -127,3 +127,17 @@ that looks as the grid did.
   its grid at the rows it holds; scrolling there and leaving scrolls the chain. Links are read
   (debounced) after document changes; unlinking returns to a single frame.
 - **Several frames** may each show their own window of one sheet: each carries its own binding.
+
+## Amendment (2026-10-24): full screen is a workspace
+
+- In full screen the surface reserves a 26 pt strip under the grid. It holds the workbook's
+  sheet tabs (a chart sheet is listed but cannot be chosen), the mode (Ready/Edit), the
+  selection's Average · Count · Sum, and the zoom (− / presets 10–400 % / +).
+- The zoom belongs to the surface, not the page. The grid is given `pxPerPt × zoom` and an area
+  of `pt / zoom`, and pointer points are divided by the zoom; Ctrl/Cmd + wheel zooms the sheet
+  instead of the page. Each surface keeps its zoom while it is re-entered.
+- The bar gets a header row: "Page › Sheet frame › ‹sheet›", "Whole screen" (the browser's
+  Fullscreen API) and "Back to page" (editor ADR 284).
+- The root's `data-heading-pt="w,h"` gives the heading strips in points. The screen-vs-page
+  journey (`sheet-screen-vs-page.journey.spec.ts`) uses it to line up the grid's cells with the
+  page's table.

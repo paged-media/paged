@@ -125,6 +125,8 @@ const MAX_COL = 16_383;
 const CHAR_TO_PT = 5.25;
 /** A heading border is grabbed within this many points. */
 const GRAB_PT = 3;
+/** The size the engine composes text no style sizes at (InDesign's). */
+const DOCUMENT_DEFAULT_SIZE_PT = 12;
 /** The cell editor's text, as the painter draws cell text. */
 const EDITOR_FONT_PT = 10;
 
@@ -210,13 +212,244 @@ export function makeSheetFrameSurface(
   const link: SurfaceLink = { session };
   // Named bindings the React Compiler can see; the components they render
   // are declared at module level.
-  const SheetFrameSurface = (props: FrameSurfaceProps) => (
-    <SheetFrameSurfaceView {...props} link={link} />
-  );
+  const SheetFrameSurface = (props: FrameSurfaceProps) =>
+    props.presentation === "fullscreen" ? (
+      <FullScreenSheet {...props} link={link} />
+    ) : (
+      <SheetFrameSurfaceView {...props} link={link} />
+    );
   const SheetBar = (props: FrameSurfaceProps) => (
     <SheetBarView {...props} link={link} />
   );
   return { render: SheetFrameSurface, bar: SheetBar };
+}
+
+/** How far the whole cells of a window reach inside a `w × h` pt cell
+ *  area, as "w,h" (a partly shown last column or row does not count). */
+export function wholeCellsPt(scene: GridScene, w: number, h: number): string {
+  const fit = (offsets: number[], room: number) => {
+    let last = 0;
+    for (const o of offsets) if (o <= room + 0.01) last = o;
+    return last;
+  };
+  return `${fit(scene.viewport.xOffsets, w)},${fit(scene.viewport.yOffsets, h)}`;
+}
+
+// ── full screen: sheet tabs, status bar and its own zoom ─────────────
+
+/** The strip under the grid in full screen (sheet tabs, status, zoom). */
+export const FOOTER_PT = 26;
+/** Full screen's zoom steps, as Excel's (10–400 %). */
+export const ZOOM_STEPS = [0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
+/** Each surface's full-screen zoom, kept while the frame is re-entered. */
+const zooms = new WeakMap<SurfaceLink, number>();
+
+/** The next zoom step from `z` in direction `dir` (+1 in, -1 out). */
+export function stepZoom(z: number, dir: 1 | -1): number {
+  if (dir > 0)
+    return ZOOM_STEPS.find((s) => s > z + 1e-6) ?? ZOOM_STEPS.at(-1)!;
+  return [...ZOOM_STEPS].reverse().find((s) => s < z - 1e-6) ?? ZOOM_STEPS[0]!;
+}
+
+/** The surface's props at a zoom: the grid sees a smaller (or larger)
+ *  area at a larger (or smaller) scale, and pointer points in it. */
+export function zoomedProps(
+  props: FrameSurfaceProps,
+  zoom: number,
+  footerPt: number,
+): FrameSurfaceProps {
+  return {
+    ...props,
+    widthPt: props.widthPt / zoom,
+    heightPt: Math.max(1, props.heightPt - footerPt) / zoom,
+    pxPerPt: props.pxPerPt * zoom,
+    toContentPt: (x, y) => {
+      const p = props.toContentPt(x, y);
+      return p ? [p[0] / zoom, p[1] / zoom] : null;
+    },
+  };
+}
+
+function FullScreenSheet({
+  link,
+  ...props
+}: FrameSurfaceProps & { link: SurfaceLink }) {
+  const session = link.session;
+  const [zoom, setZoomState] = useState(() => zooms.get(link) ?? 1);
+  const setZoom = (z: number) => {
+    const next = Math.min(4, Math.max(0.1, z));
+    zooms.set(link, next);
+    setZoomState(next);
+  };
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Ctrl/Cmd + wheel zooms the sheet, not the page behind it. A native
+  // listener: React's wheel listeners are passive and cannot prevent.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const z = zooms.get(link) ?? 1;
+      const next = Math.min(4, Math.max(0.1, z * Math.exp(-e.deltaY / 300)));
+      zooms.set(link, next);
+      setZoomState(next);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [link]);
+  const view = useSessionView(session, () => {
+    const st = session.state();
+    const sel = st.gridSelection;
+    return {
+      sheetId: st.activeSheet,
+      sheets: session.sheets().map((x) => ({
+        id: x.id,
+        name: x.name,
+        chart: x.kind === "chartsheet",
+      })),
+      editing: session.isCellEditing(),
+      stats:
+        sel && (sel.rows > 1 || sel.cols > 1) ? session.selectionStats() : null,
+    };
+  });
+  const inner = zoomedProps(props, zoom, FOOTER_PT);
+  const muted = "var(--pg-muted-fg, #5b5b57)";
+  const chip: CSSProperties = {
+    font: "12px var(--font-sans, sans-serif)",
+    padding: "1px 8px",
+    border: "1px solid var(--pg-border, #c9c9c4)",
+    borderRadius: 4,
+    background: "var(--pg-bg, #ffffff)",
+    color: "var(--pg-fg, #1a1a1a)",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  };
+  return (
+    <div
+      ref={wrapRef}
+      data-testid="sheet-fullscreen"
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: inner.widthPt,
+          height: inner.heightPt,
+          transform: `scale(${zoom})`,
+          transformOrigin: "0 0",
+        }}
+      >
+        <SheetFrameSurfaceView {...inner} link={link} />
+      </div>
+      <div
+        data-testid="sheet-status-bar"
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: FOOTER_PT,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "0 6px",
+          boxSizing: "border-box",
+          borderTop: "1px solid var(--pg-border, #c9c9c4)",
+          background: "var(--pg-chrome-bg, #f4f4f1)",
+          font: "12px var(--font-sans, sans-serif)",
+          color: "var(--pg-fg, #1a1a1a)",
+        }}
+      >
+        <div
+          role="tablist"
+          aria-label="Sheets"
+          style={{ display: "flex", gap: 2, overflow: "hidden", flex: 1 }}
+        >
+          {view.sheets.map((sh) => (
+            <button
+              key={sh.id}
+              type="button"
+              role="tab"
+              data-testid="sheet-tab"
+              aria-selected={sh.id === view.sheetId}
+              // A chart sheet holds a chart, not cells: a frame cannot show it.
+              disabled={sh.chart}
+              title={
+                sh.chart ? "A chart sheet cannot be shown in a frame" : sh.name
+              }
+              style={{
+                ...chip,
+                borderTop: "none",
+                borderRadius: "0 0 4px 4px",
+                fontWeight: sh.id === view.sheetId ? 600 : 400,
+                color: sh.chart ? muted : chip.color,
+                background:
+                  sh.id === view.sheetId
+                    ? "var(--pg-bg, #ffffff)"
+                    : "transparent",
+              }}
+              onClick={() => {
+                if (sh.id !== view.sheetId) session.setFrameSheet(sh.id);
+                const ed = editors.get(link);
+                requestAnimationFrame(() => ed?.focus({ preventScroll: true }));
+              }}
+            >
+              {sh.name}
+            </button>
+          ))}
+        </div>
+        <span data-testid="sheet-status-mode" style={{ color: muted }}>
+          {view.editing ? "Edit" : "Ready"}
+        </span>
+        {view.stats && view.stats.count > 0 ? (
+          <span
+            data-testid="sheet-status-stats"
+            style={{ color: muted, whiteSpace: "nowrap" }}
+          >
+            {view.stats.numbers > 0
+              ? `Average ${view.stats.averageDisplay} · Count ${view.stats.count} · Sum ${view.stats.sumDisplay}`
+              : `Count ${view.stats.count}`}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          aria-label="Zoom out"
+          style={chip}
+          onClick={() => setZoom(stepZoom(zoom, -1))}
+        >
+          −
+        </button>
+        <select
+          data-testid="sheet-zoom"
+          aria-label="Zoom"
+          value={String(zoom)}
+          style={chip}
+          onChange={(e) => setZoom(Number(e.currentTarget.value))}
+        >
+          {ZOOM_STEPS.includes(zoom) ? null : (
+            <option value={String(zoom)}>{Math.round(zoom * 100)} %</option>
+          )}
+          {ZOOM_STEPS.map((z) => (
+            <option key={z} value={String(z)}>
+              {Math.round(z * 100)} %
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          aria-label="Zoom in"
+          style={chip}
+          onClick={() => setZoom(stepZoom(zoom, 1))}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ── overlay scrollbars: where the window is in the sheet ───────────────
@@ -677,15 +910,15 @@ function SheetFrameSurfaceView({
     if (!ctx) return;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     paintGridScene(ctx, withSwatchColors(scene, swatchColors), {
-      // P7 — un-styled cells in the face the page prints them in.
-      ...(textDefault
-        ? {
-            grid: {
-              fontFamily: `"${textDefault.family}", sans-serif`,
-              ...(textDefault.sizePt ? { fontSizePt: textDefault.sizePt } : {}),
-            },
-          }
-        : {}),
+      // P7 — un-styled cells in the face the page prints them in. A
+      // document whose basic paragraph style sets no size composes at the
+      // engine's default, 12 pt (InDesign's).
+      grid: {
+        ...(textDefault
+          ? { fontFamily: `"${textDefault.family}", sans-serif` }
+          : {}),
+        fontSizePt: textDefault?.sizePt ?? DOCUMENT_DEFAULT_SIZE_PT,
+      },
       headings: true,
       rowHeadingWidthPt: headW,
       widthPt: props.widthPt,
@@ -1294,6 +1527,14 @@ function SheetFrameSurfaceView({
       role="grid"
       aria-label="Sheet"
       data-testid="sheet-frame-surface"
+      // The heading strips, pt (tests line the cells up with the page).
+      data-heading-pt={`${headW},${headH}`}
+      // The whole cells the window shows, pt from the cells' corner.
+      data-cells-pt={
+        scene
+          ? wholeCellsPt(scene, props.widthPt - headW, props.heightPt - headH)
+          : undefined
+      }
       style={{
         position: "relative",
         width: "100%",
@@ -1724,8 +1965,61 @@ function SheetBarView({
     cursor: "pointer",
     padding: "1px 6px",
   };
+  const fullscreen = props.presentation === "fullscreen";
   return (
     <div style={{ position: "relative" }}>
+      {fullscreen ? (
+        <div
+          data-testid="sheet-fullscreen-header"
+          style={{
+            ...bar,
+            boxShadow: "none",
+            marginBottom: 4,
+            justifyContent: "space-between",
+          }}
+        >
+          <nav
+            aria-label="Where you are"
+            style={{ color: "var(--pg-muted-fg, #5b5b57)" }}
+          >
+            Page › Sheet frame ›{" "}
+            <strong style={{ color: "var(--pg-fg, #1a1a1a)" }}>
+              {view.sheet}
+            </strong>
+          </nav>
+          <span style={{ display: "flex", gap: 6 }}>
+            {typeof document !== "undefined" && document.fullscreenEnabled ? (
+              <button
+                type="button"
+                data-testid="sheet-browser-fullscreen"
+                style={button}
+                title="Use the whole screen (the browser's full screen)"
+                onClick={() => {
+                  if (document.fullscreenElement)
+                    void document.exitFullscreen();
+                  else void document.documentElement.requestFullscreen();
+                  requestAnimationFrame(focusGrid);
+                }}
+              >
+                Whole screen
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-testid="sheet-back-to-page"
+              style={button}
+              title="Back to the frame on the page (Esc)"
+              onClick={() => {
+                if (document.fullscreenElement) void document.exitFullscreen();
+                props.requestPresentation("frame");
+                requestAnimationFrame(focusGrid);
+              }}
+            >
+              Back to page
+            </button>
+          </span>
+        </div>
+      ) : null}
       <div data-testid="sheet-bar" style={bar}>
         <span
           data-testid="sheet-bar-name"

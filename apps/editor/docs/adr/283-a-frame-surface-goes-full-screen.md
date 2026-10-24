@@ -36,3 +36,10 @@ hiding chrome next to the editor profile's regions.
 - The browser's own Fullscreen API is not used; a later toggle in the bar can add it.
 - The right dock is hidden in full screen; offering the property panels there is a later
   addition to the override's kept regions.
+
+## Amendment 2026-10-24
+
+The sheet's full-screen bar now offers the browser's Fullscreen API as a "Whole screen" toggle,
+next to "Back to page" in its header (ADR 284). In full screen the sheet keeps sheet tabs, a
+status bar (Ready/Edit, Average · Count · Sum) and its own zoom (10–400 %, Ctrl/Cmd + wheel)
+under the grid, inside the surface. The host's zoom and the page camera do not change.
