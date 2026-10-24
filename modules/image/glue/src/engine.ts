@@ -1765,6 +1765,16 @@ export interface ImageEngine {
    *  the straight RGBA8. GPU-only whenever there is anything to blend; a
    *  single plain visible layer needs no device at all. */
   layersComposite(): Promise<Uint8Array>;
+  /** WP4.10 — the window `(x, y, w, h)` of layer `index`'s OWN pixels
+   *  (not the composite) as straight RGBA8, clipped to the canvas; empty
+   *  for an adjustment layer (`layers_window_rgba8`). */
+  layersWindow(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   /** BAKE the adjustment chain destructively into the ACTIVE layer
    *  (journaled, so undoable). The panel's chain is otherwise a
    *  re-runnable preview that mutates nothing. Throws at identity, on a
@@ -2399,6 +2409,13 @@ export interface ImageWasmModule {
   layers_set_group_blend(id: number, blend: string): void;
   layers_set_group_pass_through(id: number, passThrough: boolean): void;
   layers_composite(): Promise<Uint8Array>;
+  layers_window_rgba8(
+    index: number,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+  ): Uint8Array;
   layers_bake_adjust(
     exposure_ev: number,
     brightness: number,
@@ -3316,6 +3333,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     layerSetGroupPassThrough: (id, pt) =>
       wasm.layers_set_group_pass_through(id, pt),
     layersComposite: () => wasm.layers_composite(),
+    layersWindow: (index, x, y, w, h) =>
+      wasm.layers_window_rgba8(index, x, y, w, h),
     layersAddAdjustment: (name, p) =>
       // The SAME wire block the bake and the preview use — one decode,
       // one meaning. The only difference is where the chain LIVES.
