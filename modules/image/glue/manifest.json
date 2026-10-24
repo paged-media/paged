@@ -12,6 +12,9 @@
     "rendering": ["sceneLayer", "hitTest", "resourceProvider", "overlay"],
     "assets": ["images", "fonts"],
     "network": false,
+    "actions": {
+      "register": true
+    },
     "workers": {
       "max": 4,
       "sharedMemory": true

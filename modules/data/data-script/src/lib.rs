@@ -36,7 +36,6 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-
 use data_automation::BatchMode;
 use data_core::{Locale, Value};
 use data_js::core::DataSession;

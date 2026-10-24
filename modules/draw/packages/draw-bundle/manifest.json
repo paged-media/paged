@@ -13,6 +13,9 @@
     "editContext": ["vectorGraphic"],
     "assets": ["images"],
     "network": false,
+    "actions": {
+      "register": true
+    },
     "workers": {
       "max": 2
     },
