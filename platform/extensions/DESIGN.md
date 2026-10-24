@@ -2813,3 +2813,52 @@ so two bundles running the same chain share the result; `actionKey` lets a calle
 
 **Tests.** The harness injects both backends; `fakeDataService` serves in-memory tables and
 answers `SELECT * FROM <table>` only, refusing other SQL rather than imitating it.
+
+## 26. The editing doors (ADR 348 — control bar, scoped keys, status bar, `host.text` selection)
+
+A content type whose content is native text (paged.doc: a Word document lowered to engine
+stories) needs the editor's own text editing plus the chrome and keys of the application it
+stands in for. Four doors, shipped together:
+
+- **C1 `contribute.controlBarGroup({ id, title?, scope: { editContext }, order?, render })`.**
+  A segment of the host's control bar while the context is active: in the frame context's
+  segment, or (for a document context, below) in place of the host's text and document
+  controls. Selected page items keep the host's object controls. The component gets
+  `{ editContext }`.
+- **C2 the keybinding `scope: { editContext }`.** The binding exists only while its context is
+  active and then outranks every host binding on the key (guarded, unguarded or
+  precedence-ranked) AND the canvas text input: `useTextEditing` asks the registry
+  (`claims(event)`) before it acts, so Tab can be a list level and Cmd+B bold. It never takes a
+  key from a panel's field or an input-method composition. Reserved, refused at registration:
+  Cmd+S, Cmd+P, Cmd+\ and Cmd+Shift+P (`RESERVED_HOST_KEYS`). Keys the browser keeps (Cmd+1–9,
+  Cmd+T, Cmd+N, Cmd+W, Cmd+Q, Cmd+M, Cmd+H) never reach a page; a bundle offers those actions
+  elsewhere. Combos name the space bar `space`.
+- **C3 `contribute.statusItem({ id, scope, align?, order?, render })`.** A readout in a status
+  bar under the canvas, which exists only while an item applies.
+- **C4 `host.text` selection doors.** `selection()` (content offsets, null in a table cell —
+  the C-9 gap), `onDidChangeSelection`, `properties(paths)` (the EFFECTIVE values through the
+  style cascade, `{ value }` | `"mixed"` | `null`; a collapsed caret reads the character before
+  it), `format(writes)` and `applyStyle(scope, styleId)`: one batch of `setElementProperty` on
+  the selection's story range, one undo step. Paragraph paths cover the touched paragraphs; a
+  character path covers the selection, the word around a collapsed caret (refused between
+  words), or with `extent: "paragraphs"` the touched paragraphs whole (line spacing as
+  `characterLeading`). The SDK converts the selection's content offsets (UTF-8 bytes, one
+  synthetic `\n` per paragraph) to the character offsets a story range counts; passing one as
+  the other formats the wrong text from the second paragraph on. Find and replace is NOT in C4:
+  the engine's `FindReplace` op is not on main; it joins as an additive member when it lands.
+- **The document context, `host.shell.setDocumentContext(type | null)`.** A Word document
+  opened as the whole document has no frame to enter, yet is Word content on every page. A
+  bundle declares that the open document is one of its registered context types; the scoped
+  contributions follow `editContext ?? documentContext` (`contextScopeActive`). It changes
+  nothing else (tool rail, panels, selection). The host drops it on every document load and on
+  the bundle's disposal; the bundle sets it again for a document it recognises.
+- **Gates.** Every scope names an edit context declared in `contributes.editContexts[]` and
+  registered by the same bundle first (borrowed, like a frame surface §24); ids are namespaced;
+  keybindings still need `capabilities.keybindings`. No new manifest field.
+- **Probes.** Static doors: `contribute.controlBarGroup@1`, `contribute.statusItem@1`,
+  `contribute.keybinding.scope@1`. Host backing: `controlBar.groups@1`, `statusBar.items@1`,
+  `text.selection@1`, `text.format@1`, `shell.documentContext@1`.
+- **Harness.** `createHeadlessHost` records groups and status items
+  (`controlBarGroupsContributed()`, `statusItemsContributed()`), plays the caret
+  (`setTextSelection`) and reports the document context (`documentContext()`, dropped on load).
+- **Isolate.** The groups and status items are React in the host realm, like panels (§6).
