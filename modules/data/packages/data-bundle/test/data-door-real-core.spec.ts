@@ -50,7 +50,7 @@ async function loadBundleModule() {
 }
 
 describe.skipIf(!ready && !required)(
-  "the data door over the real stack [extensions.data-door]",
+  "the data door over the real stack [plugin-platform.data-door]",
   () => {
     const hosts: HeadlessHost[] = [];
     afterEach(() => {

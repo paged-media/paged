@@ -88,7 +88,7 @@ const products = () =>
     },
   });
 
-describe("host.data — the data door (extensions ADR 343) [extensions.data-door]", () => {
+describe("host.data — the data door (extensions ADR 343) [plugin-platform.data-door]", () => {
   it("a served table is read, written and bound by another bundle, which hears the change", async () => {
     const backend = createDataRegistry();
     const server = host(SERVER, backend);
@@ -170,7 +170,7 @@ describe("host.data — the data door (extensions ADR 343) [extensions.data-door
 const PAINTER = manifest("media.paged.image", { actions: { register: true } });
 const RUNNER = manifest("media.paged.data", { actions: { run: true } });
 
-describe("host.actions — the actions door (extensions ADR 344) [extensions.actions-door]", () => {
+describe("host.actions — the actions door (extensions ADR 344) [plugin-platform.actions-door]", () => {
   it("one bundle registers, another runs; a second run is cached under the same key", async () => {
     const registry = createActionRegistry();
     const painter = host(PAINTER, undefined, registry);
