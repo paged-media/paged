@@ -2700,8 +2700,10 @@ export function createImageSession(host: BundleHost): ImageSession {
       // Same handle, new extent: the tile claim and every readout
       // addressed the old one.
       releaseTiles();
-      src.width = wh.width;
-      src.height = wh.height;
+      // A new source record, not the old one changed in place: a panel
+      // render memoised on `state.source` (the React Compiler's cache)
+      // sees the new extent only through a new reference.
+      state.source = { ...src, width: wh.width, height: wh.height };
       markPixelsEdited();
       refreshSourceReadout();
       // Composite first: Apply writes its own status line, and this one
