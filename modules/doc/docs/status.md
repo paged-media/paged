@@ -1,5 +1,34 @@
 # paged.doc — status
 
+## Wasm size (measured 2026-10-24)
+
+`docx_js_bg.wasm` as `scripts/build-wasm.sh` builds it (the `wasm-release` profile,
+then `wasm-opt -Oz`):
+
+|                     | bytes                |
+| ------------------- | -------------------- |
+| raw                 | 6,879,227 (6.56 MiB) |
+| gzip -9             | 1,876,393 (1.79 MiB) |
+| brotli -q 11        | 1,070,924 (1.02 MiB) |
+| manifest `maxBytes` | 8,388,608 (8 MiB)    |
+
+That leaves 1.44 MiB of headroom under the budget. The 8.64 MB in the editor's
+panel audit (2026-10-11) was measured before the `wasm-release` profile existed.
+That profile landed on 2026-10-14 and uses size-first codegen for `ooxmlsdk` and the
+engine model crates. The build also enforces `maxBytes`.
+
+What the wasm is made of: on the 10.2 MB module before wasm-bindgen and wasm-opt,
+`ooxmlsdk` is 6.8 MB. Most of that is the generated readers for WordprocessingML
+(2.1 MB), DrawingML (1.1 MB), charts (0.6 MB), PresentationML (0.5 MB; a Word file never
+contains it, and what links it in has not been traced yet), OMML (0.36 MB) and VML (0.29 MB). The plugin's own
+crates are about 0.3 MB.
+
+ooxmlsdk 0.12 has no per-schema cargo features (only `parts`, `mce`, `validators`
+and `flat-opc`). So dropping schemas the plugin never reads means forking the
+crate. That is the next lever if later waves outgrow the headroom.
+`opt-level = "z"` for the whole build is only about 1 % smaller and loads about a
+fifth slower (see `Cargo.toml`).
+
 ## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
 
 - `MERGEFIELD` parsed in both field forms (name, switches, instruction), carried on runs and
