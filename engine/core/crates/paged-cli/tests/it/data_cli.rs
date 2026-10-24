@@ -194,3 +194,75 @@ fn data_apply_without_a_source_file_says_which_it_needs() {
         "{report:#}"
     );
 }
+
+/// What a script sees of the bound document's data (PM-0015).
+const READ_DATA: &str = r#"
+const t = paged.data.tables();
+console.log("tables", JSON.stringify(t.tables));
+console.log("q", t.queries.find((q) => q.id === "q").rowCount);
+console.log("leak", t.queries.find((q) => q.id === "leak").error);
+const r = paged.data.query("SELECT name, opacity FROM products WHERE opacity > 50");
+console.log("query", r.rowCount, r.schema.fields.map((f) => f.name).join("|"), r.columns[0][0]);
+const w = paged.data.records("products", { offset: 1, limit: 1 });
+console.log("records", w.rowCount, w.columns[0][0]);
+console.log("evaluate", paged.data.evaluate("q", "UPPER(name)", 1).display);
+try {
+  paged.data.query("SELECT * FROM read_csv('/etc/passwd')");
+  console.log("refused", false);
+} catch (e) {
+  console.log("refused", e.message);
+}
+"#;
+
+#[test]
+fn a_script_reads_the_bound_document_s_data__feat__data_bind_labels_native() {
+    let d = dir("script");
+    let doc = document(&d);
+    let script = d.join("read.js");
+    std::fs::write(&script, READ_DATA).unwrap();
+    let csv = format!("products={}", s(&d.join("products.csv")));
+    let out = ok(paged(&["script", s(&doc), s(&script), "--source", &csv]));
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "[log] tables [\"products\"]", "{out}");
+    assert_eq!(lines[1], "[log] q 2", "{out}");
+    assert!(
+        lines[2].contains("read_csv() reads files or URLs"),
+        "{out}"
+    );
+    assert_eq!(lines[3], "[log] query 1 name|opacity Grace", "{out}");
+    assert_eq!(lines[4], "[log] records 1 Grace", "{out}");
+    assert_eq!(lines[5], "[log] evaluate GRACE", "{out}");
+    // A script's own SQL meets the same guard as the document's queries.
+    assert!(
+        lines[6].starts_with("[log] refused paged.data: not run:")
+            && lines[6].contains("read_csv() reads files or URLs"),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_script_without_data_is_told_so__feat__data_bind_labels_native() {
+    let d = dir("nodata");
+    let blank = d.join("blank.paged");
+    ok(paged(&["new", "--size", "a5", "--out", s(&blank)]));
+    let script = d.join("probe.js");
+    std::fs::write(
+        &script,
+        r#"try { paged.data.tables(); console.log("answered"); }
+           catch (e) { console.log(e.name, e.message.includes("no data is attached")); }"#,
+    )
+    .unwrap();
+    let out = ok(paged(&["script", s(&blank), s(&script)]));
+    assert_eq!(out.trim(), "[log] TypeError true");
+
+    // A --source alone attaches its file, by the file's extension.
+    std::fs::write(d.join("people.csv"), "name\nAda\nGrace\n").unwrap();
+    std::fs::write(
+        &script,
+        r#"console.log(paged.data.query("SELECT COUNT(*) AS n FROM people").columns[0][0]);"#,
+    )
+    .unwrap();
+    let csv = format!("people={}", s(&d.join("people.csv")));
+    let out = ok(paged(&["script", s(&blank), s(&script), "--source", &csv]));
+    assert_eq!(out.trim(), "[log] 2");
+}

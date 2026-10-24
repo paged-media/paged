@@ -522,3 +522,112 @@ pub fn apply(
     }
     Ok(())
 }
+
+/// The data a `paged script` run reads as `paged.data.*` (PM-0015): the
+/// document's recipe, its sources imported from `--source` files, its
+/// queries run through the guard.
+pub struct ScriptDataSession {
+    data: DataSession,
+    /// What each of the recipe's queries did when the run began.
+    runs: Vec<data_session::core::QueryRun>,
+}
+
+/// Build the run's data from the document's binding labels and `--source`
+/// files, as `apply` does. A `--source` the recipe does not declare is
+/// imported under its id by the file's extension, so a script can read a
+/// file into a document that binds nothing yet. `None` when there is
+/// neither a label nor a `--source`: the run gets no data door.
+pub fn script_data(
+    session: &mut Session,
+    sources: &[String],
+) -> Result<Option<ScriptDataSession>> {
+    let recipe = read_recipe(session)?;
+    let payload = recipe.document_payload().context("the document's recipe")?;
+    let labelled = recipe.from_elements > 0
+        || !payload.sources.is_empty()
+        || !payload.queries.is_empty()
+        || !payload.bindings.is_empty();
+    if !labelled && sources.is_empty() {
+        return Ok(None);
+    }
+    let mut data = DataSession::from_payload(payload, today());
+    let declared = recipe.payload["sources"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    for spec in sources {
+        let (id, file) = parse_source(spec)?;
+        let source = declared
+            .iter()
+            .find(|s| s.get("id").and_then(Value::as_str) == Some(id.as_str()))
+            .cloned()
+            .unwrap_or(Value::Null);
+        let bytes = std::fs::read(&file).with_context(|| format!("read {}", file.display()))?;
+        data.store_import(&id, format_of(&source, &file)?, &bytes, None)
+            .map_err(|e| anyhow!("import {id}: {e}"))?;
+    }
+    let runs = data.refresh_queries();
+    Ok(Some(ScriptDataSession { data, runs }))
+}
+
+impl paged_script::ScriptData for ScriptDataSession {
+    fn tables(&mut self) -> Result<Value, String> {
+        let tables = self.data.store_tables().map_err(|e| e.to_string())?;
+        let payload = self.data.payload();
+        let sources: Vec<Value> = payload
+            .sources
+            .iter()
+            .map(|s| {
+                let id = s.id.as_str();
+                json!({ "id": id, "imported": tables.iter().any(|t| t == id) })
+            })
+            .collect();
+        let queries: Vec<Value> = payload
+            .queries
+            .iter()
+            .map(|q| {
+                let mut row = json!({
+                    "id": q.id.as_str(),
+                    "sql": q.sql,
+                    "rowCount": self.data.query_record_count(&q.id),
+                });
+                if let Some(Err(e)) = self
+                    .runs
+                    .iter()
+                    .find(|r| r.query == q.id)
+                    .map(|r| &r.outcome)
+                {
+                    row["error"] = json!(e);
+                }
+                row
+            })
+            .collect();
+        Ok(json!({ "sources": sources, "queries": queries, "tables": tables }))
+    }
+
+    fn records(
+        &mut self,
+        table: &str,
+        offset: usize,
+        limit: Option<usize>,
+    ) -> Result<Value, String> {
+        self.data
+            .store_records(table, offset, limit)
+            .map_err(|e| e.to_string())
+    }
+
+    fn query(&mut self, sql: &str) -> Result<Value, String> {
+        // A script's SQL is held to the rule a document's queries are.
+        data_store::guard::check_query(sql).map_err(|e| format!("not run: {e}"))?;
+        self.data
+            .store_query_records(data_store::guard::trim_sql(sql))
+            .map_err(|e| e.to_string())
+    }
+
+    fn evaluate(&mut self, query: &str, expr: &str, record: usize) -> Result<Value, String> {
+        let preview = self
+            .data
+            .evaluate_at(&data_core::QueryId::new(query), expr, record);
+        serde_json::to_value(preview).map_err(|e| e.to_string())
+    }
+}
