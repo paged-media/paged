@@ -1196,6 +1196,7 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
     // fit, exactly as InDesign's justified composer does. (W1.3 landed
     // the ragged gate in `compose_paragraph`; W1.17 extends it to the
     // renderer path and pins the justified no-op.)
+    let word_first_fit = opts.single_line.as_ref().is_some_and(|o| o.word);
     let zone = if options.alignment == Alignment::Justify || single_line.is_some() {
         0
     } else {
@@ -1330,10 +1331,14 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
             // After a hyphen the text already has, the line gains no
             // hyphen glyph and no width.
             let hard = crate::hyphenate::breaks_after_hard_hyphen(&paragraph_text, *offset);
+            // Word's first-fit breaks after a hyphen the text has as it
+            // does at a space (ADR 1016, `first-fit.word.json` H01): not a
+            // hyphenation, so no zone and no ladder decides it.
+            let ordinary = hard && word_first_fit;
             items.push(Item::Penalty {
                 width: if hard { 0 } else { hyphen_width },
-                penalty: opts.hyphen_penalty,
-                flagged: true,
+                penalty: if ordinary { 0 } else { opts.hyphen_penalty },
+                flagged: !ordinary,
             });
             byte_ends.push(*offset);
             is_hyphen.push(!hard);
@@ -1354,6 +1359,40 @@ pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagr
             byte_ends.push(*offset);
             is_hyphen.push(false);
             seg_start = *offset;
+        }
+        // Word's first-fit splits a word wider than the measure where it
+        // overflows (ADR 1016): every character boundary of such a word is
+        // a last-resort break, which the breaker takes only on a line the
+        // word starts.
+        if word_first_fit && breaks.is_empty() && cjk_breaks.is_empty() {
+            let narrowest = opts
+                .column_widths
+                .as_deref()
+                .and_then(|w| w.iter().copied().filter(|&v| v > 0).min())
+                .unwrap_or(opts.column_width);
+            if sum_advances_in(&flat, w.start as u32..w.end as u32) > narrowest {
+                let word_text = &paragraph_text[w.start..w.end];
+                for (b, _) in word_text.char_indices().skip(1) {
+                    let offset = w.start + b;
+                    if held(offset, offset) {
+                        continue;
+                    }
+                    items.push(Item::Box {
+                        width: sum_advances_in(&flat, seg_start as u32..offset as u32),
+                        data: (),
+                    });
+                    byte_ends.push(offset);
+                    is_hyphen.push(false);
+                    items.push(Item::Penalty {
+                        width: 0,
+                        penalty: crate::single_line::OVERFLOW_PENALTY,
+                        flagged: false,
+                    });
+                    byte_ends.push(offset);
+                    is_hyphen.push(false);
+                    seg_start = offset;
+                }
+            }
         }
         let final_width = sum_advances_in(&flat, seg_start as u32..w.end as u32);
         // A zero-width object (an above-line anchor) stays on the line of
