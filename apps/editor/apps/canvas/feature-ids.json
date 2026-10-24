@@ -3,9 +3,9 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 392,
+    "command": 402,
     "keybinding": 88,
-    "menu": 286,
+    "menu": 295,
     "panel": 122,
     "tool": 72
   },
@@ -366,6 +366,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.globalEdit",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.imageTrace",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -676,7 +681,32 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.selectSameAppearance",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.selectSameBlendMode",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.selectSameFill",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.selectSameGraphicStyle",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.selectSameOpacity",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.selectSameShapeKind",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -692,6 +722,11 @@
     },
     {
       "id": "command:media.paged.draw.command.selectSameStrokeWeightOptions",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.selectSameSymbolInstance",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -1061,6 +1096,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.sheet.command.exportCsv",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "command:media.paged.sheet.command.fillDown",
       "kind": "command",
       "owner": "media.paged.sheet"
@@ -1112,6 +1152,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.importCsv",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.importOds",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -1217,6 +1262,11 @@
     },
     {
       "id": "command:media.paged.sheet.command.toggleFilter",
+      "kind": "command",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "command:media.paged.sheet.command.toggleR1C1",
       "kind": "command",
       "owner": "media.paged.sheet"
     },
@@ -2991,7 +3041,37 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Edit/Select same/Appearance",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Blending mode",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Edit/Select same/Fill",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Geometry (Global Edit)",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Graphic style",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Opacity",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Shape kind",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -3007,6 +3087,11 @@
     },
     {
       "id": "menu:Edit/Select same/Stroke weight within…",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Select same/Symbol instance",
       "kind": "menu",
       "owner": "media.paged.draw"
     },
@@ -3631,6 +3716,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Sheet/Export sheet as CSV…",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
       "id": "menu:Sheet/Find & replace…",
       "kind": "menu",
       "owner": "media.paged.sheet"
@@ -3682,6 +3772,11 @@
     },
     {
       "id": "menu:Sheet/Place selection on page",
+      "kind": "menu",
+      "owner": "media.paged.sheet"
+    },
+    {
+      "id": "menu:Sheet/R1C1 reference style",
       "kind": "menu",
       "owner": "media.paged.sheet"
     },
