@@ -99,3 +99,11 @@ Query), place (drag a field header onto a frame, or right-click any property).
   records placed, records per page, repeated headers, overflow, a record taller than a page.
   They reach this panel only when `data@1` gains members for them; until then the Data panel
   does not show them.
+- Amended 2026-10-24: **the pipeline** (data ADR 562). With a service that has `pipeline()`,
+  a Pipeline switch beside the table tabs shows how the data is made, in the order a refresh
+  runs it: sources → transforms → queries, each step with the tables it reads and its rows, or
+  its error, at the last run. Selecting a step shows its table in the grid. With
+  `defineTransform`, a transform is edited in place (its table name, the tables it reads, its
+  parameters as JSON and its source in the code editor) and applied; the service's refusal is
+  shown inline. **New transform** makes one, and Remove (with `removeTransform`) drops it. The
+  view is `apps/canvas/src/panels/data-pipeline.tsx`.

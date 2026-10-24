@@ -69,3 +69,9 @@ case-insensitively, as SQL does, so a mixed-case transform or source is found.
 - The pipeline view (source → SQL → transform → output, each step previewable) is the Data panel's
   (editor ADR 291).
 - The refresh makes one engine call more: the perf budgets W1 4 → 5 and W5 21 → 22 wasm calls.
+- Amended 2026-10-24: the pipeline view is built. The data door serves `pipeline()`,
+  `defineTransform` and `removeTransform` (plugin-sdk 0.74.3-canary.24): the steps in refresh
+  order with what each reads, its rows or its error at the last run; a refused definition
+  throws the session's reason (the name, the source, an input that is neither a source nor an
+  earlier transform, the parameters). A transform defined through the door runs at once; the
+  queries reading it see its rows at the next refresh.

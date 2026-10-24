@@ -30,7 +30,9 @@
 //     items those bindings are placed in (the service's `placements`);
 //   · the grid is windowed: the service sorts and filters (guarded SQL), and
 //     only the rows in view cross;
-//   · with no data yet, a three-step start: import, query, bind.
+//   · with no data yet, a three-step start: import, query, bind;
+//   · the pipeline (`data-pipeline.tsx`): sources → transforms → queries,
+//     each with its rows or its error, a transform edited in place.
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
@@ -62,6 +64,7 @@ import {
   type FilterRow,
   type SortKey,
 } from "./data-grid-model";
+import { DataPipeline, offersPipeline, PipelineToggle } from "./data-pipeline";
 
 const M = defineMessages("app.dataPanel", {
   startTitle: "Put data in the document",
@@ -826,6 +829,7 @@ export function DataPanel() {
   const [statuses, setStatuses] = useState<readonly DataBindingStatus[]>([]);
   const [updating, setUpdating] = useState(false);
   const [active, setActive] = useState("");
+  const [pipeline, setPipeline] = useState(false);
 
   useEffect(() => {
     if (!service) return;
@@ -890,7 +894,16 @@ export function DataPanel() {
             )}
           </button>
         ))}
+        {offersPipeline(service) && (
+          <PipelineToggle
+            open={pipeline}
+            onToggle={() => setPipeline(!pipeline)}
+          />
+        )}
       </div>
+      {pipeline && service && offersPipeline(service) && (
+        <DataPipeline service={service} onSelect={setActive} />
+      )}
       <StatusBar
         statuses={statuses}
         updating={updating}
