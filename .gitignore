@@ -29,3 +29,6 @@ node_modules/
 
 # bun test JUnit reports before tooling/js/bun-junit.mjs rewrites them (B7).
 *.bun.xml
+
+# Agent worktrees (Claude Code `isolation: worktree`), local only.
+/.claude/worktrees/
