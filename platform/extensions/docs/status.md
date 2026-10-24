@@ -128,6 +128,12 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   `host.render.snapshot` renders a page to a PNG through the engine, optionally with items
   hidden (`render.snapshot@1`). `host.viewport.revealText` takes the user to a range of text
   where the host wires it (`viewport.revealText@1`).
+- **Items render to pixels (0.74.3-canary.17,
+  [ADR 338](adr/338-items-render-to-pixels.md)).** `host.render.snapshot` draws a region
+  (`clip`), the named items alone (`only`), raw straight-alpha pixels (`format: "rgba"`), on a
+  transparent ground cropped to what was drawn (`trim`); `host.render.element` and
+  plugin-sdk's `rasterizeElements` draw items cropped to them at a resolution
+  (`render.snapshot@2`). paged.draw's Object ▸ Rasterize… is the first consumer.
 - **Selection.** `host.selection.set` writes the engine's geometry for the applied ids to
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).

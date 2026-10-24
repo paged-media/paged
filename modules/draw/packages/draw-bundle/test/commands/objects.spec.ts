@@ -623,6 +623,11 @@ describe("paged.draw commands, no engine — the Path Options “…” commands
     await raises(`${C}.insertFlareOptions`, "flare");
   });
 
+  it("Rasterize… raises Path Options at Rasterize [plugin-platform.render-snapshot-v2]", async () => {
+    covers("command:media.paged.draw.command.rasterizeOptions");
+    await raises(`${C}.rasterizeOptions`, "rasterize");
+  });
+
   it("Stroke weight within… raises Path Options at Select same weight", async () => {
     covers("command:media.paged.draw.command.selectSameStrokeWeightOptions");
     await raises(`${C}.selectSameStrokeWeightOptions`, "selectSameWeight");

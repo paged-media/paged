@@ -110,6 +110,7 @@ mod shear_gesture;
 mod snap_engine;
 mod snapshot_hide;
 mod snapshot_markers;
+mod snapshot_v2;
 mod spread_membership_reads;
 mod spread_transform_hit;
 mod story_grow_rule_read;
