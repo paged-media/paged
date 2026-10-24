@@ -117,11 +117,31 @@
 // is rebuilt by Update, and {@link BLEND_LIVE_NOTE} says so in the panel
 // itself.
 //
+// ------------------------------------- CONSTRUCT DEPTH (WP6.6, three rows)
+// · DIFFERENT ANCHOR COUNTS BLEND. The keys are brought to ONE structure
+//   first (`draw-geometry`'s `matchContourSets`): the run with fewer
+//   anchors gets more, split on its longest segments, so neither key's
+//   SHAPE changes; a closed run's start and direction are aligned to the
+//   other's; a key with fewer contours gets collapsed ones that grow out
+//   of a point. Only OPEN against CLOSED is still refused, by name.
+// · GROUPS BLEND, pairwise BY ORDER: two selected groups blend member i
+//   to member i (tree order = paint order), every pair with the same
+//   step count and along the same spine — the straight line between the
+//   two GROUPS' centres, so the default stays inert per pair. Groups of
+//   different sizes are refused (which member would pair with nothing is
+//   a choice the user makes, not this module). The record lists the
+//   members flat, A0 B0 A1 B1 …, and each member's key link carries its
+//   position, so the v1 two-key record IS the one-pair case. The groups
+//   stay groups: the blend's group holds them and the intermediates.
+// · GRADIENT FILLS BLEND stop for stop: each intermediate gets its own
+//   gradient, its stops interpolated (`matchRamps` / `interpolateRamps`).
+//   A flat key against a gradient key blends as a two-stop ramp of its
+//   colour. Stops in different places are resampled at the union of
+//   their locations — refused, with the reason, only where that would
+//   change a ramp (a midpoint moved off 50 %), and a LINEAR key against a
+//   RADIAL one is refused (an intermediate is one or the other).
+//
 // -------------------------------------------------------------- limits
-// · STRUCTURE MISMATCH IS STILL A REFUSAL. v0 refused two paths with
-//   different subpath/anchor counts rather than inventing a
-//   correspondence, and v1 does the same. Resampling both keys to a
-//   common parameterization is a real feature and is NOT built.
 // · RFI C-23 — `pathAnchors`/`elementGeometry` are PAGE-KEYED. Only a
 //   REPLACED spine can throw an intermediate off the page (the default
 //   spine runs between two on-page keys), so `fitToArtboard` matters
@@ -148,6 +168,11 @@ import {
   distributeAlongPath,
   ease,
   interpolateAnchors,
+  interpolateRamps,
+  matchContourSets,
+  matchRamps,
+  solidRamp,
+  type RampStop,
   measureAnchorRun,
   measureSegment,
   mixRgb,
@@ -170,7 +195,13 @@ import { supportsPathOps } from "./path-ops";
 import { repeatPageRect } from "./repeat";
 import { valueForCriterion } from "./select-same";
 import { insertPathMutationFor } from "../handlers/insert-path";
-import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
+import {
+  announceRecipeChange,
+  groupHolding,
+  leafIdsOf,
+  linkIndex,
+} from "../link-index";
+import { rawGradientDetail } from "../raw-wire";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -344,7 +375,8 @@ export interface BlendRecord {
   id: string;
   name: string;
   params: BlendParams;
-  /** The two KEY objects, in blend order. */
+  /** The KEY objects, flat by pair: A0 B0 A1 B1 … (two for a blend of
+   *  two paths, 2·n for a blend of two n-member groups). */
   keys: { kind: string; id: string }[];
   /** The replaced spine, or null for the straight-line default. */
   spine: { kind: string; id: string } | null;
@@ -357,7 +389,9 @@ export interface BlendLibrary {
   blends: BlendRecord[];
 }
 
-/** The link a KEY object carries. */
+/** The link a KEY object carries. `index` is its position in the
+ *  record's flat key list (A0 B0 A1 B1 …): even = the first key's side,
+ *  `index >> 1` = its pair. */
 export interface BlendKeyRef {
   blend: string;
   index: number;
@@ -632,6 +666,17 @@ export interface BlendKey {
   rgb: Rgb | null;
   /** The stroke as RGB, likewise. */
   strokeRgb: Rgb | null;
+  /** The fill GRADIENT, when the fill references one: its kind and its
+   *  stops as display colours (WP6.6). */
+  gradient?: BlendGradient | null;
+}
+
+/** A key's gradient fill, as a blend reads it. */
+export interface BlendGradient {
+  /** `"Linear"` | `"Radial"` (the `GradientSpec` spelling). */
+  kind: string;
+  name: string;
+  stops: RampStop[];
 }
 
 /** One resolved intermediate: its geometry (already in page space) and
@@ -651,13 +696,32 @@ export interface BlendStep {
   mintStroke: { selfId: string; name: string } | null;
   strokeRef: string | null;
   strokeWeight: number | null;
+  /** Which key PAIR this intermediate belongs to (0 for a two-key blend). */
+  pair?: number;
+  /** A gradient fill to MINT for this step (then its `selfId` is the
+   *  fill ref): the stop swatches first, then the gradient over them. */
+  mintGradient?: {
+    stops: { selfId: string; name: string; rgb: Rgb }[];
+    gradient: {
+      selfId: string;
+      name: string;
+      kind: string;
+      stops: { stopColor: string; locationPct: number; midpointPct: number }[];
+    };
+  } | null;
 }
 
 export interface BlendPlan {
   pageId: string;
   blend: string;
   params: BlendParams;
+  /** The first pair (the whole blend, for two paths). */
   keys: [BlendKey, BlendKey];
+  /** Every key pair, in member order (one for two paths). */
+  pairs?: [BlendKey, BlendKey][];
+  /** The two key GROUPS of a group blend (they join the blend's group
+   *  whole); absent for a blend of two paths. */
+  groups?: [ElementId, ElementId] | null;
   /** The replaced spine element, or null for the straight-line default. */
   spineId: ElementId | null;
   spineLength: number;
@@ -706,11 +770,27 @@ export function blendStepsFor(args: {
   params: BlendParams;
   spine: PathMetric;
   steps: number;
+  /** The straight line the spine offset is measured from — the two
+   *  keys' centres by default; a group blend passes the two GROUPS'
+   *  line, so every pair moves with the group (module header). */
+  reference?: PathMetric;
+  /** Which pair this is (stamped on its steps). */
+  pair?: number;
+  /** Shared across a plan's pairs, so one colour is one swatch. */
+  minted?: MintedByName;
+  /** Mints a gradient id (tests pin the wire with a fixed one). */
+  mintGradientId?: () => string;
 }): BlendStep[] | null {
-  const [a, b] = args.keys;
-  if (!blendStructureMatches(a.source, b.source)) return null;
+  const [a0, b0] = args.keys;
+  // WP6.6: different anchor / contour counts are MATCHED, not refused.
+  const matched = matchContourSets(a0.source, b0.source);
+  if (!matched.ok) return null;
+  const a = { ...a0, source: matched.a };
+  const b = { ...b0, source: matched.b };
+  const ramps = blendRampsOf(a0, b0);
+  if (ramps && !ramps.ok) return null;
   const { params } = args;
-  const straight = measureSegment(a.center, b.center);
+  const straight = args.reference ?? measureSegment(a.center, b.center);
   const baselineDeg = pointAtFraction(straight, 0.5).tangentDeg;
   const slots = distributeAlongPath({
     metric: args.spine,
@@ -719,7 +799,7 @@ export function blendStepsFor(args: {
     endpoints: "interior",
   });
   const out: BlendStep[] = [];
-  const minted: MintedByName = new Map();
+  const minted: MintedByName = args.minted ?? new Map();
   slots.forEach((slot, i) => {
     // The kernel owns the interior rule (`k / (count + 1)`, never on a
     // key); easing then RE-PARAMETERIZES it, which is why the point is
@@ -756,7 +836,18 @@ export function blendStepsFor(args: {
         ? params.easingStrength
         : params.colorEasingStrength,
     );
-    const fill = mixOrKeep(a.rgb, b.rgb, colorT, a.paint.fill, minted);
+    const mintGradient =
+      ramps && ramps.ok
+        ? gradientStepFor(
+            ramps,
+            colorT,
+            minted,
+            args.mintGradientId ?? mintBlendGradientId,
+          )
+        : null;
+    const fill = mintGradient
+      ? { mint: null, ref: mintGradient.gradient.selfId }
+      : mixOrKeep(a.rgb, b.rgb, colorT, a.paint.fill, minted);
     const stroke = mixOrKeep(
       a.strokeRgb,
       b.strokeRgb,
@@ -778,9 +869,91 @@ export function blendStepsFor(args: {
         typeof a.paint.weight === "number" && typeof b.paint.weight === "number"
           ? a.paint.weight + (b.paint.weight - a.paint.weight) * colorT
           : (a.paint.weight ?? null),
+      pair: args.pair ?? 0,
+      mintGradient,
     });
   });
   return params.reverseFrontToBack ? out.reverse() : out;
+}
+
+/** The two keys' fills as matched ramps, when EITHER is a gradient;
+ *  null when both are flat (the colour lerp's lane). Pure. */
+export function blendRampsOf(
+  a: BlendKey,
+  b: BlendKey,
+):
+  | { ok: true; a: RampStop[]; b: RampStop[]; kind: string; name: string }
+  | { ok: false; reason: string }
+  | null {
+  const ga = a.gradient ?? null;
+  const gb = b.gradient ?? null;
+  if (!ga && !gb) return null;
+  if (ga && gb && ga.kind !== gb.kind) {
+    return {
+      ok: false,
+      reason:
+        `a ${ga.kind.toLowerCase()} gradient cannot blend to a ` +
+        `${gb.kind.toLowerCase()} one — an intermediate is one or the other`,
+    };
+  }
+  const rampOf = (key: BlendKey, g: BlendGradient | null): RampStop[] | null =>
+    g ? g.stops : key.rgb ? solidRamp(key.rgb) : null;
+  const ra = rampOf(a, ga);
+  const rb = rampOf(b, gb);
+  if (!ra || !rb) {
+    return {
+      ok: false,
+      reason:
+        "one key is gradient-filled and the other's fill does not resolve " +
+        "to a colour, so there is nothing to blend the stops toward",
+    };
+  }
+  const m = matchRamps(ra, rb);
+  if (!m.ok) return m;
+  const g = (ga ?? gb)!;
+  return { ok: true, a: m.a, b: m.b, kind: g.kind, name: g.name };
+}
+
+/** A unique-enough gradient id nonce. */
+let gradientSeq = 0;
+function mintBlendGradientId(): string {
+  const n = `${Date.now().toString(16)}${(gradientSeq++).toString(16)}`;
+  return `Gradient/udrawblend${n}`;
+}
+
+/** One intermediate's gradient: stops interpolated at `t`, their
+ *  colours minted as swatches (one per colour in the plan). Pure but
+ *  for the injected id mints. */
+function gradientStepFor(
+  ramps: { a: RampStop[]; b: RampStop[]; kind: string; name: string },
+  t: number,
+  minted: MintedByName,
+  mintGradientId: () => string,
+): NonNullable<BlendStep["mintGradient"]> {
+  const stops = interpolateRamps(ramps.a, ramps.b, t);
+  const mints: { selfId: string; name: string; rgb: Rgb }[] = [];
+  const refs = stops.map((s) => {
+    const name = rgbToHex(s.rgb);
+    const seen = minted.get(name);
+    if (seen) return seen.selfId;
+    const mint = { selfId: mintBlendSwatchId(), name };
+    minted.set(name, mint);
+    mints.push({ ...mint, rgb: s.rgb });
+    return mint.selfId;
+  });
+  return {
+    stops: mints,
+    gradient: {
+      selfId: mintGradientId(),
+      name: `${ramps.name} ${Math.round(t * 100)}%`,
+      kind: ramps.kind,
+      stops: stops.map((s, i) => ({
+        stopColor: refs[i]!,
+        locationPct: Math.round(s.location * 1000) / 1000,
+        midpointPct: Math.round(s.midpoint * 1000) / 1000,
+      })),
+    },
+  };
 }
 
 function mapTriple(p: AnchorTriple, m: Affine): AnchorTriple {
@@ -1036,6 +1209,25 @@ export function blendBatchFor(args: {
   const ops: MutationInput[] = [];
 
   plan.steps.forEach((step, i) => {
+    if (step.mintGradient) {
+      for (const stop of step.mintGradient.stops) {
+        ops.push({
+          op: "createSwatch",
+          args: {
+            spec: {
+              selfId: stop.selfId,
+              name: stop.name,
+              space: "RGB",
+              value: [stop.rgb[0], stop.rgb[1], stop.rgb[2]],
+            },
+          },
+        });
+      }
+      ops.push({
+        op: "createGradient",
+        args: { spec: step.mintGradient.gradient },
+      });
+    }
     for (const mint of [step.mintFill, step.mintStroke]) {
       if (!mint) continue;
       const rgb = parseCssColor(mint.name);
@@ -1101,7 +1293,7 @@ export function blendBatchFor(args: {
     }
   }
 
-  plan.keys.forEach((key, index) => {
+  flatKeysOf(plan).forEach((key, index) => {
     ops.push(
       stampDrawMetadata(
         key.id,
@@ -1123,7 +1315,10 @@ export function blendBatchFor(args: {
     );
   }
 
-  const members: ElementId[] = [plan.keys[0].id, plan.keys[1].id];
+  // A group blend's key GROUPS join whole (their members stay theirs).
+  const members: ElementId[] = plan.groups
+    ? [plan.groups[0], plan.groups[1]]
+    : [plan.keys[0].id, plan.keys[1].id];
   plan.steps.forEach((step, i) => {
     step.subpaths.forEach((_run, s) => {
       members.push(handleElementId(blendHandle(i, s)));
@@ -1131,6 +1326,12 @@ export function blendBatchFor(args: {
   });
   if (members.length > 2) ops.push(groupMutationFor(members));
   return batchMutationFor(ops);
+}
+
+/** The plan's keys, flat by pair: A0 B0 A1 B1 … — the record's order and
+ *  the key links' `index`. */
+export function flatKeysOf(plan: BlendPlan): BlendKey[] {
+  return (plan.pairs ?? [plan.keys]).flatMap(([a, b]) => [a, b]);
 }
 
 /** The EXPAND batch — stop tracking, keep every piece of artwork. Drops
@@ -1268,6 +1469,7 @@ export async function blendKeyOfElement(
       string | null);
   // C-23 — see appearance-bake: a blend inserts onto a page.
   if (!table.pageId) return null;
+  const fill = typeof fillRef === "string" ? fillRef : null;
   return {
     pageId: table.pageId,
     key: {
@@ -1275,10 +1477,58 @@ export async function blendKeyOfElement(
       source,
       paint,
       center: blendSourceCenter(source),
-      rgb: await refRgbOf(host, typeof fillRef === "string" ? fillRef : null),
+      rgb: await refRgbOf(host, fill),
       strokeRgb: await refRgbOf(host, paint.stroke),
+      gradient: fill?.startsWith("Gradient/")
+        ? await blendGradientOf(host, fill)
+        : null,
     },
   };
+}
+
+/** A gradient fill's kind and stops as display colours, or null. */
+async function blendGradientOf(
+  host: BundleHost,
+  ref: string,
+): Promise<BlendGradient | null> {
+  const detail = await rawGradientDetail(host, ref);
+  if (!detail || detail.stops.length === 0) return null;
+  const stops: RampStop[] = [];
+  for (const s of detail.stops) {
+    const rgb = parseCssColor(s.resolvedRgbHex);
+    if (!rgb) return null;
+    stops.push({
+      rgb,
+      location: s.locationPct,
+      midpoint: s.midpointPct ?? 50,
+    });
+  }
+  return {
+    kind: detail.kind.toLowerCase() === "radial" ? "Radial" : "Linear",
+    name: detail.name,
+    stops,
+  };
+}
+
+/** The leaves of the group `id`, in tree (= paint) order, or null when
+ *  it is not a group the tree knows. */
+export async function blendGroupLeaves(
+  host: BundleHost,
+  id: ElementId,
+): Promise<ElementId[] | null> {
+  if (id.kind !== "group") return null;
+  const find = (
+    nodes: readonly { id?: ElementId | null; children?: unknown }[],
+  ): { children?: unknown } | null => {
+    for (const node of nodes) {
+      if (node.id?.kind === "group" && node.id.id === id.id) return node;
+      const inner = find((node.children ?? []) as never);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  const node = find((await linkIndex(host).tree()) as never);
+  return node ? leafIdsOf((node.children ?? []) as never) : null;
 }
 
 /** Every leaf carrying a blend link, split by which one. `blend`
@@ -1386,7 +1636,9 @@ export async function blendGenerationOf(
   blend: string,
 ): Promise<BlendGeneration> {
   const links = await blendLinks(host, blend);
-  const anchor = links.keys[0]?.id ?? links.steps[0]?.id ?? null;
+  // An intermediate first: it sits in the blend's own group, where a
+  // group blend's KEY sits one level down, in its key group.
+  const anchor = links.steps[0]?.id ?? links.keys[0]?.id ?? null;
   return {
     // The tree the links were just read from — the same revision, so the
     // same tree, and not a second read of it.
@@ -1407,13 +1659,15 @@ export async function blendPlanFor(
     keyIds: readonly ElementId[];
     spineId: ElementId | null;
     label: string;
+    /** The two key groups of a group blend. */
+    groups?: [ElementId, ElementId] | null;
   },
 ): Promise<BlendPlan | null> {
   const { label } = args;
-  if (args.keyIds.length !== 2) {
+  if (args.keyIds.length < 2 || args.keyIds.length % 2 !== 0) {
     host.log.warn(
-      `${label}: a blend needs exactly 2 key objects (got ` +
-        `${args.keyIds.length}) — no-op`,
+      `${label}: a blend needs its key objects in PAIRS — two paths, or ` +
+        `the members of two groups (got ${args.keyIds.length}) — no-op`,
     );
     return null;
   }
@@ -1448,22 +1702,52 @@ export async function blendPlanFor(
     pageId = read.pageId;
     resolved.push(read.key);
   }
-  const keys = resolved as [BlendKey, BlendKey];
-  if (!blendStructureMatches(keys[0].source, keys[1].source)) {
-    host.log.warn(
-      `${label}: structures differ ` +
-        `(${keys[0].source.subpaths.map((s) => s.length).join("+")} vs ` +
-        `${keys[1].source.subpaths.map((s) => s.length).join("+")} anchors) — ` +
-        "a blend interpolates anchor for anchor, so it blends only matching " +
-        "subpath counts, anchor counts and open flags. Resampling both keys " +
-        "to a common parameterization is a real feature and is NOT built; " +
-        "no-op",
-    );
-    return null;
+  const pairs: [BlendKey, BlendKey][] = [];
+  for (let i = 0; i < resolved.length; i += 2) {
+    pairs.push([resolved[i]!, resolved[i + 1]!]);
   }
+  const keys = pairs[0]!;
+  let added = 0;
+  for (const [n, [a, b]] of pairs.entries()) {
+    // WP6.6 — different structures are MATCHED; only what cannot be
+    // matched is refused, with its reason.
+    const matched = matchContourSets(a.source, b.source);
+    const what = pairs.length > 1 ? `member pair ${n + 1}` : "the keys";
+    if (!matched.ok) {
+      host.log.warn(
+        `${label}: ${what} cannot blend — ${matched.reason}; no-op`,
+      );
+      return null;
+    }
+    added += matched.added;
+    const ramps = blendRampsOf(a, b);
+    if (ramps && !ramps.ok) {
+      host.log.warn(`${label}: ${what} cannot blend — ${ramps.reason}; no-op`);
+      return null;
+    }
+  }
+  if (added > 0) {
+    host.log.info(
+      `${label}: the keys' structures differ, so ${added} anchor(s) were ` +
+        "added to the intermediates' correspondence (the keys keep their " +
+        "own anchors)",
+    );
+  }
+  // A group blend's reference line runs between the two GROUPS' centres.
+  const sideCenter = (side: 0 | 1): Vec2 => {
+    const all = pairs.map((p) => p[side].source);
+    return blendSourceCenter({
+      subpaths: all.flatMap((src) => src.subpaths),
+      open: all.flatMap((src) => src.open),
+    });
+  };
+  const reference =
+    pairs.length > 1
+      ? measureSegment(sideCenter(0), sideCenter(1))
+      : defaultSpineFor(keys);
 
   // The spine: a replaced path, or the straight line between the keys.
-  let spine = defaultSpineFor(keys);
+  let spine = reference;
   let spineId = args.spineId;
   if (spineId) {
     const table = await host.document.pathAnchors(spineId).catch(() => null);
@@ -1483,18 +1767,28 @@ export async function blendPlanFor(
           `${label}: the spine ${String(spineId.id)} has no measurable ` +
             "length — falling back to the straight line between the keys",
         );
-        spine = defaultSpineFor(keys);
+        spine = reference;
         spineId = null;
       }
     }
   }
 
-  const count = blendStepCountFor({
+  // Smooth colour over a group: the pair that needs the most steps.
+  let count = blendStepCountFor({
     params: args.params,
     spineLength: spine.length,
     fromRgb: keys[0].rgb,
     toRgb: keys[1].rgb,
   });
+  for (const [a, b] of pairs.slice(1)) {
+    const other = blendStepCountFor({
+      params: args.params,
+      spineLength: spine.length,
+      fromRgb: a.rgb,
+      toRgb: b.rgb,
+    });
+    if (other.steps > count.steps) count = other;
+  }
   if (count.steps === 0) {
     host.log.warn(`${label}: ${count.why} — no-op`);
     return null;
@@ -1508,13 +1802,27 @@ export async function blendPlanFor(
     host.log.info(`${label}: ${count.why}`);
   }
 
-  const steps = blendStepsFor({
-    keys,
-    params: args.params,
-    spine,
-    steps: count.steps,
-  });
-  if (!steps) return null; // unreachable post-check; kept for safety
+  // One step list per pair, interleaved step-major so each step's
+  // members paint together (and in member order).
+  const minted: MintedByName = new Map();
+  const perPair: BlendStep[][] = [];
+  for (const [n, pair] of pairs.entries()) {
+    const list = blendStepsFor({
+      keys: pair,
+      params: args.params,
+      spine,
+      steps: count.steps,
+      reference,
+      pair: n,
+      minted,
+    });
+    if (!list) return null; // unreachable post-check; kept for safety
+    perPair.push(list);
+  }
+  const steps: BlendStep[] = [];
+  for (let k = 0; k < count.steps; k++) {
+    for (const list of perPair) if (list[k]) steps.push(list[k]!);
+  }
 
   let placed = steps;
   let dropped = 0;
@@ -1559,6 +1867,8 @@ export async function blendPlanFor(
     blend: args.blend,
     params: args.params,
     keys,
+    pairs,
+    groups: args.groups ?? null,
     spineId,
     spineLength: spine.length,
     count,
@@ -1588,7 +1898,7 @@ async function emitBlend(
   // this revision, so this reads nothing; a make reads each key once.
   const index = linkIndex(host);
   const keyEnvelopes = await Promise.all(
-    plan.keys.map((k) => index.envelopeOf(k.id).catch(() => null)),
+    flatKeysOf(plan).map((k) => index.envelopeOf(k.id).catch(() => null)),
   );
   const spineEnvelope = plan.spineId
     ? await index.envelopeOf(plan.spineId).catch(() => null)
@@ -1673,7 +1983,7 @@ async function saveBlend(
       id: args.plan.blend,
       name: args.name,
       params: args.plan.params,
-      keys: args.plan.keys.map((k) => ({
+      keys: flatKeysOf(args.plan).map((k) => ({
         kind: k.id.kind,
         id: String(k.id.id),
       })),
@@ -1683,6 +1993,75 @@ async function saveBlend(
       steps: args.steps.map((s) => ({ kind: s.kind, id: String(s.id) })),
     }),
   );
+}
+
+/**
+ * The keys a selection blends: two paths, or the members of two groups
+ * paired by order (A0 B0 A1 B1 …). Null — with the reason logged — for
+ * anything else.
+ */
+export async function blendKeysOfSelection(
+  host: BundleHost,
+  selection: readonly ElementId[],
+  label: string,
+): Promise<{
+  keyIds: ElementId[];
+  groups: [ElementId, ElementId] | null;
+} | null> {
+  if (selection.length !== 2) {
+    host.log.warn(
+      `${label}: needs exactly 2 selected objects — two paths or two ` +
+        `groups (got ${selection.length}) — no-op`,
+    );
+    return null;
+  }
+  const [a, b] = selection as [ElementId, ElementId];
+  if (a.kind === "group" && b.kind === "group") {
+    const la = await blendGroupLeaves(host, a);
+    const lb = await blendGroupLeaves(host, b);
+    if (!la || !lb || la.length === 0 || lb.length === 0) {
+      host.log.warn(
+        `${label}: a selected group has no readable members — no-op`,
+      );
+      return null;
+    }
+    if (la.length !== lb.length) {
+      host.log.warn(
+        `${label}: the groups have ${la.length} and ${lb.length} members — ` +
+          "a group blend pairs member with member by order, so both groups " +
+          "need the same number; no-op",
+      );
+      return null;
+    }
+    const bad = [...la, ...lb].find((id) => !supportsPathOps(id));
+    if (bad) {
+      host.log.warn(
+        `${label}: group member ${bad.kind} ${String(bad.id)} is not a ` +
+          "path — no-op",
+      );
+      return null;
+    }
+    return {
+      keyIds: la.flatMap((id, i) => [id, lb[i]!]),
+      groups: [a, b],
+    };
+  }
+  if (a.kind === "group" || b.kind === "group") {
+    host.log.warn(
+      `${label}: one key is a group and the other is not — blend two ` +
+        "paths or two groups; no-op",
+    );
+    return null;
+  }
+  const paths = selection.filter(supportsPathOps);
+  if (paths.length !== 2) {
+    host.log.warn(
+      `${label}: needs exactly 2 selected path elements ` +
+        `(got ${selection.length} selected, ${paths.length} path-bearing) — no-op`,
+    );
+    return null;
+  }
+  return { keyIds: paths, groups: null };
 }
 
 /**
@@ -1698,23 +2077,18 @@ export async function applyMakeBlend(
   const label = BLEND_COMMAND_ID;
   const p = payloadOf(payload);
   const selection = host.selection.get();
-  const paths = selection.filter(supportsPathOps);
-  if (selection.length !== 2 || paths.length !== 2) {
-    host.log.warn(
-      `${label}: needs exactly 2 selected path elements ` +
-        `(got ${selection.length} selected, ${paths.length} path-bearing) — no-op`,
-    );
-    return [];
-  }
+  const resolved = await blendKeysOfSelection(host, selection, label);
+  if (!resolved) return [];
   const params = blendParamsFrom(p);
   const library = await readBlendLibrary(host);
   const blend = mintBlendId(library);
   const plan = await blendPlanFor(host, {
     blend,
     params,
-    keyIds: paths,
+    keyIds: resolved.keyIds,
     spineId: null,
     label,
+    groups: resolved.groups,
   });
   if (!plan) return [];
   const built = await emitBlend(host, { plan, label });
@@ -1766,16 +2140,28 @@ export async function applyUpdateBlend(
   const library = await readBlendLibrary(host);
   const saved = findBlendRecord(library, blend);
   const links = await blendLinks(host, blend);
+  const savedKeys =
+    saved?.keys.map((k) => ({ kind: k.kind, id: k.id }) as ElementId) ?? [];
   const keyIds =
-    links.keys.length === 2
+    links.keys.length >= 2 &&
+    (savedKeys.length === 0 || links.keys.length === savedKeys.length)
       ? links.keys.map((k) => k.id)
-      : (saved?.keys.map((k) => ({ kind: k.kind, id: k.id }) as ElementId) ??
-        []);
-  if (keyIds.length !== 2) {
+      : savedKeys;
+  if (keyIds.length < 2 || keyIds.length % 2 !== 0) {
     host.log.warn(
-      `${label}: "${blend}" no longer names two key objects — nothing to update`,
+      `${label}: "${blend}" no longer names its key objects in pairs — ` +
+        "nothing to update",
     );
     return [];
+  }
+  // A group blend: the key groups are the groups holding a member of
+  // each side (one level below the blend's own group).
+  let groups: [ElementId, ElementId] | null = null;
+  if (keyIds.length > 2) {
+    const tree = await linkIndex(host).tree();
+    const ga = groupHolding(tree, keyIds[0]!);
+    const gb = groupHolding(tree, keyIds[1]!);
+    if (ga && gb && ga.id !== gb.id) groups = [ga, gb];
   }
   const params = blendParamsFrom(p, saved?.params ?? BLEND_DEFAULTS);
   // `spineId: null` in the payload CLEARS the spine (back to the straight
@@ -1798,6 +2184,7 @@ export async function applyUpdateBlend(
     keyIds,
     spineId,
     label,
+    groups,
   });
   if (!plan) return [];
   const built = await emitBlend(host, { plan, label, previous });
