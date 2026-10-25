@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 539,
-    "keybinding": 131,
-    "menu": 383,
-    "panel": 130,
-    "tool": 81
+    "command": 569,
+    "keybinding": 145,
+    "menu": 409,
+    "panel": 131,
+    "tool": 91
   },
   "features": [
     {
@@ -401,6 +401,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.attachToPerspective",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.averageEndpoints",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -487,6 +492,11 @@
     },
     {
       "id": "command:media.paged.draw.command.detachTextFromPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.drawOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -616,6 +626,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.liquifyStroke",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.makeCompoundPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -652,6 +667,11 @@
     },
     {
       "id": "command:media.paged.draw.command.makeRadialRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.moveOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -731,7 +751,57 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.perspectiveHideGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveLockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveOnePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveSetPlane",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveShowGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveThreePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveTwoPoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveUnlockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.placeSymbolInstance",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarp",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarpTool",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -797,6 +867,11 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseCompoundPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseFromPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -2326,6 +2401,21 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.file.exportSvgPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.exportSvgSelection",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.file.importSvg",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.file.new",
       "kind": "command",
       "owner": "editor"
@@ -2666,6 +2756,11 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.guidesAndGridPreferences",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.lastPage",
       "kind": "command",
       "owner": "editor"
@@ -2676,7 +2771,62 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.view.outline",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.overprintPreview",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.pixelGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.pixelPreview",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.view.previousPage",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.resetRotation",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.rotateClockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.rotateCounterclockwise",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.showGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.smartGuides",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.snapToGrid",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.view.snapToPixel",
       "kind": "command",
       "owner": "editor"
     },
@@ -2751,6 +2901,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+cmd+y→paged.view.pixelPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+ctrl+0→paged.view.fitSpread",
       "kind": "keybinding",
       "owner": "editor"
@@ -2771,6 +2926,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+ctrl+y→paged.view.pixelPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+f5→media.paged.slide.command.presenterView",
       "kind": "keybinding",
       "owner": "media.paged.slide"
@@ -2786,6 +2946,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+shift+cmd+y→paged.view.overprintPreview",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:alt+shift+ctrl+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -2794,6 +2959,11 @@
       "id": "keybinding:alt+shift+ctrl+n→media.paged.slide.command.duplicateSlide",
       "kind": "keybinding",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "keybinding:alt+shift+ctrl+y→paged.view.overprintPreview",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:arrowdown→paged.object.nudgeDown",
@@ -2817,6 +2987,11 @@
     },
     {
       "id": "keybinding:backspace→paged.object.delete",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3081,6 +3256,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+u→paged.view.smartGuides",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -3096,7 +3276,17 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:cmd+y→paged.view.outline",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:contextmenu→paged.edit.contextMenu",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+'→paged.view.showGrid",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3256,6 +3446,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:ctrl+u→paged.view.smartGuides",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+v→media.paged.sheet.command.pasteSelection",
       "kind": "keybinding",
       "owner": "media.paged.sheet"
@@ -3267,6 +3462,11 @@
     },
     {
       "id": "keybinding:ctrl+x→paged.edit.cut",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+y→paged.view.outline",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3337,6 +3537,26 @@
     },
     {
       "id": "keybinding:shift+arrowup→paged.object.nudgeUpLarge",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+'→paged.view.snapToGrid",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+cmd+1→paged.view.resetRotation",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+'→paged.view.snapToGrid",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+ctrl+1→paged.view.resetRotation",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3921,6 +4141,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "menu:Edit/History",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:Edit/Paste",
       "kind": "menu",
       "owner": "editor"
@@ -4034,6 +4259,21 @@
       "id": "menu:File/Export PowerPoint deck…",
       "kind": "menu",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:File/Export/SVG (page)…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:File/Export/SVG (selection)…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:File/Import/SVG…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:File/New document…",
@@ -4931,6 +5171,21 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Perspective/Attach to active plane",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Perspective/Release with perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Puppet warp",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Object/Rasterize…",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5221,12 +5476,92 @@
       "owner": "editor"
     },
     {
+      "id": "menu:View/Guides & grid preferences…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Outline view",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Overprint Preview",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Perspective grid/Hide grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Lock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/One-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Show grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Three-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Two-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Unlock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Pixel Preview",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/15° clockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/15° counterclockwise",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Rotate view/Reset rotation",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Show data markers",
       "kind": "menu",
       "owner": "editor"
     },
     {
+      "id": "menu:View/Show grid",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
       "id": "menu:View/Show heading anchors",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Show pixel grid",
       "kind": "menu",
       "owner": "editor"
     },
@@ -5239,6 +5574,21 @@
       "id": "menu:View/Slide Sorter",
       "kind": "menu",
       "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:View/Smart guides",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to grid",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:View/Snap to pixel",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:View/Snap to points",
@@ -5671,6 +6021,11 @@
       "owner": "editor"
     },
     {
+      "id": "panel:paged.history",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
       "id": "panel:paged.hyperlinks",
       "kind": "panel",
       "owner": "editor"
@@ -5951,6 +6306,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.bloat",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.blobBrush",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -5962,6 +6322,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.cornerRadius",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.crystallize",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6036,6 +6401,26 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.perspectiveGrid",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.perspectiveSelect",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.pucker",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.puppetWarp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.reflect",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -6047,6 +6432,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.reshape",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.scallop",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6071,12 +6461,27 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.twirl",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.typeOnPath",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.warp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.width",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.wrinkle",
       "kind": "tool",
       "owner": "media.paged.draw"
     },

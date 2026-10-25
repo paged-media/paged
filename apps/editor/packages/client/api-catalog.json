@@ -3,9 +3,9 @@
   "package": "@paged-media/client",
   "protocol": 77,
   "counts": {
-    "clientMembers": 102,
+    "clientMembers": 103,
     "wireKinds": 67,
-    "exports": 80
+    "exports": 91
   },
   "wireKinds": [
     "amendMutation",
@@ -520,6 +520,12 @@
           "kind": "method",
           "signature": "setHostObjects(answer: HostObjectsAnswerer | null): void",
           "summary": "Object model (ADR 323) — install the answerer for a script's `plugin:` calls: the app passes the plugin SDK's `answerHostObjects` over its ONE shared object registry."
+        },
+        {
+          "name": "CanvasClient.setScriptData",
+          "kind": "method",
+          "signature": "setScriptData(answer: DataCallAnswerer | null): boolean",
+          "summary": "Engine ADR 1014, amendment 2 — install the answerer for a script's `paged.data.tables / records / query / evaluate`: `answer(method, args)` is called with the interpreter's positional arguments and resolves to the value the script gets (a throw is the script's error)."
         },
         {
           "name": "CanvasClient.beginGesture",
@@ -1872,6 +1878,79 @@
           "name": "GestureUpdateRecord",
           "kind": "type",
           "signature": "GestureUpdateRecord",
+          "summary": null
+        }
+      ]
+    },
+    {
+      "key": "data-bridge",
+      "title": "Script data (shared memory)",
+      "summary": "Engine ADR 1014, amendment 2 — a script's paged.data calls, answered on the main thread while the worker blocks on a SharedArrayBuffer.",
+      "members": [
+        {
+          "name": "DataBridgeHost",
+          "kind": "type",
+          "signature": "DataBridgeHost",
+          "summary": null
+        },
+        {
+          "name": "DATA_BRIDGE_CAPACITY",
+          "kind": "value",
+          "signature": "DATA_BRIDGE_CAPACITY",
+          "summary": null
+        },
+        {
+          "name": "DATA_BRIDGE_HEADER_BYTES",
+          "kind": "value",
+          "signature": "DATA_BRIDGE_HEADER_BYTES",
+          "summary": null
+        },
+        {
+          "name": "DATA_CALL_TIMEOUT_MS",
+          "kind": "value",
+          "signature": "DATA_CALL_TIMEOUT_MS",
+          "summary": null
+        },
+        {
+          "name": "allocateDataBridge",
+          "kind": "value",
+          "signature": "allocateDataBridge",
+          "summary": null
+        },
+        {
+          "name": "createDataBridgeCaller",
+          "kind": "value",
+          "signature": "createDataBridgeCaller",
+          "summary": null
+        },
+        {
+          "name": "isDataBridgeMessage",
+          "kind": "value",
+          "signature": "isDataBridgeMessage",
+          "summary": null
+        },
+        {
+          "name": "DataBridgeMessage",
+          "kind": "type",
+          "signature": "DataBridgeMessage",
+          "summary": null
+        },
+        {
+          "name": "DataCallAnswerer",
+          "kind": "type",
+          "signature": "DataCallAnswerer",
+          "summary": null
+        },
+        {
+          "name": "DataCallMessage",
+          "kind": "type",
+          "signature": "DataCallMessage",
+          "summary": null
+        },
+        {
+          "name": "DataMoreMessage",
+          "kind": "type",
+          "signature": "DataMoreMessage",
           "summary": null
         }
       ]
