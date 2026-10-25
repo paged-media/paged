@@ -414,6 +414,38 @@ pub(super) fn find_fill_rule_mut<'a>(
     }
 }
 
+/// Engine ADR 1007 — locate the `gradient_fill_start` field.
+pub(super) fn find_gradient_fill_start_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut Option<[f32; 2]>> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.gradient_fill_start),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.gradient_fill_start),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.gradient_fill_start),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.gradient_fill_start),
+        _ => None,
+    }
+}
+
+/// Engine ADR 1007 — locate the `gradient_stroke_mode` field on any
+/// stroked page-item kind.
+pub(super) fn find_gradient_stroke_mode_mut<'a>(
+    doc: &'a mut Document,
+    node: &NodeId,
+) -> Option<&'a mut paged_model::StrokeGradientMode> {
+    match node {
+        NodeId::TextFrame(id) => find_text_frame_mut(doc, id).map(|f| &mut f.gradient_stroke_mode),
+        NodeId::Rectangle(id) => find_rectangle_mut(doc, id).map(|r| &mut r.gradient_stroke_mode),
+        NodeId::Oval(id) => find_oval_mut(doc, id).map(|o| &mut o.gradient_stroke_mode),
+        NodeId::Polygon(id) => find_polygon_mut(doc, id).map(|p| &mut p.gradient_stroke_mode),
+        NodeId::GraphicLine(id) => {
+            find_graphic_line_mut(doc, id).map(|l| &mut l.gradient_stroke_mode)
+        }
+        _ => None,
+    }
+}
+
 /// W1.1 — locate the `stroke_dash: Vec<f32>` field (per-frame
 /// `StrokeDashAndGap` override) on any stroked page-item kind.
 pub(super) fn find_stroke_dash_mut<'a>(

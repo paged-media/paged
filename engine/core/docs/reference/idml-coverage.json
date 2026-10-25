@@ -20,13 +20,13 @@
     "elements": 142,
     "attributes": 756,
     "imported": 1430,
-    "exported": 1109,
-    "importedAndExported": 909,
-    "importOnly": 521,
+    "exported": 1112,
+    "importedAndExported": 912,
+    "importOnly": 518,
     "exportOnly": 200,
     "propertiesChild": 61,
     "importerReadSites": 1079,
-    "exporterWriteSites": 1092,
+    "exporterWriteSites": 1095,
     "unresolved": 0,
     "partRows": 4150,
     "misplaced": 30,
@@ -44,9 +44,9 @@
       "value": 0.485924
     },
     "weightedExport": {
-      "covered": 95012,
+      "covered": 95030,
       "total": 633952,
-      "value": 0.149873
+      "value": 0.149901
     },
     "misplacedReads": 30,
     "unseenReads": 405,
@@ -2953,7 +2953,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 432
+        "line": 434
       }
     },
     {
@@ -2996,7 +2996,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 483
+        "line": 485
       }
     },
     {
@@ -3442,7 +3442,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 447
+        "line": 449
       }
     },
     {
@@ -6118,11 +6118,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 325
+        "line": 327
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 325
+        "line": 327
       }
     },
     {
@@ -6139,11 +6139,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 321
+        "line": 323
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 321
+        "line": 323
       }
     },
     {
@@ -6160,11 +6160,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 326
+        "line": 328
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 326
+        "line": 328
       }
     },
     {
@@ -6296,11 +6296,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 328
+        "line": 330
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 328
+        "line": 330
       }
     },
     {
@@ -6340,11 +6340,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 327
+        "line": 329
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 327
+        "line": 329
       }
     },
     {
@@ -11113,7 +11113,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 171
+        "line": 173
       }
     },
     {
@@ -11136,7 +11136,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 169
+        "line": 171
       }
     },
     {
@@ -11159,7 +11159,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 173
+        "line": 175
       }
     },
     {
@@ -11454,7 +11454,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 182
+        "line": 184
       }
     },
     {
@@ -11479,7 +11479,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 185
+        "line": 187
       }
     },
     {
@@ -11523,7 +11523,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 181
+        "line": 183
       }
     },
     {
@@ -17239,7 +17239,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 957
+        "line": 959
       }
     },
     {
@@ -17264,7 +17264,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 950
+        "line": 952
       }
     },
     {
@@ -17289,7 +17289,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 948
+        "line": 950
       }
     },
     {
@@ -17314,7 +17314,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 947
+        "line": 949
       }
     },
     {
@@ -17794,7 +17794,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 514
+        "line": 516
       }
     },
     {
@@ -17914,17 +17914,23 @@
       "importerField": null,
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "MasterSpreads",
         "Spreads"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "MasterSpreads",
+        "Spreads"
+      ],
       "source": {
         "file": "crates/idml-import/src/spread.rs",
         "line": 1828
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/effects.rs",
+        "line": 369
+      }
     },
     {
       "element": "OpacityGradientStop",
@@ -17933,17 +17939,23 @@
       "importerField": null,
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "MasterSpreads",
         "Spreads"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "MasterSpreads",
+        "Spreads"
+      ],
       "source": {
         "file": "crates/idml-import/src/spread.rs",
         "line": 1838
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/effects.rs",
+        "line": 370
+      }
     },
     {
       "element": "OpacityGradientStop",
@@ -17952,17 +17964,23 @@
       "importerField": null,
       "coarseType": "number",
       "imported": true,
-      "exported": false,
+      "exported": true,
       "importParts": [
         "MasterSpreads",
         "Spreads"
       ],
-      "exportParts": [],
+      "exportParts": [
+        "MasterSpreads",
+        "Spreads"
+      ],
       "source": {
         "file": "crates/idml-import/src/spread.rs",
         "line": 1834
       },
-      "exportSource": null
+      "exportSource": {
+        "file": "crates/idml-export/src/effects.rs",
+        "line": 368
+      }
     },
     {
       "element": "OpacityGradientStop",
@@ -19822,7 +19840,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 432
+        "line": 434
       }
     },
     {
@@ -19988,7 +20006,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 483
+        "line": 485
       }
     },
     {
@@ -21071,7 +21089,7 @@
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 447
+        "line": 449
       }
     },
     {
@@ -29925,11 +29943,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 338
+        "line": 340
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 338
+        "line": 340
       }
     },
     {
@@ -29946,11 +29964,11 @@
       ],
       "source": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 337
+        "line": 339
       },
       "exportSource": {
         "file": "crates/idml-export/src/resources.rs",
-        "line": 337
+        "line": 339
       }
     },
     {
@@ -41006,9 +41024,9 @@
     {"part":"Resources/Styles","element":"ObjectStyleStrokeEffectsCategorySettings","attribute":"EnableOuterGlow","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"ObjectStyleStrokeEffectsCategorySettings","attribute":"EnableSatin","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"ObjectStyleStrokeEffectsCategorySettings","attribute":"EnableTransparency","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Location","kind":"attr","docCount":6,"nonModalDocs":6,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Midpoint","kind":"attr","docCount":6,"nonModalDocs":5,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Opacity","kind":"attr","docCount":6,"nonModalDocs":6,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Location","kind":"attr","docCount":6,"nonModalDocs":6,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Midpoint","kind":"attr","docCount":6,"nonModalDocs":5,"imported":true,"exported":true,"readElsewhere":false},
+    {"part":"Spreads","element":"OpacityGradientStop","attribute":"Opacity","kind":"attr","docCount":6,"nonModalDocs":6,"imported":true,"exported":true,"readElsewhere":false},
     {"part":"Spreads","element":"OpacityGradientStop","attribute":"Self","kind":"attr","docCount":6,"nonModalDocs":6,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"OuterGlowSetting","attribute":"Applied","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":true},
     {"part":"Spreads","element":"OuterGlowSetting","attribute":"Applied","kind":"attr","docCount":1,"nonModalDocs":1,"imported":true,"exported":true,"readElsewhere":false},

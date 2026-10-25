@@ -30,9 +30,14 @@
 //!   DeviceRGB. Linear→sRGB encode happens here (the list carries
 //!   linear light).
 //! - Gradients → `/Shading` type 2/3 with Type-3 stitching honouring
-//!   midpoints (sRGB stops v1; native-space shadings = v2).
+//!   midpoints (sRGB stops v1; native-space shadings = v2). A conic
+//!   (sweep) gradient → a type-1 function shading over a Type-4
+//!   calculator function of the angle (engine ADR 1007). A ramp whose
+//!   stops are translucent paints its colour shading under a
+//!   luminosity soft mask of the same geometry in DeviceGray, whose
+//!   value is the stops' alpha ([`ShadeChannels::Alpha`]).
 
-use paged_compose::{Color, LinearGradient, Paint, RadialGradient, SpotInk};
+use paged_compose::{Color, GradientStop, LinearGradient, Paint, RadialGradient, SpotInk};
 use pdf_writer::{Content, Finish, Name, Ref};
 
 use crate::writer::{DocState, PageResources};
@@ -453,6 +458,36 @@ fn short_hash(s: &str) -> u32 {
     h
 }
 
+/// Engine ADR 1007 — what a shading carries: the stops' colour
+/// (DeviceRGB, sRGB-encoded) or their alpha (DeviceGray, for the
+/// luminosity soft mask of a translucent ramp).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShadeChannels {
+    Color,
+    Alpha,
+}
+
+impl ShadeChannels {
+    fn values(self, c: Color) -> Vec<f32> {
+        match self {
+            ShadeChannels::Color => srgb_of(c).to_vec(),
+            ShadeChannels::Alpha => vec![c.a.clamp(0.0, 1.0)],
+        }
+    }
+
+    fn range(self) -> &'static [f32] {
+        match self {
+            ShadeChannels::Color => &[0.0, 1.0, 0.0, 1.0, 0.0, 1.0],
+            ShadeChannels::Alpha => &[0.0, 1.0],
+        }
+    }
+}
+
+/// Whether any stop of a ramp is less than opaque (engine ADR 1007).
+pub fn stops_translucent(stops: &[GradientStop]) -> bool {
+    stops.iter().any(|s| s.color.a < 0.999)
+}
+
 /// Write a `/Shading` dict (type 2 linear / type 3 radial) for a
 /// gradient, with a Type-3 stitching function over the stops. v1
 /// emits sRGB-encoded stops (DeviceRGB / ICCBased sRGB); native
@@ -463,13 +498,30 @@ pub fn write_linear_shading(
     g: &LinearGradient,
     bbox: paged_compose::Rect,
 ) -> Ref {
+    write_linear_shading_of(state, input, g, bbox, ShadeChannels::Color)
+}
+
+/// [`write_linear_shading`] carrying `channels`.
+pub fn write_linear_shading_of(
+    state: &mut DocState,
+    input: &ExportInput<'_>,
+    g: &LinearGradient,
+    bbox: paged_compose::Rect,
+    channels: ShadeChannels,
+) -> Ref {
     let coords = [
         bbox.x + g.start.0 * bbox.w,
         bbox.y + g.start.1 * bbox.h,
         bbox.x + g.end.0 * bbox.w,
         bbox.y + g.end.1 * bbox.h,
     ];
-    write_shading(state, input, &g.stops, ShadingGeometry::Axial(coords))
+    write_shading(
+        state,
+        input,
+        &g.stops,
+        ShadingGeometry::Axial(coords),
+        channels,
+    )
 }
 
 pub fn write_radial_shading(
@@ -477,6 +529,17 @@ pub fn write_radial_shading(
     input: &ExportInput<'_>,
     g: &RadialGradient,
     bbox: paged_compose::Rect,
+) -> Ref {
+    write_radial_shading_of(state, input, g, bbox, ShadeChannels::Color)
+}
+
+/// [`write_radial_shading`] carrying `channels`.
+pub fn write_radial_shading_of(
+    state: &mut DocState,
+    input: &ExportInput<'_>,
+    g: &RadialGradient,
+    bbox: paged_compose::Rect,
+    channels: ShadeChannels,
 ) -> Ref {
     let cx = bbox.x + g.center.0 * bbox.w;
     let cy = bbox.y + g.center.1 * bbox.h;
@@ -486,7 +549,128 @@ pub fn write_radial_shading(
         input,
         &g.stops,
         ShadingGeometry::Radial([cx, cy, 0.0, cx, cy, r]),
+        channels,
     )
+}
+
+/// Engine ADR 1007 — a conic (sweep) gradient as a type-1 function
+/// shading over `domain` (the painted area, in the current user space):
+/// a Type-4 calculator function takes `(x, y)` to the angle about
+/// `center` (PostScript `atan`, degrees, turning from +x toward +y —
+/// clockwise in the display list's y-down page space, the sweep pool's
+/// own convention), less `start_angle`, as the ramp's parameter `t`,
+/// and evaluates the stops piecewise linearly at `t`. Same stops, same
+/// geometry as the rasterisers' `peniko` sweep.
+pub fn write_sweep_shading(
+    state: &mut DocState,
+    stops: &[GradientStop],
+    center: (f32, f32),
+    start_angle: f32,
+    domain: paged_compose::Rect,
+    channels: ShadeChannels,
+) -> Ref {
+    let mut sorted: Vec<&GradientStop> = stops.iter().collect();
+    sorted.sort_by(|a, b| a.offset.total_cmp(&b.offset));
+    let code = sweep_function_code(&sorted, center, start_angle, channels);
+    let fn_ref = state.refs.alloc();
+    let x0 = domain.x;
+    let x1 = domain.x + domain.w.max(1e-3);
+    let y0 = domain.y;
+    let y1 = domain.y + domain.h.max(1e-3);
+    {
+        let mut f = state.pdf.post_script_function(fn_ref, code.as_bytes());
+        f.domain([x0, x1, y0, y1]);
+        f.range(channels.range().iter().copied());
+        f.finish();
+    }
+    let shading_ref = state.refs.alloc();
+    let mut sh = state.pdf.function_shading(shading_ref);
+    sh.shading_type(pdf_writer::types::FunctionShadingType::Function);
+    match channels {
+        ShadeChannels::Color => sh.color_space().device_rgb(),
+        ShadeChannels::Alpha => sh.color_space().device_gray(),
+    };
+    sh.domain([x0, x1, y0, y1]);
+    sh.function(fn_ref);
+    sh.finish();
+    shading_ref
+}
+
+/// The calculator function of [`write_sweep_shading`].
+pub(crate) fn sweep_function_code(
+    sorted: &[&GradientStop],
+    center: (f32, f32),
+    start_angle: f32,
+    channels: ShadeChannels,
+) -> String {
+    let n = |v: f32| {
+        let s = format!("{v:.5}");
+        let s = s.trim_end_matches('0').trim_end_matches('.').to_string();
+        if s == "-0" || s.is_empty() {
+            "0".to_string()
+        } else {
+            s
+        }
+    };
+    let start_deg = start_angle.to_degrees().rem_euclid(360.0);
+    // (x y) → t in [0, 1).
+    let mut code = format!(
+        "{{ {} sub exch {} sub atan {} sub dup 0 lt {{ 360 add }} if 360 div ",
+        n(center.1),
+        n(center.0),
+        n(start_deg)
+    );
+    let push_const = |c: Color| -> String {
+        let v = channels.values(c);
+        let mut s = String::from("pop");
+        for x in v {
+            s.push(' ');
+            s.push_str(&n(x));
+        }
+        s
+    };
+    if sorted.is_empty() {
+        code.push_str(&push_const(Color::BLACK));
+        code.push_str(" }");
+        return code;
+    }
+    // Nested `ifelse`: below the first stop its colour, each segment's
+    // linear blend, past the last stop its colour.
+    let mut tail = push_const(sorted[sorted.len() - 1].color);
+    for i in (0..sorted.len().saturating_sub(1)).rev() {
+        let (a, b) = (sorted[i], sorted[i + 1]);
+        let span = b.offset - a.offset;
+        let seg = if span <= 1e-6 {
+            push_const(b.color)
+        } else {
+            let (ca, cb) = (channels.values(a.color), channels.values(b.color));
+            let mut s = format!("{} sub {} mul", n(a.offset), n(1.0 / span));
+            let k = ca.len();
+            for (j, (va, vb)) in ca.iter().zip(&cb).enumerate() {
+                let d = vb - va;
+                if j + 1 < k {
+                    s.push_str(&format!(" dup {} mul {} add exch", n(d), n(*va)));
+                } else {
+                    s.push_str(&format!(" {} mul {} add", n(d), n(*va)));
+                }
+            }
+            s
+        };
+        tail = format!("dup {} le {{ {seg} }} {{ {tail} }} ifelse", n(b.offset));
+    }
+    let first = push_const(sorted[0].color);
+    code.push_str(&format!(
+        "dup {} le {{ {first} }} {{ {tail} }} ifelse }}",
+        n(sorted[0].offset)
+    ));
+    code
+}
+
+fn shade_space(sh: &mut pdf_writer::writers::FunctionShading<'_>, channels: ShadeChannels) {
+    match channels {
+        ShadeChannels::Color => sh.color_space().device_rgb(),
+        ShadeChannels::Alpha => sh.color_space().device_gray(),
+    };
 }
 
 enum ShadingGeometry {
@@ -499,6 +683,7 @@ fn write_shading(
     _input: &ExportInput<'_>,
     stops: &[paged_compose::GradientStop],
     geometry: ShadingGeometry,
+    channels: ShadeChannels,
 ) -> Ref {
     // Build the colour function: a single Type-2 for two stops, a
     // Type-3 stitch otherwise. Stops are sRGB-encoded here.
@@ -511,23 +696,20 @@ fn write_shading(
 
     let fn_ref = state.refs.alloc();
     if sorted.len() <= 1 {
-        let c = sorted
-            .first()
-            .map(|s| srgb_of(s.color))
-            .unwrap_or([0.0, 0.0, 0.0]);
+        let c = channels.values(sorted.first().map(|s| s.color).unwrap_or(Color::BLACK));
         let mut f = state.pdf.exponential_function(fn_ref);
         f.domain([0.0, 1.0]);
-        f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
-        f.c0(c);
-        f.c1(c);
+        f.range(channels.range().iter().copied());
+        f.c0(c.iter().copied());
+        f.c1(c.iter().copied());
         f.n(1.0);
         f.finish();
     } else if sorted.len() == 2 {
         let mut f = state.pdf.exponential_function(fn_ref);
         f.domain([0.0, 1.0]);
-        f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
-        f.c0(srgb_of(sorted[0].color));
-        f.c1(srgb_of(sorted[1].color));
+        f.range(channels.range().iter().copied());
+        f.c0(channels.values(sorted[0].color));
+        f.c1(channels.values(sorted[1].color));
         f.n(1.0);
         f.finish();
     } else {
@@ -537,16 +719,16 @@ fn write_shading(
             let seg_ref = state.refs.alloc();
             let mut f = state.pdf.exponential_function(seg_ref);
             f.domain([0.0, 1.0]);
-            f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
-            f.c0(srgb_of(pair[0].color));
-            f.c1(srgb_of(pair[1].color));
+            f.range(channels.range().iter().copied());
+            f.c0(channels.values(pair[0].color));
+            f.c1(channels.values(pair[1].color));
             f.n(1.0);
             f.finish();
             seg_refs.push(seg_ref);
         }
         let mut f = state.pdf.stitching_function(fn_ref);
         f.domain([0.0, 1.0]);
-        f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+        f.range(channels.range().iter().copied());
         f.functions(seg_refs.iter().copied());
         let bounds: Vec<f32> = sorted[1..sorted.len() - 1]
             .iter()
@@ -563,12 +745,12 @@ fn write_shading(
     match geometry {
         ShadingGeometry::Axial(coords) => {
             sh.shading_type(pdf_writer::types::FunctionShadingType::Axial);
-            sh.color_space().device_rgb();
+            shade_space(&mut sh, channels);
             sh.coords(coords);
         }
         ShadingGeometry::Radial(coords) => {
             sh.shading_type(pdf_writer::types::FunctionShadingType::Radial);
-            sh.color_space().device_rgb();
+            shade_space(&mut sh, channels);
             sh.coords(coords);
         }
     }

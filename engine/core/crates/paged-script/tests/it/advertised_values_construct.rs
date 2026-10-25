@@ -63,6 +63,8 @@ const STRUCTURED: &[(&str, &str)] = &[
     ("paragraphStartParagraph", "\"NextPage\""),
     ("paragraphSpanColumnType", "\"SpanColumns\""),
     ("frameStrokeDashArray", "[6, 3]"),
+    // Engine ADR 1007 — the gradient's start point, [x, y].
+    ("frameGradientFillStart", "[10, 20]"),
     (
         "framePathPoint",
         "{ type: 'pathPoint', value: { address: { index: 0, role: 'anchor' }, position: [5, 5] } }",

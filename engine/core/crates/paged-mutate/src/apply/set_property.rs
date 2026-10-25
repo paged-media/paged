@@ -3113,6 +3113,73 @@ pub(super) fn apply_set_property(
                 },
             )
         }
+        // Engine ADR 1007 — the gradient's start point; `[]` clears it.
+        (
+            NodeId::TextFrame(_) | NodeId::Rectangle(_) | NodeId::Oval(_) | NodeId::Polygon(_),
+            PropertyPath::FrameGradientFillStart,
+        ) => {
+            let Value::Lengths(xy) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Lengths".to_string(),
+                });
+            };
+            let start = match xy.as_slice() {
+                [] => None,
+                [x, y] if x.is_finite() && y.is_finite() => Some([*x, *y]),
+                _ => {
+                    return Err(OperationError::InvalidValue {
+                        node: node.clone(),
+                        path,
+                        reason: "a gradient start is [x, y] (or [] to clear)".to_string(),
+                    })
+                }
+            };
+            let slot = find_gradient_fill_start_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = std::mem::replace(slot, start);
+            (
+                Value::Lengths(prev.map(|p| p.to_vec()).unwrap_or_default()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
+        // Engine ADR 1007 — how a gradient stroke maps onto the stroke.
+        // The inverse names the mode it replaced (an unset mode reads
+        // "Within", the value it stood for), so undo restores it exactly.
+        (
+            NodeId::TextFrame(_)
+            | NodeId::Rectangle(_)
+            | NodeId::Oval(_)
+            | NodeId::Polygon(_)
+            | NodeId::GraphicLine(_),
+            PropertyPath::FrameGradientStrokeMode,
+        ) => {
+            let new_val = expect_text(path, value)?;
+            let mode = paged_model::StrokeGradientMode::parse(&new_val).ok_or_else(|| {
+                OperationError::InvalidValue {
+                    node: node.clone(),
+                    path,
+                    reason: format!(
+                        "a stroke gradient mode is \"Within\", \"Along\" or \"Across\", not \
+                         {new_val:?}"
+                    ),
+                }
+            })?;
+            let slot = find_gradient_stroke_mode_mut(doc, node)
+                .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+            let prev = *slot;
+            *slot = mode;
+            (
+                Value::Text(prev.as_str().into()),
+                InvalidationHint {
+                    frame_style: vec![node.clone()],
+                    ..Default::default()
+                },
+            )
+        }
         (
             NodeId::Rectangle(_) | NodeId::Polygon(_) | NodeId::GraphicLine(_),
             PropertyPath::FrameStrokeMiterLimit,

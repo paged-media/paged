@@ -5701,11 +5701,15 @@ fn js_value_to_wire(
     if let Some(obj) = value.as_object() {
         // Structured paths whose natural JS form is not the `{ type,
         // value }` wrapper: a script hands a path as its anchors, and a
-        // dash array as its numbers. Without these arms the bridge read
+        // dash array (and a gradient start, engine ADR 1007) as its
+        // numbers. Without these arms the bridge read
         // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
         // `{ anchors }` failed the wrapper's decode — `paged.set` returned
         // false on paths the catalog advertises as settable.
-        if matches!(path, P::FramePath | P::FrameStrokeDashArray) {
+        if matches!(
+            path,
+            P::FramePath | P::FrameStrokeDashArray | P::FrameGradientFillStart
+        ) {
             let json = value.to_json(ctx).ok()??;
             let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
             if !is_wrapper {

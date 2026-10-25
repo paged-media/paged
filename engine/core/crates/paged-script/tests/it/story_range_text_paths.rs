@@ -223,7 +223,9 @@ fn the_promoted_paths_are_in_the_published_catalog() {
         // 243: ADR 175 added a row's start rule and its keep with next.
         // 244: ADR 1003 added the page of a placed PDF.
         // 245: ADR 1006 added a frame's fill rule.
-        245,
+        // 247: ADR 1007 added a frame's stroke gradient mode and its
+        // gradient's start point.
+        247,
         "the advertised roster changed; move the count with the decision"
     );
 }

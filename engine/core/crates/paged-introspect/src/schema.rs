@@ -674,6 +674,8 @@ pub const STROKE_TYPES: &[&str] = &[
 pub const STROKE_ALIGNMENT: &[&str] = &["CenterAlignment", "InsideAlignment", "OutsideAlignment"];
 /// Engine ADR 1006 — a frame's fill rule.
 pub const FILL_RULES: &[&str] = &["NonZero", "EvenOdd"];
+/// Engine ADR 1007 — how a gradient stroke maps onto the stroke.
+pub const STROKE_GRADIENT_MODES: &[&str] = &["Within", "Along", "Across"];
 pub const TEXT_WRAP_MODES: &[&str] = &[
     "None",
     "BoundingBoxTextWrap",

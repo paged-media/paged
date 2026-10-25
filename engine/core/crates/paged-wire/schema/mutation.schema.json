@@ -7398,6 +7398,16 @@
           "description": "The rule the frame's outline fills and clips by: `Value::Text`\n`\"NonZero\"` (IDML's rule, the default) or `\"EvenOdd\"`; `\"\"` clears\nto `\"NonZero\"`. On a TextFrame, Rectangle, Oval, Polygon or\nGraphicLine. No IDML attribute carries it: the IDML export re-winds\nan even-odd outline whose contours do not cross and reports the\nrest as lost. Paint-only (`frame_style`).",
           "type": "string",
           "const": "frameFillRule"
+        },
+        {
+          "description": "How the frame's gradient stroke maps onto the stroke:\n`Value::Text` `\"Within\"` (IDML's mode, the default), `\"Along\"`\n(the ramp runs along the path) or `\"Across\"` (from one edge of the\nstroke to the other); `\"\"` clears to `\"Within\"`. On a TextFrame,\nRectangle, Oval, Polygon or GraphicLine. No IDML attribute carries\nit: the IDML export writes the stroke `Within` and reports the\nloss. Paint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameGradientStrokeMode"
+        },
+        {
+          "description": "The frame's `GradientFillStart` in its inner coordinates:\n`Value::Lengths` `[x, y]`, or `[]` to clear to InDesign's default\n(the box's bottom-left corner). A linear axis starts there, a\nradial or conic gradient is centred there. On a TextFrame,\nRectangle, Oval or Polygon. Paint-only (`frame_style`).",
+          "type": "string",
+          "const": "frameGradientFillStart"
         }
       ]
     },
@@ -8571,11 +8581,52 @@
           ],
           "format": "float",
           "default": null
+        },
+        "opacityPct": {
+          "description": "Engine ADR 1007 — the stop's opacity, 0..=100; `None` ⇒ 100.\nClamped to the range on apply.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float"
+        },
+        "color": {
+          "description": "Engine ADR 1007 — the stop's own colour instead of a swatch.\nWhen set it wins over `stop_color`, which may then be `\"\"`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StopColorSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "stopColor",
         "locationPct"
+      ]
+    },
+    "StopColorSpec": {
+      "description": "Engine ADR 1007 — a gradient stop's inline colour on the wire.",
+      "type": "object",
+      "properties": {
+        "space": {
+          "description": "`\"CMYK\"` | `\"RGB\"` | `\"LAB\"` | `\"Gray\"`, as a swatch's `space`.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Channel values in `space` (CMYK percent, RGB 0..=255, Lab\n`L* a* b*`, Gray percent).",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "float"
+          }
+        }
+      },
+      "required": [
+        "space",
+        "value"
       ]
     },
     "SwatchColorSpec": {
@@ -8730,7 +8781,7 @@
           "default": null
         },
         "kind": {
-          "description": "`Type`: `\"Linear\"` | `\"Radial\"`.",
+          "description": "`Type`: `\"Linear\"` | `\"Radial\"` | `\"Conic\"` (engine ADR 1007).",
           "type": "string"
         },
         "stops": {

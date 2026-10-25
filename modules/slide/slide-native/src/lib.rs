@@ -1595,7 +1595,7 @@ pub fn build(deck: &Deck, images: &dyn Fn(&str) -> Option<Vec<u8>>, name: &str) 
                     .map(|(pos, c)| GradientStopRef {
                         stop_color: c.clone(),
                         location_pct: n(*pos),
-                        midpoint_pct: None,
+                        midpoint_pct: None, opacity_pct: None, inline_color: None, 
                     })
                     .collect(),
             },

@@ -45,6 +45,7 @@ pub(crate) mod geometry;
 pub(crate) mod glyph_shadow;
 pub(crate) mod group;
 pub(crate) mod object_style;
+pub(crate) mod stroke_gradient;
 pub(crate) mod stroke_paint;
 
 #[allow(unused_imports)]
