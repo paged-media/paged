@@ -365,3 +365,22 @@ describe("the slide sorter [plugin-slide.slide-sorter]", () => {
     expect(closed()).toBe(1);
   });
 });
+
+describe("transitions without WebGPU [plugin-slide.slideshow]", () => {
+  it("cut between slides and say so once", async () => {
+    const { createCompositor } = await import("../../src/show/compositor");
+    const el = document.createElement("div");
+    el.setAttribute("data-test-surface", "compositor");
+    document.body.appendChild(el);
+    let told = 0;
+    const c = createCompositor(el, window, { onNoGpu: () => void told++ });
+    await settle();
+    const frame = { width: 16, height: 9 } as unknown as ImageBitmap;
+    const fade = { kind: "fade", dir: null, speed: null, durationMs: 300 };
+    c.show(frame, 16 / 9, null);
+    c.show(frame, 16 / 9, fade);
+    c.show(frame, 16 / 9, fade);
+    expect(told).toBe(1);
+    c.dispose();
+  });
+});

@@ -113,6 +113,7 @@ export function showSlides(
             dir: tr.dir ?? null,
             speed: tr.speed ?? null,
             durationMs: tr.durationMs ?? null,
+            xml: tr.xml ?? null,
           }
         : null,
       notes: s.state.notes ?? "",

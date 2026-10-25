@@ -18,18 +18,15 @@
 
 // Draws the show (slide ADR 716): the slide up, letterboxed on black, the
 // blank screens, and the transition from one slide to the next. A
-// transition runs on WebGPU through the registered TransitionRenderer
-// (transition-renderer.ts, ADR 721) when there is one and the device has
-// WebGPU: a GPU canvas over the slide's box shows it while it runs.
-// Otherwise the 2D canvas cross-fades fade-like kinds and cuts the rest,
-// so a show runs everywhere (a device without WebGPU gets a plain cut).
+// transition runs on WebGPU through the TransitionRenderer (the WGSL shader
+// library, transition-renderer.ts, ADR 721): a GPU canvas over the slide's
+// box shows it while it runs. A device without WebGPU gets a plain cut, and
+// the show is told once (`onNoGpu`) so it can say so.
 
 import type { Frame } from "./frames.js";
 import {
-  FADE_LIKE,
+  resolveShowTransition,
   transitionDurationMs,
-  transitionKind,
-  transitionParams,
   transitionRendererFactory,
   type TransitionRenderer,
 } from "./transition-renderer.js";
@@ -76,9 +73,15 @@ interface Gpu {
   context: GPUCanvasContext;
 }
 
+export interface CompositorOptions {
+  /** A transition was asked for and the device has no WebGPU (once). */
+  onNoGpu?(): void;
+}
+
 export function createCompositor(
   container: HTMLElement,
   win: Window,
+  opts: CompositorOptions = {},
 ): Compositor {
   const doc = container.ownerDocument;
   const canvas = doc.createElement("canvas");
@@ -98,6 +101,8 @@ export function createCompositor(
   let anim = 0;
   let gpu: Gpu | null = null;
   let gpuPending: Promise<Gpu | null> | null = null;
+  let gpuMissing = false;
+  let toldNoGpu = false;
 
   const size = () => {
     const dpr = win.devicePixelRatio || 1;
@@ -140,11 +145,17 @@ export function createCompositor(
     if (gpuPending) return gpuPending;
     const factory = transitionRendererFactory();
     const nav = win.navigator as Navigator & { gpu?: GPU };
-    if (!factory || !nav.gpu) return (gpuPending = Promise.resolve(null));
+    if (!nav.gpu) {
+      gpuMissing = true;
+      return (gpuPending = Promise.resolve(null));
+    }
     gpuPending = (async () => {
       try {
         const adapter = await nav.gpu!.requestAdapter();
-        if (!adapter) return null;
+        if (!adapter) {
+          gpuMissing = true;
+          return null;
+        }
         const device = await adapter.requestDevice();
         const format = nav.gpu!.getPreferredCanvasFormat();
         const surface = doc.createElement("canvas");
@@ -159,15 +170,16 @@ export function createCompositor(
         ) as unknown as GPUCanvasContext | null;
         if (!context) return null;
         context.configure({ device, format, alphaMode: "opaque" });
-        gpu = {
-          device,
-          format,
-          renderer: factory(device, format),
-          canvas: surface,
-          context,
-        };
+        const renderer = factory(device, format);
+        // Compile every pipeline now, so the first transition does not
+        // wait for its shader.
+        void (renderer as { prepare?: () => Promise<unknown> })
+          .prepare?.()
+          .catch(() => {});
+        gpu = { device, format, renderer, canvas: surface, context };
         return gpu;
       } catch {
+        gpuMissing = true;
         return null;
       }
     })();
@@ -248,9 +260,9 @@ export function createCompositor(
       const from = current;
       current = frame;
       aspect = a > 0 ? a : aspect;
-      const kind = transitionKind(transition?.kind);
+      const resolved = resolveShowTransition(transition);
       const durationMs = transition ? transitionDurationMs(transition) : 0;
-      if (!from || !frame || !kind || durationMs <= 0 || blankColor) {
+      if (!from || !frame || !resolved || durationMs <= 0 || blankColor) {
         paint(null, frame, 1);
         return;
       }
@@ -260,26 +272,22 @@ export function createCompositor(
         gpuTransition(
           from,
           frame,
-          kind,
+          resolved.kind,
           durationMs,
-          transitionParams(transition?.dir),
+          resolved.params,
           finish,
         )
       ) {
         paint(null, from, 1);
         return;
       }
-      if (!FADE_LIKE.has(kind)) {
-        paint(null, frame, 1);
-        return;
+      // No shader ran: a plain cut, and the show hears once why when the
+      // device has no WebGPU.
+      if (gpuMissing && !toldNoGpu) {
+        toldNoGpu = true;
+        opts.onNoGpu?.();
       }
-      const start = win.performance.now();
-      const step = () => {
-        const p = Math.min(1, (win.performance.now() - start) / durationMs);
-        paint(from, frame, p);
-        anim = p < 1 ? win.requestAnimationFrame(step) : 0;
-      };
-      step();
+      paint(null, frame, 1);
     },
     blank(color) {
       blankColor = color;

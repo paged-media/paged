@@ -18,20 +18,21 @@
 
 // The seam between the slide show and its transitions (slide ADR 716,
 // ADR 721). A transition is drawn by a TransitionRenderer: WebGPU, one WGSL
-// shader per PowerPoint transition kind (`p:fade`, `p14:vortex`, …), from
-// the outgoing slide's texture to the incoming one's at a progress 0…1.
-// The shader library (`./shaders/`) implements it and registers its
-// factory here; until one is registered, or where the device has no
-// WebGPU, the show draws a cross-fade (fade-like kinds) or a cut on its
-// 2D canvas instead (compositor.ts).
-//
-// This module is the contract both sides build on: keep it free of any
-// shader or DOM code.
+// shader per PowerPoint transition kind, from the outgoing slide's texture
+// to the incoming one's at a progress 0…1. The shader library
+// (`./shaders/`) is the default renderer; a test or an embedder can
+// register another. On a device without WebGPU the show cuts and says so
+// once (compositor.ts).
+
+import {
+  createTransitionRenderer,
+  resolveTransition,
+} from "./shaders/index.js";
 
 /** Draws one frame of a transition into `target`. */
 export interface TransitionRenderer {
   /** Whether this renderer has a shader for `kind` (a PowerPoint
-   *  transition id such as `p:fade`). */
+   *  transition kind, or a key `resolveTransition` answered). */
   supports(kind: string): boolean;
   render(opts: {
     kind: string;
@@ -53,8 +54,8 @@ export type TransitionRendererFactory = (
 
 let factory: TransitionRendererFactory | null = null;
 
-/** Register the shader library's factory (it calls this once, on import).
- *  Returns a function that unregisters it. */
+/** Register another renderer factory in place of the shader library's.
+ *  Returns a function that restores the library. */
 export function registerTransitionRenderer(
   f: TransitionRendererFactory,
 ): () => void {
@@ -64,16 +65,28 @@ export function registerTransitionRenderer(
   };
 }
 
-/** The registered factory, or null (the show then draws on 2D). */
-export function transitionRendererFactory(): TransitionRendererFactory | null {
-  return factory;
+/** The renderer factory: a registered one, else the shader library. */
+export function transitionRendererFactory(): TransitionRendererFactory {
+  return factory ?? createTransitionRenderer;
 }
 
-/** A transition as the slide stores it (the importer's names: `fade`,
- *  `push`, …, or an already qualified id), as the shader manifest's id. */
-export function transitionKind(kind: string | null | undefined): string | null {
-  if (!kind) return null;
-  return kind.includes(":") ? kind : `p:${kind}`;
+/** A slide's transition as the shader to run: the manifest's key and its
+ *  parameters, read from the kind, the direction and the deck's own
+ *  element (its effect options). Null for no transition or an unknown
+ *  kind (the show cuts). */
+export function resolveShowTransition(
+  t:
+    | {
+        kind?: string | null;
+        dir?: string | null;
+        xml?: string | null;
+      }
+    | null
+    | undefined,
+): { kind: string; params: Record<string, number> } | null {
+  if (!t?.kind) return null;
+  const r = resolveTransition({ kind: t.kind, dir: t.dir, xml: t.xml });
+  return r ? { kind: r.kind, params: r.params } : null;
 }
 
 /** PowerPoint's speeds when a transition carries no duration. */
@@ -88,23 +101,4 @@ export function transitionDurationMs(t: {
   if (typeof t.durationMs === "number" && t.durationMs >= 0)
     return t.durationMs;
   return SPEED_MS[t.speed ?? ""] ?? 700;
-}
-
-/** Kinds the 2D path draws as a cross-fade rather than a cut. Every other
- *  kind cuts there; the shader library draws them all. */
-export const FADE_LIKE: ReadonlySet<string> = new Set([
-  "p:fade",
-  "p:dissolve",
-  "p14:flash",
-  "p:random",
-]);
-
-/** The parameters a transition's direction maps to (`dir` as the deck
- *  writes it: l, r, u, d, …), for a shader manifest that reads
- *  `direction` (0 left, 1 right, 2 up, 3 down). */
-export function transitionParams(
-  dir: string | null | undefined,
-): Record<string, number> {
-  const d = { l: 0, r: 1, u: 2, d: 3 }[dir ?? ""];
-  return d === undefined ? {} : { direction: d };
 }

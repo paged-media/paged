@@ -266,7 +266,31 @@ export class ShowView {
   ) {
     this.win = win;
     container.style.position = container.style.position || "relative";
-    this.compositor = createCompositor(container, win);
+    this.compositor = createCompositor(container, win, {
+      // A device without WebGPU cuts between slides; say so once.
+      onNoGpu: () => {
+        const note = container.ownerDocument.createElement("div");
+        note.setAttribute("data-show-notice", "no-webgpu");
+        note.textContent = t(SHOW.noWebGpu);
+        Object.assign(note.style, {
+          position: "absolute",
+          left: "16px",
+          bottom: "12px",
+          font: "13px system-ui, sans-serif",
+          color: "#ccc",
+          background: "rgba(0,0,0,.6)",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          pointerEvents: "none",
+        });
+        container.appendChild(note);
+        const timer = win.setTimeout(() => note.remove(), 6000);
+        this.offs.push(() => {
+          win.clearTimeout(timer);
+          note.remove();
+        });
+      },
+    });
     this.ink = createInk(container, win, {
       interactive: opts.interactive,
       onStroke: (s) => {

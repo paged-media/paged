@@ -43,12 +43,12 @@ import {
   timingsMutation,
 } from "../src/show/contribute";
 import {
-  transitionDurationMs,
-  transitionKind,
-  transitionParams,
   registerTransitionRenderer,
+  resolveShowTransition,
+  transitionDurationMs,
   transitionRendererFactory,
 } from "../src/show/transition-renderer";
+import { createTransitionRenderer } from "../src/show/shaders/index";
 import { letterbox } from "../src/show/compositor";
 import { frameScale } from "../src/show/frames";
 import type { Slide } from "../src/slides-model";
@@ -425,23 +425,26 @@ describe("the show's slides and timings [plugin-slide.slideshow]", () => {
 });
 
 describe("transitions and frames [plugin-slide.slideshow]", () => {
-  it("names a transition as the shader manifest does, with its duration and direction", () => {
-    expect(transitionKind("fade")).toBe("p:fade");
-    expect(transitionKind("p14:vortex")).toBe("p14:vortex");
-    expect(transitionKind(null)).toBeNull();
+  it("resolves a slide's transition to its shader and parameters, with its duration", () => {
+    const push = resolveShowTransition({ kind: "push", dir: "u" })!;
+    expect(push).not.toBeNull();
+    expect(typeof push.kind).toBe("string");
+    expect(push.params.direction).toBeDefined();
+    expect(resolveShowTransition({ kind: "fade" })).not.toBeNull();
+    expect(resolveShowTransition({ kind: "noSuchKind" })).toBeNull();
+    expect(resolveShowTransition(null)).toBeNull();
     expect(transitionDurationMs({ durationMs: 300 })).toBe(300);
     expect(transitionDurationMs({ speed: "slow" })).toBe(1000);
     expect(transitionDurationMs({})).toBe(700);
-    expect(transitionParams("u")).toEqual({ direction: 2 });
-    expect(transitionParams(null)).toEqual({});
   });
 
-  it("takes one registered renderer factory", () => {
+  it("draws with the shader library unless another renderer is registered", () => {
+    expect(transitionRendererFactory()).toBe(createTransitionRenderer);
     const f = () => ({ supports: () => true, render() {} });
     const off = registerTransitionRenderer(f);
     expect(transitionRendererFactory()).toBe(f);
     off();
-    expect(transitionRendererFactory()).toBeNull();
+    expect(transitionRendererFactory()).toBe(createTransitionRenderer);
   });
 
   it("letterboxes a slide and picks a frame scale for the screen", () => {

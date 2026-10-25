@@ -50,6 +50,8 @@ export interface ShowSlide {
     dir: string | null;
     speed: string | null;
     durationMs: number | null;
+    /** The deck's own element (its effect options). */
+    xml?: string | null;
   } | null;
   notes: string;
   sizePt: [number, number];

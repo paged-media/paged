@@ -35,9 +35,11 @@ next, with PowerPoint's keys.
   screen's resolution, decoded, cached per page and scale, and prefetched a slide ahead. They
   are drawn as the exports draw, without the editor's substituted-font highlight. Per-item layers
   come with animations (wave 5).
-- **Transitions** go through the `TransitionRenderer` seam (`transition-renderer.ts`): WebGPU,
-  one WGSL shader per kind, registered by the shader library (ADR 721). Without a registered
-  renderer, or without WebGPU, fade-like kinds cross-fade on the 2D canvas and the rest cut.
+- **Transitions** go through the `TransitionRenderer` seam (`transition-renderer.ts`), whose
+  default is the WGSL shader library (ADR 721): the slide's kind, direction and the deck's own
+  element resolve to a shader and its parameters (`resolveTransition`), the pipelines are
+  compiled when the show's device is made, and each frame of the transition draws on a WebGPU
+  canvas over the slide. A device without WebGPU cuts between slides and the show says so once.
 - **Ink.** The pen draws on the slide and the laser follows the pointer; strokes are kept per
   slide for the show in slide coordinates, so the audience draws them at its size. They are not
   written into the document.

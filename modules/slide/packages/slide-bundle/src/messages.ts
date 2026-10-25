@@ -125,6 +125,8 @@ export const SHOW = defineMessages("slide.show", {
   transition: "Transition",
   noTransition: "None",
   sorterEmpty: "No slides. Open a PowerPoint deck with File ▸ Open.",
+  noWebGpu:
+    "Transitions need WebGPU, which this browser does not offer: the show cuts between slides.",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is

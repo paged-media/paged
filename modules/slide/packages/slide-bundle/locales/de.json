@@ -63,6 +63,7 @@
   "slide.show.noAudience": "Das Publikumsfenster wurde nicht geöffnet; die Referentenansicht ist auf diesem Bildschirm.",
   "slide.show.noNotes": "Keine Notizen zu dieser Folie.",
   "slide.show.noTransition": "Ohne",
+  "slide.show.noWebGpu": "Übergänge brauchen WebGPU, das dieser Browser nicht bietet: Die Präsentation wechselt ohne Übergang.",
   "slide.show.normalView": "Normal",
   "slide.show.notes": "Notizen",
   "slide.show.pause": "Zeitmessung anhalten",
