@@ -299,7 +299,7 @@ function pageContaining(
 ): PageTarget | null {
   const handle = paged.document.handle;
   if (!handle || handle.pageIds.length === 0) return null;
-  const rects = layoutPages(handle.pageSizesPt);
+  const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
   for (let i = 0; i < rects.length; i++) {
     const r = rects[i];
     if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
@@ -325,7 +325,7 @@ export function pageTargetFor({
   viewportSize,
 }: PageTargetInputs): PageTarget | null {
   if (!handle || handle.pageIds.length === 0) return null;
-  const rects = layoutPages(handle.pageSizesPt);
+  const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
   const at = (i: number): PageTarget => ({
     pageId: handle.pageIds[i],
     rect: rects[i],

@@ -278,7 +278,9 @@ Eyedropper) and `k` (a dead Measure). The current global picture:
   canonical key; the host's working Eyedropper holds `i` and paged.image
   took `shift+t`, so Type on a Path (`shift+h`) and draw's Eyedropper
   (`shift+d`) stay where they are. Free now: `shift+o` only; paged.image
-  has since taken `shift+z` for its raster type tool.
+  has since taken `shift+z` for its raster type tool. UPDATE 2026-10-25:
+  the host's Artboard tool (engine ADR 1011) took `shift+o`; no
+  single-letter or shift register is free now.
 
 **`.paged` CONTAINER PARTS: there are now SEVEN** — graphic styles,
 symbols, live paint, pattern, repeat, blend (`blend.json`) and objects-on-

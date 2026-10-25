@@ -604,6 +604,9 @@ function applyReplyEffects(reply: WorkerToMain): void {
     // tick. On the GPU path the worker already cleared its
     // scene_cache so presentFrame rebuilds.
     if (renderer) {
+      // The page list or (engine ADR 1011) a page's place on the canvas
+      // changed: the CPU lane re-reads where every page sits.
+      if (reply.payload?.pageStructureChanged) renderer.refreshLayout();
       renderer.markDirty(reply.payload?.pageIds ?? []);
     }
     scheduleResolution();
@@ -613,6 +616,8 @@ function applyReplyEffects(reply: WorkerToMain): void {
     // tiles + flags dirty — without this a pure paged.* mutation lands in
     // the model but the canvas never repaints.
     if (renderer) {
+      // A script may add, remove or place pages.
+      renderer.refreshLayout();
       renderer.markDirty([]);
     }
     scheduleResolution();
@@ -1072,7 +1077,7 @@ async function attachRenderer(
     pageCount: () => worker!.pageCount(),
     pageInfo: (index) => {
       const arr = worker!.pageInfo(index) as unknown as
-        [string, number, number] | undefined;
+        [string, number, number, number?, number?] | undefined;
       return arr;
     },
     renderTilePng: (pageId, widthPx) => worker!.renderTilePng(pageId, widthPx),

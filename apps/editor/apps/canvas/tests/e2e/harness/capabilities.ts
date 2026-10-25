@@ -118,6 +118,9 @@
 // setXmlAttribute — each probed with real args on the `text` fixture as the
 // template's author (tagging is an author's write).
 //
+// 2026-10-25: protocol 77 (engine ADR 1011) named one new Mutation op —
+// placePage — probed with real args on the geometry fixture.
+//
 // 2026-10-17: the pin moved to canvas-wasm 0.71.13 (additive on protocol
 // 71). AC-E2E-CAPS-COVER named five new Mutation ops from core's v73 wire
 // (ADRs 163–165): insertFootnote, deleteFootnote, deleteHyperlink,
@@ -383,6 +386,11 @@ export const CAPABILITIES: Capability[] = [
     op: "movePage",
     status: "supported",
     note: "proto 70; moves a page's single-page spread after `after` (null = to the front); wire-only, no editor UI",
+  },
+  {
+    op: "placePage",
+    status: "supported",
+    note: "proto 77 (engine ADR 1011); puts a page (an artboard) at originPt on the canvas, absent = its default stacked slot; the Artboard tool and the Artboards panel issue it",
   },
   {
     op: "setPageMetadata",

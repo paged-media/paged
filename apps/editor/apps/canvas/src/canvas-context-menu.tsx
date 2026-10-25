@@ -110,7 +110,7 @@ async function selectUnder(
   if (!handle || handle.pageIds.length === 0 || !(cam.scale > 0)) return;
   const r = viewport.getBoundingClientRect();
   const [x, y] = viewportToDoc(cam, clientX - r.left, clientY - r.top);
-  const rects = layoutPages(handle.pageSizesPt);
+  const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
   const i = rects.findIndex(
     (p) => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h,
   );
@@ -143,7 +143,7 @@ function keyboardPoint(paged: PagedEditor): [number, number] {
   const geo = paged.selection.elementGeometry;
   const handle = paged.document.handle;
   if (geo.length > 0 && handle) {
-    const rects = layoutPages(handle.pageSizesPt);
+    const rects = layoutPages(handle.pageSizesPt, handle.pageOriginsPt);
     const g = geo[0] as unknown as {
       pageId: string;
       bounds: [number, number, number, number];
