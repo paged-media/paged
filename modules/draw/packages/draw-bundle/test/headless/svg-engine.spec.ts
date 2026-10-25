@@ -31,12 +31,7 @@ import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { parseSvgDocument } from "@paged-media/draw-geometry";
 
-import {
-  drawBundle,
-  importSvg,
-  leafIdsOf,
-  SVG_EXPORTER_ID,
-} from "../../src";
+import { drawBundle, importSvg, leafIdsOf, SVG_EXPORTER_ID } from "../../src";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
