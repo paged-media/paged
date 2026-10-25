@@ -74,6 +74,9 @@
     "packages/shell/src/state/editor-root.tsx": {
       "active": "Which editor gets the keys typed with nothing focused (the page's <body>): the one last pointed at or focused, or the one that owns the page. The page has one keyboard, so this is the page's by nature.",
       "roots": "The editors' roots on the page, each with whether it owns the page: what decides which editor a key on the page belongs to. The page's by nature, like `active`."
+    },
+    "packages/shell/src/registries/presentation.ts": {
+      "sessionSeq": "Numbers a presentation's BroadcastChannel and audience window, which are the page's (a channel name is shared by the whole origin): one counter per page keeps two editors' presentations on one page from opening the same channel."
     }
   }
 }

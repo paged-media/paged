@@ -3,11 +3,11 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 564,
+    "command": 579,
     "keybinding": 140,
-    "menu": 389,
+    "menu": 399,
     "panel": 132,
-    "tool": 81
+    "tool": 91
   },
   "features": [
     {
@@ -491,6 +491,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.attachToPerspective",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.averageEndpoints",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -577,6 +582,11 @@
     },
     {
       "id": "command:media.paged.draw.command.detachTextFromPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.drawOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -706,6 +716,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.liquifyStroke",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.makeCompoundPath",
       "kind": "command",
       "owner": "media.paged.draw"
@@ -742,6 +757,11 @@
     },
     {
       "id": "command:media.paged.draw.command.makeRadialRepeat",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.moveOnPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -821,7 +841,57 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "command:media.paged.draw.command.perspectiveHideGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveLockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveOnePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveSetPlane",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveShowGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveThreePoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveTwoPoint",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.perspectiveUnlockGrid",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "command:media.paged.draw.command.placeSymbolInstance",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarp",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.puppetWarpTool",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -887,6 +957,11 @@
     },
     {
       "id": "command:media.paged.draw.command.releaseCompoundPath",
+      "kind": "command",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "command:media.paged.draw.command.releaseFromPerspective",
       "kind": "command",
       "owner": "media.paged.draw"
     },
@@ -5131,6 +5206,21 @@
       "owner": "editor"
     },
     {
+      "id": "menu:Object/Perspective/Attach to active plane",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Perspective/Release with perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Object/Puppet warp",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "menu:Object/Rasterize…",
       "kind": "menu",
       "owner": "media.paged.draw"
@@ -5419,6 +5509,41 @@
       "id": "menu:View/Fit spread in window",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Perspective grid/Hide grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Lock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/One-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Show grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Three-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Two-point perspective",
+      "kind": "menu",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:View/Perspective grid/Unlock grid",
+      "kind": "menu",
+      "owner": "media.paged.draw"
     },
     {
       "id": "menu:View/Show data markers",
@@ -6161,6 +6286,11 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.bloat",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.blobBrush",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -6172,6 +6302,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.cornerRadius",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.crystallize",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6246,6 +6381,26 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.perspectiveGrid",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.perspectiveSelect",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.pucker",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.puppetWarp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.reflect",
       "kind": "tool",
       "owner": "media.paged.draw"
@@ -6257,6 +6412,11 @@
     },
     {
       "id": "tool:media.paged.draw.tool.reshape",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.scallop",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
@@ -6281,12 +6441,27 @@
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.twirl",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.typeOnPath",
       "kind": "tool",
       "owner": "media.paged.draw"
     },
     {
+      "id": "tool:media.paged.draw.tool.warp",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
       "id": "tool:media.paged.draw.tool.width",
+      "kind": "tool",
+      "owner": "media.paged.draw"
+    },
+    {
+      "id": "tool:media.paged.draw.tool.wrinkle",
       "kind": "tool",
       "owner": "media.paged.draw"
     },

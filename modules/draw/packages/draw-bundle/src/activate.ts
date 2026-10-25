@@ -79,6 +79,19 @@ import {
   STAR_FLARE_COMMAND_IDS,
 } from "./commands/star-flare";
 import {
+  contributeLiquifyCommands,
+  LIQUIFY_COMMAND_IDS,
+} from "./commands/liquify";
+import {
+  contributePuppetWarpCommands,
+  PUPPET_COMMAND_IDS,
+} from "./commands/puppet-warp";
+import {
+  contributePerspectiveCommands,
+  installPerspectiveLayer,
+  PERSPECTIVE_COMMAND_IDS,
+} from "./commands/perspective";
+import {
   contributeShaperCommand,
   SHAPER_STROKE_COMMAND_ID,
 } from "./commands/shaper";
@@ -578,6 +591,13 @@ export function activate(host: BundleHost): BundleHandle {
     star: () => lastUsedPayload(host, "star"),
     flare: () => lastUsedPayload(host, "flare"),
   });
+  // WP6.7 — the distortion tools as commands (their gestures as data),
+  // the perspective grid's View / Object verbs, and the retained layer
+  // that draws a visible grid whatever tool is active.
+  const liquifyCommandsSub = contributeLiquifyCommands(host);
+  const puppetWarpCommandsSub = contributePuppetWarpCommands(host);
+  const perspectiveCommandsSub = contributePerspectiveCommands(host);
+  const perspectiveLayerSub = installPerspectiveLayer(host);
   // The width profile as data, and the rebuild of the recipes a changed
   // source feeds (G4).
   const widthProfileCommandsSub = contributeWidthProfileCommands(host, () =>
@@ -732,6 +752,9 @@ export function activate(host: BundleHost): BundleHandle {
         CUT_COMMAND_IDS.length +
         PATH_TOOL_COMMAND_IDS.length +
         STAR_FLARE_COMMAND_IDS.length +
+        LIQUIFY_COMMAND_IDS.length +
+        PUPPET_COMMAND_IDS.length +
+        PERSPECTIVE_COMMAND_IDS.length +
         [SHAPER_STROKE_COMMAND_ID].length +
         WIDTH_PROFILE_COMMAND_IDS.length +
         RECIPE_UPDATE_COMMAND_IDS.length
@@ -770,6 +793,10 @@ export function activate(host: BundleHost): BundleHandle {
       pathToolCommandsSub.dispose();
       shaperCommandSub.dispose();
       starFlareCommandsSub.dispose();
+      liquifyCommandsSub.dispose();
+      puppetWarpCommandsSub.dispose();
+      perspectiveCommandsSub.dispose();
+      perspectiveLayerSub.dispose();
       widthProfileCommandsSub.dispose();
       recipeUpdateCommandsSub.dispose();
       recipeAutoUpdateSub.dispose();

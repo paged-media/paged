@@ -56,10 +56,10 @@ describe("draw menu entries", () => {
   });
 
   it("entries merging into a HOST menu use a host top-level segment", () => {
-    // `Object/…` and `Edit/…` merge into menus the host already owns.
-    // Anything else must be under `Draw/`, or it silently mints a new
-    // top-level menu nobody designed.
-    const HOST_MENUS = ["Object", "Edit"];
+    // `Object/…`, `Edit/…` and `View/…` merge into menus the host already
+    // owns. Anything else must be under `Draw/`, or it silently mints a
+    // new top-level menu nobody designed.
+    const HOST_MENUS = ["Object", "Edit", "View"];
     const stray = MENU_ENTRIES.map(([p]) => p).filter((p) => {
       const top = p.split("/")[0];
       return top !== "Draw" && !HOST_MENUS.includes(top);

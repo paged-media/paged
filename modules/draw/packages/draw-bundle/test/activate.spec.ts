@@ -84,6 +84,18 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.tool.join",
       "media.paged.draw.tool.star",
       "media.paged.draw.tool.flare",
+      // WP6.7 — the distortion tools, keyless: the Liquify flyout, Puppet
+      // Warp in the host's Free Transform flyout, the Perspective pair.
+      "media.paged.draw.tool.warp",
+      "media.paged.draw.tool.twirl",
+      "media.paged.draw.tool.pucker",
+      "media.paged.draw.tool.bloat",
+      "media.paged.draw.tool.scallop",
+      "media.paged.draw.tool.crystallize",
+      "media.paged.draw.tool.wrinkle",
+      "media.paged.draw.tool.puppetWarp",
+      "media.paged.draw.tool.perspectiveGrid",
+      "media.paged.draw.tool.perspectiveSelect",
     ]);
     // B-15: TOOL activation commands + shortcuts are HOST-derived from
     // the registry — the bundle registers tools only. The commands it
@@ -224,6 +236,22 @@ describe("drawBundle.activate", () => {
       "media.paged.draw.command.shaperStroke",
       "media.paged.draw.command.insertStar",
       "media.paged.draw.command.insertFlare",
+      // WP6.7 — the distortion tools and the perspective grid.
+      "media.paged.draw.command.liquifyStroke",
+      "media.paged.draw.command.puppetWarp",
+      "media.paged.draw.command.puppetWarpTool",
+      "media.paged.draw.command.perspectiveShowGrid",
+      "media.paged.draw.command.perspectiveHideGrid",
+      "media.paged.draw.command.perspectiveLockGrid",
+      "media.paged.draw.command.perspectiveUnlockGrid",
+      "media.paged.draw.command.perspectiveOnePoint",
+      "media.paged.draw.command.perspectiveTwoPoint",
+      "media.paged.draw.command.perspectiveThreePoint",
+      "media.paged.draw.command.perspectiveSetPlane",
+      "media.paged.draw.command.attachToPerspective",
+      "media.paged.draw.command.releaseFromPerspective",
+      "media.paged.draw.command.moveOnPerspective",
+      "media.paged.draw.command.drawOnPerspective",
       "media.paged.draw.command.widthProfile",
       "media.paged.draw.command.updateLinkedRecipes",
       "media.paged.draw.command.selectSameFill",
