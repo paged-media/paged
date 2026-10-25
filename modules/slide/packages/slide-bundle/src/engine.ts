@@ -66,6 +66,35 @@ export interface SlideReport {
   transition: Transition | null;
   timingXml: string | null;
   items: ItemReport[];
+  /** The slide's comments, threaded and legacy (pptx-core `Comment`). */
+  comments?: SlideComment[];
+}
+
+/** A reply in a comment's thread (pptx-core `CommentReply`). */
+export interface CommentReply {
+  id: string;
+  authorId: string;
+  author: string;
+  initials: string;
+  /** As the deck wrote it (ISO 8601), or null. */
+  created: string | null;
+  /** Plain text; paragraphs joined with a line break. */
+  text: string;
+}
+
+/** A comment on a slide (pptx-core `Comment`): PowerPoint's modern threaded
+ *  comment, or a legacy one (`legacy`, converted to a threaded comment
+ *  when its slide's comments are written). */
+export interface SlideComment extends CommentReply {
+  /** Where it sits on the slide, pt; null when it is the slide's. */
+  x: number | null;
+  y: number | null;
+  /** The `cNvPr id` of the shape it is anchored to. */
+  shapeId: number | null;
+  /** null is active. */
+  status: "active" | "resolved" | "closed" | null;
+  replies: CommentReply[];
+  legacy: boolean;
 }
 
 /** A face the deck embeds (slide-js `FaceReport`): a style of one of its
@@ -158,6 +187,9 @@ export interface SlidePlan {
   pageId: string;
   /** The layout (master spread) a slide made in the editor uses. */
   layout: string | null;
+  /** The slide's comments as the document holds them; absent: write them
+   *  as the deck had them. */
+  comments?: SlideComment[];
 }
 
 interface SlideWasmModule extends WasmBindgenGlue {

@@ -137,6 +137,37 @@ describe("the Slides panel", () => {
     expect(SLIDE_KEY).toContain("media.paged.slide");
   });
 
+  it("the Delete key on a focused thumbnail deletes its slide and goes to the next one", async () => {
+    covers("panel:media.paged.slide.panel.slides");
+    const view = await shown();
+    const before = await d.pageIds();
+    const thumb = view.container.querySelector<HTMLElement>(
+      `[data-slide-thumb="${before[1]}"]`,
+    )!;
+    // A chord is not the slide's Delete.
+    await drive(() =>
+      fireEvent.keyDown(thumb, { key: "Delete", metaKey: true }),
+    );
+    expect(await d.pageIds()).toEqual(before);
+    await drive(() => fireEvent.keyDown(thumb, { key: "Delete" }));
+    const after = await d.pageIds();
+    expect(after).toEqual(before.filter((p) => p !== before[1]));
+    expect(d.wentTo.at(-1)).toBe(before[2]);
+    await waitFor(() => expect(rows(view.container)).toEqual(after));
+    // Backspace too, and one undo brings the slide back.
+    await drive(() =>
+      fireEvent.keyDown(
+        view.container.querySelector<HTMLElement>(
+          `[data-slide-thumb="${after[0]}"]`,
+        )!,
+        { key: "Backspace" },
+      ),
+    );
+    expect(await d.pageIds()).toEqual(after.slice(1));
+    await drive(() => d.host.document.undo());
+    expect(await d.pageIds()).toEqual(after);
+  });
+
   it("Delete removes the slide, one undo step", async () => {
     covers("panel:media.paged.slide.panel.slides");
     const view = await shown();

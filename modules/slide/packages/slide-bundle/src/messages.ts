@@ -55,6 +55,26 @@ export const NOTES = defineMessages("slide.notes", {
   placeholder: "Click to add notes",
 });
 
+export const COMMENTS = defineMessages("slide.comments", {
+  title: "Comments",
+  empty: "No slide selected.",
+  heading: "Slide {number} · comments",
+  none: "No comments on this slide.",
+  newPlaceholder: "Add a comment",
+  add: "Comment",
+  replyPlaceholder: "Reply",
+  reply: "Reply",
+  resolve: "Resolve",
+  reopen: "Reopen",
+  resolved: "Resolved",
+  delete: "Delete",
+  deleteReply: "Delete reply",
+  yourName: "Your name",
+  defaultAuthor: "paged user",
+  noDeck: "Comments are kept for decks opened from PowerPoint.",
+  showResolved: "Show resolved",
+});
+
 export const PANELS = defineMessages("slide.panels", {
   slide: "Slide",
   transition: "Transition",
@@ -72,6 +92,12 @@ export const MODEL = defineMessages("slide.model", {
   importPptx: "Open a PowerPoint deck",
   duplicateSlide: "Duplicate slide",
   exportPptx: "Export as a PowerPoint deck",
+  addComment: "Add a comment",
+  replyComment: "Reply to a comment",
+  resolveComment: "Resolve or reopen a comment",
+  deleteComment: "Delete a comment",
+  previousSlide: "Previous slide",
+  nextSlide: "Next slide",
 });
 
 /** The palette commands (commands.ts). */
@@ -83,6 +109,9 @@ export const COMMANDS = defineMessages("slide.commands", {
   moveSlideDown: "Move slide down",
   importPptx: "Open PowerPoint deck…",
   exportPptx: "Export PowerPoint deck…",
+  previousSlide: "Previous slide",
+  nextSlide: "Next slide",
+  addComment: "New comment",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
@@ -96,6 +125,9 @@ defineMessages("menu", {
   "Delete slide": "Delete slide",
   "Move slide up": "Move slide up",
   "Move slide down": "Move slide down",
+  "Previous slide": "Previous slide",
+  "Next slide": "Next slide",
+  "New comment": "New comment",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

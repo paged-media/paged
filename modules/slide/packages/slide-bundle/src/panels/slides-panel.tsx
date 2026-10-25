@@ -18,7 +18,8 @@
 
 // The Slides panel: the deck's slides in order as thumbnails. Click goes to
 // a slide, dragging reorders (movePage), and each slide can be duplicated,
-// deleted or hidden from the slideshow. Every action is one engine
+// deleted (its buttons, or Delete on the focused thumbnail) or hidden from
+// the slideshow. Every action is one engine
 // mutation, so one undo step. Display glue only: what a slide is comes
 // from SlidesStore.
 
@@ -233,7 +234,21 @@ export function makeSlidesPanel(
                 <button
                   type="button"
                   title={t(SLIDES.goTo, { number: slide.number })}
+                  data-slide-thumb={slide.pageId}
                   onClick={() => void host.viewport.goToPage(slide.pageId)}
+                  // Delete or Backspace on the focused thumbnail deletes
+                  // its slide, as in PowerPoint's thumbnail pane; the
+                  // canvas's Delete (the selected object) never sees it.
+                  onKeyDown={(e) => {
+                    if (e.key !== "Delete" && e.key !== "Backspace") return;
+                    if (e.metaKey || e.ctrlKey || e.altKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (slides.length < 2) return;
+                    const next = slides[i + 1] ?? slides[i - 1];
+                    mutate(deleteMutation(slide.pageId));
+                    if (next) void host.viewport.goToPage(next.pageId);
+                  }}
                   style={{
                     display: "block",
                     width: "100%",
