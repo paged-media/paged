@@ -776,6 +776,10 @@ export const CORE_PATHS: Record<
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   // The fill rule is protocol 76 (engine ADR 1006); a pre-71 engine has none.
   frameFillRule: V71,
+  // Engine ADR 1007 (protocol 76): "Within" / "Along" / "Across", and the
+  // gradient's start as [x, y] in the frame's inner coordinates.
+  frameGradientStrokeMode: V71,
+  frameGradientFillStart: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

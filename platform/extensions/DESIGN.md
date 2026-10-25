@@ -727,6 +727,13 @@ Additive at protocol 76 like the fill rule: an older engine makes a plain
 group of `clip: true` and refuses a group child. paged.draw's clipped
 repeat asks it before choosing a clip group over paste-into.
 
+`"document.paint2@1"` (engine ADR 1007) is another property flag: the
+vendored wire carries a gradient stop's opacity (`opacityPct`) and inline
+colour (`color`), the `"Conic"` gradient kind, `frameGradientStrokeMode`
+("Within" / "Along" / "Across") and `frameGradientFillStart`. Additive at
+protocol 76 like the fill rule; paged.draw's SVG importer asks it before
+lowering an SVG gradient with `stop-opacity` natively.
+
 ### 4.9 `host.editor` — the marked escape hatch
 
 The raw `PagedEditor`, present in v0 **by design**: gesture handlers

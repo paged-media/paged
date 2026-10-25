@@ -1547,6 +1547,8 @@
     "frameAutoFit",
     "framePdfPage",
     "frameFillRule",
+    "frameGradientStrokeMode",
+    "frameGradientFillStart",
     "frameStrokeType",
     "frameStrokeJoin",
     "frameStrokeMiterLimit",
@@ -3871,6 +3873,58 @@
       "default": "NonZero",
       "access": "readWrite",
       "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameGradientStrokeMode",
+      "type": {
+        "kind": "enum",
+        "members": [
+          "Within",
+          "Along",
+          "Across"
+        ]
+      },
+      "wire": "text",
+      "nullable": true,
+      "default": "Within",
+      "access": "readWrite",
+      "bindable": true
+    },
+    {
+      "addressKind": "frame",
+      "path": "frameGradientFillStart",
+      "type": {
+        "kind": "list",
+        "unit": "pt",
+        "of": "length"
+      },
+      "wire": "lengths",
+      "nullable": true,
+      "access": "readWrite",
+      "bindable": true,
+      "idml": [
+        {
+          "element": "TextFrame",
+          "attribute": "GradientFillStart",
+          "kind": "attr"
+        },
+        {
+          "element": "Rectangle",
+          "attribute": "GradientFillStart",
+          "kind": "attr"
+        },
+        {
+          "element": "Oval",
+          "attribute": "GradientFillStart",
+          "kind": "attr"
+        },
+        {
+          "element": "Polygon",
+          "attribute": "GradientFillStart",
+          "kind": "attr"
+        }
+      ]
     },
     {
       "addressKind": "frame",
@@ -16684,6 +16738,59 @@
         "access": "readWrite",
         "bindable": true,
         "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameGradientStrokeMode",
+        "type": {
+          "kind": "enum",
+          "members": [
+            "Within",
+            "Along",
+            "Across"
+          ]
+        },
+        "nullable": true,
+        "default": "Within",
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "text"
+      },
+      {
+        "addressKind": "frame",
+        "path": "frameGradientFillStart",
+        "type": {
+          "kind": "list",
+          "of": {
+            "kind": "length"
+          }
+        },
+        "nullable": true,
+        "access": "readWrite",
+        "bindable": true,
+        "wire": "lengths",
+        "idml": [
+          {
+            "element": "TextFrame",
+            "attribute": "GradientFillStart",
+            "kind": "attr"
+          },
+          {
+            "element": "Rectangle",
+            "attribute": "GradientFillStart",
+            "kind": "attr"
+          },
+          {
+            "element": "Oval",
+            "attribute": "GradientFillStart",
+            "kind": "attr"
+          },
+          {
+            "element": "Polygon",
+            "attribute": "GradientFillStart",
+            "kind": "attr"
+          }
+        ]
       },
       {
         "addressKind": "frame",
