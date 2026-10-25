@@ -22,6 +22,8 @@ mod container_open;
 mod corner_options;
 mod docx_pagination_pipeline;
 mod drop_cap_pipeline;
+mod effect_stack;
+mod effect_stack_photoshop;
 mod element_visibility;
 mod feathered_picture;
 mod feathered_stroke_and_text;

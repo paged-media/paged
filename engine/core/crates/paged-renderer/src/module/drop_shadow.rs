@@ -295,6 +295,26 @@ fn filled_and_stroked_outline_of(frame: &ResolvedFrame<'_>) -> Option<RectOutlin
     aligned_outline_path(&outline, Some("OutsideAlignment"), outside * 2.0).map(RectOutline::Path)
 }
 
+/// Engine ADR 1008 — the outlines the effect stack draws on, in the
+/// frame's inner coordinates: its own outline (the path its fill paints,
+/// by its fill rule) and its visible outline, grown to the stroke's outer
+/// edge (what InDesign and Photoshop measure an effect from). `None` for a
+/// line or an anchorless shape.
+pub(crate) fn stack_outlines(frame: &ResolvedFrame<'_>) -> Option<(PathData, PathData)> {
+    let own = match &frame.geometry {
+        Geometry::Rect { rect } | Geometry::TextFrameRect { rect } => {
+            rect_outline(frame, *rect, 0.0).into_path()
+        }
+        _ => outline_of(frame)?,
+    }
+    .with_fill_rule(frame.fill_rule);
+    let grown = (frame.stroke_outset_pt() > 0.0)
+        .then(|| filled_and_stroked_outline_of(frame).map(RectOutline::into_path))
+        .flatten()
+        .unwrap_or_else(|| own.clone());
+    Some((own, grown))
+}
+
 /// A rectangular frame's outline: the plain rect, or the corner path
 /// when a corner effect resolves.
 enum RectOutline {

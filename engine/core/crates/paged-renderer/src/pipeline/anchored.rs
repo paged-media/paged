@@ -1000,6 +1000,7 @@ fn emit_anchored_rect_via_pipeline(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
         // `AnchoredFrame` carries no `GradientFillStart` / `Length` (the
         // adapter reads only the angle on an anchored frame), so the
@@ -1108,6 +1109,7 @@ pub(super) fn emit_anchored_rect_image(
         opacity: None,
         blend_mode: None,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: af.gradient_fill_angle,
         gradient_fill_length: None,
         gradient_fill_start: None,
@@ -1241,6 +1243,7 @@ pub(super) fn emit_anchored_textframe_story<'a>(
         subpath_open: Vec::new(),
         fill_rule: paged_model::FillRule::NonZero,
         effects: None,
+        effect_stack: Vec::new(),
         gradient_fill_angle: None,
         gradient_fill_length: None,
         gradient_fill_start: None,

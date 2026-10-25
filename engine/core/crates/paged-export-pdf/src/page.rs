@@ -362,6 +362,102 @@ struct Walker<'a, 'b> {
 }
 
 impl Walker<'_, '_> {
+    /// Draw the effect layer `[start, end]` as an image (see the arm in
+    /// `walk`). `false` when this build cannot, and the caller writes the
+    /// layer's content as a plain group.
+    fn emit_effect_layer(
+        &mut self,
+        content: &mut Content,
+        start: usize,
+        end: usize,
+        blend: paged_compose::BlendMode,
+        opacity: f32,
+    ) -> bool {
+        #[cfg(feature = "raster-effects")]
+        {
+            let ppi = self.input.options.effect_dpi.max(72.0);
+            let finding = ExportDiagnostic::EffectRasterized { ppi };
+            if !self.diagnostics.contains(&finding) {
+                self.diagnostics.push(finding);
+            }
+            let Some(layer) = paged_gpu::rasterize_layer(self.list, start, end, ppi) else {
+                return true;
+            };
+            let n = (layer.w * layer.h) as usize;
+            let mut rgb = Vec::with_capacity(n * 3);
+            let mut alpha = Vec::with_capacity(n);
+            for px in layer.rgba.chunks_exact(4) {
+                let a = px[3];
+                alpha.push(a);
+                for c in &px[..3] {
+                    rgb.push(if a == 0 {
+                        0
+                    } else {
+                        ((*c as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8
+                    });
+                }
+            }
+            let deflate = |data: &[u8]| {
+                use std::io::Write as _;
+                let mut enc =
+                    flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+                let _ = enc.write_all(data);
+                enc.finish().unwrap_or_default()
+            };
+            let mask_ref = self.state.refs.alloc();
+            {
+                let data = deflate(&alpha);
+                let mut x = self.state.pdf.image_xobject(mask_ref, &data);
+                x.width(layer.w as i32);
+                x.height(layer.h as i32);
+                x.bits_per_component(8);
+                x.color_space().device_gray();
+                x.filter(pdf_writer::Filter::FlateDecode);
+                x.finish();
+            }
+            let img_ref = self.state.refs.alloc();
+            {
+                let data = deflate(&rgb);
+                let mut x = self.state.pdf.image_xobject(img_ref, &data);
+                x.width(layer.w as i32);
+                x.height(layer.h as i32);
+                x.bits_per_component(8);
+                x.color_space().device_rgb();
+                x.filter(pdf_writer::Filter::FlateDecode);
+                x.s_mask(mask_ref);
+                x.finish();
+            }
+            let name = format!("Xl{}", self.xobject_counter);
+            self.xobject_counter += 1;
+            self.resources.x_objects.insert(name.clone(), img_ref);
+            let b = layer.bounds_pt();
+            content.save_state();
+            crate::transparency::apply_gs(
+                content,
+                self.state,
+                &mut self.resources,
+                Some(blend),
+                Some(opacity),
+                false,
+            );
+            content.transform([b.w, 0.0, 0.0, -b.h, b.x, b.y + b.h]);
+            content.x_object(Name(name.as_bytes()));
+            content.restore_state();
+            true
+        }
+        #[cfg(not(feature = "raster-effects"))]
+        {
+            let _ = (content, start, end, blend, opacity);
+            if !self
+                .diagnostics
+                .contains(&ExportDiagnostic::EffectNotRasterized)
+            {
+                self.diagnostics.push(ExportDiagnostic::EffectNotRasterized);
+            }
+            false
+        }
+    }
+
     /// Borrow what the effect emitters need in one shape.
     fn effect_ctx(&mut self, input: &ExportInput<'_>) -> crate::effects::EffectCtx<'_> {
         crate::effects::EffectCtx {
@@ -708,6 +804,26 @@ impl Walker<'_, '_> {
                 }
                 DisplayCommand::PopClip(_) => {
                     stack.pop(content, FrameKind::Clip);
+                }
+                // Engine ADR 1008 — a layer effect has no PDF operator:
+                // the layer is drawn by the CPU rasterizer, effect
+                // applied, and placed as one image under its blend mode
+                // and opacity.
+                DisplayCommand::PushLayer {
+                    effect,
+                    blend_mode,
+                    opacity,
+                    ..
+                } if *effect != paged_compose::LayerEffect::None
+                    && self.emit_effect_layer(
+                        content,
+                        i,
+                        find_group_end(commands, i).min(range.end),
+                        *blend_mode,
+                        *opacity,
+                    ) =>
+                {
+                    i = find_group_end(commands, i).min(range.end);
                 }
                 DisplayCommand::BeginBlendGroup {
                     blend_mode,

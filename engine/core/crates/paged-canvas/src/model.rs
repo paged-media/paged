@@ -1430,6 +1430,27 @@ fn gradient_feather_entry(
     }
 }
 
+/// Engine ADR 1008 — the four effect-stack rows of an effect-bearing
+/// item: each target's stack as the user sees it.
+fn effect_stack_entries(
+    item: &dyn paged_model::effect_stack::EffectBearing,
+) -> Vec<crate::channel::PropertyEntry> {
+    use paged_model::effect_stack::EffectTarget as T;
+    use paged_mutate::PropertyPath as P;
+    [
+        (P::FrameEffectStack, T::Object),
+        (P::FrameFillEffectStack, T::Fill),
+        (P::FrameStrokeEffectStack, T::Stroke),
+        (P::FrameContentEffectStack, T::Content),
+    ]
+    .into_iter()
+    .map(|(path, target)| crate::channel::PropertyEntry {
+        path,
+        value: Some(paged_mutate::operation::effect_stack_value(item, target)),
+    })
+    .collect()
+}
+
 /// W0.4 — read-side mirror of the transparency-effect per-field paths
 /// (gap 18). Emits one `PropertyEntry` per effect field, sourcing each
 /// from the parsed `effects: Option<FrameEffects>` block (a `None`
@@ -6667,6 +6688,7 @@ impl CanvasModel {
     pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
         let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
         out.extend(crate::export_losses::fill_rule_losses(&self.scene));
+        out.extend(crate::export_losses::effect_stack_losses(&self.scene));
         match self.export_idml_with_links(link_base) {
             Err(e) => out.push(format!(
                 "the IDML export itself failed ({e}) — no construct below it could be measured"
@@ -7598,6 +7620,8 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -7967,6 +7991,8 @@ impl CanvasModel {
                             f.effects.as_ref(),
                             f.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(f));
                         entries.extend(target_property_entries(
                             Some(f.fill_transparency.as_ref()),
                             f.stroke_transparency.as_ref(),
@@ -8209,6 +8235,8 @@ impl CanvasModel {
                             p.effects.as_ref(),
                             p.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(p));
                         entries.extend(target_property_entries(
                             Some(p.fill_transparency.as_ref()),
                             p.stroke_transparency.as_ref(),
@@ -8545,6 +8573,8 @@ impl CanvasModel {
                             o.effects.as_ref(),
                             o.blend_mode.as_deref(),
                         ));
+                        // Engine ADR 1008 — the effect stacks.
+                        entries.extend(effect_stack_entries(o));
                         entries.extend(target_property_entries(
                             Some(o.fill_transparency.as_ref()),
                             o.stroke_transparency.as_ref(),
@@ -14449,6 +14479,10 @@ fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
             | P::FrameDirectionalFeatherNoise
             | P::FrameDirectionalFeatherChoke
             | P::FrameGradientFeather
+            | P::FrameEffectStack
+            | P::FrameFillEffectStack
+            | P::FrameStrokeEffectStack
+            | P::FrameContentEffectStack
     )
 }
 

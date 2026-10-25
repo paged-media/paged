@@ -917,6 +917,20 @@ pub enum LayerEffect {
     /// (in pt) before compositing. Edges clamp to transparent (the
     /// layer's bounds are padded by 3σ at composite time).
     GaussianBlur { sigma_pt: f32 },
+    /// Photoshop's Add Noise (uniform): each pixel's colour moves by up to
+    /// `amount` (0..=1) of its range, one random value for all channels
+    /// when `monochromatic`. The grain is hashed per page-space cell
+    /// (engine ADR 1008, [`crate::layer_fx`]).
+    Noise { amount: f32, monochromatic: bool },
+    /// A colour adjustment of the layer's pixels: brightness and contrast
+    /// (−1..=1), then saturation (−1..=1) and a hue rotation in degrees
+    /// ([`crate::layer_fx`]).
+    ColorAdjust {
+        brightness: f32,
+        contrast: f32,
+        saturation: f32,
+        hue_deg: f32,
+    },
 }
 
 impl LayerEffect {
@@ -924,8 +938,8 @@ impl LayerEffect {
     /// pad the layer bounds uniformly.
     pub fn sigma_pt(&self) -> f32 {
         match self {
-            LayerEffect::None => 0.0,
             LayerEffect::GaussianBlur { sigma_pt } => sigma_pt.max(0.0),
+            _ => 0.0,
         }
     }
 }

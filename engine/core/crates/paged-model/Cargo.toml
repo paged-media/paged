@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 serde = { workspace = true }
 base64 = { workspace = true }
+# The effect stack's IDML label (engine ADR 1008).
+serde_json = "1"
 
 [dev-dependencies]
-serde_json = "1"

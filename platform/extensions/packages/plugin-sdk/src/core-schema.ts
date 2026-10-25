@@ -776,6 +776,11 @@ export const CORE_PATHS: Record<
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   // The fill rule is protocol 76 (engine ADR 1006); a pre-71 engine has none.
   frameFillRule: V71,
+  // The effect stacks are protocol 76 (engine ADR 1008).
+  frameEffectStack: V71,
+  frameFillEffectStack: V71,
+  frameStrokeEffectStack: V71,
+  frameContentEffectStack: V71,
   nextTextFrame: {
     scope: "frame",
     wire: "text",

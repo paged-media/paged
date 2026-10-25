@@ -30,6 +30,7 @@
 //! primitive. `paged-parse` re-exports everything moved here, so its dependents
 //! compile unchanged.
 
+pub mod effect_stack;
 pub mod fitting;
 pub mod image_bytes;
 pub mod winding;
@@ -761,6 +762,11 @@ pub struct TargetTransparency {
     /// back; the renderer paints the object's effects only.
     #[serde(default)]
     pub effects: Option<FrameEffects>,
+    /// The target's effect stack (engine ADR 1008): the order and the
+    /// enabled flags of its InDesign effects. Empty in the canonical form.
+    /// Stack-only effects are applied to the object target only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
 }
 
 impl TargetTransparency {
@@ -1473,6 +1479,11 @@ pub struct TextFrame {
     pub fill_rule: FillRule,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -1631,6 +1642,7 @@ impl TextFrame {
             subpath_open: Vec::new(),
             fill_rule: FillRule::NonZero,
             effects: None,
+            effect_stack: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -1962,6 +1974,11 @@ pub struct Rectangle {
     /// renderer treats the field as "no effect"; when set it's
     /// surfaced for downstream tooling but visibly emits nothing.
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2109,6 +2126,7 @@ impl Rectangle {
             opacity: None,
             blend_mode: None,
             effects: None,
+            effect_stack: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -2417,6 +2435,11 @@ pub struct Oval {
     pub item_layer: Option<String>,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -2556,6 +2579,7 @@ impl Oval {
             text_wrap: None,
             item_layer: None,
             effects: None,
+            effect_stack: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,
@@ -3117,6 +3141,11 @@ pub struct Polygon {
     pub drop_shadow: Option<DropShadowSetting>,
     /// See [`Rectangle::effects`] (Q-04).
     pub effects: Option<FrameEffects>,
+    /// The ordered effect stack of the object target (engine ADR 1008).
+    /// Empty in the canonical form: the slots (`drop_shadow`, `effects`)
+    /// are on in InDesign's order and nothing else is stacked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effect_stack: Vec<crate::effect_stack::EffectEntry>,
     /// R-10 — `<FillTransparencySetting>`: the fill's own opacity, blend
     /// mode and effects; see [`TargetTransparency`]. `None` when absent.
     #[serde(default)]
@@ -3280,6 +3309,7 @@ impl Polygon {
             text_wrap: None,
             item_layer: None,
             effects: None,
+            effect_stack: Vec::new(),
             fill_transparency: None,
             stroke_transparency: None,
             content_transparency: None,

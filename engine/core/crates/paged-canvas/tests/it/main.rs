@@ -33,6 +33,7 @@ mod determinism;
 mod digest_gate;
 mod document_metadata;
 mod duplicate_wire;
+mod effect_stack;
 mod element_lock_wire;
 mod emit_cache_undo;
 mod empty_paragraph_leading;

@@ -118,6 +118,8 @@ pub use vcpu::rasterize;
 pub use vcpu::rasterize_with_separation;
 #[cfg(feature = "cpu")]
 pub use vcpu::CpuRasterizer;
+#[cfg(feature = "cpu")]
+pub use vcpu::{rasterize_layer, LayerRaster};
 // Re-export vello::Scene so consumers (paged-canvas-wasm) don't need
 // vello as a direct dependency to hold cached scenes.
 #[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]

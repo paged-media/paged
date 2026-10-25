@@ -6062,6 +6062,26 @@
           "const": "frameGradientFeather"
         },
         {
+          "description": "Engine ADR 1008 — the object target's ordered effect stack\n(`Value::EffectStack`), whole-list replacement: add, remove,\nreorder, enable and the stack-only effects' parameters are one\nwrite each. The InDesign effects' parameters stay on their own\nper-field paths. Reads the canonical stack (the effects that are\non, in InDesign's order) for an item that stores none. The inverse\ncarries a snapshot (`prev`), so undo restores the model exactly.\nText frames, rectangles, ovals and polygons. Paint-only.",
+          "type": "string",
+          "const": "frameEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the fill target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameFillEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the stroke target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameStrokeEffectStack"
+        },
+        {
+          "description": "ADR 1008 — the content target's stack (InDesign effects only).",
+          "type": "string",
+          "const": "frameContentEffectStack"
+        },
+        {
           "description": "Editor-ops (Page tool) — a page's `GeometricBounds`\n`[top, left, bottom, right]` in the page's INNER coordinate\nsystem (`Value::Bounds`). Only `NodeId::Page` carries it.\nItems keep their coordinates (InDesign's layout-adjust off);\n`spread_origin` re-derives on rebuild.",
           "type": "string",
           "const": "pageBounds"
@@ -8193,6 +8213,41 @@
           ]
         },
         {
+          "description": "Engine ADR 1008 — a target's whole effect stack. `prev` is the\napply layer's snapshot of the target's effect state (JSON); an\ninverse carries it so undo restores exactly. Wire callers leave\nit `None`.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "effectStack"
+            },
+            "value": {
+              "type": "object",
+              "properties": {
+                "entries": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/EffectEntrySpec"
+                  }
+                },
+                "prev": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null
+                }
+              },
+              "required": [
+                "entries"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
           "description": "W0.2 — whole paragraph rule struct (`RuleAbove` / `RuleBelow`).\n`None` clears the rule back to the all-`None` default. The\ninverse carries the prior `Option<spec>` so undo round-trips\nbytewise. Same whole-struct precedent as `GradientFeather`.",
           "type": "object",
           "properties": {
@@ -8455,6 +8510,199 @@
       "required": [
         "locationPct",
         "alphaPct"
+      ]
+    },
+    "EffectEntrySpec": {
+      "description": "Engine ADR 1008 — one entry of an effect stack on the wire. Every\nentry has `kind`, `enabled`, and — for a stack-only kind — `blendMode`\nand `opacityPct`. The parameter fields are flat and optional; each\nkind reads its own and an absent one takes the kind's default:\n\n| kind | fields |\n| --- | --- |\n| `gaussianBlur` | `radiusPt` (σ, pt) |\n| `outlineStroke` | `sizePt`, `position` (`Outside` / `Inside` / `Center`), `color` |\n| `colorOverlay` | `color` |\n| `gradientOverlay` | `gradient`, `angleDeg`, `reverse` |\n| `reflection` | `distancePt`, `sizePct`, `startOpacityPct`, `endOpacityPct`, `blurPt` |\n| `softEdge` | `sizePt` |\n| `noise` | `amountPct`, `monochromatic` |\n| `colorAdjust` | `brightness`, `contrast`, `saturation` (−100..100), `hueDeg` |\n\nInDesign's kinds carry no parameters here: theirs are the per-field\npaths (`frameInnerShadowSize`, …), and the stack keeps them.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EffectKind"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "blendMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "opacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "radiusPt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "sizePt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "position": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "gradient": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "angleDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "reverse": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "distancePt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "sizePct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "startOpacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "endOpacityPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "blurPt": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "amountPct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "monochromatic": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "brightness": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "contrast": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "saturation": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        },
+        "hueDeg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "EffectKind": {
+      "description": "Engine ADR 1008 — an effect kind on the stack: InDesign's nine, then\nthe stack-only ones.",
+      "type": "string",
+      "enum": [
+        "dropShadow",
+        "innerShadow",
+        "outerGlow",
+        "innerGlow",
+        "bevelEmboss",
+        "satin",
+        "feather",
+        "directionalFeather",
+        "gradientFeather",
+        "gaussianBlur",
+        "outlineStroke",
+        "colorOverlay",
+        "gradientOverlay",
+        "reflection",
+        "softEdge",
+        "noise",
+        "colorAdjust"
       ]
     },
     "ParagraphRuleSpec": {

@@ -869,6 +869,11 @@ property_paths! {
         // apply arm takes the same node kinds as the others and the
         // bridge already encodes its spec. PROMOTED 2026-09-09.
         FrameGradientFeather => "frameGradientFeather" : structure("GradientFeatherSpec", Wire::GradientFeather),
+        // Engine ADR 1008 — the ordered effect stack per target.
+        FrameEffectStack => "frameEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameFillEffectStack => "frameFillEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameStrokeEffectStack => "frameStrokeEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
+        FrameContentEffectStack => "frameContentEffectStack" : list_of("EffectEntrySpec", Wire::EffectStack),
         CellFillColor => "cellFillColor" : color().idml(idml![attr(Cell | CellStyle, FillColor)]),
         CellFillTint => "cellFillTint" : pct().default_num(100.0).idml(idml![attr(Cell | CellStyle, FillTint)]),
         CellInsetTop => "cellInsetTop" : length_pos().idml(idml![attr(Cell, TextTopInset)]),
@@ -1416,7 +1421,10 @@ mod tests {
         // 244 -> 245: ADR 1006 — a frame's fill rule.
         //
         // 245 -> 246: ADR 1010 — a group is a clip group.
-        assert_eq!(cat.settable_paths.len(), 246, "settable path count drifted");
+        //
+        // 246 -> 250: ADR 1008 — the effect stack of each transparency
+        // target.
+        assert_eq!(cat.settable_paths.len(), 250, "settable path count drifted");
         assert!(cat.host_functions.len() >= 20);
         assert!(!cat.elements.is_empty(), "elements section is empty");
         // representative + alias mappings

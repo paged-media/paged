@@ -57,8 +57,15 @@
 // row picks which one those two controls edit, and shows each target's
 // current setting. A group has only the Object target, plus the two
 // group options at the foot of the panel: Isolate blending and Knockout
-// group. The effect families stay on the object target (the engine has
-// no per-target effect paths).
+// group. The effect families' parameters stay on the object target (the
+// engine has no per-target per-field paths).
+//
+// Engine ADR 1008 — above the families, the picked target's effect STACK
+// (effect-stack-section.tsx): the order the effects apply in, a switch,
+// move and remove per effect, an Add menu, and the parameters of the
+// stack-only effects (blur, outline stroke, overlays, reflection, soft
+// edge, noise, colour adjustment). The blend lists come from the
+// engine's schema row (`frameBlendMode`'s members).
 
 import { useState } from "react";
 
@@ -77,6 +84,7 @@ import type { CompositionNode } from "@paged-media/catalog";
 import type { PropertyPath, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
+import { EffectStackSection, type BlendOption } from "./effect-stack-section";
 import {
   blendModes,
   bevelComposition,
@@ -299,6 +307,20 @@ function EffectDisclosure({
   );
 }
 
+/** The blend modes the engine's schema row lists (plan C1: the list is
+ *  the engine's, not hand-kept here), labelled from the panel's
+ *  messages; a mode without a label shows its IDML name. Without a row
+ *  (no selection yet) the panel's own list stands in. */
+function schemaBlendModes(strings: Strings, row: ObjectField["row"]): BlendOption[] {
+  const labelled = blendModes(strings);
+  const type = row?.type as { kind?: string; members?: readonly string[] } | undefined;
+  if (type?.kind !== "enum" || !type.members?.length) return labelled;
+  return type.members.map((m) => ({
+    value: m,
+    label: labelled.find((l) => l.value === m)?.label ?? m,
+  }));
+}
+
 /** A target's current setting as InDesign lists it ("Multiply 60%"):
  *  an unset blend reads Normal, an unset opacity 100 %; mixed reads —. */
 function targetSummary(
@@ -380,6 +402,7 @@ export function EffectsPanel() {
   const blendId = unwrapText(blendField.value) || "Normal";
   const blendDisabled = blendField.onCommit == null;
   const blendMixed = blendField.value == null;
+  const modes = schemaBlendModes(strings, fields.objectBlend.row);
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
@@ -443,7 +466,7 @@ export function EffectsPanel() {
                 —
               </option>
             )}
-            {blendModes(strings).map((opt) => (
+            {modes.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -497,6 +520,7 @@ export function EffectsPanel() {
               </span>
             )}
           </div>
+          <EffectStackSection target={target} blendModes={modes} />
           <div className="flex flex-col">
             {EFFECT_FAMILIES.map((fam) => (
               <EffectDisclosure
