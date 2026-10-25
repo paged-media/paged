@@ -25,6 +25,13 @@
 
 import { createDataDoor, type DataDoor } from "./data-door";
 import { createAssetPipeline, type AssetColumnDef } from "./assets";
+import {
+  placeRecordOn,
+  sampleCsv,
+  SAMPLE_QUERY,
+  SAMPLE_SOURCE,
+  SAMPLE_SQL,
+} from "./drop-place";
 import type { TransformDefJson } from "./engine";
 import type {
   BundleHost,
@@ -558,6 +565,27 @@ export interface DataSourceSession
     field: string,
     target: ElementId,
   ): Promise<{ binding: string; kind: string }>;
+  /** Editor ADR 291: a query dropped on a text frame as a table — a table
+   *  binding of `fields` (in order) in the frame's own story. */
+  placeTable(
+    query: string,
+    fields: readonly string[],
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }>;
+  /** Editor ADR 291: a record dropped on a design (a group or a frame):
+   *  each `<<field>>` of its text frames becomes a variable showing that
+   *  record's field, a graphic frame named `<<@field>>` its picture
+   *  (`drop-place.ts`). Refused when the design holds no `<<field>>`. */
+  placeRecord(
+    query: string,
+    record: number,
+    target: ElementId,
+  ): Promise<{ binding: string; kind: string }[]>;
+  /** Editor ADR 291's first run: a small product list as a source and a
+   *  query over it, refreshed; the query's name. */
+  loadSample(): Promise<string>;
+  /** The record a binding placed by a dropped record shows, if any. */
+  recordOfBinding(id: string): number | undefined;
   /** Data ADR 563 — declare (or, with null, undeclare) `<query>.<field>` an
    *  asset column: an image binding over it fetches (consented origins
    *  only), keeps (by content hash) and runs the chain before placing. */
@@ -1062,6 +1090,11 @@ export function createSession(
   // module each barcode binding drew last, so a re-lower or a preview step
   // replaces them instead of adding a duplicate.
   const tableAt = new Map<string, LoweredTableAt>();
+  // Editor ADR 291: the text frame a dropped table lives in (the user's frame,
+  // never deleted by a re-lower), and the record a binding placed by a
+  // dropped record shows (every refresh resolves it at that record).
+  const tableInto = new Map<string, { frame: ElementId; storyId: string }>();
+  const recordOf = new Map<string, number>();
   const barcodeMinted = new Map<string, ElementId[]>();
   // The template each merge read last: a consumed template is gone from its
   // page, and a re-merge reuses it.
@@ -1274,6 +1307,21 @@ export function createSession(
     return planRelower(elements, target, { pages: pages as never, minted });
   }
 
+  /** An ADR 131 address (`textFrame:u12`) as an element id. */
+  function elementOfAddress(address: string): ElementId {
+    const [kind, ...rest] = address.split(":");
+    return { kind, id: rest.join(":") } as ElementId;
+  }
+
+  /** Resolve a binding at the record it shows: the record a dropped record
+   *  fixed (editor ADR 291), else the first. */
+  function resolveFor(e: DataEngineLike, id: string): unknown {
+    const at = recordOf.get(id);
+    return at !== undefined && typeof e.resolve_lowered_at === "function"
+      ? e.resolve_lowered_at(id, at)
+      : e.resolve_lowered(id);
+  }
+
   /** The page a lowering starts on: the active page, else the first. */
   async function startPage(): Promise<string | null> {
     const meta = await host.document.meta();
@@ -1310,6 +1358,19 @@ export function createSession(
     for (const [id, t] of visibilityTargets) targets.visibility[id] = { ...t };
     for (const [id, t] of ruleTargets) targets.rule[id] = { ...t };
     for (const [id, el] of loweredInto) targets.lowered[id] = el;
+    if (tableInto.size > 0) {
+      targets.tableIn = {};
+      for (const [id, at] of tableInto) {
+        const known = tableAt.get(id);
+        targets.tableIn[id] = {
+          ...at,
+          ...(known?.frame.id === at.frame.id
+            ? { tableId: known.tableId }
+            : {}),
+        };
+      }
+    }
+    if (recordOf.size > 0) targets.record = Object.fromEntries(recordOf);
     const data: PersistedData[] = [];
     for (const [source, text] of importedCsv) {
       const stored = await storeData(
@@ -2176,6 +2237,8 @@ export function createSession(
     poller.stopAll();
     state.polling = [];
     loweredInto.clear();
+    tableInto.clear();
+    recordOf.clear();
     hostOids.clear();
     hostElements.clear();
     relinkSources.length = 0;
@@ -2324,6 +2387,17 @@ export function createSession(
       ruleTargets.set(id, t);
     for (const [id, el] of Object.entries(saved.targets.lowered))
       loweredInto.set(id, el);
+    for (const [id, t] of Object.entries(saved.targets.tableIn ?? {})) {
+      tableInto.set(id, { frame: t.frame, storyId: t.storyId });
+      if (t.tableId)
+        tableAt.set(id, {
+          frame: t.frame,
+          storyId: t.storyId,
+          tableId: t.tableId,
+        });
+    }
+    for (const [id, n] of Object.entries(saved.targets.record ?? {}))
+      if (Number.isInteger(n) && n >= 0) recordOf.set(id, n);
 
     // Imported data: back into the store when it is first used.
     for (const d of saved.data) {
@@ -2584,6 +2658,12 @@ export function createSession(
         id: rest.join(":"),
       } as ElementId);
     },
+    placeTable: (target, query, fields) =>
+      self.placeTable(query, fields, elementOfAddress(target)),
+    placeRecord: (target, query, record) =>
+      self.placeRecord(query, record, elementOfAddress(target)),
+    loadSample: () => self.loadSample(),
+    recordOf: (id) => recordOf.get(id),
     placements: () => props.placements(),
     assetColumns: () => self.assetColumns(),
     setAssetColumn: (query, field, def) =>
@@ -2733,6 +2813,78 @@ export function createSession(
       throw new Error(
         `a field is placed into a text frame or onto a graphic frame, not on a ${String(target.kind)}`,
       );
+    },
+    async placeTable(query, fields, target) {
+      if (target.kind !== "textFrame")
+        throw new Error(
+          `a table is placed into a text frame, not on a ${String(target.kind)}`,
+        );
+      if (fields.length === 0)
+        throw new Error(`the query ${query} has no field to make a table of`);
+      const story = await frameStory(host, String(target.id));
+      if (!story)
+        throw new Error(
+          `the text frame ${String(target.id)} has no story to place a table into`,
+        );
+      const id = `${query.replace(/[^A-Za-z0-9_]/g, "_")}-table-${Date.now().toString(36)}`;
+      self.addTableBinding(
+        id,
+        id,
+        query,
+        fields.map((f) => ({ header: f, expr: f })),
+      );
+      tableInto.set(id, { frame: target, storyId: story });
+      await self.lowerBinding(id);
+      if (!loweredInto.has(id)) {
+        const why = state.message;
+        await self.removeBinding(id);
+        throw new Error(
+          `the table could not be placed${why ? `: ${why}` : ""}`,
+        );
+      }
+      emit();
+      return { binding: id, kind: "table" };
+    },
+    async placeRecord(query, record, target) {
+      const out = await placeRecordOn(
+        {
+          host,
+          engine: ensureEngine,
+          addVariableBinding: (id, t, q, x) =>
+            self.addVariableBinding(id, t, q, x),
+          addImageBinding: (id, t, q, x) => self.addImageBinding(id, t, q, x),
+          fixRecord: (id, n) => {
+            recordOf.set(id, n);
+            markDirty();
+          },
+          placed: (id) => placedVariables.add(id),
+          lowerBinding: (id) => self.lowerBinding(id),
+          removeBinding: (id) => self.removeBinding(id),
+        },
+        query,
+        record,
+        target,
+      );
+      emit();
+      return out;
+    },
+    async loadSample() {
+      if (!sourceNames.includes(SAMPLE_SOURCE)) {
+        await self.registerCsvSource(SAMPLE_SOURCE, sampleCsv());
+        if (!sourceNames.includes(SAMPLE_SOURCE))
+          throw new Error(state.message || "the sample data was not loaded");
+      }
+      if (!queries.has(SAMPLE_QUERY))
+        self.addQuery(SAMPLE_QUERY, SAMPLE_SQL, "recordStream");
+      await self.refreshData();
+      emit();
+      return SAMPLE_QUERY;
+    },
+    recordOfBinding: (id) => recordOf.get(id),
+    async removeBinding(id, mode) {
+      tableInto.delete(id);
+      recordOf.delete(id);
+      return props.removeBinding(id, mode);
     },
     setAssetColumn(query, field, def) {
       const key = `${query}.${field}`;
@@ -3743,17 +3895,25 @@ export function createSession(
           state.message = tr(STATUS.loweredBarcode, { id });
           return;
         }
-        const lowered = e.resolve_lowered(id) as { kind?: string } | null;
+        const lowered = resolveFor(e, id) as { kind?: string } | null;
         if (lowered?.kind === "table") {
           const plan = await relowerPlan({ kind: "table", binding: id });
           const known = tableAt.get(id);
+          // A dropped table stays in the user's frame: never deleted, its
+          // table swapped in place (or, unaddressable, placed in it again).
+          const into = tableInto.get(id);
           const inPlace =
-            known && plan.reuse && plan.reuse.id === known.frame.id
+            known &&
+            ((plan.reuse && plan.reuse.id === known.frame.id) ||
+              (into && into.frame.id === known.frame.id))
               ? known
               : undefined;
+          const own = (m: Mutation) =>
+            !!into &&
+            (m.args as { frameId?: unknown }).frameId === into.frame.id;
           // A labelled frame whose table we cannot address goes, too.
-          const clear = [...plan.remove];
-          if (plan.reuse && !inPlace)
+          const clear = plan.remove.filter((m) => !own(m as Mutation));
+          if (plan.reuse && !inPlace && plan.reuse.id !== into?.frame.id)
             clear.push({
               op: "deleteFrame",
               args: { frameId: plan.reuse.id as string },
@@ -3767,6 +3927,7 @@ export function createSession(
               inPlace,
               clear,
               onTable: (at) => tableAt.set(id, at),
+              ...(into ? { into } : {}),
             },
           );
           if (frameId) {
@@ -4145,11 +4306,13 @@ export function createSession(
         { value: string | null } | "kept" | "failed" | "same"
       >();
       const ours = fields.filter((f) => bindingKinds.get(f.key) === "variable");
-      if (typeof e.refresh_field_values === "function" && ours.length > 0) {
+      // A field placed by a dropped record resolves at its record (below).
+      const atZero = ours.filter((f) => !recordOf.has(f.key));
+      if (typeof e.refresh_field_values === "function" && atZero.length > 0) {
         let decided: FieldRefreshOut[] = [];
         try {
           decided =
-            (e.refresh_field_values([...new Set(ours.map((f) => f.key))]) as
+            (e.refresh_field_values([...new Set(atZero.map((f) => f.key))]) as
               FieldRefreshOut[] | null) ?? [];
         } catch (err) {
           report({
@@ -4183,7 +4346,7 @@ export function createSession(
             r = "kept";
           } else {
             try {
-              const lowered = e.resolve_lowered(f.key) as {
+              const lowered = resolveFor(e, f.key) as {
                 kind?: string;
                 text?: string;
                 hidden?: boolean;
