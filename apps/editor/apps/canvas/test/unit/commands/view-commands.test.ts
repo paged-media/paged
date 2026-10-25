@@ -66,7 +66,16 @@ const TOGGLES = [
 
 describe("View ▸ screen modes, grids and snapping", () => {
   test("each command flips its own toggle, and a second press puts it back", async () => {
-    covers(...TOGGLES.map(([id]) => `command:${id}`));
+    covers(
+      "command:paged.view.outline",
+      "command:paged.view.overprintPreview",
+      "command:paged.view.pixelPreview",
+      "command:paged.view.showGrid",
+      "command:paged.view.snapToGrid",
+      "command:paged.view.pixelGrid",
+      "command:paged.view.snapToPixel",
+      "command:paged.view.smartGuides",
+    );
     const { registry, scope } = harness();
     for (const [id, toggle] of TOGGLES) {
       const before = getViewToggle(scope, toggle);

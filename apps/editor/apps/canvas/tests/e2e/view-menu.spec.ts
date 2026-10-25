@@ -50,7 +50,7 @@ type G = {
       };
       documentMeta(): Promise<{ dirty: boolean }>;
       elementGeometry(ids: unknown[]): Promise<
-        Array<{ bounds: { top: number; left: number; bottom: number; right: number } }>
+        Array<{ bounds: [number, number, number, number] }>
       >;
       send(m: unknown): Promise<{ kind: string; payload: unknown }>;
     };
@@ -213,9 +213,10 @@ test.describe("View menu — view modes, grids, snapping, Rotate View [editor-sh
     )[0]!.bounds;
     // The left edge (72) moved by ~7.4 lands on 81 = 9 × 9; the top (100)
     // moved by ~3.3 lands on 99 = 11 × 9.
-    expect(after.left).toBeCloseTo(81, 3);
-    expect(after.top).toBeCloseTo(99, 3);
-    expect(after.right - after.left).toBeCloseTo(before.right - before.left, 3);
+    // `bounds` is [top, left, bottom, right]; page 1 sits at the origin.
+    expect(after[1]).toBeCloseTo(81, 3);
+    expect(after[0]).toBeCloseTo(99, 3);
+    expect(after[3] - after[1]).toBeCloseTo(before[3] - before[1], 3);
     // Snap to pixel and the pixel grid toggle; Smart guides back on.
     await clickMenuRow(page, "View/Snap to pixel");
     expect(await viewToggle(page, "snapToPixel")).toBe(true);

@@ -66,11 +66,10 @@ describe("paged.view.guidesAndGridPreferences", () => {
       registry.register(c);
     const render = () =>
       renderToStaticMarkup(
-        createElement(
-          EditorScopeProvider,
-          { scope },
-          createElement(ViewPreferencesDialog),
-        ),
+        createElement(EditorScopeProvider, {
+          scope,
+          children: createElement(ViewPreferencesDialog),
+        }),
       );
     expect(render()).toBe("");
     await registry.invoke("paged.view.guidesAndGridPreferences");
