@@ -1930,6 +1930,100 @@ export interface TextSurface {
     scope: "paragraph" | "character",
     styleId: string,
   ): Promise<TextFormatResult>;
+  /**
+   * Extensions ADR 348 amendment 1 — the selection in story CHARACTERS
+   * (the offsets the story-range paths and the engine's paragraph
+   * operations — `setListLevel`, `restartNumbering` — take), converted from
+   * the content offsets {@link selection} carries. `null` without a
+   * selection or when the story is not readable. Gated on
+   * `capabilities.document.read`.
+   */
+  characterRange(): Promise<TextSelection | null>;
+  /**
+   * Extensions ADR 348 amendment 1 (engine ADR 1021) — find text: every
+   * hit of `spec` in story order (document story order across stories),
+   * each in caret offsets (`start` / `end`, what {@link selection} and
+   * `viewport.revealText` take) and in characters. Word's specials (`^p`
+   * `^t` `^l` `^m` `^?` `^#` `^$` `^^`) work in every mode. A bad pattern
+   * answers `error` and no hits. Gated on `capabilities.document.read`;
+   * probe `supports("text.find@1")`.
+   */
+  find(spec: TextFindSpec): Promise<TextFindResult>;
+  /**
+   * Replace the first hit of `spec` (or every hit with `all: true`) with
+   * `replace` (`^p` `^t` `^l` `^&` `^^`, `$1`… in regex mode, `\1`… with
+   * wildcards), optionally styled: ONE undo step however many hits (the
+   * engine's `findReplace`). `replaced` counts the hits replaced. Nothing
+   * matching answers `{ applied: false }`. Gated on
+   * `capabilities.document.write`.
+   */
+  replace(spec: TextReplaceSpec): Promise<TextReplaceResult>;
+}
+
+/** Amendment 1 — how a find pattern reads (engine ADR 1021). */
+export type TextFindMode = "literal" | "wildcards" | "regex";
+
+/** Amendment 1 — what {@link TextSurface.find} looks for. */
+export interface TextFindSpec {
+  find: string;
+  /** One story; every story when absent. */
+  storyId?: string;
+  /** Default `"literal"`. */
+  mode?: TextFindMode;
+  /** Default false (Word's case-insensitive find). */
+  matchCase?: boolean;
+  wholeWord?: boolean;
+  /** Only hits in paragraphs of this paragraph style (its `Self` id). */
+  paragraphStyle?: string;
+  /** Only hits whose runs all carry this character style. */
+  characterStyle?: string;
+  /** At most this many hits. */
+  limit?: number;
+}
+
+/** Amendment 1 — one find hit. */
+export interface TextFindHit {
+  storyId: string;
+  /** `[start, end)` in caret (content) offsets. */
+  start: number;
+  end: number;
+  /** The same hit in story characters. */
+  charStart: number;
+  charEnd: number;
+  /** The paragraph the hit starts in. */
+  paragraph: number;
+  /** The matched text. */
+  text: string;
+  /** Up to 30 characters either side, within the paragraph. */
+  context: string;
+  /** Where the hit starts in `context`, in UTF-8 bytes. */
+  contextOffset: number;
+}
+
+/** Amendment 1 — what a find answered. */
+export interface TextFindResult {
+  hits: TextFindHit[];
+  /** A pattern the engine could not read. */
+  error?: string;
+}
+
+/** Amendment 1 — what {@link TextSurface.replace} does. */
+export interface TextReplaceSpec extends TextFindSpec {
+  replace: string;
+  /** Every hit (Replace All); the first only when absent. */
+  all?: boolean;
+  /** Apply this paragraph style to the replacement's paragraphs. */
+  replaceParagraphStyle?: string;
+  /** Apply this character style to the replacement. */
+  replaceCharacterStyle?: string;
+}
+
+/** Amendment 1 — what a replace did. */
+export interface TextReplaceResult {
+  applied: boolean;
+  /** The hits replaced (0 when not applied). */
+  replaced: number;
+  error?: string;
 }
 
 /** C4 — the text selection {@link TextSurface.selection} reads. */
@@ -2038,6 +2132,13 @@ export interface OverlayLayer extends Disposable {
 
 // ---------------------------------------------------------------- shell
 
+/** Extensions ADR 348 amendment 1 — how {@link ShellSurface.openPanel}
+ *  opens a panel. */
+export interface OpenPanelOptions {
+  /** The object the panel should edit (an ADR 131 address). */
+  target?: string;
+}
+
 /**
  * Shell actions the HOST APP injects at `loadBundle` time (the
  * cockpit owns panel placement; the SDK's adapter stays a pure
@@ -2052,8 +2153,12 @@ export interface OverlayLayer extends Disposable {
  */
 export interface ShellSurface {
   /** Open a REGISTERED panel as the active dock tab (the
-   *  Window-menu / panel-rail path). */
-  openPanel(panelId: string): void;
+   *  Window-menu / panel-rail path). Extensions ADR 348 amendment 1:
+   *  `options.target` first points a panel that edits one object at it —
+   *  an ADR 131 address, e.g. `style:paragraph/ParagraphStyle/Heading 1`
+   *  for the host's Style Options (`paged.style-options`); a panel that
+   *  takes no target ignores it. */
+  openPanel(panelId: string, options?: OpenPanelOptions): void;
   closePanel(panelId: string): void;
   /** Open the host's file picker and resolve to the chosen files' bytes
    *  (read at the host boundary — the contract never leaks a DOM `File`,

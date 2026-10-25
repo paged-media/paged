@@ -41,3 +41,33 @@ edit context never becomes active there.
 - The isolate migration carries the groups and items like panels: React in the host realm.
 - Find and replace (`host.text.findReplace`) and the review and spelling doors (ADR 349) are
   later, additive members.
+
+## Amendment 1 (2026-10-25): find and replace, the character range, a panel's target
+
+Engine ADR 1021's find landed on main, so `host.text` gains its additive members (no change to
+the existing ones):
+
+- **`host.text.find(spec)`** → `{ hits, error? }`: the engine's `RequestFindText` → `FoundText`.
+  `TextFindSpec { find, storyId?, mode? ("literal" | "wildcards" | "regex"), matchCase?,
+  wholeWord?, paragraphStyle?, characterStyle?, limit? }`; each `TextFindHit` carries the caret
+  range (`start`, `end`: what `selection` and `viewport.revealText` take), the character range
+  (`charStart`, `charEnd`), the paragraph, the text and up to 30 characters of context
+  (`context`, `contextOffset` in UTF-8 bytes). Word's specials work in every mode. Gated on
+  `capabilities.document.read`.
+- **`host.text.replace(spec)`** → `{ applied, replaced, error? }`: `TextReplaceSpec` adds
+  `replace`, `all?`, `replaceParagraphStyle?`, `replaceCharacterStyle?`; one `findReplace`
+  through `document.mutate` (so the write gate applies), ONE undo step for Replace All. The SDK
+  finds first to count the hits and to refuse "nothing matches" without sending a mutation.
+- **`host.text.characterRange()`**: the selection in story characters, for the operations that
+  count characters (`setListLevel`, `restartNumbering`); the content-to-character conversion
+  stays in the SDK.
+- **`host.shell.openPanel(id, { target })`**: an ADR 131 address the panel should edit first
+  (the host's Style Options takes a style address). `OpenPanelOptions` is additive; a panel
+  without a target ignores it.
+- **Probe** `text.find@1` (static: every host of this contract runs an engine that answers).
+- **Harness**: `createHeadlessHost({ shell })` passes a shell backend through, so a test can
+  record `openPanel` and its target.
+- The dialog and results list are the host's (editor ADR 303); a content type binds its keys to
+  the host's command ids (`paged.edit.find`, `paged.edit.replace`, `paged.edit.goTo`).
+- Versions: the lockstep plugin-sdk / plugin-api bump happens at integration.
+

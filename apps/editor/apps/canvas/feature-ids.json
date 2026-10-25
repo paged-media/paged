@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 539,
-    "keybinding": 131,
-    "menu": 383,
-    "panel": 130,
+    "command": 562,
+    "keybinding": 140,
+    "menu": 388,
+    "panel": 131,
     "tool": 81
   },
   "features": [
@@ -226,7 +226,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.applyStyles",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.bold",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBottom",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderBox",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.borderNone",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -241,12 +261,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.clearParagraph",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.continueNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.copyFormat",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.decreaseIndent",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.doubleUnderline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -267,6 +302,16 @@
     },
     {
       "id": "command:media.paged.doc.command.word.heading3",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.hidden",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.highlight",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -301,12 +346,27 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "command:media.paged.doc.command.word.listBullets",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listLegal",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "command:media.paged.doc.command.word.listLevelDown",
       "kind": "command",
       "owner": "media.paged.doc"
     },
     {
       "id": "command:media.paged.doc.command.word.listLevelUp",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.listOutline",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -322,6 +382,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.pasteFormat",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.restartNumbering",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.shading",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.showHidden",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -342,6 +417,21 @@
     },
     {
       "id": "command:media.paged.doc.command.word.strikethrough",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleModify",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleNew",
+      "kind": "command",
+      "owner": "media.paged.doc"
+    },
+    {
+      "id": "command:media.paged.doc.command.word.styleUpdate",
       "kind": "command",
       "owner": "media.paged.doc"
     },
@@ -2291,12 +2381,37 @@
       "owner": "editor"
     },
     {
+      "id": "command:paged.edit.find",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findNext",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.findPrevious",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.goTo",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
       "id": "command:paged.edit.paste",
       "kind": "command",
       "owner": "editor"
     },
     {
       "id": "command:paged.edit.pasteInPlace",
+      "kind": "command",
+      "owner": "editor"
+    },
+    {
+      "id": "command:paged.edit.replace",
       "kind": "command",
       "owner": "editor"
     },
@@ -2886,6 +3001,11 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+alt+f→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:cmd+alt+shift+d→paged.edit.duplicate",
       "kind": "keybinding",
       "owner": "editor"
@@ -2956,9 +3076,24 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:cmd+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+g→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+g→paged.object.group",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+h→paged.edit.replace",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+i→media.paged.doc.command.word.italic",
@@ -2969,6 +3104,11 @@
       "id": "keybinding:cmd+j→media.paged.doc.command.word.justify",
       "kind": "keybinding",
       "owner": "media.paged.doc"
+    },
+    {
+      "id": "keybinding:cmd+j→paged.edit.goTo",
+      "kind": "keybinding",
+      "owner": "editor"
     },
     {
       "id": "keybinding:cmd+k→paged.palette.toggle",
@@ -3026,9 +3166,19 @@
       "owner": "media.paged.doc"
     },
     {
+      "id": "keybinding:cmd+shift+d→media.paged.doc.command.word.doubleUnderline",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
+    },
+    {
       "id": "keybinding:cmd+shift+g→paged.object.ungroup",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+shift+h→media.paged.doc.command.word.hidden",
+      "kind": "keybinding",
+      "owner": "media.paged.doc"
     },
     {
       "id": "keybinding:cmd+shift+h→paged.sample.hello",
@@ -3191,7 +3341,17 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:ctrl+f→paged.edit.find",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
       "id": "keybinding:ctrl+g→paged.object.group",
+      "kind": "keybinding",
+      "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+h→paged.edit.replace",
       "kind": "keybinding",
       "owner": "editor"
     },
@@ -3919,6 +4079,31 @@
       "id": "menu:Edit/Edit colors/Recolor artwork…",
       "kind": "menu",
       "owner": "media.paged.draw"
+    },
+    {
+      "id": "menu:Edit/Find and replace…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find next",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find previous",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Find…",
+      "kind": "menu",
+      "owner": "editor"
+    },
+    {
+      "id": "menu:Edit/Go to page…",
+      "kind": "menu",
+      "owner": "editor"
     },
     {
       "id": "menu:Edit/Paste",
@@ -5637,6 +5822,11 @@
     },
     {
       "id": "panel:paged.export-tagging",
+      "kind": "panel",
+      "owner": "editor"
+    },
+    {
+      "id": "panel:paged.find-results",
       "kind": "panel",
       "owner": "editor"
     },

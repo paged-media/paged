@@ -43,3 +43,30 @@ The sheet program gave its content a frame surface; Word content needs none.
   save-back (ADR 602) sees ordinary edits.
 - Inserted documents' headers, footers and notes stay unplaced (ADR 603); the editing model
   does not change that.
+
+## Amendment 1 (2026-10-25): wave 1's engine model in the chrome
+
+Engine ADRs 1018 and 1021 landed, so the targets ADR 608 left out now have one:
+
+- **Home group** gains highlight (button and colour menu), double underline, hidden text,
+  shading (button and colour menu), borders (none / bottom as the rule below / box), Show hidden
+  text (¶, `documentShowHiddenText`) and Clear paragraph formatting (the alignment, indent,
+  spacing and line-spacing overrides written empty so the style shows through).
+- **Styles menu** beside the style box: Update style to match selection (one batch of
+  `setStyleProperty` on the paragraph's style), Modify… (`host.shell.openPanel` on the host's
+  Style Options with the style as target), New style from selection ("Style N" based on the
+  paragraph's style, the selection's format, applied, then its options open to name it) and
+  Apply styles (the focus goes to the style box: Cmd+Shift+S stays the host's Save As, a
+  reserved key). Based on is edited in the host's Style Options (`setStyleBasedOn`).
+- **Lists**: Tab / Shift+Tab are a list level only at the start of a list paragraph or over a
+  range (elsewhere a tab), and are one `setListLevel` by a delta on the selection's characters
+  (`host.text.characterRange`). Restart / Continue numbering (`restartNumbering`); a multilevel
+  menu applies three Word presets (`1. a. i.`, `1. 1.1. 1.1.1.`, `• ◦ ▪`), each a
+  `NumberingListDef` with nine levels made once per document.
+- **Keys**: Cmd+Shift+D double underline, Cmd+Shift+H hidden text; Cmd+F, Cmd+H and Cmd+G name the
+  host's Find, Replace and Go To (editor ADR 303) — Find & Replace is the host's, for every text
+  document, not this bundle's. Cmd+G takes the key from the host's Group inside a Word document.
+- Still left out: clearing a paragraph's own shading, border or list (a boolean has no inherit
+  write), Word's per-side paragraph borders, the Font dialog, the structure keys, fields, notes,
+  links, comments and track changes.
+

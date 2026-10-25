@@ -157,6 +157,11 @@ import {
   SELECT_ALL_MENU_ITEM,
 } from "../../src/select-all";
 import {
+  FIND_COMMANDS,
+  FIND_KEYBINDINGS,
+  FIND_MENU_ITEMS,
+} from "../../src/find/find-commands";
+import {
   buildCoreCommandEntries,
   CORE_COMMAND_MENU_ITEMS,
 } from "../../src/core-command-entries";
@@ -1027,12 +1032,14 @@ export async function createHeadlessEditor(
       ),
       ...buildBatchCommands(),
       SELECT_ALL_COMMAND,
+      ...FIND_COMMANDS,
       ...buildCoreCommandEntries(),
       ...shellCommands,
     ].map((c) => registries.commands.register(c)),
     ...[
       ...APP_MENU_ITEMS,
       SELECT_ALL_MENU_ITEM,
+      ...FIND_MENU_ITEMS,
       ...CLIPBOARD_MENU_ITEMS,
       ...OBJECT_MENU_ITEMS,
       ...INSERT_MENU_ITEMS,
@@ -1045,6 +1052,7 @@ export async function createHeadlessEditor(
     ...[
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
+      ...FIND_KEYBINDINGS,
       ...CLIPBOARD_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,

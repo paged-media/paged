@@ -801,6 +801,24 @@
           "summary": null
         },
         {
+          "name": "FindHit",
+          "kind": "type",
+          "signature": "FindHit",
+          "summary": null
+        },
+        {
+          "name": "FindMode",
+          "kind": "type",
+          "signature": "FindMode",
+          "summary": null
+        },
+        {
+          "name": "FindSpec",
+          "kind": "type",
+          "signature": "FindSpec",
+          "summary": null
+        },
+        {
           "name": "FontScope",
           "kind": "type",
           "signature": "FontScope",
