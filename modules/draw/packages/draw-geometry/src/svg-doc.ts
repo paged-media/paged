@@ -25,8 +25,12 @@
 // + resolved style). The writer is the inverse: shapes → `<svg>` with one
 // `<path>` per shape carrying its fill/stroke.
 //
+// Gradients are paint since D-58's gradient part (engine ADR 1007):
+// `<linearGradient>` / `<radialGradient>` with their stops' colour and
+// opacity, resolved into the document frame (see "gradients" below).
+//
 // Out of scope (honest deferrals — see DESIGN notes / commit message):
-// gradients/patterns as paint (only solid colours + none), `<text>`,
+// patterns as paint, a radial gradient's focal point, `<text>`,
 // `<image>`, `<use>`/`<defs>`/`<symbol>`, clip-paths/masks, CSS
 // stylesheets. Unknown elements are skipped (their children are still
 // walked so a wrapping element never drops content).
@@ -61,6 +65,11 @@ export interface SvgStyle {
   /** Stroke width in user units (post-transform-scale applied). */
   strokeWidth?: number;
   fillRule?: FillRule;
+  /** The fill's gradient when `fill` is a `url(#…)` to one (then `fill`
+   *  is its first stop's colour, for readers that know no gradients). */
+  fillGradient?: SvgGradient;
+  /** The stroke's gradient, the same way. */
+  strokeGradient?: SvgGradient;
 }
 
 /** One imported shape: its geometry (cubic anchor table, transforms
@@ -466,6 +475,242 @@ function parsePoints(s: string): Vec2[] {
   return out;
 }
 
+// ----------------------------------------------------- gradients
+//
+// D-58 (the gradient part) — `<linearGradient>` / `<radialGradient>` as
+// paint. A `fill="url(#id)"` (or `stroke`) resolves against every gradient
+// the document declares, at any depth (`<defs>` or not), with `href` /
+// `xlink:href` inheritance of stops and attributes. The gradient's
+// geometry is resolved into the SAME document frame the shape's anchors
+// are flattened into (its `gradientUnits`, `gradientTransform` and the
+// shape's own transform applied), so a consumer reads it beside the
+// geometry without knowing any of SVG's coordinate rules. Each stop keeps
+// its `stop-color` and `stop-opacity`. The paint's `fill` / `stroke`
+// string is the first stop's colour, so a reader that knows no gradients
+// still paints something representative.
+
+/** One stop of an SVG gradient: offset 0..1, a CSS colour, opacity 0..1. */
+export interface SvgGradientStop {
+  offset: number;
+  color: string;
+  opacity: number;
+}
+
+/** A gradient paint resolved into the document frame. A linear one runs
+ *  from `start` to `end`; a radial one is centred on `center` with
+ *  `radius` (a focal point is not kept). */
+export type SvgGradient =
+  | {
+      kind: "linear";
+      start: Vec2;
+      end: Vec2;
+      stops: SvgGradientStop[];
+    }
+  | {
+      kind: "radial";
+      center: Vec2;
+      radius: number;
+      stops: SvgGradientStop[];
+    };
+
+/** A gradient element as declared (before it meets a shape). */
+interface GradientDef {
+  tag: "lineargradient" | "radialgradient";
+  attrs: Record<string, string>;
+  stops: SvgGradientStop[];
+}
+
+function parseOffset(v: string | undefined): number {
+  if (v === undefined) return 0;
+  const t = v.trim();
+  const n = parseFloat(t);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, t.endsWith("%") ? n / 100 : n));
+}
+
+function parseOpacity(v: string | undefined): number {
+  if (v === undefined) return 1;
+  const t = v.trim();
+  const n = parseFloat(t);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0, Math.min(1, t.endsWith("%") ? n / 100 : n));
+}
+
+/** Every gradient element of the tree by `id`, with its own stops. */
+function collectGradients(root: XmlNode): Map<string, GradientDef> {
+  const out = new Map<string, GradientDef>();
+  const visit = (node: XmlNode): void => {
+    const name = localName(node.tag);
+    if (name === "lineargradient" || name === "radialgradient") {
+      const stops: SvgGradientStop[] = [];
+      let last = 0;
+      for (const c of node.children) {
+        if (localName(c.tag) !== "stop") continue;
+        const style = c.attrs.style ? parseStyleShorthand(c.attrs.style) : {};
+        // Offsets never decrease (SVG clamps a smaller one up).
+        const offset = Math.max(last, parseOffset(c.attrs.offset));
+        last = offset;
+        const colorRaw = (
+          style["stop-color"] ??
+          c.attrs["stop-color"] ??
+          "black"
+        ).trim();
+        stops.push({
+          offset,
+          color: colorRaw === "" ? "black" : colorRaw,
+          opacity: parseOpacity(
+            style["stop-opacity"] ?? c.attrs["stop-opacity"],
+          ),
+        });
+      }
+      const id = node.attrs.id;
+      if (id) out.set(id, { tag: name, attrs: node.attrs, stops });
+    }
+    for (const c of node.children) visit(c);
+  };
+  visit(root);
+  return out;
+}
+
+/** `#id` of a `url(#id)` paint, or null. */
+function paintUrl(v: string | undefined): string | null {
+  if (v === undefined) return null;
+  const m = /^\s*url\(\s*['"]?#([^)'"\s]+)['"]?\s*\)/i.exec(v);
+  return m ? m[1] : null;
+}
+
+/** A gradient's attributes and stops with its `href` chain folded in
+ *  (own values win; stops come from the first in the chain that has any). */
+function inheritGradient(
+  id: string,
+  defs: Map<string, GradientDef>,
+): GradientDef | null {
+  const chain: GradientDef[] = [];
+  const seen = new Set<string>();
+  let cur: string | undefined = id;
+  while (cur && !seen.has(cur)) {
+    seen.add(cur);
+    const d = defs.get(cur);
+    if (!d) break;
+    chain.push(d);
+    const href = d.attrs.href ?? d.attrs["xlink:href"];
+    cur = href?.startsWith("#") ? href.slice(1) : undefined;
+  }
+  if (chain.length === 0) return null;
+  const attrs: Record<string, string> = {};
+  for (const d of [...chain].reverse()) Object.assign(attrs, d.attrs);
+  const stops = chain.find((d) => d.stops.length > 0)?.stops ?? [];
+  return { tag: chain[0].tag, attrs, stops };
+}
+
+/** A gradient length: a number, or a percentage of `ref`. Bounding-box
+ *  units take fractions, so a percentage there is of 1. */
+function gradLength(
+  v: string | undefined,
+  fallback: number,
+  ref: number,
+): number {
+  if (v === undefined) return fallback;
+  const t = v.trim();
+  const n = parseFloat(t);
+  if (!Number.isFinite(n)) return fallback;
+  return t.endsWith("%") ? (n / 100) * ref : n;
+}
+
+function tableBox(table: AnchorTable): [number, number, number, number] {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const a of table.anchors) {
+    for (const p of [a.anchor, a.left, a.right]) {
+      x0 = Math.min(x0, p[0]);
+      y0 = Math.min(y0, p[1]);
+      x1 = Math.max(x1, p[0]);
+      y1 = Math.max(y1, p[1]);
+    }
+  }
+  return Number.isFinite(x0) ? [x0, y0, x1, y1] : [0, 0, 0, 0];
+}
+
+/** Resolve gradient `id` for a shape whose geometry (in its own user
+ *  space) is `table` and whose user space maps to the document by `m`. */
+function resolveGradient(
+  id: string,
+  defs: Map<string, GradientDef>,
+  table: AnchorTable,
+  m: Affine,
+): SvgGradient | null {
+  const g = inheritGradient(id, defs);
+  if (!g || g.stops.length === 0) return null;
+  const a = g.attrs;
+  const bbox = (a.gradientunits ?? "objectBoundingBox") !== "userSpaceOnUse";
+  // Gradient space → user space: the box (bounding-box units), then the
+  // gradient's own transform.
+  let toUser: Affine = IDENTITY_AFFINE;
+  if (bbox) {
+    const [x0, y0, x1, y1] = tableBox(table);
+    toUser = [x1 - x0, 0, 0, y1 - y0, x0, y0];
+  }
+  if (a.gradienttransform) {
+    toUser = composeAffine(toUser, parseTransform(a.gradienttransform));
+  }
+  const toDoc = composeAffine(m, toUser);
+  const map = (x: number, y: number): Vec2 => applyAffine(toDoc, x, y);
+  const stops = g.stops.map((s) => ({ ...s }));
+  if (g.tag === "lineargradient") {
+    const ref = bbox ? 1 : 100;
+    return {
+      kind: "linear",
+      start: map(gradLength(a.x1, 0, ref), gradLength(a.y1, 0, ref)),
+      end: map(gradLength(a.x2, bbox ? 1 : 100, ref), gradLength(a.y2, 0, ref)),
+      stops,
+    };
+  }
+  const ref = bbox ? 1 : 100;
+  const cx = gradLength(a.cx, bbox ? 0.5 : 50, ref);
+  const cy = gradLength(a.cy, bbox ? 0.5 : 50, ref);
+  const r = gradLength(a.r, bbox ? 0.5 : 50, ref);
+  const center = map(cx, cy);
+  // One radius in the document frame: the mapped x and y radii averaged
+  // (a non-uniform box stretches the circle into an ellipse, which the
+  // engine's radial approximates the same way).
+  const rx = applyAffine(toDoc, cx + r, cy);
+  const ry = applyAffine(toDoc, cx, cy + r);
+  const radius =
+    (Math.hypot(rx[0] - center[0], rx[1] - center[1]) +
+      Math.hypot(ry[0] - center[0], ry[1] - center[1])) /
+    2;
+  return { kind: "radial", center, radius, stops };
+}
+
+/** A shape's style with its `url(#…)` paints resolved: the gradient in
+ *  the document frame, and its first stop as the plain colour. A `url`
+ *  to nothing paints nothing (SVG's fallback-less reference). */
+function withGradients(
+  style: SvgStyle,
+  defs: Map<string, GradientDef>,
+  table: AnchorTable,
+  m: Affine,
+): SvgStyle {
+  const out: SvgStyle = { ...style };
+  delete out.fillGradient;
+  delete out.strokeGradient;
+  for (const key of ["fill", "stroke"] as const) {
+    const id = paintUrl(out[key] ?? undefined);
+    if (!id) continue;
+    const g = resolveGradient(id, defs, table, m);
+    if (g) {
+      out[key] = g.stops[0]!.color;
+      if (key === "fill") out.fillGradient = g;
+      else out.strokeGradient = g;
+    } else {
+      out[key] = null;
+    }
+  }
+  return out;
+}
+
 // ----------------------------------------------------------- reader
 
 /** Parse an SVG document (as text) into shapes with flattened transforms
@@ -475,6 +720,7 @@ export function parseSvgDocument(src: string): SvgDocument | null {
   if (!root) return null;
 
   const shapes: DrawShape[] = [];
+  const gradients = collectGradients(root);
   const walk = (node: XmlNode, parentM: Affine, inherited: SvgStyle): void => {
     const own = node.attrs.transform
       ? parseTransform(node.attrs.transform)
@@ -487,9 +733,13 @@ export function parseSvgDocument(src: string): SvgDocument | null {
       for (const child of node.children) walk(child, m, style);
       return;
     }
+    if (name === "lineargradient" || name === "radialgradient") return;
     const table = shapeFromElement(node, style);
     if (table) {
-      shapes.push({ anchors: transformTable(table, m), style });
+      shapes.push({
+        anchors: transformTable(table, m),
+        style: withGradients(style, gradients, table, m),
+      });
     }
     // Some containers (e.g. unknown wrappers) may still hold geometry.
     for (const child of node.children) walk(child, m, style);
@@ -538,6 +788,30 @@ function styleAttrs(style: SvgStyle): string {
   return parts.length ? " " + parts.join(" ") : "";
 }
 
+/** The `<linearGradient>` / `<radialGradient>` element for `g`, in the
+ *  document frame (`userSpaceOnUse`), with id `id`. */
+function gradientElement(
+  id: string,
+  g: SvgGradient,
+  precision: number,
+): string {
+  const f = (v: number) => Number(v.toFixed(precision)).toString();
+  const stops = g.stops
+    .map((s) => {
+      const op =
+        s.opacity < 1 ? ` stop-opacity="${Number(s.opacity.toFixed(4))}"` : "";
+      return `      <stop offset="${Number(s.offset.toFixed(4))}" stop-color="${esc(s.color)}"${op}/>`;
+    })
+    .join("\n");
+  const head =
+    g.kind === "linear"
+      ? `    <linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f(g.start[0])}" y1="${f(g.start[1])}" x2="${f(g.end[0])}" y2="${f(g.end[1])}">`
+      : `    <radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${f(g.center[0])}" cy="${f(g.center[1])}" r="${f(g.radius)}">`;
+  const tail =
+    g.kind === "linear" ? "    </linearGradient>" : "    </radialGradient>";
+  return `${head}\n${stops}\n${tail}`;
+}
+
 const esc = (s: string): string =>
   s
     .replace(/&/g, "&amp;")
@@ -553,13 +827,26 @@ export function serializeSvgDocument(
   options: SvgWriteOptions = {},
 ): string {
   const precision = options.precision ?? 3;
+  const defs: string[] = [];
   const paths = shapes
     .map((s) => {
       const d = serializePathData(s.anchors, precision);
       if (!d) return null;
-      return `  <path d="${d}"${styleAttrs(s.style)}/>`;
+      const style: SvgStyle = { ...s.style };
+      if (s.style.fillGradient) {
+        const id = `g${defs.length + 1}`;
+        defs.push(gradientElement(id, s.style.fillGradient, precision));
+        style.fill = `url(#${id})`;
+      }
+      if (s.style.strokeGradient) {
+        const id = `g${defs.length + 1}`;
+        defs.push(gradientElement(id, s.style.strokeGradient, precision));
+        style.stroke = `url(#${id})`;
+      }
+      return `  <path d="${d}"${styleAttrs(style)}/>`;
     })
     .filter((p): p is string => p !== null);
+  if (defs.length > 0) paths.unshift(`  <defs>\n${defs.join("\n")}\n  </defs>`);
 
   let { width, height } = options;
   if (width === undefined || height === undefined) {

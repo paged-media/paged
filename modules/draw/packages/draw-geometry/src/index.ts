@@ -81,6 +81,8 @@ export {
   type SvgDocument,
   type DrawShape,
   type SvgStyle,
+  type SvgGradient,
+  type SvgGradientStop,
   type FillRule,
   type SvgWriteOptions,
 } from "./svg-doc";

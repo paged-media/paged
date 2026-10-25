@@ -142,8 +142,15 @@
 // serializes an `<svg>` document.
 //
 // HONEST DEFERRALS (documented, asserted by tests where they bite):
-//   · Gradient / pattern / spot fills export as their first solid
-//     approximation or are omitted — the SVG lane is sRGB-solid.
+//   · Pattern and spot fills export as their first solid approximation
+//     or are omitted. GRADIENTS travel both ways (D-58's gradient part,
+//     engine ADR 1007): an SVG `<linearGradient>` / `<radialGradient>`
+//     fill or stroke imports as a native gradient whose stops carry their
+//     own colour and `stop-opacity` (`createGradient` with inline stops,
+//     on an engine that says `document.paint2@1`; else its first stop as
+//     a solid), placed by the frame's gradient start, angle and length;
+//     the exporter writes a gradient fill or stroke back as one. A conic
+//     gradient has no SVG form and exports as its first stop.
 //   · A colour ref whose swatch name isn't itself a parseable CSS colour
 //     (the convention the importer writes — name = the hex) can't be
 //     resolved through the narrow facade, so it falls back (fill →
@@ -173,6 +180,7 @@ import {
   tableBounds,
   type DrawShape,
   type SvgStyle,
+  type SvgGradient,
   type AnchorTable,
   type AnchorTriple,
   type Affine,
@@ -182,6 +190,7 @@ import { defineMessages, t } from "@paged-media/strings";
 import { framePathMutationFor } from "../commands/compound-path";
 import { mintedLeaves, mutateMinting } from "../commands/minted";
 import { pageOriginOf, spreadTableOf, type PageOrigin } from "../page-origin";
+import { rawGradientDetail } from "../raw-wire";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -461,10 +470,17 @@ export interface SvgImportTarget {
    *  (`document.fillRule@1`): an `evenodd` shape is written that rule
    *  instead of being re-wound. Absent = it does not (fills non-zero). */
   nativeFillRule?: boolean;
+  /** The engine carries paint model v2 (`document.paint2@1`): a gradient
+   *  paint imports as a native gradient with inline, translucent stops.
+   *  Absent = it does not (the gradient's first stop paints solid). */
+  nativePaint?: boolean;
 }
 
 /** The host feature that says the engine carries `frameFillRule`. */
 export const FILL_RULE_FEATURE = "document.fillRule@1";
+
+/** The host feature that says the engine carries paint model v2. */
+export const PAINT_V2_FEATURE = "document.paint2@1";
 
 /** A `pages` row, as far as the importer reads it. */
 interface PageRow {
@@ -481,8 +497,14 @@ async function resolveImportTarget(
 ): Promise<SvgImportTarget | null> {
   const meta = await host.document.meta();
   const nativeFillRule = host.supports(FILL_RULE_FEATURE);
+  const nativePaint = host.supports(PAINT_V2_FEATURE);
   if (meta.activePage && !withOrigin) {
-    return { pageId: meta.activePage, pageOrigin: null, nativeFillRule };
+    return {
+      pageId: meta.activePage,
+      pageOrigin: null,
+      nativeFillRule,
+      nativePaint,
+    };
   }
   let rows: readonly PageRow[] = [];
   try {
@@ -503,6 +525,7 @@ async function resolveImportTarget(
         ? pageOriginOf(row)
         : null,
     nativeFillRule,
+    nativePaint,
   };
 }
 
@@ -530,6 +553,13 @@ export interface SvgImportUnit {
    *  rule; its contours are as authored). Absent: the engine's default,
    *  non-zero, and the contours are wound for it. */
   fillRule?: "EvenOdd";
+  /** The page's origin in its spread, for placing a gradient paint (the
+   *  frame's gradient start is in its inner — spread — coordinates).
+   *  Absent: the unit paints no gradient, or the engine reports no origin
+   *  and the start is not written. */
+  gradientOrigin?: PageOrigin;
+  /** The unit's gradients are lowered natively (`document.paint2@1`). */
+  nativePaint?: boolean;
 }
 
 /** Elements a unit puts into the document. */
@@ -593,12 +623,20 @@ export function svgImportUnitsFor(
         : shape.anchors;
     const contours = contoursOfTable(table);
     if (contours.length === 0) continue;
+    const gradient =
+      target.nativePaint === true &&
+      (shape.style.fillGradient !== undefined ||
+        shape.style.strokeGradient !== undefined);
     units.push({
       style: shape.style,
       pageId: target.pageId,
       contours,
       pageOrigin: compound ? target.pageOrigin : null,
       ...(evenOdd ? { fillRule: "EvenOdd" as const } : {}),
+      ...(gradient ? { nativePaint: true } : {}),
+      ...(gradient && target.pageOrigin
+        ? { gradientOrigin: target.pageOrigin }
+        : {}),
     });
   }
   return units;
@@ -681,6 +719,15 @@ export function svgImportOpsFor(
   for (const unit of units) {
     const { swatches, defaults } = styleDefaultsForShape(unit.style, palette);
     for (const swatch of swatches) ops.push(swatch);
+    // Engine ADR 1007 — a gradient paint is one native gradient per
+    // shape (its placement is the shape's own), created before the
+    // elements that point at it.
+    const gradients = unit.nativePaint ? gradientPaintFor(unit) : null;
+    if (gradients) {
+      ops.push(...gradients.creates);
+      if (gradients.fill) defaults.fillColor = gradients.fill.id;
+      if (gradients.stroke) defaults.strokeColor = gradients.stroke.id;
+    }
     const elements =
       unit.pageOrigin !== null ? [unit.contours[0]!] : unit.contours;
     for (const contour of elements) {
@@ -691,10 +738,128 @@ export function svgImportOpsFor(
         ops.push(...compoundWritesFor(target, unit, unit.pageOrigin));
       }
       ops.push(...paintMutationsFor(target, defaults));
+      if (gradients) ops.push(...gradients.place(target));
       if (unit.fillRule) ops.push(fillRuleMutationFor(target, unit.fillRule));
     }
   }
   return ops;
+}
+
+/** A gradient id an import mints (the swatch-id convention). */
+let gradientSeq = 0;
+function mintGradientId(): string {
+  const n = `${Date.now().toString(16)}${(gradientSeq++).toString(16)}`;
+  return `Gradient/udrawsvg${n}`;
+}
+
+/** An SVG gradient as the `createGradient` that holds it: inline-colour
+ *  stops (CSS colours parsed to RGB) with their opacity. */
+function createGradientFor(id: string, g: SvgGradient): Mutation {
+  return {
+    op: "createGradient",
+    args: {
+      spec: {
+        selfId: id,
+        name: `SVG ${g.kind} gradient`,
+        kind: g.kind === "linear" ? "Linear" : "Radial",
+        stops: g.stops.map((s) => {
+          const rgb = parseCssColor(s.color) ?? [0, 0, 0];
+          const opacity = Math.round(s.opacity * 10000) / 100;
+          return {
+            stopColor: "",
+            locationPct: Math.round(s.offset * 100000) / 1000,
+            ...(opacity < 100 ? { opacityPct: opacity } : {}),
+            color: { space: "RGB", value: [rgb[0], rgb[1], rgb[2]] },
+          };
+        }),
+      },
+    },
+  } as Mutation;
+}
+
+/** Where a gradient lies on its frame: the start (page space) and the
+ *  angle (degrees, counter-clockwise on the page) and length the engine
+ *  places it by — a linear axis from start to end, a radial circle
+ *  centred on the start with the length as its radius. */
+export function gradientPlacement(g: SvgGradient): {
+  start: [number, number];
+  angleDeg: number;
+  length: number;
+} {
+  if (g.kind === "linear") {
+    const dx = g.end[0] - g.start[0];
+    const dy = g.end[1] - g.start[1];
+    return {
+      start: [g.start[0], g.start[1]],
+      angleDeg: (Math.atan2(-dy, dx) * 180) / Math.PI,
+      length: Math.hypot(dx, dy),
+    };
+  }
+  return { start: [g.center[0], g.center[1]], angleDeg: 0, length: g.radius };
+}
+
+/** The gradients one unit creates, and the writes that place them on an
+ *  element. The start is written only when the page origin is known (it
+ *  is in the frame's spread coordinates); a stroke's gradient has no
+ *  start on the wire and takes the angle and length alone. */
+function gradientPaintFor(unit: SvgImportUnit): {
+  creates: Mutation[];
+  fill: { id: string } | null;
+  stroke: { id: string } | null;
+  place: (target: ElementId) => Mutation[];
+} {
+  const creates: Mutation[] = [];
+  const fillG = unit.style.fillGradient;
+  const strokeG = unit.style.strokeGradient;
+  const fill = fillG ? { id: mintGradientId() } : null;
+  const stroke = strokeG ? { id: mintGradientId() } : null;
+  if (fill && fillG) creates.push(createGradientFor(fill.id, fillG));
+  if (stroke && strokeG) creates.push(createGradientFor(stroke.id, strokeG));
+  const set = (elementId: ElementId, path: string, value: unknown): Mutation =>
+    ({
+      op: "setElementProperty",
+      args: { elementId, path, value },
+    }) as Mutation;
+  const place = (target: ElementId): Mutation[] => {
+    const out: Mutation[] = [];
+    if (fillG) {
+      const p = gradientPlacement(fillG);
+      out.push(
+        set(target, "frameGradientFillAngle", {
+          type: "length",
+          value: p.angleDeg,
+        }),
+        set(target, "frameGradientFillLength", {
+          type: "length",
+          value: p.length,
+        }),
+      );
+      const o = unit.gradientOrigin;
+      if (o) {
+        out.push(
+          set(target, "frameGradientFillStart", {
+            type: "lengths",
+            value: [p.start[0] + o[0], p.start[1] + o[1]],
+          }),
+        );
+      }
+    }
+    if (strokeG) {
+      const p = gradientPlacement(strokeG);
+      out.push(
+        set(target, "frameGradientStrokeAngle", {
+          type: "length",
+          value: p.angleDeg,
+        }),
+        set(target, "frameGradientStrokeLength", {
+          type: "length",
+          value: p.length,
+        }),
+      );
+    }
+    return out;
+  };
+  return { creates, fill, stroke, place };
 }
 
 /** What one import put into the document. */
@@ -743,13 +908,21 @@ async function commitShapes(
   minted?: ElementId[],
 ): Promise<SvgImportCommit> {
   const done = nothingCommitted(shapes.length);
-  const wantsOrigin = shapes.some((s) => compoundable(s.anchors));
+  const wantsOrigin = shapes.some(
+    (s) =>
+      compoundable(s.anchors) ||
+      s.style.fillGradient !== undefined ||
+      s.style.strokeGradient !== undefined,
+  );
   const target = await resolveImportTarget(host, wantsOrigin);
   if (!target) {
     host.log.warn(`${SVG_IMPORTER_ID}: no target page — nothing inserted`);
     return done;
   }
-  if (wantsOrigin && target.pageOrigin === null) {
+  if (
+    shapes.some((s) => compoundable(s.anchors)) &&
+    target.pageOrigin === null
+  ) {
     host.log.warn(
       `${SVG_IMPORTER_ID}: the engine reports no page origin — compound ` +
         `shapes in ${fileName} land as one path per contour, holes painted`,
@@ -906,6 +1079,10 @@ async function shapeFromElement(
   };
 
   const style: SvgStyle = {};
+  let fillRef: string | null = null;
+  let strokeRef: string | null = null;
+  const place: { angle?: number; length?: number; start?: number[] } = {};
+  const strokePlace: { angle?: number; length?: number } = {};
   // A compound is ONE `<path>` of several subpaths, and the engine fills
   // it by the element's rule over the windings it stores — the importer
   // wound an even-odd source for non-zero on an engine without the rule —
@@ -927,11 +1104,38 @@ async function shapeFromElement(
         // One contour too: a self-crossing star is even-odd on its own.
         style.fillRule = "evenodd";
       } else if (entry.path === "frameFillColor" && v.type === "colorRef") {
+        fillRef = v.value;
         const c = resolve(v.value);
         style.fill = c === undefined ? "#000000" : c;
       } else if (entry.path === "frameStrokeColor" && v.type === "colorRef") {
+        strokeRef = v.value;
         const c = resolve(v.value);
         if (c) style.stroke = c;
+      } else if (
+        entry.path === "frameGradientFillAngle" &&
+        v.type === "length"
+      ) {
+        if (typeof v.value === "number") place.angle = v.value;
+      } else if (
+        entry.path === "frameGradientFillLength" &&
+        v.type === "length"
+      ) {
+        if (typeof v.value === "number") place.length = v.value;
+      } else if (
+        entry.path === "frameGradientFillStart" &&
+        v.type === "lengths"
+      ) {
+        if (v.value.length === 2) place.start = v.value;
+      } else if (
+        entry.path === "frameGradientStrokeAngle" &&
+        v.type === "length"
+      ) {
+        if (typeof v.value === "number") strokePlace.angle = v.value;
+      } else if (
+        entry.path === "frameGradientStrokeLength" &&
+        v.type === "length"
+      ) {
+        if (typeof v.value === "number") strokePlace.length = v.value;
       } else if (entry.path === "frameStrokeWeight" && v.type === "length") {
         if (typeof v.value === "number" && v.value > 0) {
           style.strokeWidth = v.value;
@@ -939,12 +1143,88 @@ async function shapeFromElement(
       }
     }
   }
+  // Engine ADR 1007 — a gradient fill or stroke exports as an SVG
+  // gradient, placed where the engine places it.
+  const fillG = fillRef
+    ? await svgGradientOf(host, fillRef, table, place, m)
+    : null;
+  if (fillG) {
+    style.fill = fillG.stops[0]?.color ?? style.fill;
+    style.fillGradient = fillG;
+  }
+  const strokeG = strokeRef
+    ? await svgGradientOf(host, strokeRef, table, strokePlace, m)
+    : null;
+  if (strokeG) {
+    style.stroke = strokeG.stops[0]?.color ?? style.stroke;
+    style.strokeGradient = strokeG;
+  }
   // A path with no resolved fill at all defaults to a visible black fill
   // (an SVG path with no `fill` attr renders black) — keep that explicit.
   if (style.fill === undefined && style.stroke === undefined) {
     style.fill = "#000000";
   }
   return { anchors: table, style };
+}
+
+/** The SVG gradient for the gradient swatch `ref` on an element whose
+ *  exported geometry is `table`: its stops (each one's own colour or its
+ *  swatch's, and its opacity), laid where the engine lays it — from the
+ *  frame's gradient start (its inner coordinates, through `m`; else the
+ *  box's bottom-left corner) along the angle for the length (else the
+ *  box's width; a radial's radius else its longer side). Null for a ref
+ *  that is not a gradient, and for a conic one (SVG has none). */
+async function svgGradientOf(
+  host: BundleHost,
+  ref: string,
+  table: AnchorTable,
+  place: { angle?: number; length?: number; start?: number[] },
+  m: Affine | null,
+): Promise<SvgGradient | null> {
+  if (!ref.startsWith("Gradient/")) return null;
+  const detail = await rawGradientDetail(host, ref).catch(() => null);
+  if (!detail || detail.stops.length === 0) return null;
+  const kind = detail.kind.toLowerCase();
+  if (kind !== "linear" && kind !== "radial") return null;
+  const stops = [...detail.stops]
+    .sort((a, b) => a.locationPct - b.locationPct)
+    .map((s) => ({
+      offset: Math.max(0, Math.min(1, s.locationPct / 100)),
+      color:
+        s.color && s.color.space.toUpperCase() === "RGB"
+          ? rgbToHex([
+              s.color.value[0] ?? 0,
+              s.color.value[1] ?? 0,
+              s.color.value[2] ?? 0,
+            ])
+          : s.resolvedRgbHex,
+      opacity:
+        s.opacityPct === null || s.opacityPct === undefined
+          ? 1
+          : Math.max(0, Math.min(1, s.opacityPct / 100)),
+    }));
+  const box = tableBounds(table);
+  const [y0, x0, y1, x1] = box ?? [0, 0, 0, 0];
+  const start: [number, number] = place.start
+    ? m
+      ? (applyAffine(m, place.start[0]!, place.start[1]!) as [number, number])
+      : [place.start[0]!, place.start[1]!]
+    : [x0, y1];
+  const w = x1 - x0;
+  const h = y1 - y0;
+  if (kind === "radial") {
+    const radius =
+      place.length && place.length > 0 ? place.length : Math.max(w, h);
+    return { kind: "radial", center: start, radius, stops };
+  }
+  const length = place.length && place.length > 0 ? place.length : w;
+  const rad = ((place.angle ?? 0) * Math.PI) / 180;
+  return {
+    kind: "linear",
+    start,
+    end: [start[0] + length * Math.cos(rad), start[1] - length * Math.sin(rad)],
+    stops,
+  };
 }
 
 /**

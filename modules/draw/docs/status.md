@@ -403,9 +403,13 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
   and may not line up. A rotated or skewed placement, or an oval or polygon frame, is cropped
   to the box around what is visible, so traced paths can extend past a non-rectangular clip.
   It reads only what the browser can decode.
-- **SVG** carries paths, basic shapes, group transforms and solid colours. Gradients, text,
-  images, `<use>` and `<defs>`, clip paths, masks and stylesheets are not read. Export
-  writes solid colours only. `fill-rule="evenodd"` is written as the element's native
+- **SVG** carries paths, basic shapes, group transforms, solid colours and gradients. A
+  `<linearGradient>` / `<radialGradient>` fill or stroke (with `href` inheritance, either
+  gradient unit and `gradientTransform`) imports as a native gradient whose stops keep their
+  own colour and `stop-opacity` (engine ADR 1007, `document.paint2@1`; an older engine gets the
+  first stop as a solid), placed by the frame's gradient start, angle and length; export writes
+  a gradient fill or stroke back the same way. A radial gradient's focal point is not read.
+  Text, images, `<use>`, clip paths, masks, patterns and stylesheets are not read. `fill-rule="evenodd"` is written as the element's native
   fill rule (`frameFillRule`, engine ADR 1006), the contours kept as authored, so contours
   that cross each other or themselves (a star drawn as one path) import exactly; export
   writes the element's rule back as `fill-rule`. On an engine without the fill rule
