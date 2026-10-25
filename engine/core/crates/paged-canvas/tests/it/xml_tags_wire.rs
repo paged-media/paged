@@ -58,6 +58,8 @@ fn values(m: &CanvasModel) -> Vec<(String, TemplateFieldKind, Option<String>)> {
                 Some(FieldValue::Text { text }) => Some(text),
                 Some(FieldValue::Image { uri }) => Some(uri),
                 Some(FieldValue::Visible { visible }) => Some(visible.to_string()),
+                Some(FieldValue::Alternate { member }) => Some(member),
+                Some(FieldValue::Runs { runs }) => Some(format!("{runs:?}")),
                 None => None,
             };
             (r.field.name, r.field.kind, v)

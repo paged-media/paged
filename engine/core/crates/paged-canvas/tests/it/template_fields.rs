@@ -59,6 +59,7 @@ fn field(name: &str, kind: TemplateFieldKind, constraints: Constraints) -> Field
         required: false,
         constraints,
         module: None,
+        members: vec![],
     }
 }
 

@@ -127,6 +127,7 @@ mod tables_wire;
 mod tagged_pdf;
 mod template_fields;
 mod template_policy_wire;
+mod template_styled_alternates;
 mod text_variable_authoring;
 mod toc_ops;
 mod tracked_change_ops;
