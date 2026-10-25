@@ -369,3 +369,156 @@ describe("paged template ingest", () => {
     expect(r.out + r.err).toContain("nothing in the document is a field");
   });
 });
+
+/** Engine ADR 1017: `headline`, a text field allowing Bold and no breaks,
+ *  and `layout`, an alternates field over the frames `left` and `right`. */
+async function writeStyled(dir: string): Promise<string> {
+  const h = await createHeadlessHost({
+    console: silent,
+    ...(await engineOptions()),
+  });
+  try {
+    const send = (kind: string, payload: unknown) =>
+      h.host.editor.client.send({ kind, payload } as never) as Promise<{
+        kind: string;
+        payload: { createdId?: unknown };
+      }>;
+    const [pageId] = await h.load(minimalIdml());
+    await send("setSessionPolicy", { policy: { role: "author" } });
+    const mutate = (m: unknown) => send("mutate", m);
+    await mutate({
+      op: "createCharacterStyle",
+      args: { selfId: "CharacterStyle/Bold", name: "Bold" },
+    });
+    const text = await mutate({
+      op: "insertTextFrame",
+      args: { pageId, bounds: [10, 10, 60, 200] },
+    });
+    await mutate({
+      op: "setPluginMetadata",
+      args: {
+        elementId: text.payload.createdId,
+        key: "x-paged:template",
+        value: JSON.stringify({
+          v: 1,
+          data: {
+            field: {
+              name: "headline",
+              kind: "text",
+              constraints: { allowedStyles: ["Bold"], breaks: "none" },
+            },
+          },
+        }),
+      },
+    });
+    for (const [i, name] of ["left", "right"].entries()) {
+      const f = await mutate({
+        op: "insertFrame",
+        args: { pageId, bounds: [80, 10 + i * 60, 120, 60 + i * 60] },
+      });
+      const prop = (path: string, value: unknown) =>
+        mutate({
+          op: "setElementProperty",
+          args: { elementId: f.payload.createdId, path, value },
+        });
+      await prop("itemName", { type: "text", value: name });
+      if (i > 0) await prop("elementVisible", { type: "bool", value: false });
+    }
+    await mutate({
+      op: "setDocumentMetadata",
+      args: {
+        key: "x-paged:template",
+        value: JSON.stringify({
+          v: 1,
+          data: {
+            alternates: {
+              layout: {
+                name: "layout",
+                kind: "alternates",
+                members: ["left", "right"],
+              },
+            },
+          },
+        }),
+      },
+    });
+    const { bytes } = await h.exportDocument("paged");
+    const path = join(dir, "styled.paged");
+    writeFileSync(path, bytes);
+    return path;
+  } finally {
+    h.dispose();
+  }
+}
+
+describe("paged template: styled values and alternates (engine ADR 1017)", () => {
+  it("describes, fills and checks them", async () => {
+    const styled = await writeStyled(tmp.dir);
+    const listed = await cli(["template", "fields", styled, NP]);
+    expect(listed.code).toBe(0);
+    const defs = Object.fromEntries(
+      (
+        listed.json.fields as {
+          field: { name: string; constraints?: unknown; members?: string[] };
+        }[]
+      ).map((f) => [f.field.name, f.field]),
+    );
+    expect(defs["headline"]?.constraints).toEqual({
+      allowedStyles: ["Bold"],
+      breaks: "none",
+    });
+    expect(defs["layout"]?.members).toEqual(["left", "right"]);
+
+    const out = join(tmp.dir, "styled-filled.paged");
+    const r = await cli([
+      "template",
+      "fill",
+      styled,
+      "--values",
+      JSON.stringify({
+        headline: [{ text: "Ada " }, { text: "Lovelace", style: "Bold" }],
+        layout: "right",
+      }),
+      "-o",
+      out,
+      NP,
+    ]);
+    expect(r.code, r.out + r.err).toBe(0);
+    const values = Object.fromEntries(
+      (r.json.fields as { field: { name: string }; value: unknown }[]).map(
+        (f) => [f.field.name, f.value],
+      ),
+    );
+    expect(values).toEqual({
+      headline: {
+        kind: "runs",
+        runs: [{ text: "Ada " }, { text: "Lovelace", style: "Bold" }],
+      },
+      layout: { kind: "alternate", member: "right" },
+    });
+    const ok = await cli(["template", "check", styled, out, NP]);
+    expect(ok.code, ok.out + ok.err).toBe(0);
+
+    for (const [values, problem] of [
+      [
+        { headline: [{ text: "x", style: "Italic" }] },
+        "the field does not allow this character style",
+      ],
+      [{ headline: "two\nlines" }, "the field takes no paragraph breaks"],
+      [{ layout: "middle" }, "no alternate has this name"],
+    ] as const) {
+      const bad = await cli([
+        "template",
+        "fill",
+        styled,
+        "--values",
+        JSON.stringify(values),
+        "-o",
+        join(tmp.dir, "never-styled.paged"),
+        NP,
+      ]);
+      expect(bad.code).toBe(1);
+      expect(bad.out + bad.err).toContain(problem);
+    }
+  });
+});

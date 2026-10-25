@@ -71,7 +71,7 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
     sections: [section(0, 0), section(4, 1)],
   } as unknown as LoweredDoc;
 
-  it("counts native paragraphs: segments take one, a table its host", () => {
+  it("counts native paragraphs: segments take one, a table its own", () => {
     expect(bodyRunLocation(ir, 0, 1)).toEqual({
       story: 0,
       paragraph: 0,
@@ -79,13 +79,18 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
       prefix: "Dear ",
       text: "«Name»",
     });
-    // block 0 (0), block 1 split once (1, 2), the table in a new paragraph
-    // (3), and the text after it continues in the table's host (3).
+    // block 0 (0), block 1 split once (1, 2), the table in a paragraph of
+    // its own (3), and the paragraph after it (4).
     expect(bodyRunLocation(ir, 3, 1)).toMatchObject({
       story: 0,
-      paragraph: 3,
+      paragraph: 4,
       prefix: "Grüße ",
       text: "x",
+    });
+    // A document poured before tables took their own paragraph: the text
+    // after the table continued in the table's paragraph (3).
+    expect(bodyRunLocation(ir, 3, 1, "joined")).toMatchObject({
+      paragraph: 3,
     });
   });
 
@@ -124,7 +129,7 @@ describe("nativePlaces, tableLocation, cellRunLocation @feat:plugin-doc.object-m
   });
   const flow = { ...table([]), flow: [para("tall")] };
 
-  it("a table takes the story's last paragraph when it is empty", () => {
+  it("every block takes paragraphs of its own, a table one", () => {
     const places = nativePlaces([
       table([]),
       para("after"),
@@ -136,6 +141,34 @@ describe("nativePlaces, tableLocation, cellRunLocation @feat:plugin-doc.object-m
       flow,
       para("end"),
     ] as unknown as LoweredBlock[]);
+    expect(places).toEqual([
+      { paragraph: 0, table: 0 }, // the fresh story's empty paragraph
+      { paragraph: 1 },
+      { paragraph: 2 }, // a blank line keeps its paragraph
+      { paragraph: 3, table: 1 },
+      { paragraph: 4 },
+      { paragraph: 5, table: 2 },
+      { paragraph: 6, table: 3 },
+      null, // poured as text: its paragraph is 7
+      { paragraph: 8 },
+    ]);
+  });
+
+  it("the joined layout: a table takes the story's last paragraph when it is empty", () => {
+    const places = nativePlaces(
+      [
+        table([]),
+        para("after"),
+        para(""),
+        table([]),
+        para("a", "b"),
+        table([]),
+        table([]),
+        flow,
+        para("end"),
+      ] as unknown as LoweredBlock[],
+      "joined",
+    );
     expect(places).toEqual([
       { paragraph: 0, table: 0 }, // the fresh story's empty paragraph
       { paragraph: 0 }, // continues in the host
@@ -183,7 +216,9 @@ describe("nativePlaces, tableLocation, cellRunLocation @feat:plugin-doc.object-m
     expect(cellRunLocation(ir, 1, 2, 0, 0)).toBeNull();
     expect(cellRunLocation(ir, 1, 0, 0, 1)).toBeNull();
     expect(cellRunLocation(ir, 0, 0, 0, 0)).toBeNull();
-    // The paragraph after the table continues in its host paragraph.
-    expect(bodyRunLocation(ir, 2, 1)).toMatchObject({ paragraph: 1 });
+    // The paragraph after the table is the one after the table's own; in
+    // the joined layout it continued in the table's paragraph.
+    expect(bodyRunLocation(ir, 2, 1)).toMatchObject({ paragraph: 2 });
+    expect(bodyRunLocation(ir, 2, 1, "joined")).toMatchObject({ paragraph: 1 });
   });
 });

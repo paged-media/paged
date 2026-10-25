@@ -55,6 +55,46 @@ pub struct LoweredDoc {
     pub even_and_odd_headers: bool,
     /// Honest ADR-007 diagnostics for anything not lowered natively this pass.
     pub diagnostics: Vec<Diagnostic>,
+    /// Colour groups to create (`createColorGroup`) after the swatches: the
+    /// "Word theme" group of the document's theme colours (doc ADR 609).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub color_groups: Vec<LoweredColorGroup>,
+    /// The theme's Latin fonts (doc ADR 609): save-back writes a family
+    /// that is one of them as the theme reference.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_fonts: Option<LoweredThemeFonts>,
+}
+
+/// A colour group to mint via `createColorGroup`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredColorGroup {
+    /// `ColorGroup/docx-…`.
+    pub id: String,
+    pub name: String,
+    /// Swatch tokens, in order.
+    pub members: Vec<String>,
+}
+
+/// The theme's Latin typefaces (`a:majorFont` / `a:minorFont`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoweredThemeFonts {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub major: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub minor: Option<String>,
+}
+
+/// What a theme swatch stands for (doc ADR 609): the Word theme colour and
+/// the colour it resolved to at import. Save-back writes the reference
+/// while the swatch still shows that colour.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SwatchTheme {
+    pub color: docx_core::ThemeColorRef,
+    /// `RRGGBB`.
+    pub rgb: String,
 }
 
 /// A color to mint via `createSwatch`.
@@ -68,6 +108,9 @@ pub struct LoweredSwatch {
     pub space: String,
     /// Channel values in `space` — `[r, g, b]` on 0–255 (IDML convention).
     pub value: Vec<f32>,
+    /// A theme colour's swatch (`Color/docx-theme-…`): which one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<SwatchTheme>,
 }
 
 /// A native style to create via `create{Paragraph,Character}Style` +

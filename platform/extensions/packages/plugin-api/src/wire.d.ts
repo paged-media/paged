@@ -31,6 +31,11 @@ export interface FlowGrowRule {
 export type ScenePathSeg = { op: "moveTo"; x: number; y: number } | { op: "lineTo"; x: number; y: number } | { op: "cubicTo"; cx1: number; cy1: number; cx2: number; cy2: number; x: number; y: number } | { op: "close" };
 
 /**
+ * A break between the runs of a styled value.
+ */
+export type RunBreak = "line" | "paragraph";
+
+/**
  * A byte buffer that crosses the message channel. Wraps `Vec<u8>`
  * so transferable-via-`postMessage` semantics are explicit at call
  * sites; the wasm crate decides whether to clone or transfer based
@@ -80,6 +85,12 @@ export interface FieldDef {
      * A module field\'s kind and definition (`kind` is `module`).
      */
     module?: ModuleField;
+    /**
+     * An alternates field\'s members, by item name (`kind` is
+     * `alternates`): the filler shows one of them and the others are
+     * hidden.
+     */
+    members?: string[];
 }
 
 /**
@@ -212,6 +223,10 @@ export interface TemplateFieldSummary {
      * The story overflows its frames.
      */
     overset: boolean;
+    /**
+     * An alternates field\'s members, in its order (engine ADR 1017).
+     */
+    members?: AlternateMember[];
 }
 
 /**
@@ -303,7 +318,7 @@ export interface SkippedTag {
 /**
  * A value for one field.
  */
-export type FieldValue = { kind: "text"; text: string } | { kind: "image"; uri: string } | { kind: "visible"; visible: boolean };
+export type FieldValue = { kind: "text"; text: string } | { kind: "image"; uri: string } | { kind: "visible"; visible: boolean } | { kind: "runs"; runs: StyledRun[] } | { kind: "alternate"; member: string };
 
 /**
  * ADR 132 — the RESOLVED target of a `Mutation::Set` / a property
@@ -1366,6 +1381,27 @@ export interface ItemPolicy {
 }
 
 /**
+ * One member of an alternates field, as the field lists it.
+ */
+export interface AlternateMember {
+    /**
+     * The item\'s name, the member\'s name in the field.
+     */
+    name: string;
+    /**
+     * The item, when a document page carries one of that name.
+     */
+    elementId: ElementId | null;
+    visible: boolean;
+}
+
+/**
+ * One part of a styled value: text, in a character style or the frame\'s
+ * own, or a break.
+ */
+export type StyledRun = { break: RunBreak } | { text: string; style?: string };
+
+/**
  * One point query. `point` is page-local pt on `page_id`.
  */
 export interface SnapPointQuery {
@@ -1390,7 +1426,9 @@ export interface TemplateFinding {
     /**
      * `policyUnreadable`, `fieldUnnamed`, `fieldDuplicate`,
      * `imageNotReplaceable`, `textHasNoStory`, `requiredHidden`,
-     * `fieldOnParentPage`, `linkMissing`.
+     * `fieldOnParentPage`, `linkMissing`, `styleUnknown`,
+     * `stylesOnNonText`, `alternatesTooFew`, `alternateMissing`,
+     * `alternateNotOne`.
      */
     code: string;
     severity: FindingSeverity;
@@ -2546,6 +2584,12 @@ export interface DocumentPolicy {
      * ADR 1002), or a plugin placeholder\'s key.
      */
     runs?: Map<string, FieldDef>;
+    /**
+     * Fields that choose one of several items (`alternates`), by field
+     * name (engine ADR 1017). Their members stay ordinary items, hidden
+     * but the one shown, so an IDML reader sees hidden page items.
+     */
+    alternates?: Map<string, FieldDef>;
 }
 
 /**
@@ -3013,6 +3057,16 @@ export interface Constraints {
      * The fit applied after a picture is replaced (ADR 257\'s names).
      */
     fit?: string;
+    /**
+     * The character styles a text field\'s value may be written in, by
+     * style id (`CharacterStyle/Bold`) or name (`Bold`) (engine ADR 1017).
+     * Empty: none, the value takes the frame\'s own style only.
+     */
+    allowedStyles?: string[];
+    /**
+     * The breaks a text field\'s value may hold; absent, any.
+     */
+    breaks?: TextBreaks;
 }
 
 /**
@@ -3044,7 +3098,7 @@ export type OverflowRule = "refuse" | "shrink" | "allow-and-flag";
 /**
  * What kind of value a field takes.
  */
-export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "choice" | "visibility" | "data" | "module";
+export type TemplateFieldKind = "text" | "textRun" | "variable" | "image" | "choice" | "visibility" | "data" | "module" | "alternates";
 
 /**
  * What may be done to an item, the document, or the template itself. Each
@@ -3113,6 +3167,13 @@ export interface OversetAt {
     paragraph: number;
     line: number;
 }
+
+/**
+ * Which breaks a text field\'s value may hold (engine ADR 1017). Each
+ * takes the ones before it: a field that takes paragraph breaks takes
+ * line breaks too.
+ */
+export type TextBreaks = "none" | "line" | "paragraph";
 
 /**
  * Which runtime budget a script exhausted (B-09 / W-08). The typed
@@ -4159,12 +4220,32 @@ export interface InitOutput {
     readonly qcms_transform_data_rgba_out_lut_precache: (a: number, b: number, c: number, d: number) => void;
     readonly qcms_transform_release: (a: number) => void;
     readonly qcms_white_point_sRGB: (a: number) => void;
+    readonly dav1d_apply_grain: (a: number, b: number, c: number) => number;
+    readonly dav1d_close: (a: number) => void;
+    readonly dav1d_data_create: (a: number, b: number) => number;
+    readonly dav1d_data_props_unref: (a: number) => void;
+    readonly dav1d_data_unref: (a: number) => void;
+    readonly dav1d_data_wrap: (a: number, b: number, c: number, d: number, e: number) => number;
+    readonly dav1d_data_wrap_user_data: (a: number, b: number, c: number, d: number) => number;
+    readonly dav1d_default_settings: (a: number) => void;
+    readonly dav1d_flush: (a: number) => void;
+    readonly dav1d_get_decode_error_data_props: (a: number, b: number) => number;
+    readonly dav1d_get_event_flags: (a: number, b: number) => number;
+    readonly dav1d_get_frame_delay: (a: number) => number;
+    readonly dav1d_get_picture: (a: number, b: number) => number;
+    readonly dav1d_open: (a: number, b: number) => number;
+    readonly dav1d_parse_sequence_header: (a: number, b: number, c: number) => number;
+    readonly dav1d_picture_unref: (a: number) => void;
+    readonly dav1d_send_data: (a: number, b: number) => number;
+    readonly dav1d_version: () => number;
+    readonly dav1d_version_api: () => number;
+    readonly dav1d_set_cpu_flags_mask: (a: number) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined___js_sys_f14cd77ae230e8f7___Function_fn_wasm_bindgen_2e35521b6c202407___JsValue_____wasm_bindgen_2e35521b6c202407___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___JsValue__core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_440175afba5ba1ca___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_440175afba5ba1ca___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__40: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_440175afba5ba1ca___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__41: (a: number, b: number, c: any) => [number, number];
-    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_440175afba5ba1ca___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true_: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__40: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wasm_bindgen_2e35521b6c202407___sys__JsNullable_wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuError__GpuError___core_37ee0ce0c4cd57d5___result__Result_____wasm_bindgen_2e35521b6c202407___JsError___true__41: (a: number, b: number, c: any) => [number, number];
+    readonly wasm_bindgen_2e35521b6c202407___convert__closures_____invoke___wgpu_35fedf094af69cbf___backend__webgpu__webgpu_sys__gen_GpuDeviceLostInfo__GpuDeviceLostInfo______true_: (a: number, b: number, c: any) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

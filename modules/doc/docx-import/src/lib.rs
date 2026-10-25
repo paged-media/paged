@@ -44,6 +44,9 @@ use paged_ooxml::ooxmlsdk::simple_type::{
 };
 use paged_ooxml::{parse_root, part_dir, rels, resolve_target, OoxmlError, OpcPackage};
 
+mod theme;
+use docx_core::Theme;
+
 /// Import context threaded through the body mapping: the numbering resolver and
 /// the image (media-part) resolver.
 struct ImportCtx<'a> {
@@ -61,6 +64,8 @@ struct ImportCtx<'a> {
     /// Character styles that hide their text (`w:vanish` on, through
     /// `basedOn`).
     hidden_styles: std::collections::HashSet<String>,
+    /// The document theme, for theme colours and fonts (doc ADR 609).
+    theme: Option<Theme>,
 }
 
 impl ImportCtx<'_> {
@@ -255,11 +260,36 @@ pub fn import_docx_with_package(
     let doc_bytes = pkg.require(&main_part)?;
     let wml_doc: wml::Document = parse_root(&main_part, doc_bytes)?;
 
+    // Body mapping borrows the package (image resolution); scope the borrow so
+    // the package can be moved into the return value once mapping is done.
+    // settings.xml (optional): even/odd headers and the document-wide note
+    // numbering.
+    let settings = settings_part(&pkg, &main_part)
+        .and_then(|name| pkg.part(&name).map(|b| (name, b)))
+        .and_then(|(name, b)| parse_root::<wml::Settings>(&name, b).ok());
+    // The theme part (optional), with settings' colour mapping (doc ADR
+    // 609): theme colours and fonts resolve through it everywhere below.
+    let theme = theme::theme_part(&pkg, &main_part)
+        .and_then(|name| pkg.part(&name))
+        .and_then(theme::parse_theme)
+        .map(|mut t| {
+            if let Some(m) = settings
+                .as_ref()
+                .and_then(|s| s.color_scheme_mapping.as_ref())
+            {
+                t.mapping = theme::color_mapping(m);
+            }
+            t
+        });
+
     // The styles part is optional.
     let wml_styles = styles_part(&pkg, &main_part)
         .and_then(|name| pkg.part(&name).map(|b| (name, b)))
         .and_then(|(name, b)| parse_root::<wml::Styles>(&name, b).ok());
-    let styles = wml_styles.as_ref().map(map_styles).unwrap_or_default();
+    let styles = wml_styles
+        .as_ref()
+        .map(|w| map_styles(w, theme.as_ref()))
+        .unwrap_or_default();
     let style_lists = wml_styles
         .as_ref()
         .map(StyleLists::from_styles)
@@ -272,13 +302,6 @@ pub fn import_docx_with_package(
         .map(|n| NumberingTable::from_numbering(&n))
         .unwrap_or_default();
 
-    // Body mapping borrows the package (image resolution); scope the borrow so
-    // the package can be moved into the return value once mapping is done.
-    // settings.xml (optional): even/odd headers and the document-wide note
-    // numbering.
-    let settings = settings_part(&pkg, &main_part)
-        .and_then(|name| pkg.part(&name).map(|b| (name, b)))
-        .and_then(|(name, b)| parse_root::<wml::Settings>(&name, b).ok());
     let even_and_odd_headers = settings
         .as_ref()
         .and_then(|s| s.even_and_odd_headers.as_ref())
@@ -331,6 +354,7 @@ pub fn import_docx_with_package(
             unplaced_vml: std::cell::Cell::new(0),
             held: std::cell::Cell::new(BodyHeld::default()),
             hidden_styles: wml_styles.as_ref().map(hidden_styles).unwrap_or_default(),
+            theme: theme.clone(),
             images: ImageResolver {
                 rels: doc_rels,
                 package: &pkg,
@@ -369,6 +393,7 @@ pub fn import_docx_with_package(
         add_paragraph_spacing,
         unplaced_vml,
         held,
+        theme,
     };
     Ok((doc, pkg, main_part))
 }
@@ -643,7 +668,7 @@ fn main_document_part(pkg: &OpcPackage) -> Option<String> {
 }
 
 /// The styles part name (via the main document's `.rels`).
-fn styles_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
+pub fn styles_part(pkg: &OpcPackage, main_part: &str) -> Option<String> {
     let rels_name = rels::rels_part_name(main_part);
     let rels_bytes = pkg.part(&rels_name)?;
     let rels = rels::Relationships::parse(rels_bytes);
@@ -1020,7 +1045,9 @@ fn map_paragraph(
         .flat_map(|m| &m.paragraph_mark_run_properties_choice2)
     {
         match choice {
-            wml::ParagraphMarkRunPropertiesChoice2::RunFonts(f) => mark_font = f.ascii.clone(),
+            wml::ParagraphMarkRunPropertiesChoice2::RunFonts(f) => {
+                mark_font = theme::latin_font(f, ctx.theme.as_ref())
+            }
             wml::ParagraphMarkRunPropertiesChoice2::FontSize(s) => mark_half_pts = hps(&s.val),
             _ => {}
         }
@@ -1841,7 +1868,7 @@ fn map_run(r: &wml::Run, ctx: &ImportCtx) -> Run {
     let mut style_id = None;
     if let Some(rpr) = r.run_properties.as_deref() {
         for c in &rpr.run_properties_choice {
-            apply_run_property_choice(c, &mut props, &mut style_id);
+            apply_run_property_choice(c, &mut props, &mut style_id, ctx.theme.as_ref());
         }
     }
     let mut text = String::new();
@@ -2181,17 +2208,19 @@ fn apply_run_property_choice(
     c: &wml::RunPropertiesChoice,
     props: &mut RunProps,
     style_id: &mut Option<String>,
+    theme: Option<&Theme>,
 ) {
     use wml::RunPropertiesChoice as C;
     match c {
         C::RunStyle(s) => *style_id = Some(s.val.clone()),
-        C::RunFonts(f) => props.font = f.ascii.clone().or_else(|| props.font.take()),
+        C::RunFonts(f) => theme::apply_fonts(f, theme, props),
+        C::Shading(s) => props.shading = theme::shading(s, theme),
         C::Bold(b) => props.bold = Some(on(&b.val)),
         C::Italic(i) => props.italic = Some(on(&i.val)),
         C::Caps(v) => props.caps = Some(on(&v.val)),
         C::SmallCaps(v) => props.small_caps = Some(on(&v.val)),
         C::Strike(v) => props.strike = Some(on(&v.val)),
-        C::Color(col) => props.color = color_hex(&col.val),
+        C::Color(col) => theme::apply_color(col, theme, props),
         C::FontSize(sz) => props.size_half_pts = hps(&sz.val),
         C::Underline(u) => props.underline = Some(underline_on(u)),
         C::VerticalTextAlignment(v) => props.vert_align = Some(vert_align(&v.val)),
@@ -2204,7 +2233,7 @@ fn apply_run_property_choice(
 // ---------------------------------------------------------------------------
 // Styles
 
-fn map_styles(styles: &wml::Styles) -> StyleCatalog {
+fn map_styles(styles: &wml::Styles, theme: Option<&Theme>) -> StyleCatalog {
     let mut out = StyleCatalog::default();
     if let Some(dd) = styles.doc_defaults.as_deref() {
         // docDefaults — the document-wide base run/paragraph properties (Word's
@@ -2212,7 +2241,7 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
         // Defaults into a base style every un-based style inherits from.
         if let Some(rpd) = dd.run_properties_default.as_deref() {
             if let Some(base) = rpd.run_properties_base_style.as_deref() {
-                out.doc_defaults.run = run_props_base(base);
+                out.doc_defaults.run = run_props_base(base, theme);
             }
         }
         if let Some(ppd) = dd.paragraph_properties_default.as_deref() {
@@ -2234,7 +2263,7 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
         }
     }
     for s in &styles.style {
-        if let Some(style) = map_style(s) {
+        if let Some(style) = map_style(s, theme) {
             out.styles.push(style);
         }
     }
@@ -2243,10 +2272,13 @@ fn map_styles(styles: &wml::Styles) -> StyleCatalog {
 
 /// Read the docDefaults run base style (`w:rPrDefault/w:rPr`) — a named-field
 /// shape carrying the subset of run properties Word emits as defaults.
-fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
+fn run_props_base(rpr: &wml::RunPropertiesBaseStyle, theme: Option<&Theme>) -> RunProps {
     let mut props = RunProps::default();
     if let Some(f) = &rpr.run_fonts {
-        props.font = f.ascii.clone();
+        theme::apply_fonts(f, theme, &mut props);
+    }
+    if let Some(s) = &rpr.shading {
+        props.shading = theme::shading(s, theme);
     }
     if let Some(b) = &rpr.bold {
         props.bold = Some(on(&b.val));
@@ -2255,7 +2287,7 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
         props.italic = Some(on(&i.val));
     }
     if let Some(c) = &rpr.color {
-        props.color = color_hex(&c.val);
+        theme::apply_color(c, theme, &mut props);
     }
     if let Some(sz) = &rpr.font_size {
         props.size_half_pts = hps(&sz.val);
@@ -2266,7 +2298,7 @@ fn run_props_base(rpr: &wml::RunPropertiesBaseStyle) -> RunProps {
     props
 }
 
-fn map_style(s: &wml::Style) -> Option<Style> {
+fn map_style(s: &wml::Style, theme: Option<&Theme>) -> Option<Style> {
     let style_id = s.style_id.clone()?;
     let kind = match s.r#type {
         Some(wml::StyleValues::Paragraph) => StyleKind::Paragraph,
@@ -2297,7 +2329,7 @@ fn map_style(s: &wml::Style) -> Option<Style> {
     let run = s
         .style_run_properties
         .as_deref()
-        .map(run_props_named)
+        .map(|r| run_props_named(r, theme))
         .unwrap_or_default();
 
     Some(Style {
@@ -2312,10 +2344,13 @@ fn map_style(s: &wml::Style) -> Option<Style> {
 }
 
 /// Read a style's `w:rPr` (the *named-field* form) into [`RunProps`].
-fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
+fn run_props_named(rpr: &wml::StyleRunProperties, theme: Option<&Theme>) -> RunProps {
     let mut props = RunProps::default();
     if let Some(f) = &rpr.run_fonts {
-        props.font = f.ascii.clone();
+        theme::apply_fonts(f, theme, &mut props);
+    }
+    if let Some(s) = &rpr.shading {
+        props.shading = theme::shading(s, theme);
     }
     if let Some(b) = &rpr.bold {
         props.bold = Some(on(&b.val));
@@ -2333,7 +2368,7 @@ fn run_props_named(rpr: &wml::StyleRunProperties) -> RunProps {
         props.strike = Some(on(&v.val));
     }
     if let Some(c) = &rpr.color {
-        props.color = color_hex(&c.val);
+        theme::apply_color(c, theme, &mut props);
     }
     if let Some(sz) = &rpr.font_size {
         props.size_half_pts = hps(&sz.val);
@@ -2558,15 +2593,6 @@ fn twips_u(v: &TwipsMeasureValue) -> Option<i32> {
         TwipsMeasureValue::Twips(n) => Some(*n as i32),
         TwipsMeasureValue::UniversalMeasure(_) => None,
     }
-}
-
-/// `w:color/@w:val` normalized to `RRGGBB`, or `None` for `auto`/theme colors.
-fn color_hex(val: &Option<String>) -> Option<String> {
-    let v = val.as_ref()?;
-    if v.eq_ignore_ascii_case("auto") || v.len() != 6 {
-        return None;
-    }
-    Some(v.to_ascii_uppercase())
 }
 
 /// `w:u` is "on" unless it explicitly says `val="none"`. A present `<w:u/>` with

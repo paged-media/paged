@@ -93,8 +93,20 @@ pub fn render_wt(text: &str) -> Vec<u8> {
 /// a symbol's character is plain text). So an edit that keeps a run's tabs,
 /// breaks, hyphens and symbols keeps their exact bytes, in order.
 pub fn render_text(text: &str, originals: &RunSpecials<'_>) -> Vec<u8> {
+    render_text_from(text, originals, &mut Vec::new(), true)
+}
+
+/// [`render_text`] for one piece of a run's text, counting each special
+/// character's occurrences on from `seen` (the pieces before it), so the
+/// k-th one of the whole text still takes the source's k-th form. With
+/// `empty_t`, no text at all writes one empty `<w:t>`.
+pub fn render_text_from(
+    text: &str,
+    originals: &RunSpecials<'_>,
+    seen: &mut Vec<(char, usize)>,
+    empty_t: bool,
+) -> Vec<u8> {
     let mut out = Vec::new();
-    let mut seen: Vec<(char, usize)> = Vec::new();
     let mut part = String::new();
     let flush = |out: &mut Vec<u8>, part: &mut String| {
         if !part.is_empty() {
@@ -138,7 +150,7 @@ pub fn render_text(text: &str, originals: &RunSpecials<'_>) -> Vec<u8> {
     }
     flush(&mut out, &mut part);
     // A run with no text at all still gets its one (empty) `<w:t>`.
-    if out.is_empty() {
+    if out.is_empty() && empty_t {
         out.extend_from_slice(b"<w:t xml:space=\"preserve\"></w:t>");
     }
     out
@@ -153,7 +165,15 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
         s.push_str(&format!("<w:rStyle w:val=\"{}\"/>", escape(id)));
     }
     if let Some(font) = &props.font {
-        s.push_str(&format!("<w:rFonts w:ascii=\"{}\"/>", escape(font)));
+        match &props.font_theme {
+            // The theme font, by reference and by name (doc ADR 609).
+            Some(slot) => s.push_str(&format!(
+                "<w:rFonts w:ascii=\"{0}\" w:hAnsi=\"{0}\" w:asciiTheme=\"{1}\" w:hAnsiTheme=\"{1}\"/>",
+                escape(font),
+                escape(slot)
+            )),
+            None => s.push_str(&format!("<w:rFonts w:ascii=\"{}\"/>", escape(font))),
+        }
     }
     toggle(&mut s, "b", props.bold);
     toggle(&mut s, "i", props.italic);
@@ -161,7 +181,18 @@ pub fn render_rpr(props: &RunProps, rstyle: Option<&str>) -> Vec<u8> {
     toggle(&mut s, "smallCaps", props.small_caps);
     toggle(&mut s, "strike", props.strike);
     if let Some(color) = &props.color {
-        s.push_str(&format!("<w:color w:val=\"{}\"/>", escape(color)));
+        s.push_str(&format!("<w:color w:val=\"{}\"", escape(color)));
+        // A theme colour: the reference Word reads, the hex its cache.
+        if let Some(t) = &props.theme_color {
+            s.push_str(&format!(" w:themeColor=\"{}\"", escape(&t.slot)));
+            if let Some(v) = t.tint {
+                s.push_str(&format!(" w:themeTint=\"{v:02X}\""));
+            }
+            if let Some(v) = t.shade {
+                s.push_str(&format!(" w:themeShade=\"{v:02X}\""));
+            }
+        }
+        s.push_str("/>");
     }
     if let Some(tw) = props.spacing_twips {
         s.push_str(&format!("<w:spacing w:val=\"{tw}\"/>"));
@@ -408,6 +439,14 @@ fn attrs(e: &quick_xml::events::BytesStart<'_>) -> Vec<(String, String)> {
 /// borders, shading, line spacing and — on a section's last paragraph — the
 /// `w:sectPr`, which deletes the section.
 pub fn merge_ppr(original: Option<&[u8]>, new: &[u8]) -> Vec<u8> {
+    merge_ppr_keeping(original, new, &[])
+}
+
+/// [`merge_ppr`], keeping the original's `keep` children too although
+/// [`render_ppr`] owns them (a style edit that changes its indents keeps
+/// its tab stops, leaders and all).
+pub fn merge_ppr_keeping(original: Option<&[u8]>, new: &[u8], keep: &[&str]) -> Vec<u8> {
+    let owned = |n: &str| PPR_OWNED.contains(&n) && !keep.contains(&n);
     let Some(orig) = original else {
         return new.to_vec();
     };
@@ -416,11 +455,11 @@ pub fn merge_ppr(original: Option<&[u8]>, new: &[u8]) -> Vec<u8> {
     };
     let mut kids: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, bytes, _) in &old_kids {
-        if !PPR_OWNED.contains(&name.as_str()) {
+        if !owned(name.as_str()) {
             kids.push((name.clone(), bytes.clone()));
         }
     }
-    for (name, bytes, new_attrs) in &new_kids {
+    for (name, bytes, new_attrs) in new_kids.iter().filter(|(n, _, _)| owned(n.as_str())) {
         let merges_attrs = matches!(name.as_str(), "spacing" | "ind");
         let kept: Vec<(String, String)> = old_kids
             .iter()
@@ -599,13 +638,27 @@ fn changed_elements(from: &RunFormat, to: &RunFormat) -> Vec<(&'static str, Opti
             }
         };
     }
-    field!(font, "rFonts");
+    if (&a.font, &a.font_theme) != (&b.font, &b.font_theme) {
+        let props = RunProps {
+            font: b.font.clone(),
+            font_theme: b.font_theme.clone(),
+            ..RunProps::default()
+        };
+        out.push(("rFonts", one(&props, None)));
+    }
     field!(bold, "b");
     field!(italic, "i");
     field!(caps, "caps");
     field!(small_caps, "smallCaps");
     field!(strike, "strike");
-    field!(color, "color");
+    if (&a.color, &a.theme_color) != (&b.color, &b.theme_color) {
+        let props = RunProps {
+            color: b.color.clone(),
+            theme_color: b.theme_color.clone(),
+            ..RunProps::default()
+        };
+        out.push(("color", one(&props, None)));
+    }
     field!(spacing_twips, "spacing");
     field!(baseline_half_pts, "position");
     field!(size_half_pts, "sz");

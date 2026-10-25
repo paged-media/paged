@@ -36,7 +36,9 @@
 use serde::{Deserialize, Serialize};
 
 pub mod symbols;
+pub mod theme;
 pub use symbols::symbol_char;
+pub use theme::{Shading, Theme, ThemeColorRef, ThemeFonts};
 
 /// A parsed Word document: the body in reading order, the style catalog, and the
 /// sections (page geometry).
@@ -93,6 +95,13 @@ pub struct DocxDocument {
     /// lowering reports it.
     #[serde(default)]
     pub held: BodyHeld,
+    /// The document theme (`word/theme/theme1.xml` with `settings.xml`'s
+    /// `w:clrSchemeMapping`), when the package has one (doc ADR 609).
+    /// Theme colour and font references are already resolved through it
+    /// on every [`RunProps`]; the lowering mints its colours as the
+    /// "Word theme" swatch group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<Theme>,
 }
 
 /// Counts of body constructs the import shows in a simplified form, for the
@@ -804,6 +813,10 @@ pub struct ParaProps {
     pub contextual_spacing: Option<bool>,
     /// `w:tabs` — explicit tab stops (empty = inherit).
     pub tabs: Vec<TabStop>,
+    /// `w:shd` — the paragraph's shading (its fill; doc ADR 609). Read, not
+    /// yet lowered: the engine has no paragraph shading on text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 /// A tab stop (`w:tab`).
@@ -846,6 +859,26 @@ pub struct RunProps {
     /// run's effective size.
     #[serde(default)]
     pub spacing_twips: Option<i32>,
+    /// `w:color/@w:themeColor` (+ tint, shade): the theme colour [`Self::color`]
+    /// resolves (doc ADR 609). Save-back writes the reference again while
+    /// the colour is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme_color: Option<ThemeColorRef>,
+    /// `w:rFonts/@w:asciiTheme` (else `@w:hAnsiTheme`): the theme font
+    /// [`Self::font`] resolves (`minorHAnsi`, `majorHAnsi`, …).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_theme: Option<String>,
+    /// `w:rFonts/@w:eastAsia`, resolved through `@w:eastAsiaTheme`. Read,
+    /// not yet lowered (the engine has one family per run).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_east_asia: Option<String>,
+    /// `w:rFonts/@w:cs`, resolved through `@w:cstheme`. Read, not lowered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_cs: Option<String>,
+    /// `w:shd` on the run (its fill). Read, not yet lowered: the engine has
+    /// no character shading.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shading: Option<Shading>,
 }
 
 /// Paragraph alignment (`w:jc`).
