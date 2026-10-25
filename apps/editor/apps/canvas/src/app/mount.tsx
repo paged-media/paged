@@ -205,10 +205,11 @@ import { HostColorPicker } from "../plugin-color-picker";
 import {
   ObjectPropertyField,
   ObjectPropertyFrame,
+  setRegisteredActionsSource,
   setDataDoorSource,
   setDataDropHandler,
 } from "@paged-media/shell";
-import { placeDroppedField } from "../data-drop";
+import { placeDropped } from "../data-drop";
 import {
   cockpitActionsOf,
   createEditorScope,
@@ -572,12 +573,13 @@ function PluginBundles() {
     const dataBackend = hostOptions.shared.data;
     if (dataBackend) {
       setDataDoorSource(scope, dataBackend);
-      // Editor ADR 291: a field dropped on the document is placed there; a
-      // refusal (no frame under it, a line) reaches Problems.
+      // Editor ADR 291: a field, a table or a record dropped on the document
+      // is placed there; a refusal (no frame under it, a line, a design
+      // without a <<field>>) reaches Problems.
       setDataDropHandler(scope, (drag, at) => {
         const paged = pagedRef.current;
         if (!paged) return;
-        void placeDroppedField(
+        void placeDropped(
           paged,
           dataBackend.current()?.service ?? null,
           drag,
@@ -599,6 +601,10 @@ function PluginBundles() {
         );
       });
     }
+    // Editor ADR 291: the picture column picker lists the actions every
+    // bundle registers into the one shared registry.
+    if (hostOptions.shared.actions)
+      setRegisteredActionsSource(scope, hostOptions.shared.actions);
     const hostOptionsFor = (pluginId: string) =>
       hostOptionsForPlugin(hostOptions.shared, pluginId);
     // One bundle's activation failure must not take the seven after it down.
@@ -1683,6 +1689,7 @@ function CanvasAppRoot() {
       initialDocumentSizePt={instance.surfaces.initialDocumentSizePt}
       regions={instance.profile.regions}
       canvasFurniture={instance.profile.canvas}
+      compactLayout={instance.profile.compact}
       features={instance.profile.features}
       sessionPolicy={{ role, overrides: [] }}
       onSessionRoleChange={instance.role.set}

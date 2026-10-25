@@ -33,6 +33,7 @@ import { entryApplies } from "../registries/types";
 import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
+import { touchTargetStyle, useTouchSized } from "../state/compact";
 import { REGIONS } from "./messages";
 
 export function RegionItems({
@@ -45,6 +46,9 @@ export function RegionItems({
 }) {
   const commands = useRegistryView(useRegistries().commands);
   const paged = useOptionalPaged();
+  // A fill shape on a phone or tablet: every button is a touch target
+  // (editor ADR 294).
+  const touch = touchTargetStyle(useTouchSized());
 
   const render = (item: RegionItem, key: string) => {
     if (typeof item === "string") {
@@ -56,6 +60,7 @@ export function RegionItems({
           size="sm"
           variant={item === primary ? "default" : "ghost"}
           data-region-command={item}
+          style={touch}
           disabled={!entryApplies(undefined, item, commands, () => paged)}
           onClick={() => void commands.invoke(item)}
         >

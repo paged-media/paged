@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Engine ADR 1016 — every undo step has a name. A wire mutation, a
+//! Engine ADR 1017 — every undo step has a name. A wire mutation, a
 //! gesture and a text edit name their step by default; a caller's label
 //! wins; an amend keeps the step's name; the log reads oldest first; and
 //! `undo_to` / `redo_to` move several steps in one call.

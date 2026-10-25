@@ -326,13 +326,18 @@ dependencies = [
 name = "pptx-export"
 version = "0.0.0"
 dependencies = [
+ "base64",
+ "paged-model",
  "paged-ooxml",
+ "paged-scene",
+ "paged-store",
  "paged-test-resources",
  "pptx-core",
  "pptx-import",
  "quick-xml",
  "serde",
  "serde_json",
+ "slide-native",
  "slide-resolve",
 ]
 
@@ -564,6 +569,7 @@ dependencies = [
  "paged-ooxml",
  "paged-scene",
  "paged-store",
+ "pptx-core",
  "pptx-import",
  "serde_json",
  "slide-geom",

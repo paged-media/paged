@@ -166,7 +166,7 @@
       "key": "paged.history.depth",
       "default": 10000,
       "values": [50, 100, 500, 1000, 10000],
-      "effect": "how many undo steps the engine keeps (engine ADR 1016, editor ADR 285); set from the History panel, kept by the worker across loads",
+      "effect": "how many undo steps the engine keeps (engine ADR 1017, editor ADR 285); set from the History panel, kept by the worker across loads",
       "source": "apps/editor/apps/canvas/src/panels/history-panel.tsx",
       "marker": "\"paged.history.depth\"",
       "sites": [

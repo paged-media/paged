@@ -30,7 +30,9 @@
 //     items those bindings are placed in (the service's `placements`);
 //   · the grid is windowed: the service sorts and filters (guarded SQL), and
 //     only the rows in view cross;
-//   · with no data yet, a three-step start: import, query, bind.
+//   · with no data yet, a three-step start: import, query, bind;
+//   · the pipeline (`data-pipeline.tsx`): sources → transforms → queries,
+//     each with its rows or its error, a transform edited in place.
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
@@ -43,6 +45,8 @@ import type {
 import { color, font, radius, space, status } from "@paged-media/panel-kit";
 import {
   DATA_FIELD_DRAG_TYPE,
+  DATA_RECORD_DRAG_TYPE,
+  DATA_TABLE_DRAG_TYPE,
   elementOfPlacement,
   useCanvasClient,
   useCockpitActions,
@@ -62,6 +66,13 @@ import {
   type FilterRow,
   type SortKey,
 } from "./data-grid-model";
+import { DataPipeline, offersPipeline, PipelineToggle } from "./data-pipeline";
+import {
+  AssetColumnEditor,
+  AssetColumnMarker,
+  PictureColumnToggle,
+  useAssetColumns,
+} from "./data-asset-column";
 
 const M = defineMessages("app.dataPanel", {
   startTitle: "Put data in the document",
@@ -110,6 +121,13 @@ const M = defineMessages("app.dataPanel", {
   fieldError: "a binding reading it failed",
   selectHint: "double-click to select where it is placed",
   dragHint: "drag onto a text or graphic frame to place it",
+  sample: "Try it with sample data",
+  sampleFailed: "The sample data was not loaded: {reason}",
+  asTable: "Drag as table",
+  asTableHint:
+    "drag onto a text frame to place the shown columns, in this order, as a table",
+  rowHint:
+    "drag onto a group or a frame with <<field>>s to fill it with this record",
 });
 
 const ROW_H = 22;
@@ -237,10 +255,19 @@ function cell(v: unknown): string {
   return String(v);
 }
 
-function Start({ hasService }: { hasService: boolean }) {
+function Start({
+  hasService,
+  sample,
+}: {
+  hasService: boolean;
+  /** Load the sample data (the service's `loadSample`), when offered. */
+  sample: (() => Promise<void>) | null;
+}) {
   const { t } = useStrings();
   const cockpit = useCockpitActions();
   const open = (id: string) => cockpit.openPanel?.(id, { activate: true });
+  const [loading, setLoading] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
   return (
     <div
       data-data-start=""
@@ -284,6 +311,36 @@ function Start({ hasService }: { hasService: boolean }) {
           <li>{t(M.step3)}</li>
         </ol>
       )}
+      {hasService && sample && (
+        <div>
+          <button
+            type="button"
+            data-data-sample=""
+            style={button}
+            disabled={loading}
+            onClick={() => {
+              setLoading(true);
+              setSampleError(null);
+              sample().then(
+                () => setLoading(false),
+                (err: unknown) => {
+                  setLoading(false);
+                  setSampleError(
+                    err instanceof Error ? err.message : String(err),
+                  );
+                },
+              );
+            }}
+          >
+            {t(M.sample)}
+          </button>
+          {sampleError && (
+            <p style={{ ...small, color: status.error }}>
+              {t(M.sampleFailed, { reason: sampleError })}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -317,6 +374,9 @@ function Grid({
   const [scrollTop, setScrollTop] = useState(0);
   const [height, setHeight] = useState(300);
   const scroller = useRef<HTMLDivElement | null>(null);
+  // Data ADR 563: the field whose picture column editor is open.
+  const assets = useAssetColumns(service, table);
+  const [picture, setPicture] = useState<string | null>(null);
 
   const fields = table.schema.fields;
   const visible = fields.filter((f) => !hidden.has(f.name));
@@ -326,6 +386,10 @@ function Grid({
     : sort;
   const sql = gridSql(table.name, filters, match, keys);
   const bound = fieldStates(statuses, table.name);
+  const rowsDrag =
+    table.kind === "query" &&
+    keys.length === 0 &&
+    filters.every((f) => f.field === "");
 
   // The count, and (grouped) the group field's values in order.
   useEffect(() => {
@@ -416,6 +480,35 @@ function Grid({
         <span style={muted} data-data-count="">
           {t(M.rows, { count })}
         </span>
+        {table.kind === "query" && (
+          // Editor ADR 291: the query as a table, its shown columns in order.
+          <span
+            role="button"
+            tabIndex={-1}
+            draggable
+            data-data-table-drag=""
+            title={t(M.asTableHint)}
+            style={{
+              ...button,
+              display: "inline-flex",
+              alignItems: "center",
+              cursor: "grab",
+            }}
+            onDragStart={(e) => {
+              e.dataTransfer.setData(
+                DATA_TABLE_DRAG_TYPE,
+                JSON.stringify({
+                  query: table.name,
+                  fields: visible.map((f) => f.name),
+                }),
+              );
+              e.dataTransfer.setData("text/plain", table.name);
+              e.dataTransfer.effectAllowed = "copy";
+            }}
+          >
+            {t(M.asTable)}
+          </span>
+        )}
         <label
           style={{ ...muted, display: "flex", gap: 4, alignItems: "center" }}
         >
@@ -455,7 +548,30 @@ function Grid({
         >
           {t(M.columns)}
         </button>
+        {assets && fields.length > 0 && (
+          <PictureColumnToggle
+            open={picture !== null}
+            onToggle={() =>
+              setPicture(
+                picture !== null
+                  ? null
+                  : ([...assets.keys()][0] ?? fields[0]!.name),
+              )
+            }
+          />
+        )}
       </div>
+      {assets && picture !== null && (
+        <AssetColumnEditor
+          key={`${picture}:${assets.has(picture)}`}
+          service={service}
+          table={table}
+          field={picture}
+          column={assets.get(picture)}
+          onField={setPicture}
+          onClose={() => setPicture(null)}
+        />
+      )}
       {showColumns && (
         <div
           data-data-columns=""
@@ -637,6 +753,11 @@ function Grid({
                   if (e.detail > 1) return;
                   setSort(nextSort(sort, f.name, e.shiftKey));
                 }}
+                onContextMenu={(e) => {
+                  if (!assets) return;
+                  e.preventDefault();
+                  setPicture(f.name);
+                }}
                 onDoubleClick={() => {
                   if (n === 0) return;
                   void selectPlaced(
@@ -677,6 +798,9 @@ function Grid({
                 >
                   {f.ty}
                 </span>
+                {assets?.has(f.name) && (
+                  <AssetColumnMarker column={assets.get(f.name)!} />
+                )}
                 {s >= 0 && (
                   <span
                     style={muted}
@@ -727,6 +851,19 @@ function Grid({
                 key={`r:${r.index}`}
                 role="row"
                 data-data-row={r.index}
+                // Editor ADR 291: a record onto a design. Only while the grid
+                // shows the query's own order: a row's place is then its
+                // record number.
+                draggable={rowsDrag}
+                title={rowsDrag ? t(M.rowHint) : undefined}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    DATA_RECORD_DRAG_TYPE,
+                    JSON.stringify({ query: table.name, record: r.index }),
+                  );
+                  e.dataTransfer.setData("text/plain", String(r.index + 1));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 style={{
                   display: "flex",
                   position: "absolute",
@@ -826,6 +963,7 @@ export function DataPanel() {
   const [statuses, setStatuses] = useState<readonly DataBindingStatus[]>([]);
   const [updating, setUpdating] = useState(false);
   const [active, setActive] = useState("");
+  const [pipeline, setPipeline] = useState(false);
 
   useEffect(() => {
     if (!service) return;
@@ -843,7 +981,17 @@ export function DataPanel() {
   }, [service, revision]);
 
   const shown = service ? tables : [];
-  if (shown.length === 0) return <Start hasService={service !== null} />;
+  if (shown.length === 0) {
+    // The first run's sample: loaded, its query's tab shows.
+    const loads =
+      service && typeof service.loadSample === "function" ? service : null;
+    return (
+      <Start
+        hasService={service !== null}
+        sample={loads ? async () => setActive(await loads.loadSample!()) : null}
+      />
+    );
+  }
   const table = shown.find((x) => x.name === active) ?? shown[0]!;
   return (
     <div
@@ -890,7 +1038,16 @@ export function DataPanel() {
             )}
           </button>
         ))}
+        {offersPipeline(service) && (
+          <PipelineToggle
+            open={pipeline}
+            onToggle={() => setPipeline(!pipeline)}
+          />
+        )}
       </div>
+      {pipeline && service && offersPipeline(service) && (
+        <DataPipeline service={service} onSelect={setActive} />
+      )}
       <StatusBar
         statuses={statuses}
         updating={updating}

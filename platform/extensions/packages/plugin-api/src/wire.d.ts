@@ -3563,7 +3563,7 @@ export interface SwatchColorSpec {
 }
 
 /**
- * v77 (engine ADR 1016) — one named undo step on the wire.
+ * v77 (engine ADR 1017) — one named undo step on the wire.
  */
 export interface UndoLogEntryWire {
     /**

@@ -2135,7 +2135,7 @@ fn the_session_policy_survives_a_load_and_unfit_field_values_are_refused() {
 }
 
 // ---------------------------------------------------------------------
-// v77 (engine ADR 1016) — named undo steps over the wire
+// v77 (engine ADR 1017) — named undo steps over the wire
 // ---------------------------------------------------------------------
 
 fn type_at(core: &mut WorkerCore, seq: u64, text: &str, label: Option<&str>) -> u64 {

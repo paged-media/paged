@@ -147,6 +147,10 @@ export interface DataEngineLike {
   merge_words?(plan: unknown, frames: number): unknown;
   /** Wave 5: per record, per frame, is the merged text overset (DM-7)? */
   merge_overset?(plan: unknown, metrics: unknown): unknown;
+  /** Editor ADR 291: the Data Merge placeholders of a text that name a field
+   *  (`{ start, end, field, image }[]`, byte offsets as the host counts
+   *  them). Optional: a wasm built before it lacks it. */
+  placeholder_spans?(text: string): unknown;
   publish_provider(
     query: string,
     providerId: string,

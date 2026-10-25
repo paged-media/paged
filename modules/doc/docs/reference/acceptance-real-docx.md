@@ -529,3 +529,50 @@ So line breaking is right; what moves the page starts is vertical. Found and fix
   Word's first line taller); a heading after body text sits 2.3 pt lower than Word's; the
   cover page; footnotes (ADR 034).
 - bug59058: tables.
+
+## Round 14 — 2026-10-24: Word's first-fit composer, measured headless
+
+The pagination program's steps 1–3 (doc ADR 617, engine ADR 1016). What changed:
+
+1. **Runtime fonts** were already in place (engine `refresh_font_table`; `word` and
+   `word-reload` measured the same in round 2). Nothing to do but use it: the measurement below
+   registers Word's faces after the open.
+2. **Word's first-fit composer.** Every Word paragraph now composes with the engine's
+   `"Word First-fit"` instead of InDesign's Single-line Composer: no compressed justified line,
+   Word's hyphenation zone, a hyphen as an ordinary break, an over-wide word split on its own
+   line.
+3. **Pictures.** A picture's line already grew to it (round 12); a picture paragraph's text
+   lines now keep Word's pitch (auto leading at Word's pitch over the size) instead of 1.2 × the
+   size.
+
+**Method.** `packages/doc-bundle/test/headless/real-docx-measure.spec.ts`: the bundle's
+standalone open on the real engine (this branch's `core:wasm-pkg`) and docx-js, Word's faces
+registered after the open (no "Times" faces: `REAL_TIMES_DIR` was not available), JSON as
+`measure.spec.ts` writes it. Word's side is its PDFs from 2026-10-02 (`word_map.py`). "Before"
+is the same build with `REAL_COMPOSER="HL Single"` set on the root Word style, so the two
+columns differ only in the composer.
+
+| Document      | Word pages | Ours | Page starts (before → after) | Paragraphs with Word's line count (before → after) |
+| ------------- | ---------- | ---- | ---------------------------- | -------------------------------------------------- |
+| parentinvguid | 61         | 59   | 13.1% → 13.1%                | 605 → 605 of 624                                   |
+| Bug50936_3    | 50         | 45   | 2% → 2%                      | 796 → 801 of 813                                   |
+| bug59058      | 52         | 8    | not measurable (see below)   | not measurable                                     |
+
+The five Bug50936_3 paragraphs whose line count changed all moved to Word's. The page starts do
+not move: line breaking was already right on 97–98 % of paragraphs, so what moves the page
+starts is vertical (round 13's list stands).
+
+**Two defects the headless run found, outside this change:**
+
+- **The pour loses the text after a table.** On main, every text step after a table is refused
+  (`offset N is past the end of story … (length N−1)`): the pour advances its `insertText`
+  offset by one past each table (`TABLE_FOOTPRINT_TEXT = 1` in `src/pour.ts`), and the engine's
+  story no longer has that position. With the advance at 0 the text pours (the numbers above
+  were measured so, locally; not committed), but the blank-line carets after a table still name
+  one paragraph too many per table, which says the table's host paragraph is not where the pour
+  expects it. It needs its own fix and a test with a table followed by text.
+- **Headless, pages grow only on a font change.** Without Word's faces registered the three
+  documents stay at 3, 9 and 4 pages (text overset), however often every page is requested;
+  registering a face (a full re-measure) grows them. bug59058 stops at 8 pages even then. The
+  editor grows them (round 13), so either the headless host misses a step the editor takes or
+  an incremental build skips the growth; not chased.

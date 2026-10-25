@@ -116,7 +116,7 @@ export interface CoreObjects {
   /** Evaluate core selector steps (no plugin steps). */
   query(steps: readonly SelectorStep[]): Promise<string[]>;
   /** Commit mutations as ONE engine mutation (a `batch` when > 1). */
-  /** `opts.label` names the undo step (engine ADR 1016). */
+  /** `opts.label` names the undo step (engine ADR 1017). */
   commit(
     mutations: readonly MutationInput[],
     opts?: { label?: string },

@@ -121,7 +121,7 @@ pub struct WorkerCore {
     pub script_sessions: std::collections::BTreeMap<u32, paged_script::ScriptSession>,
     /// Monotone id source for script sessions.
     pub next_script_session: u32,
-    /// v77 (engine ADR 1016) — the history depth a host set
+    /// v77 (engine ADR 1017) — the history depth a host set
     /// (`SetHistoryDepth`); like the snap settings it survives loads.
     pub history_depth: Option<usize>,
 }
@@ -484,7 +484,7 @@ impl WorkerCore {
                     Err(error) => WorkerToMainKind::MutationFailed { error },
                 }
             }
-            // v77 (engine ADR 1016) — name the step a write just made.
+            // v77 (engine ADR 1017) — name the step a write just made.
             MainToWorkerKind::LabelStep { applied_seq, label } => {
                 let Some(model) = self.model.as_mut() else {
                     reply!(WorkerToMainKind::MutationFailed {
@@ -1804,7 +1804,7 @@ impl WorkerCore {
                 let model = self.model.as_mut().expect("checked above");
                 match model.commit_gesture(handle) {
                     Ok(outcome) => {
-                        // v77 (engine ADR 1016) — a caller's name wins over
+                        // v77 (engine ADR 1017) — a caller's name wins over
                         // the gesture's.
                         if let Some(label) = label
                             .as_deref()
@@ -1900,7 +1900,7 @@ impl WorkerCore {
         )
     }
 
-    /// v77 (engine ADR 1016) — `UndoTo` / `RedoTo`: several steps in one
+    /// v77 (engine ADR 1017) — `UndoTo` / `RedoTo`: several steps in one
     /// round trip, answered as one `UndoApplied` / `RedoApplied` over the
     /// union of the pages they touched.
     fn history_jump(

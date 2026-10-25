@@ -15,6 +15,13 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   `@paged-media/viewer` (with the `./session` entry), built and published by
   `.github/workflows/release.yml` together with `@paged-media/plugin-sdk` (the contract as
   its `./api`).
+- **Word's first-fit composer** ([ADR 1016](adr/1016-word-first-fit-composer.md)).
+  `paragraphComposer = "Word First-fit"` sets a paragraph one line at a time the way Word
+  does: no compressed justified line, Word's hyphenation zone (0.25 in by default, no hyphen
+  limit), a hyphen in the text as an ordinary break, and a word wider than the measure split
+  on a line of its own. The doc module selects it for every Word paragraph; IDML documents
+  keep their composers. Word's own answer to the probe (`first_fit_docx()`) is not committed
+  yet.
 - **Open and create.** `LoadDocument` opens an `.idml` package or a `.paged` container;
   `NewBlankDocument` and `paged new` make an empty document.
 - **Render.** One display list per page, drawn on the CPU with `vello_cpu` (`paged render`,

@@ -101,3 +101,10 @@ the engine's model crates and packages it as `.paged`, and the bundle opens thos
 ([ADR 606](606-skeleton-is-a-native-document.md)). The pages, frames, stories and ids are the
 same; what this record says about the IDML package and the crate having no engine dependency
 describes the code before that change.
+
+## Amendment 2026-10-24
+
+[ADR 608](608-word-inside-paged-the-editing-model.md): the two entry points share one editing
+model. Neither gets a frame surface; both are in the `wordDocument` context (Insert by entering
+the frame, Open by the document context the importer holds), with the same control bar,
+shortcuts and status bar.

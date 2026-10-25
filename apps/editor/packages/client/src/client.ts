@@ -88,7 +88,7 @@ import { GestureBuffer } from "./sab/gesture";
 import type { JournalEntry, UncapturedLedger } from "./journal";
 
 /** What {@link CanvasClient.snapshotBackendInfo} reports. */
-/** Engine ADR 1016 — the `undoLog` reply ({@link CanvasClient.undoLog}). */
+/** Engine ADR 1017 — the `undoLog` reply ({@link CanvasClient.undoLog}). */
 export interface UndoLog {
   /** Oldest first; the last step is what an undo reverts. */
   undo: UndoLogEntryWire[];
@@ -2515,7 +2515,7 @@ export class CanvasClient {
   }
 
   /**
-   * Engine ADR 1016 — the named undo timeline: the newest `limit` undo
+   * Engine ADR 1017 — the named undo timeline: the newest `limit` undo
    * steps oldest first and the redo steps next-redo first (all of them
    * without a limit), with the logs' lengths and the history depth.
    */
@@ -2528,7 +2528,7 @@ export class CanvasClient {
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
 
-  /** Engine ADR 1016 — name the undo step `appliedSeq` (the step a write
+  /** Engine ADR 1017 — name the undo step `appliedSeq` (the step a write
    *  just made) `label`. Resolves whether it took the name: a step that is
    *  no longer the top of the undo log keeps its own. */
   async labelStep(appliedSeq: number, label: string): Promise<boolean> {
@@ -2539,19 +2539,19 @@ export class CanvasClient {
     return reply.kind === "stepLabeled" && reply.payload.labeled;
   }
 
-  /** Engine ADR 1016 — undo down to and including the step `appliedSeq`,
+  /** Engine ADR 1017 — undo down to and including the step `appliedSeq`,
    *  in one round trip. Resolves with the reply (`undoApplied`, or
    *  `mutationFailed` when the step is not on the undo log). */
   async undoTo(appliedSeq: number): Promise<WorkerToMain> {
     return this.send({ kind: "undoTo", payload: { appliedSeq } });
   }
 
-  /** Engine ADR 1016 — redo up to and including the step `appliedSeq`. */
+  /** Engine ADR 1017 — redo up to and including the step `appliedSeq`. */
   async redoTo(appliedSeq: number): Promise<WorkerToMain> {
     return this.send({ kind: "redoTo", payload: { appliedSeq } });
   }
 
-  /** Engine ADR 1016 — make the document what it was right after the step
+  /** Engine ADR 1017 — make the document what it was right after the step
    *  `appliedSeq` (`0`: before the oldest step) as ONE new undo step named
    *  `label` (a snapshot restore). Reply: `mutationApplied`. */
   async restoreTo(appliedSeq: number, label?: string): Promise<WorkerToMain> {
@@ -2561,7 +2561,7 @@ export class CanvasClient {
     });
   }
 
-  /** Engine ADR 1016 — keep at most `depth` undo steps (1..=10,000); the
+  /** Engine ADR 1017 — keep at most `depth` undo steps (1..=10,000); the
    *  worker keeps the depth across loads. Resolves with the depth in force. */
   async setHistoryDepth(depth: number): Promise<number> {
     const reply = await this.send({

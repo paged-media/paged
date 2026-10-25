@@ -46,6 +46,8 @@ import type {
   SecretStoreBackend,
   ShellBackend,
   TextCaretBackend,
+  TextSelectionBackend,
+  DocumentContextBackend,
   ToolSettingsBackend,
   WillSaveBackend,
   WorkerBackend,
@@ -92,8 +94,17 @@ export interface EditorHandleForHost {
       current: {
         storyId: string;
         start: number;
+        end?: number;
         cell?: unknown;
       } | null;
+    };
+    /** Extensions ADR 348 — every content-selection change. */
+    subscribeSelection?: (listener: () => void) => () => void;
+  };
+  /** Extensions ADR 348 — the document context the shell holds. */
+  registries?: {
+    documentContext?: {
+      set(pluginId: string, type: string | null): boolean;
     };
   };
 }
@@ -218,6 +229,34 @@ export function createEditorHostOptions(
       return { storyId: sel.storyId, offset: sel.start };
     },
   };
+  // Extensions ADR 348 (C4): the selection reader behind host.text's
+  // selection doors — the same live ref as the caret, with its end, and
+  // the shell's change signal. A cell-qualified selection reads null (the
+  // C-9 gap).
+  const textSelection: TextSelectionBackend = {
+    read: () => {
+      const sel =
+        getEditor()?.contentSelection.contentSelectionRef.current ?? null;
+      if (!sel || sel.cell) return null;
+      return {
+        storyId: sel.storyId,
+        start: sel.start,
+        end: sel.end ?? sel.start,
+      };
+    },
+    subscribe: (listener) => {
+      // The handle is replaced on every render, its provider's listener
+      // set is not: subscribing through the current one reaches it.
+      const off = getEditor()?.contentSelection.subscribeSelection?.(listener);
+      return off ?? (() => {});
+    },
+  };
+  // Extensions ADR 348: the shell's document context (the content type the
+  // open document is), held per plugin and dropped on a document load.
+  const documentContext: DocumentContextBackend = {
+    set: (pluginId, type) =>
+      getEditor()?.registries?.documentContext?.set(pluginId, type) ?? false,
+  };
   // K-3 / S-07 / I-02: the worker backend behind host.workers. The SDK door
   // owns the capability gate, the count cap, the SAB byte budget and
   // teardown; this resolves a bundle's DECLARED module path to a served URL
@@ -252,6 +291,8 @@ export function createEditorHostOptions(
     blobStore,
     clipboard,
     textCaret,
+    textSelection,
+    documentContext,
     workers,
     // ADR 223 — the module door.
     modules,

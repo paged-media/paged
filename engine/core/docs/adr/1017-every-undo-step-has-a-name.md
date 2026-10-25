@@ -1,4 +1,4 @@
-# ADR 1016 — Every undo step has a name, and the timeline is readable
+# ADR 1017 — Every undo step has a name, and the timeline is readable
 
 - **Status:** Accepted 2026-10-24.
 - **Scope:** protocol v77. `paged-canvas` (`AppliedRecord.label`, the `undo_label` module,

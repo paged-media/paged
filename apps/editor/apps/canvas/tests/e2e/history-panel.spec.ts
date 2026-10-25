@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// E2E — the History panel (editor ADR 285, engine ADR 1016) in the running
+// E2E — the History panel (editor ADR 285, engine ADR 1017) in the running
 // editor: three edits on a blank document, Edit ▸ History opens the panel,
 // the steps are listed by name; a click on the first step leaves the
 // document as it was after step 1 (one `undoTo`), and a click on the last

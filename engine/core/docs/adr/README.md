@@ -150,7 +150,8 @@ is not written yet.
 | [1010](1010-a-group-can-clip-and-be-pasted-in.md) | A group can clip, and a group can be pasted into a frame | Accepted 2026-10-24 |
 | [1014](1014-bindings-live-in-labels-and-the-engine-applies-them.md) | Bindings live in labels, and the engine reads and applies them | Accepted 2026-10-24 |
 | [1015](1015-paged-action-the-action-registry.md) | `paged-action`: the action registry, chains, the cache key, and actions in JavaScript | Accepted 2026-10-24; amended 2026-10-24 (`paged.actions.*`) |
-| [1016](1016-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
+| [1016](1016-word-first-fit-composer.md) | Word's first-fit is a composer of its own | Accepted 2026-10-24 |
+| [1017](1017-every-undo-step-has-a-name.md) | Every undo step has a name, and the timeline is readable | Accepted 2026-10-24 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

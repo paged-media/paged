@@ -59,6 +59,7 @@ import {
   type DocumentHandle,
   type ElementId,
   type Mutation,
+  type Role,
   type WorkerToMain,
 } from "@paged-media/client";
 import {
@@ -102,6 +103,7 @@ import {
   type TableCellSelection,
   ChromeRegionsProvider,
   chromeRegionsOf,
+  type ChromeRegions,
   createEditorScope,
   EditorScopeProvider,
   type EditorScope,
@@ -148,6 +150,11 @@ export interface MountOptions<S> {
    *  registers an edit context's provider on it and marks the context
    *  active). Default a fresh, empty one. */
   bindingProviders?: ReturnType<typeof createBindingProviderRegistry>;
+  /** The chrome the panel finds (a profile's regions, canvas furniture
+   *  and compact layout, `chromeRegionsOf`). Default the full editor's. */
+  chrome?: ChromeRegions;
+  /** The session's role. Default an editor. */
+  role?: Role;
 }
 
 interface Bridge {
@@ -390,17 +397,25 @@ export function ShellProviders({
   client,
   scope,
   bindingProviders,
+  chrome,
+  role,
   children,
 }: PropsWithChildren<{
   client: CanvasClient;
   scope: EditorScope;
   bindingProviders?: ReturnType<typeof createBindingProviderRegistry>;
+  chrome?: ChromeRegions;
+  role?: Role;
 }>): ReactNode {
   return (
     <EditorScopeProvider scope={scope}>
       <CanvasClientProvider client={client}>
-        <ChromeRegionsProvider value={chromeRegionsOf(undefined, undefined)}>
-          <SessionPolicyProvider policy={{ role: "editor", overrides: [] }}>
+        <ChromeRegionsProvider
+          value={chrome ?? chromeRegionsOf(undefined, undefined)}
+        >
+          <SessionPolicyProvider
+            policy={{ role: role ?? "editor", overrides: [] }}
+          >
             <ThemeProvider>
               <CameraProvider>
                 <DocumentProvider>
@@ -537,6 +552,8 @@ export async function mountPanel<S = undefined>(
         client={client}
         scope={scope}
         bindingProviders={options.bindingProviders}
+        {...(options.chrome ? { chrome: options.chrome } : {})}
+        {...(options.role ? { role: options.role } : {})}
       >
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
         <SeedDocument handle={handle} resolution={engine.lastResolution} />

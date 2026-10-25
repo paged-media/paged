@@ -16,16 +16,20 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// PPTX export (ADR 704), the TypeScript half: what the document says about
-// its slides, as the plan the engine writes the deck from. Each page names
-// the slide part it came from (its slide state); a page whose content
-// differs from that slide's at import is marked edited. The deck itself is
-// written in Rust (pptx-export) from the original the importer kept.
+// PPTX export (ADR 704, ADR 711), the TypeScript half: what the document
+// says about its slides, as the plan the engine writes the deck from, and
+// the document itself. Each page names the slide part it came from (its
+// slide state) and its page id; a slide made in the editor names its
+// layout. The deck is written in Rust (pptx-export) from the original the
+// importer kept and the document's `.paged` serialization: untouched
+// slides by their bytes, edited and new ones regenerated. A host that
+// cannot serialize the document gets the deck's slides as they were, and
+// the pages whose content changed (by fingerprint) are reported.
 
-import type { BundleHost } from "@paged-media/plugin-api";
+import type { BundleHost, Diagnostic } from "@paged-media/plugin-api";
 import { sha256Hex } from "@paged-media/helpers";
 
-import type { SlidePlan } from "./engine.js";
+import type { ExportedDeck, SlidePlan } from "./engine.js";
 import { parseState, type PluginMetadataEntry } from "./slides-model.js";
 
 type TreeNode = {
@@ -114,6 +118,31 @@ export async function exportPlan(
       hidden: state.hidden === true,
       notes: state.notes ?? null,
       contentEdited: imported !== undefined && imported !== prints[i],
+      pageId: p.selfId,
+      layout: state.layout ?? null,
     };
   });
+}
+
+/** The document as `.paged` bytes for the exporter, or null when the host
+ *  cannot serialize it (the deck's slides are then written as they were). */
+export async function documentBytes(
+  host: BundleHost,
+): Promise<Uint8Array | null> {
+  if (!host.supports("documents.exportPaged@1")) return null;
+  try {
+    return await host.documents.exportPaged();
+  } catch {
+    return null;
+  }
+}
+
+/** What an export could not carry, as the export's diagnostics: the
+ *  package's own, then each thing on a slide that could not round-trip. */
+export function exportDiagnostics(out: ExportedDeck): Diagnostic[] {
+  return [...out.diagnostics, ...out.notExported].map((message) => ({
+    severity: "warning" as const,
+    message,
+    source: "pptx",
+  }));
 }
