@@ -167,6 +167,7 @@ impl LayerStack {
             fold: Default::default(),
             comps: Vec::new(),
             history_states: Default::default(),
+            masking: Default::default(),
         }
     }
 

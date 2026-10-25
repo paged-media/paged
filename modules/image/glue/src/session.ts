@@ -132,6 +132,10 @@ import {
   type WandOptions,
 } from "./selection-machine";
 import {
+  createMaskingController,
+  type MaskingController,
+} from "./masking-session";
+import {
   createBrushMachine,
   type BrushMachine,
   type BrushSample,
@@ -494,6 +498,10 @@ export interface ImageSessionState {
 }
 
 export interface ImageSession {
+  /** Selection and masking: Color Range, Grow / Similar, Focus Area,
+   *  Select and Mask, Quick Mask, channels, paths, the display view
+   *  (image ADR 470). */
+  masking(): MaskingController;
   state(): ImageSessionState;
   onDidChange(listener: () => void): Disposable;
   /** Ingest the single selected element's placed image via C-5. */
@@ -1761,6 +1769,8 @@ export function createImageSession(host: BundleHost): ImageSession {
   // The selection interaction machine (rebuilt alongside the crop
   // machine; the selection itself is ENGINE state keyed to the handle).
   let selectionMachineRef: SelectionMachine | null = null;
+  // Selection and masking (created below, once `api` helpers exist).
+  let maskingRef: MaskingController | null = null;
   // The paint interaction machine (pointer sampling only — the stroke's
   // base snapshot + coverage live engine-side).
   let brushMachineRef: BrushMachine | null = null;
@@ -2364,6 +2374,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       src.height = extent.height;
       refreshSourceReadout();
     }
+    // The step may have restored a selection, a channel or a path.
+    api.refreshSelection();
+    maskingRef?.refresh();
     const ok = await recomposite();
     if (ok) setStatus(t(undo ? S.undid : S.redid, { label }));
     return ok;
@@ -2837,6 +2850,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       () => state.wand,
     );
     state.selection = engine.selectionStats();
+    maskingRef?.refresh();
     // The paint machine is pure pointer bookkeeping, but it is rebuilt
     // with the source so a stale sample queue can never leak across a
     // crop / resize / fill / paint handle swap.
@@ -2889,6 +2903,8 @@ export function createImageSession(host: BundleHost): ImageSession {
     const rect = engine?.brushDirtyRect();
     if (
       !surface ||
+      // A display view re-derives the whole frame from the stroke.
+      engine?.viewActive() ||
       !rect ||
       !submitted ||
       submitted.target !== target ||
@@ -2925,6 +2941,15 @@ export function createImageSession(host: BundleHost): ImageSession {
   ): Promise<boolean> => {
     const surface = scene();
     if (!surface) return false;
+    // The display VIEW (a channel as grey, Quick Mask's overlay, a matte
+    // preview) transforms what the frame shows, never the document.
+    if (engine?.viewActive()) {
+      try {
+        rgba = engine.viewApply(rgba, width, height);
+      } catch (err) {
+        host.log.debug("display view failed", err);
+      }
+    }
     const scale = Math.min(box.w / layoutWidth, box.h / layoutHeight);
     // The SAME number the layout uses — see `state.ptPerPx`. Recorded
     // here so a panel converting image px to points cannot disagree
@@ -3384,7 +3409,25 @@ export function createImageSession(host: BundleHost): ImageSession {
     state.channelCurves = curves;
   };
 
+  maskingRef = createMaskingController({
+    engine: () => engine,
+    source: () => state.source,
+    setStatus,
+    emit,
+    refreshSelection: () => api.refreshSelection(),
+    recomposite: () => recomposite(),
+    redisplay: () =>
+      state.source?.elementId ? api.apply() : Promise.resolve(false),
+    markEdited: () => {
+      state.uncommitted = true;
+      refreshLayers();
+    },
+    wand: () => state.wand,
+  });
+  const masking = maskingRef;
+
   const api: ImageSession = {
+    masking: () => masking,
     state: () => state,
 
     onDidChange(listener) {
@@ -4841,6 +4884,12 @@ export function createImageSession(host: BundleHost): ImageSession {
     refreshSelection() {
       if (!engine || !state.source) return;
       state.selection = engine.selectionStats();
+      // A selection change is an undo step (ADR 470): the readout follows.
+      try {
+        state.history = engine.layersHistory();
+      } catch (err) {
+        host.log.debug("history readout failed", err);
+      }
       emit();
     },
 

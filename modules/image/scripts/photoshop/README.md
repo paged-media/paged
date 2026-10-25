@@ -13,6 +13,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/brush-strokes.jsx
+bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/selection.jsx
 # then re-measure and review the ledger diff:
 PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
@@ -42,6 +43,10 @@ The brush probe reads and RESTORES the user's paintbrush options, foreground
 colour and current tool, and deletes the one temporary brush preset it
 defines, by name. A partial tool-options descriptor resets the unnamed
 gates, so the probe names every gate on every call.
+`image-conformance/tests/it/oracle_photoshop_selection.rs` (Select ▸ Color
+Range and Grow / Similar: each selection is rendered as white through the
+selection over black, so the grey is the coverage; its ledger is in the test,
+every case `Agreement` or a stated `Convention`, image ADR 470).
 
 ## Traps, and what each step does about them
 
@@ -86,5 +91,9 @@ gates, so the probe names every gate on every call.
   field in the saved bytes (BINARY file I/O), has Photoshop OPEN the
   patched file and SAVE it again — so the recorded PSD and its composite
   are still Photoshop's own.
+- **Grow and Similar** answer "the command is not available" through the
+  ActionManager with a tolerance key; `selection.jsx` calls the DOM
+  (`selection.grow(tolerance, antiAlias)`, `selection.similar(...)`), which
+  takes the tolerance as an argument.
 - **ExtendScript** is ES3 and the text crosses an Apple event: plain
   ASCII only (the runner checks), no `JSON`, no `let`.

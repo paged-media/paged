@@ -430,6 +430,11 @@ impl LayerStack {
                 }
             }
         }
+        // Channels and paths (ADR 470): a trailing block older readers
+        // skip; nothing at all without masking state.
+        if version >= 3 {
+            self.masking.doc.encode(&mut w.0, &mut slot);
+        }
         (w.0, buffers)
     }
 
@@ -747,7 +752,11 @@ impl LayerStack {
                 "layer manifest: no layers, or active out of range".into(),
             ));
         }
-        Ok(LayerStack {
+        let masking = crate::masking::MaskingDoc::decode(&manifest[r.at..], width, height, |i| {
+            buffer(i).map_err(|e| e.to_string())
+        })
+        .map_err(|e| IngestError::Decode(format!("layer manifest: {e}")))?;
+        let mut stack = LayerStack {
             width,
             height,
             layers,
@@ -763,7 +772,10 @@ impl LayerStack {
             fold: Default::default(),
             comps,
             history_states: Default::default(),
-        })
+            masking: Default::default(),
+        };
+        stack.masking.doc = masking;
+        Ok(stack)
     }
 }
 

@@ -53,6 +53,7 @@ import manifest from "../manifest.json";
 import { createImageSession } from "./session";
 import { registerImageActions } from "./actions";
 import { filterDef } from "./filters";
+import { contributeMasking } from "./masking-contrib";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { adjustmentKindLabel } from "./panels/sections/layer-parity";
@@ -1383,6 +1384,10 @@ export function activate(host: BundleHost): BundleHandle {
       session.featherSelection();
     },
   });
+  // Selection and masking (WP5.5, ADR 470): Color Range, Select and
+  // Mask, Quick Mask, Grow / Similar, Focus Area, channels and paths,
+  // the Magnetic Lasso and the Refine Edge brush.
+  const maskingSub = contributeMasking(host, session, command, PANEL_ID);
 
   // K-2 — the raster importer: opening/dropping a PSD/PNG/JPEG routes
   // its bytes HERE (decode into the session, raise the panel; it does
@@ -1689,6 +1694,7 @@ export function activate(host: BundleHost): BundleHandle {
       willSave?.dispose();
       toolSettingsSub?.dispose();
       menuSub.dispose();
+      maskingSub.dispose();
       providerInvalidate = null;
       for (const h of providerHandles.splice(0)) h.dispose();
       session.dispose();

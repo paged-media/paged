@@ -235,7 +235,9 @@ describe("the Filter dialog", () => {
     expect(stand.calls[1]!.args).toEqual([0, 10]);
     expect(await k.session.commitFilterDialog()).toBe(true);
     expect(k.session.state().selection).toEqual(sel);
-    expect(depth(k)).toBe(1);
+    // Two steps: Select All (a selection change is a step, ADR 470) and
+    // the filter.
+    expect(depth(k)).toBe(2);
     k.dispose();
   });
 
