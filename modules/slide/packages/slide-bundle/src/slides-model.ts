@@ -40,6 +40,11 @@ export interface Transition {
   dir?: string | null;
   speed?: string | null;
   durationMs?: number | null;
+  /** Advance on a click (PowerPoint's default) and/or after this long
+   *  (the Transition panel edits both; Rehearse Timings records the
+   *  latter). Absent: as the deck's element says. */
+  advanceOnClick?: boolean;
+  advanceAfterMs?: number | null;
   /** The deck's own element, kept for export. */
   xml?: string;
 }

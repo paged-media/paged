@@ -36,6 +36,12 @@
 // The fonts the deck embeds are decoded by the engine and given to the
 // deck's document once it is open, within their licences (ADR 707); a
 // document reopened later gets them again from the source deck it keeps.
+//
+// The deck's comments (ADR 711, amendment 2026-10-25) are kept per slide in
+// a container part, shown in the Comments panel and as markers on the
+// slide, and written back by export. A deck holds the `slideDeck` document
+// context (editor ADR 307), so PowerPoint's Normal-view keys (Cmd/Ctrl+M,
+// Cmd/Ctrl+D, PageUp/PageDown) apply in it and nowhere else.
 
 import type {
   BundleHandle,
@@ -44,7 +50,9 @@ import type {
 } from "@paged-media/plugin-api";
 import { t } from "@paged-media/strings";
 
-import { contributeSlideCommands } from "./commands.js";
+import { contributeCommentMarkers } from "./comment-markers.js";
+import { CommentsStore, fileFromReport } from "./comments-model.js";
+import { contributeSlideCommands, DECK_CONTEXT } from "./commands.js";
 import {
   documentBytes,
   exportDiagnostics,
@@ -54,20 +62,29 @@ import {
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
 import { contributeMenu } from "./menu.js";
-import { DECK, NOTES, SLIDES } from "./messages.js";
+import { COMMENTS, DECK, NOTES, SLIDES } from "./messages.js";
 import {
   contributeSlideObjectModel,
   parseLabel,
   type DeckLabel,
 } from "./object-model.js";
 import { slidePanels } from "./panels.js";
+import { makeCommentsPanel } from "./panels/comments-panel.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
 import { SlidesStore } from "./slides-model.js";
+import {
+  contributeShow,
+  showTypedCommands,
+  SORTER_VIEW,
+} from "./show/contribute.js";
+import { SHOW } from "./messages.js";
+import { makeSlideSorter } from "./views/slide-sorter.js";
 
 export const IMPORTER_ID = "media.paged.slide.importer.pptx";
 export const SLIDES_PANEL_ID = "media.paged.slide.panel.slides";
 export const NOTES_PANEL_ID = "media.paged.slide.panel.notes";
+export const COMMENTS_PANEL_ID = "media.paged.slide.panel.comments";
 export const PPTX_MIME =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 /** Diagnostics key for what an import met and could not render. */
@@ -118,6 +135,7 @@ export async function keepSource(
   host: BundleHost,
   bytes: Uint8Array,
   report: ImportReport,
+  comments?: CommentsStore | null,
 ): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   await host.parts.write(SOURCE_PART, bytes);
@@ -135,6 +153,8 @@ export async function keepSource(
     FINGERPRINTS_PART,
     new TextEncoder().encode(JSON.stringify(byPart)),
   );
+  // Each slide's comments, by the page it opened as.
+  await comments?.replace(fileFromReport(report.slides));
 }
 
 /**
@@ -168,6 +188,11 @@ export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
 
 export function activate(host: BundleHost): BundleHandle {
   const disposers: Array<() => void> = [];
+  // The deck's comments, in a container part (needs the parts door).
+  const comments = host.supports("storage.parts@1")
+    ? new CommentsStore(host)
+    : null;
+  if (comments) disposers.push(() => comments.dispose());
   /** An import is opening its own document (which gets its fonts there). */
   let importing = false;
 
@@ -219,7 +244,7 @@ export function activate(host: BundleHost): BundleHandle {
         report.embeddedFonts,
         fonts,
       );
-      await keepSource(host, bytes, report);
+      await keepSource(host, bytes, report, comments);
     } finally {
       importing = false;
     }
@@ -236,7 +261,28 @@ export function activate(host: BundleHost): BundleHandle {
     return report;
   }
 
-  const model = contributeSlideObjectModel(host, { openDeck, exportDeck });
+  // The slides store is made below (it needs the page doors); the object
+  // model's navigation reads it when a command runs.
+  let store: SlidesStore | null = null;
+  const step = async (by: -1 | 1): Promise<string | null> => {
+    const slide = store?.isDeck() ? store.activeSlide() : null;
+    const target = slide ? store!.list()[slide.number - 1 + by] : undefined;
+    if (!target || !host.supports("viewport.pages@1")) return null;
+    return (await host.viewport.goToPage(target.pageId)) ? target.pageId : null;
+  };
+  // The slide show's typed commands are registered with the model, which
+  // comes first; they run the show once it is contributed below.
+  let runShow: ((id: string) => Promise<boolean>) | null = null;
+  const model = contributeSlideObjectModel(host, {
+    openDeck,
+    exportDeck,
+    extraCommands: showTypedCommands((id) =>
+      runShow ? runShow(id) : Promise.resolve(false),
+    ),
+    comments: () => comments,
+    step,
+    activePage: () => store?.activePage() ?? null,
+  });
   if (model) disposers.push(() => model.dispose());
 
   // A deck document opened another way (File ▸ Open of a saved document,
@@ -304,7 +350,8 @@ export function activate(host: BundleHost): BundleHandle {
           string
         >)
       : {};
-    const plan = await exportPlan(host, prints);
+    await comments?.ready();
+    const plan = await exportPlan(host, prints, comments?.current() ?? null);
     const document = await documentBytes(host);
     const engine = await slideEngine();
     const out = engine.exportPptx(original, plan, document);
@@ -340,10 +387,49 @@ export function activate(host: BundleHost): BundleHandle {
   // The slide panels and the palette commands share one store: the pages,
   // their state, thumbnails and the active slide. It needs the v70 page
   // doors; the panels also need the panel and snapshot doors.
-  const store = host.supports("viewport.pages@1")
-    ? new SlidesStore(host)
-    : null;
-  if (store) disposers.push(() => store.dispose());
+  store = host.supports("viewport.pages@1") ? new SlidesStore(host) : null;
+  if (store) {
+    const s = store;
+    disposers.push(() => s.dispose());
+  }
+
+  // The deck's document context (editor ADR 307): a deck is slide content
+  // on every page, so its Normal-view keys apply wherever the user is in
+  // it. The context is registered for that alone (no frame is entered by
+  // double-click); the host drops it when the document is replaced, and
+  // the store says again whether the new one is a deck.
+  let deckContext = false;
+  if (
+    store &&
+    host.supports("contribute.editContext@1") &&
+    host.supports("shell.documentContext@1")
+  ) {
+    const s = store;
+    disposers.push(
+      host.contribute.editContext({
+        type: DECK_CONTEXT,
+        entry: "doubleClick",
+        matches: () => false,
+      }).dispose,
+    );
+    deckContext = true;
+    let held = false;
+    const sync = () => {
+      const want = s.isDeck();
+      if (want === held) return;
+      held = want;
+      host.shell.setDocumentContext(want ? DECK_CONTEXT : null);
+    };
+    if (host.supports("document.onDidOpen@1")) {
+      disposers.push(
+        host.document.onDidOpen(() => {
+          held = false; // the host dropped it with the old document
+        }).dispose,
+      );
+    }
+    disposers.push(s.subscribe(sync));
+    sync();
+  }
   const richPanels =
     store !== null &&
     host.supports("contribute.panel@1") &&
@@ -358,6 +444,10 @@ export function activate(host: BundleHost): BundleHandle {
       objectModel: model !== null,
       openDeck,
       exportDeck,
+      scopedKeys: deckContext,
+      ...(comments && host.supports("shell.openPanel@1")
+        ? { openComments: () => host.shell.openPanel(COMMENTS_PANEL_ID) }
+        : {}),
     });
     const menu = contributeMenu(host, (id) => commands.ids.has(id));
     disposers.push(
@@ -366,7 +456,44 @@ export function activate(host: BundleHost): BundleHandle {
     );
   }
 
+  // Slide ADR 716 — Slide Show, Presenter View, Rehearse Timings (one
+  // presentation, extensions ADR 345) and View ▸ Slide Sorter (a module
+  // view in place of the canvas).
+  if (store && host.supports("contribute.command@1")) {
+    const show = contributeShow(
+      host,
+      {
+        store,
+        readReport: async () => {
+          if (!host.supports("storage.parts@1")) return null;
+          try {
+            const bytes = await host.parts.read(REPORT_PART);
+            return bytes
+              ? (JSON.parse(new TextDecoder().decode(bytes)) as ImportReport)
+              : null;
+          } catch {
+            return null;
+          }
+        },
+      },
+      host.supports("contribute.view@1") && host.supports("render.snapshot@1")
+        ? () =>
+            host.contribute.view({
+              id: SORTER_VIEW,
+              title: t(SHOW.slideSorter),
+              render: makeSlideSorter(host, store),
+            })
+        : null,
+    );
+    runShow = show.run;
+    disposers.push(() => {
+      runShow = null;
+      show.dispose();
+    });
+  }
+
   if (store && richPanels) {
+    const s = store;
     // In the panel rail only while a deck is open: in any other document
     // the Slides and Notes launchers would sit beside the host's panels
     // with nothing to show. The rail reads `rail` at registration, so a
@@ -380,7 +507,7 @@ export function activate(host: BundleHost): BundleHandle {
         host.contribute.panel({
           id: SLIDES_PANEL_ID,
           title: t(SLIDES.title),
-          component: makeSlidesPanel(host, store),
+          component: makeSlidesPanel(host, s),
           defaultDock: "left",
           rail,
           // Three stacked slides.
@@ -392,7 +519,7 @@ export function activate(host: BundleHost): BundleHandle {
         host.contribute.panel({
           id: NOTES_PANEL_ID,
           title: t(NOTES.title),
-          component: makeNotesPanel(host, store),
+          component: makeNotesPanel(host, s),
           defaultDock: "bottom",
           rail,
           // A slide with lines of notes under it.
@@ -401,16 +528,36 @@ export function activate(host: BundleHost): BundleHandle {
             '<path d="M5 15h14M5 18.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
         }).dispose,
       );
+      if (comments) {
+        panelDisposers.push(
+          host.contribute.panel({
+            id: COMMENTS_PANEL_ID,
+            title: t(COMMENTS.title),
+            component: makeCommentsPanel(host, s, comments),
+            defaultDock: "right",
+            rail,
+            // A speech bubble.
+            iconSvg:
+              '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+          }).dispose,
+        );
+      }
     };
-    registerPanels(store.isDeck());
+    registerPanels(s.isDeck());
     disposers.push(
-      store.subscribe(() => {
-        if (store.isDeck() !== railed) registerPanels(store.isDeck());
+      s.subscribe(() => {
+        if (s.isDeck() !== railed) registerPanels(s.isDeck());
       }),
       () => {
         for (const d of panelDisposers.splice(0)) d();
       },
     );
+  }
+
+  // The comment markers on the active slide (the host's overlay layers).
+  if (store && comments) {
+    const markers = contributeCommentMarkers(host, store, comments);
+    if (markers) disposers.push(() => markers.dispose());
   }
 
   // ADR 323 — the slide, transition, notes, placeholder and deck fields as

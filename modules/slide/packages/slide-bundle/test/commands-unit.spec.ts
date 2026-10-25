@@ -49,7 +49,12 @@ import {
 } from "@paged-media/test-kit";
 
 import slideBundle from "../src/index";
+import { COMMENTS_PART, type SlideComment } from "../src/comments-model";
 import {
+  ADD_COMMENT_COMMAND,
+  DELETE_COMMENT_COMMAND,
+  REPLY_COMMENT_COMMAND,
+  RESOLVE_COMMENT_COMMAND,
   DUPLICATE_SLIDE_COMMAND,
   EXPORT_PPTX_COMMAND,
   IMPORT_PPTX_COMMAND,
@@ -372,5 +377,150 @@ describe("media.paged.slide.importPptx (unit)", () => {
     ).rejects.toThrow(/failed: this host cannot open a document/);
     expect(b.fake.mutations()).toEqual([]);
     b.dispose();
+  });
+});
+
+/** The deck's comments part, as the bundle wrote it into `parts`. */
+function commentsIn(parts: Map<string, number[]>) {
+  const key = [...parts.keys()].find((k) => k.endsWith(COMMENTS_PART));
+  return key
+    ? (JSON.parse(
+        new TextDecoder().decode(new Uint8Array(parts.get(key)!)),
+      ) as {
+        byPage: Record<string, SlideComment[]>;
+      })
+    : null;
+}
+
+const SLIDE = (id: string) => `plugin:media.paged.slide/slide/${id}`;
+
+describe("[plugin-slide.comments] the comment commands (unit)", () => {
+  function commentedDeck() {
+    const parts = new Map<string, number[]>();
+    const b = boot(
+      {
+        documentMeta: { pluginMetadata: [DECK_LABEL] } as never,
+        collections: { pages: [page("p1", 1), page("p2", 2)] },
+      },
+      {},
+      parts,
+    );
+    return { ...b, parts };
+  }
+
+  it("add, reply, resolve and delete write the comments part and never the document", async () => {
+    covers(
+      "command:media.paged.slide.command.addComment",
+      "command:media.paged.slide.command.replyComment",
+      "command:media.paged.slide.command.resolveComment",
+      "command:media.paged.slide.command.deleteComment",
+    );
+    const b = commentedDeck();
+    const { comment } = (await b.host.objects.invoke(ADD_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      text: "Use the brand blue",
+      author: "Ana Lima",
+      x: 100,
+      y: 40,
+    })) as { comment: string };
+    expect(comment).toMatch(/^\{[0-9A-F-]{36}\}$/);
+    let saved = commentsIn(b.parts)!.byPage.p2!;
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      id: comment,
+      author: "Ana Lima",
+      initials: "AL",
+      text: "Use the brand blue",
+      x: 100,
+      y: 40,
+      status: null,
+      replies: [],
+    });
+
+    const { reply } = (await b.host.objects.invoke(REPLY_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      comment,
+      text: "Done",
+      author: "Ben Ode",
+    })) as { reply: string };
+    saved = commentsIn(b.parts)!.byPage.p2!;
+    expect(saved[0]!.replies).toMatchObject([
+      { id: reply, author: "Ben Ode", text: "Done" },
+    ]);
+
+    await b.host.objects.invoke(RESOLVE_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      comment,
+    });
+    expect(commentsIn(b.parts)!.byPage.p2![0]!.status).toBe("resolved");
+    await b.host.objects.invoke(RESOLVE_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      comment,
+      resolved: false,
+    });
+    expect(commentsIn(b.parts)!.byPage.p2![0]!.status).toBeNull();
+
+    await b.host.objects.invoke(DELETE_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      comment,
+      reply,
+    });
+    expect(commentsIn(b.parts)!.byPage.p2![0]!.replies).toEqual([]);
+    await b.host.objects.invoke(DELETE_COMMENT_COMMAND, {
+      slide: SLIDE("p2"),
+      comment,
+    });
+    expect(commentsIn(b.parts)!.byPage.p2).toEqual([]);
+    // Comments live in the plugin's part: no engine mutation, no undo step.
+    expect(b.fake.mutations()).toEqual([]);
+    b.dispose();
+  });
+
+  it("refuses an unknown slide or comment, empty text, and a document that is not a deck", async () => {
+    covers(
+      "command:media.paged.slide.command.addComment",
+      "command:media.paged.slide.command.replyComment",
+      "command:media.paged.slide.command.resolveComment",
+      "command:media.paged.slide.command.deleteComment",
+    );
+    const b = commentedDeck();
+    await expect(
+      b.host.objects.invoke(ADD_COMMENT_COMMAND, {
+        slide: SLIDE("nope"),
+        text: "x",
+      }),
+    ).rejects.toThrow(/unknownAddress: no slide/);
+    await expect(
+      b.host.objects.invoke(ADD_COMMENT_COMMAND, {
+        slide: SLIDE("p1"),
+        text: "  ",
+      }),
+    ).rejects.toThrow(/invalid: a comment needs text/);
+    // No slide named and none active (no viewport): the caller must name one.
+    await expect(
+      b.host.objects.invoke(ADD_COMMENT_COMMAND, { text: "x" }),
+    ).rejects.toThrow(/unknownAddress/);
+    for (const [id, args] of [
+      [REPLY_COMMENT_COMMAND, { text: "x" }],
+      [RESOLVE_COMMENT_COMMAND, {}],
+      [DELETE_COMMENT_COMMAND, {}],
+    ] as const)
+      await expect(
+        b.host.objects.invoke(id, {
+          slide: SLIDE("p1"),
+          comment: "{nope}",
+          ...args,
+        }),
+      ).rejects.toThrow(/unknownAddress: no comment/);
+    b.dispose();
+
+    const plain = boot({ collections: { pages: [page("p1", 1)] } });
+    await expect(
+      plain.host.objects.invoke(ADD_COMMENT_COMMAND, {
+        slide: SLIDE("p1"),
+        text: "x",
+      }),
+    ).rejects.toThrow(/failed: this document is not a slide deck/);
+    plain.dispose();
   });
 });

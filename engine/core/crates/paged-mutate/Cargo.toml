@@ -49,3 +49,5 @@ bytes = { workspace = true }
 # W1.16 — the anchored-object round-trip test builds an in-memory IDML
 # package (anchored frame nested in a story) to drive `Document::open`.
 zip = { workspace = true }
+# Engine ADR 1018 — the based-on cycle refusal over random style chains.
+proptest = { version = "1", default-features = false, features = ["std"] }

@@ -55,6 +55,26 @@ export const NOTES = defineMessages("slide.notes", {
   placeholder: "Click to add notes",
 });
 
+export const COMMENTS = defineMessages("slide.comments", {
+  title: "Comments",
+  empty: "No slide selected.",
+  heading: "Slide {number} · comments",
+  none: "No comments on this slide.",
+  newPlaceholder: "Add a comment",
+  add: "Comment",
+  replyPlaceholder: "Reply",
+  reply: "Reply",
+  resolve: "Resolve",
+  reopen: "Reopen",
+  resolved: "Resolved",
+  delete: "Delete",
+  deleteReply: "Delete reply",
+  yourName: "Your name",
+  defaultAuthor: "paged user",
+  noDeck: "Comments are kept for decks opened from PowerPoint.",
+  showResolved: "Show resolved",
+});
+
 export const PANELS = defineMessages("slide.panels", {
   slide: "Slide",
   transition: "Transition",
@@ -72,6 +92,12 @@ export const MODEL = defineMessages("slide.model", {
   importPptx: "Open a PowerPoint deck",
   duplicateSlide: "Duplicate slide",
   exportPptx: "Export as a PowerPoint deck",
+  addComment: "Add a comment",
+  replyComment: "Reply to a comment",
+  resolveComment: "Resolve or reopen a comment",
+  deleteComment: "Delete a comment",
+  previousSlide: "Previous slide",
+  nextSlide: "Next slide",
 });
 
 /** The palette commands (commands.ts). */
@@ -83,6 +109,53 @@ export const COMMANDS = defineMessages("slide.commands", {
   moveSlideDown: "Move slide down",
   importPptx: "Open PowerPoint deck…",
   exportPptx: "Export PowerPoint deck…",
+  previousSlide: "Previous slide",
+  nextSlide: "Next slide",
+  addComment: "New comment",
+});
+
+/** The slide show, the presenter view and the slide sorter (show/,
+ *  views/; slide ADR 716). */
+export const SHOW = defineMessages("slide.show", {
+  fromBeginning: "Slide show from the beginning",
+  fromCurrent: "Slide show from the current slide",
+  presenterView: "Presenter view",
+  rehearseTimings: "Rehearse timings",
+  slideSorter: "Slide sorter",
+  title: "Slide show",
+  endOfShow: "End of slide show. Click or press a key to exit.",
+  slideOf: "Slide {at} of {of}",
+  goTo: "Go to slide {number}",
+  next: "Next",
+  nextSlide: "Next slide",
+  previousSlide: "Previous slide",
+  endPreview: "End of slide show",
+  notes: "Notes",
+  noNotes: "No notes for this slide.",
+  zoomIn: "Make the notes larger",
+  zoomOut: "Make the notes smaller",
+  pause: "Pause the timer",
+  resume: "Resume the timer",
+  reset: "Reset the timer",
+  black: "Black screen",
+  grid: "See all slides",
+  laser: "Laser pointer",
+  pen: "Pen",
+  erase: "Erase the ink",
+  end: "End show",
+  recording: "Recording · slide {time} · total {total}",
+  noAudience:
+    "The audience window did not open; the presenter view is on this screen.",
+  hidden: "Hidden",
+  normalView: "Normal",
+  selected: "{count} selected",
+  hide: "Hide",
+  unhide: "Unhide",
+  transition: "Transition",
+  noTransition: "None",
+  sorterEmpty: "No slides. Open a PowerPoint deck with File ▸ Open.",
+  noWebGpu:
+    "Transitions need WebGPU, which this browser does not offer: the show cuts between slides.",
 });
 
 /** The menu items this bundle adds (menu.ts): the path stays English (it is
@@ -96,6 +169,15 @@ defineMessages("menu", {
   "Delete slide": "Delete slide",
   "Move slide up": "Move slide up",
   "Move slide down": "Move slide down",
+  "Previous slide": "Previous slide",
+  "Next slide": "Next slide",
+  "New comment": "New comment",
+  "Slide Show": "Slide Show",
+  "From Beginning": "From Beginning",
+  "From Current Slide": "From Current Slide",
+  "Presenter View": "Presenter View",
+  "Rehearse Timings": "Rehearse Timings",
+  "Slide Sorter": "Slide Sorter",
 });
 
 /** The palette category of this bundle's commands (an identity, labelled

@@ -2666,8 +2666,8 @@ fn measure_cell_paragraph(
             },
             tracking: resolved_runs[i].tracking,
             font_id: font_ids[i],
-            underline: resolved_runs[i].underline.unwrap_or(false),
-            strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+            underline: resolved_runs[i].draws_underline(),
+            strikethru: resolved_runs[i].draws_strike(),
             substituted: substituted_flags[i],
             baseline_shift_pt: {
                 // Add the `Position` (super/subscript) baseline offset
@@ -2920,8 +2920,8 @@ pub(super) fn emit_cell_paragraph(
             },
             tracking: resolved_runs[i].tracking,
             font_id: font_ids[i],
-            underline: resolved_runs[i].underline.unwrap_or(false),
-            strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+            underline: resolved_runs[i].draws_underline(),
+            strikethru: resolved_runs[i].draws_strike(),
             substituted: substituted_flags[i],
             baseline_shift_pt: {
                 // Add the `Position` (super/subscript) baseline offset

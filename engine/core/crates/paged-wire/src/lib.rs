@@ -1001,6 +1001,77 @@ impl From<Vec<u8>> for ByteBuf {
     }
 }
 
+/// Engine ADR 1021 — how a find pattern reads.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum FindMode {
+    /// The text as written (Word's specials `^p` `^t` `^l` `^m` `^?` `^#`
+    /// `^$` `^^` still apply).
+    #[default]
+    Literal,
+    /// Word's wildcards: `?` `*` `@` `<` `>` `[…]` `[!…]` `{n;m}` `(…)`.
+    Wildcards,
+    /// An ECMAScript regular expression.
+    Regex,
+}
+
+/// Engine ADR 1021 — what to find.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FindSpec {
+    pub find: String,
+    /// One story; every story when absent.
+    #[serde(default)]
+    pub story_id: Option<String>,
+    #[serde(default)]
+    pub mode: FindMode,
+    #[serde(default)]
+    pub match_case: bool,
+    #[serde(default)]
+    pub whole_word: bool,
+    /// Only hits in paragraphs of this style (`ParagraphStyle/<id>`).
+    #[serde(default)]
+    pub paragraph_style: Option<String>,
+    /// Only hits whose runs all carry this character style.
+    #[serde(default)]
+    pub character_style: Option<String>,
+    /// At most this many hits.
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// Engine ADR 1021 — one find hit.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FindHit {
+    pub story_id: String,
+    /// `[start, end)` in caret offsets: UTF-8 bytes, one per paragraph
+    /// break (what `insertText` / `deleteRange` take).
+    pub start: u32,
+    pub end: u32,
+    /// The same hit in story characters (what `applyStyle` and the
+    /// story-range paths take).
+    pub char_start: u32,
+    pub char_end: u32,
+    /// The paragraph the hit starts in.
+    pub paragraph: u32,
+    /// The matched text.
+    pub text: String,
+    /// Up to 30 characters either side, within the paragraph.
+    pub context: String,
+    /// Where the hit starts in `context`, in bytes.
+    pub context_offset: u32,
+    /// The regex groups `$1`…, `None` for one that did not take part.
+    #[serde(default)]
+    pub groups: Vec<Option<String>>,
+}
+
 /// A content-space mutation. Phase 1 carries the *envelope* only —
 /// the worker rejects each variant with `WorkerError::NotImplemented`.
 /// Phase 3 lights these up incrementally.
@@ -2222,6 +2293,55 @@ pub enum Mutation {
         path: paged_mutate::PropertyPath,
         value: paged_mutate::Value,
     },
+    // rides v76 (added before first consumer sync) — engine ADR 1018 / 1021.
+    /// Engine ADR 1018 — re-parent style `style_id` of `collection` onto
+    /// `based_on` (`None`: no parent). Refused when that would make the
+    /// style inherit from itself. Undoable in one step.
+    SetStyleBasedOn {
+        collection: paged_mutate::StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        based_on: Option<String>,
+    },
+    /// Engine ADR 1018 — the list level of the paragraphs touching story
+    /// chars `[start, end)` (the caret's paragraph when equal): `level`
+    /// 1–9, or `delta` levels from where each stands (Tab / Shift+Tab).
+    SetListLevel {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        level: Option<u32>,
+        #[serde(default)]
+        delta: Option<i32>,
+    },
+    /// Engine ADR 1018 — Word's Restart Numbering (or, with
+    /// `continueNumbering`, Continue Numbering) on the paragraphs touching
+    /// `[start, end)`, at `startAt` when given.
+    RestartNumbering {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        start_at: Option<i32>,
+        #[serde(default)]
+        continue_numbering: bool,
+    },
+    /// Engine ADR 1021 — find `spec` and replace each hit (the first only
+    /// unless `replaceAll`) with `replace` (Word's `^p` `^t` `^l` `^&` `^^`,
+    /// `$1`… in regex mode, `\1`… with wildcards), styled with
+    /// `paragraphStyle` / `characterStyle` when given. Replace All is ONE
+    /// undo step. Refused when nothing matches.
+    FindReplace {
+        spec: FindSpec,
+        replace: String,
+        #[serde(default)]
+        replace_all: bool,
+        #[serde(default)]
+        paragraph_style: Option<String>,
+        #[serde(default)]
+        character_style: Option<String>,
+    },
     // ── W0.5 wire-expansion ─────────────────────────────────────────
     /// W0.5 — insert an Oval (Ellipse tool). `page_id` + page-local
     /// `bounds` `(top, left, bottom, right)`; the model resolves the
@@ -2703,6 +2823,10 @@ mutation_vocabulary! {
     RenameTableStyle,
     DeleteTableStyle,
     SetStyleProperty,
+    SetStyleBasedOn,
+    SetListLevel,
+    RestartNumbering,
+    FindReplace,
     InsertOval,
     InsertGuide,
     MoveGuide,

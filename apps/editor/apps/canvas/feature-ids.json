@@ -3,10 +3,10 @@
   "version": 1,
   "counts": {
     "chrome": 4,
-    "command": 528,
-    "keybinding": 122,
-    "menu": 375,
-    "panel": 129,
+    "command": 539,
+    "keybinding": 131,
+    "menu": 383,
+    "panel": 130,
     "tool": 81
   },
   "features": [
@@ -1896,6 +1896,16 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "command:media.paged.slide.command.addComment",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.deleteComment",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "command:media.paged.slide.command.deleteSlide",
       "kind": "command",
       "owner": "media.paged.slide"
@@ -1927,6 +1937,51 @@
     },
     {
       "id": "command:media.paged.slide.command.newSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.nextSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.presenterView",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.previousSlide",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.rehearseTimings",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.replyComment",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.resolveComment",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideShowFromBeginning",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideShowFromCurrent",
+      "kind": "command",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "command:media.paged.slide.command.slideSorter",
       "kind": "command",
       "owner": "media.paged.slide"
     },
@@ -2716,6 +2771,11 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "keybinding:alt+f5→media.paged.slide.command.presenterView",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:alt+shift+cmd+0→paged.view.zoomFit",
       "kind": "keybinding",
       "owner": "editor"
@@ -2876,6 +2936,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:cmd+d→media.paged.slide.command.duplicateSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:cmd+d→paged.insert.placeImage",
       "kind": "keybinding",
       "owner": "editor"
@@ -2919,6 +2984,11 @@
       "id": "keybinding:cmd+l→paged.object.lock",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:cmd+m→media.paged.slide.command.newSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:cmd+r→media.paged.doc.command.word.alignRight",
@@ -3106,6 +3176,11 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "keybinding:ctrl+d→media.paged.slide.command.duplicateSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:ctrl+d→paged.insert.placeImage",
       "kind": "keybinding",
       "owner": "editor"
@@ -3129,6 +3204,11 @@
       "id": "keybinding:ctrl+l→paged.object.lock",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:ctrl+m→media.paged.slide.command.newSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:ctrl+r→media.paged.sheet.command.fillRight",
@@ -3206,6 +3286,11 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:f5→media.paged.slide.command.slideShowFromBeginning",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:home→paged.view.firstPage",
       "kind": "keybinding",
       "owner": "editor"
@@ -3216,9 +3301,19 @@
       "owner": "editor"
     },
     {
+      "id": "keybinding:pagedown→media.paged.slide.command.nextSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "keybinding:pagedown→paged.view.nextPage",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:pageup→media.paged.slide.command.previousSlide",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:pageup→paged.view.previousPage",
@@ -3249,6 +3344,11 @@
       "id": "keybinding:shift+f10→paged.edit.contextMenu",
       "kind": "keybinding",
       "owner": "editor"
+    },
+    {
+      "id": "keybinding:shift+f5→media.paged.slide.command.slideShowFromCurrent",
+      "kind": "keybinding",
+      "owner": "media.paged.slide"
     },
     {
       "id": "keybinding:shift+tab→media.paged.doc.command.word.listLevelUp",
@@ -4991,6 +5091,26 @@
       "owner": "media.paged.sheet"
     },
     {
+      "id": "menu:Slide Show/From Beginning",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/From Current Slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/Presenter View",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide Show/Rehearse Timings",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/Delete slide",
       "kind": "menu",
       "owner": "media.paged.slide"
@@ -5011,7 +5131,22 @@
       "owner": "media.paged.slide"
     },
     {
+      "id": "menu:Slide/New comment",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
       "id": "menu:Slide/New slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Next slide",
+      "kind": "menu",
+      "owner": "media.paged.slide"
+    },
+    {
+      "id": "menu:Slide/Previous slide",
       "kind": "menu",
       "owner": "media.paged.slide"
     },
@@ -5099,6 +5234,11 @@
       "id": "menu:View/Show text threads",
       "kind": "menu",
       "owner": "editor"
+    },
+    {
+      "id": "menu:View/Slide Sorter",
+      "kind": "menu",
+      "owner": "media.paged.slide"
     },
     {
       "id": "menu:View/Snap to points",
@@ -5294,6 +5434,11 @@
       "id": "panel:media.paged.sheet.panel.workbook",
       "kind": "panel",
       "owner": "media.paged.sheet"
+    },
+    {
+      "id": "panel:media.paged.slide.panel.comments",
+      "kind": "panel",
+      "owner": "media.paged.slide"
     },
     {
       "id": "panel:media.paged.slide.panel.deck",

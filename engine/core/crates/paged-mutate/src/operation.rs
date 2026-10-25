@@ -1598,6 +1598,46 @@ pub enum PropertyPath {
     /// an even-odd outline whose contours do not cross and reports the
     /// rest as lost. Paint-only (`frame_style`).
     FrameFillRule,
+
+    // ---- engine ADR 1018 — Word's character and paragraph additions --
+    /// A run's highlight (Word's `w:highlight`): `Value::ColorRef` of a
+    /// swatch. `ColorRef(None)` clears the run's own value (inherit);
+    /// `ColorRef(Some("Swatch/None"))` says "no highlight" over a style
+    /// that sets one. On a `StoryRange`, or a character / paragraph style
+    /// through `SetStyleProperty`. Paint-only.
+    CharacterHighlightColor,
+    /// Hidden text (`w:vanish`): `Value::Bool`. A hidden run takes no room
+    /// unless `documentShowHiddenText` is on. Reflows.
+    CharacterHidden,
+    /// The underline's kind: `Value::Text` of `none`, `single`, `words`,
+    /// `double`, `thick`, `dotted`, `dashed`, `dotDash`, `dotDotDash`,
+    /// `wave` or `doubleWave` (Word's `w:u` names; its heavy and long
+    /// variants are accepted as their plain kind). Setting a kind turns
+    /// the underline on (`none` turns it off); `""` clears the kind and
+    /// leaves the switch. A suffix `@on`, `@off` or `@inherit` sets the
+    /// switch explicitly instead — the form an undo carries.
+    CharacterUnderlineType,
+    /// The underline's colour: `Value::ColorRef`; `None` draws in the
+    /// text's colour. Paint-only.
+    CharacterUnderlineColor,
+    /// Double strikethrough (`w:dstrike`): `Value::Bool`. Paint-only.
+    CharacterDoubleStrikethrough,
+    /// Paragraph shading on or off, set on the paragraph itself (Word's
+    /// direct `w:shd`) or on a paragraph style: `Value::Bool`.
+    ParagraphShadingOn,
+    /// The shading's swatch: `Value::ColorRef` (`None` inherits).
+    ParagraphShadingColor,
+    /// The shading's tint in percent: `Value::Length` (`None` inherits).
+    ParagraphShadingTint,
+    /// Paragraph border on or off (Word's direct `w:pBdr`): `Value::Bool`.
+    ParagraphBorderOn,
+    /// The border's swatch: `Value::ColorRef` (`None` inherits).
+    ParagraphBorderColor,
+    /// The border's stroke weight in pt: `Value::Length` (`None` inherits).
+    ParagraphBorderWeight,
+    /// Word's "show hidden text", on `NodeId::Document`: `Value::Bool`,
+    /// default false. A whole-document reflow.
+    DocumentShowHiddenText,
 }
 
 /// Phase H — which corner of a `PathAnchor` the path-point edit
@@ -1976,6 +2016,18 @@ impl PropertyPath {
             PropertyPath::DocumentFootnoteContinuingRuleOn => "document.footnoteContinuingRuleOn",
             PropertyPath::FramePdfPage => "frame.pdfPage",
             PropertyPath::FrameFillRule => "frame.fillRule",
+            PropertyPath::CharacterHighlightColor => "character.highlightColor",
+            PropertyPath::CharacterHidden => "character.hidden",
+            PropertyPath::CharacterUnderlineType => "character.underlineType",
+            PropertyPath::CharacterUnderlineColor => "character.underlineColor",
+            PropertyPath::CharacterDoubleStrikethrough => "character.doubleStrikethrough",
+            PropertyPath::ParagraphShadingOn => "paragraph.shadingOn",
+            PropertyPath::ParagraphShadingColor => "paragraph.shadingColor",
+            PropertyPath::ParagraphShadingTint => "paragraph.shadingTint",
+            PropertyPath::ParagraphBorderOn => "paragraph.borderOn",
+            PropertyPath::ParagraphBorderColor => "paragraph.borderColor",
+            PropertyPath::ParagraphBorderWeight => "paragraph.borderWeight",
+            PropertyPath::DocumentShowHiddenText => "document.showHiddenText",
         }
     }
 }
@@ -3298,6 +3350,117 @@ pub struct NumberingListSpec {
     /// `ContinueNumbersAcrossDocuments` (round-trip only). `None` ⇒ false.
     #[serde(default)]
     pub continue_across_documents: Option<bool>,
+    /// Engine ADR 1018 — Word's per-level definitions, level 1 first.
+    /// Additive: absent reads as none (an InDesign list).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub levels: Vec<NumberingLevelSpec>,
+}
+
+/// Engine ADR 1018 — one level of a Word list on the wire, mirroring
+/// `paged_model::NumberingLevelDef`. Every field but `level` optional.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct NumberingLevelSpec {
+    /// 1 to 9.
+    pub level: u32,
+    /// `NumberedList`, `BulletList` or `NoList`.
+    #[serde(default)]
+    pub list_type: Option<String>,
+    /// An InDesign sample string (`"1, 2, 3, 4..."`) or Word's numFmt name
+    /// (`decimal`, `lowerRoman`, `upperLetter`, …).
+    #[serde(default)]
+    pub format: Option<String>,
+    /// The marker: `^1.^2.` (InDesign) or `%1.%2.` (Word).
+    #[serde(default)]
+    pub expression: Option<String>,
+    /// `tab`, `space` or `nothing`: what follows the marker.
+    #[serde(default)]
+    pub suffix: Option<String>,
+    #[serde(default)]
+    pub start_at: Option<i32>,
+    /// Word's lvlRestart: restart after a paragraph at level `1..=k`; 0 never.
+    #[serde(default)]
+    pub restart_after: Option<u32>,
+    #[serde(default)]
+    pub left_indent: Option<f32>,
+    #[serde(default)]
+    pub first_line_indent: Option<f32>,
+    #[serde(default)]
+    pub tab_position: Option<f32>,
+    /// The bullet as a one-character string.
+    #[serde(default)]
+    pub bullet_character: Option<String>,
+    #[serde(default)]
+    pub bullet_font: Option<String>,
+    #[serde(default)]
+    pub marker_character_style: Option<String>,
+}
+
+impl NumberingLevelSpec {
+    pub fn to_def(&self) -> paged_model::NumberingLevelDef {
+        paged_model::NumberingLevelDef {
+            level: self.level,
+            list_type: self.list_type.clone(),
+            format: self.format.clone(),
+            expression: self.expression.clone(),
+            suffix: self
+                .suffix
+                .as_deref()
+                .and_then(paged_model::ListSuffix::from_name),
+            start_at: self.start_at,
+            restart_after: self.restart_after,
+            left_indent: self.left_indent,
+            first_line_indent: self.first_line_indent,
+            tab_position: self.tab_position,
+            bullet_character: self
+                .bullet_character
+                .as_deref()
+                .and_then(|s| s.chars().next())
+                .map(|c| c as u32),
+            bullet_font: self.bullet_font.clone(),
+            marker_character_style: self.marker_character_style.clone(),
+        }
+    }
+
+    pub fn from_def(d: &paged_model::NumberingLevelDef) -> Self {
+        Self {
+            level: d.level,
+            list_type: d.list_type.clone(),
+            format: d.format.clone(),
+            expression: d.expression.clone(),
+            suffix: d.suffix.map(|s| s.as_name().to_string()),
+            start_at: d.start_at,
+            restart_after: d.restart_after,
+            left_indent: d.left_indent,
+            first_line_indent: d.first_line_indent,
+            tab_position: d.tab_position,
+            bullet_character: d
+                .bullet_character
+                .and_then(char::from_u32)
+                .map(|c| c.to_string()),
+            bullet_font: d.bullet_font.clone(),
+            marker_character_style: d.marker_character_style.clone(),
+        }
+    }
+}
+
+/// Engine ADR 1018 — one paragraph's list state, exactly as the model
+/// holds it (`None` is "inherit"), for `SetParagraphListState`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ParagraphListState {
+    /// The paragraph's index in the story.
+    pub paragraph: u32,
+    #[serde(default)]
+    pub level: Option<u32>,
+    #[serde(default)]
+    pub numbering_continue: Option<bool>,
+    #[serde(default)]
+    pub numbering_start_at: Option<i32>,
 }
 
 /// Wire description of a colour group, mirroring `ColorGroupEntry`.
@@ -3873,6 +4036,52 @@ pub enum Operation {
         style_id: String,
         path: PropertyPath,
         value: Value,
+    },
+    /// Engine ADR 1018 — re-parent a style: `based_on` is the new parent's
+    /// self id in the same collection, `None` the collection's root (no
+    /// parent). Refused when the parent is missing, is the style itself,
+    /// or inherits from it (a cycle). Inverse: the same op with the prior
+    /// parent. // rides v76 (added before first consumer sync).
+    SetStyleBasedOn {
+        collection: StyleCollection,
+        style_id: String,
+        #[serde(default)]
+        based_on: Option<String>,
+    },
+    /// Engine ADR 1018 — move the paragraphs touching story chars
+    /// `[start, end)` (the caret's paragraph when `start == end`) to list
+    /// level `level`, or by `delta` levels from where each stands (Word's
+    /// Tab / Shift+Tab in a list), clamped to 1..=9. Inverse:
+    /// `SetParagraphListState`. // rides v76.
+    SetListLevel {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        level: Option<u32>,
+        #[serde(default)]
+        delta: Option<i32>,
+    },
+    /// Engine ADR 1018 — Word's Restart Numbering on the paragraphs
+    /// touching `[start, end)`: their count starts again
+    /// (`NumberingContinue` false), at `start_at` when given. With
+    /// `continue_numbering`, the reverse (Continue Numbering: the count
+    /// goes on). Inverse: `SetParagraphListState`. // rides v76.
+    RestartNumbering {
+        story_id: String,
+        start: u32,
+        end: u32,
+        #[serde(default)]
+        start_at: Option<i32>,
+        #[serde(default)]
+        continue_numbering: bool,
+    },
+    /// Engine ADR 1018 — inverse-only: put each listed paragraph's list
+    /// level, `NumberingContinue` and `NumberingStartAt` back exactly.
+    /// Inverse: the same op with the values it replaced.
+    SetParagraphListState {
+        story_id: String,
+        entries: Vec<ParagraphListState>,
     },
     /// SDK Phase 5 (v1 sweep) — multi-target Bezier boolean op.
     /// `kept` is the survivor (its path is replaced with the

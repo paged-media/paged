@@ -1785,6 +1785,7 @@ pub(super) fn numbering_list_def_from_spec(
         name: spec.name.clone(),
         continue_across_stories: spec.continue_across_stories,
         continue_across_documents: spec.continue_across_documents,
+        levels: spec.levels.iter().map(|l| l.to_def()).collect(),
     }
 }
 
@@ -1794,6 +1795,11 @@ pub fn numbering_list_spec_from_def(def: &paged_model::NumberingListDef) -> Numb
         name: def.name.clone(),
         continue_across_stories: def.continue_across_stories,
         continue_across_documents: def.continue_across_documents,
+        levels: def
+            .levels
+            .iter()
+            .map(crate::operation::NumberingLevelSpec::from_def)
+            .collect(),
     }
 }
 
@@ -2562,6 +2568,22 @@ pub(super) fn set_paragraph_style_field(
         PropertyPath::CharacterKerningMethod => {
             Ok(super::paragraph::set_para_text_field(path, value, &mut def.kerning_method)?.0)
         }
+        // Engine ADR 1018 — Word's additions on a paragraph style.
+        p if super::word::is_decoration_path(p) => Ok(super::word::set_decoration_field(
+            &mut def.decorations,
+            &mut def.underline,
+            p,
+            value,
+        )
+        .expect("a decoration path")?
+        .0),
+        p if super::word::is_shading_border_path(p) => {
+            Ok(
+                super::word::set_shading_border_field(&mut def.shading, &mut def.border, p, value)
+                    .expect("a shading / border path")?
+                    .0,
+            )
+        }
         _ => Err(OperationError::UnsupportedProperty {
             node: style_node_marker(style_id),
             path,
@@ -2636,6 +2658,15 @@ pub(super) fn set_character_style_field(
         PropertyPath::CharacterKerningMethod => {
             Ok(super::paragraph::set_para_text_field(path, value, &mut def.kerning_method)?.0)
         }
+        // Engine ADR 1018 — Word's additions on a character style.
+        p if super::word::is_decoration_path(p) => Ok(super::word::set_decoration_field(
+            &mut def.decorations,
+            &mut def.underline,
+            p,
+            value,
+        )
+        .expect("a decoration path")?
+        .0),
         _ => Err(OperationError::UnsupportedProperty {
             node: style_node_marker(style_id),
             path,
@@ -2931,6 +2962,128 @@ pub(super) fn apply_set_style_property(
             style_id: style_id.to_string(),
             path,
             value: prior,
+        },
+        invalidation: InvalidationHint {
+            structural: true,
+            ..Default::default()
+        },
+    })
+}
+
+/// The `based_on` slots of one style collection, by self id.
+fn based_on_map(
+    doc: &Document,
+    collection: StyleCollection,
+) -> std::collections::HashMap<String, Option<String>> {
+    let s = &doc.styles;
+    match collection {
+        StyleCollection::Paragraph => s
+            .paragraph_styles
+            .iter()
+            .map(|(k, v)| (k.clone(), v.based_on.clone()))
+            .collect(),
+        StyleCollection::Character => s
+            .character_styles
+            .iter()
+            .map(|(k, v)| (k.clone(), v.based_on.clone()))
+            .collect(),
+        StyleCollection::Object => s
+            .object_styles
+            .iter()
+            .map(|(k, v)| (k.clone(), v.based_on.clone()))
+            .collect(),
+        StyleCollection::Cell => s
+            .cell_styles
+            .iter()
+            .map(|(k, v)| (k.clone(), v.based_on.clone()))
+            .collect(),
+        StyleCollection::Table => s
+            .table_styles
+            .iter()
+            .map(|(k, v)| (k.clone(), v.based_on.clone()))
+            .collect(),
+    }
+}
+
+/// Engine ADR 1018 — whether making `style_id` inherit from `parent`
+/// closes a loop: walking `parent`'s chain reaches `style_id`. A chain
+/// that already loops (a damaged import) stops at the first repeat.
+pub fn based_on_makes_cycle(
+    parents: &std::collections::HashMap<String, Option<String>>,
+    style_id: &str,
+    parent: &str,
+) -> bool {
+    let mut seen = std::collections::HashSet::new();
+    let mut cur = Some(parent.to_string());
+    while let Some(id) = cur {
+        if id == style_id {
+            return true;
+        }
+        if !seen.insert(id.clone()) {
+            return false;
+        }
+        cur = parents.get(&id).cloned().flatten();
+    }
+    false
+}
+
+pub(super) fn apply_set_style_based_on(
+    doc: &mut Document,
+    collection: StyleCollection,
+    style_id: &str,
+    based_on: Option<&str>,
+) -> Result<AppliedOperation, OperationError> {
+    let parents = based_on_map(doc, collection);
+    let Some(prior) = parents.get(style_id).cloned() else {
+        return Err(OperationError::CollectionEntryNotFound {
+            collection: "style".to_string(),
+            id: style_id.to_string(),
+        });
+    };
+    let invalid = |reason: String| OperationError::InvalidValue {
+        node: style_node_marker(style_id),
+        path: PropertyPath::AppliedParagraphStyle,
+        reason,
+    };
+    if let Some(parent) = based_on {
+        if !parents.contains_key(parent) {
+            return Err(invalid(format!(
+                "no style {parent:?} to base {style_id:?} on"
+            )));
+        }
+        if based_on_makes_cycle(&parents, style_id, parent) {
+            return Err(invalid(format!(
+                "{style_id:?} cannot be based on {parent:?}: {parent:?} already inherits from it"
+            )));
+        }
+    }
+    let next = based_on.map(str::to_string);
+    let s = &mut doc.styles;
+    let slot = match collection {
+        StyleCollection::Paragraph => s
+            .paragraph_styles
+            .get_mut(style_id)
+            .map(|d| &mut d.based_on),
+        StyleCollection::Character => s
+            .character_styles
+            .get_mut(style_id)
+            .map(|d| &mut d.based_on),
+        StyleCollection::Object => s.object_styles.get_mut(style_id).map(|d| &mut d.based_on),
+        StyleCollection::Cell => s.cell_styles.get_mut(style_id).map(|d| &mut d.based_on),
+        StyleCollection::Table => s.table_styles.get_mut(style_id).map(|d| &mut d.based_on),
+    }
+    .expect("present in the map read above");
+    *slot = next.clone();
+    Ok(AppliedOperation {
+        op: Operation::SetStyleBasedOn {
+            collection,
+            style_id: style_id.to_string(),
+            based_on: next,
+        },
+        inverse: Operation::SetStyleBasedOn {
+            collection,
+            style_id: style_id.to_string(),
+            based_on: prior,
         },
         invalidation: InvalidationHint {
             structural: true,

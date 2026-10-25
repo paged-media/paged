@@ -19,9 +19,10 @@
 
 // PLUGIN MENUS — paged.slide (modules/slide/packages/slide-bundle/src/menu.ts).
 //
-// Seven entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
-// deck…, and five slide verbs under the Slide menu, which the bar folds
-// into Plugins ▸ Slide beside the panels.
+// Ten entries: File ▸ Open PowerPoint deck… and File ▸ Export PowerPoint
+// deck…, and eight slide verbs under the Slide menu (New, Duplicate,
+// Delete, Move up / down, Previous / Next slide, New comment), which the
+// bar folds into Plugins ▸ Slide beside the panels.
 //
 // ORDER MATTERS here (serial): the document starts as a blank one, where
 // only Open applies; the deck is then opened (through the importer, as
@@ -67,7 +68,10 @@ const DUPLICATE = "Slide/Duplicate slide";
 const DELETE = "Slide/Delete slide";
 const UP = "Slide/Move slide up";
 const DOWN = "Slide/Move slide down";
-const SLIDE_VERBS = [NEW, DUPLICATE, DELETE, UP, DOWN];
+const PREVIOUS = "Slide/Previous slide";
+const NEXT = "Slide/Next slide";
+const COMMENT = "Slide/New comment";
+const SLIDE_VERBS = [NEW, DUPLICATE, DELETE, UP, DOWN, PREVIOUS, NEXT, COMMENT];
 
 interface CanvasProbe {
   __canvas: {
@@ -173,9 +177,41 @@ test.describe.serial("plugin menus — paged.slide", () => {
       .poll(async () => (await pageIds(live)).length, { timeout: 30_000 })
       .toBe(10);
     await expectEnabled(live, NEW, true);
-    for (const path of [EXPORT, DUPLICATE, DELETE, DOWN])
+    for (const path of [EXPORT, DUPLICATE, DELETE, DOWN, NEXT, COMMENT])
       await expectEnabled(live, path, true);
     await expectGreyedAndInert(live, UP);
+    await expectGreyedAndInert(live, PREVIOUS);
+  });
+
+  test("Slide/Next slide and Slide/Previous slide — the view steps through the deck, the document unchanged", async () => {
+    covers("menu:Slide/Next slide");
+    covers("menu:Slide/Previous slide");
+    covers("command:media.paged.slide.command.nextSlide");
+    covers("command:media.paged.slide.command.previousSlide");
+    await expectGreyedAndInert(bare, NEXT);
+    await expectGreyedAndInert(bare, PREVIOUS);
+    await toFirstSlide(live);
+    const next = await clickEntry(live, NEXT, `${C}.nextSlide`);
+    expect(next.after, "going to a slide edits nothing").toBe(next.before);
+    // On slide 2 there is a slide above: Previous applies, and goes back.
+    await expectEnabled(live, PREVIOUS, true);
+    await expectEnabled(live, UP, true);
+    const previous = await clickEntry(live, PREVIOUS, `${C}.previousSlide`);
+    expect(previous.after).toBe(previous.before);
+    await expectEnabled(live, PREVIOUS, false);
+  });
+
+  test("Slide/New comment — raises the Comments panel on the active slide", async () => {
+    covers("menu:Slide/New comment");
+    covers("command:media.paged.slide.command.addComment");
+    await expectGreyedAndInert(bare, COMMENT);
+    await toFirstSlide(live);
+    const out = await clickEntry(live, COMMENT, `${C}.addComment`);
+    expect(out.after, "raising the panel edits nothing").toBe(out.before);
+    await expect(live.locator('[data-comments-panel="ready"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(live.locator("[data-comment-new]")).toBeVisible();
   });
 
   test("Slide/New slide — adds a slide after the active one; one Undo removes it", async () => {
