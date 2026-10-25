@@ -61,7 +61,25 @@
       "media.paged.doc.command.word.pasteFormat",
       "media.paged.doc.command.word.lineSpacing1",
       "media.paged.doc.command.word.lineSpacing15",
-      "media.paged.doc.command.word.lineSpacing2"
+      "media.paged.doc.command.word.lineSpacing2",
+      "media.paged.doc.command.word.doubleUnderline",
+      "media.paged.doc.command.word.hidden",
+      "media.paged.doc.command.word.highlight",
+      "media.paged.doc.command.word.shading",
+      "media.paged.doc.command.word.borderBottom",
+      "media.paged.doc.command.word.borderBox",
+      "media.paged.doc.command.word.borderNone",
+      "media.paged.doc.command.word.showHidden",
+      "media.paged.doc.command.word.clearParagraph",
+      "media.paged.doc.command.word.restartNumbering",
+      "media.paged.doc.command.word.continueNumbering",
+      "media.paged.doc.command.word.listOutline",
+      "media.paged.doc.command.word.listLegal",
+      "media.paged.doc.command.word.listBullets",
+      "media.paged.doc.command.word.styleUpdate",
+      "media.paged.doc.command.word.styleModify",
+      "media.paged.doc.command.word.styleNew",
+      "media.paged.doc.command.word.applyStyles"
     ],
     "importers": ["media.paged.doc.importer.docx"],
     "exporters": ["media.paged.doc.exporter.docx"],
@@ -951,6 +969,222 @@
         {
           "id": "media.paged.doc.command.word.lineSpacing2",
           "title": "Line spacing: Double",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.doubleUnderline",
+          "title": "Double underline",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.hidden",
+          "title": "Hidden text",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.highlight",
+          "title": "Text highlight colour",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.shading",
+          "title": "Shading",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.borderBottom",
+          "title": "Bottom border",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.borderBox",
+          "title": "Box border",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.borderNone",
+          "title": "No border",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.showHidden",
+          "title": "Show hidden text (¶)",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.clearParagraph",
+          "title": "Clear paragraph formatting",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.restartNumbering",
+          "title": "Restart numbering",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.continueNumbering",
+          "title": "Continue numbering",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.listOutline",
+          "title": "Multilevel list: 1. a. i.",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.listLegal",
+          "title": "Multilevel list: 1. 1.1. 1.1.1.",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.listBullets",
+          "title": "Multilevel list: • ◦ ▪",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.styleUpdate",
+          "title": "Update style to match selection",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.styleModify",
+          "title": "Modify style…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.styleNew",
+          "title": "New style from selection…",
+          "args": {
+            "kind": "struct",
+            "fields": {}
+          },
+          "result": {
+            "kind": "struct",
+            "fields": {}
+          }
+        },
+        {
+          "id": "media.paged.doc.command.word.applyStyles",
+          "title": "Apply styles",
           "args": {
             "kind": "struct",
             "fields": {}
