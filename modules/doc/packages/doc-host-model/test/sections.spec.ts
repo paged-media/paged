@@ -101,7 +101,9 @@ describe("mergeSectionContents", () => {
   it("merges stories that each hold several Word sections back into one body", () => {
     const blocks = ["a", "b", "c", "d", "e"].map(para);
     const ir = doc(blocks, [section(0, 0), section(2, 0), section(3, 1)]);
-    const counts = sectionBlocks(ir).map(pouredParagraphCount);
+    const counts = sectionBlocks(ir).map((blocks) =>
+      pouredParagraphCount(blocks),
+    );
     expect(counts).toEqual([3, 2]);
     const merged = mergeSectionContents(
       [

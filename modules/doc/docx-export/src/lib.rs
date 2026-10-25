@@ -37,8 +37,9 @@ pub use bindings::{build_bindings, BlockBinding, DocxBindings, ParaUse, RunBindi
 pub use diff::diff;
 pub use edit::{CellRunEdit, EditSet, ParaEdit, RunEdit, RunFormat, RunPiece, StructuralEdit};
 pub use overlay::{
-    add_canvas_colors, overlay_cells, overlay_story_content, overlay_tables, CellContentIn,
-    ParagraphContentIn, RunContentIn, StoryContentIn, TableContentIn,
+    add_canvas_colors, overlay_cells, overlay_story_content, overlay_story_content_in,
+    overlay_tables, CellContentIn, ParagraphContentIn, RunContentIn, StoryContentIn,
+    TableContentIn, TableParagraphs,
 };
 
 use std::collections::BTreeMap;

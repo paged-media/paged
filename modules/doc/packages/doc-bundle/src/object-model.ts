@@ -95,6 +95,7 @@ import {
   plannedState,
   readDocBytes,
   readLowered,
+  tableLayoutOf,
   type DocState,
 } from "./doc-state.js";
 
@@ -456,7 +457,11 @@ async function commitPlans(
       return { storyId, start, end: start + utf8(at.paragraphText) };
     };
     const paragraphAt = (block: number) => {
-      const at = bodyParagraphLocation(plan.ir, block);
+      const at = bodyParagraphLocation(
+        plan.ir,
+        block,
+        tableLayoutOf(plan.state.data),
+      );
       if (!at)
         throw new Rejected(
           `block ${block} has no place in a story this document can write`,
@@ -566,7 +571,12 @@ async function commitPlans(
         });
         continue;
       }
-      const at = bodyRunLocation(plan.ir, n.block, n.run);
+      const at = bodyRunLocation(
+        plan.ir,
+        n.block,
+        n.run,
+        tableLayoutOf(plan.state.data),
+      );
       if (!at)
         throw new Rejected(
           `block ${n.block} run ${n.run} has no place in a story this document can write`,

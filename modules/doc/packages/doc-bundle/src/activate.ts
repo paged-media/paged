@@ -44,6 +44,7 @@ import {
   discoverDocs,
   readDocBytes,
   readLowered,
+  tableLayoutOf,
   type DocState,
 } from "./doc-state.js";
 import { contributeDocObjectModel } from "./object-model.js";
@@ -109,7 +110,9 @@ export function activate(host: BundleHost): BundleHandle {
     try {
       engine.loadDocx(bytes);
       const ir = engine.lowered();
-      const paragraphCounts = sectionBlocks(ir).map(pouredParagraphCount);
+      const paragraphCounts = sectionBlocks(ir).map((blocks) =>
+        pouredParagraphCount(blocks),
+      );
       // ADR 029 — a Word document opens as the WHOLE document: a page per
       // section that grows like Word's. Hosts without the native-open door
       // get the embedded placement instead.
@@ -128,7 +131,9 @@ export function activate(host: BundleHost): BundleHandle {
           frameId: opened.frameId,
           source: bytes,
           storyIds: opened.storyIds,
-          pouredParagraphs: sectionBlocks(opened.ir).map(pouredParagraphCount),
+          pouredParagraphs: sectionBlocks(opened.ir).map((blocks) =>
+            pouredParagraphCount(blocks),
+          ),
           midPageColumns: opened.midPageColumns,
         };
         docStore.set({
@@ -192,9 +197,10 @@ export function activate(host: BundleHost): BundleHandle {
       if (!c) return source;
       contents.push(c);
     }
+    const layout = tableLayoutOf(state.data);
     const content = mergeSectionContents(
       contents,
-      sectionBlocks(ir).map(pouredParagraphCount),
+      sectionBlocks(ir).map((blocks) => pouredParagraphCount(blocks, layout)),
     );
     const { cells, tables, skips } = await readTableCells(host, ir, sections);
     const engine = await DocEngine.boot();
@@ -207,6 +213,7 @@ export function activate(host: BundleHost): BundleHandle {
         cells,
         tables,
         colors,
+        tableParagraphs: layout === "own",
       });
       host.diagnostics.set(
         "media.paged.doc/save-back",
@@ -289,11 +296,13 @@ export function activate(host: BundleHost): BundleHandle {
           last.storyIds,
         );
         const colors = await canvasColors(host, content.paragraphs, read.cells);
+        // This session poured it: each native table has its own paragraph.
         const bytes = engine.saveEditedFromContent({
           ...content,
           cells: read.cells,
           tables: read.tables,
           colors,
+          tableParagraphs: true,
         });
         // Save-back refusal feedback (ADR-007 posture): the patcher's skip
         // ledger — edits refused rather than risking corruption (gridSpan
