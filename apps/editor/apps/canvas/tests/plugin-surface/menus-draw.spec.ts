@@ -19,10 +19,11 @@
 
 // PLUGIN MENUS — paged.draw (modules/draw/packages/draw-bundle/src/menu.ts).
 //
-// Ninety-five entries: most under the Draw menu (folded into Plugins ▸
+// A hundred and five entries: most under the Draw menu (folded into Plugins ▸
 // Draw, and shown as a context menu while artwork is selected), the
 // insert verbs filed under Object (Arc…, Spiral…, Rectangular grid…, Polar
-// grid…, Star…, Flare…) beside Rasterize…, the Select same verbs under the host's Edit ▸
+// grid…, Star…, Flare…) beside Rasterize…, Puppet warp and Perspective, the
+// perspective grid's rows under the host's View, the Select same verbs under the host's Edit ▸
 // Select same and Recolor artwork… under Edit ▸ Edit colors.
 //
 // Every test starts from the same artwork, two overlapping filled
@@ -62,7 +63,13 @@ import { covers } from "@paged-media/test-kit";
 import { Designer } from "../journey/driver/designer";
 import {
   clickEntry,
+  closeMenus,
   contextRouteOf,
+  isGreyed,
+  mark,
+  openLeaf,
+  recordedSince,
+  routeOf,
   documentDigest,
   expectGreyedAndInert,
   expectOneUndoRestores,
@@ -70,6 +77,53 @@ import {
   runCommand,
   undosToRestore,
 } from "./menu-driver";
+
+/** The page's perspective grid as the bundle stored it (its container
+ *  part, read through the engine), or null. */
+async function gridState(page: Page): Promise<Record<string, unknown> | null> {
+  return page.evaluate(async () => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            send(m: unknown): Promise<{
+              kind: string;
+              payload?: { found?: boolean; bytes?: number[] };
+            }>;
+          };
+        };
+      }
+    ).__canvas;
+    const reply = await c.client.send({
+      kind: "readPagedPart",
+      payload: { path: "paged/media.paged.draw/perspective-grid.json" },
+    });
+    const bytes = reply.payload?.bytes;
+    if (!reply.payload?.found || !bytes || bytes.length === 0) return null;
+    const text = new TextDecoder().decode(Uint8Array.from(bytes));
+    const lib = JSON.parse(text.replace(/,?"_base":[^,}]*/, "")) as {
+      grids?: Record<string, Record<string, unknown>>;
+    };
+    return Object.values(lib.grids ?? {})[0] ?? null;
+  });
+}
+
+/** A View ▸ Perspective grid row: it changes the grid (a view setting in
+ *  the bundle's container part) and leaves the document alone. */
+async function gridRow(
+  bare: Page,
+  live: Page,
+  path: string,
+  command: string,
+  check: (grid: Record<string, unknown>) => void,
+): Promise<void> {
+  await expectGreyedAndInert(bare, path);
+  const out = await clickEntry(live, path, command);
+  expect(out.after, `${path} leaves the document alone`).toBe(out.before);
+  const grid = await gridState(live);
+  expect(grid, `${path} wrote the page's grid`).not.toBeNull();
+  check(grid!);
+}
 
 test.describe.serial("plugin menus — paged.draw", () => {
   let bare: Page;
@@ -1693,6 +1747,158 @@ test.describe.serial("plugin menus — paged.draw", () => {
     ]);
     expect(out.after, "opening a panel leaves the document alone").toBe(
       out.before,
+    );
+  });
+
+  // ── WP6.7 — Puppet warp, Object ▸ Perspective, View ▸ Perspective grid ──
+
+  test("Object/Puppet warp — switches to the Puppet Warp tool and leaves the document alone", async () => {
+    covers("menu:Object/Puppet warp");
+    await expectGreyedAndInert(bare, "Object/Puppet warp");
+    // Not `clickEntry`: this entry's command runs ONE more command on
+    // purpose — the editor's own `paged.tool.activate.<id>`, the only way
+    // a plugin can switch tools (commands/puppet-warp.ts).
+    const before = await documentDigest(live);
+    const m = await mark(live);
+    const item = await openLeaf(live, routeOf("Object/Puppet warp"));
+    expect(await isGreyed(item)).toBe(false);
+    await item.click();
+    await expect
+      .poll(async () =>
+        (await recordedSince(live, m)).runs
+          .filter((r) => r.phase === "started")
+          .map((r) => r.id),
+      )
+      .toEqual([
+        "media.paged.draw.command.puppetWarpTool",
+        "paged.tool.activate.media.paged.draw.tool.puppetWarp",
+      ]);
+    await closeMenus(live);
+    const effective = await live.evaluate(
+      () =>
+        (
+          globalThis as unknown as {
+            __canvas: {
+              debugContext: () => { tools: { effective: string | null } };
+            };
+          }
+        ).__canvas.debugContext().tools.effective,
+    );
+    expect(effective).toBe("media.paged.draw.tool.puppetWarp");
+    expect(await documentDigest(live)).toBe(before);
+    await runCommand(live, "paged.tool.activate.paged.tool.select");
+  });
+
+  test("Object/Perspective/Attach to active plane — projects the selection onto the grid's active plane, and one Undo takes it back", async () => {
+    covers("menu:Object/Perspective/Attach to active plane");
+    await expectGreyedAndInert(
+      bare,
+      "Object/Perspective/Attach to active plane",
+    );
+    await runCommand(live, "media.paged.draw.command.perspectiveShowGrid", {
+      page: "",
+    });
+    const out = await clickEntry(
+      live,
+      "Object/Perspective/Attach to active plane",
+      "media.paged.draw.command.attachToPerspective",
+    );
+    expect(out.after, "the attach changes the document").not.toBe(out.before);
+    await expectOneUndoRestores(
+      live,
+      "Object/Perspective/Attach to active plane",
+      out.before,
+    );
+  });
+
+  test("Object/Perspective/Release with perspective — runs releaseFromPerspective; nothing selected is on a plane, so it changes nothing", async () => {
+    covers("menu:Object/Perspective/Release with perspective");
+    await expectGreyedAndInert(
+      bare,
+      "Object/Perspective/Release with perspective",
+    );
+    const out = await clickEntry(
+      live,
+      "Object/Perspective/Release with perspective",
+      "media.paged.draw.command.releaseFromPerspective",
+    );
+    expect(out.after).toBe(out.before);
+  });
+
+  test("View/Perspective grid/Show grid — the page's grid is shown", async () => {
+    covers("menu:View/Perspective grid/Show grid");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Show grid",
+      "media.paged.draw.command.perspectiveShowGrid",
+      (g) => expect(g.visible).toBe(true),
+    );
+  });
+
+  test("View/Perspective grid/Hide grid — the page's grid is hidden", async () => {
+    covers("menu:View/Perspective grid/Hide grid");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Hide grid",
+      "media.paged.draw.command.perspectiveHideGrid",
+      (g) => expect(g.visible).toBe(false),
+    );
+  });
+
+  test("View/Perspective grid/Lock grid — the grid is locked", async () => {
+    covers("menu:View/Perspective grid/Lock grid");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Lock grid",
+      "media.paged.draw.command.perspectiveLockGrid",
+      (g) => expect(g.locked).toBe(true),
+    );
+  });
+
+  test("View/Perspective grid/Unlock grid — the grid is unlocked", async () => {
+    covers("menu:View/Perspective grid/Unlock grid");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Unlock grid",
+      "media.paged.draw.command.perspectiveUnlockGrid",
+      (g) => expect(g.locked).toBe(false),
+    );
+  });
+
+  test("View/Perspective grid/One-point perspective — a one-point grid", async () => {
+    covers("menu:View/Perspective grid/One-point perspective");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/One-point perspective",
+      "media.paged.draw.command.perspectiveOnePoint",
+      (g) => expect(g.kind).toBe(1),
+    );
+  });
+
+  test("View/Perspective grid/Two-point perspective — a two-point grid", async () => {
+    covers("menu:View/Perspective grid/Two-point perspective");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Two-point perspective",
+      "media.paged.draw.command.perspectiveTwoPoint",
+      (g) => expect(g.kind).toBe(2),
+    );
+  });
+
+  test("View/Perspective grid/Three-point perspective — a three-point grid", async () => {
+    covers("menu:View/Perspective grid/Three-point perspective");
+    await gridRow(
+      bare,
+      live,
+      "View/Perspective grid/Three-point perspective",
+      "media.paged.draw.command.perspectiveThreePoint",
+      (g) => expect(g.kind).toBe(3),
     );
   });
 

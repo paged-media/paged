@@ -183,7 +183,24 @@ first consumers' fix-ups, §12.7 the panel property row). It is on `main` and pu
   or next to a library write, are full-envelope `setPluginMetadata` mutations the registry
   checks. Every draw object answers `hostOf`, so `page:#1 > plugin:media.paged.draw/path` and
   `doc > plugin:media.paged.draw/repeat` select.
-- **Typed commands.** 117 of the 127 commands have a typed twin with the same id; ten
+- **WP6.7 distortion tools (keyless).** The **Liquify** flyout — Warp, Twirl, Pucker, Bloat,
+  Scallop, Crystallize and Wrinkle, each with Illustrator's options (brush width, height,
+  angle, intensity, use pressure; detail, simplify; twirl rate; complexity and which control
+  points the brush affects; Wrinkle's horizontal / vertical): a press, every drag sample and,
+  while the button rests, a dwell timer step the kernel; the release writes the re-fitted
+  paths (the selection's, or every path on the page with nothing selected) in one undo step.
+  **Puppet Warp** in the Free Transform flyout (and Object ▸ Puppet warp): the selection is
+  meshed with three automatic pins; click adds a pin, dragging one bends the artwork live
+  (as-rigid-as-possible), the ring round the selected pin turns about it, Alt+click or Delete
+  removes one; mesh density and the mesh display are options. **Perspective Grid** and
+  **Perspective Selection**: a per-page one-, two- or three-point grid (View ▸ Perspective grid:
+  show / hide / lock / unlock / the three presets), its handles (origin, horizon, vanishing
+  points, extents, cell) and the plane widget (keys 1–4); dragging artwork onto the active
+  plane attaches it, attached artwork moves along its plane, and with the tool's option a drag
+  on nothing draws a rectangle or an ellipse on the plane (Object ▸ Perspective ▸ Attach to
+  active plane / Release with perspective). Each artwork change is one undo step; grid edits
+  are a view setting and do not undo.
+- **Typed commands.** 139 of the 149 commands have a typed twin with the same id; ten
   Path Options "…" commands, which only raise a panel, are the untyped remainder. The
   Knife, Scissors and Shape Builder, tools before, are commands too, their gesture given as
   data: `knife { page, cut }`, `scissorsAt { point, tolerance }` and
@@ -329,6 +346,14 @@ path per shape, solid paints only. Recolouring a raster is pixel work and is not
 
 ## Limits of what is shipped
 
+- **The WP6.7 tools.** The liquify kernels are not Illustrator's (its tools are not
+  scriptable, so there is no oracle): the falloff is a smooth bump, Scallop / Crystallize /
+  Wrinkle derive their detail from a seeded hash, and the twirl sign is counter-clockwise on
+  screen. Puppet Warp's pins snap to mesh vertices, the mesh is capped (320 vertices at normal
+  density) and pins do not survive a change of selection. The perspective grid stores no
+  per-object plane in IDML (the link is this plugin's metadata), grid edits are off the undo
+  stack, artwork attached to a plane does not follow a later grid edit, and `bringInPerspective`
+  -style attach by position has no Illustrator oracle (only drawing on a plane is recorded).
 - **The WP6.1 tools.** Simplify's preview is exact only with a corner angle; without one
   the engine simplifies and no engine door answers its result before writing. Join welds
   through the engine's `joinPaths`, which joins the two paths' own coordinates, so paths

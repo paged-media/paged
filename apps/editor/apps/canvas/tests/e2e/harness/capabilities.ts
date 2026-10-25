@@ -145,6 +145,12 @@
 // repackaged with one tracked deletion, and address it by the place the
 // trackedChanges collection lists. No editor UI issues either op yet.
 
+// 2026-10-25: the Word model (engine ADRs 1018, 1021) named four new
+// Mutation ops — setStyleBasedOn, setListLevel, restartNumbering and
+// findReplace. Each got a real-args probe: a scratch paragraph style
+// re-parented, a list level and a numbering restart on the first story's
+// first character, and a find and replace of a word the probe types first.
+
 export type CapabilityStatus = "supported" | "unsupported";
 
 export interface Capability {
@@ -576,6 +582,27 @@ export const CAPABILITIES: Capability[] = [
     op: "rejectTrackedChange",
     status: "supported",
     note: "proto 74, ADR 184; {storyId, offset} of a tracked deletion's place; its text comes back where the place stood, one undo step; probed on a copy of the text fixture with one deletion; no editor UI",
+  },
+  // the Word model (protocol 76, engine ADRs 1018, 1021).
+  {
+    op: "setStyleBasedOn",
+    status: "supported",
+    note: "proto 76, ADR 1018; {collection, styleId, basedOn?}; probed re-parenting a scratch paragraph style",
+  },
+  {
+    op: "setListLevel",
+    status: "supported",
+    note: "proto 76, ADR 1018; {storyId, start, end, level? | delta?}; probed on the first story's first character",
+  },
+  {
+    op: "restartNumbering",
+    status: "supported",
+    note: "proto 76, ADR 1018; {storyId, start, end, startAt?, continueNumbering?}; probed on the first story's first character",
+  },
+  {
+    op: "findReplace",
+    status: "supported",
+    note: "proto 76, ADR 1021; {spec, replace, replaceAll?, paragraphStyle?, characterStyle?}; probed on a word typed into the first story",
   },
 ];
 
